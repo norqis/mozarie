@@ -23,13 +23,17 @@ class Element {
     this.dataset = {};
     this.style = {};
     this.listeners = new Map();
+    this.listenerLists = new Map();
     this.attributes = new Map();
     this.className = "";
     this.isConnected = true;
     this.offsetParent = {};
     this.classList = { toggle() {} };
   }
-  addEventListener(name, callback) { this.listeners.set(name, callback); }
+  addEventListener(name, callback) {
+    const callbacks = this.listenerLists.get(name) || [];
+    callbacks.push(callback); this.listenerLists.set(name, callbacks); this.listeners.set(name, callback);
+  }
   setAttribute(name, value) { this.attributes.set(name, value); }
   getAttribute(name) { return this.attributes.get(name); }
   focus() { this.focused = true; }
@@ -37,7 +41,7 @@ class Element {
   showModal() { this.open = true; }
   showPopover() { this.open = true; }
   hidePopover() { this.open = false; }
-  matches(selector) { return selector === ":popover-open" && this.open; }
+  matches(selector) { return selector === ":popover-open" ? this.open : false; }
   contains(node) { return node === this; }
   closest() { return this; }
   querySelectorAll() { return []; }
@@ -64,10 +68,106 @@ function browserFixture() {
       return element(selector);
     },
     querySelectorAll() { return []; },
-    addEventListener() {},
+    listeners: new Map(),
+    addEventListener(name, callback) { this.listeners.set(name, callback); },
     createElement() { return new Element("created"); },
   };
   return { document, element, elements };
+}
+
+async function testBoundApplicationEvents() {
+  const { document, element } = browserFixture();
+  const calls = [];
+  const state = {
+    settings: { general: { language: "ja" } }, settingsStatus: {}, images: [{ id: "one", hidden: false }],
+    currentId: "one", currentImage: { id: "one" }, view: { scale: 1, x: 0, y: 0 },
+    displayMode: "compare", compareSplit: .5, tool: "brush", polygonPoints: [], boundaryDrafts: [],
+    polygonDragIndex: -1, drawing: false, panning: false, importing: false, galleryCollapsed: false,
+    inspectorCollapsed: false, pendingDetectionTargetIds: [], processing: null, browserSave: null,
+  };
+  const groups = new Map();
+  const group = (selector, ids) => {
+    const items = ids.map((id) => element(id)); groups.set(selector, items); return items;
+  };
+  group("dialog", ["#settingsDialog", "#detectDialog", "#applyDialog", "#singleSaveDialog", "#confirmDialog", "#processingDialog", "#modelHelpDialog", "#mosaicHelpDialog"]);
+  group("[data-model-picker]", ["picker"]); group("[data-model-download]", ["downloader"]); element("downloader").dataset.modelDownload = "hand";
+  group('[data-settings-panel="models"] input, [data-settings-panel="models"] select', ["modelControl"]);
+  group('input[name="settingsSamVariant"]', ["samVariant"]); element("samVariant").checked = true; element("samVariant").value = "vit_h";
+  group("[data-model-help]", ["help-target", "help-fluid"]); element("help-target").dataset.modelHelp = "target"; element("help-fluid").dataset.modelHelp = "fluid";
+  group(".settings-tab", ["settings-tab"]); element("settings-tab").dataset.settingsTab = "models";
+  group("[data-model-toggle]", ["toggle-hand"]); element("toggle-hand").dataset.modelToggle = "hand_detection"; element("toggle-hand").checked = true;
+  group("#dialogTargetPenis, #dialogTargetPussy", ["dialogTargetPenis"]); element("dialogTargetPenis").checked = true;
+  group(".target-chip input", ["dialogTargetPussy", "targetPenis"]); element("dialogTargetPussy").checked = true; element("targetPenis").checked = true;
+  group('input[name="batchSaveMode"]', ["batchMode"]); group('input[name="singleSaveMode"]', ["singleMode"]);
+  group("[data-selection-action]", ["selectionAction"]); element("selectionAction").dataset.selectionAction = "review";
+  group("[data-candidate-batch]", ["candidateBatch"]); element("candidateBatch").dataset.candidateBatch = "apply:toggle";
+  group("[data-candidate-display-toggle]", ["candidateDisplay"]); element("candidateDisplay").dataset.candidateDisplayToggle = "apply";
+  group("[data-candidate-effective-toggle]", ["candidateEffective"]); element("candidateEffective").dataset.candidateEffectiveToggle = "apply";
+  group("[data-shortcut-action]", ["shortcutAction"]); element("shortcutAction").dataset.shortcutAction = "next"; element("shortcutAction").value = "N";
+  group("[data-shortcut-enabled]", ["shortcutEnabled"]); element("shortcutEnabled").dataset.shortcutEnabled = "next"; element("shortcutEnabled").checked = true;
+  group(".overview-filter", ["overviewFilter"]); element("overviewFilter").dataset.overviewFilter = "masked";
+  const originalAll = document.querySelectorAll;
+  document.querySelectorAll = (selector) => groups.get(selector) || originalAll.call(document, selector);
+  const window = { listeners: new Map(), addEventListener(name, callback) { this.listeners.set(name, callback); } };
+  const note = (name) => (...args) => { calls.push([name, ...args]); };
+  const context = {
+    console, Promise, Map, Set, WeakMap, Array, Object, Number, String, Boolean, Math, JSON, Error,
+    document, window, navigator: { clipboard: { writeText: async () => {} } }, state, canvas: element("#editorCanvas"),
+    stage: element("#canvasStage"), toolRail: element("#canvasToolRail"), $: (selector) => element(selector),
+    requestAnimationFrame(callback) { callback(); }, setTimeout(callback) { callback(); return 1; }, clearTimeout() {},
+    isBusy: () => Boolean(context.busy), activeDetection: () => Boolean(context.detecting), t: (key) => key,
+    setTimeout(callback) { callback(); return 1; }, api: async () => ({ kind: "detect", state: "running" }), currentRecord: () => state.currentImage,
+    isHidden: (image) => Boolean(image?.hidden), isReviewed: () => false, pointFromEvent: (event) => ({ x: event.clientX || 1, y: event.clientY || 1 }),
+    clampPoint: (point) => point, compareEventSide: () => "right", compareEventOffset: () => 0, normaliseDivisor: () => 32,
+    detectionTargets: () => ["penis"], detectionConfidence: () => .5, canDetectBoundary: () => Boolean(context.canBoundary),
+    hasBoundaryDraft: () => Boolean(context.hasDraft), polygonVertexAt: () => -1, completedPolygonVertexAt: () => null,
+    polygonIsValid: () => true, polygonRoi: () => ({ left: 1 }), roiFromPoints: () => ({ left: 1 }), pointForRoi: () => ({ x: 1, y: 1 }),
+    rectangleDraftAt: () => null, boundaryDragStarted: () => true, imageHasMask: () => true,
+  };
+  for (const name of [
+    "openSettings", "selectSettingsTab", "moveSettingsTab", "saveSettings", "resetSettings", "chooseSettingsOutputDirectory", "chooseSettingsModelFile", "startModelDownload", "cancelModelDownload", "beginModelDownload", "syncProviderSelection", "markModelStatusDirty", "selectSamVariant", "startUpdate", "handleToolRailKeydown", "setToolRailTabStop", "setModelCardEnabled", "setHandSegmentationAvailable", "setPrecisionDetectionEnabled", "refreshSettingsStatus", "setFluidExclusionEnabled", "pickImageFiles", "pickImageDirectory", "importDroppedFiles", "loadFolder", "openDetectionDialog", "validateDetectionTargets", "runDetection", "saveAll", "saveCurrent", "setDisplayMode", "fitImage", "updateCompareSplitter", "render", "updateBrushCursor", "updateBrushSize", "setHidden", "clearMasks", "closeBatchMoreMenus", "clearCatalog", "renderGallery", "setViewMode", "runNavigationAction", "moveCurrentBy", "reviewAndMoveNext", "removeImageFromCatalog", "hideAndMoveNext", "runSelectionAction", "clearBatchSelection", "renderOverview", "updateSelectionActionBar", "batchCandidateOperation", "toggleCandidateDisplay", "toggleCandidateEffective", "renderShortcutBindings", "setTool", "setBoundaryModeMenuOpen", "addBoundaryCandidate", "cancelBoundary", "setMosaicPreviewEnabled", "requestMosaicPreview", "updateBlockSizeDisplay", "setDetectionConfidence", "syncDetectionTargetSwitch", "startDetectionFromDialog", "restoreSnapshot", "resizeRenderCanvas", "refreshApplyTargets", "chooseOutputDirectory", "syncApplyMode", "controlApply", "startApplyFromDialog", "chooseSingleOutputDirectory", "syncSingleSaveMode", "startSingleSave", "showProcessing", "updateProgress", "scheduleJobPoll", "showUserError", "cancelDetection", "setReviewed", "closeCatalogContextMenu", "copyContextMenuImagePath", "setGalleryDropOverlay", "beginBoundaryBrushStroke", "appendBoundaryBrushPoint", "beginManualStroke", "appendManualStrokePoint", "fillAt", "completeManualStroke", "cancelManualStroke", "completeBoundaryBrushStroke", "flushRender", "focusElement", "closeBoundaryModeMenu", "cancelFillWork", "handleWindowKeydown", "addBoundaryDraft", "loadTranslations", "updateBoundaryActions", "setSettingsForm"
+  ]) context[name] = note(name);
+  context.openSettings = async () => { calls.push(["openSettings"]); };
+  context.toolRailItems = () => [element("toolRailItem")]; context.modelDownloadPoll = null;
+  const source = fs.readFileSync(path.join(jsRoot, "app.js"), "utf8");
+  vm.runInNewContext(source, context, { filename: path.join(jsRoot, "app.js") });
+  vm.runInNewContext("globalThis.appEvents={ bindEvents };", context, { filename: "test-app-events-exports.js" });
+  context.appEvents.bindEvents();
+  const event = (extra = {}) => ({ button: 0, pointerId: 1, clientX: 5, clientY: 5, buttons: 1, isPrimary: true, target: null, currentTarget: null, preventDefault() { this.prevented = true; }, ...extra });
+  const fire = async (id, name, extra) => { const callback = element(id).listeners.get(name); assert.ok(callback, `${id} ${name} is bound`); await callback(event(extra)); };
+
+  for (const id of ["#settingsButton", "#updateToast", "#settingsCloseButton", "picker", "downloader", "#modelDownloadCancel", "#modelDownloadStart", "#modelDownloadCopy", "#modelDownloadClose", "#checkUpdateButton", "help-target", "help-fluid", "#modelHelpCopy", "#modelHelpCloseButton", "#pickImages", "#pickFolderFiles", "#loadFolderButton", "#detectAllButton", "#detectCurrentButton", "#saveAllButton", "#saveButton", "#singleViewButton", "#compareViewButton", "#fitButton", "#removeCurrentImageButton", "#clearCurrentMasksButton", "#clearAllMasksButton", "#clearCatalogButton", "#overviewButton", "#closeOverviewButton", "#previousImageButton", "#nextImageButton", "#reviewAndNextButton", "#removeAndNextButton", "#hideAndNextButton", "selectionAction", "#selectionClearButton", "#batchModeButton", "candidateBatch", "candidateDisplay", "candidateEffective", "#brushTool", "#mosaicEraserTool", "#eraserTool", "#excludeEraserTool", "#boundaryTool", "#bucketTool", "#excludeBucketTool", "#rectangleTool", "#polygonTool", "#boundaryBrushTool", "#boundaryCancelButton", "#mosaicPreviewButton", "#undoButton", "#redoButton", "#collapseGalleryButton", "#collapseInspectorButton", "#chooseOutputDirectoryButton", "#mosaicHelpButton", "#mosaicHelpCloseButton", "#applyCloseButton", "#applyCancelButton", "#singleSaveChooseOutputDirectoryButton", "#singleSaveCloseButton", "#toggleReviewMenuItem", "#copyImagePathMenuItem", "#removeImageMenuItem"]) await fire(id, "click");
+  context.canBoundary = false; await fire("#boundaryDetectButton", "click"); context.canBoundary = true; await fire("#boundaryDetectButton", "click");
+  await fire("#settingsProvider", "change"); await fire("modelControl", "input"); await fire("modelControl", "change"); await fire("samVariant", "change"); await fire("toggle-hand", "change"); await fire("#settingsPrecisionToggle", "change"); await fire("#settingsFluidToggle", "change");
+  await fire("#folderPath", "keydown", { key: "Enter" }); await fire("#galleryFilter", "change", { currentTarget: { value: "masked" } }); await fire("overviewFilter", "click"); await fire("#overviewQuery", "input", { target: { value: "cowgirl" } }); await fire("#overviewFolder", "change", { target: { value: "folder" } });
+  await fire("#brushSize", "input"); await fire("#divisor", "input"); await fire("#applyDivisor", "input"); await fire("#confidence", "input"); await fire("#detectConfidenceRange", "input"); await fire("#detectConfidenceNumber", "input"); await fire("dialogTargetPussy", "change"); await fire("targetPenis", "change");
+  await fire("#detectForm", "submit"); await fire("#detectCancelButton", "click"); await fire("#applyForm", "submit"); await fire("batchMode", "change"); await fire("#applyTargetMode", "change"); await fire("#singleSaveForm", "submit"); await fire("singleMode", "change"); await fire("#settingsLanguage", "change", { target: { value: "en" } });
+  state.processing = { kind: "import", state: "running" }; state.importSession = {}; await fire("#processingPauseButton", "click"); await fire("#processingCancelButton", "click"); state.processing = { kind: "detect", state: "paused" }; element("#processingCancelButton").disabled = false; await fire("#processingPauseButton", "click"); await fire("#processingCancelButton", "click");
+  await fire("#gallery", "dragenter", { dataTransfer: { types: ["Files"] } }); await fire("#gallery", "dragover", { dataTransfer: { types: ["Files"] } }); await fire("#gallery", "dragleave", { relatedTarget: null }); await fire("#gallery", "drop", { dataTransfer: { files: [{}] } });
+  const canvas = context.canvas; await canvas.listeners.get("contextmenu")(event()); state.tool = "brush"; await canvas.listeners.get("pointerdown")(event()); await canvas.listeners.get("pointermove")(event({ getCoalescedEvents: () => [event()] })); await canvas.listeners.get("pointerup")(event()); await canvas.listeners.get("pointerdown")(event({ button: 1 })); await canvas.listeners.get("pointermove")(event()); await canvas.listeners.get("pointercancel")(event());
+  state.tool = "boundary"; await canvas.listeners.get("pointerdown")(event()); await canvas.listeners.get("pointermove")(event()); await canvas.listeners.get("pointerup")(event()); state.tool = "boundary_brush"; await canvas.listeners.get("pointerdown")(event()); await canvas.listeners.get("pointerup")(event()); state.tool = "bucket"; await canvas.listeners.get("pointerdown")(event()); await canvas.listeners.get("wheel")(event({ shiftKey: true, deltaY: -1 })); await canvas.listeners.get("wheel")(event({ shiftKey: false, deltaY: 1 })); await canvas.listeners.get("pointerleave")(event());
+  const keydown = window.listeners.get("keydown"); state.fillWorker = {}; await keydown(event({ key: "Escape" })); state.fillWorker = null; element("#boundaryModeMenu").hidden = false; await keydown(event({ key: "Escape" })); element("#boundaryModeMenu").hidden = true; context.hasDraft = true; await keydown(event({ key: "Enter" })); element("#catalogContextMenu").open = true; const menuItems = [element("menu1"), element("menu2")]; element("#catalogContextMenu").querySelectorAll = () => menuItems; document.activeElement = menuItems[0]; for (const key of ["ArrowDown", "ArrowUp", "Home", "End", "Tab", "Escape"]) await keydown(event({ key }));
+  await document.listeners.get("dragover")(event({ dataTransfer: { types: ["Files"] } })); await document.listeners.get("drop")(event({ dataTransfer: { files: [{}] } })); await window.listeners.get("dragend")(); await document.listeners.get("pointerdown")(event({ target: null }));
+  const settingsDialog = element("#settingsDialog"); const modalFirst = element("modalFirst"); const modalLast = element("modalLast"); modalFirst.closest = modalLast.closest = () => null; settingsDialog.querySelectorAll = () => [modalFirst, modalLast];
+  settingsDialog.contains = (node) => node === modalFirst || node === modalLast; document.activeElement = modalLast; await fire("#settingsDialog", "keydown", { key: "Tab", currentTarget: settingsDialog }); document.activeElement = modalFirst; await fire("#settingsDialog", "keydown", { key: "Tab", shiftKey: true, currentTarget: settingsDialog }); await fire("#settingsDialog", "keydown", { key: "Tab", currentTarget: settingsDialog }); settingsDialog.querySelectorAll = () => []; await fire("#settingsDialog", "keydown", { key: "Tab", currentTarget: settingsDialog });
+  document.activeElement = element("invoker"); await fire("help-target", "click"); element("#modelHelpDialog").open = false; await element("#modelHelpDialog").listenerLists.get("close")[0](event()); element("#modelHelpDialog").open = true; await element("#modelHelpDialog").listenerLists.get("close")[0](event()); element("#modelHelpDialog").open = false; state.settings = { models: {}, display: {}, detection: {}, general: { language: "ja" } }; await element("#settingsDialog").listenerLists.get("close")[0](event()); await fire("#settingsDialog", "close");
+  await fire("#settingsDialog", "cancel"); await fire("#modelHelpDialog", "cancel"); await fire("#detectDialog", "cancel"); await fire("#applyDialog", "cancel"); state.applyRunning = true; await fire("#applyDialog", "cancel"); state.applyRunning = false; await fire("#singleSaveDialog", "cancel"); state.saving = true; await fire("#singleSaveDialog", "cancel"); state.saving = false; await fire("#confirmDialog", "cancel"); await fire("#processingDialog", "cancel");
+  for (const dialogId of ["#settingsDialog", "#modelHelpDialog", "#detectDialog", "#mosaicHelpDialog", "#applyDialog", "#singleSaveDialog", "#confirmDialog"]) { const dialog = element(dialogId); await fire(dialogId, "pointerdown", { target: dialog, clientX: -1, clientY: -1 }); await fire(dialogId, "pointerup", { target: dialog, clientX: -1, clientY: -1 }); await fire(dialogId, "pointerdown", { target: dialog, clientX: -1, clientY: -1, pointerId: 2 }); await fire(dialogId, "pointercancel", { target: dialog, pointerId: 2 }); }
+  await element("#compareSplitter").listeners.get("keydown")(event({ key: "x" })); state.browserSave = { paused: true }; await fire("#applyPauseButton", "click"); state.browserSave = null; state.job = { state: "paused" }; await fire("#applyPauseButton", "click"); state.job = null;
+  state.processing = null; await fire("#processingPauseButton", "click"); await fire("#processingCancelButton", "click"); state.processing = { kind: "import", state: "running" }; state.importSession = null; await fire("#processingPauseButton", "click"); state.processing = { kind: "detect", state: "running" }; context.api = async () => { throw new Error("offline"); }; await fire("#processingPauseButton", "click"); context.api = async () => ({ kind: "detect", state: "running" });
+  context.busy = true; await fire("#galleryFilter", "change", { currentTarget: { value: "masked" } }); await fire("overviewFilter", "click"); await fire("#divisor", "input"); await fire("#confidence", "input"); await fire("#fitButton", "click"); await element("#editorCanvas").listeners.get("pointerdown")(event()); context.busy = false;
+  context.polygonVertexAt = () => 0; state.tool = "polygon"; state.polygonPoints = [{ x: 1, y: 1 }]; await canvas.listeners.get("pointerdown")(event()); await canvas.listeners.get("pointermove")(event()); await canvas.listeners.get("pointerup")(event()); context.polygonVertexAt = () => -1; state.boundaryDrafts = [{ id: "draft", points: [{ x: 1, y: 1 }], roi: {} }]; context.completedPolygonVertexAt = () => ({ draft: state.boundaryDrafts[0], index: 0 }); await canvas.listeners.get("pointerdown")(event()); state.drawing = true; await canvas.listeners.get("pointermove")(event()); await canvas.listeners.get("pointerup")(event()); context.completedPolygonVertexAt = () => null; state.polygonPoints = [{}, {}, {}]; await canvas.listeners.get("pointerdown")(event()); state.polygonPoints = [{}, {}, {}, {}]; state.drawing = true; await canvas.listeners.get("pointerup")(event());
+  state.tool = "brush"; await canvas.listeners.get("pointerdown")(event()); state.activeStroke = {}; await canvas.listeners.get("pointercancel")(event()); await canvas.listeners.get("pointerdown")(event()); state.activeStroke = {}; await canvas.listeners.get("pointerup")(event()); state.tool = "boundary_brush"; await canvas.listeners.get("pointerdown")(event()); state.drawing = true; await canvas.listeners.get("pointermove")(event()); await canvas.listeners.get("pointerup")(event()); await canvas.listeners.get("pointerdown")(event()); state.drawing = true; await canvas.listeners.get("pointercancel")(event()); state.tool = "boundary"; const draft = { id: "rectangle" }; context.rectangleDraftAt = () => draft; await canvas.listeners.get("pointerdown")(event()); await canvas.listeners.get("pointerup")(event()); context.rectangleDraftAt = () => null;
+  context.hasDraft = false; element("#catalogContextMenu").open = false; await keydown(event({ key: "q" })); element("#boundaryModeMenu").hidden = false; await document.listeners.get("pointerdown")(event({ target: element("other") })); element("#boundaryModeMenu").hidden = true; element("#catalogContextMenu").open = true; await document.listeners.get("pointerdown")(event({ target: element("other") }));
+  await fire("#settingsDialog", "keydown", { key: "Enter", currentTarget: settingsDialog }); document.activeElement = null; await fire("#settingsDialog", "keydown", { key: "Tab", currentTarget: settingsDialog }); context.navigator.clipboard.writeText = async () => { throw new Error("clipboard"); }; await fire("#modelHelpCopy", "click"); context.navigator.clipboard.writeText = async () => {};
+  await element("#modelHelpDialog").listenerLists.get("close")[0](event()); state.settings = null; await fire("#settingsDialog", "close");
+  const backdrop = element("#settingsDialog"); await fire("#settingsDialog", "pointerdown", { target: element("inside"), clientX: 0, clientY: 0 }); await fire("#settingsDialog", "pointerdown", { target: backdrop, clientX: 0, clientY: 0 }); await fire("#settingsDialog", "pointerdown", { target: backdrop, clientX: 101, clientY: 101, isPrimary: false }); await fire("#settingsDialog", "pointerup", { target: backdrop, clientX: 0, clientY: 0 });
+  state.displayMode = "single"; await element("#compareSplitter").listeners.get("pointerdown")(event()); state.displayMode = "compare"; await element("#compareSplitter").listeners.get("pointerdown")(event({ button: 2 })); state.browserSave = { paused: false }; await fire("#applyPauseButton", "click");
+  state.processing = { kind: "import", state: "running" }; state.importSession = {}; await fire("#processingPauseButton", "click"); await fire("#processingPauseButton", "click");
+  state.contextMenuImageId = "one"; await fire("#toggleReviewMenuItem", "click"); await fire("#removeImageMenuItem", "click"); state.contextMenuImageId = "missing"; await fire("#toggleReviewMenuItem", "click"); await fire("#removeImageMenuItem", "click"); await fire("#gallery", "dragenter", { dataTransfer: { types: [] } }); await fire("#gallery", "dragover", { dataTransfer: { types: [] } }); await canvas.listeners.get("pointerdown")(event({ button: 2 })); context.busy = true; await canvas.listeners.get("pointermove")(event()); context.busy = false; state.gestureDisplaySide = null; state.drawing = false; await canvas.listeners.get("pointermove")(event()); state.currentImage = null; await canvas.listeners.get("wheel")(event({ deltaY: 1 })); state.currentImage = { id: "one" }; await canvas.listeners.get("wheel")(event({ shiftKey: true, deltaY: 1 })); await canvas.listeners.get("wheel")(event({ shiftKey: false, deltaY: -1 }));
+  state.tool = "brush"; await canvas.listeners.get("pointerdown")(event()); canvas.releasePointerCapture = () => { throw new Error("released"); }; await canvas.listeners.get("pointerup")(event()); canvas.releasePointerCapture = Element.prototype.releasePointerCapture;
+  element("#catalogContextMenu").open = true; document.activeElement = menuItems[0]; await keydown(event({ key: "Escape" }));
+  assert.ok(calls.length > 40, "the listener matrix drives the page actions through DOM events");
 }
 
 async function testApplicationStartupPaths() {
@@ -95,7 +195,7 @@ async function testApplicationStartupPaths() {
     setNavigationShortcutsEnabled() {}, scheduleJobPoll() {}, updateBrushSize() {}, resizeRenderCanvas() {},
     updateHistoryButtons() {}, updateNavigationControls() {}, updateActionButtons() {}, resetCatalog(images) { state.images = images; },
     setStatusKey() {}, checkForUpdate() {}, updateBrushSize() {}, updateBrushCursor() {}, updateCompareSplitter() {}, render() {},
-    t: (key) => key, requestAnimationFrame(callback) { callback(); },
+    t: (key) => key, requestAnimationFrame(callback) { callback(); }, setTimeout(callback) { callback(); return 1; },
     isBusy: () => false,
     compareEventOffset: () => 0,
     toolRail: element("#canvasToolRail"),
@@ -128,6 +228,9 @@ async function testApplicationStartupPaths() {
   apiResults.push({ settings: { general: {} }, status: {}, version: "1" }, new Error("image list unavailable"));
   await context.appCoverage.initialise();
   assert.equal(state.lastError.message, "image list unavailable");
+  document.visibilityState = "visible";
+  apiResults.push({ settings: { general: {} }, status: {}, version: "1" }, { images: [], root: "" });
+  await context.appCoverage.initialise();
 
   // The wheel listener is a real editor interaction and covers both zoom modes.
   state.currentImage = { id: "one" };
@@ -385,6 +488,7 @@ async function testDetectionImportAndSaveBehaviour() {
 
 Promise.resolve()
   .then(testApplicationStartupPaths)
+  .then(testBoundApplicationEvents)
   .then(testCoreBoundaryAndWorkspaceBehaviour)
   .then(testDetectionImportAndSaveBehaviour)
   .then(() => console.log("test_app_core_detection_coverage: passed"))
