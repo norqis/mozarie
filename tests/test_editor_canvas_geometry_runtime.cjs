@@ -315,6 +315,12 @@ test.render(); test.flushRender();
   const fetched = await test.cachedImage(state.images[0]);
   assert.equal(fetched.width, 2);
   assert.equal(await test.cachedImage(state.images[0]), fetched, "decoded images are reused from the editor cache");
+  state.imageCache = cache(); state.imageInflight = new Map(); let decodeCalls = 0; let finishDecode;
+  context.fetchBitmap = () => { decodeCalls += 1; return new Promise((resolve) => { finishDecode = resolve; }); };
+  const firstImageLoad = test.cachedImage(state.images[0]); const secondImageLoad = test.cachedImage(state.images[0]);
+  finishDecode({ width: 3, height: 3, close() {} });
+  assert.equal((await Promise.all([firstImageLoad, secondImageLoad]))[0].width, 3);
+  assert.equal(decodeCalls, 1, "concurrent image reads share one decoded bitmap request");
 
   // Candidate cache ownership is exercised with decoded images, rather than
   // calling cache helpers directly.
