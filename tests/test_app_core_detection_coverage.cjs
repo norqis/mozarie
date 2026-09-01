@@ -553,6 +553,9 @@ async function testDetectionImportAndSaveBehaviour() {
   state.detectionStarting = true;
   await context.detectionCoverage.runDetection(["one"], .5, 1, ["penis"]);
   state.detectionStarting = false;
+  context.busy = true;
+  await context.detectionCoverage.runDetection(["one"], .5, 1, ["penis"]);
+  context.busy = false;
   state.importing = true;
   await context.detectionCoverage.runDetection(["one"], .5, 1, ["penis"]);
   state.importing = false;
