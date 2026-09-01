@@ -664,6 +664,150 @@ async function saveCoverageMatrix() {
     runtime.setHandler(async (url) => url === "/api/job" ? job : { images: runtime.state.images });
     await runtime.pollJob();
   }
+
+  const lifecycleCases = [
+    {
+      label: "apply dialog waits for candidate writes before opening",
+      run: async (runtime) => {
+        runtime.state.candidateUpdateChains.set("file", Promise.resolve());
+        await runtime.openApplyDialog({ initialMode: "masked" });
+        assert.ok(runtime.calls.includes("wait-candidates"));
+        assert.equal(runtime.nodes.get("#applyDialog").open, true);
+      },
+    },
+    {
+      label: "apply directory selection accepts an empty picker result",
+      run: async (runtime) => {
+        runtime.context.pickOutputDirectory = async () => null;
+        await runtime.chooseOutputDirectory();
+        assert.equal(runtime.errors.length, 0);
+      },
+    },
+    {
+      label: "paused browser saves resume before the next entry",
+      run: async (runtime) => {
+        const save = { paused: true, cancelled: false, failed: false };
+        runtime.context.setTimeout = (callback, delay) => { assert.equal(delay, 100); save.paused = false; callback(); return 1; };
+        assert.equal(await runtime.waitForBrowserSave(save), true);
+      },
+    },
+    {
+      label: "catalog cleanup infers removed images when the server omits them",
+      run: async (runtime) => {
+        const { state } = runtime;
+        state.images = [{ id: "file" }, { id: "kept" }]; state.currentId = "file";
+        runtime.setHandler(async (url) => url === "/api/catalog/remove" ? { images: [{ id: "kept" }] } : {});
+        await runtime.removeCompletedImagesFromCatalog(["file"], ["file", "kept"], new Map([["file", { id: "file" }]]));
+        assert.ok(runtime.calls.includes("cache:file"));
+      },
+    },
+    {
+      label: "uncertain commit reports the server save state",
+      run: async (runtime) => {
+        runtime.setHandler(async (url) => {
+          if (url === "/api/save/commit") { const error = new Error("down"); error.status = 503; throw error; }
+          if (url === "/api/save/status") return { state: "pending" };
+          return {};
+        });
+        await assert.rejects(runtime.commitBrowserSaveWithRetry({ imageId: "file" }), (error) => error.saveState === "pending");
+      },
+    },
+    {
+      label: "apply confirmations can stop overwrite or delete before saving",
+      run: async (runtime) => {
+        const event = { preventDefault() {} };
+        runtime.state.applyTargetIds = ["file"]; runtime.saveMode.value = "overwrite"; runtime.context.confirmed = false;
+        await runtime.startApplyFromDialog(event);
+        assert.equal(runtime.state.applyRunning, false);
+        runtime.saveMode.value = "copy"; runtime.nodes.get("#deleteOriginal").checked = true;
+        runtime.state.outputDirectoryHandle = { async queryPermission() { return "granted"; } };
+        await runtime.startApplyFromDialog(event);
+        assert.equal(runtime.state.applyRunning, false);
+      },
+    },
+    {
+      label: "apply stops if importing begins while candidate writes settle",
+      run: async (runtime) => {
+        const { state } = runtime;
+        state.applyTargetIds = ["file"]; state.candidateUpdateChains.set("file", Promise.resolve()); state.outputDirectoryHandle = { async queryPermission() { return "granted"; } };
+        runtime.context.waitForCandidateMutations = async () => { runtime.calls.push("wait-before-import"); state.importing = true; };
+        await runtime.startApplyFromDialog({ preventDefault() {} });
+        assert.ok(runtime.calls.includes("wait-before-import"));
+        assert.equal(state.applyRunning, false);
+      },
+    },
+    {
+      label: "remote apply controls post their requested action",
+      run: async (runtime) => {
+        await runtime.controlApply("cancel");
+        assert.equal(runtime.requests.at(-1).url, "/api/job/cancel");
+      },
+    },
+    {
+      label: "apply completion falls back to stored targets and ignores stale reloads",
+      run: async (runtime) => {
+        const { state } = runtime;
+        state.applyTargetIds = ["file"]; state.images = [{ id: "file" }];
+        runtime.context.isCurrentGeneration = () => false;
+        runtime.setHandler(async (url) => url === "/api/images" ? { images: [{ id: "file" }] } : {});
+        await runtime.finishApplyJob({ kind: "apply", state: "complete", completed: 0, completedImageIds: null });
+        assert.equal(state.images[0].id, "file");
+      },
+    },
+    {
+      label: "apply cleanup stops if its catalog epoch changes",
+      run: async (runtime) => {
+        const { state } = runtime;
+        state.images = [{ id: "file" }]; state.currentId = "file";
+        runtime.context.removeCompletedImagesFromCatalog = async () => { state.catalogEpoch += 1; };
+        runtime.setHandler(async (url) => url === "/api/images" ? { images: [{ id: "file" }] } : {});
+        await runtime.finishApplyJob({ kind: "apply", state: "complete", completed: 1, imageIds: ["file"], completedImageIds: ["file"], removeAfterSave: true });
+        assert.equal(state.applyFinishing, false);
+      },
+    },
+    {
+      label: "detection reloads ignore stale generations",
+      run: async (runtime) => {
+        runtime.state.images = [{ id: "file" }];
+        runtime.context.isCurrentGeneration = () => false;
+        runtime.setHandler(async (url) => url === "/api/images" ? { images: [{ id: "replacement" }] } : {});
+        await runtime.finishDetectionJob({ kind: "detect", state: "complete", startedAt: 1, imageIds: ["file"], completedImageIds: ["file"] });
+        assert.equal(runtime.state.images[0].id, "file");
+      },
+    },
+    {
+      label: "polling shares its in-flight request and reports apply failures",
+      run: async (runtime) => {
+        runtime.state.pollInFlight = Promise.resolve("shared");
+        assert.equal(await runtime.pollJob(), "shared");
+        runtime.state.pollInFlight = null; runtime.state.applyRunning = true;
+        runtime.setHandler(async (url) => url === "/api/job" ? { kind: "apply", state: "error", completed: 0, startedAt: 2, errorCode: "save_failed" } : { images: [] });
+        await runtime.pollJob();
+        assert.equal(runtime.errors.at(-1).code, "save_failed");
+      },
+    },
+    {
+      label: "polling renders zero totals and chooses each scheduling interval",
+      run: async (runtime) => {
+        const delays = [];
+        runtime.context.setTimeout = (_callback, delay) => { delays.push(delay); return delays.length; };
+        runtime.setHandler(async (url) => url === "/api/job" ? { kind: "apply", state: "running", total: 0, completed: 9, current: "file" } : {});
+        await runtime.pollJob();
+        assert.equal(runtime.nodes.get("#applyProgress").value, 1);
+        runtime.scheduleJobPoll(true);
+        runtime.context.document.visibilityState = "hidden"; runtime.scheduleJobPoll();
+        runtime.context.document.visibilityState = "visible"; runtime.state.pollFailures = 2; runtime.scheduleJobPoll();
+        runtime.state.pollFailures = 0; runtime.state.job = { kind: "apply", state: "paused" }; runtime.scheduleJobPoll();
+        runtime.state.job = { kind: "idle", state: "idle" }; runtime.scheduleJobPoll();
+        assert.deepEqual(delays.slice(-5), [0, 10000, 10000, 600, 2500]);
+      },
+    },
+  ];
+  for (const scenario of lifecycleCases) {
+    const runtime = makeSaveRuntime();
+    await scenario.run(runtime);
+    assert.ok(scenario.label);
+  }
 }
 
 (async () => {
