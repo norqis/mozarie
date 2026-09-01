@@ -78,7 +78,7 @@ function makeGalleryRuntime() {
   };
   const context = {
     codedError(code) { const error = new Error(); error.code = code; return error; },
-    console, Map, Set, Array, Math, String, Object, document, encodeURIComponent,
+    console, Map, Set, Array, Math, String, Object, document, encodeURIComponent, window: { addEventListener() {} },
     IntersectionObserver: class { constructor(callback, options) { this.callback = callback; this.options = options; observers.push(this); } observe(image) { this.observed = image; } unobserve(image) { image.unobserved = true; } },
     state, $: (selector) => nodes.get(selector), $$: () => [],
     t(key, values = {}) { return `${key}:${Object.values(values).join(",")}`; },
