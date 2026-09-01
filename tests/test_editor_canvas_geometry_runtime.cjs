@@ -85,7 +85,7 @@ context.historyAddCanvas = canvas(); context.historyExclusionCanvas = canvas(); 
 const canvasPath = path.join(__dirname, "..", "static", "js", "editor-canvas.js");
 const source = fs.readFileSync(canvasPath, "utf8");
 vm.runInNewContext(source, context, { filename: canvasPath });
-vm.runInNewContext("globalThis.geometryRuntime = { selectImage, loadImage, loadCandidateBundle, invalidateStaleAsset, releaseCandidateBitmap, invalidateCandidateBundles, retainCurrentCandidateBundle, reconcileCurrentCandidates, syncCandidateRecord, canvasToDataUrl, saveDraft, restoreDraft, setCssTransform, rebuildMosaicPreview, compareSplitX, comparePaneBounds, compareSideOffset, compareEventSide, compareEventOffset, updateCompareSplitter, setDisplayMode, fitImage, updateBrushCursor, roiFromPoints, boundaryDraftRoi, boundaryDraftId, pointForRoi, polygonRoi, boundaryDraftBounds, addBoundaryDraft, activeBoundaryShape, boundaryShapes, strokeRoi, appendBoundaryBrushPoint, beginBoundaryBrushStroke, completeBoundaryBrushStroke, rectsTouch, joinRois, boundaryRequests, boundaryPath, drawBoundaryScrim, drawBoundaryShape, drawBoundaryRoi, polygonArea, polygonSegmentsIntersect, polygonPointsValid, polygonIsValid, canDetectBoundary, hasBoundaryDraft, boundaryActionAnchor, updateBoundaryActions, drawCandidateBlinkOverlay, drawCompareRangeOverlay, refreshMaskStatus, renderNow, render, flushRender };", context, { filename: "test-editor-canvas-geometry-exports.js" });
+vm.runInNewContext("globalThis.geometryRuntime = { selectImage, loadImage, imageAssetVersion, invalidateStaleAsset, imageCacheKey, candidateCacheKey, cachedImage, prefetchNeighbors, releaseImageCaches, releaseStaleImageVersions, releaseCandidateBundles, releaseCandidateBitmap, invalidateCandidateBundles, retainCurrentCandidateBundle, loadCandidateBundle, reconcileCurrentCandidates, syncCandidateRecord, canvasToDataUrl, saveDraft, restoreDraft, resizeRenderCanvas, setCssTransform, releaseMosaicPreview, prepareOriginalImage, mosaicPreviewFailed, createMosaicWorker, ensureMosaicPreviewSource, rebuildMosaicPreview, requestMosaicPreview, composeEnabledExclusionMask, drawEffectiveExclusions, composeCurrentMask, markDraftDirty, markMaskDirty, flushMaskComposition, hasEffectiveMask, maskStatusWithoutCandidate, compareSplitX, comparePaneBounds, compareSideOffset, compareEventSide, compareEventOffset, updateCompareSplitter, setDisplayMode, fitImage, updateBrushCursor, roiFromPoints, boundaryDraftRoi, boundaryDraftId, pointForRoi, polygonRoi, boundaryDraftBounds, addBoundaryDraft, activeBoundaryShape, boundaryShapes, strokeRoi, appendBoundaryBrushPoint, beginBoundaryBrushStroke, completeBoundaryBrushStroke, rectsTouch, joinRois, boundaryRequests, boundaryPath, drawBoundaryScrim, drawBoundaryShape, drawBoundaryRoi, polygonArea, polygonSegmentsIntersect, polygonPointsValid, polygonIsValid, canDetectBoundary, hasBoundaryDraft, boundaryActionAnchor, updateBoundaryActions, drawCandidateBlinkOverlay, drawCompareRangeOverlay, refreshMaskStatus, renderNow, render, flushRender };", context, { filename: "test-editor-canvas-geometry-exports.js" });
 const test = context.geometryRuntime;
 
 function rectangle(left, top, right, bottom) { return { type: "rectangle", roi: { left, top, right, bottom } }; }
@@ -262,6 +262,49 @@ test.renderNow();
 test.render(); test.flushRender();
 
 (async () => {
+  // Cache and request helpers are exercised with their real cache ownership
+  // rules.  These are the states reached while selecting, replacing, and
+  // clearing editor images.
+  assert.equal(test.imageAssetVersion({ assetVersion: "v2" }), "v2");
+  assert.equal(test.imageAssetVersion({ assetVersion: 2 }), "");
+  assert.equal(test.imageCacheKey({ id: "image", assetVersion: "v2" }), "image:v2");
+  assert.equal(test.candidateCacheKey("image", 4), "image:4");
+  const released = [];
+  state.imageCache = cache([["image:v1", { close() { released.push("image"); } }], ["other:v1", { close() { released.push("other"); } }]]);
+  state.candidateBundleCache = cache([["image:1", { candidateImages: new Map([["mask", { close() { released.push("mask"); } }]]) }], ["other:1", { candidateImages: new Map() }]]);
+  state.imageInflight = new Map([["image:v1", Promise.resolve()], ["other:v1", Promise.resolve()]]);
+  state.candidateInflight = new Map([["image:1", Promise.resolve()], ["other:1", Promise.resolve()]]);
+  test.releaseImageCaches("image");
+  assert.equal(state.imageCache.has("image:v1"), false);
+  assert.equal(state.imageCache.has("other:v1"), true);
+  assert.equal(state.imageInflight.has("image:v1"), false);
+  assert.equal(state.candidateInflight.has("image:1"), false);
+  test.releaseImageCaches();
+  assert.equal(state.imageCache.items.size, 0);
+  state.imageCache = cache([["image:old", { close() {} }], ["image:new", { close() {} }]]);
+  state.candidateBundleCache = cache([["image:old", { candidateImages: new Map() }], ["image:new", { candidateImages: new Map() }]]);
+  test.releaseStaleImageVersions("image", "image:new", "image:new");
+  assert.equal(state.imageCache.has("image:old"), false);
+  assert.equal(state.candidateBundleCache.has("image:old"), false);
+  state.candidateInflight = new Map([["image:old", Promise.resolve()], ["other:old", Promise.resolve()]]);
+  state.currentId = "image"; state.candidateImages = new Map([["shown", { alpha: 255 }]]);
+  test.releaseCandidateBundles("image");
+  assert.equal(state.candidateImages.size, 0);
+  assert.equal(state.candidateInflight.has("image:old"), false);
+
+  state.images = [{ id: "prefetch", assetVersion: "v1" }, { id: "selected", assetVersion: "v1" }, { id: "next", assetVersion: "v1" }];
+  const prefetched = [];
+  context.schedulePrefetch = (record, priority) => prefetched.push([record.id, priority]);
+  test.prefetchNeighbors(state.images[1]);
+  assert.deepEqual(prefetched, [["prefetch", 1], ["next", 1]]);
+  state.imageCache = cache(); state.imageInflight = new Map(); state.catalogLoadControllers = new Set(); state.catalogEpoch = 1;
+  context.fetchBitmap = async () => ({ width: 2, height: 2, close() { released.push("fetched"); } });
+  context.imageUrl = (record) => `/images/${record.id}`;
+  context.catalogRecordMatches = () => true;
+  const fetched = await test.cachedImage(state.images[0]);
+  assert.equal(fetched.width, 2);
+  assert.equal(await test.cachedImage(state.images[0]), fetched, "decoded images are reused from the editor cache");
+
   // Candidate cache ownership is exercised with decoded images, rather than
   // calling cache helpers directly.
   state.images = [];
