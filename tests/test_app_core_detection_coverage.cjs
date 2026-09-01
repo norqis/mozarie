@@ -453,6 +453,7 @@ async function testDetectionImportAndSaveBehaviour() {
   state.settings.importing.parallelism = "12";
   assert.equal(context.detectionCoverage.importParallelism(), 10);
   assert.equal(context.detectionCoverage.normaliseImportParallelism(""), 3, "blank import parallelism keeps the default");
+  assert.equal(context.detectionCoverage.normaliseImportParallelism(null), 3, "missing import parallelism keeps the default");
   assert.equal(context.detectionCoverage.normaliseImportParallelism("bad"), 3, "invalid import parallelism keeps the default");
   assert.equal(context.detectionCoverage.normaliseImportParallelism(0), 1, "import parallelism clamps to one");
   element("#detectParallelism").value = "99";
