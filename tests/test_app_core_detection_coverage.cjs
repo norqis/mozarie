@@ -286,7 +286,7 @@ async function testCoreBoundaryAndWorkspaceBehaviour() {
   };
   const source = fs.readFileSync(path.join(jsRoot, "core.js"), "utf8");
   vm.runInNewContext(source, context, { filename: path.join(jsRoot, "core.js") });
-  vm.runInNewContext("globalThis.coreCoverage={ state, t, validCandidateTokens, showUserError, responseError, loadTranslations, api, setStatus, setStatusKey, showProcessing, progressText, processingCurrentPath, catalogRecordMatches, cancelFillWork, abortCatalogLoads, saveTargets, setHidden, selectCatalogImage, refreshReviewViews, moveReviewedPathAfterApply, markImagesUnreviewed, clearBoundaryConstruction, updateActionButtons, updateCandidateBatchButtons, setMosaicPreviewEnabled, formatDuration, normaliseDetectionConfidence, normaliseDivisor, calculatedBlockSize };", context, { filename: "test-core-exports.js" });
+  vm.runInNewContext("globalThis.coreCoverage={ state, t, validCandidateTokens, showUserError, responseError, loadTranslations, api, setStatus, setStatusKey, showProcessing, progressText, processingCurrentPath, catalogRecordMatches, cancelFillWork, abortCatalogLoads, publishWorkspaceFlags, saveWorkspaceFlag, saveTargets, setHidden, selectCatalogImage, refreshReviewViews, moveReviewedPathAfterApply, markImagesUnreviewed, refreshCurrentReviewAndMask, clearBoundaryConstruction, updateActionButtons, updateCandidateBatchButtons, setMosaicPreviewEnabled, formatDuration, normaliseDetectionConfidence, normaliseDivisor, calculatedBlockSize };", context, { filename: "test-core-exports.js" });
   const test = context.coreCoverage;
   const coreState = test.state;
   Object.assign(coreState, state);
@@ -465,6 +465,24 @@ async function testCoreBoundaryAndWorkspaceBehaviour() {
   test.selectCatalogImage("missing");
   coreState.viewMode = "overview";
   test.refreshReviewViews(null);
+  assert.equal(test.publishWorkspaceFlags("missing", { hidden: true }), false);
+  assert.equal(await test.saveWorkspaceFlag(null, "hidden", true), false);
+  const removedBeforeSave = { id: "removed", relativePath: "removed.png", hidden: false };
+  coreState.images = [removedBeforeSave];
+  context.queueWorkspaceFlags = async () => ({ hidden: true });
+  const removedSave = test.setHidden(removedBeforeSave, true);
+  coreState.images = [];
+  assert.equal(await removedSave, false, "a removed record is not updated after its queued flag write");
+  const reloadedReviewed = { id: "new", relativePath: "new.png", reviewResult: false };
+  coreState.images = [reloadedReviewed]; coreState.reviewedPaths = new Set(["new.png"]);
+  assert.equal(await test.moveReviewedPathAfterApply({ relativePath: "old.png" }, reloadedReviewed), false);
+  reloadedReviewed.reviewResult = true;
+  coreState.currentId = "new";
+  context.refreshMaskStatus = () => false;
+  assert.equal(test.refreshCurrentReviewAndMask(), true, "a review-only refresh rerenders review views");
+  context.busy = true;
+  test.setMosaicPreviewEnabled(true);
+  context.busy = false;
 }
 
 async function testDetectionImportAndSaveBehaviour() {
