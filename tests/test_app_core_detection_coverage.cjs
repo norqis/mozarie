@@ -183,7 +183,7 @@ async function testCoreBoundaryAndWorkspaceBehaviour() {
   };
   const source = fs.readFileSync(path.join(jsRoot, "core.js"), "utf8");
   vm.runInNewContext(source, context, { filename: path.join(jsRoot, "core.js") });
-  vm.runInNewContext("globalThis.coreCoverage={ state, t, loadTranslations, api, setStatusKey, progressText, processingCurrentPath, abortCatalogLoads, saveTargets, setHidden, moveReviewedPathAfterApply, markImagesUnreviewed, clearBoundaryConstruction, updateActionButtons, updateCandidateBatchButtons, setMosaicPreviewEnabled, formatDuration, normaliseDetectionConfidence, normaliseDivisor, calculatedBlockSize };", context, { filename: "test-core-exports.js" });
+  vm.runInNewContext("globalThis.coreCoverage={ state, t, validCandidateTokens, loadTranslations, api, setStatusKey, progressText, processingCurrentPath, abortCatalogLoads, saveTargets, setHidden, moveReviewedPathAfterApply, markImagesUnreviewed, clearBoundaryConstruction, updateActionButtons, updateCandidateBatchButtons, setMosaicPreviewEnabled, formatDuration, normaliseDetectionConfidence, normaliseDivisor, calculatedBlockSize };", context, { filename: "test-core-exports.js" });
   const test = context.coreCoverage;
   const coreState = test.state;
   Object.assign(coreState, state);
@@ -195,6 +195,8 @@ async function testCoreBoundaryAndWorkspaceBehaviour() {
   assert.equal(coreState.mosaicPreviewEnabled, false, "disabling the preview does not start a new failure-reporting attempt");
 
   assert.equal(test.t("unknown"), "");
+  assert.equal(test.validCandidateTokens({ labelToken: "penis", source: "target", refinement: null }), true, "known candidate metadata is accepted");
+  assert.equal(test.validCandidateTokens({ labelToken: "penis", source: "target", refinement: "unknown" }), false, "unknown candidate refinement is rejected");
   await test.loadTranslations();
   context.fetch = async () => ({ ok: true, json: async () => null });
   await test.loadTranslations();
