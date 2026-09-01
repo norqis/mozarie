@@ -143,6 +143,7 @@ async function galleryInteractions() {
   runtime.renderCatalogViews();
 
   const navigationWindow = { images: Array.from({ length: 12 }, (_, index) => ({ id: `logical-${index}` })), container: { clientWidth: 500, clientHeight: 50 }, options: { columns: 5, minWidth: 1, padding: 0, gap: 0, rowHeight: 10 } };
+  assert.equal(runtime.catalogMoveIndex({ ...navigationWindow, images: [] }, 0, { key: "ArrowRight" }), -1, "empty virtual catalogs have no keyboard target");
   assert.equal(runtime.catalogMoveIndex(navigationWindow, 0, { key: "ArrowLeft" }), 0, "Left keeps focus at the first logical card");
   assert.equal(runtime.catalogMoveIndex(navigationWindow, 0, { key: "ArrowRight" }), 1, "Right moves to the next logical card");
   assert.equal(runtime.catalogMoveIndex(navigationWindow, 7, { key: "ArrowUp" }), 2, "Up moves one virtual row");
@@ -170,6 +171,7 @@ async function galleryInteractions() {
   const visibleTop = runtime.gallery.scrollTop;
   runtime.scrollCatalogImage("gallery", "window-4");
   assert.equal(runtime.gallery.scrollTop, visibleTop, "selecting another visible card does not recenter the gallery");
+  runtime.scrollCatalogImage("gallery", "missing");
   state.images = catalogImages; state.galleryFilter = "all"; runtime.gallery.scrollTop = 0; runtime.renderGallery(true);
 
   runtime.gallery.scrollTop = 999; runtime.overviewGrid.scrollTop = 555;
