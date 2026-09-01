@@ -321,20 +321,50 @@ async function testDetectionImportAndSaveBehaviour() {
   const context = {
     Promise, Map, Set, Array, Object, Number, String, Boolean, Math, JSON, structuredClone,
     state, $: (selector) => element(selector),
-    isBusy: () => false, activeDetection: () => false, updateActionButtons() {}, updateProgress() {}, showUserError() {}, setStatusKey() {},
+    isBusy: () => false, activeDetection: () => false, updateActionButtons() {}, updateProgress() {}, showUserError() {}, setStatusKey() {}, closeProcessing() {},
     saveDraft: () => calls.push("draft"), refreshMaskStatus: () => calls.push("refresh"), saveTargets: () => ["one"],
-    openApplyDialog: async (options) => calls.push(options.initialMode), waitForCandidateMutations: async () => {}, imageHasMask: () => true,
+    openApplyDialog: async (options) => calls.push(options.initialMode), openSingleSaveDialog: async (id) => calls.push(`single:${id}`), waitForCandidateMutations: async () => { calls.push("wait"); }, imageHasMask: () => true,
     detectionConfidence: () => 0.5, normaliseDetectionConfidence: Number, setDetectionConfidence() {}, showModalFromInvoker() {},
-    t: (key) => key, api: async () => ({}), setSettingsForm() {}, scheduleJobPoll() {}, showProcessing() {},
+    t: (key) => key, api: async () => ({}), setSettingsForm() {}, scheduleJobPoll() {}, showProcessing() {}, syncDetectionTargetSwitch() {},
   };
   const source = fs.readFileSync(path.join(jsRoot, "detection.js"), "utf8");
   vm.runInNewContext(source, context, { filename: path.join(jsRoot, "detection.js") });
-  vm.runInNewContext("globalThis.detectionCoverage={ importParallelism, saveAll };", context, { filename: "test-detection-exports.js" });
+  vm.runInNewContext("globalThis.detectionCoverage={ detectionParallelism, detectionTargets, setDetectionTargets, normaliseImportParallelism, importParallelism, openDetectionDialog, runDetection, cancelDetection, saveCurrent, saveAll };", context, { filename: "test-detection-exports.js" });
   assert.equal(context.detectionCoverage.importParallelism(), 3);
   state.settings.importing.parallelism = "12";
   assert.equal(context.detectionCoverage.importParallelism(), 10);
+  assert.equal(context.detectionCoverage.normaliseImportParallelism(""), 3, "blank import parallelism keeps the default");
+  assert.equal(context.detectionCoverage.normaliseImportParallelism("bad"), 3, "invalid import parallelism keeps the default");
+  assert.equal(context.detectionCoverage.normaliseImportParallelism(0), 1, "import parallelism clamps to one");
+  element("#detectParallelism").value = "99";
+  assert.equal(context.detectionCoverage.detectionParallelism(), 4, "detection parallelism clamps to four");
+  element("#detectParallelism").value = "bad";
+  assert.equal(context.detectionCoverage.detectionParallelism(), 2, "invalid detection parallelism keeps the default");
+  element("#dialogTargetPenis").checked = true; element("#dialogTargetPussy").checked = false;
+  assert.deepEqual(JSON.parse(JSON.stringify(context.detectionCoverage.detectionTargets("dialogTarget"))), ["penis"], "dialog target selection reads public controls");
+  state.settings.detection = { targets: ["pussy"] };
+  context.detectionCoverage.setDetectionTargets(["pussy"], "dialogTarget");
+  assert.equal(element("#dialogTargetPenis").checked, false);
+  assert.equal(element("#dialogTargetPussy").checked, true);
+  context.detectionCoverage.openDetectionDialog([]);
+  context.detectionCoverage.openDetectionDialog(["one"]);
+  assert.deepEqual(JSON.parse(JSON.stringify(state.pendingDetectionTargetIds)), ["one"], "opening detection preserves target ids");
+  await context.detectionCoverage.runDetection([], .5, 1, ["penis"]);
+  await context.detectionCoverage.runDetection(["one"], .5, 99, []);
+  await context.detectionCoverage.runDetection(["one"], .5, 99, ["penis"]);
+  assert.deepEqual(JSON.parse(JSON.stringify(state.detectionTargetIds)), ["one"], "detection start persists target ids");
+  state.currentId = "one"; state.images = [{ id: "one" }];
+  await context.detectionCoverage.saveCurrent();
+  assert.ok(calls.includes("single:one"), "single save opens only for a current masked image");
+  state.currentId = null; await context.detectionCoverage.saveCurrent();
+  state.currentId = "one"; state.candidateUpdateChains.set("one", Promise.resolve()); await context.detectionCoverage.saveCurrent(); state.candidateUpdateChains.clear();
+  await context.detectionCoverage.cancelDetection();
+  state.job = { kind: "detect", state: "running" }; context.activeDetection = () => true;
+  await context.detectionCoverage.cancelDetection();
+  assert.equal(state.detectCancelRequested, true, "cancelling detection records the in-flight cancellation");
+  context.activeDetection = () => false; state.detectCancelRequested = false;
   await context.detectionCoverage.saveAll();
-  assert.deepEqual(calls, ["draft", "refresh", "masked"]);
+  assert.deepEqual(calls.slice(-3), ["draft", "refresh", "masked"]);
 }
 
 Promise.resolve()
