@@ -535,6 +535,9 @@ async function testDetectionImportAndSaveBehaviour() {
   state.detectionStarting = true;
   await context.detectionCoverage.runDetection(["one"], .5, 1, ["penis"]);
   state.detectionStarting = false;
+  state.importing = true;
+  await context.detectionCoverage.runDetection(["one"], .5, 1, ["penis"]);
+  state.importing = false;
   state.pendingDetectionTargetIds = [];
   await context.detectionCoverage.startDetectionFromDialog({ preventDefault() {} });
   state.pendingDetectionTargetIds = ["one"];
