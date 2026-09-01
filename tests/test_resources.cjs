@@ -14,7 +14,8 @@ assert.match(canvasSource, /candidateBundleCache\.take\(oldKey\)/, "candidate re
 const state = { currentId: null, pendingImageId: null, currentImage: null, pendingImageKey: null, pendingCandidateKey: null, candidateImages: new Map(), imageInflight: new Map(), prefetchQueue: [], prefetchTimer: null, prefetchActive: 0, catalogEpoch: 1, catalogLoadControllers: new Set() };
 const responseError = (response, payload) => { const error = new Error(); error.status = response.status; error.code = typeof payload?.error_code === "string" ? payload.error_code : (response.status === 404 ? "api_not_found" : "internal_error"); error.params = payload?.params || {}; return error; };
 const context = { state, setTimeout() { return 1; }, clearTimeout() {}, fetch() {}, document: { querySelector() { return null; } }, encodeURIComponent, Promise, Set, Map, Math, AbortController, DOMException, responseError, __fetchBitmap: null };
-vm.runInNewContext(`${resourcesSource}\nglobalThis.resourceTest = { WeightedLru, drainPrefetchQueue };`, context);
+vm.runInNewContext(resourcesSource, context);
+vm.runInNewContext("globalThis.resourceTest = { WeightedLru, drainPrefetchQueue };", context, { filename: "test-resources-exports.js" });
 vm.runInNewContext(canvasSource, context, { filename: canvasPath });
 const closed = []; const cache = new context.resourceTest.WeightedLru(8, (value) => closed.push(value.id), () => false);
 cache.set("one", { id: "one" }, 4); cache.set("two", { id: "two" }, 4); cache.get("one"); cache.set("three", { id: "three" }, 4);
@@ -32,7 +33,8 @@ pinned.trim(); pinned.delete("current");
 assert.deepEqual(closed, ["two", "three", "next", "current"], "trim and explicit removal release each owned resource once");
 
 const calls = []; const thumbnailContext = { state: { images: [], viewMode: "edit", galleryNodes: new Map(), galleryFilter: "all" }, Map, encodeURIComponent, IntersectionObserver: class { observe() {} unobserve() { calls.push("unobserve"); } }, $: () => ({ scrollTop: 0 }), t: () => "", imageAssetVersion: () => "", updateActionButtons() {}, document: { querySelectorAll() { return []; } } };
-vm.runInNewContext(`${gallerySource}\nglobalThis.thumbnailTest = { observeThumbnail, renderGallery, thumbnailObservers };`, thumbnailContext);
+vm.runInNewContext(gallerySource, thumbnailContext, { filename: path.join(__dirname, "..", "static", "js", "gallery.js") });
+vm.runInNewContext("globalThis.thumbnailTest = { observeThumbnail, renderGallery, thumbnailObservers };", thumbnailContext, { filename: "test-resources-gallery-exports.js" });
 const preview = { dataset: {}, removeAttribute() {} }; thumbnailContext.thumbnailTest.observeThumbnail(preview, { id: "old" }); thumbnailContext.thumbnailTest.thumbnailObservers.get("gallery").unobserve = () => calls.push("unobserve");
 thumbnailContext.state.galleryNodes.set("old", { querySelector() { return preview; }, parentNode: { remove() { calls.push("remove"); } } });
 thumbnailContext.thumbnailTest.renderGallery();
@@ -59,7 +61,8 @@ async function runResourceCoverageCases() {
     imageCacheKey: (record) => `${record.id}:${record.assetVersion || ""}`,
     cachedImage: async (record) => ({ id: record.id, close() { record.closed = true; } }),
   };
-  vm.runInNewContext(`${resourcesOriginalSource}\nglobalThis.resourceCoverage = { WeightedLru, decodedImageWeight, closeBitmap, releaseCandidateBitmapBundle, isPinnedImage, isPinnedCandidateBundle, imageUrl, maskUrl, fetchBitmap, schedulePrefetch, drainPrefetchQueue };`, context, { filename: resourcesPath });
+  vm.runInNewContext(resourcesOriginalSource, context, { filename: resourcesPath });
+  vm.runInNewContext("globalThis.resourceCoverage = { WeightedLru, decodedImageWeight, closeBitmap, releaseCandidateBitmapBundle, isPinnedImage, isPinnedCandidateBundle, imageUrl, maskUrl, fetchBitmap, schedulePrefetch, drainPrefetchQueue };", context, { filename: "test-resources-coverage-exports.js" });
   const api = context.resourceCoverage;
 
   const released = [];
@@ -146,7 +149,8 @@ async function runResourceCoverageCases() {
   for (let index = 0; index < 4 && state.prefetchActive; index += 1) await new Promise((resolve) => setImmediate(resolve));
   assert.equal(releases, 1, "the exact pending image key keeps a joined foreground image available");
   const errorContext = { state: {}, fetch: async () => ({ ok: false, status: 400, json: async () => ({ error_code: "stale_asset" }) }), document: { querySelector() { return null; } }, t: () => "load failed", Promise, Set, Map, Math, AbortController, DOMException, encodeURIComponent, responseError };
-  vm.runInNewContext(`${fs.readFileSync(path.join(__dirname, "..", "static", "js", "resources.js"), "utf8")}\nglobalThis.fetchBitmapForTest = fetchBitmap;`, errorContext);
+  vm.runInNewContext(fs.readFileSync(resourcesPath, "utf8"), errorContext, { filename: resourcesPath });
+  vm.runInNewContext("globalThis.fetchBitmapForTest = fetchBitmap;", errorContext, { filename: "test-resources-error-exports.js" });
   await assert.rejects(errorContext.fetchBitmapForTest("/api/image/stale"), (error) => error.code === "stale_asset" && error.status === 400, "full-image stale response retains its error code");
   await runResourceCoverageCases();
   console.log("test_resources: passed");

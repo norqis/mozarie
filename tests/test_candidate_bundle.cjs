@@ -1,10 +1,12 @@
 const assert = require("node:assert/strict"); const fs = require("node:fs"); const path = require("node:path"); const vm = require("node:vm");
-const canvasPath = path.join(__dirname, "..", "static", "js", "editor-canvas.js");
+const resourcesPath = path.join(__dirname, "..", "static", "js", "resources.js"); const canvasPath = path.join(__dirname, "..", "static", "js", "editor-canvas.js");
 const record = { id: "image", assetVersion: "v1", candidateRevision: 4 }; const state = { images: [record], currentId: "image", pendingImageId: null, candidateImages: new Map(), catalogEpoch: 1, catalogLoadControllers: new Set(), candidateInflight: new Map(), imageInflight: new Map(), prefetchQueue: [], prefetchTimer: null, prefetchActive: 0, galleryNodes: new Map(), overviewNodes: new Map(), drafts: new Map() };
 let apiResult; let bitmapLoader;
 const validCandidateTokens = (candidate) => candidate?.labelToken === "penis" && candidate.source === "target" && candidate.refinement === null;
 const context = { state, Map, Set, Math, Promise, AbortController, DOMException, setTimeout, clearTimeout, document: { querySelector() { return null; } }, encodeURIComponent, validCandidateTokens, codedError(code) { const error = new Error(code); error.code = code; return error; }, api: async () => apiResult, isCurrentGeneration: () => true, abortCatalogLoads() { for (const controller of state.catalogLoadControllers) controller.abort(); state.catalogLoadControllers.clear(); state.imageInflight.clear(); state.candidateInflight.clear(); }, catalogRecordMatches: (current, epoch, { version, revision } = {}) => epoch === state.catalogEpoch && current === record && record.assetVersion === version && (revision == null || record.candidateRevision === revision) };
-vm.runInNewContext(fs.readFileSync(path.join(__dirname, "..", "static", "js", "resources.js"), "utf8"), context); vm.runInNewContext(`${fs.readFileSync(canvasPath, "utf8")}\nglobalThis.loadCandidateBundle = loadCandidateBundle; globalThis.cachedImage = cachedImage;`, context, { filename: canvasPath }); context.fetchBitmap = (...args) => bitmapLoader(...args);
+vm.runInNewContext(fs.readFileSync(resourcesPath, "utf8"), context, { filename: resourcesPath });
+vm.runInNewContext(fs.readFileSync(canvasPath, "utf8"), context, { filename: canvasPath });
+vm.runInNewContext("globalThis.loadCandidateBundle = loadCandidateBundle; globalThis.cachedImage = cachedImage;", context, { filename: "test-candidate-bundle-exports.js" }); context.fetchBitmap = (...args) => bitmapLoader(...args);
 
 (async () => {
   let decodes = 0; apiResult = { candidates: [{ id: "stale", labelToken: "penis", source: "target", refinement: null }], candidateRevision: 5 }; bitmapLoader = async () => { decodes += 1; return { close() {} }; };

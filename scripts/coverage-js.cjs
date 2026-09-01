@@ -3,6 +3,8 @@ const childProcess = require("node:child_process");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
+const { fileURLToPath } = require("node:url");
+const { mergeProcessCovs } = require("@bcoe/v8-coverage");
 const v8ToIstanbul = require("v8-to-istanbul");
 const { createCoverageMap } = require("istanbul-lib-coverage");
 const libReport = require("istanbul-lib-report");
@@ -75,28 +77,50 @@ function runNodeCoverage() {
   assert.equal(result.status, 0, "the existing frontend and browser tests must pass before coverage is evaluated");
 }
 
-async function browserCoverageMap() {
+function sourceFileForCoverageEntry(entry) {
+  let url;
+  try { url = new URL(entry.url); } catch { return null; }
+  if (url.protocol === "file:") return path.resolve(fileURLToPath(url));
+  if (!url.pathname.startsWith("/js/") || !url.pathname.endsWith(".js")) return null;
+  return path.resolve(root, "static", url.pathname.slice(1).split("/").join(path.sep));
+}
+
+async function mergedV8CoverageMap() {
   assert.ok(fs.existsSync(browserCoverageFile), "browser coverage output was not written");
-  const entries = JSON.parse(fs.readFileSync(browserCoverageFile, "utf8"));
-  assert.ok(Array.isArray(entries) && entries.length > 0, "browser coverage output is empty");
+  const browserEntries = JSON.parse(fs.readFileSync(browserCoverageFile, "utf8"));
+  assert.ok(Array.isArray(browserEntries) && browserEntries.length > 0, "browser coverage output is empty");
   const map = createCoverageMap({});
+  const sources = new Map();
+  const processes = [];
   let measuredEntries = 0;
-  for (const entry of entries) {
-    let url;
-    try { url = new URL(entry.url); } catch { continue; }
-    if (!url.pathname.startsWith("/js/") || !url.pathname.endsWith(".js")) continue;
-    const relative = url.pathname.slice(1).split("/").join(path.sep);
-    const sourceFile = path.resolve(root, "static", relative);
-    assert.ok(sourceFile.startsWith(`${staticRoot}${path.sep}`), `browser coverage escaped static/js: ${entry.url}`);
-    assert.ok(fs.existsSync(sourceFile), `browser coverage references an unknown file: ${entry.url}`);
-    assert.equal(typeof entry.source, "string", `browser coverage did not include source for ${entry.url}`);
-    const converter = v8ToIstanbul(sourceFile, 0, { source: entry.source });
-    await converter.load();
-    converter.applyCoverage(entry.functions);
-    map.merge(converter.toIstanbul());
-    measuredEntries += 1;
+  const addEntries = (entries, separate) => {
+    const normalized = [];
+    for (const entry of entries) {
+      const sourceFile = sourceFileForCoverageEntry(entry);
+      if (!sourceFile || !sourceFile.startsWith(`${staticRoot}${path.sep}`)) continue;
+      assert.ok(fs.existsSync(sourceFile), `coverage references an unknown file: ${entry.url}`);
+      if (entry.source !== undefined) {
+        assert.equal(typeof entry.source, "string", `browser coverage did not include source for ${entry.url}`);
+        if (sources.has(sourceFile)) assert.equal(sources.get(sourceFile), entry.source, `browser coverage source changed during the run: ${entry.url}`);
+        else sources.set(sourceFile, entry.source);
+      }
+      normalized.push({ ...entry, url: sourceFile });
+      measuredEntries += 1;
+    }
+    if (separate) normalized.forEach((entry) => processes.push({ result: [entry] }));
+    else if (normalized.length) processes.push({ result: normalized });
+  };
+  for (const file of fs.readdirSync(nodeCoverageTemp).filter((name) => name.endsWith(".json"))) {
+    addEntries(JSON.parse(fs.readFileSync(path.join(nodeCoverageTemp, file), "utf8")).result || [], false);
   }
-  assert.ok(measuredEntries > 0, "no static JavaScript was measured in Chromium");
+  addEntries(browserEntries, true);
+  for (const script of mergeProcessCovs(processes).result) {
+    const converter = v8ToIstanbul(script.url, 0, { source: sources.get(script.url) || fs.readFileSync(script.url, "utf8") });
+    await converter.load();
+    converter.applyCoverage(script.functions);
+    map.merge(converter.toIstanbul());
+  }
+  assert.ok(measuredEntries > 0, "no static JavaScript was measured in V8 coverage");
   return map;
 }
 
@@ -124,8 +148,7 @@ async function main() {
   runNodeCoverage();
   const nodeCoverageFile = path.join(nodeCoverageRoot, "coverage-final.json");
   assert.ok(fs.existsSync(nodeCoverageFile), "c8 did not create a Node/VM coverage report");
-  const combined = createCoverageMap(JSON.parse(fs.readFileSync(nodeCoverageFile, "utf8")));
-  combined.merge(await browserCoverageMap());
+  const combined = await mergedV8CoverageMap();
   const reportDirectory = path.join(coverageRoot, "report");
   const context = libReport.createContext({ dir: reportDirectory, coverageMap: combined });
   reports.create("json").execute(context);

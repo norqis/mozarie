@@ -19,7 +19,8 @@ const context = {
   api(url, options) { writes.push({ url, options }); return Promise.resolve({}); },
   saveDraft() {}, showUserError() {},
 };
-vm.runInNewContext(`${source}\nglobalThis.workspaceFlushTest={flushAllWorkspaceMutations};`, context, { filename: workspacePath });
+vm.runInNewContext(source, context, { filename: workspacePath });
+vm.runInNewContext("globalThis.workspaceFlushTest={flushAllWorkspaceMutations};", context, { filename: "test-workspace-flush-exports.js" });
 
 (async () => {
   state.workspaceDraftTimers.set("one", setTimeout(() => {}, 5000));

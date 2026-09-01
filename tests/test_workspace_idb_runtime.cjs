@@ -31,7 +31,8 @@ const context = {
   window: { indexedDB }, indexedDB, Promise, Map, Set, Object, Number, encodeURIComponent, setTimeout, clearTimeout, queueMicrotask,
   api: async (_url, options = {}) => options.body.includes("stale") ? Promise.reject(new Error("missing")) : { catalogId: "fresh" }, setStatus() {}, saveDraft() {},
 };
-vm.runInNewContext(`${source}\nglobalThis.idbTest={catalogForDirectoryHandle};`, context, { filename: workspacePath });
+vm.runInNewContext(source, context, { filename: workspacePath });
+vm.runInNewContext("globalThis.idbTest={catalogForDirectoryHandle};", context, { filename: "test-workspace-idb-exports.js" });
 (async () => {
   assert.equal(await context.idbTest.catalogForDirectoryHandle({}), "fresh");
   assert.deepEqual(deleted, ["stale"], "same-entry activation failure removes the stale IDB row before replacement");

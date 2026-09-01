@@ -25,7 +25,9 @@ const context = {
   renderCatalogViews() {}, renderGallery() {}, renderOverview() {}, updateNavigationControls() {}, updateActionButtons() {},
   t() { return ""; }, $(selector) { return { setAttribute() {}, hidden: false, textContent: "", disabled: false }; },
 };
-vm.runInNewContext(`${workspaceSource}\n${coreFlags}\nglobalThis.flagsTest = { setHidden, setReviewed, isHidden, isReviewed };`, context, { filename: workspacePath });
+vm.runInNewContext(workspaceSource, context, { filename: workspacePath });
+vm.runInNewContext(coreFlags, context, { filename: "test-core-flags.js" });
+vm.runInNewContext("globalThis.flagsTest = { setHidden, setReviewed, isHidden, isReviewed };", context, { filename: "test-workspace-flags-exports.js" });
 
 (async () => {
   const settleQueue = () => new Promise((resolve) => setTimeout(resolve, 0));

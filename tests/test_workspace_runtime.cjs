@@ -22,7 +22,8 @@ const context = {
     return Promise.resolve({});
   },
 };
-vm.runInNewContext(`${source}\nglobalThis.workspaceTest={queueWorkspaceDraft,flushDraftSaves,flushWorkspaceDraft,flushAllWorkspaceMutations,queueWorkspaceMutation,queueWorkspaceFlags,workspaceDraftPayload,directoryCatalogStore,rememberedOutputDirectoryHandle,rememberOutputDirectoryHandle,catalogForDirectoryHandle,loadWorkspaceDraft,scheduleManualWorkspaceSave};`, context, { filename: workspacePath });
+vm.runInNewContext(source, context, { filename: workspacePath });
+vm.runInNewContext("globalThis.workspaceTest={queueWorkspaceDraft,flushDraftSaves,flushWorkspaceDraft,flushAllWorkspaceMutations,queueWorkspaceMutation,queueWorkspaceFlags,workspaceDraftPayload,directoryCatalogStore,rememberedOutputDirectoryHandle,rememberOutputDirectoryHandle,catalogForDirectoryHandle,loadWorkspaceDraft,scheduleManualWorkspaceSave};", context, { filename: "test-workspace-exports.js" });
 
 (async () => {
   await context.workspaceTest.queueWorkspaceDraft("one", true);

@@ -18,10 +18,8 @@ async function testDetectionWaitsForDraft() {
     updateActionButtons() {}, showProcessing() {}, closeProcessing() {}, updateProgress() {}, setStatusKey() {}, setStatus() {}, showUserError() {},
     t: (key) => key,
   };
-  vm.runInNewContext(
-    `${fs.readFileSync(path.join(root, "detection.js"), "utf8")}\nglobalThis.runDetectionForTest=runDetection;`,
-    context, { filename: path.join(root, "detection.js") },
-  );
+  vm.runInNewContext(fs.readFileSync(path.join(root, "detection.js"), "utf8"), context, { filename: path.join(root, "detection.js") });
+  vm.runInNewContext("globalThis.runDetectionForTest=runDetection;", context, { filename: "test-detection-refresh-exports.js" });
   await context.runDetectionForTest(["image"], 0.5, 1, ["penis"]);
   assert.deepEqual(events, ["draft", "detect"], "manual layers are captured before detection starts");
 }
@@ -42,7 +40,8 @@ async function testDetectionShowsProcessingBeforeDelayedRequests() {
     api: (path) => { events.push(path); return path.startsWith("/api/settings") ? settings.promise : detect.promise; },
     setSettingsForm() {}, updateActionButtons() {}, showProcessing: (job) => events.push(`modal:${job.completed}/${job.total}:${job.current}`), closeProcessing: () => events.push("close"), updateProgress() {}, setStatusKey() {}, setStatus() {}, showUserError() {}, t: (key) => key,
   };
-  vm.runInNewContext(`${fs.readFileSync(path.join(root, "detection.js"), "utf8")}\nglobalThis.startDetectionForTest=startDetectionFromDialog;`, context, { filename: path.join(root, "detection.js") });
+  vm.runInNewContext(fs.readFileSync(path.join(root, "detection.js"), "utf8"), context, { filename: path.join(root, "detection.js") });
+  vm.runInNewContext("globalThis.startDetectionForTest=startDetectionFromDialog;", context, { filename: "test-detection-dialog-exports.js" });
   const pending = context.startDetectionForTest({ preventDefault() {} });
   assert.equal(events[0], "modal:0/2:", "the modal opens synchronously before settings, draft, and detect requests");
   assert.deepEqual({ imageIds: [...state.job.imageIds], completedImageIds: [...state.job.completedImageIds], completed: state.job.completed, total: state.job.total }, { imageIds: ["one", "two"], completedImageIds: [], completed: 0, total: 2 });
@@ -62,7 +61,8 @@ async function testDetectionStartFailureClosesProcessing() {
     saveDraft: async () => { throw new Error("draft failed"); }, api: async () => ({ ok: true }),
     updateActionButtons() {}, showProcessing() { events.push("show"); }, closeProcessing() { events.push("close"); }, updateProgress(job) { events.push(job.state); }, setStatusKey() {}, setStatus() {}, showUserError() { events.push("error"); }, t: (key) => key,
   };
-  vm.runInNewContext(`${fs.readFileSync(path.join(root, "detection.js"), "utf8")}\nglobalThis.runDetectionForTest=runDetection;`, context, { filename: path.join(root, "detection.js") });
+  vm.runInNewContext(fs.readFileSync(path.join(root, "detection.js"), "utf8"), context, { filename: path.join(root, "detection.js") });
+  vm.runInNewContext("globalThis.runDetectionForTest=runDetection;", context, { filename: "test-detection-failure-exports.js" });
   await context.runDetectionForTest(["image"], .5, 1, ["penis"]);
   assert.deepEqual(events, ["show", "running", "close", "idle", "error"], "a start failure closes the optimistic modal and returns the job to idle");
   assert.deepEqual([...state.detectionTargetIds], [], "a start failure removes the optimistic target set");
@@ -89,10 +89,8 @@ async function testCompletionInvalidatesAndReloadsCandidates() {
     markImagesUnreviewed() {}, closeProcessing() {}, renderCatalogViews() {},
     selectImage: async (...args) => events.push(["select", ...args]),
   };
-  vm.runInNewContext(
-    `${fs.readFileSync(path.join(root, "save.js"), "utf8")}\nglobalThis.finishDetectionForTest=finishDetectionJob;`,
-    context,
-  );
+  vm.runInNewContext(fs.readFileSync(path.join(root, "save.js"), "utf8"), context, { filename: path.join(root, "save.js") });
+  vm.runInNewContext("globalThis.finishDetectionForTest=finishDetectionJob;", context, { filename: "test-finish-detection-exports.js" });
   await context.finishDetectionForTest({
     kind: "detect", state: "complete", startedAt: 10, imageIds: ["image"], completedImageIds: ["image"],
   });

@@ -108,7 +108,8 @@ async function testApplicationStartupPaths() {
   context.toolRailItems = () => [];
   context.setToolRailTabStop = () => {};
   const source = fs.readFileSync(path.join(jsRoot, "app.js"), "utf8");
-  vm.runInNewContext(`${source}\nglobalThis.appCoverage={ initialise, bindEvents };`, context, { filename: path.join(jsRoot, "app.js") });
+  vm.runInNewContext(source, context, { filename: path.join(jsRoot, "app.js") });
+  vm.runInNewContext("globalThis.appCoverage={ initialise, bindEvents };", context, { filename: "test-app-exports.js" });
 
   // Initial load without the File System Access API uses the browser guidance.
   await new Promise((resolve) => setImmediate(resolve));
@@ -181,7 +182,8 @@ async function testCoreBoundaryAndWorkspaceBehaviour() {
     forgetThumbnail() {},
   };
   const source = fs.readFileSync(path.join(jsRoot, "core.js"), "utf8");
-  vm.runInNewContext(`${source}\nglobalThis.coreCoverage={ state, t, loadTranslations, api, setStatusKey, progressText, processingCurrentPath, abortCatalogLoads, saveTargets, setHidden, moveReviewedPathAfterApply, markImagesUnreviewed, clearBoundaryConstruction, updateActionButtons, updateCandidateBatchButtons, setMosaicPreviewEnabled, formatDuration };`, context, { filename: path.join(jsRoot, "core.js") });
+  vm.runInNewContext(source, context, { filename: path.join(jsRoot, "core.js") });
+  vm.runInNewContext("globalThis.coreCoverage={ state, t, loadTranslations, api, setStatusKey, progressText, processingCurrentPath, abortCatalogLoads, saveTargets, setHidden, moveReviewedPathAfterApply, markImagesUnreviewed, clearBoundaryConstruction, updateActionButtons, updateCandidateBatchButtons, setMosaicPreviewEnabled, formatDuration };", context, { filename: "test-core-exports.js" });
   const test = context.coreCoverage;
   const coreState = test.state;
   Object.assign(coreState, state);
@@ -326,7 +328,8 @@ async function testDetectionImportAndSaveBehaviour() {
     t: (key) => key, api: async () => ({}), setSettingsForm() {}, scheduleJobPoll() {}, showProcessing() {},
   };
   const source = fs.readFileSync(path.join(jsRoot, "detection.js"), "utf8");
-  vm.runInNewContext(`${source}\nglobalThis.detectionCoverage={ importParallelism, saveAll };`, context, { filename: path.join(jsRoot, "detection.js") });
+  vm.runInNewContext(source, context, { filename: path.join(jsRoot, "detection.js") });
+  vm.runInNewContext("globalThis.detectionCoverage={ importParallelism, saveAll };", context, { filename: "test-detection-exports.js" });
   assert.equal(context.detectionCoverage.importParallelism(), 3);
   state.settings.importing.parallelism = "12";
   assert.equal(context.detectionCoverage.importParallelism(), 10);
