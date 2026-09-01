@@ -220,6 +220,22 @@ vm.runInNewContext(fs.readFileSync(canvasPath, "utf8"), context, { filename: can
   assert.equal(state.mosaicPending, true, "a stroke starting before the scheduled preview frame leaves work pending");
   state.activeStroke = null;
 
+  context.releaseMosaicPreview(); state.mosaicPreviewEnabled = true; state.currentImage = { width: 12, height: 9 }; state.currentId = "source-replaced";
+  let resolveReplacedSource; context.createImageBitmap = () => new Promise((resolve) => { resolveReplacedSource = resolve; });
+  const replacementWorker = context.createMosaicWorker(); const replacedSource = context.ensureMosaicPreviewSource(replacementWorker);
+  const newerSourcePromise = Promise.resolve("newer-source"); state.mosaicSourcePromise = newerSourcePromise;
+  resolveReplacedSource(bitmap("source-replaced")); await replacedSource;
+  assert.equal(state.mosaicSourcePromise, newerSourcePromise, "an older source completion cannot clear a newer source promise");
+
+  context.releaseMosaicPreview(); state.mosaicPreviewEnabled = true; state.currentImage = { width: 12, height: 9 }; state.currentId = "render-post-error";
+  context.createImageBitmap = async (image) => bitmap(image === state.currentImage ? "source" : "mask-render-post-error");
+  const renderPostWorker = context.createMosaicWorker(); renderPostWorker.postMessage = (payload, transfer) => {
+    if (payload.type === "render") throw new Error("render stopped");
+    return Worker.prototype.postMessage.call(renderPostWorker, payload, transfer);
+  };
+  await context.rebuildMosaicPreview();
+  assert.equal(state.mosaicPreviewEnabled, false, "a render post failure closes its captured mask and disables preview");
+
   context.createImageBitmap = async (image) => bitmap(image === state.currentImage ? "source" : "mask");
   context.releaseMosaicPreview();
   assert.equal(state.mosaicWorker, null, "release leaves no active worker handle");
@@ -227,6 +243,6 @@ vm.runInNewContext(fs.readFileSync(canvasPath, "utf8"), context, { filename: can
   assert.equal(counters.workers, counters.terminated, "all controlled workers are terminated");
   assert.equal(counters.closed, counters.bitmaps, "all source, mask, and output bitmaps are reclaimed");
   assert.ok(counters.peakWorkerCanvases <= 1, "at most one worker canvas bundle is live");
-  assert.ok(counters.workers <= 110, "100 switches and transient states create a bounded number of workers");
+  assert.ok(counters.workers <= 112, "100 switches and transient states create a bounded number of workers");
   console.log("test_mosaic_preview_runtime: passed");
 })().catch((error) => { console.error(error); process.exitCode = 1; });
