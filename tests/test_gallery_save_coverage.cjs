@@ -144,6 +144,7 @@ async function galleryInteractions() {
 
   const navigationWindow = { images: Array.from({ length: 12 }, (_, index) => ({ id: `logical-${index}` })), container: { clientWidth: 500, clientHeight: 50 }, options: { columns: 5, minWidth: 1, padding: 0, gap: 0, rowHeight: 10 } };
   assert.equal(runtime.catalogMoveIndex({ ...navigationWindow, images: [] }, 0, { key: "ArrowRight" }), -1, "empty virtual catalogs have no keyboard target");
+  assert.equal(runtime.catalogMoveIndex({ ...navigationWindow, container: { clientWidth: 500, clientHeight: 0 } }, 7, { key: "PageUp" }), 2, "zero-height catalogs retain a one-row page");
   assert.equal(runtime.catalogMoveIndex(navigationWindow, 0, { key: "ArrowLeft" }), 0, "Left keeps focus at the first logical card");
   assert.equal(runtime.catalogMoveIndex(navigationWindow, 0, { key: "ArrowRight" }), 1, "Right moves to the next logical card");
   assert.equal(runtime.catalogMoveIndex(navigationWindow, 7, { key: "ArrowUp" }), 2, "Up moves one virtual row");
