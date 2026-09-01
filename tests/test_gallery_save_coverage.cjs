@@ -25,7 +25,8 @@ function element(children = {}) {
     getAttribute(name) { return attributes.get(name); },
     querySelector(selector) { return children[selector] || null; },
     scrollIntoView(options) { this.scrolled = options; },
-    addEventListener() {}, showModal() { this.open = true; }, close() { this.open = false; },
+    listeners: new Map(),
+    addEventListener(name, callback) { this.listeners.set(name, callback); }, showModal() { this.open = true; }, close() { this.open = false; },
   };
   return node;
 }
@@ -95,7 +96,7 @@ function makeGalleryRuntime() {
   context.reviewResult = true; context.hideResult = true;
   const source = fs.readFileSync(path.join(jsRoot, "gallery.js"), "utf8");
   vm.runInNewContext(source, context, { filename: path.join(jsRoot, "gallery.js") });
-  vm.runInNewContext("globalThis.__galleryTest = { thumbnailObserver, thumbnailSource, loadThumbnail, observeThumbnail, forgetThumbnail, renderGallery, imageMatchesGalleryFilter, updateGalleryCurrent, overviewFolderOptions, overviewImages, syncOverviewFolders, selectOverviewImage, renderOverview, renderCatalogViews, setViewMode, moveCurrentBy, reviewAndMoveNext, hideAndMoveNext, runNavigationAction, updateNavigationControls, thumbnailObservers, catalogWindows, catalogMoveIndex, resetCatalogWindows, scrollCatalogImage };", context, { filename: "test-gallery-exports.js" });
+  vm.runInNewContext("globalThis.__galleryTest = { thumbnailObserver, thumbnailSource, loadThumbnail, observeThumbnail, forgetThumbnail, catalogWindow, focusCatalogIndex, renderGallery, imageMatchesGalleryFilter, updateGalleryCurrent, overviewFolderOptions, overviewImages, syncOverviewFolders, selectOverviewImage, renderOverview, renderCatalogViews, setViewMode, moveCurrentBy, reviewAndMoveNext, hideAndMoveNext, runNavigationAction, updateNavigationControls, thumbnailObservers, catalogWindows, catalogMoveIndex, resetCatalogWindows, scrollCatalogImage };", context, { filename: "test-gallery-exports.js" });
   return { ...context.__galleryTest, calls, context, document, frames, gallery, menus, nodes, observers, overviewGrid, prefetched, selected, state };
 }
 
@@ -118,6 +119,24 @@ async function galleryInteractions() {
 
   runtime.renderGallery();
   assert.equal(runtime.gallery.children.length, 4, "the fixed-row window keeps one spacer plus the mounted cards");
+  const galleryWindow = runtime.catalogWindows.get("gallery");
+  galleryWindow.frame = 1;
+  runtime.gallery.listeners.get("scroll")();
+  assert.equal(runtime.frames.length, 0, "a queued gallery render coalesces another scroll event");
+  galleryWindow.frame = 0;
+  runtime.focusCatalogIndex(galleryWindow, -1);
+  runtime.scrollCatalogImage("missing", "one");
+  runtime.gallery.clientHeight = 30;
+  const scrollCases = [
+    [0, "one"],
+    [500, "three"],
+    [0, "three"],
+    [290, "three"],
+  ];
+  for (const [scrollTop, imageId] of scrollCases) {
+    runtime.gallery.scrollTop = scrollTop;
+    runtime.scrollCatalogImage("gallery", imageId);
+  }
   const firstNode = state.galleryNodes.get("one");
   assert.equal(firstNode.getAttribute("aria-current"), "true"); assert.match(firstNode.getAttribute("aria-label"), /sets\/one/);
   firstNode.onclick(); firstNode.onmouseenter(); firstNode.oncontextmenu({});

@@ -151,7 +151,7 @@ async function testBoundApplicationEvents() {
   const settingsDialog = element("#settingsDialog"); const modalFirst = element("modalFirst"); const modalLast = element("modalLast"); modalFirst.closest = modalLast.closest = () => null; settingsDialog.querySelectorAll = () => [modalFirst, modalLast];
   settingsDialog.contains = (node) => node === modalFirst || node === modalLast; document.activeElement = modalLast; await fire("#settingsDialog", "keydown", { key: "Tab", currentTarget: settingsDialog }); document.activeElement = modalFirst; await fire("#settingsDialog", "keydown", { key: "Tab", shiftKey: true, currentTarget: settingsDialog }); await fire("#settingsDialog", "keydown", { key: "Tab", currentTarget: settingsDialog }); settingsDialog.querySelectorAll = () => []; await fire("#settingsDialog", "keydown", { key: "Tab", currentTarget: settingsDialog });
   document.activeElement = element("invoker"); await fire("help-target", "click"); element("#modelHelpDialog").open = false; await element("#modelHelpDialog").listenerLists.get("close")[0](event()); element("#modelHelpDialog").open = true; await element("#modelHelpDialog").listenerLists.get("close")[0](event()); element("#modelHelpDialog").open = false; state.settings = { models: {}, display: {}, detection: {}, general: { language: "ja" } }; await element("#settingsDialog").listenerLists.get("close")[0](event()); await fire("#settingsDialog", "close");
-  await fire("#settingsDialog", "cancel"); await fire("#modelHelpDialog", "cancel"); await fire("#detectDialog", "cancel"); await fire("#applyDialog", "cancel"); state.applyRunning = true; await fire("#applyDialog", "cancel"); state.applyRunning = false; await fire("#singleSaveDialog", "cancel"); state.saving = true; await fire("#singleSaveDialog", "cancel"); state.saving = false; await fire("#confirmDialog", "cancel"); await fire("#processingDialog", "cancel"); context.modelDownloadPoll = {}; await fire("#modelDownloadDialog", "cancel"); context.modelDownloadPoll = null;
+  await fire("#settingsDialog", "cancel"); await fire("#modelHelpDialog", "cancel"); await fire("#detectDialog", "cancel"); await fire("#applyDialog", "cancel"); state.applyRunning = true; await fire("#applyDialog", "cancel"); state.applyRunning = false; await fire("#singleSaveDialog", "cancel"); state.saving = true; await fire("#singleSaveDialog", "cancel"); state.saving = false; await fire("#confirmDialog", "cancel"); await fire("#processingDialog", "cancel"); context.modelDownloadPoll = {}; await fire("#modelDownloadDialog", "cancel"); context.modelDownloadPoll = null; await fire("#modelDownloadDialog", "cancel");
   for (const dialogId of ["#settingsDialog", "#modelHelpDialog", "#detectDialog", "#mosaicHelpDialog", "#applyDialog", "#singleSaveDialog", "#confirmDialog"]) { const dialog = element(dialogId); await fire(dialogId, "pointerdown", { target: dialog, clientX: -1, clientY: -1 }); await fire(dialogId, "pointerup", { target: dialog, clientX: -1, clientY: -1 }); await fire(dialogId, "pointerdown", { target: dialog, clientX: -1, clientY: -1, pointerId: 2 }); await fire(dialogId, "pointercancel", { target: dialog, pointerId: 2 }); }
   await element("#compareSplitter").listeners.get("keydown")(event({ key: "x" })); state.browserSave = { paused: true }; await fire("#applyPauseButton", "click"); state.browserSave = null; state.job = { state: "paused" }; await fire("#applyPauseButton", "click"); state.job = null;
   state.processing = null; await fire("#processingPauseButton", "click"); await fire("#processingCancelButton", "click"); state.processing = { kind: "import", state: "running" }; state.importSession = null; await fire("#processingPauseButton", "click"); state.processing = { kind: "detect", state: "running" }; context.api = async () => { throw new Error("offline"); }; await fire("#processingPauseButton", "click"); context.api = async () => ({ kind: "detect", state: "running" });
@@ -286,7 +286,7 @@ async function testCoreBoundaryAndWorkspaceBehaviour() {
   };
   const source = fs.readFileSync(path.join(jsRoot, "core.js"), "utf8");
   vm.runInNewContext(source, context, { filename: path.join(jsRoot, "core.js") });
-  vm.runInNewContext("globalThis.coreCoverage={ state, t, validCandidateTokens, loadTranslations, api, setStatusKey, progressText, processingCurrentPath, abortCatalogLoads, saveTargets, setHidden, moveReviewedPathAfterApply, markImagesUnreviewed, clearBoundaryConstruction, updateActionButtons, updateCandidateBatchButtons, setMosaicPreviewEnabled, formatDuration, normaliseDetectionConfidence, normaliseDivisor, calculatedBlockSize };", context, { filename: "test-core-exports.js" });
+  vm.runInNewContext("globalThis.coreCoverage={ state, t, validCandidateTokens, showUserError, responseError, loadTranslations, api, setStatus, setStatusKey, showProcessing, progressText, processingCurrentPath, catalogRecordMatches, cancelFillWork, abortCatalogLoads, saveTargets, setHidden, selectCatalogImage, refreshReviewViews, moveReviewedPathAfterApply, markImagesUnreviewed, clearBoundaryConstruction, updateActionButtons, updateCandidateBatchButtons, setMosaicPreviewEnabled, formatDuration, normaliseDetectionConfidence, normaliseDivisor, calculatedBlockSize };", context, { filename: "test-core-exports.js" });
   const test = context.coreCoverage;
   const coreState = test.state;
   Object.assign(coreState, state);
@@ -431,6 +431,40 @@ async function testCoreBoundaryAndWorkspaceBehaviour() {
   assert.equal(batchButton.disabled, true, "false manual-layer presence disables the empty exclusion batch control");
   assert.equal(displayButton.disabled, true, "false manual-layer presence disables the empty exclusion display control");
   assert.equal(effectiveButton.disabled, true, "false manual-layer presence disables the empty exclusion effective-mask control");
+
+  const dialog = element("#errorDialog");
+  const originalDollar = context.$;
+  context.$ = (selector) => selector === "#missingErrorDialog" ? null : originalDollar(selector);
+  context.$ = (selector) => selector === "#errorDialog" ? null : originalDollar(selector);
+  test.showUserError("internal_error");
+  context.$ = originalDollar;
+  dialog.open = true;
+  test.showUserError("internal_error");
+  dialog.open = false;
+  test.showUserError("internal_error");
+  for (const [payload, expected] of [
+    [{ error_code: "gpu_unavailable", params: ["ignored"] }, "gpu_unavailable"],
+    [{ params: { device: "gpu" } }, "api_not_found"],
+    [{ error_code: 3 }, "internal_error"],
+  ]) assert.equal(test.responseError({ status: expected === "api_not_found" ? 404 : 500 }, payload).code, expected);
+  test.setStatus("offline", "error");
+  for (const job of [
+    { kind: "detect", state: "paused", total: 2, completed: 1, current: "one.png", cancelRequested: false },
+    { kind: "import", state: "pausing", total: 0, completed: 0, current: "", cancelRequested: true },
+  ]) test.showProcessing(job);
+  const matchingRecord = { id: "one", candidateRevision: 4, assetVersion: "v" };
+  coreState.images = [matchingRecord];
+  assert.equal(test.catalogRecordMatches(matchingRecord, undefined, { version: 0, revision: 4 }), false);
+  coreState.catalogEpoch = 2;
+  assert.equal(test.catalogRecordMatches(matchingRecord, 2, { version: 0, revision: 4 }), true);
+  let terminated = false;
+  coreState.fillWorker = { terminate() { terminated = true; } };
+  test.cancelFillWork();
+  assert.equal(terminated, true, "fill cancellation terminates a live worker");
+  assert.equal(await test.setHidden(null, true), false);
+  test.selectCatalogImage("missing");
+  coreState.viewMode = "overview";
+  test.refreshReviewViews(null);
 }
 
 async function testDetectionImportAndSaveBehaviour() {
@@ -448,7 +482,8 @@ async function testDetectionImportAndSaveBehaviour() {
   };
   const source = fs.readFileSync(path.join(jsRoot, "detection.js"), "utf8");
   vm.runInNewContext(source, context, { filename: path.join(jsRoot, "detection.js") });
-  vm.runInNewContext("globalThis.detectionCoverage={ detectionParallelism, detectionTargets, setDetectionTargets, normaliseImportParallelism, importParallelism, openDetectionDialog, runDetection, cancelDetection, saveCurrent, saveAll };", context, { filename: "test-detection-exports.js" });
+  context.validateDetectionTargets = () => true;
+  vm.runInNewContext("globalThis.detectionCoverage={ detectionParallelism, detectionTargets, setDetectionTargets, normaliseImportParallelism, importParallelism, openDetectionDialog, runDetection, startDetectionFromDialog, cancelDetection, saveCurrent, saveAll };", context, { filename: "test-detection-exports.js" });
   assert.equal(context.detectionCoverage.importParallelism(), 3);
   state.settings.importing.parallelism = "12";
   assert.equal(context.detectionCoverage.importParallelism(), 10);
@@ -466,6 +501,8 @@ async function testDetectionImportAndSaveBehaviour() {
   context.detectionCoverage.setDetectionTargets(["pussy"], "dialogTarget");
   assert.equal(element("#dialogTargetPenis").checked, false);
   assert.equal(element("#dialogTargetPussy").checked, true);
+  context.detectionCoverage.setDetectionTargets(null, "dialogTarget");
+  assert.equal(element("#dialogTargetPenis").checked, true, "missing targets keep the public default set");
   context.detectionCoverage.openDetectionDialog([]);
   context.detectionCoverage.openDetectionDialog(["one"]);
   assert.deepEqual(JSON.parse(JSON.stringify(state.pendingDetectionTargetIds)), ["one"], "opening detection preserves target ids");
@@ -478,6 +515,7 @@ async function testDetectionImportAndSaveBehaviour() {
   assert.ok(calls.includes("single:one"), "single save opens only for a current masked image");
   state.currentId = null; await context.detectionCoverage.saveCurrent();
   state.currentId = "one"; state.candidateUpdateChains.set("one", Promise.resolve()); await context.detectionCoverage.saveCurrent(); state.candidateUpdateChains.clear();
+  context.imageHasMask = () => false; await context.detectionCoverage.saveCurrent(); context.imageHasMask = () => true;
   await context.detectionCoverage.cancelDetection();
   state.job = { kind: "detect", state: "running" }; context.activeDetection = () => true;
   await context.detectionCoverage.cancelDetection();
@@ -485,6 +523,15 @@ async function testDetectionImportAndSaveBehaviour() {
   context.activeDetection = () => false; state.detectCancelRequested = false;
   await context.detectionCoverage.saveAll();
   assert.deepEqual(calls.slice(-3), ["draft", "refresh", "masked"]);
+  state.pendingDetectionTargetIds = [];
+  await context.detectionCoverage.startDetectionFromDialog({ preventDefault() {} });
+  state.pendingDetectionTargetIds = ["one"];
+  context.validateDetectionTargets = () => false;
+  await context.detectionCoverage.startDetectionFromDialog({ preventDefault() {} });
+  context.validateDetectionTargets = () => true;
+  state.settings = { detection: {} };
+  context.api = async () => { throw new Error("settings unavailable"); };
+  await context.detectionCoverage.startDetectionFromDialog({ preventDefault() {} });
 }
 
 Promise.resolve()
