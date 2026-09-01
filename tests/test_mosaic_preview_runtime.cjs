@@ -207,6 +207,19 @@ vm.runInNewContext(fs.readFileSync(canvasPath, "utf8"), context, { filename: can
   context.createImageBitmap = async (image) => { if (image === state.currentImage) return bitmap("source"); throw new Error("mask unavailable"); };
   await context.rebuildMosaicPreview(); assert.equal(state.mosaicPreviewEnabled, false, "a mask capture failure disables preview and releases its worker");
 
+  context.releaseMosaicPreview(); state.mosaicPreviewEnabled = true; state.currentImage = { width: 12, height: 9 }; state.currentId = "worker-error";
+  const statusWorker = context.createMosaicWorker(); state.mosaicWorkerBusy = true; state.mosaicInFlightGeneration = 0;
+  statusWorker.onmessage({ data: { type: "error" } });
+  assert.equal(state.mosaicPreviewEnabled, false, "a worker error before a frame is in flight fails the pending preview");
+  context.releaseMosaicPreview(); state.mosaicPreviewEnabled = true; const onerrorWorker = context.createMosaicWorker(); onerrorWorker.onerror();
+  assert.equal(state.mosaicPreviewEnabled, false, "an active worker error handler releases the preview worker");
+
+  context.releaseMosaicPreview(); state.mosaicPreviewEnabled = true; state.currentImage = { width: 12, height: 9 }; state.currentId = "raf-stroke"; state.activeStroke = null; state.mosaicPreviewRequested = false;
+  context.requestAnimationFrame = (callback) => { state.activeStroke = { id: "late-stroke" }; callback(); return 1; };
+  context.requestMosaicPreview();
+  assert.equal(state.mosaicPending, true, "a stroke starting before the scheduled preview frame leaves work pending");
+  state.activeStroke = null;
+
   context.createImageBitmap = async (image) => bitmap(image === state.currentImage ? "source" : "mask");
   context.releaseMosaicPreview();
   assert.equal(state.mosaicWorker, null, "release leaves no active worker handle");
