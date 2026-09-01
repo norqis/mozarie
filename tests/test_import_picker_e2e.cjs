@@ -218,6 +218,14 @@ function startFixtureServer() {
       response.end(JSON.stringify({ images: catalog, removedImageIds }));
       return;
     }
+    if (requestPath.startsWith("/api/catalog/image/") && request.method === "DELETE") {
+      const imageId = decodeURIComponent(requestPath.slice("/api/catalog/image/".length));
+      const removedImageIds = catalog.some((image) => image.id === imageId) ? [imageId] : [];
+      catalog = catalog.filter((image) => image.id !== imageId);
+      response.writeHead(200, { "Content-Type": "application/json" });
+      response.end(JSON.stringify({ images: catalog, removedImageIds }));
+      return;
+    }
     if (requestPath === "/api/save/prepare" && request.method === "POST") {
       let body = ""; for await (const chunk of request) body += chunk;
       const payload = JSON.parse(body); saveRequests.push({ path: requestPath, payload });
@@ -388,6 +396,13 @@ function startFixtureServer() {
       response.end(JSON.stringify({ ok: true }));
       return;
     }
+    if (requestPath === "/api/boundary" && request.method === "POST") {
+      let body = ""; for await (const chunk of request) body += chunk;
+      const boundary = JSON.parse(body);
+      response.writeHead(200, { "Content-Type": "application/json" });
+      response.end(JSON.stringify({ candidates: [{ id: `boundary-${Date.now()}`, role: "apply", enabled: true, forced: false, labelToken: "boundary", source: "boundary", refinement: null, confidence: 1, color: "#ff3d4d" }], candidateRevision: 1, boundary }));
+      return;
+    }
     if (requestPath.startsWith("/api/workspace/manual/")) {
       for await (const _chunk of request) { /* consume POST body */ }
       response.writeHead(200, { "Content-Type": "application/json" });
@@ -457,8 +472,13 @@ function startCandidateScenarioServer() {
     detection: { mode: "standard", fluid_exclusion_enabled: true, exclude_forced_default: true, threshold: 0.5, parallelism: 1, targets: ["penis"] },
     shortcuts: { enabled: true, bindings: {}, actions: {} }, confirmations: {},
   };
-  const image = { id: imageId, relativePath: "candidate.png", sourceKind: "fixture", width: 409, height: 401, candidateCount: 1, enabledCandidateCount: 1, candidateRevision: 7 };
-  const candidate = { id: candidateId, role: "apply", enabled: true, forced: false, labelToken: "penis", source: "target", refinement: null, confidence: 0.91, color: "#ff3d4d" };
+  const image = { id: imageId, relativePath: "candidate.png", sourceKind: "fixture", width: 409, height: 401, candidateCount: 2, enabledCandidateCount: 1, candidateRevision: 7 };
+  let candidateRevision = 7;
+  const candidates = [
+    { id: candidateId, role: "apply", enabled: true, forced: false, labelToken: "penis", source: "target", refinement: null, confidence: 0.91, color: "#ff3d4d" },
+    { id: "candidate-blink-exclude", role: "exclude", enabled: true, forced: true, labelToken: "hand", source: "hand_exclusion", refinement: null, confidence: 0.88, color: "#28d3ff" },
+  ];
+  const candidateUpdates = [];
   const server = http.createServer(async (request, response) => {
     const requestUrl = new URL(request.url, "http://127.0.0.1");
     const requestPath = requestUrl.pathname;
@@ -472,8 +492,29 @@ function startCandidateScenarioServer() {
       for await (const _chunk of request) { /* consume workspace flags */ }
       json({}); return;
     }
-    if (requestPath === `/api/candidates/${imageId}`) { json({ candidates: [candidate], candidateRevision: 7 }); return; }
-    if (requestPath === `/api/mask/${imageId}/${candidateId}` || requestPath === `/api/image/${imageId}` || requestPath === `/api/thumbnail/${imageId}`) {
+    if (requestPath === `/api/candidates/${imageId}`) { json({ candidates, candidateRevision }); return; }
+    if (requestPath.startsWith(`/api/candidate/${imageId}/`) && request.method === "POST") {
+      let body = ""; for await (const chunk of request) body += chunk;
+      const candidate = candidates.find((item) => item.id === decodeURIComponent(requestPath.slice(`/api/candidate/${imageId}/`.length)));
+      const update = JSON.parse(body);
+      if (!candidate) { response.writeHead(404).end(); return; }
+      candidate.enabled = Boolean(update.enabled);
+      if (candidate.role === "exclude") candidate.forced = Boolean(update.forced);
+      candidateUpdates.push({ id: candidate.id, update });
+      candidateRevision += 1; image.candidateRevision = candidateRevision;
+      image.enabledCandidateCount = candidates.filter((item) => item.role === "apply" && item.enabled).length;
+      json({ candidateRevision }); return;
+    }
+    if (requestPath === "/api/candidates/batch" && request.method === "POST") {
+      let body = ""; for await (const chunk of request) body += chunk;
+      const update = JSON.parse(body);
+      candidates.filter((candidate) => candidate.role === update.role).forEach((candidate) => { candidate.enabled = update.operation === "enable"; });
+      candidateUpdates.push({ batch: update });
+      candidateRevision += 1; image.candidateRevision = candidateRevision;
+      image.enabledCandidateCount = candidates.filter((item) => item.role === "apply" && item.enabled).length;
+      json({ candidateRevision }); return;
+    }
+    if (requestPath.startsWith(`/api/mask/${imageId}/`) || requestPath === `/api/image/${imageId}` || requestPath === `/api/thumbnail/${imageId}`) {
       const body = await fs.readFile(imagePath);
       response.writeHead(200, { "Content-Type": "image/png", "Content-Length": body.length }); response.end(body); return;
     }
@@ -489,7 +530,7 @@ function startCandidateScenarioServer() {
     server.once("error", reject);
     server.listen(0, "127.0.0.1", () => {
       server.off("error", reject);
-      resolve({ server, url: `http://127.0.0.1:${server.address().port}`, imageId, candidateId });
+      resolve({ server, url: `http://127.0.0.1:${server.address().port}`, imageId, candidateId, candidateUpdates });
     });
   });
 }
@@ -673,6 +714,59 @@ async function runCandidateBlinkScenario(browser) {
         && !document.querySelector("#candidatePane")?.classList.contains("blink-active");
     }, scenario.candidateId);
 
+    const excludeRow = page.locator('[data-candidate-blink-id="candidate-blink-exclude"]');
+    await excludeRow.locator(".candidate-display-toggle").click();
+    await page.waitForFunction(() => state.blinkModes.get("candidate-blink-exclude") === "normal");
+    await excludeRow.locator(".candidate-effective-toggle").click();
+    await page.waitForFunction(() => state.blinkModes.get("candidate-blink-exclude") === "effective");
+    await row.locator(".candidate-toggle").click();
+    await page.waitForFunction((id) => state.candidates.find((candidate) => candidate.id === id)?.enabled === false, scenario.candidateId);
+    assert.deepEqual(scenario.candidateUpdates.at(-1), { id: scenario.candidateId, update: { enabled: false, color: "#ff3d4d" } }, "the automatic mosaic row toggle persists its explicit API state");
+    await excludeRow.locator(".candidate-toggle").click();
+    await page.waitForFunction(() => state.candidates.find((candidate) => candidate.id === "candidate-blink-exclude")?.enabled === false);
+    assert.deepEqual(scenario.candidateUpdates.at(-1), { id: "candidate-blink-exclude", update: { enabled: false, color: "#28d3ff", forced: true } }, "the automatic exclusion row toggle persists its explicit API state");
+    await excludeRow.locator(".candidate-forced").click();
+    await page.waitForFunction(() => state.candidates.find((candidate) => candidate.id === "candidate-blink-exclude")?.forced === false);
+    assert.deepEqual(scenario.candidateUpdates.at(-1), { id: "candidate-blink-exclude", update: { enabled: false, color: "#28d3ff", forced: false } }, "the automatic exclusion force control persists its explicit API state");
+
+    await page.evaluate(() => {
+      state.manualMaskPresent = true; state.manualEnabled = true;
+      state.manualExclusionEnabled = true; state.manualExclusionEraseEnabled = true; state.manualExclusionForced = true;
+      addCtx.fillRect(0, 0, 3, 3); exclusionCtx.fillRect(4, 0, 3, 3); exclusionEraseCtx.fillRect(5, 0, 1, 3);
+      markMaskDirty(); renderCandidates(); render();
+    });
+    const manualApply = page.locator('[data-candidate-blink-id="manual:apply"]');
+    const manualExclude = page.locator('[data-candidate-blink-id="manual:exclude"]');
+    const manualErase = page.locator('[data-candidate-blink-id="manual:excludeErase"]');
+    for (const manualRowControl of [manualApply, manualExclude, manualErase]) {
+      await manualRowControl.locator(".candidate-display-toggle").click();
+      await manualRowControl.locator(".candidate-effective-toggle").click();
+    }
+    await manualApply.locator(".candidate-toggle").click();
+    await page.waitForFunction(() => state.manualEnabled === false);
+    await manualExclude.locator(".candidate-toggle").click();
+    await page.waitForFunction(() => state.manualExclusionEnabled === false);
+    await manualExclude.locator(".candidate-forced").click();
+    await page.waitForFunction(() => state.manualExclusionForced === false);
+    await manualErase.locator(".candidate-toggle").click();
+    await page.waitForFunction(() => state.manualExclusionEraseEnabled === false);
+    await manualApply.locator(".candidate-delete").click();
+    await page.waitForFunction(() => !state.manualMaskPresent && !canvasHasPixels(addCtx, addCanvas));
+    await manualExclude.locator(".candidate-delete").click();
+    await page.waitForFunction(() => !canvasHasPixels(exclusionCtx, exclusionCanvas));
+    await manualErase.locator(".candidate-delete").click();
+    await page.waitForFunction(() => !canvasHasPixels(exclusionEraseCtx, exclusionEraseCanvas));
+
+    await row.locator(".candidate-delete").click();
+    await page.waitForFunction(() => document.querySelector("#confirmDialog").open);
+    await page.locator("#confirmAccept").click();
+    await page.waitForFunction((id) => state.removedCandidateIds.has(id) && !document.querySelector(`[data-candidate-blink-id="${id}"]`), scenario.candidateId);
+    await excludeRow.locator(".candidate-delete").click();
+    await page.waitForFunction(() => document.querySelector("#confirmDialog").open);
+    await page.locator("#confirmAccept").click();
+    await page.waitForFunction(() => state.removedCandidateIds.has("candidate-blink-exclude") && !document.querySelector('[data-candidate-blink-id="candidate-blink-exclude"]'));
+    assert.equal(await page.evaluate(() => { state.maskDirty = true; composeCurrentMask(); return canvasHasPixels(combinedCtx, combinedCanvas); }), false, "deleting every automatic and manual mosaic source clears the composed mask in Chromium");
+
     const blinkPixels = await page.evaluate(async (applyId) => {
       const source = document.createElement("canvas"); source.width = 100; source.height = 80;
       source.getContext("2d").fillStyle = "#000000"; source.getContext("2d").fillRect(0, 0, 100, 80);
@@ -710,6 +804,25 @@ async function runCandidateBlinkScenario(browser) {
     assert.equal(blinkPixels.erase.cacheSame, true, "manual erase blink leaves the cached post-erase exclusion mask untouched");
     assert.deepEqual(blinkPixels.erase.intersect, [199, 47, 60, 255], "manual erase blinks red only where it intersects a pre-erase exclusion");
     assert.deepEqual(blinkPixels.erase.outside, [0, 0, 0, 255], "manual erase does not color pixels outside the pre-erase exclusion union");
+
+    await page.evaluate(() => {
+      window.__nativeWorker = window.Worker;
+      window.Worker = class { constructor() { throw new Error("fixture mosaic worker failure"); } };
+      state.mosaicPreviewEnabled = false;
+      state.mosaicPreviewFailureReported = false;
+      const button = document.querySelector("#mosaicPreviewButton");
+      button.classList.remove("active"); button.setAttribute("aria-pressed", "false");
+    });
+    await page.locator("#mosaicPreviewButton").click();
+    await page.waitForFunction(() => document.querySelector("#errorDialog").open);
+    assert.equal(await page.locator("#errorDialogTitle").textContent(), await page.evaluate(() => t("errorDialog.mosaic_preview_failed.title")), "the first failed preview attempt reports its error");
+    await page.locator("#errorDialogClose").click();
+    await page.locator("#mosaicPreviewButton").click();
+    await page.waitForFunction(() => document.querySelector("#errorDialog").open);
+    assert.equal(await page.locator("#errorDialogTitle").textContent(), await page.evaluate(() => t("errorDialog.mosaic_preview_failed.title")), "explicitly re-enabling after a failure reports the next failed attempt once");
+    await page.locator("#errorDialogClose").click();
+    assert.equal(await page.evaluate(() => state.mosaicPreviewEnabled), false, "a failed preview attempt stays off instead of retrying in the background");
+    await page.evaluate(() => { window.Worker = window.__nativeWorker; });
   } finally {
     await stopCoveredPage(page, true);
     scenario.server.closeAllConnections();
@@ -1194,7 +1307,7 @@ async function selectFixtureImage(page, pageErrors, consoleErrors) {
 // not by page-side events that production code could synthesize.  Every
 // manifest assertion id must be present at the
 // end of the sweep.
-async function runControlLedger(page, fixtureUrl, contracts, dynamicContracts, finishCancel, holdSaveRender, releaseSaveRenders) {
+async function runControlLedger(page, fixtureUrl, contracts, dynamicContracts, finishCancel, holdSaveRender, releaseSaveRenders, resetScenario) {
   page.setDefaultTimeout(3000);
   const operated = new Set();
   const assertionPassed = new Set();
@@ -1238,6 +1351,79 @@ async function runControlLedger(page, fixtureUrl, contracts, dynamicContracts, f
   assert.equal(await page.locator("#singleSaveOutputDirectoryStatus").textContent(), await page.evaluate(() => t("apply.outputDirectoryUnset")), "single save never presents the configured server path as its browser destination");
   await page.locator("#singleSaveCloseButton").click();
   await setupFixture();
+
+  const errorCodes = await page.evaluate(() => Object.keys(USER_ERROR_CODES));
+  for (const language of ["ja", "en"]) {
+    await page.evaluate((locale) => loadTranslations(locale), language);
+    for (const code of errorCodes) {
+      await page.evaluate((errorCode) => showUserError({ code: errorCode, message: "fixture server detail" }), code);
+      if (code === "connection_lost") {
+        assert.equal(await page.locator("#errorDialog").evaluate((dialog) => dialog.open), false, "connection loss remains outside the modal error dialog");
+        assert.equal(await page.locator("#connectionStatus").isVisible(), true, `connection loss is visible inline in ${language}`);
+        assert.equal(await page.locator("#connectionStatus").evaluate((node) => node.classList.contains("error")), true, `connection loss uses the inline error presentation in ${language}`);
+        await page.evaluate(() => clearStatus());
+        continue;
+      }
+      await page.waitForFunction(() => document.querySelector("#errorDialog").open);
+      const presentation = await page.evaluate(() => ["#errorDialogTitle", "#errorDialogCause", "#errorDialogAction"].map((selector) => document.querySelector(selector).textContent.trim()));
+      assert.equal(presentation.every(Boolean), true, `${code} has title, cause, and action in ${language}`);
+      assert.equal(presentation.join("\n").includes(code), false, `${code} never leaks its raw server code in ${language}`);
+      assert.equal(presentation.join("\n").includes("fixture server detail"), false, `${code} never leaks server detail in ${language}`);
+      await page.locator("#errorDialogClose").click();
+    }
+  }
+  await page.evaluate(() => loadTranslations("ja"));
+
+  await setupFixture();
+  await page.evaluate(() => {
+    state.images = [
+      { id: "overview-unreviewed", relativePath: "unreviewed.png", width: 20, height: 20 },
+      { id: "overview-reviewed-masked", relativePath: "reviewed-masked.png", width: 20, height: 20 },
+      { id: "overview-hidden", relativePath: "hidden.png", width: 20, height: 20 },
+    ];
+    state.reviewedPaths = new Set([reviewPath(state.images[1])]);
+    state.hiddenPaths = new Set([reviewPath(state.images[2])]);
+    state.maskStatus = new Map([["overview-reviewed-masked", true]]);
+    setViewMode("overview");
+  });
+  for (const [filter, expected] of [
+    ["all", ["overview-unreviewed", "overview-reviewed-masked", "overview-hidden"]],
+    ["unreviewed", ["overview-unreviewed"]], ["reviewed", ["overview-reviewed-masked"]],
+    ["masked", ["overview-reviewed-masked"]], ["unmasked", ["overview-unreviewed"]], ["hidden", ["overview-hidden"]],
+  ]) {
+    await page.locator(`[data-overview-filter="${filter}"]`).click();
+    await page.waitForFunction((value) => state.overviewFilter === value, filter);
+    assert.deepEqual(await page.locator(".overview-item").evaluateAll((items) => items.map((item) => item.dataset.id)), expected, `overview ${filter} filter exposes exactly its matching images`);
+  }
+
+  for (const action of ["remove", "hide", "show", "clear", "detect", "reviewed", "unreviewed"]) {
+    resetScenario();
+    await setupFixture();
+    if (action === "show") await page.evaluate(() => { const image = state.images.find((item) => item.id === "sample"); state.hiddenPaths.add(reviewPath(image)); image.hidden = true; renderCatalogViews(); });
+    if (action === "clear") await page.evaluate(() => { state.maskStatus.set("sample", true); currentRecord().candidateCount = 1; renderCatalogViews(); });
+    if (action === "unreviewed") await page.evaluate(() => { const image = state.images.find((item) => item.id === "sample"); state.reviewedPaths.add(reviewPath(image)); image.reviewed = true; renderCatalogViews(); });
+    await page.locator("#overviewButton").click(); await page.locator("#batchModeButton").click();
+    await page.locator('.overview-item[data-id="sample"]').click();
+    await page.locator("#selectionActionsButton").click();
+    await page.locator(`[data-selection-action="${action}"]`).click();
+    if (await page.locator("#confirmDialog").evaluate((dialog) => dialog.open)) await page.locator("#confirmAccept").click();
+    if (action === "detect") {
+      await page.waitForFunction(() => document.querySelector("#detectDialog").open);
+      await page.locator("#detectCloseButton").click();
+    } else if (action === "remove") {
+      await page.waitForFunction(() => !state.images.some((image) => image.id === "sample"));
+    } else if (action === "hide") {
+      await page.waitForFunction(() => isHidden(state.images.find((image) => image.id === "sample")));
+    } else if (action === "show") {
+      await page.waitForFunction(() => !isHidden(state.images.find((image) => image.id === "sample")));
+    } else if (action === "clear") {
+      await page.waitForFunction(() => !state.maskStatus.has("sample") && state.images.find((image) => image.id === "sample")?.candidateCount === 0);
+    } else if (action === "reviewed") {
+      await page.waitForFunction(() => isReviewed(state.images.find((image) => image.id === "sample")));
+    } else {
+      await page.waitForFunction(() => !isReviewed(state.images.find((image) => image.id === "sample")));
+    }
+  }
 
   // This snapshot intentionally contains only product results that a control
   // is allowed to prove: a particular dialog, value, state transition, canvas
@@ -1563,6 +1749,38 @@ async function runControlLedger(page, fixtureUrl, contracts, dynamicContracts, f
   });
   assert.ok(Math.abs(restoredBoundaryAnchor.actual - restoredBoundaryAnchor.expected) <= 1, "returning to compare restores the boundary action to the current right-side split");
   await page.locator("#singleViewButton").click(); await click("fitButton");
+  await setupFixture();
+  const bucketCanvas = await page.locator("#editorCanvas").boundingBox();
+  const bucketPoint = { x: bucketCanvas.x + bucketCanvas.width / 2, y: bucketCanvas.y + bucketCanvas.height / 2 };
+  await click("bucketTool"); await page.mouse.click(bucketPoint.x, bucketPoint.y);
+  await page.waitForFunction(() => state.manualMaskPresent && canvasHasPixels(addCtx, addCanvas) && canvasHasPixels(combinedCtx, combinedCanvas));
+  assert.equal(await page.evaluate(() => state.mosaicPreviewEnabled && Boolean(state.mosaicWorker)), true, "a public bucket fill rebuilds the mosaic preview worker from its composed mask");
+  await click("undoButton"); await page.waitForFunction(() => !state.manualMaskPresent && !canvasHasPixels(addCtx, addCanvas));
+  await click("excludeBucketTool"); await page.mouse.click(bucketPoint.x, bucketPoint.y);
+  await page.waitForFunction(() => canvasHasPixels(exclusionCtx, exclusionCanvas) && !canvasHasPixels(combinedCtx, combinedCanvas));
+  await click("undoButton"); await page.waitForFunction(() => !canvasHasPixels(exclusionCtx, exclusionCanvas));
+
+  const boundaryRequest = async (toolId, points, expectedField) => {
+    await setupFixture(); await click("boundaryTool"); await click(toolId);
+    const box = await page.locator("#editorCanvas").boundingBox();
+    const toClient = ([x, y]) => ({ x: box.x + box.width * x, y: box.y + box.height * y });
+    if (toolId === "boundaryBrushTool") {
+      const [start, end] = points.map(toClient);
+      await page.mouse.move(start.x, start.y); await page.mouse.down(); await page.mouse.move(end.x, end.y); await page.mouse.up();
+    } else {
+      for (const point of points.map(toClient)) await page.mouse.click(point.x, point.y);
+    }
+    await page.waitForFunction(() => !document.querySelector("#boundaryDetectButton").disabled);
+    const before = await snapshot(); await click("boundaryDetectButton");
+    await page.waitForFunction((count) => window.__ledgerApi.slice(count).some((request) => request.url.includes("/api/boundary")), before.api.length);
+    const payload = await page.evaluate((count) => JSON.parse(window.__ledgerApi.slice(count).find((request) => request.url.includes("/api/boundary")).body), before.api.length);
+    assert.equal(typeof payload[expectedField], "object", `${toolId} sends its ${expectedField} shape through the public boundary API`);
+    if (expectedField === "points") assert.ok(payload.points.length >= 3, "polygon detection sends the completed point mask");
+    else assert.ok(payload.roi.right > payload.roi.left && payload.roi.bottom > payload.roi.top, "brush detection sends a non-empty drawn mask ROI");
+  };
+  await boundaryRequest("polygonTool", [[.3, .3], [.65, .32], [.68, .68], [.3, .7]], "points");
+  await boundaryRequest("boundaryBrushTool", [[.28, .42], [.72, .58]], "roi");
+  await setupFixture(); await click("fitButton");
   await page.evaluate(() => { state.manualMaskPresent = true; renderCandidates(); });
   for (const selector of ["[data-candidate-batch]", "[data-candidate-display-toggle]", "[data-candidate-effective-toggle]"]) {
     const before = await snapshot(); await page.locator(selector).first().click();
@@ -1707,10 +1925,21 @@ async function runControlLedger(page, fixtureUrl, contracts, dynamicContracts, f
   await page.waitForFunction(() => !state.masksClearing && !state.catalogMutation);
   if (await page.locator("#errorDialog").evaluate((dialog) => dialog.open)) await page.locator("#errorDialogClose").click();
   await setupFixture();
+  await page.evaluate(async () => {
+    const source = document.createElement("canvas"); source.width = 3840; source.height = 2160;
+    source.getContext("2d").fillRect(0, 0, source.width, source.height);
+    state.currentImage = await createImageBitmap(source);
+    const record = currentRecord(); record.width = source.width; record.height = source.height;
+    canvasSizeForImage(record); prepareOriginalImage();
+    state.imageCache.set(imageCacheKey(record), state.currentImage, source.width * source.height * 4);
+    requestMosaicPreview(); fitImage(); render();
+  });
+  await page.waitForFunction(() => originalCanvas.width === 3840 && originalCanvas.height === 2160);
   const catalogBefore = await snapshot(); await click("batchMoreButton"); await click("clearCatalogButton"); await click("confirmAccept");
   await page.waitForFunction(() => state.images.length === 0);
   const catalogAfter = await snapshot();
   assertCatalogClearResult({ api: catalogAfter.api.slice(catalogBefore.api.length) }, { imageIds: catalogAfter.state.imageIds });
+  assert.deepEqual(await page.evaluate(() => ({ original: [originalCanvas.width, originalCanvas.height], worker: state.mosaicWorker, imageCache: state.imageCache.items.size, candidateCache: state.candidateBundleCache.items.size })), { original: [1, 1], worker: null, imageCache: 0, candidateCache: 0 }, "clearing a selected 4K image releases its original canvas, preview worker, and decoded caches");
   await page.evaluate(() => showUserError(new Error("ledger fixture error")));
   await click("errorDialogClose");
   for (const [locale, expected] of [["ja", ["モデルをダウンロードできません", "選択中のモデルはダウンロード対象として登録されていません。", "設定の検出タブで対象のモデルを選び直してから、もう一度実行してください。"]], ["en", ["Model download is unavailable", "The selected model is not registered for download.", "Choose a listed model in Settings > Detection, then try again."]]]) {
@@ -3519,7 +3748,7 @@ async function main() {
     });
     holdDetection(true);
     try {
-      await runControlLedger(ledgerPage, fixtureUrl, uiControlManifest, uiDynamicControlManifest, finishCancel, holdSaveRender, releaseSaveRenders);
+      await runControlLedger(ledgerPage, fixtureUrl, uiControlManifest, uiDynamicControlManifest, finishCancel, holdSaveRender, releaseSaveRenders, resetScenario);
     } finally {
       holdDetection(false);
       await stopCoveredPage(ledgerPage, true);

@@ -96,6 +96,10 @@ const test = context.canvasCompletion;
   assert.equal(addCanvas.width, 20, "resizing an image resets every editable canvas");
   assert.equal(state.maskDirty, true);
   assert.equal(state.manualEnabled, true);
+  originalCanvas.width = 3840; originalCanvas.height = 2160;
+  test.clearEditor();
+  assert.deepEqual([originalCanvas.width, originalCanvas.height], [1, 1], "clearing an image releases the full-resolution original backing store");
+  state.hover = { x: 1, y: 2 };
 
   addCanvas.ctx.alpha = 255;
   assert.equal(test.canvasHasPixels(addCanvas.ctx, addCanvas), true);

@@ -34,8 +34,8 @@ function clearEditor() {
   state.draftDirty = false;
   state.draftLayerDirty.clear();
   state.historyBaseDirty = false;
-  addCanvas.width = exclusionCanvas.width = exclusionEraseCanvas.width = effectiveExclusionCanvas.width = combinedCanvas.width = mosaicCanvas.width = 1;
-  addCanvas.height = exclusionCanvas.height = exclusionEraseCanvas.height = effectiveExclusionCanvas.height = combinedCanvas.height = mosaicCanvas.height = 1;
+  addCanvas.width = exclusionCanvas.width = exclusionEraseCanvas.width = effectiveExclusionCanvas.width = combinedCanvas.width = mosaicCanvas.width = originalCanvas.width = 1;
+  addCanvas.height = exclusionCanvas.height = exclusionEraseCanvas.height = effectiveExclusionCanvas.height = combinedCanvas.height = mosaicCanvas.height = originalCanvas.height = 1;
   releaseHistoryCanvases();
   $("#emptyState").hidden = false;
   $("#currentFileName").textContent = t("editor.none");

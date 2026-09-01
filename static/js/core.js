@@ -6,7 +6,6 @@ const state = {
   selectedImageIds: new Set(), selectionAnchorId: null, batchMode: false,
   navigationShortcutsEnabled: true,
   candidates: [], candidateImages: new Map(), drafts: new Map(),
-  draftSaveChains: new Map(),
   tool: "brush", panning: false, drawing: false, gestureDisplaySide: null, hoverDisplaySide: "left", boundaryPending: false,
   boundaryRoi: null, boundaryStart: null, boundaryStartClient: null, boundaryPoint: null, boundaryPromptPoint: null, boundaryDragging: false, boundaryDisplaySide: "left",
   boundaryDrafts: [], boundaryDraftSequence: 0, boundaryActiveId: null, boundaryBrushStroke: null,
@@ -602,6 +601,7 @@ function clearBoundaryConstruction() {
 
 function setMosaicPreviewEnabled(enabled) {
   if (isBusy() || state.importing) return;
+  if (enabled) state.mosaicPreviewFailureReported = false;
   state.mosaicPreviewEnabled = enabled;
   const button = $("#mosaicPreviewButton");
   button.classList.toggle("active", enabled);

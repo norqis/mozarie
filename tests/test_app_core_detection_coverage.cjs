@@ -181,11 +181,16 @@ async function testCoreBoundaryAndWorkspaceBehaviour() {
     forgetThumbnail() {},
   };
   const source = fs.readFileSync(path.join(jsRoot, "core.js"), "utf8");
-  vm.runInNewContext(`${source}\nglobalThis.coreCoverage={ state, t, loadTranslations, api, setStatusKey, progressText, processingCurrentPath, abortCatalogLoads, saveTargets, setHidden, moveReviewedPathAfterApply, markImagesUnreviewed, clearBoundaryConstruction, updateActionButtons, updateCandidateBatchButtons, formatDuration };`, context, { filename: path.join(jsRoot, "core.js") });
+  vm.runInNewContext(`${source}\nglobalThis.coreCoverage={ state, t, loadTranslations, api, setStatusKey, progressText, processingCurrentPath, abortCatalogLoads, saveTargets, setHidden, moveReviewedPathAfterApply, markImagesUnreviewed, clearBoundaryConstruction, updateActionButtons, updateCandidateBatchButtons, setMosaicPreviewEnabled, formatDuration };`, context, { filename: path.join(jsRoot, "core.js") });
   const test = context.coreCoverage;
   const coreState = test.state;
   Object.assign(coreState, state);
   coreState.workspaceFlagPending = new Map();
+  coreState.mosaicPreviewFailureReported = true;
+  test.setMosaicPreviewEnabled(true);
+  assert.equal(coreState.mosaicPreviewFailureReported, false, "explicitly re-enabling mosaic preview starts a fresh failure-reporting attempt");
+  test.setMosaicPreviewEnabled(false);
+  assert.equal(coreState.mosaicPreviewEnabled, false, "disabling the preview does not start a new failure-reporting attempt");
 
   assert.equal(test.t("unknown"), "");
   await test.loadTranslations();
