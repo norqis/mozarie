@@ -470,5 +470,48 @@ test.render(); test.flushRender();
   assert.deepEqual([displayCanvas.width, displayCanvas.height], [240, 180], "resizing the editor allocates the display backing store at device resolution");
   test.resizeRenderCanvas();
   context.window.devicePixelRatio = 1;
+
+  // Late responses are discarded before either draft restoration or UI writes.
+  // This is the normal race when the user moves on while a decoded image is in
+  // flight, and is intentionally a successful no-op rather than an error.
+  const late = { id: "late", assetVersion: "v1", candidateRevision: 1, relativePath: "late.png", width: 8, height: 8 };
+  state.images = [late]; state.currentId = null; state.currentImage = null; state.imageCache = cache(); state.candidateBundleCache = cache(); state.drafts = new Map();
+  context.cachedImage = async () => ({ width: 8, height: 8 }); context.loadCandidateBundle = async () => ({ candidates: [], candidateImages: new Map(), candidateRevision: 1 });
+  context.isCurrentGeneration = () => false;
+  await test.selectImage("late", true, { saveCurrentDraft: false });
+  assert.equal(state.currentId, null, "a late image response cannot replace the current editor image");
+  context.isCurrentGeneration = () => true;
+
+  let staleInvalidated = null;
+  state.images = [{ id: "stale-error", assetVersion: "v1", candidateRevision: 1 }]; state.imageCache = cache(); state.candidateBundleCache = cache();
+  context.cachedImage = async () => { const error = new Error("stale"); error.code = "stale_asset"; throw error; };
+  context.loadCandidateBundle = async () => ({ candidates: [], candidateImages: new Map(), candidateRevision: 1 });
+  context.invalidateStaleAsset = (id) => { staleInvalidated = id; };
+  await test.selectImage("stale-error", true, { saveCurrentDraft: false });
+  assert.equal(staleInvalidated, "stale-error", "a stale asset response evicts only its obsolete decoded data");
+
+  // Candidate revisions may arrive while the image is not selected, may have
+  // no decoded bundle yet, or may transfer the displayed bundle to a new key.
+  state.images = [{ id: "inactive", candidateRevision: 1 }, { id: "active", candidateRevision: 1 }]; state.currentId = "inactive";
+  state.candidateBundleCache = cache(); state.candidateImages = new Map(); state.candidates = [];
+  test.retainCurrentCandidateBundle("missing", 2);
+  test.retainCurrentCandidateBundle("inactive", 2);
+  assert.equal(state.images[0].candidateRevision, 2, "inactive records only update revision metadata");
+  state.currentId = "active"; test.retainCurrentCandidateBundle("active", 3);
+  assert.equal(state.images[1].candidateRevision, 3, "a selected record without a decoded bundle still advances revision metadata");
+  state.candidateImages = new Map([["active-mask", { width: 1, height: 1 }]]); state.candidates = [{ id: "active-mask", enabled: true, role: "apply" }];
+  state.candidateBundleCache.set("active:3", { candidateImages: state.candidateImages }, 1);
+  test.retainCurrentCandidateBundle("active", 4);
+  assert.equal(state.candidateBundleCache.has("active:4"), true, "the displayed bundle transfers ownership to the new server revision");
+
+  // Clearing an unrelated stale image must close only the cache entries that
+  // belong to that image and leave the current editor intact.
+  let staleClosed = 0;
+  state.currentId = "active"; state.currentImage = { close() {} }; state.candidateImages = new Map(); state.galleryNodes = new Map([["orphan", { querySelector() { return { src: "thumb" }; } }]]); state.overviewNodes = new Map([["orphan", { querySelector() { return { src: "thumb" }; } }]]);
+  state.imageCache = cache([["orphan:v1", { close() { staleClosed += 1; } }]]);
+  state.candidateBundleCache = cache([["orphan:1", { candidateImages: new Map([["orphan-mask", { close() { staleClosed += 1; } }]]) }]]);
+  context.forgetThumbnail = () => {};
+  test.invalidateStaleAsset("orphan");
+  assert.equal(staleClosed, 2); assert.equal(state.currentId, "active");
   console.log("test_editor_canvas_geometry_runtime: passed");
 })().catch((error) => { console.error(error); process.exitCode = 1; });
