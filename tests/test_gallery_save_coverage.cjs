@@ -427,6 +427,143 @@ async function saveCoverageMatrix() {
     assert.ok(label);
   }
 
+  const singleFailureCases = [
+    {
+      label: "image disappears before the single save dialog opens",
+      run: async (runtime) => {
+        runtime.state.candidateUpdateChains.set("pending", Promise.resolve());
+        await runtime.openSingleSaveDialog("missing");
+        assert.equal(runtime.state.singleSave, undefined);
+      },
+    },
+    {
+      label: "prepare has no single save entry",
+      run: async (runtime) => {
+        const { state } = runtime;
+        state.images = [{ id: "file", sourceKind: "filesystem", relativePath: "file.png" }];
+        state.singleSave = { imageId: "file", divisor: 16, draft: null };
+        state.outputDirectoryHandle = { name: "out", async queryPermission() { return "granted"; } };
+        runtime.setHandler(async (url) => url === "/api/save/prepare" ? { entries: [] } : {});
+        await runtime.startSingleSave({ preventDefault() {} });
+        assert.match(runtime.nodes.get("#singleSaveResult").textContent, /save_state_changed/);
+      },
+    },
+    {
+      label: "render response has no save token",
+      run: async (runtime) => {
+        const { state } = runtime;
+        state.images = [{ id: "file", sourceKind: "filesystem", relativePath: "file.png" }];
+        state.singleSave = { imageId: "file", divisor: 16, draft: null };
+        state.outputDirectoryHandle = { name: "out", async queryPermission() { return "granted"; } };
+        runtime.setHandler(async (url) => url === "/api/save/prepare" ? { entries: [{ imageId: "file", candidateRevision: 1, relativePath: "file.png" }] } : url === "/api/save/render" ? response("") : {});
+        await runtime.startSingleSave({ preventDefault() {} });
+        assert.match(runtime.nodes.get("#singleSaveResult").textContent, /save_state_changed/);
+      },
+    },
+    {
+      label: "failed copy removes its browser output",
+      run: async (runtime) => {
+        const { state } = runtime;
+        let removed = false;
+        state.images = [{ id: "file", sourceKind: "filesystem", relativePath: "file.png" }];
+        state.singleSave = { imageId: "file", divisor: 16, draft: null };
+        state.outputDirectoryHandle = {
+          name: "out", async queryPermission() { return "granted"; },
+          async getFileHandle(_name, options) { if (!options?.create) return missing(); return { async createWritable() { return { async write() {}, async close() {}, async abort() {} }; } }; },
+          async removeEntry() { removed = true; },
+        };
+        runtime.setHandler(async (url) => {
+          if (url === "/api/save/prepare") return { entries: [{ imageId: "file", candidateRevision: 1, relativePath: "file.png" }] };
+          if (url === "/api/save/render") return response();
+          if (url === "/api/save/commit") { const error = new Error("rejected"); error.status = 400; throw error; }
+          if (url === "/api/save/status") return { state: "pending" };
+          return {};
+        });
+        await runtime.startSingleSave({ preventDefault() {} });
+        assert.equal(removed, true);
+      },
+    },
+    {
+      label: "successful overwrite reports completion",
+      run: async (runtime) => {
+        const { state } = runtime;
+        const file = { name: "file.png", size: 1, lastModified: 1, async arrayBuffer() { return Uint8Array.from([1]).buffer; } };
+        const access = { fileHandle: { name: file.name, async queryPermission() { return "granted"; }, async getFile() { return file; }, async createWritable() { return { async write() {}, async close() {}, async abort() {} }; } }, name: file.name, size: 1, lastModified: 1 };
+        state.images = [{ id: "file", sourceKind: "filesystem", relativePath: "file.png" }];
+        state.sourceAccess = new Map([["file", access]]); state.singleSave = { imageId: "file", divisor: 16, draft: null };
+        runtime.singleSaveMode.value = "overwrite";
+        runtime.setHandler(async (url) => url === "/api/save/prepare" ? { entries: [{ imageId: "file", candidateRevision: 1, relativePath: "file.png" }] } : url === "/api/save/render" ? response() : url === "/api/save/commit" ? { cleared: false, stale: false } : url === "/api/images" ? { images: state.images } : {});
+        await runtime.startSingleSave({ preventDefault() {} });
+        assert.match(runtime.nodes.get("#singleSaveResult").textContent, /apply\.complete/);
+      },
+    },
+  ];
+  for (const scenario of singleFailureCases) {
+    const runtime = makeSaveRuntime();
+    await scenario.run(runtime);
+    assert.ok(scenario.label);
+  }
+
+  const helperFailureCases = [
+    {
+      label: "output file names are exhausted",
+      run: async (runtime) => {
+        const occupied = { async getFileHandle() { return {}; } };
+        await assert.rejects(runtime.writeSingleOutput(occupied, "file.png", "_m", response()), (error) => error.code === "output_name_exhausted");
+      },
+    },
+    {
+      label: "output abort failure preserves the pipe failure",
+      run: async (runtime) => {
+        const output = { async getFileHandle(_name, options) { if (!options?.create) return missing(); return { async createWritable() { return { async abort() { throw new Error("abort"); } }; } }; }, async removeEntry() {} };
+        await assert.rejects(runtime.writeSingleOutput(output, "file.png", "_m", { body: { async pipeTo() { throw new Error("pipe"); } } }), /pipe/);
+      },
+    },
+    {
+      label: "render allows a missing token meta element",
+      run: async (runtime) => {
+        const querySelector = runtime.context.document.querySelector;
+        runtime.context.document.querySelector = (selector) => selector === 'meta[name="mozarie-token"]' ? null : querySelector(selector);
+        runtime.setHandler(async (url, options) => {
+          assert.equal(url, "/api/save/render"); assert.equal(options.headers["X-Mozarie-Token"], ""); return response();
+        });
+        await runtime.renderSingleSave({ imageId: "file" });
+      },
+    },
+    {
+      label: "apply directory selection ignores busy and empty picks",
+      run: async (runtime) => {
+        runtime.state.applyRunning = true; await runtime.chooseOutputDirectory();
+        runtime.state.applyRunning = false; runtime.context.window.showDirectoryPicker = async () => null;
+        await runtime.chooseOutputDirectory();
+        assert.equal(runtime.nodes.get("#applyResult").textContent, "");
+      },
+    },
+    {
+      label: "source and restore abort failures preserve the write failure",
+      run: async (runtime) => {
+        const failing = { fileHandle: { async createWritable() { return { async abort() { throw new Error("abort"); } }; } } };
+        await assert.rejects(runtime.writeSourceHandle(failing, { body: { async pipeTo() { throw new Error("pipe"); } } }), /pipe/);
+        const restore = { fileHandle: { async createWritable() { return { async write() { throw new Error("write"); }, async close() {}, async abort() { throw new Error("abort"); } }; } } };
+        await assert.rejects(runtime.restoreSourceHandle(restore, Uint8Array.from([1]), false), /write/);
+      },
+    },
+    {
+      label: "restore translates exclusive writer failures",
+      run: async (runtime) => {
+        for (const [name, code] of [["NoModificationAllowedError", "source_busy"], ["TypeError", "source_write_unsupported"]]) {
+          const access = { fileHandle: { async createWritable() { const error = new Error(name); error.name = name; throw error; } } };
+          await assert.rejects(runtime.restoreSourceHandle(access, Uint8Array.from([1]), false), (error) => error.code === code);
+        }
+      },
+    },
+  ];
+  for (const scenario of helperFailureCases) {
+    const runtime = makeSaveRuntime();
+    await scenario.run(runtime);
+    assert.ok(scenario.label);
+  }
+
   const runCases = [
     { mode: "copy", deleteOriginal: false, sourceKind: "filesystem", committed: { cleared: true, stale: true, deleted: false }, removeAfterSave: true },
     { mode: "copy", deleteOriginal: true, sourceKind: "session", committed: { cleared: true, stale: false, deleted: true }, removeAfterSave: true },
