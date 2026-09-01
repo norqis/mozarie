@@ -85,7 +85,7 @@ context.historyAddCanvas = canvas(); context.historyExclusionCanvas = canvas(); 
 const canvasPath = path.join(__dirname, "..", "static", "js", "editor-canvas.js");
 const source = fs.readFileSync(canvasPath, "utf8");
 vm.runInNewContext(source, context, { filename: canvasPath });
-vm.runInNewContext("globalThis.geometryRuntime = { selectImage, loadImage, imageAssetVersion, invalidateStaleAsset, imageCacheKey, candidateCacheKey, cachedImage, prefetchNeighbors, releaseImageCaches, releaseStaleImageVersions, releaseCandidateBundles, releaseCandidateBitmap, invalidateCandidateBundles, retainCurrentCandidateBundle, loadCandidateBundle, reconcileCurrentCandidates, syncCandidateRecord, syncCurrentCandidateRecord, syncStoredMaskStatus, canvasToDataUrl, saveDraft, restoreDraft, resizeRenderCanvas, setCssTransform, releaseMosaicPreview, prepareOriginalImage, mosaicPreviewFailed, createMosaicWorker, ensureMosaicPreviewSource, rebuildMosaicPreview, requestMosaicPreview, composeEnabledExclusionMask, drawEffectiveExclusions, composeCurrentMask, markDraftDirty, markMaskDirty, flushMaskComposition, hasEffectiveMask, maskStatusWithoutCandidate, paintMosaicPreviewAt, paintTintedMask, selectedCandidateMask, compareSplitX, comparePaneBounds, compareSideOffset, compareEventSide, compareEventOffset, updateCompareSplitter, setDisplayMode, fitImage, updateBrushCursor, roiFromPoints, boundaryDraftRoi, boundaryDraftId, pointForRoi, polygonRoi, boundaryDraftBounds, addBoundaryDraft, activeBoundaryShape, boundaryShapes, strokeRoi, appendBoundaryBrushPoint, beginBoundaryBrushStroke, completeBoundaryBrushStroke, rectsTouch, joinRois, boundaryRequests, boundaryPath, drawBoundaryScrim, drawBoundaryShape, drawBoundaryRoi, polygonArea, polygonSegmentsIntersect, polygonPointsValid, polygonIsValid, canDetectBoundary, hasBoundaryDraft, boundaryActionAnchor, updateBoundaryActions, drawCandidateBlinkOverlay, drawCompareRangeOverlay, refreshMaskStatus, renderNow, render, flushRender };", context, { filename: "test-editor-canvas-geometry-exports.js" });
+vm.runInNewContext("globalThis.geometryRuntime = { selectImage, loadImage, imageAssetVersion, invalidateStaleAsset, imageCacheKey, candidateCacheKey, cachedImage, prefetchNeighbors, releaseImageCaches, releaseStaleImageVersions, releaseCandidateBundles, releaseCandidateBitmap, invalidateCandidateBundles, retainCurrentCandidateBundle, loadCandidateBundle, reconcileCurrentCandidates, syncCandidateRecord, syncCurrentCandidateRecord, syncStoredMaskStatus, updateCandidateStatus, canvasToDataUrl, saveDraft, restoreDraft, resizeRenderCanvas, setCssTransform, releaseMosaicPreview, prepareOriginalImage, mosaicPreviewFailed, createMosaicWorker, ensureMosaicPreviewSource, rebuildMosaicPreview, requestMosaicPreview, composeEnabledExclusionMask, drawEffectiveExclusions, composeCurrentMask, markDraftDirty, markMaskDirty, flushMaskComposition, hasEffectiveMask, maskStatusWithoutCandidate, paintMosaicPreviewAt, paintTintedMask, selectedCandidateMask, compareSplitX, comparePaneBounds, compareSideOffset, compareEventSide, compareEventOffset, updateCompareSplitter, setDisplayMode, fitImage, updateBrushCursor, roiFromPoints, boundaryDraftRoi, boundaryDraftId, pointForRoi, polygonRoi, boundaryDraftBounds, addBoundaryDraft, activeBoundaryShape, boundaryShapes, strokeRoi, appendBoundaryBrushPoint, beginBoundaryBrushStroke, completeBoundaryBrushStroke, rectsTouch, joinRois, boundaryRequests, boundaryPath, drawBoundaryScrim, drawBoundaryShape, drawBoundaryRoi, polygonArea, polygonSegmentsIntersect, polygonPointsValid, polygonIsValid, canDetectBoundary, hasBoundaryDraft, boundaryActionAnchor, updateBoundaryActions, drawCandidateBlinkOverlay, drawCompareRangeOverlay, refreshMaskStatus, renderNow, render, flushRender };", context, { filename: "test-editor-canvas-geometry-exports.js" });
 const test = context.geometryRuntime;
 
 function rectangle(left, top, right, bottom) { return { type: "rectangle", roi: { left, top, right, bottom } }; }
@@ -609,5 +609,29 @@ test.render(); test.flushRender();
   test.drawCompareRangeOverlay(test.compareSplitX());
   context.Image = class { set src(value) { this.source = value; this.onload(); } };
   assert.equal((await test.loadImage("ok-image")).source, "ok-image", "a decoded image resolves through its load handler");
+
+  // The compact draft format deliberately permits omitted history fields.
+  // Both the defaulted and explicit forms retain the same editable state.
+  state.images = [{ id: "compact", candidateRevision: 2, enabledCandidateCount: 0 }]; state.currentId = "compact"; state.currentImage = { width: 8, height: 8 }; state.imageGeneration = 81;
+  state.candidates = [{ id: "kept", enabled: true, role: "apply" }];
+  await test.restoreDraft("compact", 81, { candidateRevision: 2, history: [{ kind: "brush" }], historyBase: {}, removedCandidateIds: [], historyIndex: undefined }, [null, null, null, null, null, null]);
+  assert.equal(state.historyIndex, 0);
+  state.drafts = new Map([["compact", { historyBase: { add: "old-add", exclusion: "old-exclusion", exclusionErase: "old-erase" } }]]);
+  state.draftSaveChains = new Map(); state.draftDirty = true; state.draftLayerDirty = new Set(); state.historyBaseDirty = true; state.history = [{ kind: "brush" }]; state.historyIndex = 1;
+  state.historyRemovedCandidateIds = null; state.historyCandidateIds = null; state.removedCandidateIds = new Set();
+  context.historyAddCanvas.ctx.alpha = context.historyExclusionCanvas.ctx.alpha = context.historyExclusionEraseCanvas.ctx.alpha = 0;
+  await test.saveDraft();
+  assert.equal(state.drafts.get("compact").historyBase.add, "", "a newly encoded empty history base replaces a stale layer");
+
+  state.drafts = new Map([["compact", { hasEffectiveMask: true, candidateRevision: 0 }]]); state.maskStatus = new Map();
+  test.syncStoredMaskStatus("compact", []); assert.equal(state.maskStatus.get("compact"), true);
+  state.drafts.set("compact", { hasEffectiveMask: false, candidateRevision: 0 }); test.syncStoredMaskStatus("compact", []);
+  assert.equal(state.maskStatus.has("compact"), false);
+
+  state.candidates = [{ id: "removed", enabled: true, role: "apply" }, { id: "off", enabled: false, role: "apply" }, { id: "exclude", enabled: true, role: "exclude" }];
+  state.removedCandidateIds = new Set(["removed"]); state.manualEnabled = false; state.manualExclusionEnabled = false; state.manualExclusionEraseEnabled = false;
+  test.maskStatusWithoutCandidate("off");
+  state.boundaryDrafts = [{ id: "invalid-again", type: "polygon", points: [{ x: 1, y: 1 }] }]; test.boundaryRequests();
+  test.drawBoundaryShape({ type: "polygon", points: [{ x: 1, y: 1 }] });
   console.log("test_editor_canvas_geometry_runtime: passed");
 })().catch((error) => { console.error(error); process.exitCode = 1; });
