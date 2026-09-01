@@ -339,6 +339,22 @@ async function saveInteractions() {
   state.browserSave = {}; await runtime.pollJob(); state.browserSave = null; state.pollInFlight = null; runtime.setHandler(async (url) => url === "/api/job" ? { kind: "apply", state: "running", total: 2, completed: 1, current: "file" } : { images: state.images }); await runtime.pollJob(); runtime.setHandler(async () => { throw new Error("offline"); }); await runtime.pollJob(); await runtime.pollJob(); await runtime.pollJob(); runtime.scheduleJobPoll(true); runtime.scheduleJobPoll(false);
   const detectionRuntime = makeSaveRuntime(); detectionRuntime.state.images = [{ id: "file", relativePath: "file.png" }]; detectionRuntime.state.currentId = "file"; detectionRuntime.state.pageLoadedAt = 1; detectionRuntime.state.job = { kind: "detect", state: "running", startedAt: 99 }; detectionRuntime.setHandler(async (url) => url === "/api/job" ? { kind: "detect", state: "cancelled", completed: 0, imageIds: ["file"], completedImageIds: [], startedAt: 99 } : { images: detectionRuntime.state.images }); await detectionRuntime.pollJob(); assert.ok(detectionRuntime.calls.includes("status:status.detectCancelled"));
   detectionRuntime.state.handledDetectionStartedAt = null; detectionRuntime.state.job = { kind: "detect", state: "running", startedAt: 100 }; detectionRuntime.setHandler(async (url) => url === "/api/job" ? { kind: "detect", state: "complete", completed: 1, imageIds: ["file"], completedImageIds: ["file"], startedAt: 100 } : { images: detectionRuntime.state.images }); await detectionRuntime.pollJob(); assert.ok(detectionRuntime.calls.includes("status:status.detectDone"));
+
+  const pipeFailure = { body: { async pipeTo() { throw new Error("write failed"); } } };
+  const outputCases = [
+    [{ async getFileHandle() { const error = new Error("blocked"); error.name = "SecurityError"; throw error; } }, "file.png", "_m", pipeFailure, "blocked"],
+    [{ async getFileHandle(_name, options = {}) { if (!options.create) { const error = new Error("missing"); error.name = "NotFoundError"; throw error; } return { async createWritable() { const error = new Error("unsupported"); error.name = "TypeError"; throw error; } }; }, async removeEntry() {} }, "file.png", "_m", pipeFailure, "output_write_unsupported"],
+  ];
+  for (const [handle, name, suffix, response, expected] of outputCases) {
+    await assert.rejects(runtime.writeSingleOutput(handle, name, suffix, response), (error) => error.code === expected || error.message === expected);
+  }
+  const cleanupFailure = { async getFileHandle(_name, options = {}) { if (!options.create) { const error = new Error("missing"); error.name = "NotFoundError"; throw error; } return { async createWritable() { return { async abort() {}, async write() {}, async close() {} }; } }; }, async removeEntry() { throw new Error("cleanup"); } };
+  await assert.rejects(runtime.writeSingleOutput(cleanupFailure, "file.png", "_m", pipeFailure), (error) => error.code === "output_cleanup_failed");
+  assert.equal(await runtime.ensureHandlePermission(null, true), undefined);
+  const permissionDenied = { fileHandle: { async queryPermission() { return "denied"; }, async requestPermission() { return "denied"; }, async getFile() { return { size: 0, lastModified: 0 }; } } };
+  await assert.rejects(runtime.ensureHandlePermission(permissionDenied, true), (error) => error.code === "source_permission_denied");
+  const busyAccess = { fileHandle: { async createWritable() { const error = new Error("busy"); error.name = "NoModificationAllowedError"; throw error; } } };
+  await assert.rejects(runtime.writeSourceHandle(busyAccess, { body: { async pipeTo() {} } }), (error) => error.code === "source_busy");
 }
 
 (async () => {
