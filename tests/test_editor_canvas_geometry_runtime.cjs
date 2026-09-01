@@ -590,5 +590,22 @@ test.render(); test.flushRender();
   test.drawBoundaryScrim([]); test.drawBoundaryShape({ type: "rectangle", roi: null });
   const lookup = context.$; context.$ = (id) => id === "#compareSplitter" ? null : lookup(id);
   test.updateCompareSplitter(); context.$ = lookup;
+
+  // Geometry validation and display fallbacks deliberately have visible
+  // behaviour for both valid and invalid inputs.
+  assert.equal(test.polygonSegmentsIntersect({ x: 0, y: 0 }, { x: 4, y: 4 }, { x: 0, y: 4 }, { x: 4, y: 0 }), true);
+  state.boundaryDrafts = [{ id: "invalid-only", type: "polygon", points: [{ x: 0, y: 0 }] }];
+  assert.deepEqual(JSON.parse(JSON.stringify(test.boundaryRequests())), [], "an incomplete polygon is never sent to boundary detection");
+  test.drawBoundaryShape({ type: "polygon", points: [{ x: 0, y: 0 }] });
+  state.displayMode = "single"; test.setDisplayMode("single");
+  context.window.devicePixelRatio = 0; displayCanvas.width = 0; test.resizeRenderCanvas(); test.resizeRenderCanvas(); context.window.devicePixelRatio = 1;
+
+  state.currentImage = { width: 20, height: 20, alpha: 255 }; state.currentId = "blink"; state.view = { x: 0, y: 0, scale: 1 };
+  state.blinkCandidateIds = new Set(["manual:apply"]); state.blinkModes = new Map(); state.blinkPhase = true; state.manualEnabled = true;
+  state.settings = { display: { apply_color: "#abc", exclude_color: "#def", overlay_opacity: "not-a-number" } };
+  test.drawCandidateBlinkOverlay();
+  state.settings = null; test.drawCandidateBlinkOverlay();
+  state.blinkCandidateIds.clear(); state.displayMode = "compare"; state.compareSplit = .5;
+  test.drawCompareRangeOverlay(test.compareSplitX());
   console.log("test_editor_canvas_geometry_runtime: passed");
 })().catch((error) => { console.error(error); process.exitCode = 1; });
