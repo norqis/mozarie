@@ -579,6 +579,62 @@ async function saveCoverageMatrix() {
     await runtime.runBrowserSave(["file"], "_m", scenario.deleteOriginal, scenario.mode, scenario.removeAfterSave);
   }
 
+  const browserBatchFailureCases = [
+    {
+      label: "copy rejects a missing save token without committing",
+      run: async (runtime) => {
+        const { state } = runtime;
+        state.images = [{ id: "file", sourceKind: "filesystem", relativePath: "file.png" }];
+        state.outputDirectoryHandle = { async getFileHandle(_name, options) { if (!options?.create) return missing(); return { async createWritable() { return { async write() {}, async close() {} }; } }; }, async removeEntry() {} };
+        runtime.setHandler(async (url) => url === "/api/save/prepare" ? { entries: [{ imageId: "file", candidateRevision: 1, relativePath: "file.png" }] } : url === "/api/save/render" ? response("") : url === "/api/images" ? { images: state.images } : {});
+        await assert.rejects(runtime.runBrowserSave(["file"], "_m", false, "copy"), (error) => error.code === "save_state_changed");
+      },
+    },
+    {
+      label: "copy restores a deleted source when commit is definitively rejected",
+      run: async (runtime) => {
+        const { state } = runtime;
+        let restored = false; let outputRemoved = false;
+        const file = { name: "file.png", size: 1, lastModified: 1, async arrayBuffer() { return Uint8Array.from([1]).buffer; } };
+        const restoredHandle = { name: file.name, async getFile() { return file; }, async createWritable() { return { async write() { restored = true; }, async close() {} }; } };
+        const access = { name: file.name, size: 1, lastModified: 1, fileHandle: { name: file.name, async queryPermission() { return "granted"; }, async getFile() { return file; } }, parentHandle: { async removeEntry() {}, async getFileHandle() { return restoredHandle; } } };
+        state.images = [{ id: "file", sourceKind: "filesystem", relativePath: "file.png" }]; state.sourceAccess = new Map([["file", access]]);
+        state.outputDirectoryHandle = { async getFileHandle(_name, options) { if (!options?.create) return missing(); return { async createWritable() { return { async write() {}, async close() {} }; } }; }, async removeEntry() { outputRemoved = true; } };
+        runtime.setHandler(async (url) => {
+          if (url === "/api/save/prepare") return { entries: [{ imageId: "file", candidateRevision: 1, relativePath: "file.png" }] };
+          if (url === "/api/save/render") return response();
+          if (url === "/api/save/commit") { const error = new Error("rejected"); error.status = 400; throw error; }
+          if (url === "/api/images") return { images: state.images };
+          return {};
+        });
+        await assert.rejects(runtime.runBrowserSave(["file"], "_m", true, "copy"), /rejected/);
+        assert.equal(restored, true); assert.equal(outputRemoved, true);
+      },
+    },
+    {
+      label: "stale masks skip one batch entry and later entries still complete",
+      run: async (runtime) => {
+        const { state } = runtime;
+        state.images = [{ id: "stale", sourceKind: "filesystem", relativePath: "stale.png" }, { id: "file", sourceKind: "filesystem", relativePath: "file.png" }];
+        state.outputDirectoryHandle = { async getFileHandle(_name, options) { if (!options?.create) return missing(); return { async createWritable() { return { async write() {}, async close() {} }; } }; }, async removeEntry() {} };
+        runtime.setHandler(async (url, options) => {
+          if (url === "/api/save/prepare") return { entries: [{ imageId: "stale", candidateRevision: 1, relativePath: "stale.png" }, { imageId: "file", candidateRevision: 1, relativePath: "file.png" }] };
+          if (url === "/api/save/render") { if (JSON.parse(options.body).imageId === "stale") throw runtime.context.codedError("no_effective_mask"); return response(); }
+          if (url === "/api/save/commit") return { cleared: false, stale: false, deleted: false };
+          if (url === "/api/images") return { images: state.images };
+          return {};
+        });
+        await runtime.runBrowserSave(["stale", "file"], "_m", false, "copy");
+        assert.match(runtime.nodes.get("#applyResult").textContent, /apply\.complete/);
+      },
+    },
+  ];
+  for (const scenario of browserBatchFailureCases) {
+    const runtime = makeSaveRuntime();
+    await scenario.run(runtime);
+    assert.ok(scenario.label);
+  }
+
   for (const status of [400, 503]) {
     const runtime = makeSaveRuntime(); let attempts = 0;
     runtime.setHandler(async (url) => {
