@@ -385,6 +385,22 @@ test.render(); test.flushRender();
   assert.equal(element("#currentFileName").textContent, "folder/selected.png");
   await test.selectImage("selected", false, { saveCurrentDraft: false });
 
+  // Selection is intentionally inert while another editor operation owns the
+  // canvas.  These are separate UI states (busy work, import, gesture, and a
+  // candidate batch), not aliases of the same guard.
+  const selectionGuards = [
+    () => { context.isBusy = () => true; },
+    () => { state.importing = true; },
+    () => { context.isGestureActive = () => true; },
+    () => { state.candidateBatchPending = new Set(["candidate"]); },
+  ];
+  for (const arm of selectionGuards) {
+    const generationBefore = state.imageGeneration; arm();
+    await test.selectImage("selected", false, { saveCurrentDraft: false });
+    assert.equal(state.imageGeneration, generationBefore, "blocked selection does not start a competing image request");
+    context.isBusy = () => false; context.isGestureActive = () => false; state.importing = false; state.candidateBatchPending = new Set();
+  }
+
   context.Image = class { set src(_source) { this.onerror(); } };
   await assert.rejects(test.loadImage("bad-image"), (error) => error?.code === "image_read_failed");
   context.FileReader = class { readAsDataURL() { this.error = new Error("encode failed"); this.onerror(); } };
