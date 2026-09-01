@@ -973,6 +973,165 @@ async function saveCoverageMatrix() {
     await scenario.run(runtime);
     assert.ok(scenario.label);
   }
+
+  // Keep these at the end: the coverage merger must see the original save.js
+  // source execute through each browser-owned recovery boundary.
+  {
+    const runtime = makeSaveRuntime(); const { state } = runtime; let writes = 0;
+    const file = { name: "file.png", size: 1, lastModified: 1, async arrayBuffer() { return Uint8Array.from([1]).buffer; } };
+    const access = { name: file.name, size: 1, lastModified: 1, fileHandle: { name: file.name, async queryPermission() { return "granted"; }, async getFile() { return file; }, async createWritable() { return { async write() { writes += 1; }, async close() {} }; } } };
+    state.images = [{ id: "file", sourceKind: "filesystem", relativePath: file.name }]; state.sourceAccess = new Map([["file", access]]); state.singleSave = { imageId: "file", divisor: 16, draft: null };
+    runtime.singleSaveMode.value = "overwrite";
+    runtime.setHandler(async (url) => {
+      if (url === "/api/save/prepare") return { entries: [{ imageId: "file", candidateRevision: 1, relativePath: file.name }] };
+      if (url === "/api/save/render") return response();
+      if (url === "/api/save/commit") { const error = new Error("rejected"); error.status = 400; throw error; }
+      if (url === "/api/images") return { images: state.images };
+      return {};
+    });
+    await runtime.startSingleSave({ preventDefault() {} });
+    assert.equal(writes, 2, "a rejected single overwrite restores its source");
+  }
+
+  {
+    const runtime = makeSaveRuntime(); let created = false;
+    const access = {
+      name: "restored.png", fileHandle: { name: "restored.png" },
+      parentHandle: { async getFileHandle(name, options) {
+        created = name === "restored.png" && options.create;
+        return { name, async createWritable() { return { async write() { throw new Error("write failed"); }, async close() {} }; } };
+      } },
+    };
+    await assert.rejects(runtime.restoreSourceHandle(access, Uint8Array.from([1]), true), /write failed/);
+    assert.equal(created, true);
+  }
+
+  {
+    const runtime = makeSaveRuntime(); const { state } = runtime; let writes = 0; let renderOptions;
+    const file = { name: "file.png", size: 1, lastModified: 1, async arrayBuffer() { return Uint8Array.from([2]).buffer; } };
+    const access = { name: file.name, size: 1, lastModified: 1, fileHandle: { name: file.name, async queryPermission() { return "granted"; }, async getFile() { return file; }, async createWritable() { return { async write() { writes += 1; }, async close() {} }; } } };
+    state.images = [{ id: "file", sourceKind: "filesystem", relativePath: file.name }]; state.sourceAccess = new Map([["file", access]]);
+    const querySelector = runtime.context.document.querySelector;
+    runtime.context.document.querySelector = (selector) => selector === 'meta[name="mozarie-token"]' ? null : querySelector(selector);
+    runtime.setHandler(async (url, options) => {
+      if (url === "/api/save/prepare") return { entries: [{ imageId: "file", candidateRevision: 1, relativePath: file.name }] };
+      if (url === "/api/save/render") { renderOptions = options; return response(); }
+      if (url === "/api/save/commit") { const error = new Error("rejected"); error.status = 503; throw error; }
+      if (url === "/api/save/status") return { state: "pending" };
+      if (url === "/api/save/cancel") return {};
+      if (url === "/api/images") return { images: state.images };
+      return {};
+    });
+    await assert.rejects(runtime.runBrowserSave(["file"], "_m", false, "overwrite"), /rejected/);
+    assert.equal(renderOptions.headers["X-Mozarie-Token"], ""); assert.equal(JSON.parse(renderOptions.body).imageId, "file"); assert.equal(writes, 2, "a rejected batch overwrite restores its source");
+  }
+
+  {
+    const runtime = makeSaveRuntime(); const { state } = runtime; let renderOptions;
+    state.images = [{ id: "file", sourceKind: "filesystem", relativePath: "file.png" }];
+    runtime.setHandler(async (url, options) => {
+      if (url === "/api/save/prepare") return { entries: [{ imageId: "file", candidateRevision: 1, relativePath: "file.png" }] };
+      if (url === "/api/save/render") { renderOptions = options; return response(); }
+      if (url === "/api/save/commit") return { cleared: false, stale: false, deleted: false };
+      if (url === "/api/images") return { images: state.images };
+      return {};
+    });
+    await runtime.runBrowserSave(["file"], "_m", false, "overwrite");
+    assert.equal(renderOptions.headers["X-Mozarie-Token"], "token"); assert.equal(JSON.parse(renderOptions.body).imageId, "file");
+  }
+
+  {
+    const runtime = makeSaveRuntime();
+    runtime.setHandler(async (url) => {
+      if (url === "/api/save/commit") { const error = new Error("down"); error.status = 503; throw error; }
+      if (url === "/api/save/status") return {};
+      return {};
+    });
+    await assert.rejects(runtime.commitBrowserSaveWithRetry({ imageId: "file" }), (error) => error.saveState === "unknown");
+  }
+
+  {
+    const runtime = makeSaveRuntime(); runtime.state.applyRunning = true;
+    runtime.setHandler(async (url) => url === "/api/job" ? { kind: "apply", state: "error", completed: 0, startedAt: 99 } : { images: [] });
+    await runtime.pollJob(); assert.equal(runtime.errors.at(-1).code, "internal_error");
+  }
+
+  for (const [job, expected] of [
+    [{ kind: "apply", state: "running", total: 3, completed: 0, current: "file" }, 0],
+    [{ kind: "apply", state: "running", completed: 2, current: "file" }, 1],
+  ]) {
+    const runtime = makeSaveRuntime();
+    runtime.setHandler(async (url) => url === "/api/job" ? job : {});
+    await runtime.pollJob(); assert.equal(runtime.nodes.get("#applyProgress").value, expected);
+  }
+
+  {
+    const runtime = makeSaveRuntime(); const { state, nodes } = runtime; let restored = 0; let cleaned = 0;
+    const file = { name: "file.png", size: 1, lastModified: 1, async arrayBuffer() { return Uint8Array.from([3]).buffer; } };
+    const restoredHandle = { name: file.name, async getFile() { return file; }, async createWritable() { return { async write() { restored += 1; }, async close() {} }; } };
+    const access = { name: file.name, size: 1, lastModified: 1, fileHandle: { async queryPermission() { return "granted"; }, async getFile() { return file; } }, parentHandle: { async removeEntry() {}, async getFileHandle(name, options) { assert.equal(name, file.name); assert.equal(options.create, true); return restoredHandle; } } };
+    state.images = [{ id: "file", sourceKind: "filesystem", relativePath: file.name }]; state.sourceAccess = new Map([["file", access]]); state.singleSave = { imageId: "file", divisor: 16, draft: null };
+    state.outputDirectoryHandle = { name: "out", async queryPermission() { return "granted"; }, async getFileHandle(_name, options) { if (!options?.create) return missing(); return { async createWritable() { return { async write() {}, async close() {} }; } }; }, async removeEntry() { cleaned += 1; } };
+    runtime.singleSaveMode.value = "copy"; nodes.get("#singleSaveDeleteOriginal").checked = true;
+    runtime.setHandler(async (url) => {
+      if (url === "/api/save/prepare") return { entries: [{ imageId: "file", candidateRevision: 1, relativePath: file.name }] };
+      if (url === "/api/save/render") return response();
+      if (url === "/api/save/commit") { const error = new Error("pending"); error.status = 503; throw error; }
+      if (url === "/api/save/status") return { state: "pending" };
+      if (url === "/api/save/cancel") return {};
+      return {};
+    });
+    await runtime.startSingleSave({ preventDefault() {} });
+    assert.equal(restored, 1); assert.equal(cleaned, 1);
+  }
+
+  {
+    const runtime = makeSaveRuntime(); const { state } = runtime; let writes = 0;
+    const file = { name: "file.png", size: 1, lastModified: 1 };
+    const access = { name: file.name, size: 1, lastModified: 1, fileHandle: { name: file.name, async queryPermission() { return "granted"; }, async getFile() { return file; }, async createWritable() { return { async write() { writes += 1; }, async close() {} }; } } };
+    state.images = [{ id: "file", sourceKind: "filesystem", relativePath: file.name }]; state.sourceAccess = new Map([["file", access]]);
+    runtime.setHandler(async (url) => {
+      if (url === "/api/save/prepare") return { entries: [{ imageId: "file", candidateRevision: 1, relativePath: file.name }] };
+      if (url === "/api/save/render") return response();
+      if (url === "/api/save/commit") { const error = new Error("rejected"); error.status = 400; throw error; }
+      if (url === "/api/images") return { images: state.images };
+      return {};
+    });
+    await assert.rejects(runtime.runBrowserSave(["file"], "_m", false, "overwrite"), (error) => error.code === "source_restore_failed");
+    assert.equal(writes, 1);
+  }
+
+  {
+    const runtime = makeSaveRuntime(); const { state } = runtime; let header;
+    const querySelector = runtime.context.document.querySelector;
+    runtime.context.document.querySelector = (selector) => selector === 'meta[name="mozarie-token"]' ? null : querySelector(selector);
+    runtime.context.responseError = (binary, body) => Object.assign(new Error("save_render_failed"), { code: body.error_code || "internal_error", status: binary.status });
+    state.images = [{ id: "file", sourceKind: "filesystem", relativePath: "file.png" }];
+    runtime.setHandler(async (url, options) => {
+      if (url === "/api/save/prepare") return { entries: [{ imageId: "file", candidateRevision: 1, relativePath: "file.png" }] };
+      if (url === "/api/save/render") { header = options.headers["X-Mozarie-Token"]; return { ok: false, status: 502, async json() { throw new Error("not JSON"); } }; }
+      if (url === "/api/images") return { images: state.images };
+      return {};
+    });
+    await assert.rejects(runtime.runBrowserSave(["file"], "_m", false, "overwrite"), (error) => error.code === "internal_error" && error.status === 502);
+    assert.equal(header, "");
+  }
+
+  {
+    const runtime = makeSaveRuntime(); const { state } = runtime; let saveToken;
+    const querySelector = runtime.context.document.querySelector;
+    runtime.context.document.querySelector = (selector) => selector === 'meta[name="mozarie-token"]' ? null : querySelector(selector);
+    state.images = [{ id: "file", sourceKind: "filesystem", relativePath: "file.png" }];
+    runtime.setHandler(async (url, options) => {
+      if (url === "/api/save/prepare") return { entries: [{ imageId: "file", candidateRevision: 1, relativePath: "file.png" }] };
+      if (url === "/api/save/render") return { ok: true, headers: undefined };
+      if (url === "/api/save/commit") { saveToken = JSON.parse(options.body).saveToken; return { cleared: false, stale: false, deleted: false }; }
+      if (url === "/api/images") return { images: state.images };
+      return {};
+    });
+    await runtime.runBrowserSave(["file"], "_m", false, "overwrite");
+    assert.equal(saveToken, "");
+  }
 }
 
 (async () => {
