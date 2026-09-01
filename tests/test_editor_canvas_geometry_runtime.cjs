@@ -607,5 +607,7 @@ test.render(); test.flushRender();
   state.settings = null; test.drawCandidateBlinkOverlay();
   state.blinkCandidateIds.clear(); state.displayMode = "compare"; state.compareSplit = .5;
   test.drawCompareRangeOverlay(test.compareSplitX());
+  context.Image = class { set src(value) { this.source = value; this.onload(); } };
+  assert.equal((await test.loadImage("ok-image")).source, "ok-image", "a decoded image resolves through its load handler");
   console.log("test_editor_canvas_geometry_runtime: passed");
 })().catch((error) => { console.error(error); process.exitCode = 1; });
