@@ -221,9 +221,9 @@ function startFixtureServer() {
     if (requestPath.startsWith("/api/catalog/image/") && request.method === "DELETE") {
       const imageId = decodeURIComponent(requestPath.slice("/api/catalog/image/".length));
       const removedImageIds = catalog.some((image) => image.id === imageId) ? [imageId] : [];
-      catalog = catalog.filter((image) => image.id !== imageId);
+      const images = catalog.filter((image) => image.id !== imageId);
       response.writeHead(200, { "Content-Type": "application/json" });
-      response.end(JSON.stringify({ images: catalog, removedImageIds }));
+      response.end(JSON.stringify({ images, removedImageIds }));
       return;
     }
     if (requestPath === "/api/save/prepare" && request.method === "POST") {
@@ -460,7 +460,7 @@ function closeServer(server) {
 // from the control ledger means the candidate row, its decoded mask, and its
 // blink interval are created by the same public image-selection flow a user
 // takes, rather than by replacing page state in a shared browser page.
-function startCandidateScenarioServer() {
+function startCandidateScenarioServer(expanded = false) {
   const imageId = "candidate-scenario";
   const candidateId = "candidate-blink-apply";
   const imagePath = path.join(staticRoot, "logo.png");
@@ -470,13 +470,13 @@ function startCandidateScenarioServer() {
     display: { apply_color: "#ff3d4d", exclude_color: "#28d3ff", overlay_opacity: 0.78, mosaic_preview: true },
     importing: { parallelism: 1 }, saving: { parallelism: 1 },
     detection: { mode: "standard", fluid_exclusion_enabled: true, exclude_forced_default: true, threshold: 0.5, parallelism: 1, targets: ["penis"] },
-    shortcuts: { enabled: true, bindings: {}, actions: {} }, confirmations: {},
+    shortcuts: { enabled: true, bindings: {}, actions: {} }, confirmations: expanded ? { candidateDelete: true } : {},
   };
-  const image = { id: imageId, relativePath: "candidate.png", sourceKind: "fixture", width: 409, height: 401, candidateCount: 2, enabledCandidateCount: 1, candidateRevision: 7 };
+  const image = { id: imageId, relativePath: "candidate.png", sourceKind: "fixture", width: 409, height: 401, candidateCount: expanded ? 2 : 1, enabledCandidateCount: 1, candidateRevision: 7 };
   let candidateRevision = 7;
   const candidates = [
     { id: candidateId, role: "apply", enabled: true, forced: false, labelToken: "penis", source: "target", refinement: null, confidence: 0.91, color: "#ff3d4d" },
-    { id: "candidate-blink-exclude", role: "exclude", enabled: true, forced: true, labelToken: "hand", source: "hand_exclusion", refinement: null, confidence: 0.88, color: "#28d3ff" },
+    ...(expanded ? [{ id: "candidate-blink-exclude", role: "exclude", enabled: true, forced: true, labelToken: "hand", source: "hand_exclusion", refinement: null, confidence: 0.88, color: "#28d3ff" }] : []),
   ];
   const candidateUpdates = [];
   const server = http.createServer(async (request, response) => {
@@ -535,8 +535,8 @@ function startCandidateScenarioServer() {
   });
 }
 
-async function runCandidateBlinkScenario(browser) {
-  const scenario = await startCandidateScenarioServer();
+async function runCandidateBlinkScenario(browser, expanded = false) {
+  const scenario = await startCandidateScenarioServer(expanded);
   const page = await newCoveredPage(browser, { viewport: { width: 1280, height: 900 } });
   try {
     await page.addInitScript(() => {
@@ -714,6 +714,7 @@ async function runCandidateBlinkScenario(browser) {
         && !document.querySelector("#candidatePane")?.classList.contains("blink-active");
     }, scenario.candidateId);
 
+    if (expanded) {
     const excludeRow = page.locator('[data-candidate-blink-id="candidate-blink-exclude"]');
     await excludeRow.locator(".candidate-display-toggle").click();
     await page.waitForFunction(() => state.blinkModes.get("candidate-blink-exclude") === "normal");
@@ -766,6 +767,7 @@ async function runCandidateBlinkScenario(browser) {
     await page.locator("#confirmAccept").click();
     await page.waitForFunction(() => state.removedCandidateIds.has("candidate-blink-exclude") && !document.querySelector('[data-candidate-blink-id="candidate-blink-exclude"]'));
     assert.equal(await page.evaluate(() => { state.maskDirty = true; composeCurrentMask(); return canvasHasPixels(combinedCtx, combinedCanvas); }), false, "deleting every automatic and manual mosaic source clears the composed mask in Chromium");
+    }
 
     const blinkPixels = await page.evaluate(async (applyId) => {
       const source = document.createElement("canvas"); source.width = 100; source.height = 80;
@@ -805,6 +807,7 @@ async function runCandidateBlinkScenario(browser) {
     assert.deepEqual(blinkPixels.erase.intersect, [199, 47, 60, 255], "manual erase blinks red only where it intersects a pre-erase exclusion");
     assert.deepEqual(blinkPixels.erase.outside, [0, 0, 0, 255], "manual erase does not color pixels outside the pre-erase exclusion union");
 
+    if (expanded) {
     await page.evaluate(() => {
       window.__nativeWorker = window.Worker;
       window.Worker = class { constructor() { throw new Error("fixture mosaic worker failure"); } };
@@ -823,11 +826,16 @@ async function runCandidateBlinkScenario(browser) {
     await page.locator("#errorDialogClose").click();
     assert.equal(await page.evaluate(() => state.mosaicPreviewEnabled), false, "a failed preview attempt stays off instead of retrying in the background");
     await page.evaluate(() => { window.Worker = window.__nativeWorker; });
+    }
   } finally {
     await stopCoveredPage(page, true);
     scenario.server.closeAllConnections();
     await closeServer(scenario.server);
   }
+}
+
+async function runExhaustiveCandidateScenarios(browser) {
+  await runCandidateBlinkScenario(browser, true);
 }
 
 function overlaps(left, right) {
@@ -1307,25 +1315,11 @@ async function selectFixtureImage(page, pageErrors, consoleErrors) {
 // not by page-side events that production code could synthesize.  Every
 // manifest assertion id must be present at the
 // end of the sweep.
-async function runControlLedger(page, fixtureUrl, contracts, dynamicContracts, finishCancel, holdSaveRender, releaseSaveRenders, resetScenario) {
-  page.setDefaultTimeout(3000);
-  const operated = new Set();
-  const assertionPassed = new Set();
-  const staticContracts = new Map(contracts.map((control) => [control.id, control]));
-  const dynamicContractsBySelector = new Map(dynamicContracts.map((control) => [control.selector, control]));
-  const markDynamic = async (selector, before, predicate) => {
-    const contract = dynamicContractsBySelector.get(selector);
-    assert.ok(contract, `${selector} has a dynamic ledger contract`);
-    const after = await snapshot();
-    await predicate(before, after);
-    operated.add(selector); assertionPassed.add(contract.assertionId);
-  };
+async function runExhaustiveAddedScenarios(page, fixtureUrl, resetScenario) {
   const setupFixture = async () => {
     await page.goto(fixtureUrl, { waitUntil: "networkidle" });
     await page.locator('.gallery-item[data-id="sample"]').click();
     await page.waitForFunction(() => state.currentId === "sample");
-    // The catalog thumbnail is intentionally 2px.  Give the editor fixture a
-    // normal-sized in-memory image before exercising pointer-only tools.
     await page.evaluate(async () => {
       const source = document.createElement("canvas"); source.width = source.height = 240;
       source.getContext("2d").fillRect(0, 0, source.width, source.height);
@@ -1335,23 +1329,6 @@ async function runControlLedger(page, fixtureUrl, contracts, dynamicContracts, f
     });
   };
   await setupFixture();
-
-  // A configured server path is not a browser-granted directory. Exercise the
-  // visible single-save flow with no handle and require both the disabled
-  // button and the unselected label before any output picker is used.
-  await page.evaluate(() => { state.outputDirectoryHandle = null; renderOutputDirectory(); });
-  await page.locator("#brushTool").click();
-  const unavailableOutputCanvas = await page.locator("#editorCanvas").boundingBox();
-  assert.ok(unavailableOutputCanvas, "the editor canvas is available before testing an unselected save destination");
-  await page.mouse.move(unavailableOutputCanvas.x + unavailableOutputCanvas.width / 2, unavailableOutputCanvas.y + unavailableOutputCanvas.height / 2);
-  await page.mouse.down(); await page.mouse.move(unavailableOutputCanvas.x + unavailableOutputCanvas.width / 2 + 10, unavailableOutputCanvas.y + unavailableOutputCanvas.height / 2 + 6); await page.mouse.up();
-  await page.locator("#saveButton").click();
-  await page.waitForFunction(() => document.querySelector("#singleSaveDialog").open);
-  assert.equal(await page.locator("#singleSaveStartButton").isDisabled(), true, "single save remains disabled until a browser directory handle is selected");
-  assert.equal(await page.locator("#singleSaveOutputDirectoryStatus").textContent(), await page.evaluate(() => t("apply.outputDirectoryUnset")), "single save never presents the configured server path as its browser destination");
-  await page.locator("#singleSaveCloseButton").click();
-  await setupFixture();
-
   const errorCodes = await page.evaluate(() => Object.keys(USER_ERROR_CODES));
   for (const language of ["ja", "en"]) {
     await page.evaluate((locale) => loadTranslations(locale), language);
@@ -1395,35 +1372,115 @@ async function runControlLedger(page, fixtureUrl, contracts, dynamicContracts, f
     await page.waitForFunction((value) => state.overviewFilter === value, filter);
     assert.deepEqual(await page.locator(".overview-item").evaluateAll((items) => items.map((item) => item.dataset.id)), expected, `overview ${filter} filter exposes exactly its matching images`);
   }
-
   for (const action of ["remove", "hide", "show", "clear", "detect", "reviewed", "unreviewed"]) {
-    resetScenario();
-    await setupFixture();
+    resetScenario(); await setupFixture();
     if (action === "show") await page.evaluate(() => { const image = state.images.find((item) => item.id === "sample"); state.hiddenPaths.add(reviewPath(image)); image.hidden = true; renderCatalogViews(); });
     if (action === "clear") await page.evaluate(() => { state.maskStatus.set("sample", true); currentRecord().candidateCount = 1; renderCatalogViews(); });
     if (action === "unreviewed") await page.evaluate(() => { const image = state.images.find((item) => item.id === "sample"); state.reviewedPaths.add(reviewPath(image)); image.reviewed = true; renderCatalogViews(); });
     await page.locator("#overviewButton").click(); await page.locator("#batchModeButton").click();
-    await page.locator('.overview-item[data-id="sample"]').click();
-    await page.locator("#selectionActionsButton").click();
+    await page.locator('.overview-item[data-id="sample"]').click(); await page.locator("#selectionActionsButton").click();
     await page.locator(`[data-selection-action="${action}"]`).click();
     if (await page.locator("#confirmDialog").evaluate((dialog) => dialog.open)) await page.locator("#confirmAccept").click();
     if (action === "detect") {
       await page.waitForFunction(() => document.querySelector("#detectDialog").open);
-      await page.locator("#detectCloseButton").click();
-    } else if (action === "remove") {
-      await page.waitForFunction(() => !state.images.some((image) => image.id === "sample"));
-    } else if (action === "hide") {
-      await page.waitForFunction(() => isHidden(state.images.find((image) => image.id === "sample")));
-    } else if (action === "show") {
-      await page.waitForFunction(() => !isHidden(state.images.find((image) => image.id === "sample")));
-    } else if (action === "clear") {
-      await page.waitForFunction(() => !state.maskStatus.has("sample") && state.images.find((image) => image.id === "sample")?.candidateCount === 0);
-    } else if (action === "reviewed") {
-      await page.waitForFunction(() => isReviewed(state.images.find((image) => image.id === "sample")));
-    } else {
-      await page.waitForFunction(() => !isReviewed(state.images.find((image) => image.id === "sample")));
-    }
+      await page.locator("#detectCancelButton").click(); await page.waitForFunction(() => !document.querySelector("#detectDialog").open);
+    } else if (action === "remove") await page.waitForFunction(() => !state.images.some((image) => image.id === "sample"));
+    else if (action === "hide") await page.waitForFunction(() => isHidden(state.images.find((image) => image.id === "sample")));
+    else if (action === "show") await page.waitForFunction(() => !isHidden(state.images.find((image) => image.id === "sample")));
+    else if (action === "clear") await page.waitForFunction(() => !state.maskStatus.has("sample") && state.images.find((image) => image.id === "sample")?.candidateCount === 0);
+    else if (action === "reviewed") await page.waitForFunction(() => isReviewed(state.images.find((image) => image.id === "sample")));
+    else await page.waitForFunction(() => !isReviewed(state.images.find((image) => image.id === "sample")));
   }
+
+  await setupFixture();
+  const bucketCanvas = await page.locator("#editorCanvas").boundingBox();
+  const bucketPoint = { x: bucketCanvas.x + bucketCanvas.width / 2, y: bucketCanvas.y + bucketCanvas.height / 2 };
+  await page.locator("#bucketTool").click(); await page.mouse.click(bucketPoint.x, bucketPoint.y);
+  await page.waitForFunction(() => state.manualMaskPresent && canvasHasPixels(addCtx, addCanvas) && canvasHasPixels(combinedCtx, combinedCanvas));
+  assert.equal(await page.evaluate(() => state.mosaicPreviewEnabled && Boolean(state.mosaicWorker)), true, "a public bucket fill rebuilds the mosaic preview worker from its composed mask");
+  await page.locator("#undoButton").click(); await page.waitForFunction(() => !state.manualMaskPresent && !canvasHasPixels(addCtx, addCanvas));
+  await page.locator("#excludeBucketTool").click(); await page.mouse.click(bucketPoint.x, bucketPoint.y);
+  await page.waitForFunction(() => canvasHasPixels(exclusionCtx, exclusionCanvas) && !canvasHasPixels(combinedCtx, combinedCanvas));
+  await page.locator("#undoButton").click(); await page.waitForFunction(() => !canvasHasPixels(exclusionCtx, exclusionCanvas));
+  const boundaryRequest = async (toolId, points, expectedField) => {
+    await setupFixture(); await page.locator("#boundaryTool").click(); await page.locator(`#${toolId}`).click();
+    const box = await page.locator("#editorCanvas").boundingBox();
+    const toClient = ([x, y]) => ({ x: box.x + box.width * x, y: box.y + box.height * y });
+    if (toolId === "boundaryBrushTool") {
+      const [start, end] = points.map(toClient); await page.mouse.move(start.x, start.y); await page.mouse.down(); await page.mouse.move(end.x, end.y); await page.mouse.up();
+    } else for (const point of points.map(toClient)) await page.mouse.click(point.x, point.y);
+    await page.waitForFunction(() => !document.querySelector("#boundaryDetectButton").disabled);
+    const count = await page.evaluate(() => window.__exhaustiveApi.length);
+    await page.locator("#boundaryDetectButton").click();
+    await page.waitForFunction((index) => window.__exhaustiveApi.slice(index).some((request) => request.url.includes("/api/boundary")), count);
+    const payload = await page.evaluate((index) => JSON.parse(window.__exhaustiveApi.slice(index).find((request) => request.url.includes("/api/boundary")).body), count);
+    assert.equal(typeof payload[expectedField], "object", `${toolId} sends its ${expectedField} through the public boundary API`);
+    if (expectedField === "points") assert.ok(payload.points.length >= 3, "polygon detection sends the completed point shape");
+    else assert.ok(payload.roi.right > payload.roi.left && payload.roi.bottom > payload.roi.top, "brush detection sends a non-empty mask ROI");
+  };
+  await boundaryRequest("polygonTool", [[.3, .3], [.65, .32], [.68, .68], [.3, .7]], "points");
+  await boundaryRequest("boundaryBrushTool", [[.28, .42], [.72, .58]], "roi");
+
+  await setupFixture();
+  await page.evaluate(async () => {
+    const source = document.createElement("canvas"); source.width = 3840; source.height = 2160;
+    source.getContext("2d").fillRect(0, 0, source.width, source.height);
+    state.currentImage = await createImageBitmap(source);
+    const record = currentRecord(); record.width = source.width; record.height = source.height;
+    canvasSizeForImage(record); prepareOriginalImage();
+    state.imageCache.set(imageCacheKey(record), state.currentImage, source.width * source.height * 4);
+    requestMosaicPreview(); fitImage(); render();
+  });
+  await page.waitForFunction(() => originalCanvas.width === 3840 && originalCanvas.height === 2160);
+  await page.locator("#batchMoreButton").click(); await page.locator("#clearCatalogButton").click(); await page.locator("#confirmAccept").click();
+  await page.waitForFunction(() => state.images.length === 0);
+  assert.deepEqual(await page.evaluate(() => ({ original: [originalCanvas.width, originalCanvas.height], worker: state.mosaicWorker, imageCache: state.imageCache.items.size, candidateCache: state.candidateBundleCache.items.size })), { original: [1, 1], worker: null, imageCache: 0, candidateCache: 0 }, "clearing a selected 4K image releases its original canvas, preview worker, and decoded caches");
+}
+
+async function runControlLedger(page, fixtureUrl, contracts, dynamicContracts, finishCancel, holdSaveRender, releaseSaveRenders) {
+  page.setDefaultTimeout(3000);
+  const operated = new Set();
+  const assertionPassed = new Set();
+  const staticContracts = new Map(contracts.map((control) => [control.id, control]));
+  const dynamicContractsBySelector = new Map(dynamicContracts.map((control) => [control.selector, control]));
+  const markDynamic = async (selector, before, predicate) => {
+    const contract = dynamicContractsBySelector.get(selector);
+    assert.ok(contract, `${selector} has a dynamic ledger contract`);
+    const after = await snapshot();
+    await predicate(before, after);
+    operated.add(selector); assertionPassed.add(contract.assertionId);
+  };
+  const setupFixture = async () => {
+    await page.goto(fixtureUrl, { waitUntil: "networkidle" });
+    await page.locator('.gallery-item[data-id="sample"]').click();
+    await page.waitForFunction(() => state.currentId === "sample");
+    // The catalog thumbnail is intentionally 2px.  Give the editor fixture a
+    // normal-sized in-memory image before exercising pointer-only tools.
+    await page.evaluate(async () => {
+      const source = document.createElement("canvas"); source.width = source.height = 240;
+      source.getContext("2d").fillRect(0, 0, source.width, source.height);
+      state.currentImage = await createImageBitmap(source);
+      const record = currentRecord(); record.width = source.width; record.height = source.height;
+      canvasSizeForImage(record); prepareOriginalImage(); resetCurrentDraft(); fitImage(); render();
+    });
+  };
+  await setupFixture();
+
+  // A configured server path is not a browser-granted directory. Exercise the
+  // visible single-save flow with no handle and require both the disabled
+  // button and the unselected label before any output picker is used.
+  await page.evaluate(() => { state.outputDirectoryHandle = null; renderOutputDirectory(); });
+  await page.locator("#brushTool").click();
+  const unavailableOutputCanvas = await page.locator("#editorCanvas").boundingBox();
+  assert.ok(unavailableOutputCanvas, "the editor canvas is available before testing an unselected save destination");
+  await page.mouse.move(unavailableOutputCanvas.x + unavailableOutputCanvas.width / 2, unavailableOutputCanvas.y + unavailableOutputCanvas.height / 2);
+  await page.mouse.down(); await page.mouse.move(unavailableOutputCanvas.x + unavailableOutputCanvas.width / 2 + 10, unavailableOutputCanvas.y + unavailableOutputCanvas.height / 2 + 6); await page.mouse.up();
+  await page.locator("#saveButton").click();
+  await page.waitForFunction(() => document.querySelector("#singleSaveDialog").open);
+  assert.equal(await page.locator("#singleSaveStartButton").isDisabled(), true, "single save remains disabled until a browser directory handle is selected");
+  assert.equal(await page.locator("#singleSaveOutputDirectoryStatus").textContent(), await page.evaluate(() => t("apply.outputDirectoryUnset")), "single save never presents the configured server path as its browser destination");
+  await page.locator("#singleSaveCloseButton").click();
+  await setupFixture();
 
   // This snapshot intentionally contains only product results that a control
   // is allowed to prove: a particular dialog, value, state transition, canvas
@@ -1749,38 +1806,6 @@ async function runControlLedger(page, fixtureUrl, contracts, dynamicContracts, f
   });
   assert.ok(Math.abs(restoredBoundaryAnchor.actual - restoredBoundaryAnchor.expected) <= 1, "returning to compare restores the boundary action to the current right-side split");
   await page.locator("#singleViewButton").click(); await click("fitButton");
-  await setupFixture();
-  const bucketCanvas = await page.locator("#editorCanvas").boundingBox();
-  const bucketPoint = { x: bucketCanvas.x + bucketCanvas.width / 2, y: bucketCanvas.y + bucketCanvas.height / 2 };
-  await click("bucketTool"); await page.mouse.click(bucketPoint.x, bucketPoint.y);
-  await page.waitForFunction(() => state.manualMaskPresent && canvasHasPixels(addCtx, addCanvas) && canvasHasPixels(combinedCtx, combinedCanvas));
-  assert.equal(await page.evaluate(() => state.mosaicPreviewEnabled && Boolean(state.mosaicWorker)), true, "a public bucket fill rebuilds the mosaic preview worker from its composed mask");
-  await click("undoButton"); await page.waitForFunction(() => !state.manualMaskPresent && !canvasHasPixels(addCtx, addCanvas));
-  await click("excludeBucketTool"); await page.mouse.click(bucketPoint.x, bucketPoint.y);
-  await page.waitForFunction(() => canvasHasPixels(exclusionCtx, exclusionCanvas) && !canvasHasPixels(combinedCtx, combinedCanvas));
-  await click("undoButton"); await page.waitForFunction(() => !canvasHasPixels(exclusionCtx, exclusionCanvas));
-
-  const boundaryRequest = async (toolId, points, expectedField) => {
-    await setupFixture(); await click("boundaryTool"); await click(toolId);
-    const box = await page.locator("#editorCanvas").boundingBox();
-    const toClient = ([x, y]) => ({ x: box.x + box.width * x, y: box.y + box.height * y });
-    if (toolId === "boundaryBrushTool") {
-      const [start, end] = points.map(toClient);
-      await page.mouse.move(start.x, start.y); await page.mouse.down(); await page.mouse.move(end.x, end.y); await page.mouse.up();
-    } else {
-      for (const point of points.map(toClient)) await page.mouse.click(point.x, point.y);
-    }
-    await page.waitForFunction(() => !document.querySelector("#boundaryDetectButton").disabled);
-    const before = await snapshot(); await click("boundaryDetectButton");
-    await page.waitForFunction((count) => window.__ledgerApi.slice(count).some((request) => request.url.includes("/api/boundary")), before.api.length);
-    const payload = await page.evaluate((count) => JSON.parse(window.__ledgerApi.slice(count).find((request) => request.url.includes("/api/boundary")).body), before.api.length);
-    assert.equal(typeof payload[expectedField], "object", `${toolId} sends its ${expectedField} shape through the public boundary API`);
-    if (expectedField === "points") assert.ok(payload.points.length >= 3, "polygon detection sends the completed point mask");
-    else assert.ok(payload.roi.right > payload.roi.left && payload.roi.bottom > payload.roi.top, "brush detection sends a non-empty drawn mask ROI");
-  };
-  await boundaryRequest("polygonTool", [[.3, .3], [.65, .32], [.68, .68], [.3, .7]], "points");
-  await boundaryRequest("boundaryBrushTool", [[.28, .42], [.72, .58]], "roi");
-  await setupFixture(); await click("fitButton");
   await page.evaluate(() => { state.manualMaskPresent = true; renderCandidates(); });
   for (const selector of ["[data-candidate-batch]", "[data-candidate-display-toggle]", "[data-candidate-effective-toggle]"]) {
     const before = await snapshot(); await page.locator(selector).first().click();
@@ -1925,21 +1950,10 @@ async function runControlLedger(page, fixtureUrl, contracts, dynamicContracts, f
   await page.waitForFunction(() => !state.masksClearing && !state.catalogMutation);
   if (await page.locator("#errorDialog").evaluate((dialog) => dialog.open)) await page.locator("#errorDialogClose").click();
   await setupFixture();
-  await page.evaluate(async () => {
-    const source = document.createElement("canvas"); source.width = 3840; source.height = 2160;
-    source.getContext("2d").fillRect(0, 0, source.width, source.height);
-    state.currentImage = await createImageBitmap(source);
-    const record = currentRecord(); record.width = source.width; record.height = source.height;
-    canvasSizeForImage(record); prepareOriginalImage();
-    state.imageCache.set(imageCacheKey(record), state.currentImage, source.width * source.height * 4);
-    requestMosaicPreview(); fitImage(); render();
-  });
-  await page.waitForFunction(() => originalCanvas.width === 3840 && originalCanvas.height === 2160);
   const catalogBefore = await snapshot(); await click("batchMoreButton"); await click("clearCatalogButton"); await click("confirmAccept");
   await page.waitForFunction(() => state.images.length === 0);
   const catalogAfter = await snapshot();
   assertCatalogClearResult({ api: catalogAfter.api.slice(catalogBefore.api.length) }, { imageIds: catalogAfter.state.imageIds });
-  assert.deepEqual(await page.evaluate(() => ({ original: [originalCanvas.width, originalCanvas.height], worker: state.mosaicWorker, imageCache: state.imageCache.items.size, candidateCache: state.candidateBundleCache.items.size })), { original: [1, 1], worker: null, imageCache: 0, candidateCache: 0 }, "clearing a selected 4K image releases its original canvas, preview worker, and decoded caches");
   await page.evaluate(() => showUserError(new Error("ledger fixture error")));
   await click("errorDialogClose");
   for (const [locale, expected] of [["ja", ["モデルをダウンロードできません", "選択中のモデルはダウンロード対象として登録されていません。", "設定の検出タブで対象のモデルを選び直してから、もう一度実行してください。"]], ["en", ["Model download is unavailable", "The selected model is not registered for download.", "Choose a listed model in Settings > Detection, then try again."]]]) {
@@ -3748,10 +3762,27 @@ async function main() {
     });
     holdDetection(true);
     try {
-      await runControlLedger(ledgerPage, fixtureUrl, uiControlManifest, uiDynamicControlManifest, finishCancel, holdSaveRender, releaseSaveRenders, resetScenario);
+      await runControlLedger(ledgerPage, fixtureUrl, uiControlManifest, uiDynamicControlManifest, finishCancel, holdSaveRender, releaseSaveRenders);
     } finally {
       holdDetection(false);
       await stopCoveredPage(ledgerPage, true);
+    }
+
+    resetScenario();
+    const exhaustivePage = await newCoveredPage(browser, { viewport: { width: 1280, height: 900 } });
+    await exhaustivePage.addInitScript(() => {
+      window.__exhaustiveApi = [];
+      const originalFetch = window.fetch.bind(window);
+      window.fetch = (...args) => {
+        const input = args[0]; const init = args[1] || {};
+        window.__exhaustiveApi.push({ url: String(input?.url || input), method: init.method || input?.method || "GET", body: init.body || "" });
+        return originalFetch(...args);
+      };
+    });
+    try {
+      await runExhaustiveAddedScenarios(exhaustivePage, fixtureUrl, resetScenario);
+    } finally {
+      await stopCoveredPage(exhaustivePage, true);
     }
 
     // Run the browser-owned save path in a fresh, stateful fixture.  This is
@@ -3895,6 +3926,7 @@ async function main() {
     }
 
     await runCandidateBlinkScenario(browser);
+    await runExhaustiveCandidateScenarios(browser);
 
     assert.deepEqual(pageErrors, [], `unexpected page errors: ${pageErrors.join("; ")}`);
     assert.deepEqual(consoleErrors.sort(), ["Failed to load resource: the server responded with a status of 400 (Bad Request)", "Failed to load resource: the server responded with a status of 500 (Internal Server Error)", "Failed to load resource: the server responded with a status of 500 (Internal Server Error)", "Failed to load resource: the server responded with a status of 503 (Service Unavailable)"].sort(), `unexpected console errors: ${consoleErrors.join("; ")}`);
