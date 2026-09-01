@@ -32,8 +32,6 @@ if TYPE_CHECKING:
 
 
 _SCENE_FLUID_TAGS = frozenset({"cum_on_breasts", "cum on fingers", "cum on ass"})
-_METADATA_FLUID_ANCHOR_RADIUS_PX = 120
-_METADATA_FLUID_ANCHOR_KERNEL_SIZE = _METADATA_FLUID_ANCHOR_RADIUS_PX * 2 + 1
 
 
 def _scene_fluid_tags(info: dict[str, Any]) -> frozenset[str]:
@@ -53,6 +51,18 @@ def _scene_fluid_tags(info: dict[str, Any]) -> frozenset[str]:
     if not isinstance(positive, str):
         return frozenset()
     return frozenset(tag for tag in (value.strip().casefold() for value in positive.split(",")) if tag in _SCENE_FLUID_TAGS)
+
+
+def _mask_bounds(mask: np.ndarray) -> tuple[int, int, int, int] | None:
+    rows, columns = np.nonzero(np.asarray(mask) > 0)
+    if not rows.size:
+        return None
+    return int(columns.min()), int(rows.min()), int(columns.max()) + 1, int(rows.max()) + 1
+
+
+def _fill_metadata_fluid_roi(search: np.ndarray, left: float, top: float, right: float, bottom: float) -> None:
+    height, width = search.shape
+    search[max(0, round(top)):min(height, round(bottom)), max(0, round(left)):min(width, round(right))] = 1
 
 
 def TargetSegmenter(*args: Any, **kwargs: Any) -> Any:
@@ -445,21 +455,28 @@ class DetectionMixin:
         if not scene_fluid_tags:
             return np.zeros(shape, dtype=np.uint8)
         search = np.zeros(shape, dtype=np.uint8)
-        for mask in final_masks:
-            search = np.maximum(search, np.asarray(mask > 0, dtype=np.uint8))
-        search = np.maximum(search, np.asarray(hand_evidence > 0, dtype=np.uint8))
-        if np.any(search):
-            search = cv2.dilate(
-                search,
-                np.ones((_METADATA_FLUID_ANCHOR_KERNEL_SIZE, _METADATA_FLUID_ANCHOR_KERNEL_SIZE), dtype=np.uint8),
-            )
+        if "cum on ass" in scene_fluid_tags:
+            for mask in final_masks:
+                bounds = _mask_bounds(mask)
+                if bounds is None:
+                    continue
+                left, top, right, bottom = bounds
+                width, height = right - left, bottom - top
+                center_x = (left + right) / 2
+                half_width = max(2 * width, 1.4 * height)
+                _fill_metadata_fluid_roi(search, center_x - half_width, top - .2 * height, center_x + half_width, bottom + 2.1 * height)
+        if "cum on fingers" in scene_fluid_tags:
+            count, _labels, stats, _centroids = cv2.connectedComponentsWithStats(np.asarray(hand_evidence > 0, dtype=np.uint8), connectivity=8)
+            scale = min(shape) / 896
+            for left, top, width, height, _area in stats[1:count]:
+                lateral = max(64 * scale, .8 * height)
+                _fill_metadata_fluid_roi(search, left - lateral, top - .4 * height, left + width + lateral, top + height * 1.3)
         if "cum_on_breasts" in scene_fluid_tags:
             for face in faces:
-                rows, columns = np.nonzero(np.asarray(face["mask"]) > 0)
-                if not rows.size:
+                bounds = _mask_bounds(np.asarray(face["mask"]))
+                if bounds is None:
                     continue
-                top, bottom = int(rows.min()), int(rows.max()) + 1
-                left, right = int(columns.min()), int(columns.max()) + 1
+                left, top, right, bottom = bounds
                 width, height = right - left, bottom - top
                 center = (left + right) // 2
                 chest_left, chest_right = max(0, round(center - width * .38)), min(shape[1], round(center + width * .38))

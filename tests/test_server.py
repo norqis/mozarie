@@ -1874,6 +1874,34 @@ class MozarieTests(unittest.TestCase):
             self.assertTrue(old_mask_path.is_file())
             self.assertFalse(new_mask_path.exists())
 
+    def test_successful_detection_replaces_a_seeded_hand_candidate(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            Image.new("RGB", (16, 16), "white").save(root / "source.png")
+            state = self.new_state()
+            image_id = state.set_root(str(root))[0]["id"]
+            record = state.image_for_id(image_id)
+            state.job = core_module.Job(kind="detect", state="running", total=1, image_ids=(image_id,))
+            old_path = state.cache_dir / image_id / "old-hand.png"
+            old_path.parent.mkdir(parents=True, exist_ok=True)
+            Image.fromarray(self._mask(16, 16)).save(old_path)
+            state._commit_candidate_snapshot(image_id, [
+                Candidate("old-hand", "hand", None, old_path, source="hand_exclusion", role=CandidateRole.EXCLUDE),
+            ], replace=True)
+            pending_path = state.cache_dir / image_id / ".mozarie-pending-fresh.png"
+
+            def fresh_detection(*_args):
+                Image.fromarray(self._mask(16, 16)).save(pending_path)
+                return [Candidate("fresh", "penis", .9, pending_path, source="target")]
+
+            with patch.object(state, "_ensure_models", return_value=DetectionModels(target=object())), \
+                    patch.object(state, "_detect_image", side_effect=fresh_detection):
+                state._detect_worker([record], DEFAULT_DETECTION_CONFIDENCE, 1)
+
+            self.assertEqual(state.job.state, "complete")
+            self.assertEqual([(candidate.label_token, candidate.source) for candidate in state.candidates[image_id]], [("penis", "target")])
+            self.assertFalse(old_path.exists())
+
     def test_detect_persistence_failure_removes_final_new_masks(self):
         """A failed candidate transaction must not leave a visible orphan mask."""
         with tempfile.TemporaryDirectory() as directory:
@@ -3723,20 +3751,40 @@ class MozarieTests(unittest.TestCase):
         for info in ({}, {"scene_info": "bad"}, {"scene_info": "[]"}, {"scene_positive": "not_cum_on_breasts"}, {"scene_positive": ["cum_on_breasts"]}):
             with self.subTest(info=info): self.assertEqual(detection_module._scene_fluid_tags(info), set())
 
-        rgb = np.zeros((300, 300, 3), dtype=np.uint8)
-        target = np.zeros((300, 300), dtype=np.uint8); target[100:120, 100:120] = 1
-        hand = np.zeros_like(target); hand[160:170, 160:170] = 1
+        rgb = np.zeros((400, 400, 3), dtype=np.uint8)
+        target = np.zeros((400, 400), dtype=np.uint8); target[160:210, 160:200] = 1
+        hand = np.zeros_like(target); hand[100:120, 310:330] = 1; hand[250:270, 350:360] = 1
         face = np.zeros_like(target); face[20:40, 130:170] = 1
         with patch.object(detection_module, "white_fluid_mask", side_effect=lambda _rgb, search: np.asarray(search, dtype=np.uint8) * 255) as fluid:
-            searched = state = self.new_state()._metadata_fluid_mask(rgb, [target], hand, [], frozenset({"cum on fingers"}))
-            self.assertTrue(np.any(searched)); self.assertGreater(np.count_nonzero(searched), np.count_nonzero(target | hand))
+            ass = self.new_state()._metadata_fluid_mask(rgb, [np.zeros_like(target), target], np.zeros_like(hand), [], frozenset({"cum on ass"}))
+            fingers = self.new_state()._metadata_fluid_mask(rgb, [target], hand, [], frozenset({"cum on fingers"}))
             chest = self.new_state()._metadata_fluid_mask(
                 rgb, [], np.zeros_like(target), [{"mask": np.zeros_like(face)}, {"mask": face}], frozenset({"cum_on_breasts"}),
             )
-        self.assertEqual(fluid.call_count, 2)
-        self.assertEqual(searched[250, 165], 255)
+            absent = self.new_state()._metadata_fluid_mask(rgb, [], np.zeros_like(hand), [], frozenset({"cum on fingers"}))
+        self.assertEqual(fluid.call_count, 3)
+        self.assertEqual(ass[150, 100], 255)
+        self.assertEqual(ass[314, 259], 255)
+        self.assertEqual(ass[149, 180], 0)
+        self.assertEqual(fingers[92, 281], 255)
+        self.assertEqual(fingers[125, 358], 255)
+        self.assertEqual(fingers[242, 321], 255)
+        self.assertEqual(fingers[275, 388], 255)
+        self.assertEqual(fingers[150, 180], 0)
         self.assertTrue(np.any(chest[53:73, 135:165]))
         self.assertFalse(np.any(chest[:40]))
+        self.assertFalse(np.any(absent))
+
+    def test_scene_metadata_fluid_only_detects_lower_deposits_in_the_tagged_local_roi(self):
+        rgb = np.zeros((400, 400, 3), dtype=np.uint8)
+        target = np.zeros((400, 400), dtype=np.uint8); target[160:210, 160:200] = 1
+        rgb[120:140, 130:230] = 255  # White clothing above the ass ROI is not a candidate.
+        rgb[250:255, 170:190] = 255  # A small bright lower deposit remains a candidate.
+        detected = self.new_state()._metadata_fluid_mask(rgb, [target], np.zeros_like(target), [], frozenset({"cum on ass"}))
+        untagged = self.new_state()._metadata_fluid_mask(rgb, [target], np.zeros_like(target), [], frozenset({"not_cum_on_ass"}))
+        self.assertFalse(np.any(detected[120:140, 130:230]))
+        self.assertTrue(np.any(detected[250:255, 170:190]))
+        self.assertFalse(np.any(untagged))
 
     def test_scene_metadata_fluid_candidate_is_optional_and_can_exist_without_apply(self):
         state = self.new_state()

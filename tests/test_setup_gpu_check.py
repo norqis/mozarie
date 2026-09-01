@@ -9,7 +9,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, call, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import setup_gpu_check
@@ -189,6 +189,37 @@ class SetupGpuCheckTests(unittest.TestCase):
         ort = SimpleNamespace(get_available_providers=lambda: ["CUDAExecutionProvider"])
         self.assertFalse(setup_gpu_check._gpu_is_ready(object(), ort, torch, object(), -1))
         torch.ones.assert_not_called()
+
+    def test_gpu_probe_suppresses_only_the_two_known_enumeration_warnings(self):
+        tensor = Mock(); tensor.add_.return_value = tensor; tensor.cpu.return_value = tensor
+        torch = SimpleNamespace(
+            cuda=SimpleNamespace(is_available=lambda: True, device_count=lambda: 1),
+            ones=Mock(return_value=tensor),
+        )
+        session = SimpleNamespace(disable_fallback=lambda: None, get_providers=lambda: ["CUDAExecutionProvider"], run=lambda *_args: None)
+        ort = SimpleNamespace(get_available_providers=lambda: ["CUDAExecutionProvider"], InferenceSession=lambda *_args, **_kwargs: session)
+        with patch.object(setup_gpu_check.warnings, "filterwarnings") as filter_warnings:
+            self.assertTrue(setup_gpu_check._gpu_is_ready(SimpleNamespace(ones=lambda *_args, **_kwargs: object(), float32=object()), ort, torch, SimpleNamespace(get_example=lambda _name: "model.onnx"), 0))
+        self.assertEqual(filter_warnings.call_args_list, [
+            call("ignore", category=UserWarning, message=r"\s*Found GPU\d+"),
+            call("ignore", category=UserWarning, message=r"\s*NVIDIA .* with CUDA capability sm_\d+ is not compatible with the current PyTorch installation"),
+        ])
+
+    @unittest.skipUnless(os.name == "nt", "requires Windows GPU runtime")
+    def test_real_cuda_setup_subprocess_is_quiet_when_cuda_runtime_is_available(self):
+        try:
+            _np, ort, torch, _datasets = setup_gpu_check._runtime_modules()
+        except Exception as exc:
+            self.skipTest(f"runtime packages unavailable: {exc}")
+        if not torch.cuda.is_available() or "CUDAExecutionProvider" not in ort.get_available_providers():
+            self.skipTest("CUDA runtime unavailable")
+        result = subprocess.run(
+            [sys.executable, str(Path(__file__).resolve().parents[1] / "setup_gpu_check.py")],
+            capture_output=True, text=True, check=False, timeout=60, env={**os.environ, "MOZARIE_RUNTIME": "cuda"},
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(result.stdout.strip(), "[Mozarie] GPU is ready.")
+        self.assertEqual(result.stderr, "")
 
     def test_runtime_module_loader_returns_the_installed_runtime_modules(self):
         fake_numpy = object()
