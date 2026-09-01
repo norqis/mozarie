@@ -190,6 +190,15 @@ assert.ok(events.includes("draft:add,exclusion"));
 assert.ok(events.includes("draft:exclusion,exclusionErase"));
 assert.ok(events.includes("draft:exclusionErase"));
 
+const savedImage = state.currentImage;
+state.currentImage = null;
+test.beginManualStroke({ x: 2, y: 2 });
+test.fillAt({ x: 2, y: 2 });
+test.cancelManualStroke();
+test.replayManualStroke({ points: [] });
+assert.equal(state.activeStroke, null, "manual paint, fill, cancel, and replay are inert without a loaded image");
+state.currentImage = savedImage;
+
 state.tool = "brush";
 test.beginManualStroke({ x: 4, y: 4 });
 test.appendManualStrokePoint({ x: 8, y: 8 });
