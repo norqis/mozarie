@@ -51,14 +51,23 @@ const context = {
       if (selector === "[data-shortcut-enabled]") return shortcutEnabled;
       return [];
     },
+    querySelector(selector) {
+      if (selector === '.settings-tab[data-settings-tab="models"]' && context.modelsTabQuery) return tabs[1];
+      return null;
+    },
     createElement() { return element(`generated-${elements.size}`); },
   },
   $: element,
   t: (key) => key,
-  isBusy: () => false,
+  busy: false, modelsTabQuery: false,
+  isBusy: () => context.busy,
   showModalFromInvoker(dialog, invoker) { context.modal = [dialog, invoker]; },
   showUserError(error, anchor) { errors.push([error, anchor]); },
-  closeBoundaryModeMenu() {}, stage: { dataset: {} }, toolRail: { setAttribute() {}, getAttribute() { return "horizontal"; } },
+  closeBoundaryModeMenu() {}, stage: { dataset: {} }, toolRail: {
+    orientation: "horizontal",
+    setAttribute(name, value) { if (name === "aria-orientation") this.orientation = value; },
+    getAttribute(name) { return name === "aria-orientation" ? this.orientation : null; },
+  },
   focusElement(item) { context.focused = item; },
   renderSamVariantStatuses() {}, renderSettingsStatus() {}, syncProviderSelection() {},
   setNavigationShortcutsEnabled() {}, setMosaicPreviewEnabled() {}, renderOutputDirectory() {}, applyToolPosition() {}, setDetectionConfidence() {}, setDetectionTargets() {}, syncDetectionActions() {}, loadTranslations: async () => {},
@@ -228,5 +237,108 @@ vm.runInNewContext("globalThis.settingsTest={renderModelStatus,renderSamVariantS
   context.api = async (url) => { checked = url === "/api/update/status"; return { available: false, current: "v1" }; };
   await context.settingsTest.startUpdate();
   assert.equal(checked, true, "starting without an available update refreshes the status instead");
+
+  // Exercise the alternate settings controls as compact, table-driven runtime cases.
+  for (const { key, expected } of [
+    { key: "ArrowRight", expected: "models" },
+    { key: "Home", expected: "general" },
+    { key: "End", expected: "display" },
+  ]) {
+    context.settingsTest.moveSettingsTab({ currentTarget: tabs[0], key, preventDefault() {} });
+    assert.equal(tabs.find((tab) => tab.classList.contains("active")).dataset.settingsTab, expected);
+  }
+  context.settingsTest.moveSettingsTab({ currentTarget: element("not-a-tab"), key: "ArrowRight", preventDefault() { throw new Error("non-tabs are ignored"); } });
+
+  context.toolRail.orientation = "vertical";
+  for (const { target, key, expected } of [
+    { target: element("#brushTool"), key: "ArrowDown", expected: "#bucketTool" },
+    { target: element("#bucketTool"), key: "ArrowUp", expected: "#brushTool" },
+  ]) {
+    context.settingsTest.handleToolRailKeydown({ target, key, preventDefault() {} });
+    assert.equal(context.focused, element(expected));
+  }
+  context.toolRail.orientation = "horizontal";
+  for (const item of ["#brushTool", "#bucketTool", "#mosaicEraserTool", "#boundaryTool", "#eraserTool", "#excludeBucketTool", "#excludeEraserTool", "#singleViewButton", "#compareViewButton", "#fitButton", "#undoButton", "#redoButton", "#mosaicPreviewButton"]) element(item).tabIndex = -1;
+  context.settingsTest.setToolRailTabStop();
+  assert.equal(element("#brushTool").tabIndex, 0, "a missing roving tab stop falls back to the first enabled tool");
+
+  state.settingsStatus = { runtimeBackend: "cpu", gpus: [{ id: 7, name: "Fallback", totalMemory: 0, supported: true }] };
+  element("#settingsGpuDevice").options.length = 0;
+  context.settingsTest.renderSettingsStatus();
+  assert.equal(element("#settingsGpuDevice").options[0].value, "7", "status rendering falls back to its saved GPU list");
+
+  context.busy = true;
+  const modalBeforeBusyOpen = context.modal;
+  await context.settingsTest.openSettings();
+  assert.equal(context.modal, modalBeforeBusyOpen, "busy work prevents opening settings");
+  context.busy = false;
+
+  let translations = 0;
+  context.loadTranslations = async () => { translations += 1; };
+  state.settings = { general: { language: "ja" }, models: { gpu_device: 0 }, display: {} };
+  context.validateDetectionTargets = () => true;
+  context.api = async (url) => {
+    if (url === "/api/settings?status=0") return { settings: { general: { language: "en", shortcuts_enabled: true }, display: { mosaic_preview: false } }, version: "v2" };
+    throw new Error(`unexpected ${url}`);
+  };
+  await context.settingsTest.saveSettings({ preventDefault() {} });
+  assert.equal(translations, 1, "saving reloads translations when its language changes");
+  context.api = async () => { throw new Error("reset failed"); };
+  await context.settingsTest.resetSettings();
+  assert.equal(errors.at(-1)[0].message, "reset failed", "reset failures stay anchored to their action");
+
+  assert.equal(context.settingsTest.samTypeFromPath(""), null, "an empty model path has no SAM variant");
+  element("#settingsSamType").value = "vit_l";
+  context.api = async () => ({ path: "models/custom-checkpoint.pth" });
+  await context.settingsTest.chooseSettingsModelFile(modelPickers[0]);
+  assert.equal(element("#settingsSamModel").value, "models/custom-checkpoint.pth", "unlabelled SAM files retain the selected variant");
+  context.api = async () => ({ path: "models/target.onnx" });
+  await context.settingsTest.chooseSettingsModelFile(modelPickers[1]);
+  assert.equal(element("#settingsTargetModel").value, "models/target.onnx", "non-SAM pickers update their own input");
+
+  context.settingsTest.renderModelDownload({ expected: 0, received: 99, state: "failed", paths: {}, current: "custom", phase: "", completed: 0, total: 0 });
+  assert.equal(errors.at(-1)[0].code, "internal_error", "failed downloads without a code use the generic failure message");
+  context.settingsTest.renderModelDownload({ expected: 1, received: 1, state: "cancelled", paths: {} });
+  context.settingsTest.renderModelDownload({ expected: 1, received: 1, state: "idle", paths: {} });
+  context.settingsTest.modelDownloadConfirmation("hand_detection");
+  context.api = async (url) => {
+    if (url.endsWith("/start")) return { state: "running", expected: 1, received: 0, paths: {} };
+    throw new Error("poll failed");
+  };
+  await context.settingsTest.beginModelDownload();
+  await context.settingsTest.refreshModelDownload();
+  context.settingsTest.showUnsupportedModelDownload("target");
+  await context.settingsTest.beginModelDownload();
+  context.settingsTest.modelDownloadConfirmation("sam");
+  context.api = async () => { throw new Error("start failed"); };
+  await context.settingsTest.beginModelDownload();
+  assert.equal(errors.at(-1)[0].message, "start failed", "download start failures are actionable");
+
+  element("#settingsDialog").open = true;
+  context.modelsTabQuery = true;
+  tabs.forEach((tab) => tab.classList.toggle("active", tab.dataset.settingsTab === "models"));
+  let payloadCall = 0;
+  context.settingsPayload = () => {
+    payloadCall += 1;
+    if (payloadCall === 2) throw new Error("settings changed while checking");
+    return { revision: payloadCall };
+  };
+  context.api = async () => ({ status: { runtimeBackend: "cpu", gpus: [] } });
+  await context.settingsTest.refreshSettingsStatus();
+  payloadCall = 0;
+  context.settingsPayload = () => ({ revision: ++payloadCall });
+  await context.settingsTest.refreshSettingsStatus();
+
+  context.api = async () => ({ available: true, current: "v3" });
+  await context.settingsTest.checkForUpdate();
+  assert.equal(element("#updateStatus").textContent, "update.available", "available updates use the available status message");
+  await context.settingsTest.checkForUpdate({ silent: true });
+  context.confirmAction = async () => false;
+  await context.settingsTest.startUpdate();
+  let updateStarted = false;
+  context.confirmAction = async () => true;
+  context.api = async (url) => { updateStarted = url === "/api/update/start"; return {}; };
+  await context.settingsTest.startUpdate();
+  assert.equal(updateStarted, true, "confirmed updates start the update request");
   console.log("test_settings_runtime: passed");
 })().catch((error) => { console.error(error); process.exitCode = 1; });
