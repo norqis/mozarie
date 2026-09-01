@@ -67,7 +67,7 @@ const context = {
   confirmAction: async () => true,
 };
 vm.runInNewContext(source, context, { filename: settingsPath });
-vm.runInNewContext("globalThis.settingsTest={renderModelStatus,renderSamVariantStatuses,selectSettingsTab,moveSettingsTab,openSettings,saveSettings,resetSettings,chooseSettingsOutputDirectory,chooseSettingsModelFile,handleToolRailKeydown,modelDownloadInput,renderModelDownload,refreshModelDownload,startModelDownload,beginModelDownload,refreshSettingsStatus,checkForUpdate,startUpdate,samTypeFromPath,shortcutFromEvent,gpuMemoryLabel,modelCardEnabled,setHandSegmentationAvailable,setPrecisionDetectionEnabled,setFluidExclusionEnabled};", context, { filename: "test-settings-exports.js" });
+vm.runInNewContext("globalThis.settingsTest={renderModelStatus,renderSamVariantStatuses,selectSamVariant,selectSettingsTab,moveSettingsTab,openSettings,saveSettings,resetSettings,chooseSettingsOutputDirectory,chooseSettingsModelFile,handleToolRailKeydown,modelDownloadInput,renderModelDownload,refreshModelDownload,startModelDownload,beginModelDownload,refreshSettingsStatus,checkForUpdate,startUpdate,samTypeFromPath,shortcutFromEvent,gpuMemoryLabel,modelCardEnabled,setHandSegmentationAvailable,setPrecisionDetectionEnabled,setFluidExclusionEnabled};", context, { filename: "test-settings-exports.js" });
 
 (async () => {
   assert.equal(context.settingsTest.shortcutFromEvent({ ctrlKey: true, metaKey: false, shiftKey: true, altKey: true, key: "a" }), "Ctrl+Shift+Alt+A", "shortcut capture normalizes modifiers and single letters");
@@ -86,6 +86,9 @@ vm.runInNewContext("globalThis.settingsTest={renderModelStatus,renderSamVariantS
   context.settingsTest.setPrecisionDetectionEnabled(true); context.settingsTest.setFluidExclusionEnabled(true);
   assert.equal(element("#settingsPrecisionToggle").checked, true);
   assert.equal(element("#settingsFluidToggle").checked, true);
+  element("#settingsSamType").value = "vit_b"; element("#settingsSamModel").value = "base.pth";
+  context.settingsTest.selectSamVariant("missing");
+  assert.equal(element("#settingsSamType").value, "vit_b", "unknown SAM variants leave the configured model untouched");
   state.settingsStatus = { models: { unknown: { required: true, reasonCode: "missing" }, ntd11: { enabled: true, reasonCode: "missing" } }, gpuDeviceReasonCode: "unsupported" };
   context.settingsTest.renderModelStatus();
   assert.match(element("#settingsModelStatus").textContent, /settings\.ntd11Model/, "a known invalid model identifies its setting in the status summary");
@@ -151,6 +154,7 @@ vm.runInNewContext("globalThis.settingsTest={renderModelStatus,renderSamVariantS
   context.settingsTest.handleToolRailKeydown({ target: element("#eraserTool"), key: "Home", preventDefault() {} });
   context.settingsTest.handleToolRailKeydown({ target: element("#eraserTool"), key: "End", preventDefault() {} });
   context.settingsTest.handleToolRailKeydown({ target: element("#eraserTool"), key: "x", preventDefault() { throw new Error("unhandled tool key must not prevent default"); } });
+  context.settingsTest.handleToolRailKeydown({ target: element("not-a-tool"), key: "ArrowRight", preventDefault() { throw new Error("unknown toolbar items keep native behavior"); } });
 
   element("#settingsSamType").value = "vit_b";
   element("#settingsSamModel").value = "old.pth";
