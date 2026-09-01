@@ -20,6 +20,7 @@ const browserCoverageFile = path.join(coverageRoot, "browser-v8.json");
 const testFiles = [
   "tests/test_app_core_detection_coverage.cjs",
   "tests/test_browser_save_runtime.cjs",
+  "tests/test_coverage_js.cjs",
   "tests/test_candidate_bundle.cjs",
   "tests/test_detection_refresh_runtime.cjs",
   "tests/test_editor_canvas_completion_runtime.cjs",
@@ -85,6 +86,13 @@ function sourceFileForCoverageEntry(entry) {
   return path.resolve(root, "static", url.pathname.slice(1).split("/").join(path.sep));
 }
 
+function normalizeV8FunctionRanges(functions, source) {
+  return functions.map((fn) => ({
+    ...fn,
+    ranges: fn.ranges.filter((range, index) => index === 0 || /\S/.test(source.slice(range.startOffset, range.endOffset))),
+  }));
+}
+
 async function mergedV8CoverageMap() {
   assert.ok(fs.existsSync(browserCoverageFile), "browser coverage output was not written");
   const browserEntries = JSON.parse(fs.readFileSync(browserCoverageFile, "utf8"));
@@ -115,9 +123,10 @@ async function mergedV8CoverageMap() {
   }
   addEntries(browserEntries, true);
   for (const script of mergeProcessCovs(processes).result) {
-    const converter = v8ToIstanbul(script.url, 0, { source: sources.get(script.url) || fs.readFileSync(script.url, "utf8") });
+    const source = sources.get(script.url) || fs.readFileSync(script.url, "utf8");
+    const converter = v8ToIstanbul(script.url, 0, { source });
     await converter.load();
-    converter.applyCoverage(script.functions);
+    converter.applyCoverage(normalizeV8FunctionRanges(script.functions, source));
     map.merge(converter.toIstanbul());
   }
   assert.ok(measuredEntries > 0, "no static JavaScript was measured in V8 coverage");
@@ -156,9 +165,13 @@ async function main() {
   verifyCoverage(combined);
 }
 
-main().catch((error) => {
-  console.error(error.stack || error);
-  process.exitCode = 1;
-}).finally(() => {
-  if (!requestedCoverageRoot) fs.rmSync(coverageRoot, { recursive: true, force: true });
-});
+if (require.main === module) {
+  main().catch((error) => {
+    console.error(error.stack || error);
+    process.exitCode = 1;
+  }).finally(() => {
+    if (!requestedCoverageRoot) fs.rmSync(coverageRoot, { recursive: true, force: true });
+  });
+}
+
+module.exports = { normalizeV8FunctionRanges };
