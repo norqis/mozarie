@@ -523,6 +523,18 @@ async function testDetectionImportAndSaveBehaviour() {
   context.activeDetection = () => false; state.detectCancelRequested = false;
   await context.detectionCoverage.saveAll();
   assert.deepEqual(calls.slice(-3), ["draft", "refresh", "masked"]);
+  context.busy = true; context.isBusy = () => context.busy;
+  await context.detectionCoverage.saveAll();
+  context.busy = false; state.importing = true;
+  await context.detectionCoverage.saveAll();
+  state.importing = false;
+  state.candidateUpdateChains.set("one", Promise.resolve());
+  context.waitForCandidateMutations = async () => { state.importing = true; };
+  await context.detectionCoverage.saveAll();
+  state.importing = false; state.candidateUpdateChains.clear();
+  state.detectionStarting = true;
+  await context.detectionCoverage.runDetection(["one"], .5, 1, ["penis"]);
+  state.detectionStarting = false;
   state.pendingDetectionTargetIds = [];
   await context.detectionCoverage.startDetectionFromDialog({ preventDefault() {} });
   state.pendingDetectionTargetIds = ["one"];
