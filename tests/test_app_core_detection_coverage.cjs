@@ -281,12 +281,12 @@ async function testCoreBoundaryAndWorkspaceBehaviour() {
     refreshMaskStatus: () => false, selectImage() {}, imageAssetVersion: () => 0, canvasHasPixels: () => false,
     applyRestrictionMessage: () => "", candidateDisplayIdsForRole: () => [], queueWorkspaceFlags: () => Promise.reject(new Error("write failed")),
     showModalFromInvoker() {}, showConnectionFailure() {}, releaseMosaicPreview() {}, requestMosaicPreview() {},
-    closeBoundaryModeMenu() {}, closeCatalogContextMenu() {}, releaseImageCaches() {}, clearCandidateBlink() {}, clearEditor() {},
+    closeBoundaryModeMenu() {}, closeCatalogContextMenu() {}, releaseImageCaches() {}, clearCandidateBlink() {}, clearEditor() {}, flushAllWorkspaceMutations: async () => {},
     forgetThumbnail() {},
   };
   const source = fs.readFileSync(path.join(jsRoot, "core.js"), "utf8");
   vm.runInNewContext(source, context, { filename: path.join(jsRoot, "core.js") });
-  vm.runInNewContext("globalThis.coreCoverage={ state, t, validCandidateTokens, showUserError, responseError, loadTranslations, api, setStatus, setStatusKey, showProcessing, progressText, processingCurrentPath, catalogRecordMatches, cancelFillWork, abortCatalogLoads, publishWorkspaceFlags, saveWorkspaceFlag, saveTargets, setHidden, selectCatalogImage, refreshReviewViews, moveReviewedPathAfterApply, markImagesUnreviewed, refreshCurrentReviewAndMask, clearBoundaryConstruction, updateActionButtons, updateCandidateBatchButtons, setMosaicPreviewEnabled, formatDuration, normaliseDetectionConfidence, normaliseDivisor, calculatedBlockSize };", context, { filename: "test-core-exports.js" });
+  vm.runInNewContext("globalThis.coreCoverage={ state, t, validCandidateTokens, showUserError, responseError, loadTranslations, api, setStatus, setStatusKey, showProcessing, progressText, processingCurrentPath, catalogRecordMatches, cancelFillWork, abortCatalogLoads, publishWorkspaceFlags, saveWorkspaceFlag, saveTargets, setHidden, selectCatalogImage, refreshReviewViews, moveReviewedPathAfterApply, markImagesUnreviewed, refreshCurrentReviewAndMask, clearBoundaryConstruction, updateActionButtons, updateCandidateBatchButtons, setMosaicPreviewEnabled, loadFolder, formatDuration, normaliseDetectionConfidence, normaliseDivisor, calculatedBlockSize };", context, { filename: "test-core-exports.js" });
   const test = context.coreCoverage;
   const coreState = test.state;
   Object.assign(coreState, state);
@@ -494,6 +494,17 @@ async function testCoreBoundaryAndWorkspaceBehaviour() {
   coreState.saving = true;
   test.setMosaicPreviewEnabled(true);
   coreState.saving = false;
+  element("#folderPath").value = "G:/fixture";
+  coreState.saving = true;
+  await test.loadFolder();
+  coreState.saving = false;
+  element("#folderPath").value = "";
+  await test.loadFolder();
+  element("#folderPath").value = "G:/fixture";
+  context.api = async () => { coreState.catalogEpoch += 1; return { images: [] }; };
+  await test.loadFolder();
+  context.api = async () => { throw new Error("folder unavailable"); };
+  await test.loadFolder();
 }
 
 async function testDetectionImportAndSaveBehaviour() {
