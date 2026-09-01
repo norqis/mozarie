@@ -368,6 +368,21 @@ test.render(); test.flushRender();
   await test.selectImage("broken", true, { saveCurrentDraft: false });
   assert.equal(context.lastUserError, loadError, "image load failures reach the standard user error path");
 
+  // A successful gallery selection changes the image, candidate bundle, and
+  // editor dimensions together.  This remains distinct from the stale/error
+  // paths above, so a rejected image never leaves partial UI state behind.
+  const selectable = { id: "selected", assetVersion: "v3", candidateRevision: 2, relativePath: "folder/selected.png", width: 12, height: 9, enabledCandidateCount: 0 };
+  state.images = [selectable]; state.currentId = null; state.currentImage = null; state.pendingImageId = null; state.imageGeneration = 20;
+  state.imageCache = cache(); state.candidateBundleCache = cache(); state.drafts = new Map(); state.mosaicPreviewEnabled = false;
+  context.cachedImage = async () => ({ width: 12, height: 9, alpha: 255 });
+  context.loadCandidateBundle = async () => ({ candidates: [{ id: "candidate", enabled: true, role: "apply" }], candidateImages: new Map([["candidate", { alpha: 255 }]]), candidateRevision: 3 });
+  context.loadWorkspaceDraft = async () => null; context.decodeDraftImages = async () => [null, null, null, null, null, null];
+  await test.selectImage("selected", true, { saveCurrentDraft: false });
+  assert.equal(state.currentId, "selected");
+  assert.equal(state.candidates[0].id, "candidate");
+  assert.equal(element("#currentFileName").textContent, "folder/selected.png");
+  await test.selectImage("selected", false, { saveCurrentDraft: false });
+
   context.Image = class { set src(_source) { this.onerror(); } };
   await assert.rejects(test.loadImage("bad-image"), (error) => error?.code === "image_read_failed");
   context.FileReader = class { readAsDataURL() { this.error = new Error("encode failed"); this.onerror(); } };
