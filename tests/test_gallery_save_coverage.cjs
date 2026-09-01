@@ -635,6 +635,171 @@ async function saveCoverageMatrix() {
     assert.ok(scenario.label);
   }
 
+  // Exercise the browser-owned batch failure boundaries as a matrix.  The
+  // source and destination must be reconciled together whenever a commit
+  // does not settle conclusively.
+  const batchRecoveryCases = [
+    {
+      label: "copy deletion rolls back its source and cleans its output after a definitive rejection",
+      mode: "copy",
+      run: async (runtime) => {
+        const { state } = runtime; let restored = 0; let cleaned = 0;
+        const file = { name: "file.png", size: 1, lastModified: 1, async arrayBuffer() { return Uint8Array.from([4]).buffer; } };
+        const restoredHandle = { name: file.name, async getFile() { return file; }, async createWritable() { return { async write() { restored += 1; }, async close() {} }; } };
+        const access = { name: file.name, size: 1, lastModified: 1, fileHandle: { name: file.name, async queryPermission() { return "granted"; }, async getFile() { return file; } }, parentHandle: { async removeEntry() {}, async getFileHandle() { return restoredHandle; } } };
+        state.images = [{ id: "file", sourceKind: "filesystem", relativePath: "file.png" }]; state.sourceAccess = new Map([["file", access]]);
+        state.outputDirectoryHandle = { async getFileHandle(_name, options) { if (!options?.create) return missing(); return { async createWritable() { return { async write() {}, async close() {} }; } }; }, async removeEntry() { cleaned += 1; } };
+        runtime.setHandler(async (url) => {
+          if (url === "/api/save/prepare") return { entries: [{ imageId: "file", candidateRevision: 1, relativePath: "file.png" }] };
+          if (url === "/api/save/render") return response();
+          if (url === "/api/save/commit") { const error = new Error("rejected"); error.status = 400; throw error; }
+          if (url === "/api/images") return { images: state.images };
+          return {};
+        });
+        await assert.rejects(runtime.runBrowserSave(["file"], "_m", true, "copy"), /rejected/);
+        assert.equal(restored, 1); assert.equal(cleaned, 1);
+      },
+    },
+    {
+      label: "copy deletion reports restore failure when its snapshot is unavailable",
+      mode: "copy",
+      run: async (runtime) => {
+        const { state } = runtime; let cleaned = 0;
+        const file = { name: "file.png", size: 1, lastModified: 1 };
+        const access = { name: file.name, size: 1, lastModified: 1, fileHandle: { name: file.name, async queryPermission() { return "granted"; }, async getFile() { return file; } }, parentHandle: { async removeEntry() {}, async getFileHandle() { throw new Error("must not restore without a snapshot"); } } };
+        state.images = [{ id: "file", sourceKind: "filesystem", relativePath: "file.png" }]; state.sourceAccess = new Map([["file", access]]);
+        state.outputDirectoryHandle = { async getFileHandle(_name, options) { if (!options?.create) return missing(); return { async createWritable() { return { async write() {}, async close() {} }; } }; }, async removeEntry() { cleaned += 1; } };
+        runtime.setHandler(async (url) => {
+          if (url === "/api/save/prepare") return { entries: [{ imageId: "file", candidateRevision: 1, relativePath: "file.png" }] };
+          if (url === "/api/save/render") return response();
+          if (url === "/api/save/commit") { const error = new Error("rejected"); error.status = 400; throw error; }
+          if (url === "/api/images") return { images: state.images };
+          return {};
+        });
+        await assert.rejects(runtime.runBrowserSave(["file"], "_m", true, "copy"), (error) => error.code === "source_restore_failed");
+        assert.equal(cleaned, 0, "a failed rollback keeps the output for manual recovery");
+      },
+    },
+    {
+      label: "copy preserves its commit rejection when output cleanup also fails",
+      mode: "copy",
+      run: async (runtime) => {
+        const { state } = runtime; let cleanupAttempts = 0;
+        state.images = [{ id: "file", sourceKind: "filesystem", relativePath: "file.png" }];
+        state.outputDirectoryHandle = { async getFileHandle(_name, options) { if (!options?.create) return missing(); return { async createWritable() { return { async write() {}, async close() {} }; } }; }, async removeEntry() { cleanupAttempts += 1; throw new Error("cleanup"); } };
+        runtime.setHandler(async (url) => {
+          if (url === "/api/save/prepare") return { entries: [{ imageId: "file", candidateRevision: 1, relativePath: "file.png" }] };
+          if (url === "/api/save/render") return response();
+          if (url === "/api/save/commit") { const error = new Error("rejected"); error.status = 400; throw error; }
+          if (url === "/api/images") return { images: state.images };
+          return {};
+        });
+        await assert.rejects(runtime.runBrowserSave(["file"], "_m", false, "copy"), /rejected/);
+        assert.equal(cleanupAttempts, 1);
+      },
+    },
+    {
+      label: "overwrite turns a non-JSON render failure into an internal error",
+      mode: "overwrite",
+      run: async (runtime) => {
+        const { state } = runtime;
+        runtime.context.responseError = (binary, body) => { const error = new Error("save_render_failed"); error.code = body.error_code || "internal_error"; error.status = binary.status; return error; };
+        const file = { name: "file.png", size: 1, lastModified: 1, async arrayBuffer() { return Uint8Array.from([5]).buffer; } };
+        const access = { name: file.name, size: 1, lastModified: 1, fileHandle: { name: file.name, async queryPermission() { return "granted"; }, async getFile() { return file; }, async createWritable() { throw new Error("must not write"); } } };
+        state.images = [{ id: "file", sourceKind: "filesystem", relativePath: "file.png" }]; state.sourceAccess = new Map([["file", access]]);
+        runtime.setHandler(async (url) => {
+          if (url === "/api/save/prepare") return { entries: [{ imageId: "file", candidateRevision: 1, relativePath: "file.png" }] };
+          if (url === "/api/save/render") return { ok: false, status: 502, async json() { throw new Error("not JSON"); } };
+          if (url === "/api/images") return { images: state.images };
+          return {};
+        });
+        await assert.rejects(runtime.runBrowserSave(["file"], "_m", false, "overwrite"), (error) => error.code === "internal_error" && error.status === 502);
+      },
+    },
+    {
+      label: "overwrite passes an empty render token through to its commit",
+      mode: "overwrite",
+      run: async (runtime) => {
+        const { state } = runtime; let token;
+        const file = { name: "file.png", size: 1, lastModified: 1, async arrayBuffer() { return Uint8Array.from([6]).buffer; } };
+        const access = { name: file.name, size: 1, lastModified: 1, fileHandle: { name: file.name, async queryPermission() { return "granted"; }, async getFile() { return file; }, async createWritable() { return { async write() {}, async close() {} }; } } };
+        state.images = [{ id: "file", sourceKind: "filesystem", relativePath: "file.png" }]; state.sourceAccess = new Map([["file", access]]);
+        runtime.setHandler(async (url, options) => {
+          if (url === "/api/save/prepare") return { entries: [{ imageId: "file", candidateRevision: 1, relativePath: "file.png" }] };
+          if (url === "/api/save/render") return response("");
+          if (url === "/api/save/commit") { token = JSON.parse(options.body).saveToken; return { cleared: false, stale: false, deleted: false }; }
+          if (url === "/api/images") return { images: state.images };
+          return {};
+        });
+        await runtime.runBrowserSave(["file"], "_m", false, "overwrite");
+        assert.equal(token, "");
+      },
+    },
+    {
+      label: "overwrite restores its access handle after pending and definitive commits fail",
+      mode: "overwrite",
+      run: async (runtime) => {
+        for (const [status, saveState] of [[503, "pending"], [400, null]]) {
+          const { state } = runtime; let writes = 0; let cancelled = 0;
+          const file = { name: "file.png", size: 1, lastModified: 1, async arrayBuffer() { return Uint8Array.from([7]).buffer; } };
+          const access = { name: file.name, size: 1, lastModified: 1, fileHandle: { name: file.name, async queryPermission() { return "granted"; }, async getFile() { return file; }, async createWritable() { return { async write() { writes += 1; }, async close() {} }; } } };
+          state.images = [{ id: "file", sourceKind: "filesystem", relativePath: "file.png" }]; state.sourceAccess = new Map([["file", access]]);
+          runtime.setHandler(async (url) => {
+            if (url === "/api/save/prepare") return { entries: [{ imageId: "file", candidateRevision: 1, relativePath: "file.png" }] };
+            if (url === "/api/save/render") return response();
+            if (url === "/api/save/commit") { const error = new Error("commit"); error.status = status; throw error; }
+            if (url === "/api/save/status") return { state: saveState };
+            if (url === "/api/save/cancel") { cancelled += 1; return {}; }
+            if (url === "/api/images") return { images: state.images };
+            return {};
+          });
+          await assert.rejects(runtime.runBrowserSave(["file"], "_m", false, "overwrite"), /commit/);
+          assert.equal(writes, 2, `${status} restores the original source bytes`); assert.equal(cancelled, saveState === "pending" ? 1 : 0);
+        }
+      },
+    },
+    {
+      label: "overwrite reports a failed source restoration",
+      mode: "overwrite",
+      run: async (runtime) => {
+        const { state } = runtime; let writers = 0;
+        const file = { name: "file.png", size: 1, lastModified: 1, async arrayBuffer() { return Uint8Array.from([8]).buffer; } };
+        const access = { name: file.name, size: 1, lastModified: 1, fileHandle: { name: file.name, async queryPermission() { return "granted"; }, async getFile() { return file; }, async createWritable() { writers += 1; if (writers === 2) { const error = new Error("unsupported"); error.name = "TypeError"; throw error; } return { async write() {}, async close() {} }; } } };
+        state.images = [{ id: "file", sourceKind: "filesystem", relativePath: "file.png" }]; state.sourceAccess = new Map([["file", access]]);
+        runtime.setHandler(async (url) => {
+          if (url === "/api/save/prepare") return { entries: [{ imageId: "file", candidateRevision: 1, relativePath: "file.png" }] };
+          if (url === "/api/save/render") return response();
+          if (url === "/api/save/commit") { const error = new Error("rejected"); error.status = 400; throw error; }
+          if (url === "/api/images") return { images: state.images };
+          return {};
+        });
+        await assert.rejects(runtime.runBrowserSave(["file"], "_m", false, "overwrite"), (error) => error.code === "source_restore_failed");
+      },
+    },
+    {
+      label: "filesystem overwrite and invalid parallelism fall back to one serial worker",
+      mode: "overwrite",
+      run: async (runtime) => {
+        const { state } = runtime; let active = 0; let maximum = 0;
+        state.images = ["one", "two"].map((id) => ({ id, sourceKind: "filesystem", relativePath: `${id}.png` })); state.settings.saving.parallelism = 0;
+        runtime.setHandler(async (url, options) => {
+          if (url === "/api/save/prepare") return { entries: ["one", "two"].map((imageId) => ({ imageId, candidateRevision: 1, relativePath: `${imageId}.png` })) };
+          if (url === "/api/save/render") { active += 1; maximum = Math.max(maximum, active); await new Promise((resolve) => setImmediate(resolve)); active -= 1; return response(); }
+          if (url === "/api/save/commit") return { cleared: false, stale: false, deleted: false };
+          if (url === "/api/images") return { images: state.images };
+          return {};
+        });
+        await runtime.runBrowserSave(["one", "two"], "_m", false, "overwrite");
+        assert.equal(maximum, 1);
+      },
+    },
+  ];
+  for (const scenario of batchRecoveryCases) {
+    const runtime = makeSaveRuntime();
+    await scenario.run(runtime);
+    assert.ok(scenario.label && scenario.mode);
+  }
+
   for (const status of [400, 503]) {
     const runtime = makeSaveRuntime(); let attempts = 0;
     runtime.setHandler(async (url) => {
