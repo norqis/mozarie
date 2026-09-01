@@ -459,6 +459,8 @@ async function testCoreBoundaryAndWorkspaceBehaviour() {
   assert.equal(test.processingCurrentPath({ kind: "detect", imageIds: ["plain"], completedImageIds: [], current: "fallback.png" }), "fallback.png");
   coreState.images = [{ id: "plain" }];
   assert.equal(test.processingCurrentPath({ kind: "detect", imageIds: ["plain"], completedImageIds: [], current: "fallback.png" }), "");
+  coreState.images = [];
+  assert.equal(test.processingCurrentPath({ kind: "detect", imageIds: ["plain"], completedImageIds: [], current: "" }), "");
   const matchingRecord = { id: "one", candidateRevision: 4, assetVersion: "v" };
   coreState.images = [matchingRecord];
   assert.equal(test.catalogRecordMatches(matchingRecord, undefined, { version: 0, revision: 4 }), false);
@@ -584,6 +586,9 @@ async function testDetectionImportAndSaveBehaviour() {
   state.importing = true;
   await context.detectionCoverage.runDetection(["one"], .5, 1, ["penis"]);
   state.importing = false;
+  context.validateDetectionTargets = () => false;
+  await context.detectionCoverage.runDetection(["one"], .5, 1, ["penis"]);
+  context.validateDetectionTargets = () => true;
   state.pendingDetectionTargetIds = [];
   await context.detectionCoverage.startDetectionFromDialog({ preventDefault() {} });
   state.pendingDetectionTargetIds = ["one"];
