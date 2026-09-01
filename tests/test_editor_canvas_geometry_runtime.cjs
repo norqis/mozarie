@@ -85,7 +85,7 @@ context.historyAddCanvas = canvas(); context.historyExclusionCanvas = canvas(); 
 const canvasPath = path.join(__dirname, "..", "static", "js", "editor-canvas.js");
 const source = fs.readFileSync(canvasPath, "utf8");
 vm.runInNewContext(source, context, { filename: canvasPath });
-vm.runInNewContext("globalThis.geometryRuntime = { selectImage, loadImage, imageAssetVersion, invalidateStaleAsset, imageCacheKey, candidateCacheKey, cachedImage, prefetchNeighbors, releaseImageCaches, releaseStaleImageVersions, releaseCandidateBundles, releaseCandidateBitmap, invalidateCandidateBundles, retainCurrentCandidateBundle, loadCandidateBundle, reconcileCurrentCandidates, syncCandidateRecord, syncCurrentCandidateRecord, canvasToDataUrl, saveDraft, restoreDraft, resizeRenderCanvas, setCssTransform, releaseMosaicPreview, prepareOriginalImage, mosaicPreviewFailed, createMosaicWorker, ensureMosaicPreviewSource, rebuildMosaicPreview, requestMosaicPreview, composeEnabledExclusionMask, drawEffectiveExclusions, composeCurrentMask, markDraftDirty, markMaskDirty, flushMaskComposition, hasEffectiveMask, maskStatusWithoutCandidate, compareSplitX, comparePaneBounds, compareSideOffset, compareEventSide, compareEventOffset, updateCompareSplitter, setDisplayMode, fitImage, updateBrushCursor, roiFromPoints, boundaryDraftRoi, boundaryDraftId, pointForRoi, polygonRoi, boundaryDraftBounds, addBoundaryDraft, activeBoundaryShape, boundaryShapes, strokeRoi, appendBoundaryBrushPoint, beginBoundaryBrushStroke, completeBoundaryBrushStroke, rectsTouch, joinRois, boundaryRequests, boundaryPath, drawBoundaryScrim, drawBoundaryShape, drawBoundaryRoi, polygonArea, polygonSegmentsIntersect, polygonPointsValid, polygonIsValid, canDetectBoundary, hasBoundaryDraft, boundaryActionAnchor, updateBoundaryActions, drawCandidateBlinkOverlay, drawCompareRangeOverlay, refreshMaskStatus, renderNow, render, flushRender };", context, { filename: "test-editor-canvas-geometry-exports.js" });
+vm.runInNewContext("globalThis.geometryRuntime = { selectImage, loadImage, imageAssetVersion, invalidateStaleAsset, imageCacheKey, candidateCacheKey, cachedImage, prefetchNeighbors, releaseImageCaches, releaseStaleImageVersions, releaseCandidateBundles, releaseCandidateBitmap, invalidateCandidateBundles, retainCurrentCandidateBundle, loadCandidateBundle, reconcileCurrentCandidates, syncCandidateRecord, syncCurrentCandidateRecord, canvasToDataUrl, saveDraft, restoreDraft, resizeRenderCanvas, setCssTransform, releaseMosaicPreview, prepareOriginalImage, mosaicPreviewFailed, createMosaicWorker, ensureMosaicPreviewSource, rebuildMosaicPreview, requestMosaicPreview, composeEnabledExclusionMask, drawEffectiveExclusions, composeCurrentMask, markDraftDirty, markMaskDirty, flushMaskComposition, hasEffectiveMask, maskStatusWithoutCandidate, paintMosaicPreviewAt, paintTintedMask, selectedCandidateMask, compareSplitX, comparePaneBounds, compareSideOffset, compareEventSide, compareEventOffset, updateCompareSplitter, setDisplayMode, fitImage, updateBrushCursor, roiFromPoints, boundaryDraftRoi, boundaryDraftId, pointForRoi, polygonRoi, boundaryDraftBounds, addBoundaryDraft, activeBoundaryShape, boundaryShapes, strokeRoi, appendBoundaryBrushPoint, beginBoundaryBrushStroke, completeBoundaryBrushStroke, rectsTouch, joinRois, boundaryRequests, boundaryPath, drawBoundaryScrim, drawBoundaryShape, drawBoundaryRoi, polygonArea, polygonSegmentsIntersect, polygonPointsValid, polygonIsValid, canDetectBoundary, hasBoundaryDraft, boundaryActionAnchor, updateBoundaryActions, drawCandidateBlinkOverlay, drawCompareRangeOverlay, refreshMaskStatus, renderNow, render, flushRender };", context, { filename: "test-editor-canvas-geometry-exports.js" });
 const test = context.geometryRuntime;
 
 function rectangle(left, top, right, bottom) { return { type: "rectangle", roi: { left, top, right, bottom } }; }
@@ -513,5 +513,18 @@ test.render(); test.flushRender();
   context.forgetThumbnail = () => {};
   test.invalidateStaleAsset("orphan");
   assert.equal(staleClosed, 2); assert.equal(state.currentId, "active");
+
+  // Empty editor and display-only paths must remain harmless: no mask
+  // composition, canvas paint, or splitter update can assume an image exists.
+  state.currentId = null; state.currentImage = null; state.maskDirty = true;
+  test.composeCurrentMask(); test.refreshMaskStatus(); test.prepareOriginalImage(); test.paintMosaicPreviewAt(12); test.renderNow();
+  assert.equal(state.maskDirty, true, "without an image composition leaves its pending state untouched");
+  test.paintTintedMask(null, "#fff", 1, 0);
+  assert.equal(test.selectedCandidateMask("missing", "apply", true, null, "effective", context.combinedCanvas), null);
+  assert.equal(test.selectedCandidateMask("disabled", "apply", false, context.addCanvas, "effective", context.combinedCanvas), null);
+  assert.equal(test.selectedCandidateMask("normal", "apply", true, context.addCanvas, "normal", context.combinedCanvas), context.addCanvas);
+  test.drawBoundaryScrim([]); test.drawBoundaryShape({ type: "rectangle", roi: null });
+  const lookup = context.$; context.$ = (id) => id === "#compareSplitter" ? null : lookup(id);
+  test.updateCompareSplitter(); context.$ = lookup;
   console.log("test_editor_canvas_geometry_runtime: passed");
 })().catch((error) => { console.error(error); process.exitCode = 1; });
