@@ -4,7 +4,7 @@ const path = require("node:path");
 const vm = require("node:vm");
 
 function canvas(width = 100, height = 80) {
-  const target = { width, height, alpha: 0 };
+  const target = { width, height, alpha: 0, toBlob(done) { done({}); } };
   target.ctx = {
     calls: [], alpha: 0,
     clearRect(...args) { this.calls.push(["clear", ...args]); this.alpha = 0; },
@@ -64,7 +64,7 @@ class Worker {
 const context = {
   codedError(code) { const error = new Error(); error.code = code; return error; },
   state, Math, Map, Set, Array, Object, Number, Boolean, Uint8Array, Uint8ClampedArray, AbortController,
-  window: { devicePixelRatio: 1 }, document: { activeElement: null }, stage: { clientWidth: 120, clientHeight: 90, dataset: {} }, toolRail: { offsetHeight: 30 },
+  window: { devicePixelRatio: 1 }, document: { activeElement: null }, stage: { clientWidth: 120, clientHeight: 90, dataset: {} }, toolRail: { offsetHeight: 30 }, renderedWidth: 0, renderedHeight: 0,
   requestAnimationFrame(callback) { callback(); return 1; }, cancelAnimationFrame() {}, Worker,
   canvas: displayCanvas, ctx: displayCanvas.ctx, layerCanvas, layerCtx: layerCanvas.ctx, boundaryOverlayCanvas: overlayCanvas, boundaryOverlayCtx: overlayCanvas.ctx,
   combinedCanvas: canvas(), addCanvas: canvas(), exclusionCanvas: canvas(), exclusionEraseCanvas: canvas(),
@@ -389,5 +389,42 @@ test.render(); test.flushRender();
     historyBase: { removedCandidateIds: ["old"], candidateIds: ["old"] }, removedCandidateIds: ["old"], manualMaskPresent: false,
   }, [null, null, null, null, null, null]);
   assert.deepEqual(JSON.parse(JSON.stringify(state.history.map((stroke) => stroke.kind))), ["brush"], "a newer candidate revision removes only obsolete candidate-history operations");
+
+  // A complete persisted edit restores all three layers and keeps the history
+  // cursor usable for undo/redo.  The same helper also deliberately rejects a
+  // result which finishes after the user selected a different image.
+  state.images = [{ id: "restore", candidateRevision: 3, enabledCandidateCount: 0 }]; state.currentId = "restore"; state.imageGeneration = 13;
+  state.currentImage = { width: 10, height: 10 }; state.candidates = [{ id: "still-here", enabled: true, role: "apply" }];
+  const restoredLayers = [{ alpha: 255 }, { alpha: 255 }, { alpha: 255 }, { alpha: 255 }, { alpha: 255 }, { alpha: 255 }];
+  const restored = await test.restoreDraft("restore", 13, {
+    candidateRevision: 3, manualEnabled: false, manualExclusionEnabled: false, manualExclusionEraseEnabled: false, manualExclusionForced: false, manualMaskPresent: true,
+    removedCandidateIds: ["still-here", "stale"], history: [{ kind: "removeCandidates", points: [{ x: 1, y: 2 }], spans: [1] }, { kind: "brush", points: [{ x: 2, y: 3 }] }], historyIndex: 1,
+    historyBase: { removedCandidateIds: ["still-here", "stale"], candidateIds: ["still-here", "stale"] },
+  }, restoredLayers);
+  assert.equal(restored, true);
+  assert.equal(state.history.length, 2);
+  assert.equal(state.historyIndex, 1);
+  assert.deepEqual([...state.removedCandidateIds], ["still-here"]);
+  assert.equal(state.manualEnabled, false);
+  state.currentId = "other";
+  assert.equal(await test.restoreDraft("restore", 13, null, restoredLayers), false, "late draft decodes cannot overwrite a newly selected image");
+
+  state.currentId = "restore"; state.currentImage = { width: 10, height: 10, alpha: 255 }; state.images = [{ id: "restore", candidateRevision: 3 }]; state.drafts = new Map(); state.draftSaveChains = new Map();
+  context.FileReader = class { readAsDataURL() { this.result = "data:image/png;base64,AA=="; this.onload(); } };
+  state.draftDirty = true; state.draftLayerDirty = new Set(["add", "exclusion", "exclusionErase", "unknown"]); state.historyBaseDirty = true;
+  context.addCanvas.ctx.alpha = context.exclusionCanvas.ctx.alpha = context.exclusionEraseCanvas.ctx.alpha = 255;
+  context.historyAddCanvas.ctx.alpha = context.historyExclusionCanvas.ctx.alpha = context.historyExclusionEraseCanvas.ctx.alpha = 255;
+  state.history = [{ kind: "brush", points: [{ x: 1, y: 1 }], spans: [0] }]; state.historyIndex = 1;
+  state.historyRemovedCandidateIds = new Set(["still-here"]); state.historyCandidateIds = new Set(["still-here"]);
+  await test.saveDraft();
+  assert.equal(state.drafts.get("restore").historyBase.add.startsWith("data:image/png"), true, "dirty history base layers are persisted with the edit");
+  assert.equal(state.drafts.get("restore").add.startsWith("data:image/png"), true, "dirty manual layers are persisted with the edit");
+
+  state.displayMode = "single"; state.currentImage = null; test.fitImage();
+  state.currentImage = { width: 10, height: 10 }; context.window.devicePixelRatio = 2; displayCanvas.width = 0; displayCanvas.height = 0;
+  test.resizeRenderCanvas();
+  assert.deepEqual([displayCanvas.width, displayCanvas.height], [240, 180], "resizing the editor allocates the display backing store at device resolution");
+  test.resizeRenderCanvas();
+  context.window.devicePixelRatio = 1;
   console.log("test_editor_canvas_geometry_runtime: passed");
 })().catch((error) => { console.error(error); process.exitCode = 1; });
