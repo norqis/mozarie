@@ -17,6 +17,6 @@ Promise.all([
   assert.rejects(browserCoverageMap([{ ...validEntry, source: "changed" }]), /browser coverage source changed/),
 ]).then(async () => {
   const map = await browserCoverageMap([validEntry]);
-  assert.ok(map.data[appPath], "a matching static browser entry is converted into an Istanbul map");
+  assert.ok(map.files().includes(path.resolve(appPath)), "a matching static browser entry is converted into an Istanbul map");
   console.log("test_coverage_js: passed");
 }).catch((error) => { console.error(error); process.exitCode = 1; });

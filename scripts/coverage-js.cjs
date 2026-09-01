@@ -108,7 +108,7 @@ async function browserCoverageMap(entries) {
     measuredEntries += 1;
   }
   assert.ok(measuredEntries > 0, "browser coverage has no static JavaScript entries");
-  assert.ok(Object.keys(map.data).length > 0, "browser coverage map has no static JavaScript files");
+  assert.ok(map.files().length > 0, "browser coverage map has no static JavaScript files");
   return map;
 }
 
