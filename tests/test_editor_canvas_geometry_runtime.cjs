@@ -529,6 +529,54 @@ test.render(); test.flushRender();
   context.forgetThumbnail = () => {};
   test.invalidateStaleAsset("orphan");
   assert.equal(staleClosed, 2); assert.equal(state.currentId, "active");
+  state.candidateBundleCache = cache([["orphan:missing-images", {}]]);
+  test.invalidateStaleAsset("orphan");
+
+  // Revision-zero is a valid initial server state.  Transfer and inactive
+  // record updates must not mistake it for absence.
+  state.images = [{ id: "zero", candidateRevision: 0 }, { id: "other", candidateRevision: 1 }]; state.currentId = "other";
+  state.candidateBundleCache = cache(); state.candidateImages = new Map(); state.candidates = [];
+  test.retainCurrentCandidateBundle("zero", 0);
+  assert.equal(state.images[0].candidateRevision, 0);
+  state.currentId = "zero"; test.retainCurrentCandidateBundle("zero", 0);
+  assert.equal(state.images[0].candidateRevision, 0);
+
+  state.drafts = new Map(); state.maskStatus = new Map(); state.images = [{ id: "zero", candidateRevision: 1 }];
+  test.syncStoredMaskStatus("zero", []);
+  state.drafts.set("zero", { hasEffectiveMask: false, candidateRevision: 1 }); test.syncStoredMaskStatus("zero", []);
+  assert.equal(state.maskStatus.get("zero"), false);
+  state.images = []; state.drafts.set("zero", { hasEffectiveMask: false, candidateRevision: 2 }); test.syncStoredMaskStatus("zero", []);
+  assert.equal(state.maskStatus.has("zero"), false, "an empty stale draft does not create a status for a missing record");
+
+  await assert.rejects(test.canvasToDataUrl({ toBlob(done) { done(null); } }), (error) => error.code === "internal_error");
+
+  // Draft restoration accepts the compact stored form, including omitted
+  // history-base IDs, but never applies it after selection has changed.
+  const restoreRecord = { id: "restore-current", candidateRevision: 7, enabledCandidateCount: 0 };
+  state.images = [restoreRecord]; state.currentId = "restore-current"; state.imageGeneration = 70; state.currentImage = { width: 10, height: 10 };
+  state.candidates = [{ id: "kept", enabled: true, role: "apply" }]; state.drafts = new Map([[
+    "restore-current", { candidateRevision: 7, removedCandidateIds: ["kept", "old"], history: [{ kind: "brush", points: [{ x: 1, y: 1 }] }], historyIndex: 99, historyBase: {} },
+  ]]);
+  context.decodeDraftImages = async () => [null, null, null, null, null, null];
+  assert.equal(await test.restoreDraft("restore-current", 70), true);
+  assert.equal(state.historyIndex, 1); assert.deepEqual([...state.historyCandidateIds], ["kept"]);
+  state.drafts.set("restore-current", { candidateRevision: 6, history: [{ kind: "removeCandidates" }, { kind: "brush", points: [] }], historyIndex: 2, historyBase: { removedCandidateIds: ["old"], candidateIds: ["old"] }, removedCandidateIds: ["old"] });
+  assert.equal(await test.restoreDraft("restore-current", 70), true);
+  assert.deepEqual(state.history.map((stroke) => stroke.kind), ["brush"]);
+  state.currentId = "different";
+  assert.equal(await test.restoreDraft("restore-current", 70, state.drafts.get("restore-current"), [null, null, null, null, null, null]), false);
+
+  // Saving over an older compact draft creates all history-base layer keys
+  // without requiring the previous draft to already have that object.
+  state.images = [{ id: "save-current", candidateRevision: 1 }]; state.currentId = "save-current"; state.currentImage = { width: 8, height: 8 };
+  state.drafts = new Map([["save-current", {}]]); state.draftSaveChains = new Map(); state.draftDirty = true; state.draftLayerDirty = new Set(); state.historyBaseDirty = true;
+  state.history = [{ kind: "brush" }]; state.historyIndex = 1; state.removedCandidateIds = new Set(); state.historyRemovedCandidateIds = new Set(); state.historyCandidateIds = new Set();
+  context.historyAddCanvas.ctx.alpha = context.historyExclusionCanvas.ctx.alpha = context.historyExclusionEraseCanvas.ctx.alpha = 0;
+  await test.saveDraft();
+  assert.deepEqual(JSON.parse(JSON.stringify(state.drafts.get("save-current").historyBase)), { add: "", exclusion: "", exclusionErase: "", removedCandidateIds: [], candidateIds: [] });
+
+  state.currentId = "different"; context.loadCandidateBundle = async () => ({ candidates: [], candidateImages: new Map(), candidateRevision: 1 });
+  assert.equal(await test.reconcileCurrentCandidates("save-current", 70), false, "a candidate response for a no-longer-current image is ignored");
 
   // Empty editor and display-only paths must remain harmless: no mask
   // composition, canvas paint, or splitter update can assume an image exists.
