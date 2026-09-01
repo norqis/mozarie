@@ -143,6 +143,13 @@ async function galleryInteractions() {
   runtime.renderCatalogViews();
 
   const navigationWindow = { images: Array.from({ length: 12 }, (_, index) => ({ id: `logical-${index}` })), container: { clientWidth: 500, clientHeight: 50 }, options: { columns: 5, minWidth: 1, padding: 0, gap: 0, rowHeight: 10 } };
+  assert.equal(runtime.catalogMoveIndex(navigationWindow, 0, { key: "ArrowLeft" }), 0, "Left keeps focus at the first logical card");
+  assert.equal(runtime.catalogMoveIndex(navigationWindow, 0, { key: "ArrowRight" }), 1, "Right moves to the next logical card");
+  assert.equal(runtime.catalogMoveIndex(navigationWindow, 7, { key: "ArrowUp" }), 2, "Up moves one virtual row");
+  assert.equal(runtime.catalogMoveIndex(navigationWindow, 7, { key: "ArrowDown" }), 11, "Down clamps to the final virtual row");
+  assert.equal(runtime.catalogMoveIndex(navigationWindow, 7, { key: "PageUp" }), 0, "PageUp clamps at the catalog start");
+  assert.equal(runtime.catalogMoveIndex(navigationWindow, 2, { key: "PageDown" }), 12 - 1, "PageDown clamps at the catalog end");
+  assert.equal(runtime.catalogMoveIndex(navigationWindow, 7, { key: "x" }), -1, "unmapped keys leave virtual focus unchanged");
   assert.equal(runtime.catalogMoveIndex(navigationWindow, 7, { key: "Home" }), 5, "Home moves to the current logical row start");
   assert.equal(runtime.catalogMoveIndex(navigationWindow, 7, { key: "End" }), 9, "End moves to the current logical row end");
   assert.equal(runtime.catalogMoveIndex(navigationWindow, 11, { key: "Home" }), 10, "Home handles the first cell of an incomplete final row");
