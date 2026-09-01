@@ -26,7 +26,6 @@ vm.runInNewContext("globalThis.loadCandidateBundle = loadCandidateBundle; global
 
   // Concurrent editor reads share the one in-flight metadata and mask load.
   record.candidateRevision = 4; let resolveMetadata;
-  context.api = () => new Promise((resolve) => { resolveMetadata = resolve; });
   let metadataCalls = 0; context.api = () => { metadataCalls += 1; return new Promise((resolve) => { resolveMetadata = resolve; }); };
   const firstPending = context.loadCandidateBundle("image", 1);
   const secondPending = context.loadCandidateBundle("image", 1);
