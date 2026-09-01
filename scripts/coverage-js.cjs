@@ -89,7 +89,8 @@ function sourceFileForCoverageEntry(entry) {
 function normalizeV8FunctionRanges(functions, source) {
   return functions.map((fn) => ({
     ...fn,
-    ranges: fn.ranges.filter((range, index) => index === 0 || /\S/.test(source.slice(range.startOffset, range.endOffset))),
+    ranges: fn.ranges.filter((range, index) => index === 0 || range.count !== 0
+      || /\S/.test(source.slice(range.startOffset, range.endOffset))),
   }));
 }
 

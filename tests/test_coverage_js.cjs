@@ -13,6 +13,7 @@ const normalized = normalizeV8FunctionRanges([{ functionName: "fixture", ranges 
 assert.deepEqual(normalized.map((range) => [range.startOffset, range.endOffset, range.count]), [
   [0, source.length, 0],
   [6, source.length, 0],
+  [4, 6, 1],
 ], "only whitespace-only subranges are removed");
 
 const whitespaceFunction = normalizeV8FunctionRanges([{ functionName: "fixture", ranges: [{ startOffset: 0, endOffset: 1, count: 0 }] }], " ");
