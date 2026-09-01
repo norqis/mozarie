@@ -221,6 +221,8 @@ vm.runInNewContext("globalThis.settingsTest={renderModelStatus,renderSamVariantS
   ]) assert.equal(context.settingsTest.shortcutFromEvent(event), event.expected);
   context.settingsTest.renderSettingsStatus({ runtimeBackend: "other", gpus: [{ id: 4, name: "Small", totalMemory: 0, supported: false }], gpuDeviceReasonCode: "unsupported" }, 4);
   assert.equal(element("#settingsRuntimeBackend").textContent, "other", "unknown runtime labels are preserved");
+  state.settingsStatus = { gpus: [{ id: 5, name: "Fallback", totalMemory: 8 * 1024 ** 3, supported: true }] };
+  context.settingsTest.renderSettingsStatus(null, 5);
   const defaultSettings = { general: { language: "ja", open_browser: false, port: 8766, shortcuts_enabled: true }, models: { provider: "gpu", gpu_device: 0, target_segmentation: "", ntd11: "", ntd11_enabled: false, sensitive: "", sensitive_enabled: false, hand_detection: "", hand_detection_enabled: false, hand_segmentation_enabled: false, sam_checkpoints: {}, sam_model_type: "vit_b" }, display: { apply_color: "", exclude_color: "", overlay_opacity: 0, mosaic_preview: false }, importing: {}, saving: {}, detection: { mode: "standard", fluid_exclusion_enabled: false, exclude_forced_default: true, threshold: .5, targets: [] }, shortcuts: {}, confirmations: {} };
   context.settingsTest.setSettingsForm(defaultSettings, { models: {}, gpus: [] });
   assert.equal(element("#settingsImportParallelism").value, "3", "empty import settings use their public default");

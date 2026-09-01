@@ -457,12 +457,16 @@ async function testCoreBoundaryAndWorkspaceBehaviour() {
   assert.equal(test.processingCurrentPath({ kind: "detect" }), "");
   coreState.images = [];
   assert.equal(test.processingCurrentPath({ kind: "detect", imageIds: ["plain"], completedImageIds: [], current: "fallback.png" }), "fallback.png");
+  coreState.images = [{ id: "plain" }];
+  assert.equal(test.processingCurrentPath({ kind: "detect", imageIds: ["plain"], completedImageIds: [], current: "fallback.png" }), "");
   const matchingRecord = { id: "one", candidateRevision: 4, assetVersion: "v" };
   coreState.images = [matchingRecord];
   assert.equal(test.catalogRecordMatches(matchingRecord, undefined, { version: 0, revision: 4 }), false);
   coreState.catalogEpoch = 2;
   assert.equal(test.catalogRecordMatches(matchingRecord, 2, { version: 0, revision: 4 }), true);
   assert.equal(test.catalogRecordMatches(matchingRecord, 2, { version: 0, revision: 5 }), false);
+  delete matchingRecord.candidateRevision;
+  assert.equal(test.catalogRecordMatches(matchingRecord, 2, { version: 0, revision: 0 }), true);
   let terminated = false;
   coreState.fillWorker = { terminate() { terminated = true; } };
   test.cancelFillWork();
@@ -481,8 +485,7 @@ async function testCoreBoundaryAndWorkspaceBehaviour() {
   assert.equal(await removedSave, false, "a removed record is not updated after its queued flag write");
   const savedBeforeRemoval = { id: "saved", relativePath: "saved.png", hidden: false };
   coreState.images = [savedBeforeRemoval];
-  let someReads = 0;
-  coreState.images.some = (...args) => { someReads += 1; return someReads === 1 ? Array.prototype.some.call(coreState.images, ...args) : false; };
+  coreState.images.some = () => false;
   assert.equal(await test.setHidden(savedBeforeRemoval, true), true);
   const reloadedReviewed = { id: "new", relativePath: "new.png", reviewResult: false };
   coreState.images = [reloadedReviewed]; coreState.reviewedPaths = new Set(["new.png"]);
