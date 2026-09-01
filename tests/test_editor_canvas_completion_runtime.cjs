@@ -89,7 +89,7 @@ const context = {
 const canvasPath = path.join(__dirname, "..", "static", "js", "editor-canvas.js");
 const source = fs.readFileSync(canvasPath, "utf8");
 vm.runInNewContext(source, context, { filename: canvasPath });
-vm.runInNewContext("globalThis.canvasCompletion = { canvasSizeForImage, clearEditor, canvasHasPixels, syncCandidateRecord, syncStoredMaskStatus, refreshCandidateRecord, updateCandidateStatus, canvasToDataUrl, decodeDraftImages, releaseMosaicPreview, prepareOriginalImage, rebuildMosaicPreview, requestMosaicPreview, drawEffectiveExclusions, composeCurrentMask, markDraftDirty, markMaskDirty, flushMaskComposition, hasEffectiveMask, maskStatusWithoutCandidate, refreshMaskStatus, paintMosaicPreview, updateBrushCursor, drawCandidateBlinkOverlay, renderNow, flushRender };", context, { filename: "test-editor-canvas-completion-exports.js" });
+vm.runInNewContext("globalThis.canvasCompletion = { canvasSizeForImage, ensureHistoryCanvases, releaseHistoryCanvases, clearEditor, canvasHasPixels, syncCandidateRecord, syncStoredMaskStatus, refreshCandidateRecord, updateCandidateStatus, canvasToDataUrl, decodeDraftImages, releaseMosaicPreview, prepareOriginalImage, rebuildMosaicPreview, requestMosaicPreview, drawEffectiveExclusions, composeCurrentMask, markDraftDirty, markMaskDirty, flushMaskComposition, hasEffectiveMask, maskStatusWithoutCandidate, refreshMaskStatus, paintMosaicPreview, updateBrushCursor, drawCandidateBlinkOverlay, renderNow, flushRender };", context, { filename: "test-editor-canvas-completion-exports.js" });
 const test = context.canvasCompletion;
 
 (async () => {
@@ -97,6 +97,11 @@ const test = context.canvasCompletion;
   assert.equal(addCanvas.width, 20, "resizing an image resets every editable canvas");
   assert.equal(state.maskDirty, true);
   assert.equal(state.manualEnabled, true);
+  state.currentImage = null; test.ensureHistoryCanvases();
+  state.currentImage = { width: 20, height: 12 }; test.ensureHistoryCanvases();
+  assert.deepEqual([historyAddCanvas.width, historyAddCanvas.height], [20, 12], "history canvases follow the selected image dimensions");
+  test.releaseHistoryCanvases();
+  assert.deepEqual([historyAddCanvas.width, historyAddCanvas.height], [1, 1], "releasing history canvases drops their backing stores");
   originalCanvas.width = 3840; originalCanvas.height = 2160;
   test.clearEditor();
   assert.deepEqual([originalCanvas.width, originalCanvas.height], [1, 1], "clearing an image releases the full-resolution original backing store");
