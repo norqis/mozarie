@@ -257,6 +257,17 @@ assert.ok(displayCanvas.ctx.calls.some(([name, left, top, width]) => name === "r
 const overlayCalls = overlayCanvas.ctx.calls.length;
 state.boundaryDrafts = [{ id: "pane-safe", ...rectangle(2, 2, 12, 12) }]; state.boundaryDragging = false;
 test.drawBoundaryRoi();
+
+// Exclusion erase has a separate effective display pass: it is limited to the
+// already-excluded pixels and uses the apply colour because it restores mosaic.
+state.displayMode = "single"; state.currentImage = { width: 100, height: 80, alpha: 255 };
+state.blinkCandidateIds = new Set(["manual:excludeErase"]); state.blinkModes = new Map([["manual:excludeErase", "effective"]]);
+state.manualExclusionEnabled = true; state.manualExclusionEraseEnabled = true;
+test.drawCandidateBlinkOverlay();
+assert.ok(overlayCanvas.ctx.calls.some(([name]) => name === "image"), "effective exclusion erase first composes the existing exclusion mask");
+state.manualExclusionEraseEnabled = false;
+test.drawCandidateBlinkOverlay();
+state.manualExclusionEraseEnabled = true;
 assert.ok(overlayCanvas.ctx.calls.length > overlayCalls && overlayCanvas.ctx.calls.filter(([name]) => name === "clip").length >= 2, "boundary scrim is clipped independently in both compare panes");
 test.renderNow();
 test.render(); test.flushRender();
