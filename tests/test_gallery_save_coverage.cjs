@@ -261,7 +261,7 @@ function makeSaveRuntime() {
   context.confirmed = true;
   const source = fs.readFileSync(path.join(jsRoot, "save.js"), "utf8");
   vm.runInNewContext(source, context, { filename: path.join(jsRoot, "save.js") });
-  vm.runInNewContext("globalThis.__saveTest = { setApplyResult, showApplyError, isTerminalApply, selectedSaveMode, sourceAccessFor, sourceCanOverwrite, sourceCanDelete, applyTargetsSupport, applyRestrictionMessage, syncApplyMode, refreshApplyTargets, openApplyDialog, selectedSingleSaveMode, setSingleSaveResult, syncSingleSaveMode, openSingleSaveDialog, chooseSingleOutputDirectory, singleOutputName, writeSingleOutput, renderSingleSave, startSingleSave, draftPayload, renderOutputDirectory, setOutputDirectoryPickerBusy, pickOutputDirectory, chooseOutputDirectory, waitForBrowserSave, showBrowserSaveProgress, reconcileStoredMaskStatuses, reconcileBrowserSaveState, ensureHandlePermission, ensureSaveSources, writeSourceHandle, removeSourceHandle, snapshotSourceHandle, restoreSourceHandle, removeCompletedImagesFromCatalog, runBrowserSave, commitBrowserSaveWithRetry, cancelBrowserSave, isDefinitiveCommitRejection, startApplyFromDialog, finishSaveStart, controlApply, showRunningApply, finishApplyJob, isTerminalDetection, finishDetectionJob, pollJob, scheduleJobPoll };", context, { filename: "test-save-exports.js" });
+  vm.runInNewContext("globalThis.__saveTest = { setApplyResult, showApplyError, isTerminalApply, selectedSaveMode, sourceAccessFor, sourceCanOverwrite, sourceCanDelete, applyTargetsSupport, applyRestrictionMessage, syncApplyMode, refreshApplyTargets, openApplyDialog, selectedSingleSaveMode, setSingleSaveResult, syncSingleSaveMode, openSingleSaveDialog, chooseSingleOutputDirectory, singleOutputName, writeSingleOutput, renderSingleSave, startSingleSave, draftPayload, renderOutputDirectory, setOutputDirectoryPickerBusy, pickOutputDirectory, ensureOutputDirectoryPermission, chooseOutputDirectory, waitForBrowserSave, showBrowserSaveProgress, reconcileStoredMaskStatuses, reconcileBrowserSaveState, ensureHandlePermission, ensureSaveSources, writeSourceHandle, removeSourceHandle, snapshotSourceHandle, restoreSourceHandle, removeCompletedImagesFromCatalog, runBrowserSave, commitBrowserSaveWithRetry, cancelBrowserSave, isDefinitiveCommitRejection, startApplyFromDialog, finishSaveStart, controlApply, showRunningApply, finishApplyJob, isTerminalDetection, finishDetectionJob, pollJob, scheduleJobPoll };", context, { filename: "test-save-exports.js" });
   return { ...context.__saveTest, calls, context, errors, nodes, requests, saveMode, singleSaveMode, state, setHandler(fn) { handler = fn; } };
 }
 
@@ -357,8 +357,125 @@ async function saveInteractions() {
   await assert.rejects(runtime.writeSourceHandle(busyAccess, { body: { async pipeTo() {} } }), (error) => error.code === "source_busy");
 }
 
+// Keep these failure boundaries in fresh browser-shaped runtimes: a failed
+// save must leave both the source and its chosen output directory coherent.
+async function saveCoverageMatrix() {
+  const response = (token = "token") => ({ ok: true, headers: { get() { return token; } }, body: { async pipeTo(stream) { await stream.write(Uint8Array.from([9])); await stream.close(); } } });
+  const missing = () => { const error = new Error("missing"); error.name = "NotFoundError"; throw error; };
+
+  for (const [label, setup, expectation] of [
+    ["directory permission outcomes", async (runtime) => {
+      const { state } = runtime;
+      await assert.rejects(runtime.ensureOutputDirectoryPermission(), (error) => error.code === "output_permission_denied");
+      for (const permission of ["denied", "prompt"]) {
+        const handle = { async queryPermission() { return permission; }, async requestPermission() { return "denied"; } };
+        await assert.rejects(runtime.ensureOutputDirectoryPermission(handle), (error) => error.code === "output_permission_denied");
+      }
+      const throwing = { async queryPermission() { throw new Error("permission"); } };
+      await assert.rejects(runtime.ensureOutputDirectoryPermission(throwing), (error) => error.code === "output_permission_denied");
+      state.outputDirectoryHandle = { name: "ready", async queryPermission() { return "granted"; } };
+    }, () => {}],
+    ["output lock and stream cleanup", async (runtime) => {
+      const lock = runtime.context.navigator.locks;
+      runtime.context.navigator.locks = { async request() { throw new Error("lock"); } };
+      await assert.rejects(runtime.writeSingleOutput({}, "file.png", "_m", response()), (error) => error.code === "output_write_unsupported");
+      runtime.context.navigator.locks = lock;
+      let aborted = false; let removed = false;
+      const output = { async getFileHandle(_name, options) { if (!options?.create) return missing(); return { async createWritable() { return { async write() {}, async close() {}, async abort() { aborted = true; } }; } }; }, async removeEntry() { removed = true; } };
+      await assert.rejects(runtime.writeSingleOutput(output, "file.png", "_m", { body: { async pipeTo() { throw new Error("pipe"); } } }), /pipe/);
+      assert.equal(aborted, true); assert.equal(removed, true);
+      let sequence = 0;
+      const collision = { async getFileHandle(name, options) { if (!options?.create) { sequence += 1; if (sequence === 1) return { name }; return missing(); } return { async createWritable() { return { async write() {}, async close() {} }; } }; } };
+      assert.equal((await runtime.writeSingleOutput(collision, "file.png", "_m", response())).name, "file_m_1.png");
+    }, () => {}],
+    ["source permission and write translation", async (runtime) => {
+      const permission = { fileHandle: { async queryPermission() { return "granted"; }, async getFile() { return { size: 1, lastModified: 2 }; } } };
+      await runtime.ensureHandlePermission(permission, false);
+      const unsupported = { fileHandle: { async createWritable() { const error = new Error("unsupported"); error.name = "NotSupportedError"; throw error; } } };
+      await assert.rejects(runtime.writeSourceHandle(unsupported, response()), (error) => error.code === "source_write_unsupported");
+      const aborting = { fileHandle: { async createWritable() { return { async abort() {}, async write() {}, async close() {} }; } } };
+      await assert.rejects(runtime.writeSourceHandle(aborting, { body: { async pipeTo() { throw new Error("pipe"); } } }), /pipe/);
+      const noBuffer = { fileHandle: { async getFile() { return {}; } } };
+      assert.equal(await runtime.snapshotSourceHandle(noBuffer), null);
+    }, () => {}],
+    ["single save exits and confirmations", async (runtime) => {
+      const { state, nodes } = runtime;
+      const event = { preventDefault() {} };
+      state.singleSave = null; await runtime.startSingleSave(event);
+      state.singleSave = { imageId: "file", divisor: 16, draft: null }; state.images = [{ id: "file", sourceKind: "filesystem", relativePath: "file.png" }];
+      runtime.singleSaveMode.value = "copy"; state.outputDirectoryHandle = null; await runtime.startSingleSave(event);
+      state.outputDirectoryHandle = { name: "out", async queryPermission() { return "granted"; } };
+      runtime.singleSaveMode.value = "overwrite"; runtime.context.confirmed = false; await runtime.startSingleSave(event);
+      runtime.context.confirmed = true; runtime.singleSaveMode.value = "copy"; nodes.get("#singleSaveDeleteOriginal").checked = true; runtime.context.confirmed = false; await runtime.startSingleSave(event);
+      runtime.context.confirmed = true;
+    }, () => {}],
+    ["single copy keeps and deletes source", async (runtime) => {
+      const { state, nodes } = runtime;
+      const file = { name: "session.png", size: 1, lastModified: 1, async arrayBuffer() { return Uint8Array.from([3]).buffer; } };
+      let removed = false;
+      const fileHandle = { name: file.name, async queryPermission() { return "granted"; }, async getFile() { return file; } };
+      const access = { fileHandle, parentHandle: { async removeEntry() { removed = true; }, async getFileHandle() { return { async createWritable() { return { async write() {}, async close() {} }; } }; } }, name: file.name, size: 1, lastModified: 1 };
+      state.images = [{ id: "session", sourceKind: "session", relativePath: "session.png" }]; state.singleSave = { imageId: "session", divisor: 16, draft: null }; state.outputDirectoryHandle = { name: "out", async queryPermission() { return "granted"; }, async getFileHandle(_name, options) { if (!options?.create) return missing(); return { async createWritable() { return { async write() {}, async close() {} }; } }; }, async removeEntry() {} }; state.sourceAccess = new Map([["session", access]]);
+      runtime.singleSaveMode.value = "copy"; nodes.get("#singleSaveDeleteOriginal").checked = true;
+      runtime.setHandler(async (url) => url === "/api/save/prepare" ? { entries: [{ imageId: "session", candidateRevision: 1, relativePath: "session.png" }] } : url === "/api/save/render" ? response() : url === "/api/save/commit" ? { cleared: true, stale: false } : url === "/api/images" ? { images: state.images } : {});
+      await runtime.startSingleSave({ preventDefault() {} }); assert.equal(removed, true);
+    }, () => {}],
+  ]) {
+    const runtime = makeSaveRuntime();
+    await setup(runtime);
+    expectation(runtime);
+    assert.ok(label);
+  }
+
+  const runCases = [
+    { mode: "copy", deleteOriginal: false, sourceKind: "filesystem", committed: { cleared: true, stale: true, deleted: false }, removeAfterSave: true },
+    { mode: "copy", deleteOriginal: true, sourceKind: "session", committed: { cleared: true, stale: false, deleted: true }, removeAfterSave: true },
+    { mode: "overwrite", deleteOriginal: false, sourceKind: "filesystem", committed: { cleared: true, stale: false, deleted: false }, removeAfterSave: false },
+  ];
+  for (const scenario of runCases) {
+    const runtime = makeSaveRuntime(); const { state } = runtime;
+    const file = { name: "file.png", size: 1, lastModified: 1, async arrayBuffer() { return Uint8Array.from([2]).buffer; } };
+    const access = { fileHandle: { name: file.name, async queryPermission() { return "granted"; }, async getFile() { return file; }, async createWritable() { return { async write() {}, async close() {}, async abort() {} }; } }, name: file.name, size: 1, lastModified: 1 };
+    if (scenario.deleteOriginal) access.parentHandle = { async removeEntry() {}, async getFileHandle() { return access.fileHandle; } };
+    state.images = [{ id: "file", sourceKind: scenario.sourceKind, relativePath: "file.png" }]; state.currentId = "file"; state.sourceAccess = new Map([["file", access]]); state.outputDirectoryHandle = { name: "out", async getFileHandle(_name, options) { if (!options?.create) return missing(); return { async createWritable() { return { async write() {}, async close() {}, async abort() {} }; } }; }, async removeEntry() {} };
+    runtime.setHandler(async (url) => url === "/api/save/prepare" ? { entries: [{ imageId: "file", candidateRevision: 1, relativePath: "file.png" }] } : url === "/api/save/render" ? response() : url === "/api/save/commit" ? scenario.committed : url === "/api/catalog/remove" ? { images: state.images, removedImageIds: [] } : url === "/api/images" ? { images: state.images } : {});
+    await runtime.runBrowserSave(["file"], "_m", scenario.deleteOriginal, scenario.mode, scenario.removeAfterSave);
+  }
+
+  for (const status of [400, 503]) {
+    const runtime = makeSaveRuntime(); let attempts = 0;
+    runtime.setHandler(async (url) => {
+      if (url === "/api/save/commit") { attempts += 1; const error = new Error("commit"); error.status = status; throw error; }
+      if (url === "/api/save/status") return status === 503 ? { state: "committed" } : { state: "pending" };
+      return {};
+    });
+    if (status === 400) await assert.rejects(runtime.commitBrowserSaveWithRetry({}), /commit/);
+    else assert.equal((await runtime.commitBrowserSaveWithRetry({})).state, "committed");
+    assert.ok(attempts >= 1);
+  }
+
+  for (const job of [
+    { kind: "apply", state: "running", total: 0, completed: 4, current: "", startedAt: 30 },
+    { kind: "apply", state: "paused", total: 3, completed: 2, current: "file", startedAt: 31 },
+  ]) {
+    const runtime = makeSaveRuntime(); runtime.state.job = { kind: "idle", state: "idle" };
+    runtime.setHandler(async (url) => url === "/api/job" ? job : { images: runtime.state.images });
+    await runtime.pollJob(); assert.equal(runtime.state.job, job);
+  }
+
+  for (const job of [
+    { kind: "detect", state: "complete", startedAt: 41, imageIds: [], completedImageIds: [] },
+    { kind: "detect", state: "error", startedAt: 42, imageIds: ["file"], completedImageIds: [] },
+  ]) {
+    const runtime = makeSaveRuntime(); runtime.state.images = [{ id: "file" }]; runtime.state.currentId = "file"; runtime.state.pageLoadedAt = 1; runtime.state.job = { kind: "detect", state: "running", startedAt: job.startedAt };
+    runtime.setHandler(async (url) => url === "/api/job" ? job : { images: runtime.state.images });
+    await runtime.pollJob();
+  }
+}
+
 (async () => {
   await galleryInteractions();
   await saveInteractions();
+  await saveCoverageMatrix();
   console.log("test_gallery_save_coverage: passed");
 })().catch((error) => { console.error(error); process.exitCode = 1; });
