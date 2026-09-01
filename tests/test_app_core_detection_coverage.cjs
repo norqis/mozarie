@@ -183,7 +183,7 @@ async function testCoreBoundaryAndWorkspaceBehaviour() {
   };
   const source = fs.readFileSync(path.join(jsRoot, "core.js"), "utf8");
   vm.runInNewContext(source, context, { filename: path.join(jsRoot, "core.js") });
-  vm.runInNewContext("globalThis.coreCoverage={ state, t, loadTranslations, api, setStatusKey, progressText, processingCurrentPath, abortCatalogLoads, saveTargets, setHidden, moveReviewedPathAfterApply, markImagesUnreviewed, clearBoundaryConstruction, updateActionButtons, updateCandidateBatchButtons, setMosaicPreviewEnabled, formatDuration };", context, { filename: "test-core-exports.js" });
+  vm.runInNewContext("globalThis.coreCoverage={ state, t, loadTranslations, api, setStatusKey, progressText, processingCurrentPath, abortCatalogLoads, saveTargets, setHidden, moveReviewedPathAfterApply, markImagesUnreviewed, clearBoundaryConstruction, updateActionButtons, updateCandidateBatchButtons, setMosaicPreviewEnabled, formatDuration, normaliseDetectionConfidence, normaliseDivisor, calculatedBlockSize };", context, { filename: "test-core-exports.js" });
   const test = context.coreCoverage;
   const coreState = test.state;
   Object.assign(coreState, state);
@@ -253,12 +253,26 @@ async function testCoreBoundaryAndWorkspaceBehaviour() {
   assert.match(test.formatDuration(3661), /duration/);
   assert.match(test.formatDuration(61), /duration/);
   assert.match(test.formatDuration(1), /duration/);
+  assert.equal(test.formatDuration(-1), "duration second", "negative elapsed values clamp to zero");
+  assert.equal(test.normaliseDetectionConfidence(""), .5, "blank detection confidence uses the documented midpoint");
+  assert.equal(test.normaliseDetectionConfidence(-4), .1, "detection confidence clamps to its minimum");
+  assert.equal(test.normaliseDetectionConfidence(8), 1, "detection confidence clamps to its maximum");
+  assert.equal(test.normaliseDivisor(""), 100, "blank mosaic divisor uses the documented default");
+  assert.equal(test.normaliseDivisor(-1), 1, "mosaic divisor clamps to its minimum");
+  assert.equal(test.normaliseDivisor(10001), 10000, "mosaic divisor clamps to its maximum");
+  const blockImage = { width: 100, height: 50 };
+  assert.equal(test.calculatedBlockSize(blockImage, 25), 4, "block size keeps the four-pixel minimum");
+  assert.equal(test.calculatedBlockSize(blockImage, 10), 10, "block size follows the larger image edge");
+  assert.equal(test.calculatedBlockSize(null, 10), 0, "block size is zero without a loaded image");
   assert.match(test.progressText({ kind: "detect", state: "running", completed: 1, total: 3, startedAt: "job", activeElapsed: 3 }), /status/);
   coreState.images = [{ id: "one", relativePath: "one.png" }, { id: "two", relativePath: "two.png" }];
   const preparing = { kind: "detect", state: "running", phase: "preparing_models", completed: 0, total: 2, imageIds: ["one", "two"], completedImageIds: [] };
   assert.match(test.progressText(preparing), /0/, "model preparation keeps the stable progress count");
   assert.equal(test.processingCurrentPath(preparing), "one.png", "model preparation keeps the first unfinished filename visible");
   assert.equal(test.processingCurrentPath({ ...preparing, phase: "detecting", completedImageIds: ["one"] }), "two.png", "phase changes do not clear the next filename");
+  assert.equal(test.processingCurrentPath({ kind: "apply", current: "saving.png" }), "saving.png", "non-detection jobs keep their reported path");
+  assert.equal(test.processingCurrentPath({ kind: "detect", current: "fallback.png", imageIds: [], completedImageIds: [] }), "fallback.png", "detection with no targets keeps its reported path");
+  assert.equal(test.processingCurrentPath({ kind: "detect", current: "ignored.png", imageIds: ["one"], completedImageIds: ["one"] }), "", "completed detection targets clear the current-path label");
   test.updateActionButtons();
   // The save dialog has a separate restriction and retains its live pause
   // control while the rest of the UI is locked.
