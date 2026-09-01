@@ -67,11 +67,25 @@ const context = {
   confirmAction: async () => true,
 };
 vm.runInNewContext(source, context, { filename: settingsPath });
-vm.runInNewContext("globalThis.settingsTest={renderModelStatus,renderSamVariantStatuses,selectSettingsTab,moveSettingsTab,openSettings,saveSettings,resetSettings,chooseSettingsOutputDirectory,chooseSettingsModelFile,handleToolRailKeydown,modelDownloadInput,renderModelDownload,refreshModelDownload,startModelDownload,beginModelDownload,refreshSettingsStatus,checkForUpdate,startUpdate,samTypeFromPath,shortcutFromEvent};", context, { filename: "test-settings-exports.js" });
+vm.runInNewContext("globalThis.settingsTest={renderModelStatus,renderSamVariantStatuses,selectSettingsTab,moveSettingsTab,openSettings,saveSettings,resetSettings,chooseSettingsOutputDirectory,chooseSettingsModelFile,handleToolRailKeydown,modelDownloadInput,renderModelDownload,refreshModelDownload,startModelDownload,beginModelDownload,refreshSettingsStatus,checkForUpdate,startUpdate,samTypeFromPath,shortcutFromEvent,gpuMemoryLabel,modelCardEnabled,setHandSegmentationAvailable,setPrecisionDetectionEnabled,setFluidExclusionEnabled};", context, { filename: "test-settings-exports.js" });
 
 (async () => {
   assert.equal(context.settingsTest.shortcutFromEvent({ ctrlKey: true, metaKey: false, shiftKey: true, altKey: true, key: "a" }), "Ctrl+Shift+Alt+A", "shortcut capture normalizes modifiers and single letters");
   assert.equal(context.settingsTest.shortcutFromEvent({ ctrlKey: false, metaKey: true, shiftKey: false, altKey: false, key: "ArrowLeft" }), "Ctrl+ArrowLeft", "shortcut capture accepts the platform modifier for named keys");
+  assert.equal(context.settingsTest.gpuMemoryLabel(0), "", "missing GPU memory is not rendered as a capacity");
+  assert.equal(context.settingsTest.gpuMemoryLabel(8 * 1024 ** 3), "8", "whole GPU GiB values avoid unnecessary decimals");
+  assert.equal(context.settingsTest.gpuMemoryLabel(7.5 * 1024 ** 3), "7.5", "fractional GPU GiB values retain one useful decimal");
+  element("#settingsHandToggle").checked = true; element("#settingsHandSegmentationToggle").checked = true;
+  assert.equal(context.settingsTest.modelCardEnabled("hand_segmentation"), true, "hand segmentation requires both public model switches");
+  element("#settingsHandToggle").checked = false;
+  assert.equal(context.settingsTest.modelCardEnabled("hand_segmentation"), false, "hand segmentation is unavailable without hand detection");
+  context.settingsTest.setHandSegmentationAvailable(false);
+  assert.equal(element("#settingsHandSegmentationToggle").disabled, true, "turning off hand detection disables its dependent switch");
+  context.settingsTest.setHandSegmentationAvailable(true);
+  assert.equal(element("#settingsHandSegmentationToggle").disabled, false, "turning hand detection on re-enables its dependent switch");
+  context.settingsTest.setPrecisionDetectionEnabled(true); context.settingsTest.setFluidExclusionEnabled(true);
+  assert.equal(element("#settingsPrecisionToggle").checked, true);
+  assert.equal(element("#settingsFluidToggle").checked, true);
   state.settingsStatus = { models: { unknown: { required: true, reasonCode: "missing" }, ntd11: { enabled: true, reasonCode: "missing" } }, gpuDeviceReasonCode: "unsupported" };
   context.settingsTest.renderModelStatus();
   assert.match(element("#settingsModelStatus").textContent, /settings\.ntd11Model/, "a known invalid model identifies its setting in the status summary");
@@ -173,6 +187,8 @@ vm.runInNewContext("globalThis.settingsTest={renderModelStatus,renderSamVariantS
   assert.equal(errors.at(-1)[0].message, "update failed", "an update start failure remains anchored to the update action");
 
   assert.equal(context.settingsTest.samTypeFromPath("models/sam_vit-h.pth"), "vit_h", "SAM file names select their matching variant");
+  assert.equal(context.settingsTest.samTypeFromPath("models/sam_vit_b.pth"), "vit_b", "SAM base file names select the base variant");
+  assert.equal(context.settingsTest.samTypeFromPath("models/sam_vit_l.pth"), "vit_l", "SAM large file names select the large variant");
   assert.equal(context.settingsTest.samTypeFromPath("models/other.pth"), null, "unrecognised model names do not guess a SAM variant");
   console.log("test_settings_runtime: passed");
 })().catch((error) => { console.error(error); process.exitCode = 1; });
