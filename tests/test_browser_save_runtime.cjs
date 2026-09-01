@@ -118,6 +118,7 @@ function createRuntime({ commit, copy = null, deleteOriginal = false, renderBina
     btoa(value) { return Buffer.from(value, "binary").toString("base64"); },
     window: browserWindow,
     navigator: browserNavigator,
+    showModalFromInvoker(dialog) { dialog?.showModal?.(); },
     fetch: async (requestPath, options = {}) => {
       if (requestPath === "/api/images") {
         imageFetches += 1;
@@ -150,9 +151,15 @@ function createRuntime({ commit, copy = null, deleteOriginal = false, renderBina
     },
   };
 
-  let source = appPaths.map((appPath) => fs.readFileSync(appPath, "utf8")).join("\n");
-  source = source.replace(/\ninitialise\(\);\s*$/, "\nglobalThis.__browserSaveRuntime = { state, ensureOutputDirectoryPermission, ensureSaveSources, finishApplyJob, runBrowserSave, saveTargets, chooseOutputDirectory, startApplyFromDialog, startSingleSave, writeSingleOutput, writeSourceHandle, restoreSourceHandle, renderOutputDirectory, translate: t };\n");
-  vm.runInNewContext(source, context, { filename: "static/js/runtime.js" });
+  const runtimeContext = vm.createContext(context);
+  for (const appPath of appPaths) {
+    if (path.basename(appPath) === "app.js") continue;
+    new vm.Script(fs.readFileSync(appPath, "utf8"), { filename: appPath }).runInContext(runtimeContext);
+  }
+  new vm.Script(
+    "globalThis.__browserSaveRuntime = { state, ensureOutputDirectoryPermission, ensureSaveSources, finishApplyJob, runBrowserSave, saveTargets, chooseOutputDirectory, startApplyFromDialog, startSingleSave, writeSingleOutput, writeSourceHandle, restoreSourceHandle, renderOutputDirectory, translate: t };",
+    { filename: "test-browser-save-exports.js" },
+  ).runInContext(runtimeContext);
   const { state, ensureOutputDirectoryPermission, ensureSaveSources, finishApplyJob, runBrowserSave, saveTargets, chooseOutputDirectory, startApplyFromDialog, startSingleSave, writeSingleOutput, writeSourceHandle, restoreSourceHandle, renderOutputDirectory, translate } = context.__browserSaveRuntime;
   state.images = initialImages || [{ id: "image-1", relativePath: "nested/source.png", width: 32, height: 32, candidateCount: 1, enabledCandidateCount: 1 }];
   state.settings = { saving: { parallelism: 1, default_output_directory: "G:/output" } };
