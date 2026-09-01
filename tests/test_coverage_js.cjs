@@ -1,22 +1,22 @@
 const assert = require("node:assert/strict");
-const { normalizeV8FunctionRanges } = require("../scripts/coverage-js.cjs");
+const fs = require("node:fs");
+const path = require("node:path");
+const { browserCoverageMap } = require("../scripts/coverage-js.cjs");
 
-const source = "body \nreturn";
-const ranges = [
-  { startOffset: 0, endOffset: source.length, count: 0 },
-  { startOffset: 4, endOffset: 6, count: 0 },
-  { startOffset: 6, endOffset: source.length, count: 0 },
-  { startOffset: 4, endOffset: 6, count: 1 },
-];
-const normalized = normalizeV8FunctionRanges([{ functionName: "fixture", ranges }], source)[0].ranges;
+const appPath = path.join(__dirname, "..", "static", "js", "app.js");
+const source = fs.readFileSync(appPath, "utf8");
+const validEntry = {
+  url: "http://127.0.0.1:8188/js/app.js",
+  source,
+  functions: [{ functionName: "", isBlockCoverage: true, ranges: [{ startOffset: 0, endOffset: source.length, count: 1 }] }],
+};
 
-assert.deepEqual(normalized.map((range) => [range.startOffset, range.endOffset, range.count]), [
-  [0, source.length, 0],
-  [6, source.length, 0],
-  [4, 6, 1],
-], "only whitespace-only subranges are removed");
-
-const whitespaceFunction = normalizeV8FunctionRanges([{ functionName: "fixture", ranges: [{ startOffset: 0, endOffset: 1, count: 0 }] }], " ");
-assert.equal(whitespaceFunction[0].ranges.length, 1, "the full function range is never removed");
-
-console.log("test_coverage_js: passed");
+Promise.all([
+  assert.rejects(browserCoverageMap([]), /browser coverage output is empty/),
+  assert.rejects(browserCoverageMap([{ url: "http://127.0.0.1:8188/vendor.js", source: "", functions: [] }]), /browser coverage has no static JavaScript entries/),
+  assert.rejects(browserCoverageMap([{ ...validEntry, source: "changed" }]), /browser coverage source changed/),
+]).then(async () => {
+  const map = await browserCoverageMap([validEntry]);
+  assert.ok(map.data[appPath], "a matching static browser entry is converted into an Istanbul map");
+  console.log("test_coverage_js: passed");
+}).catch((error) => { console.error(error); process.exitCode = 1; });
