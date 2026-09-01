@@ -14,6 +14,39 @@ vm.runInNewContext("globalThis.loadCandidateBundle = loadCandidateBundle; global
   await changed; assert.equal(decodes, 1, "metadata is authoritative when candidate revision changes"); assert.equal(state.catalogLoadControllers.size, 0, "request unregisters its controller"); for (const [key] of state.candidateBundleCache.items) state.candidateBundleCache.delete(key);
   record.candidateRevision = 4; apiResult = { candidates: [{ id: "invalid-token", labelToken: "unknown", source: "target", refinement: null }], candidateRevision: 5 };
   await assert.rejects(context.loadCandidateBundle("image", 1), (error) => error.code === "response_invalid", "an unknown candidate label token is rejected before any mask is fetched");
+  // The candidate endpoint may return the revision already decoded for this
+  // editor image.  Reuse it instead of issuing another mask bitmap request.
+  record.candidateRevision = 4; apiResult = { candidates: [], candidateRevision: 4 };
+  const cachedBundle = { candidates: [], candidateImages: new Map(), candidateRevision: 4 };
+  state.candidateBundleCache.set("image:4", cachedBundle, 0);
+  const decodesBeforeCache = decodes;
+  assert.equal(await context.loadCandidateBundle("image", 1), cachedBundle, "the current candidate revision reuses its decoded bundle");
+  assert.equal(decodes, decodesBeforeCache);
+  state.candidateBundleCache.delete("image:4");
+
+  // Concurrent editor reads share the one in-flight metadata and mask load.
+  record.candidateRevision = 4; let resolveMetadata;
+  context.api = () => new Promise((resolve) => { resolveMetadata = resolve; });
+  let metadataCalls = 0; context.api = () => { metadataCalls += 1; return new Promise((resolve) => { resolveMetadata = resolve; }); };
+  const firstPending = context.loadCandidateBundle("image", 1);
+  const secondPending = context.loadCandidateBundle("image", 1);
+  bitmapLoader = async () => ({ width: 1, height: 1, close() {} });
+  resolveMetadata({ candidates: [], candidateRevision: 4 }); await Promise.all([firstPending, secondPending]);
+  assert.equal(metadataCalls, 1, "one candidate revision creates one shared in-flight request");
+
+  // A response belonging to an obsolete catalogue epoch is discarded both
+  // before and after the parallel bitmap decodes complete.
+  record.candidateRevision = 4;
+  let catalogueCurrent = false; context.catalogRecordMatches = () => catalogueCurrent;
+  context.api = async () => ({ candidates: [], candidateRevision: 4 });
+  await assert.rejects(context.loadCandidateBundle("image", 1), (error) => error.name === "AbortError");
+  catalogueCurrent = true; let checks = 0; context.catalogRecordMatches = () => ++checks === 1;
+  context.api = async () => ({ candidates: [{ id: "late", labelToken: "penis", source: "target", refinement: null }], candidateRevision: 5 });
+  bitmapLoader = async () => ({ width: 1, height: 1, close() {} });
+  record.candidateRevision = 4;
+  await assert.rejects(context.loadCandidateBundle("image", 1), (error) => error.name === "AbortError");
+  context.catalogRecordMatches = (current, epoch, { version, revision } = {}) => epoch === state.catalogEpoch && current === record && record.assetVersion === version && (revision == null || record.candidateRevision === revision);
+  context.api = async () => apiResult;
   let closed = 0; record.candidateRevision = 4; apiResult = { candidates: [{ id: "kept", labelToken: "penis", source: "target", refinement: null }, { id: "broken", labelToken: "penis", source: "target", refinement: null }], candidateRevision: 5 };
   bitmapLoader = async (source) => { if (source.includes("broken")) throw new Error("decode failed"); return { width: 1, height: 1, close() { closed += 1; } }; };
   await assert.rejects(context.loadCandidateBundle("image", 1), /decode failed/); assert.equal(closed, 1, "a failed mask decode closes accumulated decoded masks exactly once"); assert.equal(state.catalogLoadControllers.size, 0, "failed request unregisters its controller"); console.log("test_candidate_bundle: passed");
