@@ -623,7 +623,18 @@ test.render(); test.flushRender();
   await test.saveDraft();
   assert.equal(state.drafts.get("compact").historyBase.add, "", "a newly encoded empty history base replaces a stale layer");
 
-  state.drafts = new Map([["compact", { hasEffectiveMask: true, candidateRevision: 0 }]]); state.maskStatus = new Map();
+  for (const [id, historyBase, expected] of [
+    ["keep-history-base", { add: "old-add", exclusion: "old-exclusion", exclusionErase: "old-erase" }, ["old-add", "old-exclusion", "old-erase"]],
+    ["default-history-base", undefined, ["", "", ""]],
+  ]) {
+    state.images = [{ id, candidateRevision: 2 }]; state.currentId = id; state.currentImage = { width: 8, height: 8 };
+    state.drafts = new Map([[id, historyBase ? { historyBase } : {}]]); state.draftSaveChains = new Map(); state.draftDirty = true; state.draftLayerDirty = new Set(); state.historyBaseDirty = false;
+    state.history = [{ kind: "brush" }]; state.historyIndex = 1; state.removedCandidateIds = new Set(); state.historyRemovedCandidateIds = new Set(); state.historyCandidateIds = new Set();
+    await test.saveDraft();
+    assert.deepEqual([state.drafts.get(id).historyBase.add, state.drafts.get(id).historyBase.exclusion, state.drafts.get(id).historyBase.exclusionErase], expected);
+  }
+
+  state.images = [{ id: "compact", candidateRevision: 1 }]; state.drafts = new Map([["compact", { hasEffectiveMask: true, candidateRevision: 0 }]]); state.maskStatus = new Map();
   test.syncStoredMaskStatus("compact", []); assert.equal(state.maskStatus.get("compact"), true);
   state.drafts.set("compact", { hasEffectiveMask: false, candidateRevision: 0 }); test.syncStoredMaskStatus("compact", []);
   assert.equal(state.maskStatus.has("compact"), false);
@@ -631,7 +642,16 @@ test.render(); test.flushRender();
   state.candidates = [{ id: "removed", enabled: true, role: "apply" }, { id: "off", enabled: false, role: "apply" }, { id: "exclude", enabled: true, role: "exclude" }];
   state.removedCandidateIds = new Set(["removed"]); state.manualEnabled = false; state.manualExclusionEnabled = false; state.manualExclusionEraseEnabled = false;
   test.maskStatusWithoutCandidate("off");
+  state.candidates = [
+    { id: "target", enabled: true, role: "apply" }, { id: "disabled", enabled: false, role: "apply" },
+    { id: "other-apply", enabled: true, role: "apply" }, { id: "excluded", enabled: true, role: "exclude" }, { id: "removed", enabled: true, role: "apply" },
+  ]; state.removedCandidateIds = new Set(["removed"]); test.maskStatusWithoutCandidate("target");
+  const validBoundary = [{ x: 1, y: 1 }, { x: 8, y: 1 }, { x: 8, y: 8 }, { x: 1, y: 8 }];
   state.boundaryDrafts = [{ id: "invalid-again", type: "polygon", points: [{ x: 1, y: 1 }] }]; test.boundaryRequests();
-  test.drawBoundaryShape({ type: "polygon", points: [{ x: 1, y: 1 }] });
+  state.boundaryDrafts = [{ id: "valid-again", type: "polygon", points: validBoundary }];
+  assert.equal(test.boundaryRequests().length, 1);
+  state.boundaryDrafts = [{ id: "missing-points", type: "polygon" }];
+  assert.deepEqual(JSON.parse(JSON.stringify(test.boundaryRequests())), [], "a polygon without points takes the same rejected detection path");
+  for (const shape of [{ type: "rectangle", roi: { left: 1, top: 1, right: 4, bottom: 4 } }, { type: "polygon", points: validBoundary }, { type: "polygon", points: [{ x: 1, y: 1 }] }, { type: "polygon", points: "" }]) test.drawBoundaryShape(shape);
   console.log("test_editor_canvas_geometry_runtime: passed");
 })().catch((error) => { console.error(error); process.exitCode = 1; });

@@ -49,6 +49,20 @@ vm.runInNewContext("globalThis.loadCandidateBundle = loadCandidateBundle; global
   let closed = 0; record.candidateRevision = 4; apiResult = { candidates: [{ id: "kept", labelToken: "penis", source: "target", refinement: null }, { id: "broken", labelToken: "penis", source: "target", refinement: null }], candidateRevision: 5 };
   bitmapLoader = async (source) => { if (source.includes("broken")) throw new Error("decode failed"); return { width: 1, height: 1, close() { closed += 1; } }; };
   await assert.rejects(context.loadCandidateBundle("image", 1), /decode failed/); assert.equal(closed, 1, "a failed mask decode closes accumulated decoded masks exactly once"); assert.equal(state.catalogLoadControllers.size, 0, "failed request unregisters its controller"); console.log("test_candidate_bundle: passed");
+
+  // The final controller cleanup remains harmless even if another catalogue
+  // operation has already removed that controller from the tracking set.
+  const deletedControllers = []; const deleteResults = [false, true];
+  state.catalogLoadControllers = {
+    add() {},
+    delete(controller) { deletedControllers.push(controller); return deleteResults.shift(); },
+  };
+  state.candidateInflight = new Map(); state.candidateBundleCache.items.clear();
+  record.candidateRevision = 4; apiResult = { candidates: [], candidateRevision: 4 };
+  context.api = async () => apiResult; bitmapLoader = async () => ({ width: 1, height: 1, close() {} });
+  await context.loadCandidateBundle("image", 2); await context.loadCandidateBundle("image", 2);
+  assert.equal(deletedControllers.length, 2, "both already-removed and current controllers complete their finally cleanup");
+  state.catalogLoadControllers = new Set();
   let imageClosed = 0; let candidateClosed = 0; const staleImage = { close() { imageClosed += 1; } }; const staleCandidate = { close() { candidateClosed += 1; } };
   state.imageCache.set("stale:v1", staleImage, 1); state.candidateBundleCache.set("stale:1", { candidateImages: new Map([["candidate", staleCandidate]]) }, 1); state.drafts.set("stale", { add: "kept" });
   context.forgetThumbnail = () => {}; context.invalidateStaleAsset("stale");
