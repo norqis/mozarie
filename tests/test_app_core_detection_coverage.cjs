@@ -433,11 +433,10 @@ async function testCoreBoundaryAndWorkspaceBehaviour() {
   assert.equal(effectiveButton.disabled, true, "false manual-layer presence disables the empty exclusion effective-mask control");
 
   const dialog = element("#errorDialog");
-  const originalDollar = context.$;
-  context.$ = (selector) => selector === "#missingErrorDialog" ? null : originalDollar(selector);
-  context.$ = (selector) => selector === "#errorDialog" ? null : originalDollar(selector);
+  const originalQuery = document.querySelector;
+  document.querySelector = (selector) => selector === "#errorDialog" ? null : originalQuery.call(document, selector);
   test.showUserError("internal_error");
-  context.$ = originalDollar;
+  document.querySelector = originalQuery;
   dialog.open = true;
   test.showUserError("internal_error");
   dialog.open = false;
@@ -452,11 +451,18 @@ async function testCoreBoundaryAndWorkspaceBehaviour() {
     { kind: "detect", state: "paused", total: 2, completed: 1, current: "one.png", cancelRequested: false },
     { kind: "import", state: "pausing", total: 0, completed: 0, current: "", cancelRequested: true },
   ]) test.showProcessing(job);
+  assert.match(test.formatDuration(undefined), /duration/);
+  coreState.detectionEta = { key: "detect:", completed: 1, remaining: 1 };
+  assert.match(test.progressText({ kind: "detect", state: "running", completed: 1, total: 3 }), /status/);
+  assert.equal(test.processingCurrentPath({ kind: "detect" }), "");
+  coreState.images = [];
+  assert.equal(test.processingCurrentPath({ kind: "detect", imageIds: ["plain"], completedImageIds: [], current: "fallback.png" }), "fallback.png");
   const matchingRecord = { id: "one", candidateRevision: 4, assetVersion: "v" };
   coreState.images = [matchingRecord];
   assert.equal(test.catalogRecordMatches(matchingRecord, undefined, { version: 0, revision: 4 }), false);
   coreState.catalogEpoch = 2;
   assert.equal(test.catalogRecordMatches(matchingRecord, 2, { version: 0, revision: 4 }), true);
+  assert.equal(test.catalogRecordMatches(matchingRecord, 2, { version: 0, revision: 5 }), false);
   let terminated = false;
   coreState.fillWorker = { terminate() { terminated = true; } };
   test.cancelFillWork();
@@ -473,6 +479,11 @@ async function testCoreBoundaryAndWorkspaceBehaviour() {
   const removedSave = test.setHidden(removedBeforeSave, true);
   coreState.images = [];
   assert.equal(await removedSave, false, "a removed record is not updated after its queued flag write");
+  const savedBeforeRemoval = { id: "saved", relativePath: "saved.png", hidden: false };
+  coreState.images = [savedBeforeRemoval];
+  let someReads = 0;
+  coreState.images.some = (...args) => { someReads += 1; return someReads === 1 ? Array.prototype.some.call(coreState.images, ...args) : false; };
+  assert.equal(await test.setHidden(savedBeforeRemoval, true), true);
   const reloadedReviewed = { id: "new", relativePath: "new.png", reviewResult: false };
   coreState.images = [reloadedReviewed]; coreState.reviewedPaths = new Set(["new.png"]);
   assert.equal(await test.moveReviewedPathAfterApply({ relativePath: "old.png" }, reloadedReviewed), false);
@@ -480,9 +491,9 @@ async function testCoreBoundaryAndWorkspaceBehaviour() {
   coreState.currentId = "new";
   context.refreshMaskStatus = () => false;
   assert.equal(test.refreshCurrentReviewAndMask(), true, "a review-only refresh rerenders review views");
-  context.busy = true;
+  coreState.saving = true;
   test.setMosaicPreviewEnabled(true);
-  context.busy = false;
+  coreState.saving = false;
 }
 
 async function testDetectionImportAndSaveBehaviour() {
