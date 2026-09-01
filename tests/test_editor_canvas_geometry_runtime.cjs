@@ -85,7 +85,7 @@ context.historyAddCanvas = canvas(); context.historyExclusionCanvas = canvas(); 
 const canvasPath = path.join(__dirname, "..", "static", "js", "editor-canvas.js");
 const source = fs.readFileSync(canvasPath, "utf8");
 vm.runInNewContext(source, context, { filename: canvasPath });
-vm.runInNewContext("globalThis.geometryRuntime = { selectImage, loadImage, imageAssetVersion, invalidateStaleAsset, imageCacheKey, candidateCacheKey, cachedImage, prefetchNeighbors, releaseImageCaches, releaseStaleImageVersions, releaseCandidateBundles, releaseCandidateBitmap, invalidateCandidateBundles, retainCurrentCandidateBundle, loadCandidateBundle, reconcileCurrentCandidates, syncCandidateRecord, syncCurrentCandidateRecord, canvasToDataUrl, saveDraft, restoreDraft, resizeRenderCanvas, setCssTransform, releaseMosaicPreview, prepareOriginalImage, mosaicPreviewFailed, createMosaicWorker, ensureMosaicPreviewSource, rebuildMosaicPreview, requestMosaicPreview, composeEnabledExclusionMask, drawEffectiveExclusions, composeCurrentMask, markDraftDirty, markMaskDirty, flushMaskComposition, hasEffectiveMask, maskStatusWithoutCandidate, paintMosaicPreviewAt, paintTintedMask, selectedCandidateMask, compareSplitX, comparePaneBounds, compareSideOffset, compareEventSide, compareEventOffset, updateCompareSplitter, setDisplayMode, fitImage, updateBrushCursor, roiFromPoints, boundaryDraftRoi, boundaryDraftId, pointForRoi, polygonRoi, boundaryDraftBounds, addBoundaryDraft, activeBoundaryShape, boundaryShapes, strokeRoi, appendBoundaryBrushPoint, beginBoundaryBrushStroke, completeBoundaryBrushStroke, rectsTouch, joinRois, boundaryRequests, boundaryPath, drawBoundaryScrim, drawBoundaryShape, drawBoundaryRoi, polygonArea, polygonSegmentsIntersect, polygonPointsValid, polygonIsValid, canDetectBoundary, hasBoundaryDraft, boundaryActionAnchor, updateBoundaryActions, drawCandidateBlinkOverlay, drawCompareRangeOverlay, refreshMaskStatus, renderNow, render, flushRender };", context, { filename: "test-editor-canvas-geometry-exports.js" });
+vm.runInNewContext("globalThis.geometryRuntime = { selectImage, loadImage, imageAssetVersion, invalidateStaleAsset, imageCacheKey, candidateCacheKey, cachedImage, prefetchNeighbors, releaseImageCaches, releaseStaleImageVersions, releaseCandidateBundles, releaseCandidateBitmap, invalidateCandidateBundles, retainCurrentCandidateBundle, loadCandidateBundle, reconcileCurrentCandidates, syncCandidateRecord, syncCurrentCandidateRecord, syncStoredMaskStatus, canvasToDataUrl, saveDraft, restoreDraft, resizeRenderCanvas, setCssTransform, releaseMosaicPreview, prepareOriginalImage, mosaicPreviewFailed, createMosaicWorker, ensureMosaicPreviewSource, rebuildMosaicPreview, requestMosaicPreview, composeEnabledExclusionMask, drawEffectiveExclusions, composeCurrentMask, markDraftDirty, markMaskDirty, flushMaskComposition, hasEffectiveMask, maskStatusWithoutCandidate, paintMosaicPreviewAt, paintTintedMask, selectedCandidateMask, compareSplitX, comparePaneBounds, compareSideOffset, compareEventSide, compareEventOffset, updateCompareSplitter, setDisplayMode, fitImage, updateBrushCursor, roiFromPoints, boundaryDraftRoi, boundaryDraftId, pointForRoi, polygonRoi, boundaryDraftBounds, addBoundaryDraft, activeBoundaryShape, boundaryShapes, strokeRoi, appendBoundaryBrushPoint, beginBoundaryBrushStroke, completeBoundaryBrushStroke, rectsTouch, joinRois, boundaryRequests, boundaryPath, drawBoundaryScrim, drawBoundaryShape, drawBoundaryRoi, polygonArea, polygonSegmentsIntersect, polygonPointsValid, polygonIsValid, canDetectBoundary, hasBoundaryDraft, boundaryActionAnchor, updateBoundaryActions, drawCandidateBlinkOverlay, drawCompareRangeOverlay, refreshMaskStatus, renderNow, render, flushRender };", context, { filename: "test-editor-canvas-geometry-exports.js" });
 const test = context.geometryRuntime;
 
 function rectangle(left, top, right, bottom) { return { type: "rectangle", roi: { left, top, right, bottom } }; }
@@ -480,6 +480,10 @@ test.render(); test.flushRender();
   context.isCurrentGeneration = () => false;
   await test.selectImage("late", true, { saveCurrentDraft: false });
   assert.equal(state.currentId, null, "a late image response cannot replace the current editor image");
+  let generationChecks = 0; context.isCurrentGeneration = () => ++generationChecks === 1;
+  state.drafts.set("late", { add: "draft" });
+  await test.selectImage("late", true, { saveCurrentDraft: false });
+  assert.equal(state.currentId, null, "a selection finishing after draft decode also leaves the editor unchanged");
   context.isCurrentGeneration = () => true;
 
   let staleInvalidated = null;
@@ -495,7 +499,7 @@ test.render(); test.flushRender();
   state.images = [{ id: "inactive", candidateRevision: 1 }, { id: "active", candidateRevision: 1 }]; state.currentId = "inactive";
   state.candidateBundleCache = cache(); state.candidateImages = new Map(); state.candidates = [];
   test.retainCurrentCandidateBundle("missing", 2);
-  test.retainCurrentCandidateBundle("inactive", 2);
+  state.currentId = "active"; test.retainCurrentCandidateBundle("inactive", 2);
   assert.equal(state.images[0].candidateRevision, 2, "inactive records only update revision metadata");
   state.currentId = "active"; test.retainCurrentCandidateBundle("active", 3);
   assert.equal(state.images[1].candidateRevision, 3, "a selected record without a decoded bundle still advances revision metadata");
@@ -503,6 +507,12 @@ test.render(); test.flushRender();
   state.candidateBundleCache.set("active:3", { candidateImages: state.candidateImages }, 1);
   test.retainCurrentCandidateBundle("active", 4);
   assert.equal(state.candidateBundleCache.has("active:4"), true, "the displayed bundle transfers ownership to the new server revision");
+  state.candidateBundleCache.set("other:1", { candidateImages: new Map() }, 0);
+  state.candidateBundleCache.set("active:5", { candidateImages: new Map() }, 0);
+  test.invalidateCandidateBundles("active");
+  assert.equal(state.candidateBundleCache.has("other:1"), true, "revision cleanup leaves other images alone");
+  assert.equal(state.candidateBundleCache.has("active:5"), false, "revision cleanup drops stale active bundles");
+  state.drafts = new Map(); test.syncStoredMaskStatus("active", []);
 
   // Clearing an unrelated stale image must close only the cache entries that
   // belong to that image and leave the current editor intact.
