@@ -61,13 +61,13 @@ const context = {
   closeBoundaryModeMenu() {}, stage: { dataset: {} }, toolRail: { setAttribute() {}, getAttribute() { return "horizontal"; } },
   focusElement(item) { context.focused = item; },
   renderSamVariantStatuses() {}, renderSettingsStatus() {}, syncProviderSelection() {},
-  setNavigationShortcutsEnabled() {}, setMosaicPreviewEnabled() {}, loadTranslations: async () => {},
+  setNavigationShortcutsEnabled() {}, setMosaicPreviewEnabled() {}, renderOutputDirectory() {}, applyToolPosition() {}, setDetectionConfidence() {}, setDetectionTargets() {}, syncDetectionActions() {}, loadTranslations: async () => {},
   validateDetectionTargets: () => true, detectionTargets: () => ["penis"], detectionParallelism: () => 2, normaliseDetectionConfidence: Number, normaliseImportParallelism: Number, settingsPayload: () => ({ ok: true }),
   pickOutputDirectory: async () => "", api: async () => ({ settings: { general: { language: "ja", shortcuts_enabled: true }, display: { mosaic_preview: true } }, version: "v1" }), clearInterval() {}, setInterval() { return 1; },
   confirmAction: async () => true,
 };
 vm.runInNewContext(source, context, { filename: settingsPath });
-vm.runInNewContext("globalThis.settingsTest={renderModelStatus,renderSamVariantStatuses,selectSamVariant,selectSettingsTab,moveSettingsTab,openSettings,saveSettings,resetSettings,chooseSettingsOutputDirectory,chooseSettingsModelFile,handleToolRailKeydown,modelDownloadInput,renderModelDownload,refreshModelDownload,startModelDownload,beginModelDownload,refreshSettingsStatus,checkForUpdate,startUpdate,samTypeFromPath,shortcutFromEvent,gpuMemoryLabel,modelCardEnabled,setHandSegmentationAvailable,setPrecisionDetectionEnabled,setFluidExclusionEnabled};", context, { filename: "test-settings-exports.js" });
+vm.runInNewContext("globalThis.settingsTest={renderModelStatus,renderSamVariantStatuses,selectedSamType,selectSamVariant,selectSettingsTab,moveSettingsTab,setToolRailTabStop,renderSettingsStatus,setSettingsForm,openSettings,saveSettings,resetSettings,chooseSettingsOutputDirectory,chooseSettingsModelFile,handleToolRailKeydown,modelDownloadInput,renderModelDownload,refreshModelDownload,showUnsupportedModelDownload,modelDownloadConfirmation,startModelDownload,beginModelDownload,cancelModelDownload,refreshSettingsStatus,checkForUpdate,startUpdate,samTypeFromPath,shortcutFromEvent,gpuMemoryLabel,modelCardEnabled,setHandSegmentationAvailable,setPrecisionDetectionEnabled,setFluidExclusionEnabled};", context, { filename: "test-settings-exports.js" });
 
 (async () => {
   assert.equal(context.settingsTest.shortcutFromEvent({ ctrlKey: true, metaKey: false, shiftKey: true, altKey: true, key: "a" }), "Ctrl+Shift+Alt+A", "shortcut capture normalizes modifiers and single letters");
@@ -194,5 +194,39 @@ vm.runInNewContext("globalThis.settingsTest={renderModelStatus,renderSamVariantS
   assert.equal(context.settingsTest.samTypeFromPath("models/sam_vit_b.pth"), "vit_b", "SAM base file names select the base variant");
   assert.equal(context.settingsTest.samTypeFromPath("models/sam_vit_l.pth"), "vit_l", "SAM large file names select the large variant");
   assert.equal(context.settingsTest.samTypeFromPath("models/other.pth"), null, "unrecognised model names do not guess a SAM variant");
+
+  element("#settingsSamType").value = "";
+  assert.equal(context.settingsTest.selectedSamType(), "vit_b", "an empty SAM selector falls back to the base variant");
+  element("#settingsSamType").value = "vit_l";
+  context.settingsTest.setToolRailTabStop(element("#fitButton"));
+  assert.equal(element("#fitButton").tabIndex, 0, "the requested tool becomes the roving tab stop");
+  context.settingsTest.setToolRailTabStop(element("#unknownTool"));
+  assert.equal(element("#fitButton").tabIndex, 0, "an unrelated item does not replace the current roving stop");
+  const boundaryMenu = element("#boundaryModeMenu");
+  boundaryMenu.contains = (target) => target === boundaryMenu;
+  context.settingsTest.handleToolRailKeydown({ target: boundaryMenu, key: "ArrowRight", preventDefault() { throw new Error("boundary menu keeps its own navigation"); } });
+  boundaryMenu.contains = () => false;
+  for (const event of [
+    { ctrlKey: false, metaKey: false, shiftKey: false, altKey: false, key: "1", expected: "1" },
+    { ctrlKey: false, metaKey: false, shiftKey: true, altKey: false, key: "F2", expected: "Shift+F2" },
+  ]) assert.equal(context.settingsTest.shortcutFromEvent(event), event.expected);
+  context.settingsTest.renderSettingsStatus({ runtimeBackend: "other", gpus: [{ id: 4, name: "Small", totalMemory: 0, supported: false }], gpuDeviceReasonCode: "unsupported" }, 4);
+  assert.equal(element("#settingsRuntimeBackend").textContent, "other", "unknown runtime labels are preserved");
+  const defaultSettings = { general: { language: "ja", open_browser: false, port: 8766, shortcuts_enabled: true }, models: { provider: "gpu", gpu_device: 0, target_segmentation: "", ntd11: "", ntd11_enabled: false, sensitive: "", sensitive_enabled: false, hand_detection: "", hand_detection_enabled: false, hand_segmentation_enabled: false, sam_checkpoints: {}, sam_model_type: "vit_b" }, display: { apply_color: "", exclude_color: "", overlay_opacity: 0, mosaic_preview: false }, importing: {}, saving: {}, detection: { mode: "standard", fluid_exclusion_enabled: false, exclude_forced_default: true, threshold: .5, targets: [] }, shortcuts: {}, confirmations: {} };
+  context.settingsTest.setSettingsForm(defaultSettings, { models: {}, gpus: [] });
+  assert.equal(element("#settingsImportParallelism").value, "3", "empty import settings use their public default");
+  assert.equal(element("#detectParallelism").value, "2", "empty detection settings use their public default");
+  context.api = async () => ({ state: "failed", errorCode: "download_failed", expected: 0, received: 0, paths: null });
+  await context.settingsTest.refreshModelDownload();
+  context.api = async () => { throw new Error("cancel download failed"); };
+  await context.settingsTest.cancelModelDownload();
+  context.settingsTest.showUnsupportedModelDownload("target");
+  context.settingsTest.modelDownloadConfirmation("all");
+  context.settingsTest.modelDownloadConfirmation("sam");
+  element("#checkUpdateButton").dataset.available = "false";
+  let checked = false;
+  context.api = async (url) => { checked = url === "/api/update/status"; return { available: false, current: "v1" }; };
+  await context.settingsTest.startUpdate();
+  assert.equal(checked, true, "starting without an available update refreshes the status instead");
   console.log("test_settings_runtime: passed");
 })().catch((error) => { console.error(error); process.exitCode = 1; });
