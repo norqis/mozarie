@@ -76,7 +76,7 @@ const context = {
   confirmAction: async () => true,
 };
 vm.runInNewContext(source, context, { filename: settingsPath });
-vm.runInNewContext("globalThis.settingsTest={renderModelStatus,renderSamVariantStatuses,selectedSamType,selectSamVariant,selectSettingsTab,moveSettingsTab,setToolRailTabStop,renderSettingsStatus,setSettingsForm,openSettings,saveSettings,resetSettings,chooseSettingsOutputDirectory,chooseSettingsModelFile,handleToolRailKeydown,modelDownloadInput,renderModelDownload,refreshModelDownload,showUnsupportedModelDownload,modelDownloadConfirmation,startModelDownload,beginModelDownload,cancelModelDownload,refreshSettingsStatus,checkForUpdate,startUpdate,samTypeFromPath,shortcutFromEvent,gpuMemoryLabel,modelCardEnabled,setHandSegmentationAvailable,setPrecisionDetectionEnabled,setFluidExclusionEnabled};", context, { filename: "test-settings-exports.js" });
+vm.runInNewContext("globalThis.settingsTest={renderModelStatus,renderSamVariantStatuses,selectedSamType,selectSamVariant,selectSettingsTab,moveSettingsTab,setToolRailTabStop,renderSettingsStatus,setSettingsForm,openSettings,saveSettings,resetSettings,chooseSettingsOutputDirectory,chooseSettingsModelFile,handleToolRailKeydown,modelDownloadInput,renderModelDownload,refreshModelDownload,showUnsupportedModelDownload,modelDownloadConfirmation,startModelDownload,beginModelDownload,cancelModelDownload,refreshSettingsStatus,checkForUpdate,startUpdate,samTypeFromPath,shortcutFromEvent,gpuMemoryLabel,modelCardEnabled,setHandSegmentationAvailable,setPrecisionDetectionEnabled,setFluidExclusionEnabled,setFillColorTolerance,saveFillColorTolerance};", context, { filename: "test-settings-exports.js" });
 
 (async () => {
   assert.equal(context.settingsTest.shortcutFromEvent({ ctrlKey: true, metaKey: false, shiftKey: true, altKey: true, key: "a" }), "Ctrl+Shift+Alt+A", "shortcut capture normalizes modifiers and single letters");
@@ -225,10 +225,22 @@ vm.runInNewContext("globalThis.settingsTest={renderModelStatus,renderSamVariantS
   context.settingsTest.renderSettingsStatus(null, 5);
   state.settingsStatus = null;
   context.settingsTest.renderSettingsStatus(null);
-  const defaultSettings = { general: { language: "ja", open_browser: false, port: 8766, shortcuts_enabled: true }, models: { provider: "gpu", gpu_device: 0, target_segmentation: "", ntd11: "", ntd11_enabled: false, sensitive: "", sensitive_enabled: false, hand_detection: "", hand_detection_enabled: false, hand_segmentation_enabled: false, sam_checkpoints: {}, sam_model_type: "vit_b" }, display: { apply_color: "", exclude_color: "", overlay_opacity: 0, mosaic_preview: false }, importing: {}, saving: {}, detection: { mode: "standard", fluid_exclusion_enabled: false, exclude_forced_default: true, threshold: .5, targets: [] }, shortcuts: {}, confirmations: {} };
+  const defaultSettings = { general: { language: "ja", open_browser: false, port: 8766, shortcuts_enabled: true }, models: { provider: "gpu", gpu_device: 0, target_segmentation: "", ntd11: "", ntd11_enabled: false, sensitive: "", sensitive_enabled: false, hand_detection: "", hand_detection_enabled: false, hand_segmentation_enabled: false, sam_checkpoints: {}, sam_model_type: "vit_b" }, display: { apply_color: "", exclude_color: "", overlay_opacity: 0, mosaic_preview: false }, importing: {}, editing: { fill_color_tolerance: 20 }, saving: {}, detection: { mode: "standard", fluid_exclusion_enabled: false, exclude_forced_default: true, threshold: .5, targets: [] }, shortcuts: {}, confirmations: {} };
   context.settingsTest.setSettingsForm(defaultSettings, { models: {}, gpus: [] });
   assert.equal(element("#settingsImportParallelism").value, "3", "empty import settings use their public default");
   assert.equal(element("#detectParallelism").value, "2", "empty detection settings use their public default");
+  assert.equal(element("#bucketTolerance").value, "20", "the fill tolerance reflects the persisted editing setting");
+  let tolerancePayload = null;
+  context.api = async (_path, options) => { tolerancePayload = JSON.parse(options.body); return { settings: { ...state.settings, editing: { fill_color_tolerance: 37 } } }; };
+  element("#bucketTolerance").value = "37";
+  await context.settingsTest.saveFillColorTolerance();
+  assert.deepEqual(tolerancePayload, { editing: { fill_color_tolerance: 37 } }, "changing fill tolerance persists one editing-only settings update");
+  assert.equal(element("#bucketToleranceValue").textContent, "37", "the current fill tolerance is shown beside the range");
+  context.api = async () => { throw new Error("settings unavailable"); };
+  element("#bucketTolerance").value = "91";
+  await context.settingsTest.saveFillColorTolerance();
+  assert.equal(state.settings.editing.fill_color_tolerance, 37, "a failed tolerance save restores the persisted value");
+  assert.equal(element("#bucketTolerance").value, "37", "a failed tolerance save restores the range control");
   context.api = async () => ({ state: "failed", errorCode: "download_failed", expected: 0, received: 0, paths: null });
   await context.settingsTest.refreshModelDownload();
   context.api = async () => { throw new Error("cancel download failed"); };

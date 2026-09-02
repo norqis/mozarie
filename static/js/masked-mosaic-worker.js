@@ -31,7 +31,17 @@ function render({ mask, width, height, blockSize, generation }) {
     maskContext.clearRect(0, 0, width, height); maskContext.drawImage(mask, 0, 0);
     const alphaPixels = maskContext.getImageData(0, 0, width, height).data;
     const output = new Uint8ClampedArray(pixels);
-    for (let top = 0; top < height; top += blockSize) for (let left = 0; left < width; left += blockSize) {
+    let minX = width; let minY = height; let maxX = -1; let maxY = -1;
+    for (let y = 0; y < height; y += 1) for (let x = 0; x < width; x += 1) {
+      if (!alphaPixels[(y * width + x) * 4 + 3]) continue;
+      minX = Math.min(minX, x); minY = Math.min(minY, y); maxX = Math.max(maxX, x); maxY = Math.max(maxY, y);
+    }
+    if (maxX >= 0) {
+      const firstTop = Math.floor(minY / blockSize) * blockSize;
+      const firstLeft = Math.floor(minX / blockSize) * blockSize;
+      const lastTop = Math.floor(maxY / blockSize) * blockSize;
+      const lastLeft = Math.floor(maxX / blockSize) * blockSize;
+      for (let top = firstTop; top <= lastTop; top += blockSize) for (let left = firstLeft; left <= lastLeft; left += blockSize) {
       const bottom = Math.min(height, top + blockSize); const right = Math.min(width, left + blockSize);
       let count = 0; let red = 0; let green = 0; let blue = 0; let weight = 0;
       for (let y = top; y < bottom; y += 1) for (let x = left; x < right; x += 1) {
@@ -44,6 +54,7 @@ function render({ mask, width, height, blockSize, generation }) {
       for (let y = top; y < bottom; y += 1) for (let x = left; x < right; x += 1) {
         const pixel = y * width + x; if (!alphaPixels[pixel * 4 + 3] || !rgb) continue; const index = pixel * 4;
         output[index] = rgb[0]; output[index + 1] = rgb[1]; output[index + 2] = rgb[2];
+      }
       }
     }
     outputContext.putImageData(new ImageData(output, width, height), 0, 0);

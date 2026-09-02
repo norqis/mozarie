@@ -67,13 +67,13 @@ const state = {
     { id: "apply", role: "apply", enabled: true, labelToken: "penis", source: "target", refinement: null, color: "#fff" },
     { id: "exclude", role: "exclude", enabled: true, forced: true, labelToken: "hand", source: "hand_exclusion", refinement: null, color: "#000" },
   ],
-  removedCandidateIds: new Set(), blinkCandidateIds: new Set(), blinkModes: new Map(), blinkPhase: false, blinkTimer: null,
+  removedCandidateIds: new Set(), candidateImages: new Map(), blinkCandidateIds: new Set(), blinkModes: new Map(), blinkPhase: false, blinkTimer: null,
   manualMaskPresent: true, manualEnabled: true, manualExclusionEnabled: true, manualExclusionEraseEnabled: true, manualExclusionForced: false,
   candidateUpdateChains: new Map(), candidateUpdateVersions: new Map(), candidateDeleting: new Set(), candidateBatchPending: new Set(),
   maskStatus: new Map(), images: [{ id: "image", assetVersion: "a", candidateRevision: 4, candidateCount: 0, enabledCandidateCount: 0 }],
   history: [], historyIndex: 0, historyRestoreToken: 0, historyRemovedCandidateIds: new Set(), historyCandidateIds: new Set(["apply", "exclude"]), historyBaseDirty: false,
   boundaryDrafts: [{ id: "draft", type: "rectangle", roi: { left: 1, top: 2, right: 10, bottom: 12 } }], boundaryActiveId: "draft", boundaryPending: false,
-  importing: false, pendingImageId: null, fillPending: false, tool: "brush", view: { x: 0, y: 0, scale: 1 },
+  importing: false, pendingImageId: null, fillPending: false, tool: "brush", view: { x: 0, y: 0, scale: 1 }, settings: { editing: { fill_color_tolerance: 12 } },
 };
 
 let latestFillWorker = null;
@@ -113,6 +113,7 @@ const context = {
   renderCandidates: () => events.push("candidates"), render: () => events.push("render"), renderCatalogViews: () => events.push("catalog"), updateActionButtons() {},
   updateCandidateBatchButtons(...args) { batchPresences.push(args[2]); },
   syncCurrentCandidateRecord() {}, syncCandidateRecord() {}, retainCurrentCandidateBundle() {}, refreshCandidateRecord: async () => {}, reconcileCurrentCandidates: async () => true,
+  fetchBitmap: async () => ({ close() {} }), maskUrl: (_imageId, candidateId, revision) => `${candidateId}:${revision}`, closeBitmap(bitmap) { bitmap.close(); },
   releaseCandidateBitmap() {}, releaseCandidateBundles() {}, invalidateCandidateBundles: () => events.push("invalidate"), markImagesUnreviewed: () => events.push("unreview"),
   clearBoundaryInteraction: () => events.push("boundary-clear"), updateBoundaryActions() {}, setStatusKey: () => events.push("status"), showUserError: (error) => events.push(`error:${error}`),
   canDetectBoundary: () => true, compareEventSide: () => "right", compareSideOffset: () => 100,
@@ -204,7 +205,9 @@ assert.equal(state.activeStroke, null, "manual paint, fill, cancel, and replay a
 state.currentImage = savedImage;
 
 state.tool = "brush";
+events.length = 0;
 test.beginManualStroke({ x: 4, y: 4 });
+assert.ok(events.includes("preview"), "the initial brush point schedules a live mosaic preview without waiting for pointer movement");
 test.appendManualStrokePoint({ x: 8, y: 8 });
 test.completeManualStroke();
 assert.equal(state.history.length, 1, "a completed brush gesture is retained for undo");
@@ -289,9 +292,16 @@ assert.equal(state.manualExclusionEraseEnabled, true);
   assert.deepEqual(candidateCalls, [{ path: "/api/candidate/image/apply", body: { enabled: false, color: "#fff" } }], "a candidate toggle persists its requested enabled state");
   assert.equal(retainedRevision, 9, "a successful mutation retains the returned candidate revision");
   candidateCalls.length = 0;
+  let oldMaskClosed = 0;
+  const oldMask = { close() { oldMaskClosed += 1; } };
+  const expandedMask = { close() {} };
+  state.candidateImages.set("apply", oldMask);
+  context.fetchBitmap = async (url) => { assert.equal(url, "apply:9", "padding refreshes the candidate mask at the returned revision"); return expandedMask; };
   state.candidates[0].expandPx = 3;
   await test.updateCandidate(state.candidates[0], false, true, undefined, 0);
   assert.deepEqual(candidateCalls, [{ path: "/api/candidate/image/apply", body: { enabled: false, color: "#fff", expandPx: 3 } }], "padding updates send only the new source-image pixel value");
+  assert.equal(state.candidateImages.get("apply"), expandedMask, "padding swaps in the server-expanded candidate bitmap immediately");
+  assert.equal(oldMaskClosed, 1, "padding closes the replaced candidate bitmap exactly once");
 
   resetCandidateState();
   test.renderCandidateRows();

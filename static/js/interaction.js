@@ -10,7 +10,10 @@ function setTool(tool) {
   }
   $("#boundaryTool").classList.toggle("active", boundaryTools.has(tool));
   $("#boundaryTool").setAttribute("aria-pressed", String(boundaryTools.has(tool)));
-  $("#bucketToleranceControl").hidden = !["bucket", "exclude_bucket"].includes(tool);
+  const tolerancePanel = $("#bucketToleranceControl");
+  const toleranceAnchor = tool === "bucket" ? $("#bucketToolAnchor") : (tool === "exclude_bucket" ? $("#excludeBucketToolAnchor") : null);
+  if (toleranceAnchor && tolerancePanel.parentElement !== toleranceAnchor) toleranceAnchor.append?.(tolerancePanel);
+  tolerancePanel.hidden = !toleranceAnchor;
   canvas.style.cursor = "default";
   updateBoundaryActions(); render(); updateBrushCursor();
   if (focusedInBoundaryMenu) focusCanvas();

@@ -236,7 +236,7 @@ function makeSaveRuntime() {
   const state = {
     sourceAccess: new Map(), applyTargetIds: ["file"], images: [{ id: "file", sourceKind: "filesystem", relativePath: "file.png" }, { id: "session", sourceKind: "session", relativePath: "session.png" }],
     settings: { saving: { default_output_directory: "G:/out", parallelism: 1 }, detection: { exclude_forced_default: true } }, drafts: new Map(), maskStatus: new Map(), selectedImageIds: new Set(), candidateUpdateChains: new Map(),
-    applyRunning: false, saveStarting: false, outputDirectoryPicking: false, outputDirectoryHandle: null, importing: false, saving: false, currentId: null, candidates: [], catalogEpoch: 1, imageGeneration: 0, pageLoadedAt: 1, job: { kind: "idle", state: "idle" },
+    applyRunning: false, saveStarting: false, outputDirectoryPicking: false, outputDirectoryHandle: null, importing: false, saving: false, currentId: null, candidates: [], prefetchQueue: [], catalogEpoch: 1, imageGeneration: 0, pageLoadedAt: 1, job: { kind: "idle", state: "idle" },
   };
   let handler = async (url) => {
     if (url === "/api/images") return { images: state.images };

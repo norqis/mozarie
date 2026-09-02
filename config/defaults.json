@@ -34,6 +34,9 @@
   "importing": {
     "parallelism": 3
   },
+  "editing": {
+    "fill_color_tolerance": 20
+  },
   "detection": {
     "mode": "standard",
     "fluid_exclusion_enabled": true,

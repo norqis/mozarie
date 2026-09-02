@@ -107,7 +107,7 @@ function startFixtureServer() {
     general: { language: "ja", open_browser: false, port: 8766, shortcuts_enabled: true },
     models: { target_segmentation: "", ntd11: "", ntd11_enabled: false, sensitive: "", sensitive_enabled: false, hand_detection: "", hand_detection_enabled: false, sam_checkpoints: { vit_b: "", vit_l: "", vit_h: "" }, sam_model_type: "vit_b", provider: "gpu", gpu_device: 0 },
     display: { apply_color: "#ff3d4d", exclude_color: "#28d3ff", overlay_opacity: 0.78, mosaic_preview: true, tool_position: "left" },
-    importing: { parallelism: 3 }, saving: { parallelism: 2 },
+    importing: { parallelism: 3 }, editing: { fill_color_tolerance: 20 }, saving: { parallelism: 2 },
     detection: { mode: "standard", fluid_exclusion_enabled: true, exclude_forced_default: true, threshold: 0.5, parallelism: 2, targets: ["penis", "pussy"] },
     shortcuts: {
       enabled: true,
@@ -138,6 +138,7 @@ function startFixtureServer() {
           models: { ...settings.models, ...(submitted.models || {}) },
           display: { ...settings.display, ...(submitted.display || {}) },
           importing: { ...settings.importing, ...(submitted.importing || {}) },
+          editing: { ...settings.editing, ...(submitted.editing || {}) },
           saving: { ...settings.saving, ...(submitted.saving || {}) },
           detection: { ...settings.detection, ...(submitted.detection || {}) },
           shortcuts: { ...settings.shortcuts, ...(submitted.shortcuts || {}) },
@@ -468,7 +469,7 @@ function startCandidateScenarioServer(expanded = false) {
     general: { language: "ja", open_browser: false, port: 8766, shortcuts_enabled: true },
     models: { target_segmentation: "", ntd11: "", ntd11_enabled: false, sensitive: "", sensitive_enabled: false, hand_detection: "", hand_detection_enabled: false, sam_checkpoints: { vit_b: "", vit_l: "", vit_h: "" }, sam_model_type: "vit_b", provider: "cpu", gpu_device: 0 },
     display: { apply_color: "#ff3d4d", exclude_color: "#28d3ff", overlay_opacity: 0.78, mosaic_preview: true },
-    importing: { parallelism: 1 }, saving: { parallelism: 1 },
+    importing: { parallelism: 1 }, editing: { fill_color_tolerance: 20 }, saving: { parallelism: 1 },
     detection: { mode: "standard", fluid_exclusion_enabled: true, exclude_forced_default: true, threshold: 0.5, parallelism: 1, targets: ["penis"] },
     shortcuts: { enabled: true, bindings: {}, actions: {} }, confirmations: expanded ? { candidateDelete: true } : {},
   };
@@ -1278,8 +1279,8 @@ async function assertToolRailLayout(page, position) {
     const ids = (selector) => [...document.querySelectorAll(selector)].map((element) => element.id);
     return {
       rail: read("#canvasToolRail"), settings: read(".canvas-settings-bar"), navigation: read(".canvas-navigation-bar"),
-      mosaicTools: ids('[data-i18n-aria-label="editor.mosaicTools"] > button'),
-      exclusionTools: ids('[data-i18n-aria-label="editor.exclusionTools"] > button'),
+      mosaicTools: ids('[data-i18n-aria-label="editor.mosaicTools"] > .tool, [data-i18n-aria-label="editor.mosaicTools"] > .fill-tool-anchor > .tool'),
+      exclusionTools: ids('[data-i18n-aria-label="editor.exclusionTools"] > .tool, [data-i18n-aria-label="editor.exclusionTools"] > .fill-tool-anchor > .tool'),
     };
   });
   assert.equal(overlaps(boxes.rail, boxes.settings), true, "tool settings are integrated into the top editor toolbar");

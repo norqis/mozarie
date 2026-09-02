@@ -165,6 +165,8 @@ function bindEvents() {
   document.querySelectorAll("#dialogTargetPenis, #dialogTargetPussy").forEach((input) => input.addEventListener("change", () => validateDetectionTargets(detectionTargets("dialogTarget"), $("#detectTargetValidation"))));
   $("#detectCurrentButton").addEventListener("click", () => state.currentId && runDetection([state.currentId], detectionConfidence(), 1, detectionTargets()));
   $("#saveAllButton").addEventListener("click", saveAll); $("#saveButton").addEventListener("click", saveCurrent); $("#singleViewButton").addEventListener("click", () => setDisplayMode("single")); $("#compareViewButton").addEventListener("click", () => setDisplayMode("compare")); $("#fitButton").addEventListener("click", () => { if (!isBusy() && !state.importing) fitImage(); });
+  $("#bucketTolerance").addEventListener("input", (event) => setFillColorTolerance(event.currentTarget.value));
+  $("#bucketTolerance").addEventListener("change", () => { void saveFillColorTolerance(); });
   const splitter = $("#compareSplitter");
   const setCompareSplit = (clientX) => {
     const rect = canvas.getBoundingClientRect();

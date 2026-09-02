@@ -117,6 +117,7 @@ def validate_settings(value: Any) -> dict[str, Any]:
     models = _expect_dict(settings.get("models"), "models")
     display = _expect_dict(settings.get("display"), "display")
     importing = _expect_dict(settings.get("importing"), "importing")
+    editing = _expect_dict(settings.get("editing"), "editing")
     detection = _expect_dict(settings.get("detection"), "detection")
     saving = _expect_dict(settings.get("saving", {}), "saving")
     shortcuts = _expect_dict(settings.get("shortcuts", {}), "shortcuts")
@@ -184,6 +185,9 @@ def validate_settings(value: Any) -> dict[str, Any]:
         },
         "importing": {
             "parallelism": int(_expect_number(importing.get("parallelism"), "importing.parallelism", 1, 10)),
+        },
+        "editing": {
+            "fill_color_tolerance": int(_expect_number(editing.get("fill_color_tolerance"), "editing.fill_color_tolerance", 0, 255)),
         },
         "detection": {
             "mode": mode,

@@ -117,6 +117,17 @@ class SettingsTests(unittest.TestCase):
             self.assertTrue((root / "config" / "local.json").is_file())
             self.assertEqual(json.loads((root / "config" / "defaults.json").read_text(encoding="utf-8")), defaults)
 
+    def test_legacy_local_settings_gain_fill_tolerance_default(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); config = root / "config"; config.mkdir()
+            defaults = default_settings()
+            (config / "defaults.json").write_text(json.dumps(defaults), encoding="utf-8")
+            (config / "local.json").write_text(json.dumps({"general": {"language": "en"}}), encoding="utf-8")
+
+            loaded = SettingsStore(root).load()
+
+            self.assertEqual(loaded["editing"]["fill_color_tolerance"], 20)
+
     def test_reset_removes_only_machine_override(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory); (root / "config").mkdir()

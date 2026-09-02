@@ -188,6 +188,7 @@ function setSettingsForm(settings, status = null) {
   $("#settingsPort").value = String(settings.general.port);
   $("#settingsImportParallelism").value = String(settings.importing?.parallelism || 3);
   $("#settingsSaveParallelism").value = String(settings.saving?.parallelism || 2);
+  setFillColorTolerance(settings.editing.fill_color_tolerance);
   $("#settingsShortcutsEnabled").checked = settings.shortcuts?.enabled ?? settings.general.shortcuts_enabled;
   renderOutputDirectory();
   setNavigationShortcutsEnabled(settings.shortcuts?.enabled ?? settings.general.shortcuts_enabled);
@@ -253,6 +254,30 @@ function shortcutBindingsPayload() {
 }
 function shortcutActionsPayload() { return Object.fromEntries([...document.querySelectorAll("[data-shortcut-enabled]")].map((input) => [input.dataset.shortcutEnabled, input.checked])); }
 
+function setFillColorTolerance(value) {
+  const tolerance = Math.max(0, Math.min(255, Math.round(Number(value))));
+  $("#bucketTolerance").value = String(tolerance);
+  $("#bucketToleranceValue").textContent = String(tolerance);
+}
+
+async function saveFillColorTolerance() {
+  const input = $("#bucketTolerance");
+  const previous = state.settings.editing.fill_color_tolerance;
+  const tolerance = Math.max(0, Math.min(255, Math.round(Number(input.value))));
+  setFillColorTolerance(tolerance);
+  if (tolerance === previous) return;
+  state.settings.editing.fill_color_tolerance = tolerance;
+  try {
+    const data = await api("/api/settings?status=0", { method: "POST", body: JSON.stringify({ editing: { fill_color_tolerance: tolerance } }) });
+    state.settings = data.settings;
+    setFillColorTolerance(data.settings.editing.fill_color_tolerance);
+  } catch (error) {
+    state.settings.editing.fill_color_tolerance = previous;
+    setFillColorTolerance(previous);
+    showUserError(error, input);
+  }
+}
+
 function settingsPayload() {
   storeSelectedSamPath();
   const gpuDevice = $("#settingsGpuDevice").value;
@@ -284,6 +309,7 @@ function settingsPayload() {
       default_output_directory: $("#settingsDefaultOutputDirectory").value.trim(),
     },
     shortcuts: { enabled: $("#settingsShortcutsEnabled").checked, bindings: shortcutBindingsPayload(), actions: shortcutActionsPayload() },
+    editing: { fill_color_tolerance: state.settings.editing.fill_color_tolerance },
     confirmations: { clearMasks: $("#confirmClearMasks").checked, clearCatalog: $("#confirmClearCatalog").checked, removeImage: $("#confirmRemoveImage").checked, candidateDelete: $("#confirmCandidateDelete").checked, candidateRoleDelete: $("#confirmCandidateRoleDelete").checked, overwriteSource: $("#confirmOverwriteSource").checked, deleteSourceAfterCopy: $("#confirmDeleteSourceAfterCopy").checked },
   };
 }

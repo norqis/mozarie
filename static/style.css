@@ -64,6 +64,13 @@ h2 { margin: 0 0 2px; font-size: 14px; } .muted { color: #98a2ad; font-size: 12p
 .tool-group, .numeric-controls, .tool-pair { display: flex; flex-wrap: nowrap; gap: 4px; align-items: center; min-width: 0; }
 .tool-pair { padding: 3px; border: 1px solid #3d454e; border-radius: 6px; background: #1b1f23; }
 .tool { flex: 0 0 auto; min-width: 0; padding-inline: 7px; }
+.fill-tool-anchor { position: relative; display: flex; flex: 0 0 auto; }
+.bucket-tolerance-panel { position: absolute; z-index: 5; top: calc(100% + 5px); left: 50%; display: grid; width: min(218px, calc(100vw - 16px)); gap: 5px; padding: 7px; border: 1px solid #4a5662; border-radius: 6px; background: #1b2026; box-shadow: 0 5px 14px #0008; color: #d7dde4; font-size: 12px; transform: translateX(-50%); }
+.bucket-tolerance-panel[hidden] { display: none; }
+.bucket-tolerance-panel input { width: 100%; margin: 0; }
+.bucket-tolerance-scale { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; color: #aeb8c2; font-size: 11px; }
+.bucket-tolerance-scale span:last-child { text-align: right; }
+.bucket-tolerance-scale output { min-width: 28px; color: #edf4fb; text-align: center; }
 .tool.active { border-color: #57a993; background: #335d55; } .detect-current { color: #d5f2e9; }
 .numeric-controls { gap: 9px; margin-left: auto; } .numeric-control { display: flex; flex-wrap: nowrap; gap: 5px; align-items: center; min-width: 0; white-space: nowrap; }
 .numeric-control input[type="range"] { width: 74px; } .numeric-control input[type="number"] { width: 78px; min-width: 72px; }

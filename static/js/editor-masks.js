@@ -255,6 +255,17 @@ function nextCandidateMutationVersion(key) {
   state.candidateUpdateVersions.set(key, version);
   return version;
 }
+async function refreshCandidateBitmap(candidate, imageId, revision, generation, mutationKey, mutationVersion) {
+  const bitmap = await fetchBitmap(maskUrl(imageId, candidate.id, revision));
+  if (state.currentId !== imageId || !isCurrentGeneration(generation) || state.candidateUpdateVersions.get(mutationKey) !== mutationVersion) {
+    closeBitmap(bitmap); return false;
+  }
+  const previous = state.candidateImages.get(candidate.id);
+  state.candidateImages.set(candidate.id, bitmap);
+  if (previous && previous !== bitmap) closeBitmap(previous);
+  invalidateCandidateBundles(imageId);
+  return true;
+}
 function enqueueCandidateMutation(imageId, send) {
   const previous = state.candidateUpdateChains.get(imageId) || Promise.resolve();
   const queued = previous.then(send, send);
@@ -288,6 +299,7 @@ async function updateCandidate(candidate, previousEnabled, previousMaskStatus, p
         method: "POST", body: JSON.stringify({ enabled: desired, color: candidate.color, ...(desiredExpandPx !== previousExpandPx ? { expandPx: desiredExpandPx } : {}), ...(candidate.role === "exclude" ? { forced: desiredForced } : {}) }),
       });
       if (state.candidateUpdateVersions.get(mutationKey) !== version) return;
+      if (desiredExpandPx !== previousExpandPx && !await refreshCandidateBitmap(candidate, imageId, result.candidateRevision, generation, mutationKey, version)) return;
       if (state.currentId === imageId && isCurrentGeneration(generation)) {
         const currentCandidate = state.candidates.find((item) => item.id === candidate.id);
         if (currentCandidate) { currentCandidate.enabled = desired; currentCandidate.forced = desiredForced; currentCandidate.expandPx = desiredExpandPx; }
@@ -585,7 +597,7 @@ function fillAt(point, tool = state.tool) {
   const width = originalCanvas.width; const height = originalCanvas.height;
   const pixels = originalCtx.getImageData(0, 0, width, height).data;
   const x = Math.min(width - 1, Math.max(0, Math.floor(point.x))); const y = Math.min(height - 1, Math.max(0, Math.floor(point.y)));
-  const tolerance = Math.max(0, Math.min(255, Number($("#bucketTolerance").value) || 0));
+  const tolerance = state.settings.editing.fill_color_tolerance;
   const generation = state.imageGeneration; const epoch = state.catalogEpoch; const imageId = state.currentId; const record = currentRecord(); const version = imageAssetVersion(record); const revision = Number(record?.candidateRevision || 0);
   const apply = (spans) => {
     if (!catalogRecordMatches(record, epoch, { version, revision }) || !isCurrentGeneration(generation) || state.currentId !== imageId) { state.fillPending = false; return; }
@@ -645,6 +657,7 @@ function beginManualStroke(point) {
   const excludeDisplayIds = state.tool === "exclude_eraser" ? candidateDisplayIdsForRole("exclude") : [];
   if (state.tool === "exclude_eraser" && excludeDisplayIds.length && excludeDisplayIds.every((id) => candidateDisplayMode(id) === "normal")) setCandidateDisplayMode(["manual:excludeErase"], "normal");
   drawStroke(point, point, state.tool, state.activeStroke.size);
+  requestMosaicPreview();
 }
 
 function appendManualStrokePoint(point) {

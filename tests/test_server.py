@@ -1699,6 +1699,30 @@ class MozarieTests(unittest.TestCase):
                 state.remove_image_from_catalog(image_id)
             self.assertIn(image_id, state.images)
 
+    def test_remove_image_allows_terminal_worker_cleanup_only(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            Image.new("RGB", (16, 16), "white").save(root / "source.png")
+            state = self.new_state()
+            image_id = state.set_root(directory)[0]["id"]
+            state.worker_thread = types.SimpleNamespace(is_alive=lambda: True)
+            state.job.state = "complete"
+            invalidation_lock_states = []
+            with patch.object(state, "invalidate_sam_image", side_effect=lambda _id: invalidation_lock_states.append(state.lock._is_owned())):
+                self.assertEqual(state.remove_image_from_catalog(image_id), [])
+            self.assertEqual(invalidation_lock_states, [False])
+
+            state.worker_thread = None
+            image_id = state.set_root(directory)[0]["id"]
+            state.worker_thread = types.SimpleNamespace(is_alive=lambda: True)
+            state.job.state = "paused"
+            with self.assertRaisesRegex(ClientError, "処理が終了"):
+                state.remove_image_from_catalog(image_id)
+            state.job.state = "complete"
+            with self.assertRaisesRegex(ClientError, "処理が終了"):
+                state.detach_catalog()
+            state.worker_thread = None
+
     def test_remove_session_image_cleans_masks_thumbnails_and_import_copy(self):
         encoded = io.BytesIO()
         Image.new("RGB", (16, 16), "white").save(encoded, format="PNG")

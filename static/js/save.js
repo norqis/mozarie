@@ -464,6 +464,8 @@ async function removeCompletedImagesFromCatalog(imageIds, initialOrder, recordsB
   if (!imageIds.length) return;
   const currentId = state.currentId;
   const currentIndex = initialOrder.indexOf(currentId);
+  const scroll = [["#gallery", $("#gallery")], ["#overviewGrid", $("#overviewGrid")]]
+    .map(([selector, container]) => [selector, container ? Number(container.scrollTop) || 0 : null]);
   const data = await api("/api/catalog/remove", { method: "POST", body: JSON.stringify({ imageIds }) });
   state.images = data.images;
   const remainingIds = new Set(state.images.map((image) => image.id));
@@ -475,14 +477,22 @@ async function removeCompletedImagesFromCatalog(imageIds, initialOrder, recordsB
 
   for (const imageId of removedIds) {
     state.selectedImageIds.delete(imageId);
+    if (state.selectionAnchorId === imageId) state.selectionAnchorId = null;
     releaseImageCaches(imageId);
     state.sourceAccess.delete(imageId);
     state.drafts.delete(imageId);
     state.maskStatus.delete(imageId);
     clearCandidateMutationState(imageId);
+    state.prefetchQueue = state.prefetchQueue.filter((entry) => entry.record.id !== imageId);
+    if (state.pendingImageId === imageId) {
+      state.pendingImageId = null;
+      state.pendingImageKey = null;
+      state.pendingCandidateKey = null;
+    }
     const image = recordsById.get(imageId);
     if (image) clearReviewForRemovedImage(image);
   }
+  if (state.contextMenuImageId && removedIds.has(state.contextMenuImageId)) closeCatalogContextMenu({ restoreFocus: false });
   if (!state.images.length) { state.batchMode = false; clearBatchSelection(); }
 
   if (currentId && removedIds.has(currentId)) {
@@ -494,7 +504,17 @@ async function removeCompletedImagesFromCatalog(imageIds, initialOrder, recordsB
     clearEditor();
   }
   pruneSourceAccess();
-  renderCatalogViews(); updateSelectionActionBar();
+  renderCatalogViews();
+  for (const [selector, top] of scroll) {
+    if (top === null) continue;
+    const container = $(selector);
+    if (!container) continue;
+    const height = Number(container.scrollHeight);
+    const viewport = Number(container.clientHeight);
+    const maximum = height > 0 && viewport >= 0 ? Math.max(0, height - viewport) : Number(top) || 0;
+    container.scrollTop = Math.max(0, Math.min(Number(top) || 0, maximum));
+  }
+  updateSelectionActionBar();
 
   if (currentId && removedIds.has(currentId)) {
     const survivors = new Set(state.images.map((image) => image.id));

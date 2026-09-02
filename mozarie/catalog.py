@@ -115,8 +115,13 @@ class CatalogMixin:
     def _has_active_worker(self) -> bool:
         return self.worker_thread is not None and self.worker_thread.is_alive()
 
-    def _assert_catalog_mutable(self) -> None:
-        if self.active_import_count or self.job.state in {"running", "pausing", "paused"} or self._has_active_worker():
+    def _assert_catalog_mutable(self, *, allow_terminal_cleanup: bool = False) -> None:
+        worker_cleanup = (
+            allow_terminal_cleanup
+            and self.job.state in {"complete", "cancelled", "error"}
+            and self._has_active_worker()
+        )
+        if self.active_import_count or self.job.state in {"running", "pausing", "paused"} or (self._has_active_worker() and not worker_cleanup):
             raise ClientError("処理が終了するまで画像一覧を変更できません。", "operation_in_progress")
 
     def _job_is_current(self, job_generation: int | None, catalog_generation: int | None) -> bool:
@@ -330,14 +335,14 @@ class CatalogMixin:
             raise ClientError("削除する画像がありません。", "image_not_found")
         with self.import_lock:
             with self.lock:
-                self._assert_catalog_mutable()
+                self._assert_catalog_mutable(allow_terminal_cleanup=True)
                 records = [self.images[image_id] for image_id in requested_ids if image_id in self.images]
             locks = [(record.image_id, self.image_io_lock(record.image_id)) for record in records]
             with ExitStack() as stack:
                 for _image_id, image_lock in sorted(locks):
                     stack.enter_context(image_lock)
                 with self.lock:
-                    self._assert_catalog_mutable()
+                    self._assert_catalog_mutable(allow_terminal_cleanup=True)
                     records = [self.images[record.image_id] for record in records if record.image_id in self.images]
                     removed_ids = [record.image_id for record in records]
                     mask_paths = [candidate.mask_path for record in records for candidate in self.candidates.get(record.image_id, [])]
