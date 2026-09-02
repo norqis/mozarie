@@ -35,6 +35,25 @@ function renderCandidates() {
     button.textContent = text; button.addEventListener("click", onChange); return button;
   };
   const makeDisplay = (id) => candidateDisplayToggle(id);
+  const makeExpandInput = (candidate, disabled) => {
+    const label = document.createElement("label"); label.className = "candidate-expand";
+    const text = document.createElement("span"); text.textContent = t("candidates.expand");
+    const input = document.createElement("input"); input.type = "number"; input.min = "0"; input.step = "1"; input.inputMode = "numeric";
+    input.value = String(candidate.expandPx || 0); input.disabled = disabled;
+    input.setAttribute("aria-label", t("candidates.expand"));
+    const suffix = document.createElement("span"); suffix.textContent = t("candidates.px");
+    input.addEventListener("change", async () => {
+      const expandPx = Number(input.value);
+      if (!Number.isInteger(expandPx) || expandPx < 0) { input.value = String(candidate.expandPx || 0); return; }
+      const previousExpandPx = candidate.expandPx || 0;
+      if (expandPx === previousExpandPx || isBusy() || state.importing) return;
+      const previousMaskStatus = state.maskStatus.has(state.currentId) ? state.maskStatus.get(state.currentId) : imageHasMask(currentRecord());
+      candidate.expandPx = expandPx; markMaskDirty(); setReviewed(currentRecord(), false);
+      syncCurrentCandidateRecord(); refreshCurrentReviewAndMask(); requestMosaicPreview(); render();
+      await updateCandidate(candidate, candidate.enabled, previousMaskStatus, candidate.forced, previousExpandPx);
+    });
+    label.append(text, input, suffix); return label;
+  };
   const appendManual = (list, role) => {
     const isApply = role === "apply";
     const exists = isApply ? state.manualMaskPresent : presence.hasManualExclude;
@@ -125,8 +144,8 @@ function renderCandidates() {
         syncCurrentCandidateRecord(); refreshCurrentReviewAndMask(); requestMosaicPreview(); render();
         await updateCandidate(candidate, candidate.enabled, previousMaskStatus, previousForced);
       }, deleting || state.candidateBatchPending.has(state.currentId));
-      row.append(label, enabled, blink, candidateEffectiveToggle(candidate.id), forced, remove);
-    } else row.append(label, enabled, blink, candidateEffectiveToggle(candidate.id), remove);
+      row.append(label, enabled, blink, candidateEffectiveToggle(candidate.id), makeExpandInput(candidate, deleting || state.candidateBatchPending.has(state.currentId)), forced, remove);
+    } else row.append(label, enabled, blink, candidateEffectiveToggle(candidate.id), makeExpandInput(candidate, deleting || state.candidateBatchPending.has(state.currentId)), remove);
     (role === "apply" ? applyList : excludeList).append(row);
   }
   appendEmpty(applyList); appendEmpty(excludeList);
@@ -254,7 +273,7 @@ async function waitForCandidateMutations() {
   }
 }
 
-async function updateCandidate(candidate, previousEnabled, previousMaskStatus, previousForced = candidate.forced) {
+async function updateCandidate(candidate, previousEnabled, previousMaskStatus, previousForced = candidate.forced, previousExpandPx = candidate.expandPx || 0) {
   const imageId = state.currentId;
   const generation = state.imageGeneration;
   const targetCandidates = [...state.candidates];
@@ -262,15 +281,16 @@ async function updateCandidate(candidate, previousEnabled, previousMaskStatus, p
   const version = nextCandidateMutationVersion(mutationKey);
   const desired = candidate.enabled;
   const desiredForced = candidate.forced;
+  const desiredExpandPx = candidate.expandPx || 0;
   const send = async () => {
     try {
       const result = await api(`/api/candidate/${encodeURIComponent(imageId)}/${encodeURIComponent(candidate.id)}`, {
-        method: "POST", body: JSON.stringify({ enabled: desired, color: candidate.color, ...(candidate.role === "exclude" ? { forced: desiredForced } : {}) }),
+        method: "POST", body: JSON.stringify({ enabled: desired, color: candidate.color, ...(desiredExpandPx !== previousExpandPx ? { expandPx: desiredExpandPx } : {}), ...(candidate.role === "exclude" ? { forced: desiredForced } : {}) }),
       });
       if (state.candidateUpdateVersions.get(mutationKey) !== version) return;
       if (state.currentId === imageId && isCurrentGeneration(generation)) {
         const currentCandidate = state.candidates.find((item) => item.id === candidate.id);
-        if (currentCandidate) { currentCandidate.enabled = desired; currentCandidate.forced = desiredForced; }
+        if (currentCandidate) { currentCandidate.enabled = desired; currentCandidate.forced = desiredForced; currentCandidate.expandPx = desiredExpandPx; }
         retainCurrentCandidateBundle(imageId, result.candidateRevision);
         syncCurrentCandidateRecord(); refreshMaskStatus(true); requestMosaicPreview(); renderCandidates(); render();
       } else {
@@ -287,13 +307,13 @@ async function updateCandidate(candidate, previousEnabled, previousMaskStatus, p
           }
         } catch {
           if (state.currentId === imageId && isCurrentGeneration(generation)) {
-            candidate.enabled = previousEnabled; candidate.forced = previousForced; syncCurrentCandidateRecord(); refreshMaskStatus(true); requestMosaicPreview(); renderCandidates(); render();
+            candidate.enabled = previousEnabled; candidate.forced = previousForced; candidate.expandPx = previousExpandPx; syncCurrentCandidateRecord(); refreshMaskStatus(true); requestMosaicPreview(); renderCandidates(); render();
             showUserError(error);
             return;
           }
         }
       }
-      candidate.enabled = previousEnabled; candidate.forced = previousForced;
+      candidate.enabled = previousEnabled; candidate.forced = previousForced; candidate.expandPx = previousExpandPx;
       syncCandidateRecord(imageId, targetCandidates);
       if (previousMaskStatus !== undefined) state.maskStatus.set(imageId, previousMaskStatus);
       try {
@@ -639,6 +659,7 @@ function paintPendingManualStroke() {
   if (!stroke || stroke.paintedPointCount >= stroke.points.length) return;
   paintStrokePath(stroke.points.slice(stroke.paintedPointCount - 1), stroke.tool, stroke.size);
   stroke.paintedPointCount = stroke.points.length;
+  requestMosaicPreview();
 }
 
 function cancelManualStroke() {

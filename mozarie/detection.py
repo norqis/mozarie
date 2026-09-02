@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import cv2
-from PIL import Image, ImageOps
+from PIL import Image, ImageOps, PngImagePlugin
 
 from .core import (
     DEFAULT_COLORS, DEFAULT_DETECTION_CONFIDENCE, HAND_CONFIDENCE,
@@ -84,7 +84,9 @@ def _save_binary_mask(mask: Any, path: Path) -> None:
     """Persist every non-zero mask pixel as fully opaque PNG data."""
 
     binary = np.where(np.asarray(mask) > 0, 255, 0).astype(np.uint8)
-    Image.fromarray(binary).save(path, format="PNG")
+    metadata = PngImagePlugin.PngInfo()
+    metadata.add_text("mozarie_expand_px", "0")
+    Image.fromarray(binary).save(path, format="PNG", pnginfo=metadata)
 
 
 class DetectionMixin:

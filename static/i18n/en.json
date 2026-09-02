@@ -50,6 +50,8 @@
   "candidates.delete": "Delete {label}",
   "candidates.deleteManual": "Clear manual mosaic range",
   "candidates.manual": "Manual",
+  "candidates.expand": "Padding",
+  "candidates.px": "px",
   "candidates.manualOnly": "Manual edits only",
   "candidates.manualToggle": "Enable manual mosaic",
   "candidates.toggleAll": "Toggle ON/OFF",

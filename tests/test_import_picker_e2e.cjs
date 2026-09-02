@@ -3458,8 +3458,8 @@ async function main() {
     assert.deepEqual(workspaceDraftRetention, { restoredHistory: true, undo: true, redo: true, bulk: ["sample", "sample-two"], retained: [true, true] }, "workspace persistence keeps per-image undo drafts and includes both manual masks in bulk saving");
 
     // This deliberately uses real pointer events rather than the canvas helpers.
-    // A stroke updates the effective mask during the drag, but the expensive
-    // mosaic worker receives one confirmed frame after pointerup. Test both a
+    // A stroke updates both the effective mask and mosaic preview during the
+    // drag. The one worker keeps only the newest pending frame. Test both a
     // normal editor image and a 4K image.
     await page.setViewportSize({ width: 1280, height: 900 });
     for (const [width, height] of (browserCoverage ? [[1024, 768]] : [[1024, 768], [3840, 2160]])) {
@@ -3518,7 +3518,7 @@ async function main() {
         preview: [...mosaicCtx.getImageData(logical.x, logical.y, 1, 1).data]
           .some((value, index) => value !== originalCtx.getImageData(logical.x, logical.y, 1, 1).data[index]),
       }), geometry);
-      assert.deepEqual(duringBrush, { active: true, mask: true, preview: false }, `${width}x${height} brush defers its mosaic worker frame until pointerup`);
+      assert.deepEqual(duringBrush, { active: true, mask: true, preview: true }, `${width}x${height} brush updates its mosaic preview during the drag`);
       await page.mouse.up();
       await page.waitForFunction(() => !state.activeStroke && state.history.length > 0 && !state.mosaicWorkerBusy && !state.mosaicPending, null, { timeout: 15000 });
       const afterBrushPreview = await page.evaluate(({ logical }) => [...mosaicCtx.getImageData(logical.x, logical.y, 1, 1).data]

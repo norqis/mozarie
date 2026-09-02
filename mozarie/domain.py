@@ -34,6 +34,7 @@ class Candidate:
     refinement: str | None = None
     role: CandidateRole = CandidateRole.APPLY
     forced: bool = True
+    expand_px: int = 0
 
     def __post_init__(self) -> None:
         if self.label_token not in CANDIDATE_LABEL_TOKENS:
@@ -42,6 +43,8 @@ class Candidate:
             raise ValueError("candidate source token is invalid")
         if self.refinement is not None and self.refinement not in CANDIDATE_REFINEMENT_TOKENS:
             raise ValueError("candidate refinement token is invalid")
+        if isinstance(self.expand_px, bool) or not isinstance(self.expand_px, int) or self.expand_px < 0:
+            raise ValueError("candidate expand pixels are invalid")
 
     def as_api_dict(self) -> dict[str, object]:
         return {
@@ -55,4 +58,5 @@ class Candidate:
             "refinement": self.refinement,
             "role": self.role.value,
             "forced": self.forced if self.role == CandidateRole.EXCLUDE else False,
+            "expandPx": self.expand_px,
         }

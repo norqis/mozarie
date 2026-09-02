@@ -3,6 +3,18 @@
 from __future__ import annotations
 
 import numpy as np
+import cv2
+
+
+def expand_mask(mask: np.ndarray, expand_px: int) -> np.ndarray:
+    """Expand a binary candidate mask in source-image pixels."""
+    if isinstance(expand_px, bool) or not isinstance(expand_px, int) or expand_px < 0:
+        raise ValueError("candidate expand pixels are invalid")
+    binary = np.asarray(mask > 0, dtype=np.uint8) * 255
+    if expand_px == 0:
+        return binary
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (expand_px * 2 + 1, expand_px * 2 + 1))
+    return cv2.dilate(binary, kernel)
 
 
 def compose_masks(

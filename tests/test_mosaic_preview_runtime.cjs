@@ -79,12 +79,12 @@ vm.runInNewContext(fs.readFileSync(canvasPath, "utf8"), context, { filename: can
 
   state.mosaicPending = true;
   const pendingOutput = worker.frame(first);
-  assert.equal(pendingOutput.closed, true, "a pending frame is closed without drawing");
-  assert.deepEqual(draws, [], "a pending frame is never drawn");
+  assert.equal(pendingOutput.closed, true, "a pending frame is closed after drawing");
+  assert.deepEqual(draws, ["output"], "a completed frame remains visible while the latest pending stroke is rendered");
   const newest = await worker.nextRender();
   const newestOutput = worker.frame(newest);
   assert.equal(newestOutput.closed, true, "the newest frame is closed after drawing");
-  assert.deepEqual(draws, ["output"], "only the exact newest frame is drawn");
+  assert.deepEqual(draws, ["output", "output"], "the completed and newest frames are both drawn in order");
 
   let resolveMask; let oldMask; let deferFirstMask = true; let signalMaskRequest;
   const maskRequested = new Promise((resolve) => { signalMaskRequest = resolve; });
@@ -149,7 +149,7 @@ vm.runInNewContext(fs.readFileSync(canvasPath, "utf8"), context, { filename: can
     assert.equal(state.mosaicPending, false, "each switch retains no pending frame");
     assert.equal(state.mosaicInFlightGeneration, 0, "each switch clears its active generation");
   }
-  assert.equal(draws.length - drawCountBeforeSoak, 100, "each image switch paints only its newest stroke or undo frame");
+  assert.equal(draws.length - drawCountBeforeSoak, 300, "each image switch draws every completed preview frame while keeping only one worker");
 
   // Preview scheduling is deliberately tolerant of each transient editor
   // state: no selected image, an active render, a stale source decode, and a
@@ -191,8 +191,9 @@ vm.runInNewContext(fs.readFileSync(canvasPath, "utf8"), context, { filename: can
   context.releaseMosaicPreview(); state.mosaicPreviewEnabled = true; state.currentImage = { width: 12, height: 9 }; state.currentId = "stroke"; state.activeStroke = { id: "stroke" };
   context.createImageBitmap = async (image) => bitmap(image === state.currentImage ? "source" : "mask");
   await context.rebuildMosaicPreview();
-  assert.equal(state.mosaicWorkerBusy, false); assert.equal(state.mosaicPending, true, "an active manual stroke defers preview rendering");
-  context.requestMosaicPreview(); assert.equal(state.mosaicPending, true, "requesting during a stroke only records pending work");
+  assert.equal(state.mosaicWorkerBusy, true); assert.equal(state.mosaicPending, false, "an active manual stroke starts a preview render immediately");
+  context.requestMosaicPreview(); assert.equal(state.mosaicPending, true, "a new stroke update retains one newest pending preview while the worker is busy");
+  const liveStroke = await state.mosaicWorker.nextRender(); state.mosaicWorker.frame(liveStroke);
   state.activeStroke = null; state.mosaicPreviewRequested = true; context.requestMosaicPreview();
   context.releaseMosaicPreview(); state.mosaicPreviewEnabled = true; state.currentImage = { width: 12, height: 9 }; state.currentId = "mask-stale";
   let resolveStaleMask; let staleMaskRequested;
@@ -217,7 +218,7 @@ vm.runInNewContext(fs.readFileSync(canvasPath, "utf8"), context, { filename: can
   context.releaseMosaicPreview(); state.mosaicPreviewEnabled = true; state.currentImage = { width: 12, height: 9 }; state.currentId = "raf-stroke"; state.activeStroke = null; state.mosaicPreviewRequested = false;
   context.requestAnimationFrame = (callback) => { state.activeStroke = { id: "late-stroke" }; callback(); return 1; };
   context.requestMosaicPreview();
-  assert.equal(state.mosaicPending, true, "a stroke starting before the scheduled preview frame leaves work pending");
+  assert.equal(state.mosaicWorkerBusy, true, "a stroke starting before the scheduled preview frame still starts its immediate preview");
   state.activeStroke = null;
 
   context.releaseMosaicPreview(); state.mosaicPreviewEnabled = true; state.currentImage = { width: 12, height: 9 }; state.currentId = "source-replaced";
@@ -243,6 +244,6 @@ vm.runInNewContext(fs.readFileSync(canvasPath, "utf8"), context, { filename: can
   assert.equal(counters.workers, counters.terminated, "all controlled workers are terminated");
   assert.equal(counters.closed, counters.bitmaps, "all source, mask, and output bitmaps are reclaimed");
   assert.ok(counters.peakWorkerCanvases <= 1, "at most one worker canvas bundle is live");
-  assert.ok(counters.workers <= 112, "100 switches and transient states create a bounded number of workers");
+  assert.ok(counters.workers <= 114, "100 switches and transient states create a bounded number of workers");
   console.log("test_mosaic_preview_runtime: passed");
 })().catch((error) => { console.error(error); process.exitCode = 1; });

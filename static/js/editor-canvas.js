@@ -586,21 +586,21 @@ function createMosaicWorker() {
       }
       if (data.type !== "frame") return;
       if (!activeFrame) { data.output?.close?.(); return; }
-      const hasPending = Boolean(state.mosaicPending || state.activeStroke);
+      const hasPending = Boolean(state.mosaicPending);
       state.mosaicWorkerBusy = false;
       state.mosaicPending = false;
       state.mosaicInFlightSourceId = "";
       state.mosaicInFlightGeneration = 0;
       let paintFailed = false;
       try {
-        if (!hasPending && state.currentImage && data.sourceId === state.mosaicSourceId && data.generation === state.mosaicPreviewGeneration) {
+        if (state.currentImage && data.sourceId === state.mosaicSourceId && data.generation === state.mosaicPreviewGeneration) {
           mosaicCtx.clearRect(0, 0, originalCanvas.width, originalCanvas.height);
           mosaicCtx.drawImage(data.output, 0, 0);
           render();
         }
       } catch { paintFailed = true; } finally { data.output?.close?.(); }
       if (paintFailed) return mosaicPreviewFailed();
-      if (hasPending && !state.activeStroke) void rebuildMosaicPreview();
+      if (hasPending) void rebuildMosaicPreview();
     };
     worker.onerror = () => { if (state.mosaicWorker === worker) mosaicPreviewFailed(); };
     return worker;
@@ -643,7 +643,6 @@ async function rebuildMosaicPreview() {
   state.mosaicWorkerBusy = true;
   const sourceId = await ensureMosaicPreviewSource(worker);
   if (!sourceId || !state.mosaicPreviewEnabled || state.mosaicWorker !== worker) { state.mosaicWorkerBusy = false; return; }
-  if (state.activeStroke) { state.mosaicWorkerBusy = false; state.mosaicPending = true; return; }
   // Requests received while the source bitmap was being prepared are already
   // represented by the mask below, so one current render is sufficient.
   state.mosaicPending = false;
@@ -657,7 +656,7 @@ async function rebuildMosaicPreview() {
     if (state.mosaicWorker !== worker || !state.mosaicPreviewEnabled) { mask.close?.(); state.mosaicWorkerBusy = false; state.mosaicInFlightSourceId = ""; state.mosaicInFlightGeneration = 0; return; }
     if (state.mosaicPending) {
       mask.close?.(); state.mosaicWorkerBusy = false; state.mosaicInFlightSourceId = ""; state.mosaicInFlightGeneration = 0;
-      if (!state.activeStroke) { state.mosaicPending = false; void rebuildMosaicPreview(); }
+      state.mosaicPending = false; void rebuildMosaicPreview();
       return;
     }
     worker.postMessage({ type: "render", sourceId, mask, width: originalCanvas.width, height: originalCanvas.height, blockSize: calculatedBlockSize(), generation }, [mask]);
@@ -667,13 +666,11 @@ async function rebuildMosaicPreview() {
 
 function requestMosaicPreview() {
   if (!state.mosaicPreviewEnabled || !state.currentImage) return;
-  if (state.activeStroke) { state.mosaicPending = true; return; }
   if (state.mosaicWorkerBusy) { state.mosaicPending = true; return; }
   if (state.mosaicPreviewRequested) return;
   state.mosaicPreviewRequested = true;
   requestAnimationFrame(() => {
     state.mosaicPreviewRequested = false;
-    if (state.activeStroke) { state.mosaicPending = true; return; }
     rebuildMosaicPreview();
   });
 }

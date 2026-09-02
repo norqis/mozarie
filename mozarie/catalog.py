@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
-from PIL import Image, UnidentifiedImageError
+from PIL import Image, PngImagePlugin, UnidentifiedImageError
 
 from .core import (
     IMAGE_SUFFIXES, IO_CHUNK_BYTES, MAX_BODY_BYTES, PNG_SIGNATURE,
@@ -27,6 +27,7 @@ from .core import (
 )
 from .domain import Candidate, CandidateRole
 from .image_io import _valid_color, decode_draft_masks, draft_manual_exclusion_forced, inspect_import_image, oriented_image_size, unique_session_import_destination
+from .masks import expand_mask
 from .runtime import patch_directml_sam_prompt_encoder, runtime_backend, torch_device
 
 class CatalogMixin:
@@ -55,7 +56,7 @@ class CatalogMixin:
         return Candidate(
             candidate_id=str(row["candidate_id"]), label_token=str(row["label_token"]), confidence=row["confidence"], mask_path=path,
             enabled=bool(row["enabled"]), color=str(row["color"]), source=str(row["source"]), origin=str(row["origin"]),
-            refinement=row["refinement"], role=CandidateRole(str(row["role"])), forced=bool(row["forced"]),
+            refinement=row["refinement"], role=CandidateRole(str(row["role"])), forced=bool(row["forced"]), expand_px=int(row["expand_px"]),
         )
 
     def _restore_workspace_candidates(self, records: list[ImageRecord]) -> None:
@@ -1095,6 +1096,7 @@ class CatalogMixin:
                     raise StaleMaskError("検出候補は既に更新されています。") from exc
         with Image.open(io.BytesIO(raw_mask)) as mask_image:
             alpha = mask_image.convert("L").point(lambda value: 255 if value else 0)
+            alpha = Image.fromarray(expand_mask(np.asarray(alpha, dtype=np.uint8), candidate.expand_px))
             rgba = Image.new("RGBA", alpha.size, (255, 255, 255, 0))
             rgba.putalpha(alpha)
             output = io.BytesIO()
@@ -1144,6 +1146,18 @@ class CatalogMixin:
                     candidate.color = color
                 if "forced" in payload:
                     candidate.forced = payload["forced"]
+                if "expandPx" in payload:
+                    expand_px = payload["expandPx"]
+                    if isinstance(expand_px, bool) or not isinstance(expand_px, int) or expand_px < 0:
+                        raise ClientError("候補の枠pxは0以上の整数で指定してください。", "input_invalid")
+                    if candidate.expand_px != expand_px:
+                        self.materialize_candidate_mask(candidate, image_id)
+                        with Image.open(candidate.mask_path) as mask_image:
+                            raw_mask = mask_image.convert("L")
+                            metadata = PngImagePlugin.PngInfo()
+                            metadata.add_text("mozarie_expand_px", str(expand_px))
+                            raw_mask.save(candidate.mask_path, format="PNG", pnginfo=metadata)
+                        candidate.expand_px = expand_px
                 return self._commit_candidate_snapshot(image_id, candidates, replace=False)
 
     def batch_update_candidates(self, image_id: str, payload: dict[str, Any]) -> int:

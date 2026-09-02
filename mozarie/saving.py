@@ -23,7 +23,7 @@ from .image_io import (
     decode_draft_masks, draft_manual_exclusion_forced, save_with_mask,
     unique_session_import_destination, write_rendered_copy,
 )
-from .masks import compose_masks
+from .masks import compose_masks, expand_mask
 
 class SavingMixin:
     @staticmethod
@@ -170,7 +170,7 @@ class SavingMixin:
                     try:
                         self.materialize_candidate_mask(candidate, image_id)
                         with Image.open(candidate.mask_path) as mask_image:
-                            candidate_mask = np.asarray(mask_image.convert("L"), dtype=np.uint8)
+                            candidate_mask = expand_mask(np.asarray(mask_image.convert("L"), dtype=np.uint8), candidate.expand_px)
                     except FileNotFoundError as exc:
                         with self.lock:
                             if self.images.get(image_id) is not None:

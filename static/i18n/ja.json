@@ -133,6 +133,8 @@
   "candidateLabel.hand": "手",
   "candidateLabel.fluid": "白い液",
   "candidates.manual": "手書き",
+  "candidates.expand": "枠",
+  "candidates.px": "px",
   "candidates.manualToggle": "手書きモザイクを使用",
   "candidates.toggleAll": "ON/OFF切替",
   "candidates.toggle": "{label}を使用",
