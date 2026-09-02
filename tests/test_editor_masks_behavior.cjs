@@ -304,6 +304,24 @@ assert.equal(state.manualExclusionEraseEnabled, true);
   assert.equal(oldMaskClosed, 1, "padding closes the replaced candidate bitmap exactly once");
 
   resetCandidateState();
+  const retainedBeforeStaleBitmap = retainedRevision; retainedRevision = null;
+  const currentMask = { close() { throw new Error("the current bitmap must stay owned by the editor"); } };
+  let staleBitmapClosed = 0;
+  const staleBitmap = { close() { staleBitmapClosed += 1; } };
+  state.candidateImages.set("apply", currentMask);
+  state.candidates[0].expandPx = 4;
+  context.api = async () => ({ candidateRevision: 10 });
+  context.fetchBitmap = async () => {
+    state.candidateUpdateVersions.set("image:apply", 99);
+    return staleBitmap;
+  };
+  await test.updateCandidate(state.candidates[0], true, true, undefined, 0);
+  assert.equal(staleBitmapClosed, 1, "a bitmap decoded for a superseded candidate mutation is closed");
+  assert.equal(state.candidateImages.get("apply"), currentMask, "a superseded candidate mutation never replaces the currently displayed bitmap");
+  assert.equal(retainedRevision, null, "a superseded bitmap fetch never publishes the returned candidate revision");
+  retainedRevision = retainedBeforeStaleBitmap;
+
+  resetCandidateState();
   test.renderCandidateRows();
   const lastRow = (className) => [...elements.values()].filter((node) => node.className === className).at(-1);
   const controlOrder = (row) => row.children.slice(1).map((node) => node.className);
