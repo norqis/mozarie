@@ -84,7 +84,7 @@ class TranslationContractTests(unittest.TestCase):
         candidate = Candidate("candidate", "penis", .9, Path("mask.png"), source="target", refinement=None, role=CandidateRole.APPLY)
         self.assertEqual(
             set(candidate.as_api_dict()),
-            {"id", "labelToken", "confidence", "enabled", "color", "source", "origin", "refinement", "role", "forced"},
+            {"id", "labelToken", "confidence", "enabled", "color", "source", "origin", "refinement", "role", "forced", "expandPx"},
         )
         for values in (("unknown", "auto", None), ("penis", "unknown", None), ("penis", "auto", "unknown")):
             with self.subTest(values=values), self.assertRaises(ValueError):

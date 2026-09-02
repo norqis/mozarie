@@ -485,12 +485,10 @@ class WorkspaceStore:
                     db.execute("DELETE FROM candidates WHERE image_id=? AND deleted=1", (image_id,))
                 else:
                     for candidate in candidates:
-                        if candidate.mask_path.is_file():
-                            mask = candidate.mask_path.read_bytes()
-                            self._require_png_mask(mask)
-                            db.execute("UPDATE candidates SET mask_png=?,enabled=?,color=?,forced=? WHERE image_id=? AND candidate_id=?", (mask, int(candidate.enabled), candidate.color, int(candidate.forced), image_id, candidate.candidate_id))
-                        else:
-                            db.execute("UPDATE candidates SET enabled=?,color=?,forced=? WHERE image_id=? AND candidate_id=?", (int(candidate.enabled), candidate.color, int(candidate.forced), image_id, candidate.candidate_id))
+                        # Normal candidate controls only alter metadata. Keep
+                        # the durable PNG BLOB untouched instead of rereading
+                        # a potentially lazy cache file.
+                        db.execute("UPDATE candidates SET enabled=?,color=?,forced=? WHERE image_id=? AND candidate_id=?", (int(candidate.enabled), candidate.color, int(candidate.forced), image_id, candidate.candidate_id))
                 self._update_manual_candidate_state(db, image_id, revision, {candidate.candidate_id for candidate in candidates}, effective)
                 db.execute("COMMIT")
             except Exception:

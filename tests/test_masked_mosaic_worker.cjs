@@ -51,6 +51,11 @@ assert.equal(response.generation, 8, "each render returns its own generation");
 const untouched = render([1, 2, 3, 255, 4, 5, 6, 255], [0, 0], 2, 1, 2, 9);
 assert.deepEqual([...untouched], [1, 2, 3, 255, 4, 5, 6, 255], "an unmasked block remains unchanged");
 
+const sparse = render([
+  10, 0, 0, 255, 20, 0, 0, 255, 30, 0, 0, 255, 40, 0, 0, 255, 50, 0, 0, 255,
+], [255, 0, 0, 0, 255], 5, 1, 2, 10);
+assert.deepEqual([...sparse], [10, 0, 0, 255, 20, 0, 0, 255, 30, 0, 0, 255, 40, 0, 0, 255, 50, 0, 0, 255], "sparse masks skip empty blocks inside their bounding rectangle");
+
 const releasable = { width: 1, height: 1, pixels: new Uint8ClampedArray([1, 2, 3, 255]), close() { this.closed = true; } };
 self.onmessage({ data: { type: "source", sourceId: "releasable", source: releasable, generation: 10 } });
 self.onmessage({ data: { type: "release" } });

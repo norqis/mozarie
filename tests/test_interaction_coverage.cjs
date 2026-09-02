@@ -16,6 +16,8 @@ class Element {
     this.classList = { toggle() {} };
   }
   setAttribute(key, value) { this.attributes.set(key, value); }
+  getAttribute(key) { return this.attributes.get(key) || null; }
+  append(child) { child.parentElement = this; }
   addEventListener(name, callback) { this.listeners.set(name, callback); }
   contains(value) { return value === this; }
   matches(value) { return value === ":popover-open" && this.open; }
@@ -117,9 +119,26 @@ vm.runInNewContext("globalThis.interactionTest={setTool,setBoundaryModeMenuOpen,
 const test = context.interactionTest;
 const event = (binding, type = "keydown") => ({ binding, type, currentTarget: element("#origin"), clientX: 30, clientY: 40, preventDefault() { this.prevented = true; }, stopPropagation() { this.stopped = true; } });
 const file = (name) => ({ name, size: 1, lastModified: 1 });
+const indexSource = fs.readFileSync(path.join(__dirname, "..", "static", "index.html"), "utf8");
+const styleSource = fs.readFileSync(path.join(__dirname, "..", "static", "style.css"), "utf8");
+const tolerancePanelCss = styleSource.match(/\.bucket-tolerance-panel\s*\{([^}]*)\}/)?.[1] || "";
 
 (async () => {
+  assert.match(indexSource, /id="bucketTool"[^>]*aria-controls="bucketToleranceControl"[^>]*aria-expanded="false"/, "the mosaic fill control owns its tolerance popover semantically");
+  assert.match(indexSource, /id="excludeBucketTool"[^>]*aria-controls="bucketToleranceControl"[^>]*aria-expanded="false"/, "the exclusion fill control owns the shared tolerance popover semantically");
+  assert.match(indexSource, /<output id="bucketToleranceValue" for="bucketTolerance">/, "the displayed tolerance is associated with its range input");
+  assert.match(tolerancePanelCss, /left:\s*0;/, "the tolerance panel anchors to the left edge on a narrow viewport");
+  assert.doesNotMatch(tolerancePanelCss, /transform:\s*translateX\(-50%\)/, "the tolerance panel does not overflow left by centering itself");
+  test.setTool("bucket");
+  assert.equal(element("#bucketTool").getAttribute("aria-expanded"), "true", "mosaic fill marks its tolerance control expanded");
+  assert.equal(element("#excludeBucketTool").getAttribute("aria-expanded"), "false", "only the active fill control is expanded");
+  assert.equal(element("#bucketToleranceControl").parentElement, element("#bucketToolAnchor"), "mosaic fill places the shared tolerance panel under its anchor");
+  test.setTool("exclude_bucket");
+  assert.equal(element("#bucketTool").getAttribute("aria-expanded"), "false", "changing to exclusion fill collapses mosaic fill semantics");
+  assert.equal(element("#excludeBucketTool").getAttribute("aria-expanded"), "true", "exclusion fill marks its tolerance control expanded");
+  assert.equal(element("#bucketToleranceControl").parentElement, element("#excludeBucketToolAnchor"), "exclusion fill moves the shared tolerance panel to its anchor");
   test.setTool("boundary"); test.setTool("brush");
+  assert.equal(element("#excludeBucketTool").getAttribute("aria-expanded"), "false", "leaving fill tools collapses the tolerance control");
   element("#boundaryModeMenu").hidden = false; document.activeElement = element("#boundaryModeMenu");
   assert.equal(test.closeBoundaryModeMenu({ restoreFocus: true }), true);
   test.setBoundaryModeMenuOpen(true); test.updateBrushSize(999); element("#applyDivisor").value = "4"; test.updateBlockSizeDisplay();

@@ -39,12 +39,13 @@ function renderCandidates() {
     const label = document.createElement("label"); label.className = "candidate-expand";
     const text = document.createElement("span"); text.textContent = t("candidates.expand");
     const input = document.createElement("input"); input.type = "number"; input.min = "0"; input.step = "1"; input.inputMode = "numeric";
+    const record = currentRecord(); input.max = String(Math.max(0, Number(record?.width) || 0, Number(record?.height) || 0));
     input.value = String(candidate.expandPx || 0); input.disabled = disabled;
     input.setAttribute("aria-label", t("candidates.expand"));
     const suffix = document.createElement("span"); suffix.textContent = t("candidates.px");
     input.addEventListener("change", async () => {
       const expandPx = Number(input.value);
-      if (!Number.isInteger(expandPx) || expandPx < 0) { input.value = String(candidate.expandPx || 0); return; }
+      if (!Number.isInteger(expandPx) || expandPx < 0 || expandPx > Number(input.max)) { input.value = String(candidate.expandPx || 0); return; }
       const previousExpandPx = candidate.expandPx || 0;
       if (expandPx === previousExpandPx || isBusy() || state.importing) return;
       const previousMaskStatus = state.maskStatus.has(state.currentId) ? state.maskStatus.get(state.currentId) : imageHasMask(currentRecord());

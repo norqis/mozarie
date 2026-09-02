@@ -35,6 +35,8 @@ class CandidateExpandTests(unittest.TestCase):
         self.assertEqual(int(expanded[2, 3]), 255)
         with self.assertRaises(ValueError):
             expand_mask(source, -1)
+        with self.assertRaises(ValueError):
+            expand_mask(source, 8)
 
     def test_new_candidate_png_records_zero_padding_without_changing_pixels(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -85,3 +87,21 @@ class CandidateExpandTests(unittest.TestCase):
             self.assertEqual(revision, 1)
             self.assertEqual(hydrated[0].expand_px, 0)
             self.assertEqual(WorkspaceStore(root).candidate_png(image_id, "candidate"), raw)
+
+    def test_png_padding_metadata_rejects_non_integer_or_noncanonical_values(self):
+        for value in ("bad", "-1", "01"):
+            with self.subTest(value=value):
+                raw = self._png()
+                with Image.open(io.BytesIO(raw)) as source:
+                    output = io.BytesIO(); metadata = PngImagePlugin.PngInfo()
+                    metadata.add_text("mozarie_expand_px", value)
+                    source.save(output, format="PNG", pnginfo=metadata)
+                with self.assertRaises(ValueError):
+                    WorkspaceStore._candidate_row({"mask_png": output.getvalue()})
+        with self.assertRaises(ValueError):
+            WorkspaceStore._candidate_row({"mask_png": "not-bytes"})
+
+    def test_candidate_rejects_non_integer_padding(self):
+        for value in (True, 1.5, -1):
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                Candidate("candidate", "penis", .9, Path("mask.png"), expand_px=value)

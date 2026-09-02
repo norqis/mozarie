@@ -668,6 +668,7 @@ async function runCandidateBlinkScenario(browser, expanded = false) {
       state.manualMaskPresent = true;
       addCtx.fillRect(0, 0, 2, 2); exclusionCtx.fillRect(2, 0, 2, 2); exclusionEraseCtx.fillRect(3, 0, 2, 2);
       renderCandidates();
+      document.querySelector(".candidate-row-apply .candidate-class").textContent = "Long English candidate label that must stay inside the row";
     });
     for (const width of [1024, 1280, 1920]) {
       await page.setViewportSize({ width, height: 900 });
@@ -675,8 +676,9 @@ async function runCandidateBlinkScenario(browser, expanded = false) {
       const apply = rows.find((item) => item.className.includes("candidate-row-manual-apply"));
       const exclude = rows.find((item) => item.className.includes("candidate-row-manual-exclude") && !item.className.includes("erase"));
       const erase = rows.find((item) => item.className.includes("candidate-row-manual-exclude-erase"));
+      const detectedApply = rows.find((item) => item.className.includes("candidate-row-apply") && !item.className.includes("manual"));
       assert.deepEqual([apply?.children, exclude?.children, erase?.children], [5, 6, 5], `real Chromium candidate row control counts are stable at ${width}px`);
-      assert.equal([apply, exclude, erase].every((item) => !item.overflow && item.hit && item.grid.split(" ").length === item.children), true, `real Chromium candidate rows do not wrap, overflow, or lose hits at ${width}px`);
+      assert.equal([detectedApply, apply, exclude, erase].every((item) => !item.overflow && item.hit && item.grid.split(" ").length === item.children), true, `real Chromium candidate rows do not wrap, overflow, or lose hits at ${width}px (${JSON.stringify({ detectedApply, apply, exclude, erase })})`);
     }
 
     await page.locator("#brushTool").click();
@@ -2526,8 +2528,26 @@ async function main() {
     await page.locator("#boundaryTool").click();
     await page.locator("#bucketTool").click();
     assert.equal(await page.locator("#bucketToleranceControl").isVisible(), true, "bucket tolerance appears for the fill tool");
+    assert.deepEqual(await page.evaluate(() => ({
+      bucket: $("#bucketTool").getAttribute("aria-expanded"), exclude: $("#excludeBucketTool").getAttribute("aria-expanded"),
+      controls: [$("#bucketTool").getAttribute("aria-controls"), $("#excludeBucketTool").getAttribute("aria-controls")],
+      outputFor: $("#bucketToleranceValue").getAttribute("for"),
+    })), { bucket: "true", exclude: "false", controls: ["bucketToleranceControl", "bucketToleranceControl"], outputFor: "bucketTolerance" }, "the active fill button exposes the shared tolerance range semantically");
+    for (const width of [1024, 360]) {
+      await page.setViewportSize({ width, height: 768 });
+      for (const selector of ["#bucketTool", "#excludeBucketTool"]) {
+        await page.locator(selector).click();
+        const panel = await page.locator("#bucketToleranceControl").evaluate((node) => {
+          const rect = node.getBoundingClientRect(); return { left: rect.left, right: rect.right, width: innerWidth };
+        });
+        assert.ok(panel.left >= 0 && panel.right <= panel.width, `${width}px ${selector} tolerance panel stays within the viewport (${JSON.stringify(panel)})`);
+      }
+    }
+    await page.setViewportSize({ width: 1280, height: 900 });
+    assert.deepEqual(await page.evaluate(() => [$("#bucketTool").getAttribute("aria-expanded"), $("#excludeBucketTool").getAttribute("aria-expanded")]), ["false", "true"], "switching fill controls updates both expanded states");
     await page.locator("#brushTool").click();
     assert.equal(await page.locator("#bucketToleranceControl").isVisible(), false, "bucket tolerance hides when switching away from fill");
+    assert.deepEqual(await page.evaluate(() => [$("#bucketTool").getAttribute("aria-expanded"), $("#excludeBucketTool").getAttribute("aria-expanded")]), ["false", "false"], "leaving the fill tools collapses both tolerance controls");
     for (const selector of ["#removeAndNextButton", "#hideAndNextButton"]) assert.equal(await page.locator(selector).isDisabled(), true, `${selector} is disabled without a selected image`);
     assert.equal(await page.locator("[data-candidate-batch]").evaluateAll((buttons) => buttons.every((button) => button.disabled)), true, "candidate batch actions are disabled without a selected image or candidate");
     await selectFixtureImage(page, pageErrors, consoleErrors);
@@ -3938,7 +3958,11 @@ async function main() {
   }
 }
 
-main().catch((error) => {
-  console.error(error);
-  process.exitCode = 1;
-});
+if (require.main === module) {
+  main().catch((error) => {
+    console.error(error);
+    process.exitCode = 1;
+  });
+}
+
+module.exports = { closeServer, runCandidateBlinkScenario, startFixtureServer };

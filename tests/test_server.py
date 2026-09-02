@@ -325,6 +325,39 @@ class MozarieTests(unittest.TestCase):
                 after = tuple(db.execute("SELECT removed_candidate_ids,candidate_revision,has_effective_mask FROM manual_edits WHERE image_id=?", (image_id,)).fetchone())
             self.assertEqual(after, before)
 
+    def test_candidate_padding_rejects_more_than_the_image_long_edge(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            Image.new("RGB", (16, 10), "white").save(root / "source.png")
+            state = self.new_state()
+            image_id = state.set_root(str(root))[0]["id"]
+            mask_path = state.cache_dir / image_id / "candidate.png"
+            mask_path.parent.mkdir(parents=True, exist_ok=True)
+            Image.new("L", (16, 10), 255).save(mask_path)
+            state.candidates[image_id] = [Candidate("candidate", "penis", 0.9, mask_path)]
+            self.commit_candidates(state, image_id)
+            with self.assertRaisesRegex(ClientError, "0から16") as raised:
+                state.set_candidate_state(image_id, "candidate", {"expandPx": 17})
+            self.assertEqual(raised.exception.error_code, "input_invalid")
+
+    def test_candidate_padding_updates_the_durable_png_without_source_readback(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            Image.new("RGB", (16, 10), "white").save(root / "source.png")
+            state = self.new_state()
+            image_id = state.set_root(str(root))[0]["id"]
+            mask_path = state.cache_dir / image_id / "candidate.png"
+            mask_path.parent.mkdir(parents=True, exist_ok=True)
+            Image.new("L", (16, 10), 255).save(mask_path)
+            state.candidates[image_id] = [Candidate("candidate", "penis", 0.9, mask_path)]
+            self.commit_candidates(state, image_id)
+            revision = state.set_candidate_state(image_id, "candidate", {"expandPx": 3})
+            self.assertEqual(state.candidates[image_id][0].expand_px, 3)
+            self.assertGreater(revision, 1)
+            with Image.open(io.BytesIO(state.workspace_store.candidate_png(image_id, "candidate"))) as mask:
+                self.assertEqual(mask.text.get("mozarie_expand_px"), "3")
+            self.assertGreater(state.set_candidate_state(image_id, "candidate", {"expandPx": 3}), revision)
+
     def test_candidate_mutation_updates_manual_revision_removed_ids_and_effective_together(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory); Image.new("RGB", (16, 16), "white").save(root / "source.png")

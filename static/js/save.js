@@ -461,7 +461,7 @@ async function restoreSourceHandle(access, snapshot, deleted) {
 }
 
 async function removeCompletedImagesFromCatalog(imageIds, initialOrder, recordsById) {
-  if (!imageIds.length) return;
+  if (!imageIds.length) return null;
   const currentId = state.currentId;
   const currentIndex = initialOrder.indexOf(currentId);
   const scroll = [["#gallery", $("#gallery")], ["#overviewGrid", $("#overviewGrid")]]
@@ -473,7 +473,10 @@ async function removeCompletedImagesFromCatalog(imageIds, initialOrder, recordsB
     ...(data.removedImageIds || []),
     ...imageIds.filter((imageId) => !remainingIds.has(imageId)),
   ]);
-  if (!removedIds.size) return;
+  if (!removedIds.size) return null;
+  const cleanupGeneration = state.imageGeneration;
+  const removesPendingImage = Boolean(state.pendingImageId && removedIds.has(state.pendingImageId));
+  if (removesPendingImage) { ++state.imageGeneration; abortCatalogLoads(); }
 
   for (const imageId of removedIds) {
     state.selectedImageIds.delete(imageId);
@@ -495,6 +498,7 @@ async function removeCompletedImagesFromCatalog(imageIds, initialOrder, recordsB
   if (state.contextMenuImageId && removedIds.has(state.contextMenuImageId)) closeCatalogContextMenu({ restoreFocus: false });
   if (!state.images.length) { state.batchMode = false; clearBatchSelection(); }
 
+  let selectedReplacement = false;
   if (currentId && removedIds.has(currentId)) {
     releaseCandidateBundles(currentId);
     state.currentId = null;
@@ -520,10 +524,11 @@ async function removeCompletedImagesFromCatalog(imageIds, initialOrder, recordsB
     const survivors = new Set(state.images.map((image) => image.id));
     const nextId = [...initialOrder.slice(currentIndex + 1), ...initialOrder.slice(0, currentIndex).reverse()]
       .find((imageId) => survivors.has(imageId));
-    if (nextId) await selectImage(nextId, true, { saveCurrentDraft: false });
+    if (nextId) { selectedReplacement = true; await selectImage(nextId, true, { saveCurrentDraft: false }); }
     else updateNavigationControls();
   }
   updateActionButtons();
+  return cleanupGeneration + Number(removesPendingImage) + Number(selectedReplacement);
 }
 
 async function runBrowserSave(imageIds, suffix, deleteOriginal, mode = "copy", removeAfterSave = false) {
@@ -806,7 +811,7 @@ async function finishApplyJob(job) {
   if (state.applyFinishing) return;
   state.applyFinishing = true;
   let reconciled = false;
-  const generation = ++state.imageGeneration;
+  let generation = ++state.imageGeneration;
   const catalogEpoch = state.catalogEpoch;
   try {
     const keepCurrent = state.currentId;
@@ -832,7 +837,8 @@ async function finishApplyJob(job) {
     state.applyTargetIds = requestedImageIds;
     const removableImageIds = completedImageIds;
     if (job.removeAfterSave && removableImageIds.length) {
-      await removeCompletedImagesFromCatalog(removableImageIds, previousOrder, previousImagesById);
+      const expectedGeneration = await removeCompletedImagesFromCatalog(removableImageIds, previousOrder, previousImagesById);
+      if (expectedGeneration !== null) generation = expectedGeneration;
       if (!isCurrentGeneration(generation) || !isCurrentCatalogEpoch(catalogEpoch)) return;
     }
     const removedAfterSave = Boolean(job.removeAfterSave && removableImageIds.length);

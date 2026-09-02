@@ -117,7 +117,7 @@ class SettingsTests(unittest.TestCase):
             self.assertTrue((root / "config" / "local.json").is_file())
             self.assertEqual(json.loads((root / "config" / "defaults.json").read_text(encoding="utf-8")), defaults)
 
-    def test_legacy_local_settings_gain_fill_tolerance_default(self):
+    def test_local_settings_gain_fill_tolerance_default(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory); config = root / "config"; config.mkdir()
             defaults = default_settings()
@@ -167,11 +167,15 @@ class SettingsTests(unittest.TestCase):
         invalid_tool_position = json.loads(json.dumps(valid)); invalid_tool_position["display"]["tool_position"] = "center"
         invalid_fluid_exclusion = json.loads(json.dumps(valid)); invalid_fluid_exclusion["detection"]["fluid_exclusion_enabled"] = "yes"
         invalid_import_parallelism = json.loads(json.dumps(valid)); invalid_import_parallelism["importing"]["parallelism"] = 11
+        invalid_fill_float = json.loads(json.dumps(valid)); invalid_fill_float["editing"]["fill_color_tolerance"] = 1.5
+        invalid_fill_bool = json.loads(json.dumps(valid)); invalid_fill_bool["editing"]["fill_color_tolerance"] = True
         with self.assertRaises(SettingsError): validate_settings(invalid_provider)
         with self.assertRaises(SettingsError): validate_settings(invalid_threshold)
         with self.assertRaises(SettingsError): validate_settings(invalid_tool_position)
         with self.assertRaises(SettingsError): validate_settings(invalid_fluid_exclusion)
         with self.assertRaises(SettingsError): validate_settings(invalid_import_parallelism)
+        with self.assertRaises(SettingsError): validate_settings(invalid_fill_float)
+        with self.assertRaises(SettingsError): validate_settings(invalid_fill_bool)
 
     def test_invalid_hex_color_is_rejected(self):
         invalid = default_settings()

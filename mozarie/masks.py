@@ -8,7 +8,7 @@ import cv2
 
 def expand_mask(mask: np.ndarray, expand_px: int) -> np.ndarray:
     """Expand a binary candidate mask in source-image pixels."""
-    if isinstance(expand_px, bool) or not isinstance(expand_px, int) or expand_px < 0:
+    if isinstance(expand_px, bool) or not isinstance(expand_px, int) or expand_px < 0 or expand_px > max(mask.shape):
         raise ValueError("candidate expand pixels are invalid")
     binary = np.asarray(mask > 0, dtype=np.uint8) * 255
     if expand_px == 0:

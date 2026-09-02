@@ -1129,7 +1129,7 @@ class CatalogMixin:
         candidate.mask_path.write_bytes(raw)
 
     def set_candidate_state(self, image_id: str, candidate_id: str, payload: dict[str, Any]) -> int:
-        self.image_for_id(image_id)
+        record = self.image_for_id(image_id)
         with self.image_io_lock(image_id):
             with self.lock:
                 if self._has_active_worker():
@@ -1138,6 +1138,7 @@ class CatalogMixin:
                 candidate = next((item for item in candidates if item.candidate_id == candidate_id), None)
                 if candidate is None:
                     raise ClientError("検出候補が見つかりません。", "catalog_changed")
+                replace_snapshot = False
                 if "forced" in payload and (candidate.role != CandidateRole.EXCLUDE or not isinstance(payload["forced"], bool)):
                     raise ClientError("除外候補の強制指定が正しくありません。", "input_invalid")
                 if "enabled" in payload:
@@ -1153,8 +1154,9 @@ class CatalogMixin:
                     candidate.forced = payload["forced"]
                 if "expandPx" in payload:
                     expand_px = payload["expandPx"]
-                    if isinstance(expand_px, bool) or not isinstance(expand_px, int) or expand_px < 0:
-                        raise ClientError("候補の枠pxは0以上の整数で指定してください。", "input_invalid")
+                    max_expand_px = max(record.width, record.height)
+                    if isinstance(expand_px, bool) or not isinstance(expand_px, int) or not 0 <= expand_px <= max_expand_px:
+                        raise ClientError(f"候補の枠pxは0から{max_expand_px}までの整数で指定してください。", "input_invalid")
                     if candidate.expand_px != expand_px:
                         self.materialize_candidate_mask(candidate, image_id)
                         with Image.open(candidate.mask_path) as mask_image:
@@ -1163,7 +1165,11 @@ class CatalogMixin:
                             metadata.add_text("mozarie_expand_px", str(expand_px))
                             raw_mask.save(candidate.mask_path, format="PNG", pnginfo=metadata)
                         candidate.expand_px = expand_px
-                return self._commit_candidate_snapshot(image_id, candidates, replace=False)
+                        # This is the only candidate mutation that changes its
+                        # durable PNG bytes. Ordinary metadata toggles must not
+                        # reread the source mask.
+                        replace_snapshot = True
+                return self._commit_candidate_snapshot(image_id, candidates, replace=replace_snapshot)
 
     def batch_update_candidates(self, image_id: str, payload: dict[str, Any]) -> int:
         """Apply one simple bulk operation and advance the revision once."""

@@ -12,8 +12,16 @@ function setTool(tool) {
   $("#boundaryTool").setAttribute("aria-pressed", String(boundaryTools.has(tool)));
   const tolerancePanel = $("#bucketToleranceControl");
   const toleranceAnchor = tool === "bucket" ? $("#bucketToolAnchor") : (tool === "exclude_bucket" ? $("#excludeBucketToolAnchor") : null);
+  tolerancePanel.style.left = ""; tolerancePanel.style.right = "";
   if (toleranceAnchor && tolerancePanel.parentElement !== toleranceAnchor) toleranceAnchor.append?.(tolerancePanel);
   tolerancePanel.hidden = !toleranceAnchor;
+  if (toleranceAnchor) {
+    const anchor = toleranceAnchor.getBoundingClientRect(); const panel = tolerancePanel.getBoundingClientRect();
+    const overflow = anchor.left + panel.width - window.innerWidth + 8;
+    if (overflow > 0) tolerancePanel.style.left = `${-overflow}px`;
+  }
+  $("#bucketTool").setAttribute("aria-expanded", String(tool === "bucket"));
+  $("#excludeBucketTool").setAttribute("aria-expanded", String(tool === "exclude_bucket"));
   canvas.style.cursor = "default";
   updateBoundaryActions(); render(); updateBrushCursor();
   if (focusedInBoundaryMenu) focusCanvas();

@@ -139,6 +139,9 @@ def validate_settings(value: Any) -> dict[str, Any]:
         detection.get("fluid_exclusion_enabled"), "detection.fluid_exclusion_enabled"
     )
     exclude_forced_default = _expect_bool(detection.get("exclude_forced_default"), "detection.exclude_forced_default")
+    fill_color_tolerance = editing.get("fill_color_tolerance")
+    if isinstance(fill_color_tolerance, bool) or not isinstance(fill_color_tolerance, int) or not 0 <= fill_color_tolerance <= 255:
+        raise SettingsError("editing.fill_color_tolerance must be an integer between 0 and 255")
     tool_position = display.get("tool_position")
     if tool_position not in {"left", "top", "right", "bottom"}:
         raise SettingsError("display.tool_position must be left, top, right, or bottom")
@@ -187,7 +190,7 @@ def validate_settings(value: Any) -> dict[str, Any]:
             "parallelism": int(_expect_number(importing.get("parallelism"), "importing.parallelism", 1, 10)),
         },
         "editing": {
-            "fill_color_tolerance": int(_expect_number(editing.get("fill_color_tolerance"), "editing.fill_color_tolerance", 0, 255)),
+            "fill_color_tolerance": fill_color_tolerance,
         },
         "detection": {
             "mode": mode,

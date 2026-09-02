@@ -249,7 +249,7 @@ assert.equal(state.manualExclusionEraseEnabled, true);
     state.blinkCandidateIds = new Set(); state.blinkModes = new Map(); state.blinkPhase = false; state.blinkTimer = null;
     state.manualMaskPresent = true; state.manualEnabled = true; state.manualExclusionEnabled = true; state.manualExclusionEraseEnabled = true;
     addCtx.pixels = true; exclusionCtx.pixels = true; exclusionEraseCtx.pixels = true;
-    state.images = [{ id: "image", assetVersion: "a", candidateRevision: 4, candidateCount: 2, enabledCandidateCount: 1 }];
+    state.images = [{ id: "image", width: 100, height: 80, assetVersion: "a", candidateRevision: 4, candidateCount: 2, enabledCandidateCount: 1 }];
     state.history = []; state.historyIndex = 0; state.historyRemovedCandidateIds = new Set(); state.historyCandidateIds = new Set(["apply", "exclude"]);
     context.confirmationRequired = () => false; context.confirmAction = async () => true;
     context.isBusy = () => false; context.reconcileCurrentCandidates = async () => false;
@@ -311,6 +311,13 @@ assert.equal(state.manualExclusionEraseEnabled, true);
   assert.deepEqual(controlOrder(lastRow("candidate-row candidate-row-exclude")), ["candidate-toggle", "candidate-display-toggle", "candidate-effective-toggle", "candidate-expand", "candidate-forced", "candidate-delete"], "exclusion rows retain ON/OFF, detection range, applied range, padding, force, delete order");
   assert.deepEqual(controlOrder(lastRow("candidate-row candidate-row-manual candidate-row-manual-apply")), ["candidate-toggle", "candidate-display-toggle", "candidate-effective-toggle", "candidate-delete"], "manual apply rows retain the same keyboard tab order");
   assert.deepEqual(controlOrder(lastRow("candidate-row candidate-row-manual candidate-row-manual-exclude")), ["candidate-toggle", "candidate-display-toggle", "candidate-effective-toggle", "candidate-forced", "candidate-delete"], "manual exclusion rows retain the same keyboard tab order");
+  const paddingInput = lastRow("candidate-row candidate-row-apply").children.find((node) => node.className === "candidate-expand").children[1];
+  assert.equal(paddingInput.max, "100", "candidate padding cannot exceed the current image long edge");
+  const callsBeforeInvalidPadding = candidateCalls.length;
+  paddingInput.value = "101";
+  await paddingInput.listeners.get("change")();
+  assert.equal(candidateCalls.length, callsBeforeInvalidPadding, "out-of-range padding does not call the candidate API");
+  assert.equal(paddingInput.value, "0", "out-of-range padding restores the persisted value");
   for (const row of [lastRow("candidate-row candidate-row-apply"), lastRow("candidate-row candidate-row-exclude")]) {
     for (const button of row.children.slice(1).filter((node) => node.className !== "candidate-expand")) assert.equal(typeof button.listeners.get("click"), "function", "each ordered candidate control remains keyboard-operable");
   }
