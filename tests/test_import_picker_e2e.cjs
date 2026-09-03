@@ -775,6 +775,7 @@ async function runCandidateBlinkScenario(browser, expanded = false) {
     await padding.click();
     const paddingPopover = page.locator("#candidatePaddingPopover");
     const paddingInput = page.locator("#candidatePaddingInput");
+    const maximumPadding = Number(await paddingInput.getAttribute("max"));
     assert.equal(await paddingPopover.evaluate((node) => node.matches(":popover-open")), true, "one shared padding popover opens from the candidate row");
     assert.equal(await paddingInput.evaluate((node) => document.activeElement === node), true, "opening focuses the numeric value for immediate replacement");
     const beforeInvalid = scenario.candidateUpdates.length;
@@ -792,7 +793,7 @@ async function runCandidateBlinkScenario(browser, expanded = false) {
     assert.equal(scenario.candidateUpdates.length, beforeInvalid, "repeated arrow keys never commit the draft");
     await paddingInput.fill(""); await page.keyboard.press("ArrowUp"); assert.equal(await paddingInput.inputValue(), "1", "ArrowUp recovers an invalid empty value from the persisted value");
     await page.locator("#candidatePaddingReset").click();
-    for (const invalid of ["0.1", "-1", "410"]) {
+    for (const invalid of ["0.1", "-1", String(maximumPadding + 1)]) {
       await paddingInput.fill(invalid); await page.locator("#candidatePaddingConfirm").click();
       assert.equal(await paddingInput.getAttribute("aria-invalid"), "true", `padding ${invalid} is exposed as invalid`);
       assert.equal(await paddingPopover.evaluate((node) => node.matches(":popover-open")), true, "invalid padding keeps the editor open");
@@ -806,9 +807,9 @@ async function runCandidateBlinkScenario(browser, expanded = false) {
     await page.waitForFunction((count) => window.fetch && state.candidates.find((item) => item.id === "candidate-blink-apply")?.expandPx === 1, beforeInvalid);
     assert.equal(scenario.candidateUpdates.length, beforeInvalid + 1, "Enter commits padding exactly once");
     assert.equal(scenario.candidateUpdates.at(-1).update.expandPx, 1, "one-pixel padding is persisted in source-image pixels");
-    await row.locator(".candidate-padding-button").click(); await paddingInput.fill("409");
+    await row.locator(".candidate-padding-button").click(); await paddingInput.fill(String(maximumPadding));
     await page.locator("#candidatePane .inspector-heading").click();
-    await page.waitForFunction(() => state.candidates.find((item) => item.id === "candidate-blink-apply")?.expandPx === 409);
+    await page.waitForFunction((maximum) => state.candidates.find((item) => item.id === "candidate-blink-apply")?.expandPx === maximum, maximumPadding);
     assert.equal(scenario.candidateUpdates.length, beforeInvalid + 2, "valid outside-click commits the maximum exactly once");
     await row.locator(".candidate-padding-button").click(); await page.locator("#candidatePaddingReset").click(); await page.locator("#candidatePaddingConfirm").click();
     await page.waitForFunction(() => state.candidates.find((item) => item.id === "candidate-blink-apply")?.expandPx === 0);
