@@ -435,6 +435,20 @@ class MozarieTests(unittest.TestCase):
                 with self.subTest(value=value), self.assertRaises(ClientError):
                     state.batch_update_candidates(image_id, {"role": "apply", "operation": "set_padding", "expandPx": value})
 
+    def test_batch_candidate_padding_rejects_an_empty_role_and_skips_an_identical_write(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); Image.new("RGB", (16, 10), "white").save(root / "source.png")
+            state = self.new_state(); image_id = state.set_root(str(root))[0]["id"]
+            mask_path = state.cache_dir / image_id / "apply.png"; mask_path.parent.mkdir(parents=True, exist_ok=True)
+            Image.new("L", (16, 10), 255).save(mask_path)
+            state.candidates[image_id] = [Candidate("apply", "penis", .9, mask_path, expand_px=4)]
+            revision = self.commit_candidates(state, image_id)
+            with self.assertRaisesRegex(ClientError, "更新する候補") as missing:
+                state.batch_update_candidates(image_id, {"role": "exclude", "operation": "set_padding", "expandPx": 4})
+            self.assertEqual(missing.exception.error_code, "candidate_not_found")
+            self.assertEqual(state.batch_update_candidates(image_id, {"role": "apply", "operation": "set_padding", "expandPx": 4}), revision)
+            self.assertEqual(state.candidates[image_id][0].expand_px, 4)
+
     def test_batch_candidate_padding_undo_redo_and_restart_restore_only_its_role(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory); Image.new("RGB", (20, 12), "white").save(root / "source.png")

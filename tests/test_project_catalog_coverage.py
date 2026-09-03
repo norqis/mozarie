@@ -418,6 +418,7 @@ class ProjectCatalogCoverageTests(unittest.TestCase):
             "candidates": [
                 {"id": "apply", "mask": apply, "enabled": True, "role": "apply", "forced": False, "expandPx": 0},
                 {"id": "exclude", "mask": exclude, "enabled": True, "role": "exclude", "forced": True, "expandPx": 0},
+                {"id": "unforced", "mask": self.png(pixel=(7, 7)), "enabled": True, "role": "exclude", "forced": False, "expandPx": 0},
                 {"id": "disabled", "mask": self.png(pixel=(3, 3)), "enabled": False, "role": "apply", "forced": False, "expandPx": 0},
                 {"id": "removed", "mask": self.png(pixel=(4, 4)), "enabled": True, "role": "apply", "forced": False, "expandPx": 0},
             ],
