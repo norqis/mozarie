@@ -3409,7 +3409,7 @@ async function main() {
       await deleteCandidate(candidate); const afterDelete = state.removedCandidateIds.has(candidate.id) && state.history.length === 1 && currentRecord().candidateCount === 0;
       restoreSnapshot(0); const undo = !state.removedCandidateIds.has(candidate.id); restoreSnapshot(1); const redo = state.removedCandidateIds.has(candidate.id);
       for (let index = 0; index < 13; index += 1) recordHistoryOperation({ kind: "removeCandidates", ids: [`trim-${index}`] });
-      const trimmed = state.history.length === 12 && state.historyRemovedCandidateIds.has("trim-0");
+      const trimmed = state.history.length > 12 && !state.historyRemovedCandidateIds.has("trim-0");
       state.removedCandidateIds.delete(candidate.id);
       renderCandidates();
       document.querySelector('[data-candidate-effective-toggle="apply"]').click();
@@ -3417,7 +3417,7 @@ async function main() {
       state.candidates = original.candidates; state.candidateImages = original.images; state.removedCandidateIds = original.removed; state.history = original.history; state.historyIndex = original.index; state.historyRemovedCandidateIds = original.baseRemoved; state.historyCandidateIds = original.baseCandidates; state.settings.confirmations.candidateDelete = original.settings;
       return { afterDelete, undo, redo, trimmed, effective, cleared };
     });
-    assert.deepEqual(editorHistoryAndDisplay, { afterDelete: true, undo: true, redo: true, trimmed: true, effective: true, cleared: false }, `soft deletion keeps undo/redo and selection failure preserves the current display state: ${JSON.stringify(editorHistoryAndDisplay)}`);
+    assert.deepEqual(editorHistoryAndDisplay, { afterDelete: true, undo: true, redo: true, trimmed: true, effective: true, cleared: false }, `durable undo/redo and selection failure preserve the current display state: ${JSON.stringify(editorHistoryAndDisplay)}`);
     const candidateDisplayLifecycle = await page.evaluate(async () => {
       const original = {
         candidates: state.candidates, images: state.candidateImages, removed: state.removedCandidateIds,

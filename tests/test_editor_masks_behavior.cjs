@@ -477,9 +477,9 @@ assert.equal(state.manualExclusionEraseEnabled, true);
   ]) {
     for (let index = 0; index < 5; index += 1) test.recordHistoryOperation(operation);
   }
-  assert.equal(state.history.length, 12, "history trimming retains the newest twelve operations");
-  assert.equal(state.historyBaseDirty, true, "trimmed operations become part of the immutable history base");
-  state.importing = true; test.restoreSnapshot(0); assert.equal(state.historyIndex, 12, "history restoration is blocked while importing");
+  assert.equal(state.history.length, 15, "durable project history keeps every operation");
+  assert.equal(state.historyBaseDirty, true, "the initial base remains available for durable history");
+  state.importing = true; test.restoreSnapshot(0); assert.equal(state.historyIndex, 15, "history restoration is blocked while importing");
   state.importing = false; test.restoreSnapshot(0); assert.equal(state.historyIndex, 0, "history restoration rebuilds the active image state");
 
   // Exercise the actual controls rendered for manual and detected masks.  The
@@ -785,7 +785,7 @@ assert.equal(state.manualExclusionEraseEnabled, true);
   ];
   state.historyRemovedCandidateIds = new Set(); state.historyCandidateIds = new Set(["apply", "exclude"]);
   test.trimHistory();
-  assert.equal(state.history.length, 12, "history trimming folds every older operation into its base snapshot");
+  assert.equal(state.history.length, 15, "durable project history does not discard older operations");
   state.historyRemovedCandidateIds = null; state.historyCandidateIds = null;
   test.rebuildManualMaskFromHistory();
   assert.ok(state.removedCandidateIds.has("apply"), "rebuild treats candidates missing from a history base as removed");
