@@ -102,7 +102,13 @@ class DetectionMixin:
         with self.inference_lock:
             self._require_supported_gpu()
             records, catalog_generation = self._records_for_ids_with_catalog(image_ids)
+            for record in records:
+                self._assert_image_editable(record.image_id)
             targets = _read_target_classes(target_classes or set(self.settings["detection"]["targets"]))
+            # Every successfully published result belongs to one undo group.
+            # The worker still commits each image as it finishes, so detection
+            # progress and cancellation remain responsive.
+            self._detection_history_group = uuid.uuid4().hex
             args: tuple[Any, ...] = (confidence, _read_detection_parallelism(parallelism))
             if targets != TARGET_CLASSES:
                 args = (*args, targets)
@@ -268,7 +274,7 @@ class DetectionMixin:
                                 self._discard_candidates(candidates)
                                 return
                             try:
-                                self._commit_candidate_snapshot(record.image_id, [*boundary_candidates, *candidates], replace=True)
+                                self._commit_candidate_snapshot(record.image_id, [*boundary_candidates, *candidates], replace=True, history_group=getattr(self, "_detection_history_group", None))
                             except Exception:
                                 # The durable transaction did not publish this
                                 # run: remove every new final-path mask.  The

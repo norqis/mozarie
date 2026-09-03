@@ -499,3 +499,13 @@ except (WorkspaceOpenError, sqlite3.DatabaseError) as exc:
     STATE_STARTUP_ERROR = exc
 else:
     atexit.register(STATE.shutdown)
+
+
+def recreate_workspace() -> StudioState:
+    """Explicit recovery action; source images are never part of this deletion."""
+    global STATE, STATE_STARTUP_ERROR
+    WorkspaceStore.recreate(APP_DIR / "data")
+    STATE = StudioState()
+    STATE_STARTUP_ERROR = None
+    atexit.register(STATE.shutdown)
+    return STATE

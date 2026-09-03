@@ -124,6 +124,38 @@ class WorkspaceTests(unittest.TestCase):
             store = WorkspaceStore(Path(directory))
             self.assertIsNone(store.manual("missing", lambda value: value))
 
+    def test_history_restores_one_image_and_discards_its_redo_after_new_edit(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = WorkspaceStore(Path(directory)); catalog = store.ensure_catalog()
+            image_id = str(store.reconcile_images(catalog, [SimpleNamespace(relative_path="001.png", size_bytes=1, mtime_ns=1, width=4, height=4)])["001.png"]["image_id"])
+            before = store.history_state(image_id)
+            payload = {"add": "", "exclusion": "", "exclusionErase": "", "removedCandidateIds": [], "hasEffectiveMask": False, "history": {}}
+            store.save_manual(image_id, payload, lambda _value: None)
+            store.record_history(image_id, before, store.history_state(image_id))
+            self.assertEqual(store.history_status(image_id), {"canUndo": True, "canRedo": False})
+            self.assertEqual(store.restore_history(image_id, "undo"), [image_id])
+            self.assertIsNone(store.manual(image_id, lambda value: value))
+            self.assertEqual(store.restore_history(image_id, "redo"), [image_id])
+            self.assertIsNotNone(store.manual(image_id, lambda value: value))
+            store.restore_history(image_id, "undo")
+            store.save_manual(image_id, {**payload, "manualEnabled": False}, lambda _value: None)
+            store.record_history(image_id, before, store.history_state(image_id))
+            self.assertEqual(store.history_status(image_id), {"canUndo": True, "canRedo": False})
+
+    def test_history_group_restores_every_affected_image(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = WorkspaceStore(Path(directory)); catalog = store.ensure_catalog()
+            records = [SimpleNamespace(relative_path=f"{index}.png", size_bytes=1, mtime_ns=1, width=4, height=4) for index in range(2)]
+            ids = [str(value["image_id"]) for value in store.reconcile_images(catalog, records).values()]
+            payload = {"add": "", "exclusion": "", "exclusionErase": "", "removedCandidateIds": [], "hasEffectiveMask": False, "history": {}}
+            group = "detection"
+            for image_id in ids:
+                before = store.history_state(image_id); store.save_manual(image_id, payload, lambda _value: None)
+                store.record_history(image_id, before, store.history_state(image_id), group_id=group)
+            self.assertEqual(set(store.restore_history(ids[0], "undo")), set(ids))
+            self.assertTrue(all(store.manual(image_id, lambda value: value) is None for image_id in ids))
+            self.assertEqual(set(store.restore_history(ids[1], "redo")), set(ids))
+
     def test_future_database_is_not_touched(self):
         with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as directory:
             root = Path(directory)
@@ -225,26 +257,16 @@ class WorkspaceTests(unittest.TestCase):
                     WorkspaceStore(path.parent)
                 self.assertEqual(path.read_bytes(), before)
 
-    def test_server_exits_with_one_recovery_message_for_a_corrupt_workspace(self):
-        source_root = Path(__file__).resolve().parents[1]
+    def test_explicit_recreate_removes_only_workspace_database_files(self):
         with tempfile.TemporaryDirectory() as directory:
-            app = Path(directory) / "app"
-            app.mkdir()
-            shutil.copy2(source_root / "server.py", app / "server.py")
-            shutil.copy2(source_root / "updater.py", app / "updater.py")
-            shutil.copytree(source_root / "mozarie", app / "mozarie")
-            shutil.copytree(source_root / "config", app / "config")
-            data = app / "data"; data.mkdir()
+            data = Path(directory) / "data"; data.mkdir()
             database = data / "workspaces.sqlite3"; database.write_bytes(b"not sqlite")
-            before = database.read_bytes()
-            result = subprocess.run(
-                [sys.executable, "-X", "utf8", "server.py", "--port", "0"], cwd=app,
-                capture_output=True, text=True, encoding="utf-8", timeout=20,
-            )
-            self.assertEqual(result.returncode, 1)
-            self.assertIn("作業データを開けません", result.stderr)
-            self.assertNotIn("Traceback", result.stderr)
-            self.assertEqual(database.read_bytes(), before)
+            wal = Path(f"{database}-wal"); wal.write_bytes(b"wal")
+            shm = Path(f"{database}-shm"); shm.write_bytes(b"shm")
+            source = Path(directory) / "source.png"; source.write_bytes(b"source")
+            WorkspaceStore.recreate(data)
+            self.assertFalse(database.exists()); self.assertFalse(wal.exists()); self.assertFalse(shm.exists())
+            self.assertEqual(source.read_bytes(), b"source")
 
     def test_empty_candidate_set_keeps_nonzero_revision_after_restart(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -325,10 +347,7 @@ class WorkspaceTests(unittest.TestCase):
                 return connection
 
             store._connect = counted_connect  # type: ignore[method-assign]
-            self.assertEqual(store.best_catalog_for_manifest(entries, "f" * 32), catalog)
-            selects = [statement for statement in statements if statement.lstrip().upper().startswith("SELECT")]
-            self.assertEqual(len(selects), 2)
-            self.assertIn("workspace_manifest_entries", selects[0])
+            self.assertIsNone(store.best_catalog_for_manifest(entries, "f" * 32))
 
     def test_schema_type_or_default_tampering_is_rejected_without_mutation(self):
         with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as directory:
