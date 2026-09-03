@@ -29,6 +29,7 @@ const testFiles = [
   "tests/test_gallery_save_coverage.cjs",
   "tests/test_interaction_coverage.cjs",
   "tests/test_import_picker_e2e.cjs",
+  "tests/test_padding_splitter_e2e.cjs",
   "tests/test_flood_fill_worker.cjs",
   "tests/test_masked_mosaic_worker.cjs",
   "tests/test_mosaic_preview_runtime.cjs",

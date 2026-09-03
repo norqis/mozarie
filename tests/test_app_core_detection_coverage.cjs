@@ -28,7 +28,7 @@ class Element {
     this.className = "";
     this.isConnected = true;
     this.offsetParent = {};
-    this.classList = { toggle() {} };
+    this.classList = { toggle() {}, add() {}, remove() {} };
   }
   addEventListener(name, callback) {
     const callbacks = this.listenerLists.get(name) || [];
@@ -119,13 +119,14 @@ async function testBoundApplicationEvents() {
     setTimeout(callback) { callback(); return 1; }, api: async () => ({ kind: "detect", state: "running" }), currentRecord: () => state.currentImage,
     isHidden: (image) => Boolean(image?.hidden), isReviewed: () => false, pointFromEvent: (event) => ({ x: event.clientX || 1, y: event.clientY || 1 }),
     clampPoint: (point) => point, compareEventSide: () => "right", compareEventOffset: () => 0, normaliseDivisor: () => 32,
+    compareSplitLimits: () => ({ fixed: false, minimum: .2, maximum: .8 }), clampCompareSplit: (value) => Math.max(.2, Math.min(.8, value)), persistCompareSplit: note("persistCompareSplit"),
     detectionTargets: () => ["penis"], detectionConfidence: () => .5, canDetectBoundary: () => Boolean(context.canBoundary),
     hasBoundaryDraft: () => Boolean(context.hasDraft), polygonVertexAt: () => -1, completedPolygonVertexAt: () => null,
     polygonIsValid: () => true, polygonRoi: () => ({ left: 1 }), roiFromPoints: () => ({ left: 1 }), pointForRoi: () => ({ x: 1, y: 1 }),
     rectangleDraftAt: () => null, boundaryDragStarted: () => true, imageHasMask: () => true,
   };
   for (const name of [
-    "openSettings", "selectSettingsTab", "moveSettingsTab", "saveSettings", "resetSettings", "chooseSettingsOutputDirectory", "chooseSettingsModelFile", "startModelDownload", "cancelModelDownload", "beginModelDownload", "syncProviderSelection", "markModelStatusDirty", "selectSamVariant", "startUpdate", "handleToolRailKeydown", "setToolRailTabStop", "setModelCardEnabled", "setHandSegmentationAvailable", "setPrecisionDetectionEnabled", "refreshSettingsStatus", "setFluidExclusionEnabled", "pickImageFiles", "pickImageDirectory", "importDroppedFiles", "loadFolder", "openDetectionDialog", "validateDetectionTargets", "runDetection", "saveAll", "saveCurrent", "setDisplayMode", "fitImage", "updateCompareSplitter", "render", "updateBrushCursor", "updateBrushSize", "setHidden", "clearMasks", "closeBatchMoreMenus", "clearCatalog", "renderGallery", "setViewMode", "runNavigationAction", "moveCurrentBy", "reviewAndMoveNext", "removeImageFromCatalog", "hideAndMoveNext", "runSelectionAction", "clearBatchSelection", "renderOverview", "updateSelectionActionBar", "batchCandidateOperation", "toggleCandidateDisplay", "toggleCandidateEffective", "renderShortcutBindings", "setTool", "setBoundaryModeMenuOpen", "addBoundaryCandidate", "cancelBoundary", "setMosaicPreviewEnabled", "requestMosaicPreview", "updateBlockSizeDisplay", "setDetectionConfidence", "syncDetectionTargetSwitch", "startDetectionFromDialog", "restoreSnapshot", "resizeRenderCanvas", "refreshApplyTargets", "chooseOutputDirectory", "syncApplyMode", "controlApply", "startApplyFromDialog", "chooseSingleOutputDirectory", "syncSingleSaveMode", "startSingleSave", "showProcessing", "updateProgress", "scheduleJobPoll", "showUserError", "cancelDetection", "setReviewed", "closeCatalogContextMenu", "copyContextMenuImagePath", "setGalleryDropOverlay", "beginBoundaryBrushStroke", "appendBoundaryBrushPoint", "beginManualStroke", "appendManualStrokePoint", "fillAt", "completeManualStroke", "cancelManualStroke", "completeBoundaryBrushStroke", "flushRender", "focusElement", "closeBoundaryModeMenu", "cancelFillWork", "handleWindowKeydown", "addBoundaryDraft", "loadTranslations", "updateBoundaryActions", "setSettingsForm"
+    "openSettings", "selectSettingsTab", "moveSettingsTab", "saveSettings", "resetSettings", "chooseSettingsOutputDirectory", "chooseSettingsModelFile", "startModelDownload", "cancelModelDownload", "beginModelDownload", "syncProviderSelection", "markModelStatusDirty", "selectSamVariant", "startUpdate", "handleToolRailKeydown", "setToolRailTabStop", "setModelCardEnabled", "setHandSegmentationAvailable", "setPrecisionDetectionEnabled", "refreshSettingsStatus", "setFluidExclusionEnabled", "pickImageFiles", "pickImageDirectory", "importDroppedFiles", "loadFolder", "openDetectionDialog", "validateDetectionTargets", "runDetection", "saveAll", "saveCurrent", "setDisplayMode", "fitImage", "updateCompareSplitter", "render", "updateBrushCursor", "updateBrushSize", "setHidden", "clearMasks", "closeBatchMoreMenus", "clearCatalog", "renderGallery", "setViewMode", "runNavigationAction", "moveCurrentBy", "reviewAndMoveNext", "removeImageFromCatalog", "hideAndMoveNext", "runSelectionAction", "clearBatchSelection", "renderOverview", "updateSelectionActionBar", "batchCandidateOperation", "toggleCandidateDisplay", "toggleCandidateEffective", "renderShortcutBindings", "setTool", "setBoundaryModeMenuOpen", "addBoundaryCandidate", "cancelBoundary", "setMosaicPreviewEnabled", "requestMosaicPreview", "updateBlockSizeDisplay", "setDetectionConfidence", "syncDetectionTargetSwitch", "startDetectionFromDialog", "restoreSnapshot", "resizeRenderCanvas", "refreshApplyTargets", "chooseOutputDirectory", "syncApplyMode", "controlApply", "startApplyFromDialog", "chooseSingleOutputDirectory", "syncSingleSaveMode", "startSingleSave", "showProcessing", "updateProgress", "scheduleJobPoll", "showUserError", "cancelDetection", "setReviewed", "closeCatalogContextMenu", "copyContextMenuImagePath", "setGalleryDropOverlay", "beginBoundaryBrushStroke", "appendBoundaryBrushPoint", "beginManualStroke", "appendManualStrokePoint", "fillAt", "completeManualStroke", "cancelManualStroke", "completeBoundaryBrushStroke", "flushRender", "focusElement", "closeBoundaryModeMenu", "cancelFillWork", "handleWindowKeydown", "addBoundaryDraft", "loadTranslations", "updateBoundaryActions", "setSettingsForm", "initCandidatePaddingPopover"
   ]) context[name] = note(name);
   context.openSettings = async () => { calls.push(["openSettings"]); };
   context.toolRailItems = () => [element("toolRailItem")]; context.modelDownloadPoll = null;
@@ -174,6 +175,8 @@ async function testApplicationStartupPaths() {
   const { document, element } = browserFixture();
   const state = { settings: null, images: [], view: { scale: 1, x: 0, y: 0 }, displayMode: "single", compareSplit: .5 };
   const apiResults = [];
+  let animationFrame = null;
+  let animationFrameRequests = 0;
   const context = {
     console, Promise, Map, Set, Array, Object, Number, String, Boolean, Math, Error,
     document,
@@ -195,15 +198,18 @@ async function testApplicationStartupPaths() {
     setNavigationShortcutsEnabled() {}, scheduleJobPoll() {}, updateBrushSize() {}, resizeRenderCanvas() {},
     updateHistoryButtons() {}, updateNavigationControls() {}, updateActionButtons() {}, resetCatalog(images) { state.images = images; },
     setStatusKey() {}, checkForUpdate() {}, updateBrushSize() {}, updateBrushCursor() {}, updateCompareSplitter() {}, render() {},
-    t: (key) => key, requestAnimationFrame(callback) { callback(); }, setTimeout(callback) { callback(); return 1; },
+    t: (key) => key, requestAnimationFrame(callback) { animationFrame = callback; animationFrameRequests += 1; return animationFrameRequests; }, cancelAnimationFrame() { animationFrame = null; }, setTimeout(callback) { callback(); return 1; },
     isBusy: () => false,
     compareEventOffset: () => 0,
+    compareSplitLimits: () => ({ fixed: false, minimum: .2, maximum: .8 }), clampCompareSplit: (value) => Math.max(.2, Math.min(.8, value)), persistCompareSplit() {},
+    cancelAnimationFrame() {},
     toolRail: element("#canvasToolRail"),
   };
   for (const name of [
     "saveSettings", "syncProviderSelection", "handleToolRailKeydown", "loadFolder", "saveAll", "saveCurrent",
     "startDetectionFromDialog", "startApplyFromDialog", "startSingleSave", "chooseSingleOutputDirectory", "syncSingleSaveMode", "rememberedOutputDirectoryHandle", "renderOutputDirectory", "chooseOutputDirectory", "importDroppedFiles", "cancelBoundary",
     "restoreSnapshot", "copyContextMenuImagePath", "modelDownloadPoll", "fitImage", "refreshApplyTargets",
+    "restoreCompareSplit", "initCandidatePaddingPopover",
   ]) context[name] = () => {};
   context.toolRailItems = () => [];
   context.setToolRailTabStop = () => {};
@@ -241,17 +247,25 @@ async function testApplicationStartupPaths() {
   state.displayMode = "compare";
   const splitter = element("#compareSplitter");
   const pointer = (clientX, pointerId = 7) => ({ button: 0, clientX, pointerId, preventDefault() {} });
+  const animationFramesBeforeDrag = animationFrameRequests;
   splitter.listeners.get("pointerdown")(pointer(30));
-  assert.equal(state.compareSplit, .3, "splitter pointerdown sets the compare ratio");
-  splitter.listeners.get("pointermove")(pointer(70));
-  assert.equal(state.compareSplit, .7, "splitter pointermove updates the captured compare ratio");
+  for (let index = 0; index < 1000; index += 1) splitter.listeners.get("pointermove")(pointer(index === 999 ? 70 : 30 + index % 40));
+  assert.equal(animationFrameRequests - animationFramesBeforeDrag, 1, "one thousand pointer moves schedule one animation frame");
+  assert.equal(state.compareSplit, .5, "drag movement waits for the next paint frame");
+  animationFrame();
+  assert.equal(state.compareSplit, .7, "the animation frame applies only the latest pointer position");
   splitter.listeners.get("pointerup")(pointer(70));
   assert.equal(splitter.hasPointerCapture(7), false, "splitter pointerup releases capture");
   splitter.listeners.get("pointerdown")(pointer(70));
+  splitter.listeners.get("pointermove")(pointer(40)); animationFrame();
   splitter.listeners.get("pointercancel")(pointer(70));
   assert.equal(splitter.hasPointerCapture(7), false, "splitter pointercancel releases capture");
+  assert.equal(state.compareSplit, .7, "pointer cancellation restores the ratio from before the drag");
+  splitter.listeners.get("pointerdown")(pointer(60)); splitter.listeners.get("lostpointercapture")(pointer(60));
+  assert.equal(state.compareSplit, .7, "lost pointer capture also rolls back the unfinished drag");
+  splitter.listeners.get("dblclick")({}); assert.equal(state.compareSplit, .5, "double-click restores a 50/50 split");
   for (const event of [
-    { key: "ArrowLeft", shiftKey: false, expected: .69 }, { key: "ArrowRight", shiftKey: true, expected: .74 },
+    { key: "ArrowLeft", shiftKey: false, expected: .49 }, { key: "ArrowRight", shiftKey: true, expected: .54 },
     { key: "Home", shiftKey: false, expected: .2 }, { key: "End", shiftKey: false, expected: .8 },
   ]) {
     splitter.listeners.get("keydown")({ ...event, preventDefault() {} });

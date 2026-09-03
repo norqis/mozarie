@@ -706,8 +706,8 @@ async function runCandidateBlinkScenario(browser, expanded = false) {
       const exclude = rows.find((item) => item.className.includes("candidate-row-manual-exclude") && !item.className.includes("erase"));
       const erase = rows.find((item) => item.className.includes("candidate-row-manual-exclude-erase"));
       const detectedApply = rows.find((item) => item.className.includes("candidate-row-apply") && !item.className.includes("manual"));
-      assert.deepEqual([apply?.children, exclude?.children, erase?.children], [5, 6, 5], `real Chromium candidate row control counts are stable at ${width}px`);
-      assert.equal([detectedApply, apply, exclude, erase].every((item) => !item.overflow && item.hit && item.grid.split(" ").length === item.children), true, `real Chromium candidate rows do not wrap, overflow, or lose hits at ${width}px (${JSON.stringify({ detectedApply, apply, exclude, erase })})`);
+      assert.deepEqual([apply?.children, exclude?.children, erase?.children], [2, 2, 2], `real Chromium candidate rows keep one heading and one action row at ${width}px`);
+      assert.equal([detectedApply, apply, exclude, erase].every((item) => !item.overflow && item.hit), true, `real Chromium candidate rows wrap actions without overflow or lost hits at ${width}px (${JSON.stringify({ detectedApply, apply, exclude, erase })})`);
     }
 
     await page.locator("#brushTool").click();
@@ -748,6 +748,59 @@ async function runCandidateBlinkScenario(browser, expanded = false) {
 
     if (expanded) {
     const excludeRow = page.locator('[data-candidate-blink-id="candidate-blink-exclude"]');
+    const padding = row.locator(".candidate-padding-button");
+    assert.equal(await row.locator('input[type="number"]').count(), 0, "candidate rows do not reserve permanent width for a padding input");
+    assert.equal(await padding.textContent(), "枠 0px", "the compact padding button includes its current value");
+    await padding.click();
+    const paddingPopover = page.locator("#candidatePaddingPopover");
+    const paddingInput = page.locator("#candidatePaddingInput");
+    assert.equal(await paddingPopover.evaluate((node) => node.matches(":popover-open")), true, "one shared padding popover opens from the candidate row");
+    assert.equal(await paddingInput.evaluate((node) => document.activeElement === node), true, "opening focuses the numeric value for immediate replacement");
+    const beforeInvalid = scenario.candidateUpdates.length;
+    await page.locator("#candidatePaddingDecrease").click(); assert.equal(await paddingInput.inputValue(), "0", "decrease clamps at zero without persistence");
+    await page.locator("#candidatePaddingIncrease").click(); assert.equal(await paddingInput.inputValue(), "1", "increase changes only the draft value");
+    await page.locator("#candidatePaddingDecrease").click(); assert.equal(await paddingInput.inputValue(), "0", "decrease returns the draft value to zero");
+    assert.equal(scenario.candidateUpdates.length, beforeInvalid, "step buttons do not persist before confirmation");
+    const scrollBeforeArrows = await page.evaluate(() => {
+      const list = document.querySelector("#candidateList"); list.style.height = "40px"; list.style.flex = "0 0 40px"; list.scrollTop = 20;
+      return { list: list.scrollTop, page: scrollY };
+    });
+    for (let index = 0; index < 12; index += 1) await page.keyboard.press("ArrowUp");
+    assert.equal(await paddingInput.inputValue(), "12", "repeated ArrowUp changes only the draft by one step per key");
+    assert.deepEqual(await page.evaluate(() => ({ list: document.querySelector("#candidateList").scrollTop, page: scrollY })), scrollBeforeArrows, "padding arrow keys do not scroll the candidate list or page");
+    assert.equal(scenario.candidateUpdates.length, beforeInvalid, "repeated arrow keys never commit the draft");
+    await paddingInput.fill(""); await page.keyboard.press("ArrowUp"); assert.equal(await paddingInput.inputValue(), "1", "ArrowUp recovers an invalid empty value from the persisted value");
+    await page.locator("#candidatePaddingReset").click();
+    for (const invalid of ["0.1", "-1", "410"]) {
+      await paddingInput.fill(invalid); await page.locator("#candidatePaddingConfirm").click();
+      assert.equal(await paddingInput.getAttribute("aria-invalid"), "true", `padding ${invalid} is exposed as invalid`);
+      assert.equal(await paddingPopover.evaluate((node) => node.matches(":popover-open")), true, "invalid padding keeps the editor open");
+      assert.equal(scenario.candidateUpdates.length, beforeInvalid, "invalid padding never reaches the candidate API");
+    }
+    await page.keyboard.press("Escape");
+    assert.equal(await page.evaluate((id) => document.activeElement?.dataset.candidatePaddingId === id, scenario.candidateId), true, "Escape cancels and restores focus to the invoking row");
+    await page.keyboard.press("Space"); assert.equal(await paddingPopover.evaluate((node) => node.matches(":popover-open")), true, "Space opens padding from the focused row button");
+    await page.keyboard.press("Escape"); await page.keyboard.press("Enter"); assert.equal(await paddingPopover.evaluate((node) => node.matches(":popover-open")), true, "Enter opens padding from the focused row button");
+    await paddingInput.fill("1"); await page.keyboard.press("Enter");
+    await page.waitForFunction((count) => window.fetch && state.candidates.find((item) => item.id === "candidate-blink-apply")?.expandPx === 1, beforeInvalid);
+    assert.equal(scenario.candidateUpdates.length, beforeInvalid + 1, "Enter commits padding exactly once");
+    assert.equal(scenario.candidateUpdates.at(-1).update.expandPx, 1, "one-pixel padding is persisted in source-image pixels");
+    await row.locator(".candidate-padding-button").click(); await paddingInput.fill("409");
+    await page.locator("#candidatePane .inspector-heading").click();
+    await page.waitForFunction(() => state.candidates.find((item) => item.id === "candidate-blink-apply")?.expandPx === 409);
+    assert.equal(scenario.candidateUpdates.length, beforeInvalid + 2, "valid outside-click commits the maximum exactly once");
+    await row.locator(".candidate-padding-button").click(); await page.locator("#candidatePaddingReset").click(); await page.locator("#candidatePaddingConfirm").click();
+    await page.waitForFunction(() => state.candidates.find((item) => item.id === "candidate-blink-apply")?.expandPx === 0);
+    assert.equal(scenario.candidateUpdates.length, beforeInvalid + 3, "reset and confirm commit zero exactly once");
+    await page.evaluate(() => { state.projectReadOnly = true; renderCandidates(); });
+    assert.equal(await row.locator(".candidate-padding-button").isDisabled(), true, "padding is disabled for a read-only completed project");
+    await page.evaluate(() => { state.projectReadOnly = false; state.candidateBatchPending.add(state.currentId); renderCandidates(); });
+    assert.equal(await row.locator(".candidate-padding-button").isDisabled(), true, "padding is disabled during a candidate batch mutation");
+    await page.evaluate(() => { state.candidateBatchPending.clear(); state.importing = true; renderCandidates(); });
+    assert.equal(await row.locator(".candidate-padding-button").isDisabled(), true, "padding is disabled during import");
+    await page.evaluate(() => { state.importing = false; state.saving = true; renderCandidates(); });
+    assert.equal(await row.locator(".candidate-padding-button").isDisabled(), true, "padding is disabled while the editor is busy");
+    await page.evaluate(() => { state.saving = false; renderCandidates(); });
     await excludeRow.locator(".candidate-display-toggle").click();
     await page.waitForFunction(() => state.blinkModes.get("candidate-blink-exclude") === "normal");
     await excludeRow.locator(".candidate-effective-toggle").click();
@@ -1776,8 +1829,8 @@ async function runControlLedger(page, fixtureUrl, contracts, dynamicContracts, f
   assert.equal(await page.locator("#compareSplitter").getAttribute("aria-valuenow"), "30", "pointer dragging fixes the compare split at 30 percent");
   await page.locator("#compareSplitter").focus(); await page.keyboard.press("Shift+ArrowRight");
   assert.equal(await page.locator("#compareSplitter").getAttribute("aria-valuenow"), "35", "Shift+Arrow adjusts the compare split by five percent");
-  await page.keyboard.press("Home"); assert.equal(await page.locator("#compareSplitter").getAttribute("aria-valuenow"), "20", "Home moves the compare split to its minimum");
-  await page.keyboard.press("End"); assert.equal(await page.locator("#compareSplitter").getAttribute("aria-valuenow"), "80", "End moves the compare split to its maximum");
+  await page.keyboard.press("Home"); assert.equal(await page.locator("#compareSplitter").getAttribute("aria-valuenow"), await page.locator("#compareSplitter").getAttribute("aria-valuemin"), "Home moves the compare split to its dynamic minimum");
+  await page.keyboard.press("End"); assert.equal(await page.locator("#compareSplitter").getAttribute("aria-valuenow"), await page.locator("#compareSplitter").getAttribute("aria-valuemax"), "End moves the compare split to its dynamic maximum");
   const splitterAfterKeys = await page.locator("#compareSplitter").boundingBox();
   await page.mouse.move(splitterAfterKeys.x + splitterAfterKeys.width / 2, splitterAfterKeys.y + splitterAfterKeys.height / 2); await page.mouse.down(); await page.mouse.move(compareCanvas.x + compareCanvas.width * .5, splitterAfterKeys.y + splitterAfterKeys.height / 2); await page.mouse.up();
   const compareBefore = await page.evaluate(() => ({ history: state.history.length, scale: state.view.scale, x: state.view.x, y: state.view.y, right: state.view.x + stage.clientWidth * state.compareSplit, singlePressed: $("#singleViewButton").getAttribute("aria-pressed"), comparePressed: $("#compareViewButton").getAttribute("aria-pressed") }));
@@ -1981,7 +2034,9 @@ async function runControlLedger(page, fixtureUrl, contracts, dynamicContracts, f
   const runningSaveCanvas = await page.locator("#editorCanvas").boundingBox();
   await page.mouse.move(runningSaveCanvas.x + runningSaveCanvas.width / 2, runningSaveCanvas.y + runningSaveCanvas.height / 2);
   await page.mouse.down(); await page.mouse.move(runningSaveCanvas.x + runningSaveCanvas.width / 2 + 8, runningSaveCanvas.y + runningSaveCanvas.height / 2 + 8); await page.mouse.up();
-  await page.waitForFunction(() => !document.querySelector("#saveAllButton").disabled); await click("saveAllButton"); await click("chooseOutputDirectoryButton"); await input("deleteOriginal", false);
+  await page.waitForFunction(() => !document.querySelector("#saveAllButton").disabled); await click("saveAllButton"); await click("chooseOutputDirectoryButton");
+  if (await page.locator("#deleteOriginal").isDisabled()) assert.equal(await page.locator("#deleteOriginal").isChecked(), false, "an unavailable source-delete action stays safely unchecked");
+  else await input("deleteOriginal", false);
   holdSaveRender(true); await click("applyStartButton");
   await page.waitForFunction(() => !document.querySelector("#applyPauseButton").hidden);
   await click("applyPauseButton"); await click("applyCancelButton"); releaseSaveRenders(); await page.waitForFunction(() => !state.saving); await click("applyCloseButton");

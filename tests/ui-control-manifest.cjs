@@ -5,6 +5,7 @@ const ids = `
 projectButton projectClose projectNew projectName projectOpenList projectSourceSelect projectResume projectComplete projectMosaicZip projectExcludeZip projectDelete projectCloseWorkspace projectListClose projectSort projectNameInput projectNameCancel sourceMismatchClear sourceMismatchCancel sameSourceOpen sameSourceSeparate sameSourceCancel projectDeleteCancel projectDeleteConfirm pickFolder detectAllButton saveAllButton folderPath loadFolderButton pickImages pickFolderFiles settingsButton updateToast batchMoreButton clearAllMasksButton clearCatalogButton galleryFilter overviewButton collapseGalleryButton
 brushTool bucketTool mosaicEraserTool eraserTool excludeBucketTool excludeEraserTool boundaryTool rectangleTool polygonTool boundaryBrushTool singleViewButton compareViewButton fitButton undoButton redoButton mosaicPreviewButton brushSize mosaicHelpButton divisor bucketTolerance
 previousImageButton nextImageButton removeAndNextButton hideAndNextButton reviewAndNextButton boundaryDetectButton boundaryCancelButton collapseInspectorButton detectCurrentButton saveButton downloadCurrentMosaicMask downloadCurrentExcludeMask clearCurrentMasksButton removeCurrentImageButton detectTargetPenis detectTargetPussy confidence
+candidatePaddingDecrease candidatePaddingInput candidatePaddingIncrease candidatePaddingReset candidatePaddingConfirm
 closeOverviewButton batchModeButton overviewQuery overviewFolder selectionActionsButton selectionClearButton toggleReviewMenuItem copyImagePathMenuItem removeImageMenuItem confirmNeverShow confirmAccept errorDialogClose
 detectParallelism dialogTargetPenis dialogTargetPussy detectConfidenceRange detectConfidenceNumber detectCancelButton detectStartButton
 settingsCloseButton settingsTabGeneral settingsTabModels settingsTabDisplay settingsTabShortcuts settingsTabConfirm settingsTabInfo settingsLanguage settingsPort settingsDefaultOutputDirectory settingsChooseOutputDirectory settingsImportParallelism settingsSaveParallelism settingsOpenBrowser settingsProvider settingsGpuDevice settingsTargetModel settingsNtd11Toggle settingsNtd11Model settingsSensitiveToggle settingsSensitiveModel settingsPrecisionToggle settingsSamType settingsSamModel settingsHandToggle settingsHandModel settingsHandSegmentationToggle settingsHandSegmentationModel settingsFluidToggle settingsApplyColor settingsExcludeColor settingsOpacity settingsMosaicPreview settingsExcludeForcedDefault settingsShortcutsEnabled confirmClearMasks confirmClearCatalog confirmRemoveImage confirmCandidateDelete confirmCandidateRoleDelete confirmOverwriteSource confirmDeleteSourceAfterCopy checkUpdateButton settingsResetButton settingsSaveButton
@@ -16,7 +17,7 @@ modelDownloadClose modelDownloadCopy modelDownloadStart modelDownloadCancel appl
 // id is a button-style activation.  The separate list keeps a new control from
 // silently bypassing the interaction sweep.
 const keyboardIds = new Set(`
-projectNameInput folderPath overviewQuery settingsDefaultOutputDirectory settingsTargetModel settingsNtd11Model settingsSensitiveModel settingsSamModel settingsHandModel settingsHandSegmentationModel applySuffix applyOutputDirectoryStatus singleSaveSuffix
+projectNameInput folderPath overviewQuery candidatePaddingInput settingsDefaultOutputDirectory settingsTargetModel settingsNtd11Model settingsSensitiveModel settingsSamModel settingsHandModel settingsHandSegmentationModel applySuffix applyOutputDirectoryStatus singleSaveSuffix
 `.trim().split(/\s+/));
 const changeIds = new Set(`
   projectSort sourceMismatchClear galleryFilter brushSize divisor bucketTolerance confidence detectTargetPenis detectTargetPussy detectParallelism dialogTargetPenis dialogTargetPussy detectConfidenceRange detectConfidenceNumber overviewFolder confirmNeverShow settingsLanguage settingsPort settingsImportParallelism settingsSaveParallelism settingsOpenBrowser settingsProvider settingsGpuDevice settingsNtd11Toggle settingsSensitiveToggle settingsPrecisionToggle settingsSamType settingsHandToggle settingsHandSegmentationToggle settingsFluidToggle settingsApplyColor settingsExcludeColor settingsOpacity settingsMosaicPreview settingsExcludeForcedDefault settingsShortcutsEnabled confirmClearMasks confirmClearCatalog confirmRemoveImage confirmCandidateDelete confirmCandidateRoleDelete confirmOverwriteSource confirmDeleteSourceAfterCopy applyTargetMode applyCopyMode applyOverwriteMode deleteOriginal applyDivisor singleSaveCopyMode singleSaveOverwriteMode singleSaveDeleteOriginal
@@ -69,6 +70,11 @@ const exemptReasons = {
   projectDeleteConfirm: "covered by the dedicated project UI runtime suite",
   downloadCurrentMosaicMask: "covered by the dedicated project UI runtime suite",
   downloadCurrentExcludeMask: "covered by the dedicated project UI runtime suite",
+  candidatePaddingDecrease: "covered by the real-browser candidate padding scenario",
+  candidatePaddingInput: "covered by the real-browser candidate padding scenario",
+  candidatePaddingIncrease: "covered by the real-browser candidate padding scenario",
+  candidatePaddingReset: "covered by the real-browser candidate padding scenario",
+  candidatePaddingConfirm: "covered by the real-browser candidate padding scenario",
 };
 
 function interactionFor(id) {
@@ -81,6 +87,8 @@ function interactionFor(id) {
     resultKind = "dialog"; scenario = "import";
   } else if (/^(detect|confidence|boundaryDetectButton|boundaryCancelButton)/.test(id)) {
     resultKind = "api"; scenario = "detection";
+  } else if (/^candidatePadding/.test(id)) {
+    resultKind = "dom"; scenario = "candidate";
   } else if (/^(save|apply|deleteOriginal|chooseOutputDirectoryButton|singleSave)/.test(id)) {
     resultKind = "api"; scenario = "save";
   } else if (/^(settings|modelDownload|modelHelp)/.test(id)) {

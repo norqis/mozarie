@@ -32,12 +32,16 @@ function element(selector) {
     const classes = new Set();
     elements.set(selector, {
       value: selector === "#bucketTolerance" ? "12" : "6", textContent: "", disabled: false,
-      children: [], dataset: {}, listeners: new Map(), attributes: new Map(), classList: {
+      children: [], dataset: {}, listeners: new Map(), attributes: new Map(), style: {}, isConnected: true, classList: {
         toggle(name, enabled) { if (enabled) classes.add(name); else classes.delete(name); },
         remove(...names) { names.forEach((name) => classes.delete(name)); },
         contains(name) { return classes.has(name); },
       }, setAttribute(name, value) { this.attributes.set(name, value); },
     addEventListener(name, callback) { this.listeners.set(name, callback); },
+    focus() { this.focused = true; }, select() { this.selected = true; },
+    getBoundingClientRect() { return { left: 10, right: 80, top: 10, bottom: 38, width: 70, height: 28 }; },
+    showPopover() { this.popoverOpen = true; }, hidePopover() { this.popoverOpen = false; },
+    matches(value) { return value === ":popover-open" && this.popoverOpen === true; }, contains(target) { return this === target || this.children.includes(target); },
     append(...children) { this.children.push(...children); }, appendChild(child) { this.children.push(child); },
     });
   }
@@ -73,7 +77,7 @@ const state = {
   maskStatus: new Map(), images: [{ id: "image", assetVersion: "a", candidateRevision: 4, candidateCount: 0, enabledCandidateCount: 0 }],
   history: [], historyIndex: 0, historyRestoreToken: 0, historyRemovedCandidateIds: new Set(), historyCandidateIds: new Set(["apply", "exclude"]), historyBaseDirty: false,
   boundaryDrafts: [{ id: "draft", type: "rectangle", roi: { left: 1, top: 2, right: 10, bottom: 12 } }], boundaryActiveId: "draft", boundaryPending: false,
-  importing: false, pendingImageId: null, fillPending: false, tool: "brush", view: { x: 0, y: 0, scale: 1 }, settings: { editing: { fill_color_tolerance: 12 } },
+  importing: false, projectReadOnly: false, pendingImageId: null, fillPending: false, tool: "brush", view: { x: 0, y: 0, scale: 1 }, settings: { editing: { fill_color_tolerance: 12 } },
 };
 
 let latestFillWorker = null;
@@ -84,7 +88,7 @@ class FillWorker {
 }
 
 const context = {
-  state, Math, Number, String, Boolean, Array, Map, Set, Promise, JSON, Uint8ClampedArray, encodeURIComponent, Worker: FillWorker,
+  state, Math, Number, String, Boolean, Array, Map, Set, Promise, JSON, Uint8ClampedArray, encodeURIComponent, Worker: FillWorker, innerWidth: 1200, innerHeight: 800,
   addCtx, exclusionCtx, exclusionEraseCtx, addCanvas: addCtx.canvas, exclusionCanvas: exclusionCtx.canvas, exclusionEraseCanvas: exclusionEraseCtx.canvas,
   historyAddCanvas: { ...historyAddCtx.canvas, getContext: () => historyAddCtx },
   historyExclusionCanvas: { ...historyExclusionCtx.canvas, getContext: () => historyExclusionCtx },
@@ -124,7 +128,7 @@ const context = {
 const masksPath = path.join(__dirname, "..", "static", "js", "editor-masks.js");
 const source = fs.readFileSync(masksPath, "utf8");
 vm.runInNewContext(source, context, { filename: masksPath });
-vm.runInNewContext("globalThis.masksTest = { candidateLabel, manualLayerPresence, renderCandidateRows: renderCandidates, candidateDisplayMode, candidateDisplayIdsForRole, syncCandidateDisplayButtons, syncCandidateBlinkTimer, setCandidateDisplayMode, toggleCandidateDisplay, toggleCandidateEffective, candidateDisplayToggle, candidateEffectiveToggle, clearCandidateBlink, clearCandidateMutationState, candidateMutationKey, nextCandidateMutationVersion, enqueueCandidateMutation, waitForCandidateMutations, updateCandidate, deleteCandidate, deleteManualMask, deleteManualExclusion, deleteManualExclusionErase, shouldBlinkNewManual, batchCandidateOperation, escapeHtml, pointFromEvent, clampPoint, boundaryDragStarted, polygonVertexAt, completedPolygonVertexAt, rectangleDraftAt, paintStrokeOnContexts, paintStrokePath, paintFillSpans, applyFillSpans, enableManualLayerForTool, beginManualStroke, appendManualStrokePoint, paintPendingManualStroke, completeManualStroke, cancelManualStroke, replayManualStroke, historyWeight, trimHistory, rebuildManualMaskFromHistory, recordHistoryOperation, resetHistoryToCurrentManualMask, restoreSnapshot, buildCombinedMask, addBoundaryCandidate, cancelBoundary, fillAt };\nrenderCandidates = globalThis.renderCandidates; render = globalThis.render;", context, { filename: "test-editor-masks-exports.js" });
+vm.runInNewContext("globalThis.masksTest = { candidateLabel, manualLayerPresence, renderCandidateRows: renderCandidates, candidatePaddingLimit, candidatePaddingValue, validateCandidatePadding, openCandidatePadding, closeCandidatePadding, commitCandidatePadding, changeCandidatePaddingDraft, candidateDisplayMode, candidateDisplayIdsForRole, syncCandidateDisplayButtons, syncCandidateBlinkTimer, setCandidateDisplayMode, toggleCandidateDisplay, toggleCandidateEffective, candidateDisplayToggle, candidateEffectiveToggle, clearCandidateBlink, clearCandidateMutationState, candidateMutationKey, nextCandidateMutationVersion, enqueueCandidateMutation, waitForCandidateMutations, updateCandidate, deleteCandidate, deleteManualMask, deleteManualExclusion, deleteManualExclusionErase, shouldBlinkNewManual, batchCandidateOperation, escapeHtml, pointFromEvent, clampPoint, boundaryDragStarted, polygonVertexAt, completedPolygonVertexAt, rectangleDraftAt, paintStrokeOnContexts, paintStrokePath, paintFillSpans, applyFillSpans, enableManualLayerForTool, beginManualStroke, appendManualStrokePoint, paintPendingManualStroke, completeManualStroke, cancelManualStroke, replayManualStroke, historyWeight, trimHistory, rebuildManualMaskFromHistory, recordHistoryOperation, resetHistoryToCurrentManualMask, restoreSnapshot, buildCombinedMask, addBoundaryCandidate, cancelBoundary, fillAt };\nrenderCandidates = globalThis.renderCandidates; render = globalThis.render;", context, { filename: "test-editor-masks-exports.js" });
 const test = context.masksTest;
 
 const candidateLabelFixtures = [
@@ -262,7 +266,7 @@ assert.equal(state.manualExclusionEraseEnabled, true);
   assert.equal(readCounts.get("excludeErase"), 1, "one candidate render reads the exclusion-erase layer once");
   assert.deepEqual({ ...batchPresences.at(-1) }, presentManualLayers, "the batch controls receive the same manual-layer presence used for candidate display");
   const eraseRow = [...elements.values()].find((node) => node.className === "candidate-row candidate-row-manual candidate-row-manual-exclude-erase");
-  const eraseToggle = eraseRow.children.find((node) => node.className === "candidate-toggle");
+  const eraseToggle = eraseRow.children[0].children.find((node) => node.className === "candidate-toggle");
   state.importing = true;
   eraseToggle.listeners.get("click")();
   assert.equal(state.manualExclusionEraseEnabled, true, "the manual exclusion-erase toggle ignores input while importing");
@@ -271,7 +275,7 @@ assert.equal(state.manualExclusionEraseEnabled, true);
   assert.equal(state.manualExclusionEraseEnabled, false, "the manual exclusion-erase toggle persists a user click after importing finishes");
 
   const excludeRow = [...elements.values()].find((node) => node.className === "candidate-row candidate-row-exclude");
-  const forcedToggle = excludeRow.children.find((node) => node.className === "candidate-forced");
+  const forcedToggle = excludeRow.children[1].children.find((node) => node.className === "candidate-forced");
   state.importing = true;
   forcedToggle.listeners.get("click")();
   assert.equal(state.candidates[1].forced, true, "the exclusion force toggle ignores input while importing");
@@ -324,28 +328,42 @@ assert.equal(state.manualExclusionEraseEnabled, true);
   resetCandidateState();
   test.renderCandidateRows();
   const lastRow = (className) => [...elements.values()].filter((node) => node.className === className).at(-1);
-  const controlOrder = (row) => row.children.slice(1).map((node) => node.className);
-  assert.deepEqual(controlOrder(lastRow("candidate-row candidate-row-apply")), ["candidate-toggle", "candidate-display-toggle", "candidate-effective-toggle", "candidate-expand", "candidate-delete"], "apply rows retain ON/OFF, detection range, applied range, padding, delete order");
-  assert.deepEqual(controlOrder(lastRow("candidate-row candidate-row-exclude")), ["candidate-toggle", "candidate-display-toggle", "candidate-effective-toggle", "candidate-expand", "candidate-forced", "candidate-delete"], "exclusion rows retain ON/OFF, detection range, applied range, padding, force, delete order");
-  assert.deepEqual(controlOrder(lastRow("candidate-row candidate-row-manual candidate-row-manual-apply")), ["candidate-toggle", "candidate-display-toggle", "candidate-effective-toggle", "candidate-delete"], "manual apply rows retain the same keyboard tab order");
-  assert.deepEqual(controlOrder(lastRow("candidate-row candidate-row-manual candidate-row-manual-exclude")), ["candidate-toggle", "candidate-display-toggle", "candidate-effective-toggle", "candidate-forced", "candidate-delete"], "manual exclusion rows retain the same keyboard tab order");
-  const paddingInput = lastRow("candidate-row candidate-row-apply").children.find((node) => node.className === "candidate-expand").children[1];
+  const controlOrder = (row) => [row.children[0].children[1].className, ...row.children[1].children.map((node) => node.className)];
+  assert.deepEqual(controlOrder(lastRow("candidate-row candidate-row-apply")), ["candidate-toggle", "candidate-display-toggle", "candidate-effective-toggle", "candidate-padding-button", "candidate-delete"], "apply rows use a compact two-tier control order");
+  assert.deepEqual(controlOrder(lastRow("candidate-row candidate-row-exclude")), ["candidate-toggle", "candidate-display-toggle", "candidate-effective-toggle", "candidate-padding-button", "candidate-forced", "candidate-delete"], "exclusion rows use the same two-tier control order");
+  assert.deepEqual(controlOrder(lastRow("candidate-row candidate-row-manual candidate-row-manual-apply")), ["candidate-toggle", "candidate-display-toggle", "candidate-effective-toggle", "candidate-delete"], "manual apply rows use the same two-tier skeleton");
+  assert.deepEqual(controlOrder(lastRow("candidate-row candidate-row-manual candidate-row-manual-exclude")), ["candidate-toggle", "candidate-display-toggle", "candidate-effective-toggle", "candidate-forced", "candidate-delete"], "manual exclusion rows use the same two-tier skeleton");
+  const paddingButton = lastRow("candidate-row candidate-row-apply").children[1].children.find((node) => node.className === "candidate-padding-button");
+  assert.equal(paddingButton.textContent, "candidates.paddingButton", "padding is represented by one compact localized button");
+  test.openCandidatePadding("apply", paddingButton);
+  const paddingInput = element("#candidatePaddingInput");
   assert.equal(paddingInput.max, "100", "candidate padding cannot exceed the current image long edge");
   const callsBeforeInvalidPadding = candidateCalls.length;
+  element("#candidateList").scrollTop = 41;
+  const arrowEvent = (key) => ({ key, prevented: false, stopped: false, preventDefault() { this.prevented = true; }, stopPropagation() { this.stopped = true; } });
+  paddingInput.value = "invalid";
+  const up = arrowEvent("ArrowUp"); context.handleCandidatePaddingKeydown(up);
+  assert.deepEqual([paddingInput.value, up.prevented, up.stopped, element("#candidateList").scrollTop], ["1", true, true, 41], "ArrowUp recovers from invalid input using the persisted value without scrolling the list");
+  paddingInput.value = "0"; const down = arrowEvent("ArrowDown"); context.handleCandidatePaddingKeydown(down);
+  assert.deepEqual([paddingInput.value, down.prevented, down.stopped], ["0", true, true], "ArrowDown clamps at zero");
+  paddingInput.value = "100"; context.handleCandidatePaddingKeydown(arrowEvent("ArrowUp")); assert.equal(paddingInput.value, "100", "ArrowUp clamps at the image long edge");
+  const pageDown = arrowEvent("PageDown"); context.handleCandidatePaddingKeydown(pageDown); assert.deepEqual([pageDown.prevented, pageDown.stopped], [false, false], "unrelated numeric-field keys retain their native behavior");
+  assert.equal(candidateCalls.length, callsBeforeInvalidPadding, "repeated padding keys remain draft-only");
   paddingInput.value = "101";
-  await paddingInput.listeners.get("change")();
+  assert.equal(await test.commitCandidatePadding(), false);
   assert.equal(candidateCalls.length, callsBeforeInvalidPadding, "out-of-range padding does not call the candidate API");
-  assert.equal(paddingInput.value, "0", "out-of-range padding restores the persisted value");
-  for (const row of [lastRow("candidate-row candidate-row-apply"), lastRow("candidate-row candidate-row-exclude")]) {
-    for (const button of row.children.slice(1).filter((node) => node.className !== "candidate-expand")) assert.equal(typeof button.listeners.get("click"), "function", "each ordered candidate control remains keyboard-operable");
-  }
+  assert.equal(paddingInput.attributes.get("aria-invalid"), "true", "invalid padding is exposed to assistive technology");
+  paddingInput.value = "3";
+  context.api = async (path, options) => { candidateCalls.push({ path, body: JSON.parse(options.body) }); return { candidateRevision: 11 }; };
+  assert.equal(await test.commitCandidatePadding(), true);
+  assert.equal(candidateCalls.length, callsBeforeInvalidPadding + 1, "one confirmed padding change calls the candidate API exactly once");
 
   const manualRows = [
     lastRow("candidate-row candidate-row-manual candidate-row-manual-apply"),
     lastRow("candidate-row candidate-row-manual candidate-row-manual-exclude"),
     lastRow("candidate-row candidate-row-manual candidate-row-manual-exclude-erase"),
   ];
-  assert.deepEqual(manualRows.map((row) => row.children[0].textContent), ["candidates.manual", "candidates.manual", "candidates.manual"], "every manual candidate row has the same role-neutral visible label");
+  assert.deepEqual(manualRows.map((row) => row.children[0].children[0].textContent), ["candidates.manual", "candidates.manual", "candidates.manual"], "every manual candidate row has the same role-neutral visible label");
 
   resetCandidateState();
   state.manualMaskPresent = false; exclusionCtx.pixels = false; exclusionEraseCtx.pixels = false;
@@ -357,8 +375,8 @@ assert.equal(state.manualExclusionEraseEnabled, true);
   assert.equal(metadataRows.length, candidateLabelFixtures.length, "every supported candidate token renders a candidate row");
   for (const [index, row] of metadataRows.entries()) {
     const candidate = candidateLabelFixtures[index];
-    const visibleLabel = row.children[0].children[0].textContent;
-    const actionNames = row.children
+    const visibleLabel = row.children[0].children[0].children[0].textContent;
+    const actionNames = [row.children[0].children[1], ...row.children[1].children]
       .filter((node) => node.className === "candidate-toggle" || node.className === "candidate-delete")
       .map((node) => node.attributes.get("aria-label"));
     assert.equal(visibleLabel, `candidateLabel.${candidate.labelToken}`, "the candidate row displays its localized class token");
@@ -490,7 +508,7 @@ assert.equal(state.manualExclusionEraseEnabled, true);
     element("#exclusionList").children = [];
   };
   const row = (list, className) => list.children.find((item) => item.className?.includes(className));
-  const control = (candidateRow, className) => candidateRow.children.find((item) => item.className === className);
+  const control = (candidateRow, className) => candidateRow.children.flatMap((item) => item.children || []).find((item) => item.className === className);
   const click = async (button) => button.listeners.get("click")();
 
   resetCandidateState(); resetLists();

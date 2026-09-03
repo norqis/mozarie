@@ -230,6 +230,7 @@ async function openSameSourceDialog(path) {
 }
 
 function bindEvents() {
+  initCandidatePaddingPopover();
   document.querySelectorAll("dialog").forEach((dialog) => dialog.addEventListener("keydown", trapModalTab));
   $("#projectButton").addEventListener("click", () => { renderProjectCurrent(); showModalFromInvoker($("#projectDialog")); });
   $("#projectClose").addEventListener("click", () => $("#projectDialog").close());
@@ -370,29 +371,58 @@ function bindEvents() {
   $("#bucketTolerance").addEventListener("input", (event) => setFillColorTolerance(event.currentTarget.value));
   $("#bucketTolerance").addEventListener("change", () => { void saveFillColorTolerance(); });
   const splitter = $("#compareSplitter");
+  let compareDrag = null;
   const setCompareSplit = (clientX) => {
     const rect = canvas.getBoundingClientRect();
-    state.compareSplit = Math.max(.2, Math.min(.8, (clientX - rect.left) / rect.width));
+    state.compareSplit = clampCompareSplit((clientX - rect.left) / rect.width, rect.width);
     updateCompareSplitter(); render(); updateBrushCursor();
   };
+  const flushCompareDrag = () => {
+    if (!compareDrag) return;
+    compareDrag.frame = 0;
+    if (compareDrag.latestX !== null) { const latestX = compareDrag.latestX; compareDrag.latestX = null; setCompareSplit(latestX); }
+  };
+  const scheduleCompareDrag = (clientX) => {
+    if (!compareDrag) return;
+    compareDrag.latestX = clientX;
+    if (!compareDrag.frame) compareDrag.frame = requestAnimationFrame(flushCompareDrag);
+  };
+  const finishCompareDrag = (event, commit) => {
+    if (!compareDrag || compareDrag.pointerId !== event.pointerId) return;
+    if (compareDrag.frame) cancelAnimationFrame(compareDrag.frame);
+    const initial = compareDrag.initial;
+    compareDrag.frame = 0;
+    if (commit) setCompareSplit(event.clientX);
+    else { state.compareSplit = initial; updateCompareSplitter(); render(); updateBrushCursor(); }
+    compareDrag = null; splitter.classList.remove("dragging");
+    if (splitter.hasPointerCapture(event.pointerId)) splitter.releasePointerCapture(event.pointerId);
+    if (commit) persistCompareSplit();
+  };
   splitter.addEventListener("pointerdown", (event) => {
-    if (state.displayMode !== "compare" || event.button !== 0) return;
-    event.preventDefault(); splitter.setPointerCapture(event.pointerId); setCompareSplit(event.clientX);
+    if (state.displayMode !== "compare" || event.button !== 0 || compareSplitLimits().fixed) return;
+    event.preventDefault(); compareDrag = { pointerId: event.pointerId, initial: state.compareSplit, latestX: null, frame: 0 };
+    splitter.classList.add("dragging"); splitter.setPointerCapture(event.pointerId); scheduleCompareDrag(event.clientX);
   });
   splitter.addEventListener("pointermove", (event) => {
-    if (splitter.hasPointerCapture(event.pointerId)) setCompareSplit(event.clientX);
+    if (compareDrag?.pointerId === event.pointerId && splitter.hasPointerCapture(event.pointerId)) scheduleCompareDrag(event.clientX);
   });
-  const releaseCompareSplitterPointer = (event) => { if (splitter.hasPointerCapture(event.pointerId)) splitter.releasePointerCapture(event.pointerId); };
-  splitter.addEventListener("pointerup", releaseCompareSplitterPointer);
-  splitter.addEventListener("pointercancel", releaseCompareSplitterPointer);
+  splitter.addEventListener("pointerup", (event) => finishCompareDrag(event, true));
+  splitter.addEventListener("pointercancel", (event) => finishCompareDrag(event, false));
+  splitter.addEventListener("lostpointercapture", (event) => finishCompareDrag(event, false));
+  splitter.addEventListener("dblclick", () => {
+    if (compareSplitLimits().fixed) return;
+    state.compareSplit = .5; updateCompareSplitter(); render(); updateBrushCursor(); persistCompareSplit();
+  });
   splitter.addEventListener("keydown", (event) => {
+    const limits = compareSplitLimits();
+    if (limits.fixed) return;
     const step = event.shiftKey ? .05 : .01;
-    if (event.key === "ArrowLeft") state.compareSplit = Math.max(.2, state.compareSplit - step);
-    else if (event.key === "ArrowRight") state.compareSplit = Math.min(.8, state.compareSplit + step);
-    else if (event.key === "Home") state.compareSplit = .2;
-    else if (event.key === "End") state.compareSplit = .8;
+    if (event.key === "ArrowLeft") state.compareSplit = clampCompareSplit(state.compareSplit - step);
+    else if (event.key === "ArrowRight") state.compareSplit = clampCompareSplit(state.compareSplit + step);
+    else if (event.key === "Home") state.compareSplit = limits.minimum;
+    else if (event.key === "End") state.compareSplit = limits.maximum;
     else return;
-    event.preventDefault(); updateCompareSplitter(); render(); updateBrushCursor();
+    event.preventDefault(); updateCompareSplitter(); render(); updateBrushCursor(); persistCompareSplit();
   });
   $("#removeCurrentImageButton").addEventListener("click", () => { const image = currentRecord(); if (image) void setHidden(image, !isHidden(image)); });
   $("#clearCurrentMasksButton").addEventListener("click", () => state.currentId && clearMasks([state.currentId], "confirm.clearCurrent.title", "confirm.clearCurrent.message"));
@@ -737,7 +767,7 @@ async function initialise() {
     showUserError(error);
     return;
   }
-  await loadTranslations(); bindEvents();
+  await loadTranslations(); restoreCompareSplit(); bindEvents();
   state.outputDirectoryHandle = await rememberedOutputDirectoryHandle();
   renderOutputDirectory();
   setNavigationShortcutsEnabled(state.settings?.general?.shortcuts_enabled ?? true);

@@ -476,7 +476,29 @@ async function restoreDraft(imageId, generation, draft = state.drafts.get(imageI
   return true;
 }
 
-function compareSplitX(width = stage.clientWidth) { return Math.round(width * state.compareSplit); }
+const COMPARE_SPLIT_STORAGE_KEY = "mozarie.compareSplit";
+const COMPARE_MIN_PANE_PX = 160;
+
+function compareSplitLimits(width = stage.clientWidth) {
+  const fixed = width < COMPARE_MIN_PANE_PX * 2;
+  const minimum = fixed ? .5 : COMPARE_MIN_PANE_PX / width;
+  return { fixed, minimum, maximum: fixed ? .5 : 1 - minimum };
+}
+
+function clampCompareSplit(value, width = stage.clientWidth) {
+  const limits = compareSplitLimits(width);
+  return limits.fixed ? .5 : Math.max(limits.minimum, Math.min(limits.maximum, value));
+}
+
+function restoreCompareSplit() {
+  const stored = Number(localStorage.getItem(COMPARE_SPLIT_STORAGE_KEY));
+  if (Number.isFinite(stored) && stored > 0 && stored < 1) state.compareSplit = clampCompareSplit(stored);
+  else state.compareSplit = clampCompareSplit(state.compareSplit);
+}
+
+function persistCompareSplit() { localStorage.setItem(COMPARE_SPLIT_STORAGE_KEY, String(state.compareSplit)); }
+
+function compareSplitX(width = stage.clientWidth) { return Math.round(width * clampCompareSplit(state.compareSplit, width)); }
 
 function comparePaneBounds(width = stage.clientWidth) {
   if (state.displayMode !== "compare") return [{ offset: 0, width }];
@@ -501,8 +523,14 @@ function updateCompareSplitter() {
   if (!splitter) return;
   const visible = state.displayMode === "compare";
   stage.dataset.displayMode = state.displayMode;
+  const width = stage.clientWidth;
+  const limits = compareSplitLimits(width);
+  state.compareSplit = clampCompareSplit(state.compareSplit, width);
   splitter.hidden = !visible;
   splitter.style.setProperty("--compare-split", `${state.compareSplit * 100}%`);
+  splitter.setAttribute("aria-disabled", String(limits.fixed));
+  splitter.setAttribute("aria-valuemin", String(Math.round(limits.minimum * 100)));
+  splitter.setAttribute("aria-valuemax", String(Math.round(limits.maximum * 100)));
   splitter.setAttribute("aria-valuenow", String(Math.round(state.compareSplit * 100)));
 }
 

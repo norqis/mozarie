@@ -208,6 +208,23 @@
     <button id="removeImageMenuItem" type="button" role="menuitem" data-i18n="editor.hide">非表示</button>
   </div>
 
+  <div id="candidatePaddingPopover" class="candidate-padding-popover" popover="manual" role="dialog" aria-labelledby="candidatePaddingLabel">
+    <form id="candidatePaddingForm" novalidate>
+      <label id="candidatePaddingLabel" for="candidatePaddingInput" data-i18n="candidates.paddingLabel">枠の広さ</label>
+      <div class="candidate-padding-value">
+        <button id="candidatePaddingDecrease" type="button" aria-label="1 px減らす" title="1 px減らす" data-i18n-aria-label="candidates.paddingDecrease" data-i18n-title="candidates.paddingDecrease">−</button>
+        <input id="candidatePaddingInput" type="number" min="0" step="1" inputmode="numeric" aria-describedby="candidatePaddingValidation">
+        <span data-i18n="candidates.px">px</span>
+        <button id="candidatePaddingIncrease" type="button" aria-label="1 px増やす" title="1 px増やす" data-i18n-aria-label="candidates.paddingIncrease" data-i18n-title="candidates.paddingIncrease">＋</button>
+      </div>
+      <p id="candidatePaddingValidation" class="candidate-padding-validation" aria-live="polite"></p>
+      <div class="candidate-padding-actions">
+        <button id="candidatePaddingReset" type="button" data-i18n="candidates.paddingReset">0に戻す</button>
+        <button id="candidatePaddingConfirm" class="primary" type="submit" data-i18n="candidates.paddingConfirm">確定</button>
+      </div>
+    </form>
+  </div>
+
   <dialog id="confirmDialog" class="modal-dialog confirm-dialog" aria-labelledby="confirmTitle" aria-describedby="confirmMessage">
     <form method="dialog" class="dialog-body">
       <h2 id="confirmTitle"></h2>

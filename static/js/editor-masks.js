@@ -9,6 +9,127 @@ function manualLayerPresence() {
   };
 }
 
+let candidatePaddingSession = null;
+
+function candidatePaddingLimit() {
+  const record = currentRecord();
+  return Math.max(0, Number(record?.width) || 0, Number(record?.height) || 0);
+}
+
+function candidatePaddingValue(input = $("#candidatePaddingInput")) {
+  const text = String(input.value).trim();
+  const value = Number(text);
+  return /^\d+$/.test(text) && Number.isSafeInteger(value) && value <= Number(input.max) ? value : null;
+}
+
+function validateCandidatePadding() {
+  const input = $("#candidatePaddingInput");
+  const value = candidatePaddingValue(input);
+  input.setAttribute("aria-invalid", String(value === null));
+  $("#candidatePaddingValidation").textContent = value === null ? t("candidates.paddingInvalid", { max: input.max }) : "";
+  return value;
+}
+
+function closeCandidatePadding({ restoreFocus = false } = {}) {
+  const session = candidatePaddingSession;
+  candidatePaddingSession = null;
+  const popover = $("#candidatePaddingPopover");
+  if (popover.matches?.(":popover-open")) popover.hidePopover();
+  if (restoreFocus && session?.trigger?.isConnected) session.trigger.focus();
+}
+
+function positionCandidatePadding(trigger) {
+  const popover = $("#candidatePaddingPopover");
+  const triggerRect = trigger.getBoundingClientRect();
+  const popoverRect = popover.getBoundingClientRect();
+  const left = Math.max(8, Math.min(innerWidth - popoverRect.width - 8, triggerRect.right - popoverRect.width));
+  const below = triggerRect.bottom + 5;
+  const top = below + popoverRect.height <= innerHeight - 8 ? below : Math.max(8, triggerRect.top - popoverRect.height - 5);
+  popover.style.left = `${left}px`; popover.style.top = `${top}px`;
+}
+
+function openCandidatePadding(candidateId, trigger) {
+  if (trigger.disabled) return;
+  const candidate = state.candidates.find((item) => item.id === candidateId);
+  if (!candidate) return;
+  closeCandidatePadding();
+  const input = $("#candidatePaddingInput");
+  const value = candidate.expandPx || 0;
+  input.max = String(candidatePaddingLimit()); input.value = String(value);
+  input.setAttribute("aria-invalid", "false"); $("#candidatePaddingValidation").textContent = "";
+  candidatePaddingSession = { imageId: state.currentId, candidateId, original: value, trigger, committing: false };
+  const popover = $("#candidatePaddingPopover"); popover.showPopover(); positionCandidatePadding(trigger);
+  input.focus(); input.select();
+}
+
+async function commitCandidatePadding() {
+  const session = candidatePaddingSession;
+  if (!session || session.committing) return false;
+  const value = validateCandidatePadding();
+  if (value === null) { $("#candidatePaddingInput").focus(); return false; }
+  if (session.imageId !== state.currentId || state.projectReadOnly || isBusy() || state.importing || state.candidateBatchPending.has(state.currentId)) {
+    closeCandidatePadding({ restoreFocus: true }); return false;
+  }
+  const candidate = state.candidates.find((item) => item.id === session.candidateId);
+  if (!candidate) { closeCandidatePadding(); return false; }
+  if (value === session.original) { closeCandidatePadding({ restoreFocus: true }); return true; }
+  session.committing = true;
+  const previousMaskStatus = state.maskStatus.has(state.currentId) ? state.maskStatus.get(state.currentId) : imageHasMask(currentRecord());
+  candidate.expandPx = value; markMaskDirty(); setReviewed(currentRecord(), false);
+  syncCurrentCandidateRecord(); refreshCurrentReviewAndMask(); requestMosaicPreview(); render();
+  closeCandidatePadding();
+  await updateCandidate(candidate, candidate.enabled, previousMaskStatus, candidate.forced, session.original);
+  return true;
+}
+
+function changeCandidatePaddingDraft(delta) {
+  const input = $("#candidatePaddingInput");
+  const value = candidatePaddingValue(input);
+  const base = value === null ? candidatePaddingSession?.original || 0 : value;
+  input.value = String(Math.max(0, Math.min(Number(input.max), base + delta)));
+  validateCandidatePadding(); input.focus(); input.select();
+}
+
+function handleCandidatePaddingKeydown(event) {
+  if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
+  event.preventDefault(); event.stopPropagation();
+  changeCandidatePaddingDraft(event.key === "ArrowUp" ? 1 : -1);
+}
+
+function initCandidatePaddingPopover() {
+  for (const selector of ["#candidateList", "#exclusionList"]) {
+    $(selector).addEventListener("click", (event) => {
+      const trigger = event.target.closest?.("[data-candidate-padding-id]");
+      if (trigger) openCandidatePadding(trigger.dataset.candidatePaddingId, trigger);
+    });
+  }
+  $("#candidatePaddingInput").addEventListener("input", validateCandidatePadding);
+  $("#candidatePaddingInput").addEventListener("keydown", handleCandidatePaddingKeydown);
+  $("#candidatePaddingForm").addEventListener("submit", (event) => { event.preventDefault(); void commitCandidatePadding(); });
+  $("#candidatePaddingDecrease").addEventListener("click", () => changeCandidatePaddingDraft(-1));
+  $("#candidatePaddingIncrease").addEventListener("click", () => changeCandidatePaddingDraft(1));
+  $("#candidatePaddingReset").addEventListener("click", () => { $("#candidatePaddingInput").value = "0"; validateCandidatePadding(); $("#candidatePaddingInput").focus(); });
+  $("#candidatePaddingPopover").addEventListener("keydown", (event) => {
+    if (event.key === "Escape") { event.preventDefault(); closeCandidatePadding({ restoreFocus: true }); }
+  });
+  document.addEventListener("pointerdown", (event) => {
+    const popover = $("#candidatePaddingPopover");
+    if (!candidatePaddingSession || popover.contains(event.target) || candidatePaddingSession.trigger === event.target) return;
+    if (validateCandidatePadding() === null) { event.preventDefault(); event.stopPropagation(); $("#candidatePaddingInput").focus(); return; }
+    const nextTrigger = event.target.closest?.("[data-candidate-padding-id]");
+    if (nextTrigger) {
+      const nextId = nextTrigger.dataset.candidatePaddingId;
+      event.preventDefault(); event.stopPropagation();
+      void commitCandidatePadding().then(() => {
+        const replacement = document.querySelector(`[data-candidate-padding-id="${CSS.escape(nextId)}"]`);
+        if (replacement) openCandidatePadding(nextId, replacement);
+      });
+      return;
+    }
+    void commitCandidatePadding();
+  }, true);
+}
+
 function renderCandidates() {
   const applyList = $("#candidateList");
   const excludeList = $("#exclusionList");
@@ -35,25 +156,19 @@ function renderCandidates() {
     button.textContent = text; button.addEventListener("click", onChange); return button;
   };
   const makeDisplay = (id) => candidateDisplayToggle(id);
-  const makeExpandInput = (candidate, disabled) => {
-    const label = document.createElement("label"); label.className = "candidate-expand";
-    const text = document.createElement("span"); text.textContent = t("candidates.expand");
-    const input = document.createElement("input"); input.type = "number"; input.min = "0"; input.step = "1"; input.inputMode = "numeric";
-    const record = currentRecord(); input.max = String(Math.max(0, Number(record?.width) || 0, Number(record?.height) || 0));
-    input.value = String(candidate.expandPx || 0); input.disabled = disabled;
-    input.setAttribute("aria-label", t("candidates.expand"));
-    const suffix = document.createElement("span"); suffix.textContent = t("candidates.px");
-    input.addEventListener("change", async () => {
-      const expandPx = Number(input.value);
-      if (!Number.isInteger(expandPx) || expandPx < 0 || expandPx > Number(input.max)) { input.value = String(candidate.expandPx || 0); return; }
-      const previousExpandPx = candidate.expandPx || 0;
-      if (expandPx === previousExpandPx || isBusy() || state.importing) return;
-      const previousMaskStatus = state.maskStatus.has(state.currentId) ? state.maskStatus.get(state.currentId) : imageHasMask(currentRecord());
-      candidate.expandPx = expandPx; markMaskDirty(); setReviewed(currentRecord(), false);
-      syncCurrentCandidateRecord(); refreshCurrentReviewAndMask(); requestMosaicPreview(); render();
-      await updateCandidate(candidate, candidate.enabled, previousMaskStatus, candidate.forced, previousExpandPx);
-    });
-    label.append(text, input, suffix); return label;
+  const makeExpandButton = (candidate, disabled, labelText) => {
+    const button = document.createElement("button"); button.type = "button"; button.className = "candidate-padding-button";
+    const value = candidate.expandPx || 0;
+    button.dataset.candidatePaddingId = candidate.id; button.disabled = disabled;
+    button.textContent = t("candidates.paddingButton", { value });
+    const accessibleLabel = t("candidates.paddingButtonLabel", { label: labelText, value });
+    button.title = accessibleLabel; button.setAttribute("aria-label", accessibleLabel);
+    return button;
+  };
+  const appendRow = (row, label, enabled, actions) => {
+    const heading = document.createElement("div"); heading.className = "candidate-row-heading"; heading.append(label, enabled);
+    const actionRow = document.createElement("div"); actionRow.className = "candidate-row-actions"; actionRow.append(...actions);
+    row.append(heading, actionRow);
   };
   const appendManual = (list, role) => {
     const isApply = role === "apply";
@@ -83,8 +198,8 @@ function renderCandidates() {
         state.manualExclusionForced = !state.manualExclusionForced; markMaskDirty(); saveDraft();
         setReviewed(currentRecord(), false); refreshCurrentReviewAndMask(); requestMosaicPreview(); renderCandidates(); render();
       });
-      row.append(label, enabled, blink, candidateEffectiveToggle(blinkId), forced, remove);
-    } else row.append(label, enabled, blink, candidateEffectiveToggle(blinkId), remove);
+      appendRow(row, label, enabled, [blink, candidateEffectiveToggle(blinkId), forced, remove]);
+    } else appendRow(row, label, enabled, [blink, candidateEffectiveToggle(blinkId), remove]);
     list.append(row);
   };
   appendManual(applyList, "apply");
@@ -105,7 +220,7 @@ function renderCandidates() {
     const remove = document.createElement("button"); remove.type = "button"; remove.className = "candidate-delete"; remove.textContent = "×";
     remove.title = t("candidates.deleteManualExcludeErase"); remove.setAttribute("aria-label", remove.title);
     remove.addEventListener("click", deleteManualExclusionErase);
-    row.append(label, enabled, blink, candidateEffectiveToggle(blinkId), remove); excludeList.append(row);
+    appendRow(row, label, enabled, [blink, candidateEffectiveToggle(blinkId), remove]); excludeList.append(row);
   }
   for (const candidate of state.candidates) {
     if (state.removedCandidateIds.has(candidate.id)) continue;
@@ -145,8 +260,8 @@ function renderCandidates() {
         syncCurrentCandidateRecord(); refreshCurrentReviewAndMask(); requestMosaicPreview(); render();
         await updateCandidate(candidate, candidate.enabled, previousMaskStatus, previousForced);
       }, deleting || state.candidateBatchPending.has(state.currentId));
-      row.append(label, enabled, blink, candidateEffectiveToggle(candidate.id), makeExpandInput(candidate, deleting || state.candidateBatchPending.has(state.currentId)), forced, remove);
-    } else row.append(label, enabled, blink, candidateEffectiveToggle(candidate.id), makeExpandInput(candidate, deleting || state.candidateBatchPending.has(state.currentId)), remove);
+      appendRow(row, label, enabled, [blink, candidateEffectiveToggle(candidate.id), makeExpandButton(candidate, deleting || state.projectReadOnly || isBusy() || state.importing || state.candidateBatchPending.has(state.currentId), labelText), forced, remove]);
+    } else appendRow(row, label, enabled, [blink, candidateEffectiveToggle(candidate.id), makeExpandButton(candidate, deleting || state.projectReadOnly || isBusy() || state.importing || state.candidateBatchPending.has(state.currentId), labelText), remove]);
     (role === "apply" ? applyList : excludeList).append(row);
   }
   appendEmpty(applyList); appendEmpty(excludeList);
