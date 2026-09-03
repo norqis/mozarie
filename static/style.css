@@ -336,5 +336,6 @@ button { overflow: visible; text-overflow: clip; white-space: nowrap; }
    narrow window sizes and does not introduce a second custom widget. */
 .project-list { display: grid; gap: .5rem; margin-top: .75rem; max-height: min(55vh, 34rem); overflow: auto; }
 .project-list-item { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: .35rem .75rem; align-items: center; text-align: left; }
-.project-list-item small { grid-column: 1; color: var(--muted, #777); }
+.project-list-item small { grid-column: 1; color: var(--muted, #777); min-width: 0; overflow-wrap: anywhere; }
+.project-list-details { font-size: .78rem; }
 .project-actions { align-items: stretch; }

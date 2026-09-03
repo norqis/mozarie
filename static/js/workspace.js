@@ -48,6 +48,25 @@ async function rememberedProjectSource(projectId, imageId = null) {
   const value = await new Promise((resolve) => { const request = db.transaction("projectSources").objectStore("projectSources").get(`${projectId}:${imageId || "directory"}`); request.onsuccess = () => resolve(request.result?.handle || null); request.onerror = () => resolve(null); });
   db.close(); return value;
 }
+async function rememberedProjectFileSources(projectId) {
+  const db = await directoryCatalogStore(); if (!db || !projectId) return [];
+  const rows = await new Promise((resolve) => {
+    const request = db.transaction("projectSources").objectStore("projectSources").getAll();
+    request.onsuccess = () => resolve(request.result || []); request.onerror = () => resolve([]);
+  });
+  db.close();
+  return rows.filter((row) => row.projectId === projectId && row.imageId && row.handle?.kind === "file").map((row) => row.handle);
+}
+async function ensureProjectSourcePermission(handle, request = false) {
+  if (!handle?.queryPermission) return Boolean(handle);
+  try {
+    const mode = "read";
+    const current = await handle.queryPermission({ mode });
+    if (current === "granted") return true;
+    if (!request || !handle.requestPermission) return false;
+    return (await handle.requestPermission({ mode })) === "granted";
+  } catch { return false; }
+}
 async function rememberedOutputDirectoryHandle() {
   const db = await directoryCatalogStore();
   if (!db) return null;
@@ -71,40 +90,14 @@ async function catalogForDirectoryHandle(handle) {
     await rememberProjectSource(state.project.id, handle);
     return activated.catalogId || state.project.id;
   }
-  const db = await directoryCatalogStore();
-  if (db) {
-    const rows = await new Promise((resolve) => { const request = db.transaction("directories").objectStore("directories").getAll(); request.onsuccess = () => resolve(request.result || []); request.onerror = () => resolve([]); });
-    for (const row of rows) {
-      try {
-        if (await row.handle?.isSameEntry?.(handle)) {
-          // Validate the opaque ID on the server before uploads. A database
-          // reset leaves the handle usable and simply falls back to a new ID.
-          try {
-            const activated = await api("/api/workspace/catalog", { method: "POST", body: JSON.stringify({ catalogId: row.catalogId }) });
-            db.close();
-            return activated.catalogId || null;
-          } catch {
-            try {
-              await new Promise((resolve) => {
-                const transaction = db.transaction("directories", "readwrite");
-                transaction.objectStore("directories").delete(row.catalogId);
-                transaction.oncomplete = transaction.onerror = transaction.onabort = resolve;
-              });
-            } catch { /* a fresh ID remains safe */ }
-            break;
-          }
-        }
-      } catch {
-        db.transaction("directories", "readwrite").objectStore("directories").delete(row.catalogId);
-      }
-    }
-    db.close();
-  }
-  const created = await api("/api/workspace/catalog", { method: "POST", body: JSON.stringify({}) });
-  if (!db || !created.catalogId) return created.catalogId || null;
-  const writeDb = await directoryCatalogStore();
-  if (writeDb) { try { writeDb.transaction("directories", "readwrite").objectStore("directories").put({ catalogId: created.catalogId, handle }); } catch { /* persistence remains optional */ } writeDb.close(); }
-  return created.catalogId;
+  // A folder is never silently matched to a prior project.  Project history
+  // remains explicit; opening an older project is done from its own list.
+  const created = await api("/api/projects", { method: "POST", body: JSON.stringify({}) });
+  state.project = created.project || null;
+  state.projectReadOnly = false;
+  if (!state.project?.id) return null;
+  await rememberProjectSource(state.project.id, handle);
+  return state.project.id;
 }
 
 function workspaceDraftPayload(draft) {

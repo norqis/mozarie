@@ -450,6 +450,35 @@ async function importDirectoryHandle(directoryHandle, session = beginImportSessi
   await importHandleEntries(entries, session);
 }
 
+async function importProjectDirectoryHandle(directoryHandle, projectId) {
+  const session = beginImportSession(); if (!session) return;
+  try {
+    await flushAllWorkspaceMutations();
+    session.catalogId = projectId;
+    await rememberProjectSource(projectId, directoryHandle);
+    const entries = [];
+    showProcessing({ kind: "import", state: "running", total: 1, completed: 0, current: directoryHandle.name || "" });
+    async function collect(handle, relativePath = "", parentHandle = null) {
+      if (!await waitForImportSession(session)) return;
+      const path = relativePath ? `${relativePath}/${handle.name}` : handle.name;
+      if (handle.kind === "file") entries.push({ handle, relativePath: path, parentHandle });
+      else for await (const child of handle.values()) await collect(child, path, handle);
+    }
+    for await (const handle of directoryHandle.values()) await collect(handle, "", directoryHandle);
+    if (await waitForImportSession(session)) await importHandleEntries(entries, session);
+  } catch (error) { if (error?.name !== "AbortError") showUserError(error); }
+  finally { finishImportSession(session); }
+}
+
+async function importProjectFileHandles(handles, projectId) {
+  const session = beginImportSession(); if (!session) return;
+  try {
+    await flushAllWorkspaceMutations();
+    session.catalogId = projectId;
+    await importFileHandles(handles, session);
+  } finally { finishImportSession(session); }
+}
+
 async function pickImageFiles() {
   $("#pickerMenu").hidePopover();
   const session = beginImportSession(); if (!session) return;

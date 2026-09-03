@@ -95,6 +95,7 @@ async function selectImage(imageId, force = false, { saveCurrentDraft = true } =
     $("#currentFileName").textContent = record.relativePath;
     updateCandidateStatus();
     renderCandidates(); updateGalleryCurrent(); updateNavigationControls(); updateActionButtons(); render(); clearStatus();
+    if (state.project?.id) void refreshProjectHistory(imageId);
     prefetchNeighbors(record);
   } catch (error) {
     if (isCurrentGeneration(generation)) {
