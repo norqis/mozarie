@@ -17,6 +17,8 @@ const context = { state, setTimeout() { return 1; }, clearTimeout() {}, fetch() 
 vm.runInNewContext(resourcesSource, context);
 vm.runInNewContext("globalThis.resourceTest = { WeightedLru, drainPrefetchQueue };", context, { filename: "test-resources-exports.js" });
 vm.runInNewContext(canvasSource, context, { filename: canvasPath });
+assert.equal(state.imageCache.limit, 128 * 1024 * 1024, "decoded full images have a 128MiB cache budget");
+assert.equal(state.candidateBundleCache.limit, 128 * 1024 * 1024, "decoded candidate masks have their own 128MiB cache budget");
 const closed = []; const cache = new context.resourceTest.WeightedLru(8, (value) => closed.push(value.id), () => false);
 cache.set("one", { id: "one" }, 4); cache.set("two", { id: "two" }, 4); cache.get("one"); cache.set("three", { id: "three" }, 4);
 assert.equal(cache.has("one"), true, "recent entry remains"); assert.equal(cache.has("two"), false, "least-recent entry is evicted"); assert.deepEqual(closed, ["two"]);
@@ -91,8 +93,11 @@ async function runResourceCoverageCases() {
   assert.equal(closable.closed, true, "bitmap resources use close when supplied");
   assert.equal(source.src, "", "image-like resources clear their source when close is unavailable");
   const candidate = { closed: 0, close() { this.closed += 1; } };
-  api.releaseCandidateBitmapBundle({ candidateImages: new Map([["candidate", candidate]]) }); api.releaseCandidateBitmapBundle({}); api.releaseCandidateBitmapBundle(null);
+  const bundle = { candidates: [{ id: "candidate" }], candidateImages: new Map([["candidate", candidate]]) };
+  api.releaseCandidateBitmapBundle(bundle); api.releaseCandidateBitmapBundle({}); api.releaseCandidateBitmapBundle(null);
   assert.equal(candidate.closed, 1, "candidate bundles release every bitmap they own");
+  assert.equal(bundle.candidates.length, 0, "released candidate metadata is detached");
+  assert.equal(bundle.candidateImages.size, 0, "released candidate bitmap references are detached");
 
   state.currentImage = closable; state.pendingImageKey = "pending"; state.candidateImages = new Map(); state.pendingCandidateKey = "candidate-pending";
   assert.equal(api.isPinnedImage("other", closable), true, "the displayed image is pinned");

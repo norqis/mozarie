@@ -10,11 +10,16 @@ let maskContext = null;
 let outputCanvas = null;
 let outputContext = null;
 
+function releaseScratch() {
+  for (const canvas of [maskCanvas, outputCanvas]) if (canvas) canvas.width = canvas.height = 1;
+  maskCanvas = null; maskContext = null; outputCanvas = null; outputContext = null;
+}
+
 function releaseSource() {
   source?.close?.();
   source = null; sourceId = "";
-  for (const canvas of [sourceCanvas, maskCanvas, outputCanvas]) if (canvas) canvas.width = canvas.height = 1;
-  sourceCanvas = null; sourceContext = null; sourcePixels = null; sourceWidth = 0; sourceHeight = 0; maskCanvas = null; maskContext = null; outputCanvas = null; outputContext = null;
+  if (sourceCanvas) sourceCanvas.width = sourceCanvas.height = 1;
+  sourceCanvas = null; sourceContext = null; sourcePixels = null; sourceWidth = 0; sourceHeight = 0; releaseScratch();
 }
 
 function fail(generation, failedSourceId = sourceId) { self.postMessage({ type: "error", code: "mosaic_preview_failed", sourceId: failedSourceId, generation }); }
@@ -61,7 +66,7 @@ function render({ mask, width, height, blockSize, generation }) {
     const frame = outputCanvas.transferToImageBitmap();
     try { self.postMessage({ type: "frame", sourceId, generation, output: frame }, [frame]); }
     catch { frame.close?.(); fail(generation); }
-  } catch { fail(generation); } finally { mask.close?.(); }
+  } catch { fail(generation); } finally { mask.close?.(); releaseScratch(); }
 }
 
 function renderPatch({ mask, left, top, width, height, blockSize, generation }) {
@@ -100,7 +105,7 @@ function renderPatch({ mask, left, top, width, height, blockSize, generation }) 
     const frame = outputCanvas.transferToImageBitmap();
     try { self.postMessage({ type: "frame", sourceId, generation, patch: true, left, top, width, height, output: frame }, [frame]); }
     catch { frame.close?.(); fail(generation); }
-  } catch { fail(generation); } finally { mask.close?.(); }
+  } catch { fail(generation); } finally { mask.close?.(); releaseScratch(); }
 }
 
 self.onmessage = ({ data }) => {

@@ -174,6 +174,7 @@ function queueWorkspaceDraft(imageId, immediate = false) {
         draft.dirtyLayers = [];
         draft.dirtyRois = {};
       }
+      if (state.project?.id && state.currentId === imageId) void refreshProjectHistory(imageId);
       // A project has a durable copy and can reload an inactive draft on
       // demand.  Projectless sessions have no equivalent recovery path, so
       // they deliberately keep the in-memory bitmap.

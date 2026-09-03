@@ -470,6 +470,7 @@ async function updateCandidate(candidate, previousEnabled, previousMaskStatus, p
         try { await refreshCandidateRecord(imageId, true); } catch { /* Keep the optimistic aggregate until a later refresh. */ }
         renderCatalogViews();
       }
+      if (state.project?.id) void refreshProjectHistory(imageId);
     } catch (error) {
       if (state.candidateUpdateVersions.get(mutationKey) !== version) return;
       if (state.currentId === imageId && isCurrentGeneration(generation)) {
@@ -583,6 +584,7 @@ async function batchCandidateOperation(spec) {
       if (manual || manualErase) saveDraft();
       retainCurrentCandidateBundle(imageId, result.candidateRevision);
       setReviewed(currentRecord(), false); syncCurrentCandidateRecord(); refreshCurrentReviewAndMask(); requestMosaicPreview(); renderCandidates(); render();
+      if (state.project?.id) void refreshProjectHistory(imageId);
     } catch (error) {
       if (state.currentId === imageId && isCurrentGeneration(generation)) showUserError(error);
     } finally {
@@ -704,7 +706,14 @@ function updateHistoryButtons() {
 
 function resetHistoryToCurrentManualMask() {
   if (!state.currentImage) return;
-  if (typeof ensureHistoryCanvases === "function") ensureHistoryCanvases();
+  if (state.project?.id) {
+    releaseHistoryCanvases();
+    state.historyRemovedCandidateIds = new Set(); state.historyCandidateIds = new Set();
+    state.historyBaseDirty = false;
+    state.history = []; state.historyIndex = 0; state.activeStroke = null; updateHistoryButtons();
+    return;
+  }
+  if (!ensureHistoryCanvases()) return;
   copyCanvas(addCanvas, historyAddCanvas); copyCanvas(exclusionCanvas, historyExclusionCanvas); copyCanvas(exclusionEraseCanvas, historyExclusionEraseCanvas);
   state.historyRemovedCandidateIds = new Set(state.removedCandidateIds || []);
   state.historyCandidateIds = new Set(state.candidates.map((candidate) => candidate.id));
@@ -791,8 +800,11 @@ function fillAt(point, tool = state.tool) {
   const generation = state.imageGeneration; const epoch = state.catalogEpoch; const imageId = state.currentId; const record = currentRecord(); const version = imageAssetVersion(record); const revision = Number(record?.candidateRevision || 0);
   const apply = (spans) => {
     if (!catalogRecordMatches(record, epoch, { version, revision }) || !isCurrentGeneration(generation) || state.currentId !== imageId) { state.fillPending = false; return; }
-    applyFillSpans(spans, tool); state.history.splice(state.historyIndex); state.history.push({ tool, spans }); trimHistory();
-    state.historyIndex = state.history.length;
+    applyFillSpans(spans, tool);
+    if (!state.project?.id) {
+      state.history.splice(state.historyIndex); state.history.push({ tool, spans }); trimHistory();
+      state.historyIndex = state.history.length;
+    }
     if (tool === "bucket") state.manualMaskPresent = canvasHasPixels(addCtx, addCanvas);
     state.fillPending = false; scheduleManualWorkspaceSave(); setReviewed(currentRecord(), false); updateHistoryButtons(); refreshCurrentReviewAndMask(); requestMosaicPreview(); renderCandidates(); render();
   };
@@ -903,12 +915,14 @@ function trimHistory() {
 }
 
 function recordHistoryOperation(operation) {
+  if (state.project?.id) { state.history = []; state.historyIndex = 0; updateHistoryButtons(); return; }
   state.history.splice(state.historyIndex);
   state.history.push(operation); trimHistory(); state.historyIndex = state.history.length;
   updateHistoryButtons();
 }
 
 function rebuildManualMaskFromHistory() {
+  if (state.project?.id) return;
   addCtx.clearRect(0, 0, addCanvas.width, addCanvas.height);
   exclusionCtx.clearRect(0, 0, exclusionCanvas.width, exclusionCanvas.height);
   exclusionEraseCtx.clearRect(0, 0, exclusionEraseCanvas.width, exclusionEraseCanvas.height);
@@ -926,10 +940,12 @@ function completeManualStroke() {
   paintPendingManualStroke();
   state.activeStroke = null;
   if (!stroke?.points?.length) return;
-  state.history.splice(state.historyIndex);
-  state.history.push(stroke);
-  trimHistory();
-  state.historyIndex = state.history.length;
+  if (!state.project?.id) {
+    state.history.splice(state.historyIndex);
+    state.history.push(stroke);
+    trimHistory();
+    state.historyIndex = state.history.length;
+  }
   state.manualMaskPresent = canvasHasPixels(addCtx, addCanvas);
   // The live ROI previews are intentionally provisional: after pointerup,
   // rebuild the whole mask once so every exclusion and candidate is exact

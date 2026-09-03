@@ -9,11 +9,16 @@ class WeightedLru {
 }
 function decodedImageWeight(image) { return Math.max(1, Number(image?.width || 0) * Number(image?.height || 0) * 4); }
 function closeBitmap(image) { if (typeof image?.close === "function") image.close(); else if (image && "src" in image) image.src = ""; }
-function releaseCandidateBitmapBundle(bundle) { for (const image of bundle?.candidateImages?.values?.() || []) closeBitmap(image); }
+function releaseCandidateBitmapBundle(bundle) {
+  const images = bundle?.candidateImages;
+  for (const image of images?.values?.() || []) closeBitmap(image);
+  images?.clear?.();
+  if (bundle) { bundle.candidates = []; bundle.candidateImages = new Map(); }
+}
 function isPinnedImage(key, image) { return image === state.currentImage || key === state.pendingImageKey; }
 function isPinnedCandidateBundle(key, bundle) { return bundle?.candidateImages === state.candidateImages || key === state.pendingCandidateKey; }
-state.imageCache = new WeightedLru(256 * 1024 * 1024, closeBitmap, isPinnedImage);
-state.candidateBundleCache = new WeightedLru(512 * 1024 * 1024, releaseCandidateBitmapBundle, isPinnedCandidateBundle);
+state.imageCache = new WeightedLru(128 * 1024 * 1024, closeBitmap, isPinnedImage);
+state.candidateBundleCache = new WeightedLru(128 * 1024 * 1024, releaseCandidateBitmapBundle, isPinnedCandidateBundle);
 function imageUrl(record) { const version = imageAssetVersion(record); return `/api/image/${encodeURIComponent(record.id)}${version ? `?v=${encodeURIComponent(version)}` : ""}`; }
 function maskUrl(imageId, candidateId, revision) { return `/api/mask/${encodeURIComponent(imageId)}/${encodeURIComponent(candidateId)}?v=${encodeURIComponent(`${revision}-${candidateId}`)}`; }
 async function fetchBitmap(url, signal) { const response = await fetch(url, { signal, headers: { "X-Mozarie-Token": document.querySelector('meta[name="mozarie-token"]')?.content || "" } }); if (!response.ok) throw responseError(response, await response.json().catch(() => ({}))); return createImageBitmap(await response.blob()); }

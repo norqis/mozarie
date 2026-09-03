@@ -85,8 +85,19 @@ context.historyAddCanvas = canvas(); context.historyExclusionCanvas = canvas(); 
 const canvasPath = path.join(__dirname, "..", "static", "js", "editor-canvas.js");
 const source = fs.readFileSync(canvasPath, "utf8");
 vm.runInNewContext(source, context, { filename: canvasPath });
-vm.runInNewContext("globalThis.geometryRuntime = { selectImage, loadImage, imageAssetVersion, invalidateStaleAsset, imageCacheKey, candidateCacheKey, cachedImage, prefetchNeighbors, releaseImageCaches, releaseStaleImageVersions, releaseCandidateBundles, releaseCandidateBitmap, invalidateCandidateBundles, retainCurrentCandidateBundle, loadCandidateBundle, reconcileCurrentCandidates, syncCandidateRecord, syncCurrentCandidateRecord, syncStoredMaskStatus, updateCandidateStatus, canvasToDataUrl, saveDraft, restoreDraft, resizeRenderCanvas, setCssTransform, releaseMosaicPreview, prepareOriginalImage, mosaicPreviewFailed, createMosaicWorker, ensureMosaicPreviewSource, rebuildMosaicPreview, requestMosaicPreview, composeEnabledExclusionMask, drawEffectiveExclusions, composeCurrentMask, markDraftDirty, markDraftDirtyRoi, markMaskDirty, flushMaskComposition, hasEffectiveMask, maskStatusWithoutCandidate, paintMosaicPreviewAt, paintTintedMask, selectedCandidateMask, compareSplitLimits, clampCompareSplit, restoreCompareSplit, persistCompareSplit, compareSplitX, comparePaneBounds, compareSideOffset, compareEventSide, compareEventOffset, updateCompareSplitter, setDisplayMode, fitImage, updateBrushCursor, roiFromPoints, boundaryDraftRoi, boundaryDraftId, pointForRoi, polygonRoi, boundaryDraftBounds, addBoundaryDraft, activeBoundaryShape, boundaryShapes, strokeRoi, appendBoundaryBrushPoint, beginBoundaryBrushStroke, completeBoundaryBrushStroke, rectsTouch, joinRois, boundaryRequests, boundaryPath, drawBoundaryScrim, drawBoundaryShape, drawBoundaryRoi, polygonArea, polygonSegmentsIntersect, polygonPointsValid, polygonIsValid, canDetectBoundary, hasBoundaryDraft, boundaryActionAnchor, updateBoundaryActions, drawCandidateBlinkOverlay, drawCompareRangeOverlay, refreshMaskStatus, renderNow, render, flushRender };", context, { filename: "test-editor-canvas-geometry-exports.js" });
+vm.runInNewContext("globalThis.geometryRuntime = { selectImage, loadImage, imageAssetVersion, invalidateStaleAsset, imageCacheKey, candidateCacheKey, cachedImage, prefetchNeighbors, releaseImageCaches, releaseStaleImageVersions, releaseCandidateBundles, releaseCandidateBitmap, invalidateCandidateBundles, retainCurrentCandidateBundle, loadCandidateBundle, reconcileCurrentCandidates, syncCandidateRecord, syncCurrentCandidateRecord, syncStoredMaskStatus, updateCandidateStatus, canvasToDataUrl, saveDraft, restoreDraft, resizeRenderCanvas, setCssTransform, ensureHistoryCanvases, releaseHistoryCanvases, releaseMosaicPreview, prepareOriginalImage, mosaicPreviewFailed, createMosaicWorker, ensureMosaicPreviewSource, rebuildMosaicPreview, requestMosaicPreview, composeEnabledExclusionMask, drawEffectiveExclusions, composeCurrentMask, markDraftDirty, markDraftDirtyRoi, markMaskDirty, flushMaskComposition, hasEffectiveMask, maskStatusWithoutCandidate, paintMosaicPreviewAt, paintTintedMask, selectedCandidateMask, compareSplitLimits, clampCompareSplit, restoreCompareSplit, persistCompareSplit, compareSplitX, comparePaneBounds, compareSideOffset, compareEventSide, compareEventOffset, updateCompareSplitter, setDisplayMode, fitImage, updateBrushCursor, roiFromPoints, boundaryDraftRoi, boundaryDraftId, pointForRoi, polygonRoi, boundaryDraftBounds, addBoundaryDraft, activeBoundaryShape, boundaryShapes, strokeRoi, appendBoundaryBrushPoint, beginBoundaryBrushStroke, completeBoundaryBrushStroke, rectsTouch, joinRois, boundaryRequests, boundaryPath, drawBoundaryScrim, drawBoundaryShape, drawBoundaryRoi, polygonArea, polygonSegmentsIntersect, polygonPointsValid, polygonIsValid, canDetectBoundary, hasBoundaryDraft, boundaryActionAnchor, updateBoundaryActions, drawCandidateBlinkOverlay, drawCompareRangeOverlay, refreshMaskStatus, renderNow, render, flushRender };", context, { filename: "test-editor-canvas-geometry-exports.js" });
 const test = context.geometryRuntime;
+
+state.currentImage = { width: 3840, height: 2160 };
+state.project = { id: "project" };
+assert.equal(test.ensureHistoryCanvases(), false, "project mode does not allocate browser history bases");
+assert.deepEqual([context.historyAddCanvas, context.historyExclusionCanvas, context.historyExclusionEraseCanvas].map((canvas) => [canvas.width, canvas.height]), [[1, 1], [1, 1], [1, 1]], "project mode leaves all three 4K history canvases released");
+state.project = null;
+assert.equal(test.ensureHistoryCanvases(), true, "projectless mode retains the local undo base");
+assert.deepEqual([context.historyAddCanvas, context.historyExclusionCanvas, context.historyExclusionEraseCanvas].map((canvas) => [canvas.width, canvas.height]), [[3840, 2160], [3840, 2160], [3840, 2160]], "projectless mode allocates its three 4K history canvases");
+test.releaseHistoryCanvases();
+assert.deepEqual([context.historyAddCanvas, context.historyExclusionCanvas, context.historyExclusionEraseCanvas].map((canvas) => [canvas.width, canvas.height]), [[1, 1], [1, 1], [1, 1]], "history-canvas release returns all three bases to the plateau");
+state.currentImage = { width: 100, height: 80, alpha: 255 };
 
 // Two strokes can be encoded before the 250ms workspace debounce fires.  The
 // saved operation must cover both distant changes, not just the last stroke.
@@ -644,6 +655,18 @@ test.render(); test.flushRender();
     await test.saveDraft();
     assert.deepEqual([state.drafts.get(id).historyBase.add, state.drafts.get(id).historyBase.exclusion, state.drafts.get(id).historyBase.exclusionErase], expected);
   }
+
+  state.project = { id: "durable-project" };
+  state.images = [{ id: "project-current", candidateRevision: 2 }]; state.currentId = "project-current"; state.currentImage = { width: 3840, height: 2160 };
+  state.drafts = new Map([["project-current", { add: "current-mask", history: [{ kind: "brush" }], historyIndex: 1, historyBase: { add: "old-base", exclusion: "old-exclusion", exclusionErase: "old-erase" } }]]);
+  state.draftSaveChains = new Map(); state.draftDirty = true; state.draftLayerDirty = new Set(); state.historyBaseDirty = true;
+  state.history = [{ kind: "brush" }]; state.historyIndex = 1; state.removedCandidateIds = new Set(); state.historyRemovedCandidateIds = new Set(); state.historyCandidateIds = new Set();
+  await test.saveDraft();
+  const projectDraft = state.drafts.get("project-current");
+  assert.equal("history" in projectDraft, false, "project drafts do not retain a second client-side operation log");
+  assert.equal("historyBase" in projectDraft, false, "project drafts do not retain full-size history-base images");
+  assert.deepEqual([context.historyAddCanvas, context.historyExclusionCanvas, context.historyExclusionEraseCanvas].map((canvas) => [canvas.width, canvas.height]), [[1, 1], [1, 1], [1, 1]], "project draft persistence keeps all three history canvases released");
+  state.project = null;
 
   state.images = [{ id: "compact", candidateRevision: 1 }]; state.drafts = new Map([["compact", { hasEffectiveMask: true, candidateRevision: 0 }]]); state.maskStatus = new Map();
   test.syncStoredMaskStatus("compact", []); assert.equal(state.maskStatus.get("compact"), true);
