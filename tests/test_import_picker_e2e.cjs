@@ -1961,9 +1961,13 @@ async function runControlLedger(page, fixtureUrl, contracts, dynamicContracts, f
   for (const [id, value] of [["singleSaveCopyMode", true], ["singleSaveSuffix", "_ledger"], ["singleSaveDeleteOriginal", true]]) await input(id, value);
   await click("singleSaveChooseOutputDirectoryButton");
   await input("singleSaveOverwriteMode", true);
+  // Keep the public save operation observable.  A fast fixture response can
+  // otherwise finish between clicking Start and the state assertion below.
+  holdSaveRender(true);
   await click("singleSaveStartButton");
   await click("confirmAccept");
   await page.waitForFunction(() => state.saving);
+  releaseSaveRenders();
   await page.waitForFunction(() => !state.saving);
   await input("singleSaveCopyMode", true); await click("singleSaveCloseButton");
   await page.evaluate(() => { addCtx.fillStyle = "#fff"; addCtx.fillRect(0, 0, 1, 1); markMaskDirty(); refreshMaskStatus(true); });
