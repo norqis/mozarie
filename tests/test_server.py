@@ -509,6 +509,47 @@ class MozarieTests(unittest.TestCase):
                 ("apply", "boundary", 7), ("exclude", "hand", 7), ("exclude", "fluid", 7),
             ])
 
+    def test_detector_epoch_stat_and_explicit_padding_guards_preserve_catalogue_state(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); Image.new("RGB", (20, 12), "white").save(root / "source.png")
+            state = self.new_state(); image_id = state.set_root(str(root))[0]["id"]
+            record = state.image_for_id(image_id)
+            pending = state.cache_dir / image_id / ".mozarie-pending-stale.tmp"
+            pending.parent.mkdir(parents=True, exist_ok=True); Image.new("L", (20, 12), 255).save(pending, format="PNG")
+            candidate = Candidate("stale", "penis", .9, pending)
+            with patch.object(state, "_ensure_models", return_value=DetectionModels(target=Mock(), auxiliaries=[])), \
+                    patch.object(state, "_detect_image", return_value=[candidate]), \
+                    patch.object(state, "_job_is_current", return_value=True), \
+                    patch.object(state, "_assert_record_stat_matches", side_effect=ClientError("changed", "stale_asset")), \
+                    patch.object(state, "_fail_job") as failed:
+                state._detect_worker([record], .5, 1, catalog_generation=None)
+            self.assertEqual(failed.call_args.args[0].error_code, "stale_asset")
+            self.assertFalse(pending.exists())
+            self.assertEqual(state.candidates.get(image_id, []), [])
+
+            # No durable pending transaction exists for a just-removed image,
+            # but publication must still reject an old catalogue epoch.
+            with patch.object(state.workspace_store, "has_image", return_value=False), \
+                    self.assertRaises(ClientError) as stale:
+                state._commit_candidate_snapshot_outside_state_lock(
+                    image_id, [], replace=True, expected_revision=0,
+                    expected_catalog_generation=state.catalog_generation - 1,
+                )
+            self.assertEqual(stale.exception.error_code, "catalog_changed")
+            self.assertEqual(state.candidates.get(image_id, []), [])
+
+            state._active_detection_default_padding = 9
+            mask = np.ones((12, 20), dtype=np.uint8)
+            segments = [{"class_name": "penis", "confidence": .9, "mask": mask, "source": "target"}]
+            with patch.object(state, "_detect_arbitrated_segments", return_value=segments), \
+                    patch.object(state, "_hand_refinement_context", return_value=(segments, np.zeros_like(mask), [])), \
+                    patch.object(state, "_attach_hand_evidence", side_effect=lambda items, *_args: items), \
+                    patch.object(state, "_finalize_exclusions", side_effect=lambda _rgb, items, *_args: items):
+                explicit = state._detect_image(Mock(), record, .5, default_padding=2)
+            self.assertEqual([item.expand_px for item in explicit], [2])
+            for item in explicit:
+                item.mask_path.unlink(missing_ok=True)
+
     def test_candidate_mutation_updates_manual_revision_removed_ids_and_effective_together(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory); Image.new("RGB", (16, 16), "white").save(root / "source.png")

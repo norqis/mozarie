@@ -648,6 +648,67 @@ class ProjectWorkspaceCoverageTests(unittest.TestCase):
             self.assertEqual(store.restore_history("missing", "undo"), [])
             self.assertEqual(store.restore_history("missing", "redo"), [])
 
+    def test_incremental_manual_metadata_roi_and_revision_are_atomic(self):
+        """A one-layer stroke cannot corrupt untouched layers or its revision."""
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); store, _, image_id = self.store_image(root)
+            candidate = self.candidate(root, "detector", expand_px=2)
+            store.commit_candidate_state(image_id, 1, [candidate], True, replace=True)
+            base = self.png(size=(6, 6), value=0)
+            changed_image = Image.open(io.BytesIO(base)); changed_image.putpixel((4, 1), 255)
+            stream = io.BytesIO(); changed_image.save(stream, format="PNG"); changed = stream.getvalue()
+            store.save_manual(image_id, {
+                "add": "base", "exclusion": "base", "exclusionErase": "base", "removedCandidateIds": [],
+                "candidateRevision": 999, "hasEffectiveMask": True,
+            }, lambda _value: base)
+            self.assertEqual(store.manual(image_id, lambda value: value)["candidateRevision"], 1)
+
+            calls: list[str | None] = []
+            bad_region = {
+                "add": "changed", "dirtyLayers": ["add"],
+                "dirtyRois": {"add": {"left": 4, "top": 1, "right": 7, "bottom": 2}},
+                "removedCandidateIds": [], "hasEffectiveMask": True,
+            }
+            with self.assertRaisesRegex(ValueError, "dirty region"):
+                store.save_manual(image_id, bad_region, lambda value: calls.append(value) or changed)
+            self.assertEqual(calls, ["changed"])
+            unchanged = store.manual(image_id, lambda value: value)
+            self.assertEqual((unchanged["add"], unchanged["exclusion"], unchanged["exclusionErase"]), (base, base, base))
+            self.assertEqual(unchanged["candidateRevision"], 1)
+
+            dirty = {
+                "add": "changed", "dirtyLayers": ["add"],
+                "dirtyRois": {"add": {"left": 4, "top": 1, "right": 5, "bottom": 2}},
+                "removedCandidateIds": [], "candidateRevision": -1, "hasEffectiveMask": True,
+            }
+            store.save_manual(image_id, dirty, lambda value: changed if value == "changed" else self.fail("untouched layer decoded"))
+            saved = store.manual(image_id, lambda value: value)
+            self.assertEqual((saved["add"], saved["exclusion"], saved["exclusionErase"]), (changed, base, base))
+            self.assertEqual(saved["candidateRevision"], 1)
+            store.commit_candidate_state(image_id, 2, [candidate], True, replace=False, expected_revision=1)
+            self.assertEqual(store.manual(image_id, lambda value: value)["candidateRevision"], 2)
+
+    def test_manual_xor_and_candidate_metadata_reject_ambiguous_values(self):
+        class Row(dict):
+            def keys(self):
+                return super().keys()
+
+        empty = self.png(size=(5, 4), value=0)
+        changed_image = Image.open(io.BytesIO(empty)); changed_image.putpixel((2, 3), 255)
+        stream = io.BytesIO(); changed_image.save(stream, format="PNG"); changed = stream.getvalue()
+        delta = WorkspaceStore._manual_xor(empty, changed, (2, 3, 3, 4))
+        self.assertEqual(delta and delta["box"], [2, 3, 1, 1])
+        self.assertEqual(WorkspaceStore._apply_manual_xor(empty, delta or {}, forward=True), changed)
+        self.assertEqual(WorkspaceStore._apply_manual_xor(changed, delta or {}, forward=False), empty)
+        with self.assertRaisesRegex(ValueError, "dirty region"):
+            WorkspaceStore._manual_xor(empty, changed, (0, 0, 6, 1))
+
+        self.assertEqual(WorkspaceStore._candidate_row(Row(expand_px=0))["expand_px"], 0)
+        self.assertEqual(WorkspaceStore._candidate_row(Row(expand_px=7))["expand_px"], 7)
+        for value in (True, -1, "7", 1.5):
+            with self.subTest(value=value), self.assertRaisesRegex(ValueError, "expand"):
+                WorkspaceStore._candidate_row(Row(expand_px=value))
+
 
 if __name__ == "__main__":
     unittest.main()

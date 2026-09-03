@@ -374,3 +374,37 @@ class ProjectCatalogCoverageTests(unittest.TestCase):
         with self.assertRaises(ClientError): state.delete_project(current_id or "")
         self.assertIsNotNone(state.workspace_store.project(current_id or ""))
         state.worker_thread = None
+
+    def test_project_export_keeps_raw_per_image_state_and_rejects_bad_padding_metadata(self) -> None:
+        source = self.root / "export-source"
+        self.image(source, "first.png"); self.image(source, "second.png")
+        state = self.state(); state.create_project("raw export")
+        image_ids = {item["relativePath"]: item["id"] for item in state.set_root(str(source))}
+        first, second = image_ids["first.png"], image_ids["second.png"]
+        apply = self.candidate(state, first, "apply", pixel=(1, 1)); apply.expand_px = 3
+        exclude = self.candidate(state, first, "exclude", role=CandidateRole.EXCLUDE, forced=True, pixel=(2, 2)); exclude.expand_px = 5
+        self.commit_candidates(state, first, [apply, exclude])
+        state.save_manual_workspace(first, {
+            "add": "data:image/png;base64," + base64.b64encode(self.png(pixel=(3, 3))).decode("ascii"),
+            "exclusion": "", "exclusionErase": "", "removedCandidateIds": [],
+            "candidateRevision": state._candidate_revision(first), "hasEffectiveMask": True,
+        })
+
+        exported = list(state.workspace_store.iter_project_export_states(state.catalog_id))
+        self.assertEqual([entry["image"]["id"] for entry in exported], sorted((first, second)))
+        first_state = next(entry for entry in exported if entry["image"]["id"] == first)
+        second_state = next(entry for entry in exported if entry["image"]["id"] == second)
+        self.assertIsInstance(first_state["candidates"][0]["mask"], bytes)
+        self.assertEqual([(item["role"], item["forced"], item["expandPx"]) for item in first_state["candidates"]], [
+            ("apply", False, 3), ("exclude", True, 5),
+        ])
+        self.assertIsInstance(first_state["manual"]["add"], bytes)
+        self.assertIsNone(second_state["manual"])
+        self.assertEqual(second_state["candidates"], [])
+
+        with state.workspace_store._connect() as db:
+            db.execute("UPDATE candidate_metadata SET expand_px=? WHERE image_id=? AND candidate_id=?", (-1, first, "apply"))
+        replacement = self.state()
+        with self.assertRaisesRegex(ValueError, "expand"):
+            replacement.open_project(state.catalog_id)
+        self.assertEqual(replacement.candidates, {})
