@@ -4044,7 +4044,9 @@ async function main() {
       await browserSavePage.locator("#pickFolder").click();
       await browserSavePage.locator("#folderPath").fill("G:\\selected-folder");
       await browserSavePage.locator("#loadFolderButton").click();
-      await browserSavePage.waitForFunction(() => state.images.length === 2);
+      // The initial fixture also contains two images.  Wait for the loaded
+      // root instead of that unchanged count: folder preflight is async.
+      await browserSavePage.waitForFunction(() => state.reviewRoot === "g:\\selected-folder");
       assert.equal(folderRequests.length, folderRequestCount + 1, "folder selection sends exactly one new request");
       assert.deepEqual(folderRequests.at(-1), { path: "G:\\selected-folder" }, "folder selection posts the typed path and reloads the catalogue");
       await browserSavePage.locator('.gallery-item[data-id="sample"]').click();
