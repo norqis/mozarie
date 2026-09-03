@@ -242,12 +242,19 @@ async function startSingleSave(event) {
       if (output) await state.outputDirectoryHandle.removeEntry(output.name).catch(() => {});
       throw error;
     }
-    const latest = await api("/api/images"); state.images = latest.images;
-    const savedImage = state.images.find((item) => item.id === save.imageId);
-    if (savedImage) await setReviewed(savedImage, true);
-    state.drafts.delete(save.imageId); state.maskStatus.delete(save.imageId); pruneSourceAccess();
-    if (savedImage && state.currentId === save.imageId) await selectImage(save.imageId, true, { saveCurrentDraft: false });
-    renderCatalogViews();
+    // Copying to another folder does not change the source catalogue or any
+    // editor state.  Reconcile only when the source itself was overwritten or
+    // explicitly deleted, and keep its persisted masks and history intact.
+    if (!copying || deleteOriginal) {
+      const latest = await api("/api/images"); state.images = latest.images;
+      const savedImage = state.images.find((item) => item.id === save.imageId);
+      pruneSourceAccess();
+      if (state.currentId === save.imageId) {
+        if (savedImage) await selectImage(save.imageId, true, { saveCurrentDraft: false });
+        else { state.currentId = null; state.currentImage = null; clearEditor(); }
+      }
+      renderCatalogViews();
+    }
     setSingleSaveResult(copying ? `${t("apply.complete", { completed: 1 })} ${state.outputDirectoryHandle.name}/${output.name}` : t("apply.complete", { completed: 1 }));
     } catch (error) {
       if (saveToken && entry) await cancelBrowserSave(entry, saveToken);

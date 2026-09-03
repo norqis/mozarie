@@ -211,6 +211,33 @@ async function runOutputDirectoryPermissionCases() {
   await assert.rejects(runtime.ensureOutputDirectoryPermission(), (error) => error?.code === "output_permission_denied", "a browser permission exception uses the dedicated code");
 }
 
+async function runSingleCopyKeepsEditorStateCase() {
+  const image = { id: "image-1", relativePath: "source.png", width: 32, height: 32, candidateCount: 1, enabledCandidateCount: 1, reviewed: false, hidden: true };
+  const images = [image];
+  const runtime = createRuntime({ initialImages: images, commit: () => jsonResponse({ cleared: true, stale: false }) });
+  const candidates = [{ id: "candidate-1", role: "apply", enabled: true }];
+  const draft = { add: "manual-mask", exclusion: "manual-exclusion", exclusionErase: "manual-restore" };
+  runtime.state.currentId = image.id; runtime.state.currentImage = image;
+  runtime.state.singleSave = { imageId: image.id, divisor: 100, draft };
+  runtime.state.candidates = candidates; runtime.state.drafts.set(image.id, draft); runtime.state.maskStatus.set(image.id, true);
+  runtime.state.manualMaskPresent = true; runtime.state.manualEnabled = false; runtime.state.manualExclusionEnabled = true; runtime.state.manualExclusionEraseEnabled = false; runtime.state.manualExclusionForced = true;
+  runtime.element('input[name="singleSaveMode"]:checked').value = "copy";
+  runtime.element("#singleSaveDeleteOriginal").checked = false;
+  runtime.element("#singleSaveSuffix").value = "_copy";
+
+  await runtime.startSingleSave({ preventDefault() {} });
+
+  assert.equal(runtime.imageFetches(), 0, "copy-and-keep does not reload an unchanged catalogue");
+  assert.equal(runtime.state.images, images, "copy-and-keep preserves the catalogue object");
+  assert.equal(runtime.state.currentId, image.id, "copy-and-keep preserves the current image");
+  assert.equal(runtime.state.currentImage, image, "copy-and-keep preserves the current image object");
+  assert.equal(runtime.state.candidates, candidates, "copy-and-keep preserves candidate state");
+  assert.equal(runtime.state.drafts.get(image.id), draft, "copy-and-keep preserves all manual draft layers");
+  assert.equal(runtime.state.maskStatus.get(image.id), true, "copy-and-keep preserves mask status");
+  assert.deepEqual([runtime.state.manualMaskPresent, runtime.state.manualEnabled, runtime.state.manualExclusionEnabled, runtime.state.manualExclusionEraseEnabled, runtime.state.manualExclusionForced], [true, false, true, false, true], "copy-and-keep preserves manual layer switches");
+  assert.deepEqual([image.reviewed, image.hidden], [false, true], "copy-and-keep preserves reviewed and hidden flags");
+}
+
 function deferred() {
   let resolve;
   return { promise: new Promise((done) => { resolve = done; }), resolve };
@@ -246,7 +273,7 @@ async function runOutputPermissionSubmissionLockCases() {
   await runtime.startApplyFromDialog(event);
   assert.equal(runtime.requests.filter((request) => request.path === "/api/save/commit").length, commitsBeforeRetry + 1, "a rejected batch permission can be retried");
 
-  const lockedImage = { id: "image-1", relativePath: "nested/source.png", width: 32, height: 32, candidateCount: 1, enabledCandidateCount: 1 };
+  const lockedImage = { id: "image-1", relativePath: "nested/source.png", width: 32, height: 32, candidateCount: 1, enabledCandidateCount: 1, reviewed: false, hidden: false };
   const single = createRuntime({ initialImages: [lockedImage], commit: () => jsonResponse({ cleared: true, stale: false, images: [lockedImage] }) });
   single.state.singleSave = { imageId: "image-1", divisor: 100, draft: null };
   single.element('input[name="singleSaveMode"]:checked').value = "copy";
@@ -279,6 +306,7 @@ async function runOutputPermissionSubmissionLockCases() {
   assert.equal(single.requests.filter((request) => request.path === "/api/save/commit").length, 1, "a pending single-save permission starts one save loop and one commit");
   assert.equal(sourceDeletes, 1, "a pending single-save permission deletes the source once after its one commit path");
   assert.equal(single.state.saveStarting, false, "a completed single save releases the preflight lock");
+  assert.equal(single.state.images[0].reviewed, false, "single save does not mark an unreviewed image as reviewed");
 
   const singleCommits = single.requests.filter((request) => request.path === "/api/save/commit").length;
   single.state.outputDirectoryHandle.queryPermission = async () => "denied";
@@ -288,8 +316,10 @@ async function runOutputPermissionSubmissionLockCases() {
   assert.equal(single.requests.filter((request) => request.path === "/api/save/commit").length, singleCommits, "a denied single-save permission starts no save");
   assert.equal(single.state.saveStarting, false, "a denied single-save permission releases the lock");
   single.state.outputDirectoryHandle.queryPermission = async () => "granted";
+  single.state.images[0].reviewed = true;
   await single.startSingleSave(event);
   assert.equal(single.requests.filter((request) => request.path === "/api/save/commit").length, singleCommits + 1, "a denied single-save permission can be retried successfully");
+  assert.equal(single.state.images[0].reviewed, true, "single save preserves an already reviewed image");
 }
 
 async function runExclusiveWritableCases() {
@@ -1055,6 +1085,7 @@ async function runSaveKeepsCatalogueAndEditorStateCase() {
 
 (async () => {
   await runOutputDirectoryPermissionCases();
+  await runSingleCopyKeepsEditorStateCase();
   await runOutputPermissionSubmissionLockCases();
   await runSuccessCase();
   await runDraftBarrierBeforeDefaultApplyCase();

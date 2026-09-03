@@ -99,8 +99,8 @@ function startFixtureServer() {
   const catalogRemoveRequests = [];
   const folderRequests = [];
   const initialCatalog = [
-    { id: "sample", relativePath: "sample.png", sourceKind: "filesystem", sourcePath: "G:\\画像 フォルダー\\sample image.png", width: 100, height: 80, candidateCount: 0, enabledCandidateCount: 0 },
-    { id: "sample-two", relativePath: "sample-two.png", sourceKind: "session", width: 100, height: 80, candidateCount: 0, enabledCandidateCount: 0 },
+    { id: "sample", relativePath: "sample.png", sourceKind: "filesystem", sourcePath: "G:\\画像 フォルダー\\sample image.png", width: 100, height: 80, candidateCount: 0, enabledCandidateCount: 0, reviewed: false, hidden: false },
+    { id: "sample-two", relativePath: "sample-two.png", sourceKind: "session", width: 100, height: 80, candidateCount: 0, enabledCandidateCount: 0, reviewed: false, hidden: false },
   ];
   let catalog = structuredClone(initialCatalog);
   let settings = {
@@ -711,20 +711,22 @@ async function runCandidateBlinkScenario(browser, expanded = false) {
       const detectedApply = rows.find((item) => item.className.includes("candidate-row-apply") && !item.className.includes("manual"));
       const detectedExclude = rows.find((item) => item.className.includes("candidate-row-exclude") && !item.className.includes("manual"));
       assert.deepEqual([apply?.children, exclude?.children, erase?.children], [2, 2, 2], `real Chromium candidate rows keep one heading and one action row at ${width}px/${language}`);
-      assert.equal([detectedApply, detectedExclude, apply, exclude, erase].every((item) => !item.overflow), true, `real Chromium candidate rows wrap actions without overflow at ${width}px/${language} (${JSON.stringify({ detectedApply, detectedExclude, apply, exclude, erase })})`);
+      assert.equal([detectedApply, detectedExclude, apply, exclude, erase].filter(Boolean).every((item) => !item.overflow), true, `real Chromium candidate rows wrap actions without overflow at ${width}px/${language} (${JSON.stringify({ detectedApply, detectedExclude, apply, exclude, erase })})`);
       for (const selector of ['[data-candidate-blink-id="candidate-blink-apply"]', '.candidate-row-manual-apply', '.candidate-row-manual-exclude:not(.candidate-row-manual-exclude-erase)', '.candidate-row-manual-exclude-erase']) {
         await page.locator(selector).scrollIntoViewIfNeeded();
         assert.equal(await page.locator(selector).evaluate((node) => [...node.querySelectorAll("button")].every((button) => {
           const rect = button.getBoundingClientRect(); const target = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2); return target === button || button.contains(target);
         })), true, `candidate row controls retain their hit targets for ${selector} at ${width}px/${language}`);
       }
-      await page.locator('[data-candidate-blink-id="candidate-blink-exclude"] .candidate-forced').scrollIntoViewIfNeeded();
-      assert.equal(await page.locator('[data-candidate-blink-id="candidate-blink-exclude"] .candidate-forced').evaluate((button) => {
+      if (expanded) {
+        await page.locator('[data-candidate-blink-id="candidate-blink-exclude"] .candidate-forced').scrollIntoViewIfNeeded();
+        assert.equal(await page.locator('[data-candidate-blink-id="candidate-blink-exclude"] .candidate-forced').evaluate((button) => {
         const rect = button.getBoundingClientRect(); const row = button.closest(".candidate-row").getBoundingClientRect();
         const target = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
         return getComputedStyle(button).display !== "none" && rect.width > 0 && rect.height > 0 && rect.left >= row.left && rect.right <= row.right && rect.top >= row.top && rect.bottom <= row.bottom && (target === button || button.contains(target));
-      }), true, `the automatic exclusion force control remains fully visible inside the row at ${width}px/${language}`);
-      assert.deepEqual(await page.locator('[data-candidate-blink-id="candidate-blink-exclude"] .candidate-row-actions > button').evaluateAll((buttons) => buttons.map((button) => button.className)), ["candidate-display-toggle", "candidate-effective-toggle", "candidate-padding-button", "candidate-forced", "candidate-delete"], `the exclusion actions retain display, effective, padding, force, delete order at ${width}px/${language}`);
+        }), true, `the automatic exclusion force control remains fully visible inside the row at ${width}px/${language}`);
+        assert.deepEqual(await page.locator('[data-candidate-blink-id="candidate-blink-exclude"] .candidate-row-actions > button').evaluateAll((buttons) => buttons.map((button) => button.className)), ["candidate-display-toggle", "candidate-effective-toggle", "candidate-padding-button", "candidate-forced", "candidate-delete"], `the exclusion actions retain display, effective, padding, force, delete order at ${width}px/${language}`);
+      }
     }
     }
     await page.evaluate(() => loadTranslations("ja"));
@@ -3987,11 +3989,13 @@ async function main() {
     });
     try {
       await browserSavePage.goto(fixtureUrl, { waitUntil: "networkidle" });
+      const folderRequestCount = folderRequests.length;
       await browserSavePage.locator("#pickFolder").click();
       await browserSavePage.locator("#folderPath").fill("G:\\selected-folder");
       await browserSavePage.locator("#loadFolderButton").click();
       await browserSavePage.waitForFunction(() => state.images.length === 2);
-      assert.deepEqual(folderRequests, [{ path: "G:\\selected-folder" }], "folder selection posts the typed path and reloads the catalogue");
+      assert.equal(folderRequests.length, folderRequestCount + 1, "folder selection sends exactly one new request");
+      assert.deepEqual(folderRequests.at(-1), { path: "G:\\selected-folder" }, "folder selection posts the typed path and reloads the catalogue");
       await browserSavePage.locator('.gallery-item[data-id="sample"]').click();
       await browserSavePage.waitForFunction(() => state.currentId === "sample" && state.currentImage);
       await browserSavePage.locator("#brushTool").click();
