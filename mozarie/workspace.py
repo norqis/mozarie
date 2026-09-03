@@ -391,20 +391,24 @@ class WorkspaceStore:
 
     def name_project(self, catalog_id: str, name: str) -> dict[str, Any]:
         clean_name = name.strip()
-        if not clean_name: raise ValueError("project name is required")
+        if not clean_name:
+            raise ValueError("project name is required")
         with self._lock, self._connect() as db:
             try:
                 cursor = db.execute("UPDATE catalogs SET name=?,updated_at=? WHERE catalog_id=?", (clean_name, time.time_ns(), catalog_id))
             except sqlite3.IntegrityError as exc:
                 raise ValueError("project name already exists") from exc
-            if not cursor.rowcount: raise ValueError("project is missing")
+            if not cursor.rowcount:
+                raise ValueError("project is missing")
         return self.project(catalog_id) or {}
 
     def set_project_status(self, catalog_id: str, status: str) -> dict[str, Any]:
-        if status not in {"working", "completed"}: raise ValueError("invalid project status")
+        if status not in {"working", "completed"}:
+            raise ValueError("invalid project status")
         with self._lock, self._connect() as db:
             cursor = db.execute("UPDATE catalogs SET status=?,updated_at=? WHERE catalog_id=?", (status, time.time_ns(), catalog_id))
-            if not cursor.rowcount: raise ValueError("project is missing")
+            if not cursor.rowcount:
+                raise ValueError("project is missing")
         return self.project(catalog_id) or {}
 
     def projects_for_source_root(self, source_root: str, exclude_catalog: str | None = None) -> list[dict[str, Any]]:
@@ -619,7 +623,10 @@ class WorkspaceStore:
             db.execute("""INSERT INTO manual_edits(image_id,removed_candidate_ids,candidate_revision,has_effective_mask,updated_at)
                 VALUES(?,?,?,?,?)""", (image_id, "[]", revision, int(effective), time.time_ns()))
             return
-        removed = json.loads(row["removed_candidate_ids"])
+        try:
+            removed = json.loads(row["removed_candidate_ids"])
+        except (TypeError, ValueError, json.JSONDecodeError) as exc:
+            raise ValueError("workspace removed candidates are invalid") from exc
         if not isinstance(removed, list) or any(not isinstance(item, str) for item in removed):
             raise ValueError("workspace removed candidates are invalid")
         db.execute("""UPDATE manual_edits SET removed_candidate_ids=?,candidate_revision=?,has_effective_mask=?,updated_at=?
@@ -879,7 +886,8 @@ class WorkspaceStore:
         def pixels(raw: bytes | None) -> np.ndarray:
             if raw is None: return np.zeros((height, width), dtype=np.uint8)
             with Image.open(io.BytesIO(raw)) as image:
-                if image.size != (width, height): raise ValueError("workspace manual mask dimensions are invalid")
+                if image.size != (width, height):
+                    raise ValueError("workspace manual mask dimensions are invalid")
                 return np.asarray(image.convert("L"), dtype=np.uint8) > 0
         changed = np.logical_xor(pixels(before), pixels(after))
         ys, xs = np.where(changed)
@@ -905,17 +913,20 @@ class WorkspaceStore:
                 and isinstance(encoded, str)):
             raise ValueError("workspace history is invalid")
         width, height = size; left, top, box_width, box_height = box
-        if left + box_width > width or top + box_height > height: raise ValueError("workspace history is invalid")
+        if left + box_width > width or top + box_height > height:
+            raise ValueError("workspace history is invalid")
         if raw is None: canvas = np.zeros((height, width), dtype=np.uint8)
         else:
             with Image.open(io.BytesIO(raw)) as image:
-                if image.size != (width, height): raise ValueError("workspace history is invalid")
+                if image.size != (width, height):
+                    raise ValueError("workspace history is invalid")
                 canvas = (np.asarray(image.convert("L"), dtype=np.uint8) > 0).astype(np.uint8) * 255
         delta = WorkspaceStore._unpack_blob(encoded)
         WorkspaceStore._require_png_mask(delta)
         assert delta is not None
         with Image.open(io.BytesIO(delta)) as image: region = (np.asarray(image.convert("L"), dtype=np.uint8) > 0)
-        if region.shape != (box_height, box_width): raise ValueError("workspace history is invalid")
+        if region.shape != (box_height, box_width):
+            raise ValueError("workspace history is invalid")
         canvas[top:top + box_height, left:left + box_width] ^= region.astype(np.uint8) * 255
         if not target_exists: return None
         output = io.BytesIO(); Image.fromarray(canvas, "L").save(output, format="PNG"); return output.getvalue()
@@ -923,9 +934,11 @@ class WorkspaceStore:
     @staticmethod
     def _history_candidate_ids(state: dict[str, Any]) -> set[str]:
         candidates = state.get("candidates", [])
-        if not isinstance(candidates, list): raise ValueError("workspace history is invalid")
+        if not isinstance(candidates, list):
+            raise ValueError("workspace history is invalid")
         values = {item.get("id") for item in candidates if isinstance(item, dict)}
-        if not all(isinstance(value, str) and value for value in values): raise ValueError("workspace history is invalid")
+        if not all(isinstance(value, str) and value for value in values):
+            raise ValueError("workspace history is invalid")
         return values
 
     @staticmethod
@@ -1039,7 +1052,8 @@ class WorkspaceStore:
                 raise ValueError("workspace history is invalid")
             for blob in blobs: WorkspaceStore._require_png_mask(blob)
             for key in ("removed",):
-                if not isinstance(manual.get(key), str): raise ValueError("workspace history is invalid")
+                if not isinstance(manual.get(key), str):
+                    raise ValueError("workspace history is invalid")
             db.execute("""INSERT INTO manual_edits(image_id,add_png,exclusion_png,exclusion_erase_png,manual_enabled,exclusion_enabled,
                 exclusion_erase_enabled,exclusion_forced,removed_candidate_ids,candidate_revision,has_effective_mask,history_json,updated_at)
                 VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)""", (image_id, *blobs, int(bool(manual.get("manualEnabled"))),
@@ -1068,14 +1082,16 @@ class WorkspaceStore:
                     if direction == "undo" and cursor_id != int(member["entry_id"]): return False
                     if direction == "redo":
                         previous = db.execute("SELECT entry_id FROM history_entries WHERE image_id=? AND entry_id<? ORDER BY entry_id DESC LIMIT 1", (member["image_id"], member["entry_id"])).fetchone()
-                        if cursor_id != (int(previous["entry_id"]) if previous else 0): return False
+                        if cursor_id != (int(previous["entry_id"]) if previous else 0):
+                            return False
                 return True
             can_undo = group_ready(undo_entry, "undo")
             can_redo = group_ready(redo_entry, "redo")
         return {"canUndo": can_undo, "canRedo": can_redo}
 
     def restore_history(self, image_id: str, direction: str) -> list[str]:
-        if direction not in {"undo", "redo"}: raise ValueError("invalid history direction")
+        if direction not in {"undo", "redo"}:
+            raise ValueError("invalid history direction")
         with self._lock, self._connect() as db:
             db.execute("BEGIN IMMEDIATE")
             try:
@@ -1148,5 +1164,6 @@ class WorkspaceStore:
             history = json.loads(str(row["history_json"]))
         except (TypeError, ValueError, json.JSONDecodeError) as exc:
             raise ValueError("workspace history is invalid") from exc
-        if not isinstance(history, dict): raise ValueError("workspace history is invalid")
+        if not isinstance(history, dict):
+            raise ValueError("workspace history is invalid")
         return {"add": encoder(masks[0]), "exclusion": encoder(masks[1]), "exclusionErase": encoder(masks[2]), "manualEnabled": bool(row["manual_enabled"]), "manualExclusionEnabled": bool(row["exclusion_enabled"]), "manualExclusionEraseEnabled": bool(row["exclusion_erase_enabled"]), "manualExclusionForced": bool(row["exclusion_forced"]), "removedCandidateIds": removed, "candidateRevision": current_revision, "hasEffectiveMask": bool(row["has_effective_mask"]), "history": history}
