@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="ja">
+<meta charset="utf-8">
+<title>Mozarie</title>
+<main>
+  <h1 data-key="workspaceRecovery.title"></h1>
+  <p data-key="workspaceRecovery.message"></p>
+  <button id="recreate" data-key="workspaceRecovery.recreate"></button>
+  <p id="message" aria-live="polite"></p>
+</main>
+<script>
+(() => {
+  const lang = localStorage.getItem("mozarie-language") === "en" ? "en" : "ja";
+  const button = document.querySelector("#recreate");
+  const message = document.querySelector("#message");
+  let translations;
+  const text = (key) => translations[key];
+
+  fetch(`/i18n/${lang}.json`, { cache: "no-store" })
+    .then((response) => {
+      if (!response.ok) throw new Error("translations unavailable");
+      return response.json();
+    })
+    .then((data) => {
+      translations = data;
+      document.documentElement.lang = lang;
+      document.querySelectorAll("[data-key]").forEach((element) => {
+        element.textContent = text(element.dataset.key);
+      });
+      button.addEventListener("click", async () => {
+        if (button.disabled || !confirm(text("workspaceRecovery.confirm"))) return;
+        button.disabled = true;
+        try {
+          const response = await fetch("/api/workspace/recreate", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: "{}",
+          });
+          if (response.ok) {
+            location.reload();
+            return;
+          }
+          message.textContent = text("workspaceRecovery.failed");
+        } catch (_error) {
+          message.textContent = text("workspaceRecovery.failed");
+        }
+        button.disabled = false;
+      });
+    })
+    .catch(() => {
+      message.textContent = "";
+    });
+})();
+</script>
+</html>

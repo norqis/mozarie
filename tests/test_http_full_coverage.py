@@ -42,7 +42,7 @@ class HttpBoundaryCoverageTests(unittest.TestCase):
         page._binary = lambda data, content_type, *_args, **_kwargs: emitted.append((data, content_type))
         page._send_workspace_recovery_page()
         self.assertEqual(emitted[0][1], "text/html; charset=utf-8")
-        self.assertIn(b"localStorage.getItem('mozarie-language')==='en'?'en':'ja'", emitted[0][0])
+        self.assertIn(b'localStorage.getItem("mozarie-language") === "en"', emitted[0][0])
         self.assertIn(b"/api/workspace/recreate", emitted[0][0])
 
         unavailable = handler(); unavailable.path = "/api/workspace/recovery"; unavailable._require_local_host = lambda: "127.0.0.1:9876"

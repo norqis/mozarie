@@ -300,9 +300,9 @@ class ProjectHttpCoverageTests(unittest.TestCase):
                 status, headers, body = self.request("GET", path)
                 self.assertEqual(status, 200)
                 self.assertEqual(headers["Content-Type"], "text/html; charset=utf-8")
-                self.assertIn(b'fetch(\'/i18n/\'+lang+\'.json\'', body)
-                self.assertIn(b"button.disabled=true", body)
-                self.assertIn(b"if(response.ok)", body)
+                self.assertIn(b"fetch(`/i18n/${lang}.json`", body)
+                self.assertIn(b"button.disabled = true", body)
+                self.assertIn(b"if (response.ok)", body)
 
             for path in ("/i18n/ja.json", "/i18n/en.json"):
                 status, headers, body = self.request("GET", path)
