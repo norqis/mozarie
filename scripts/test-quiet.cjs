@@ -28,7 +28,113 @@ function runCommand(command, args, options = {}) {
   });
 }
 
-function diagnostic(output) { return output.trim().split(/\r?\n/).slice(-60).join("\n"); }
+const MAX_DIAGNOSTIC_CHARACTERS = 32 * 1024;
+const MAX_NAME_CHARACTERS = 240;
+const MAX_DETAIL_LINES = 8;
+
+function normalizeOutput(output) {
+  return String(output || "")
+    .replace(/\u001B\[[0-?]*[ -/]*[@-~]/g, "")
+    .replace(/\r\n?/g, "\n")
+    .trim();
+}
+
+function shorten(value, maximum = MAX_NAME_CHARACTERS) {
+  const text = String(value || "").trim();
+  return text.length <= maximum ? text : `${text.slice(0, Math.max(0, maximum - 1))}…`;
+}
+
+function cleanDetail(lines) {
+  const useful = lines
+    .map((line) => line.trim())
+    .filter((line) => line && !/^[=\-]{3,}$/.test(line))
+    .filter((line) => !/^Traceback \(most recent call last\):$/.test(line));
+  if (!useful.length) return [];
+  const start = useful.findLastIndex((line) => /^File ["']/.test(line));
+  return useful.slice(start >= 0 ? start : Math.max(0, useful.length - MAX_DETAIL_LINES), (start >= 0 ? undefined : useful.length))
+    .slice(-MAX_DETAIL_LINES)
+    .map((line) => shorten(line, 900));
+}
+
+function pythonDiagnostic(lines) {
+  const entries = [];
+  const headers = [];
+  for (let index = 0; index < lines.length; index += 1) {
+    const match = lines[index].match(/^(FAIL|ERROR):\s+(.+)$/);
+    if (match) headers.push({ index, kind: match[1], name: match[2] });
+  }
+  if (!headers.length) return null;
+  for (let index = 0; index < headers.length; index += 1) {
+    const current = headers[index];
+    const next = headers[index + 1]?.index ?? lines.length;
+    const body = lines.slice(current.index + 1, next);
+    entries.push({ kind: current.kind, name: current.name, detail: cleanDetail(body) });
+  }
+  const summary = lines.filter((line) => /^Ran \d+ tests? in\b/.test(line) || /^FAILED \(.+\)$/.test(line));
+  return { family: "python", entries, summary };
+}
+
+function tapDiagnostic(lines) {
+  const entries = [];
+  const headers = [];
+  for (let index = 0; index < lines.length; index += 1) {
+    const match = lines[index].match(/^\s*not ok \d+ - (.+)$/);
+    if (!match || /\s+#\s*(?:SKIP|TODO)\b/i.test(match[1])) continue;
+    headers.push({ index, name: match[1].replace(/\s+#\s*(?:SKIP|TODO)\b.*$/i, "").trim() });
+  }
+  if (!headers.length) return null;
+  for (let index = 0; index < headers.length; index += 1) {
+    const current = headers[index];
+    const next = headers[index + 1]?.index ?? lines.length;
+    const body = lines.slice(current.index + 1, next);
+    const yamlStart = body.findIndex((line) => line.trim() === "---");
+    const yamlEnd = yamlStart < 0 ? -1 : body.findIndex((line, bodyIndex) => bodyIndex > yamlStart && line.trim() === "...");
+    const candidate = yamlStart < 0 ? body : body.slice(yamlStart + 1, yamlEnd < 0 ? undefined : yamlEnd);
+    const detailLines = [];
+    for (let candidateIndex = 0; candidateIndex < candidate.length; candidateIndex += 1) {
+      const line = candidate[candidateIndex];
+      if (/\b(?:error|code|name|message|stack)\s*:|(?:Assertion|Error|Exception)\b/i.test(line)) {
+        detailLines.push(line);
+        if (/\bstack\s*:/i.test(line)) detailLines.push(...candidate.slice(candidateIndex + 1, candidateIndex + 5));
+      }
+    }
+    entries.push({ kind: "FAIL", name: current.name, detail: cleanDetail(detailLines.length ? detailLines : candidate) });
+  }
+  const summary = lines.filter((line) => /^# (?:tests|pass|fail)\b/i.test(line.trim()));
+  return { family: "tap", entries, summary };
+}
+
+function appendWithinLimit(parts, value) {
+  const used = parts.join("\n").length;
+  const remaining = MAX_DIAGNOSTIC_CHARACTERS - used - (parts.length ? 1 : 0);
+  if (remaining <= 0) return false;
+  parts.push(value.length <= remaining ? value : `${value.slice(0, Math.max(0, remaining - 1))}…`);
+  return value.length <= remaining;
+}
+
+function structuredDiagnostic(parsed) {
+  const parts = [];
+  if (parsed.summary.length) appendWithinLimit(parts, parsed.summary.join("\n"));
+  appendWithinLimit(parts, `Failures (${parsed.entries.length}):`);
+  for (const entry of parsed.entries) appendWithinLimit(parts, `- ${entry.kind}: ${shorten(entry.name)}`);
+  let detailed = 0;
+  for (const entry of parsed.entries) {
+    const detail = entry.detail.length ? `\n  ${entry.detail.join("\n  ")}` : "";
+    if (!appendWithinLimit(parts, `\n${entry.kind}: ${shorten(entry.name)}${detail}`)) break;
+    detailed += 1;
+  }
+  if (detailed < parsed.entries.length) appendWithinLimit(parts, `\ndetails truncated: ${parsed.entries.length - detailed} more`);
+  return parts.join("\n").trim();
+}
+
+function diagnostic(output) {
+  const normalized = normalizeOutput(output);
+  const lines = normalized.split("\n");
+  const parsed = pythonDiagnostic(lines) || tapDiagnostic(lines);
+  if (parsed) return structuredDiagnostic(parsed);
+  const fallback = lines.slice(-60).join("\n");
+  return fallback.length <= MAX_DIAGNOSTIC_CHARACTERS ? fallback : `${fallback.slice(-MAX_DIAGNOSTIC_CHARACTERS + 1)}…`;
+}
 
 async function requiredCommand(label, command, args, options) {
   const result = await runCommand(command, args, options);

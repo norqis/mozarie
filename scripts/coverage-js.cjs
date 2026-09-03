@@ -65,6 +65,7 @@ function runNodeCoverage() {
     "--clean",
     process.execPath,
     "--test",
+    "--test-reporter=tap",
     "--test-concurrency=4",
     ...testFiles,
   ], {
