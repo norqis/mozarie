@@ -3679,6 +3679,11 @@ async function main() {
         };
       }, { width, height });
       await page.waitForFunction(() => !state.mosaicWorkerBusy && state.mosaicSourceId && !state.mosaicPreviewRequested, null, { timeout: 15000 });
+      const projectMode = await page.evaluate(() => {
+        const enabled = Boolean(state.project?.id);
+        if (enabled) state.projectHistory.delete(state.currentId);
+        return enabled;
+      });
       const normalCursors = await page.evaluate(() => ["brush", "mosaic_eraser", "eraser", "exclude_eraser", "boundary", "polygon", "boundary_brush", "bucket", "exclude_bucket"].map((tool) => {
         setTool(tool); return getComputedStyle(document.querySelector("#editorCanvas")).cursor;
       }));
@@ -3701,7 +3706,21 @@ async function main() {
       }), geometry);
       assert.deepEqual(duringBrush, { active: true, mask: true, preview: true }, `${width}x${height} brush updates its mosaic preview during the drag`);
       await page.mouse.up();
-      await page.waitForFunction(() => !state.activeStroke && state.history.length > 0 && !state.mosaicWorkerBusy && !state.mosaicPending, null, { timeout: 15000 });
+      const brushPersistence = await page.waitForFunction((projectMode) => {
+        const imageId = state.currentId;
+        if (state.activeStroke || state.mosaicWorkerBusy || state.mosaicPending) return false;
+        if (!projectMode) return state.history.length > 0;
+        const draft = state.drafts.get(imageId);
+        return state.history.length === 0
+          && !state.draftSaveChains.has(imageId)
+          && !state.workspaceDraftTimers.has(imageId)
+          && !state.workspaceDraftChains.has(imageId)
+          && !state.workspaceMutationErrors.has(imageId)
+          && draft?.dirtyLayers?.length === 0
+          && state.projectHistory.has(imageId);
+      }, projectMode, { timeout: 15000 });
+      const brushPersistenceState = await brushPersistence.jsonValue();
+      assert.equal(brushPersistenceState, true, `${width}x${height} brush settles its ${projectMode ? "durable project draft and history status without local history" : "projectless local history"}`);
       const afterBrushPreview = await page.evaluate(({ logical }) => [...mosaicCtx.getImageData(logical.x, logical.y, 1, 1).data]
         .some((value, index) => value !== originalCtx.getImageData(logical.x, logical.y, 1, 1).data[index]), geometry);
       assert.equal(afterBrushPreview, true, `${width}x${height} brush confirms one mosaic worker frame after pointerup`);
