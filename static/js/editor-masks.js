@@ -532,6 +532,12 @@ function copyCanvas(source, target) {
 }
 
 function updateHistoryButtons() {
+  if (state.project?.id) {
+    const history = state.projectHistory.get(state.currentId) || {};
+    $("#undoButton").disabled = state.projectReadOnly || state.projectHistoryBusy || history.canUndo !== true;
+    $("#redoButton").disabled = state.projectReadOnly || state.projectHistoryBusy || history.canRedo !== true;
+    return;
+  }
   $("#undoButton").disabled = state.historyIndex <= 0;
   $("#redoButton").disabled = state.historyIndex >= state.history.length;
 }
@@ -740,7 +746,39 @@ function completeManualStroke() {
   updateHistoryButtons(); updateCandidateStatus(); refreshCurrentReviewAndMask(); requestMosaicPreview(); renderCandidates();
 }
 
+async function refreshProjectHistory(imageId = state.currentId) {
+  if (!state.project?.id || !imageId) return;
+  try {
+    const history = await api(`/api/project/history/${encodeURIComponent(imageId)}`);
+    state.projectHistory.set(imageId, { canUndo: history.canUndo === true, canRedo: history.canRedo === true });
+    if (imageId === state.currentId) updateHistoryButtons();
+  } catch (error) { showUserError(error); }
+}
+
+async function restoreProjectHistory(direction) {
+  const imageId = state.currentId;
+  if (!state.project?.id || !imageId || state.projectReadOnly || state.projectHistoryBusy || isBusy() || state.importing) return;
+  const history = state.projectHistory.get(imageId) || {};
+  if ((direction === "undo" && !history.canUndo) || (direction === "redo" && !history.canRedo)) return;
+  state.projectHistoryBusy = true; updateHistoryButtons();
+  try {
+    await flushWorkspaceDraft(imageId);
+    const result = await api(`/api/project/history/${encodeURIComponent(imageId)}/${direction}`, { method: "POST", body: "{}" });
+    const changed = new Set(result.changedImageIds || []);
+    for (const changedId of changed) {
+      state.drafts.delete(changedId); state.projectHistory.delete(changedId); releaseCandidateBundles(changedId);
+      const record = state.images.find((image) => image.id === changedId);
+      if (record && changedId === imageId && result.current) record.candidateRevision = Number(result.current.candidateRevision || 0);
+    }
+    state.projectHistory.set(imageId, { canUndo: result.canUndo === true, canRedo: result.canRedo === true });
+    if (changed.has(imageId)) await selectImage(imageId, true, { saveCurrentDraft: false });
+    else updateHistoryButtons();
+  } catch (error) { showUserError(error); }
+  finally { state.projectHistoryBusy = false; updateHistoryButtons(); }
+}
+
 function restoreSnapshot(index) {
+  if (state.project?.id) { void restoreProjectHistory(index < state.historyIndex ? "undo" : "redo"); return; }
   if (isBusy() || state.importing || index < 0 || index > state.history.length) return;
   const restoreToken = ++state.historyRestoreToken;
   state.historyIndex = index;

@@ -28,7 +28,7 @@ const state = {
   imageCache: null, candidateBundleCache: null, catalogLoadControllers: new Set(),
   prefetchQueue: [], prefetchActive: 0, prefetchTimer: null,
   fillWorker: null, fillPending: false,
-  project: null, projectReadOnly: false,
+  project: null, projectReadOnly: false, projectHistory: new Map(), projectHistoryBusy: false,
   renderFrame: 0,
   maskDirty: false, draftDirty: false, draftLayerDirty: new Set(), historyBaseDirty: false, draftSaveChains: new Map(),
 };
@@ -81,7 +81,7 @@ const USER_ERROR_CODES = {
   api_not_found: "response_invalid", connection_lost: "connection_lost", output_folder_unavailable: "output_folder_unavailable", output_permission_denied: "output_permission_denied", request_failed: "internal_error",
   image_not_found: "image_not_found", image_read_failed: "image_read_failed", image_format_unsupported: "image_format_unsupported",
   save_write_failed: "save_write_failed", save_state_changed: "save_state_changed", folder_not_found: "folder_not_found",
-  source_restore_failed: "source_restore_failed",
+  source_restore_failed: "project_source_unavailable", project_source_unavailable: "project_source_unavailable", project_name_invalid: "project_name_invalid", project_read_only: "project_read_only",
   source_permission_denied: "source_permission_denied", source_action_unavailable: "source_action_unavailable",
   source_busy: "source_busy", source_write_unsupported: "source_write_unsupported", output_write_unsupported: "output_write_unsupported", output_cleanup_failed: "output_cleanup_failed",
   clipboard_write_failed: "clipboard_write_failed",
@@ -487,7 +487,8 @@ function setNavigationShortcutsEnabled(enabled) {
 
 function updateActionButtons() {
   const running = isBusy();
-  const locked = running || state.importing || state.projectReadOnly;
+  const sourceIncompatible = Boolean(currentRecord()?.sourceDimensionsChanged);
+  const locked = running || state.importing || state.projectReadOnly || sourceIncompatible;
   const mutatingCandidates = state.candidateUpdateChains.size > 0;
   const switchingImages = state.candidateBatchPending.size > 0;
   const current = currentRecord();
@@ -501,11 +502,11 @@ function updateActionButtons() {
       }
     }
   }
-  $("#pickFolder").disabled = running || state.importing;
+  $("#pickFolder").disabled = running || state.importing || state.projectReadOnly;
   const detectAllButton = $("#detectAllButton");
   detectAllButton.textContent = t("gallery.detectAll");
   detectAllButton.disabled = running || state.images.length === 0;
-  $("#detectCurrentButton").disabled = running || !hasImage;
+  $("#detectCurrentButton").disabled = running || !hasImage || state.projectReadOnly || sourceIncompatible;
   $("#clearCurrentMasksButton").disabled = running || !hasImage || !(current.candidateCount || state.manualMaskPresent || imageHasMask(current));
   const visibilityButton = $("#removeCurrentImageButton");
   visibilityButton.disabled = running || !hasImage;
@@ -524,9 +525,18 @@ function updateActionButtons() {
   $("#reviewAndNextButton").disabled = running || switchingImages || !hasImage;
   $("#removeAndNextButton").disabled = running || switchingImages || !hasImage;
   $("#hideAndNextButton").disabled = running || switchingImages || !hasImage;
+  $("#downloadCurrentMosaicMask").disabled = !hasImage || !state.project;
+  $("#downloadCurrentExcludeMask").disabled = !hasImage || !state.project;
   updateCandidateBatchButtons(hasImage, locked);
   updateHistoryButtons();
   if (locked) for (const control of controls) {
+    const availableInReadOnly = new Set([
+      "projectButton", "projectClose", "projectOpenList", "projectListClose", "projectSort", "projectResume",
+      "projectMosaicZip", "projectExcludeZip", "downloadCurrentMosaicMask", "downloadCurrentExcludeMask",
+      "singleViewButton", "compareViewButton", "fitButton", "previousImageButton", "nextImageButton",
+      "settingsButton", "errorDialogClose",
+    ]);
+    if ((state.projectReadOnly || sourceIncompatible) && availableInReadOnly.has(control.id)) continue;
     if (control.id === "errorDialogClose") continue;
     if (["applyPauseButton", "applyCancelButton"].includes(control.id) && state.applyRunning) continue;
     if (["processingPauseButton", "processingCancelButton"].includes(control.id) && state.processing) continue;
@@ -535,8 +545,8 @@ function updateActionButtons() {
     control.disabled = true;
   }
   $("#gallery").classList.toggle("locked", locked);
-  canvas.style.pointerEvents = locked ? "none" : "";
-  canvas.setAttribute("aria-disabled", String(locked));
+  canvas.style.pointerEvents = running || state.importing ? "none" : "";
+  canvas.setAttribute("aria-disabled", String(running || state.importing));
   syncDetectionActions();
 }
 
@@ -618,6 +628,7 @@ function resetCatalog(images, root) {
   cancelFillWork();
   releaseImageCaches();
   state.images = images;
+  state.projectHistory.clear();
   state.sourceAccess.clear();
   state.reviewRoot = normaliseReviewRoot(root);
   state.overviewFolder = "";
@@ -634,6 +645,7 @@ function resetCatalog(images, root) {
 function applyProjectSnapshot(snapshot) {
   state.project = snapshot?.project || null;
   state.projectReadOnly = snapshot?.readOnly === true || state.project?.status === "completed";
+  if (typeof renderProjectCurrent === "function") renderProjectCurrent();
   updateActionButtons();
 }
 
@@ -655,10 +667,11 @@ function updateProgress(job) {
   updateActionButtons();
 }
 
-async function loadFolder() {
+async function loadFolder({ skipSameSourceWarning = false, path: suppliedPath = null } = {}) {
   if (isBusy() || state.importing) return;
-  const path = $("#folderPath").value.trim();
+  const path = suppliedPath || $("#folderPath").value.trim();
   if (!path) return setStatusKey("status.enterFolder");
+  if (!skipSameSourceWarning && typeof openSameSourceDialog === "function" && await openSameSourceDialog(path)) return;
   const picker = $("#pickerMenu");
   if (picker?.matches?.(":popover-open")) picker.hidePopover();
   const catalogEpoch = beginCatalogEpoch();
