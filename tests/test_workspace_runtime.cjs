@@ -201,7 +201,7 @@ vm.runInNewContext("globalThis.workspaceTest={queueWorkspaceDraft,flushDraftSave
   assert.equal(await context.workspaceTest.catalogForDirectoryHandle({}), null, "a server response without a catalog ID remains an explicit no-catalog result");
 
   state.currentId = null; state.draftDirty = false; state.draftSaveChains.clear(); state.workspaceDraftChains.clear(); state.workspaceMutationErrors.clear(); state.workspaceDraftTimers.clear();
-  assert.equal(JSON.stringify(context.workspaceTest.workspaceDraftPayload({})), JSON.stringify({ add: "", exclusion: "", exclusionErase: "", manualEnabled: true, manualExclusionEnabled: true, manualExclusionEraseEnabled: true, manualExclusionForced: true, hasEffectiveMask: false, removedCandidateIds: [], candidateRevision: 0 }), "a partially initialized manual draft receives the persisted defaults");
+  assert.equal(JSON.stringify(context.workspaceTest.workspaceDraftPayload({})), JSON.stringify({ add: "", exclusion: "", exclusionErase: "", manualEnabled: true, manualExclusionEnabled: true, manualExclusionEraseEnabled: true, manualExclusionForced: true, hasEffectiveMask: false, removedCandidateIds: [], candidateRevision: 0, history: { operations: [], index: 0, base: {} } }), "a partially initialized manual draft receives the persisted defaults");
   await context.workspaceTest.flushDraftSaves(["one"]);
   state.currentId = "one"; state.draftDirty = true;
   let skippedDraftEncodes = 0;

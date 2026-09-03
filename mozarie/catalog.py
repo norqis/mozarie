@@ -27,7 +27,7 @@ from .core import (
 )
 from .domain import Candidate, CandidateRole
 from .image_io import _valid_color, decode_draft_masks, draft_manual_exclusion_forced, inspect_import_image, oriented_image_size, unique_session_import_destination
-from .masks import expand_mask
+from .masks import compose_masks, expand_mask
 from .runtime import patch_directml_sam_prompt_encoder, runtime_backend, torch_device
 
 class CatalogMixin:
@@ -344,6 +344,31 @@ class CatalogMixin:
         with self.lock:
             return [{"id": image_id, "relativePath": self.images[image_id].relative_path, "dimensionsChanged": dimensions}
                     for image_id, dimensions in self.source_mismatches.items() if image_id in self.images]
+
+    def export_mask_png(self, image_id: str, kind: str) -> bytes:
+        """Return original-size grayscale project masks; never touches source files."""
+        if kind not in {"mosaic", "exclude"}: raise ClientError("マスク種別が正しくありません。", "input_invalid")
+        record = self.image_snapshot(image_id)
+        draft = self.workspace_store.manual(image_id, self._encode_workspace_mask) or {}
+        add, manual_exclude, erase = decode_draft_masks(draft, record.width, record.height)
+        removed = {str(item) for item in draft.get("removedCandidateIds", [])}
+        with self.lock: candidates = [replace(item) for item in self.candidates.get(image_id, []) if item.enabled and item.candidate_id not in removed]
+        apply_masks: list[np.ndarray] = []; exclude_masks: list[np.ndarray] = []; forced: list[np.ndarray] = []
+        for candidate in candidates:
+            self.materialize_candidate_mask(candidate, image_id)
+            with Image.open(candidate.mask_path) as image: mask = expand_mask(np.asarray(image.convert("L"), dtype=np.uint8), candidate.expand_px)
+            if candidate.role == CandidateRole.APPLY: apply_masks.append(mask)
+            else:
+                exclude_masks.append(mask)
+                if candidate.forced: forced.append(mask)
+        if kind == "mosaic":
+            value = compose_masks((record.height, record.width), apply_masks, exclude_masks, add if draft.get("manualEnabled") is not False else None, manual_exclude if draft.get("manualExclusionEnabled") is not False else None, forced, draft_manual_exclusion_forced(draft, True), erase if draft.get("manualExclusionEraseEnabled") is not False else None)
+        else:
+            value = np.zeros((record.height, record.width), dtype=np.uint8)
+            for mask in exclude_masks: value = np.maximum(value, np.asarray(mask > 0, dtype=np.uint8) * 255)
+            if manual_exclude is not None and draft.get("manualExclusionEnabled") is not False: value = np.maximum(value, np.asarray(manual_exclude > 0, dtype=np.uint8) * 255)
+            if erase is not None and draft.get("manualExclusionEraseEnabled") is not False: value[np.asarray(erase) > 0] = 0
+        output = io.BytesIO(); Image.fromarray(value, "L").save(output, format="PNG"); return output.getvalue()
 
     def resolve_source_mismatches(self, image_ids: list[str], clear_masks: bool) -> None:
         requested = set(str(value) for value in image_ids)

@@ -9,6 +9,7 @@ import subprocess
 import tempfile
 import threading
 import time
+import zipfile
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -228,6 +229,18 @@ class MosaicHandler(BaseHTTPRequestHandler):
             elif path.startswith("/api/mask/"):
                 image_id, candidate_id = _route_ids(path, "/api/mask/")
                 self._send_candidate_mask(image_id, candidate_id, _request_version(parsed.query))
+            elif path.startswith("/api/project/mask/"):
+                image_id, kind = _route_ids(path, "/api/project/mask/")
+                self._binary(STATE.export_mask_png(image_id, kind), "image/png", headers={"Content-Disposition": f'attachment; filename="{kind}.png"'})
+            elif path.startswith("/api/project/masks/"):
+                kind = path.removeprefix("/api/project/masks/")
+                if kind not in {"mosaic", "exclude"}: raise ClientError("マスク種別が正しくありません。", "input_invalid")
+                output = io.BytesIO()
+                with zipfile.ZipFile(output, "w", zipfile.ZIP_DEFLATED) as archive:
+                    for image in STATE.catalog_snapshot()["images"]:
+                        name = Path(image["relativePath"]).with_suffix("").as_posix() + f"_{kind}.png"
+                        archive.writestr(name, STATE.export_mask_png(str(image["id"]), kind))
+                self._binary(output.getvalue(), "application/zip", headers={"Content-Disposition": f'attachment; filename="{kind}-masks.zip"'})
             else:
                 self._send_static(path)
         except StaleMaskError as exc:
