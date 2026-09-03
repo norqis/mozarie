@@ -2119,7 +2119,7 @@ class MozarieTests(unittest.TestCase):
             with (
                 patch.object(state, "_ensure_models", return_value=[]),
                 patch.object(state, "_detect_image", side_effect=detect_image),
-                patch.object(state, "_commit_candidate_snapshot", side_effect=OSError("database write failed")),
+                patch.object(state, "_commit_candidate_snapshot_outside_state_lock", side_effect=OSError("database write failed")),
             ):
                 state._detect_worker([record], DEFAULT_DETECTION_CONFIDENCE)
 

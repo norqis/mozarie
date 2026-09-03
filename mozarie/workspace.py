@@ -739,10 +739,12 @@ class WorkspaceStore:
         with self._connect() as db:
             image = db.execute("SELECT candidate_revision FROM images WHERE image_id=?", (image_id,)).fetchone()
             rows = db.execute("""SELECT candidates.candidate_id,label_token,confidence,enabled,color,source,origin,refinement,role,forced,
-                COALESCE(candidate_metadata.expand_px,0) AS expand_px FROM candidates LEFT JOIN candidate_metadata USING(image_id,candidate_id)
+                COALESCE(candidate_metadata.expand_px,0) AS expand_px,length(mask_png) AS mask_size,substr(mask_png,1,24) AS mask_header
+                FROM candidates LEFT JOIN candidate_metadata USING(image_id,candidate_id)
                 WHERE candidates.image_id=? AND deleted=0""", (image_id,)).fetchall()
         if not image: return 0, []
         if not rows: return int(image["candidate_revision"]), []
+        for row in rows: self._require_candidate_png_header(row["mask_size"], row["mask_header"])
         candidates = [candidate_factory(self._candidate_row(row), directory / f"{row['candidate_id']}.png") for row in rows]
         return int(image["candidate_revision"]), candidates
 
@@ -758,8 +760,10 @@ class WorkspaceStore:
                 for row in db.execute(f"SELECT image_id,candidate_revision FROM images WHERE image_id IN ({placeholders})", chunk):
                     images[str(row["image_id"])] = int(row["candidate_revision"])
                 for row in db.execute(f"""SELECT candidates.image_id,candidates.candidate_id,label_token,confidence,enabled,color,source,origin,refinement,role,forced,
-                    COALESCE(candidate_metadata.expand_px,0) AS expand_px FROM candidates LEFT JOIN candidate_metadata USING(image_id,candidate_id)
+                    COALESCE(candidate_metadata.expand_px,0) AS expand_px,length(mask_png) AS mask_size,substr(mask_png,1,24) AS mask_header
+                    FROM candidates LEFT JOIN candidate_metadata USING(image_id,candidate_id)
                     WHERE candidates.image_id IN ({placeholders}) AND deleted=0""", chunk):
+                    self._require_candidate_png_header(row["mask_size"], row["mask_header"])
                     image_id = str(row["image_id"])
                     candidates.setdefault(image_id, []).append(candidate_factory(self._candidate_row(row), cache_dir / image_id / f"{row['candidate_id']}.png"))
         return {image_id: (revision, candidates.get(image_id, [])) for image_id, revision in images.items()}
@@ -776,6 +780,16 @@ class WorkspaceStore:
             row = db.execute("SELECT mask_png FROM candidates WHERE image_id=? AND candidate_id=? AND deleted=0", (image_id, candidate_id)).fetchone()
         raw = row["mask_png"] if row else None
         return raw if isinstance(raw, bytes) and raw.startswith(b"\x89PNG\r\n\x1a\n") else None
+
+    @staticmethod
+    def _require_candidate_png_header(mask_size: Any, header: Any) -> None:
+        """Reject broken durable candidate rows without fetching their BLOBs."""
+        if (isinstance(mask_size, bool) or not isinstance(mask_size, int) or mask_size < 24
+                or not isinstance(header, bytes) or len(header) != 24
+                or header[:8] != b"\x89PNG\r\n\x1a\n" or header[8:12] != b"\x00\x00\x00\r"
+                or header[12:16] != b"IHDR" or int.from_bytes(header[16:20], "big") <= 0
+                or int.from_bytes(header[20:24], "big") <= 0):
+            raise ValueError("workspace candidate PNG is invalid")
 
     def save_manual(self, image_id: str, payload: dict[str, Any], decoder: Any) -> None:
         removed = payload.get("removedCandidateIds", [])
