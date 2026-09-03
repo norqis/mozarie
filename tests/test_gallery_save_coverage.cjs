@@ -138,6 +138,7 @@ async function galleryInteractions() {
     runtime.scrollCatalogImage("gallery", imageId);
   }
   const firstNode = state.galleryNodes.get("one");
+  assert.equal(firstNode.classList.contains("reviewed"), true, "reviewed gallery entries carry the green review state");
   assert.equal(firstNode.getAttribute("aria-current"), "true"); assert.match(firstNode.getAttribute("aria-label"), /sets\/one/);
   firstNode.onclick(); firstNode.onmouseenter(); firstNode.oncontextmenu({});
   const secondaryPointer = { button: 2, preventDefault() { this.prevented = true; } }; firstNode.onpointerdown(secondaryPointer);
@@ -228,7 +229,7 @@ async function galleryInteractions() {
 
 function makeSaveRuntime() {
   const nodes = new Map();
-  const ids = ["#applyResult", "#applyStartButton", "#deleteOriginal", "#removeAfterSave", "#applySuffix", "#applyTargetMode", "#applyTargetCount", "#applyDivisor", "#divisor", "#applySuffixRow", "#deleteOriginalRow", "#applyOutputDirectoryRow", "#chooseOutputDirectoryButton", "#applyOutputDirectoryStatus", "#applyTemporarySourceNote", "#applyOverwriteMode", "#applyOverwriteRow", "#settingsDefaultOutputDirectory", "#settingsChooseOutputDirectory", "#applyProgress", "#applyCurrentName", "#applyProgressText", "#applyPauseButton", "#applyCancelButton", "#applyCloseButton", "#applySettings", "#applyProgressPanel", "#applyDialog", "#singleSaveOutputDirectoryStatus", "#singleSaveResult", "#singleSaveSuffixRow", "#singleSaveDeleteOriginalRow", "#singleSaveOutputDirectoryRow", "#singleSaveOverwriteMode", "#singleSaveOverwriteRow", "#singleSaveDeleteOriginal", "#singleSaveChooseOutputDirectoryButton", "#singleSaveStartButton", "#singleSaveSettings", "#singleSaveCopyMode", "#singleSaveSuffix", "#singleSaveDialog"];
+  const ids = ["#applyResult", "#applyStartButton", "#deleteOriginal", "#applySuffix", "#applyTargetMode", "#applyTargetCount", "#applyDivisor", "#divisor", "#applySuffixRow", "#deleteOriginalRow", "#applyOutputDirectoryRow", "#chooseOutputDirectoryButton", "#applyOutputDirectoryStatus", "#applyTemporarySourceNote", "#applyOverwriteMode", "#applyOverwriteRow", "#settingsDefaultOutputDirectory", "#settingsChooseOutputDirectory", "#applyProgress", "#applyCurrentName", "#applyProgressText", "#applyPauseButton", "#applyCancelButton", "#applyCloseButton", "#applySettings", "#applyProgressPanel", "#applyDialog", "#singleSaveOutputDirectoryStatus", "#singleSaveResult", "#singleSaveSuffixRow", "#singleSaveDeleteOriginalRow", "#singleSaveOutputDirectoryRow", "#singleSaveOverwriteMode", "#singleSaveOverwriteRow", "#singleSaveDeleteOriginal", "#singleSaveChooseOutputDirectoryButton", "#singleSaveStartButton", "#singleSaveSettings", "#singleSaveCopyMode", "#singleSaveSuffix", "#singleSaveDialog"];
   for (const id of ids) nodes.set(id, element());
   nodes.get("#applyTargetMode").value = "masked"; nodes.get("#applyDivisor").value = "16"; nodes.get("#divisor").value = "16"; nodes.get("#applySuffix").value = "_m";
   const saveMode = element(); saveMode.value = "copy"; const singleSaveMode = element(); singleSaveMode.value = "copy";
@@ -261,7 +262,7 @@ function makeSaveRuntime() {
   context.confirmed = true;
   const source = fs.readFileSync(path.join(jsRoot, "save.js"), "utf8");
   vm.runInNewContext(source, context, { filename: path.join(jsRoot, "save.js") });
-  vm.runInNewContext("globalThis.__saveTest = { setApplyResult, showApplyError, isTerminalApply, selectedSaveMode, sourceAccessFor, sourceCanOverwrite, sourceCanDelete, applyTargetsSupport, applyRestrictionMessage, syncApplyMode, refreshApplyTargets, openApplyDialog, selectedSingleSaveMode, setSingleSaveResult, syncSingleSaveMode, openSingleSaveDialog, chooseSingleOutputDirectory, singleOutputName, writeSingleOutput, renderSingleSave, startSingleSave, draftPayload, renderOutputDirectory, setOutputDirectoryPickerBusy, pickOutputDirectory, ensureOutputDirectoryPermission, chooseOutputDirectory, waitForBrowserSave, showBrowserSaveProgress, reconcileStoredMaskStatuses, reconcileBrowserSaveState, ensureHandlePermission, ensureSaveSources, writeSourceHandle, removeSourceHandle, snapshotSourceHandle, restoreSourceHandle, removeCompletedImagesFromCatalog, runBrowserSave, commitBrowserSaveWithRetry, cancelBrowserSave, isDefinitiveCommitRejection, startApplyFromDialog, finishSaveStart, controlApply, showRunningApply, finishApplyJob, isTerminalDetection, finishDetectionJob, pollJob, scheduleJobPoll };", context, { filename: "test-save-exports.js" });
+  vm.runInNewContext("globalThis.__saveTest = { setApplyResult, showApplyError, isTerminalApply, selectedSaveMode, sourceAccessFor, sourceCanOverwrite, sourceCanDelete, applyTargetsSupport, applyRestrictionMessage, syncApplyMode, refreshApplyTargets, openApplyDialog, selectedSingleSaveMode, setSingleSaveResult, syncSingleSaveMode, openSingleSaveDialog, chooseSingleOutputDirectory, singleOutputName, writeSingleOutput, renderSingleSave, startSingleSave, draftPayload, renderOutputDirectory, setOutputDirectoryPickerBusy, pickOutputDirectory, ensureOutputDirectoryPermission, chooseOutputDirectory, waitForBrowserSave, showBrowserSaveProgress, reconcileStoredMaskStatuses, reconcileBrowserSaveState, ensureHandlePermission, ensureSaveSources, writeSourceHandle, removeSourceHandle, snapshotSourceHandle, restoreSourceHandle, runBrowserSave, commitBrowserSaveWithRetry, cancelBrowserSave, isDefinitiveCommitRejection, startApplyFromDialog, finishSaveStart, controlApply, showRunningApply, finishApplyJob, isTerminalDetection, finishDetectionJob, pollJob, scheduleJobPoll };", context, { filename: "test-save-exports.js" });
   return { ...context.__saveTest, calls, context, errors, nodes, requests, saveMode, singleSaveMode, state, setHandler(fn) { handler = fn; } };
 }
 
@@ -306,8 +307,6 @@ async function saveInteractions() {
   const binary = { body: { async pipeTo(stream) { await stream.write(Uint8Array.from([1])); await stream.close(); } } }; await runtime.writeSourceHandle(access, binary); assert.equal(access.size, 2); assert.deepEqual([...await runtime.snapshotSourceHandle(access)], [1, 2]);
   await assert.rejects(runtime.removeSourceHandle(access), (error) => error?.code === "source_action_unavailable"); let removed = false; access.parentHandle = { async removeEntry() { removed = true; }, async getFileHandle() { return handle; } }; await runtime.removeSourceHandle(access); assert.equal(removed, true); await runtime.restoreSourceHandle(access, Uint8Array.from([1]), true);
 
-  state.images = [{ id: "a" }, { id: "b" }]; state.currentId = "a"; state.selectedImageIds = new Set(["a"]); state.sourceAccess = new Map([["a", {}]]); state.drafts = new Map([["a", {}]]); state.maskStatus = new Map([["a", true]]);
-  runtime.setHandler(async (url) => url === "/api/catalog/remove" ? { images: [{ id: "b" }], removedImageIds: ["a"] } : { images: state.images }); await runtime.removeCompletedImagesFromCatalog(["a"], ["a", "b"], new Map([["a", { id: "a" }]])); assert.ok(runtime.calls.includes("select:b")); await runtime.removeCompletedImagesFromCatalog([], [], new Map());
 
   state.images = [{ id: "file", sourceKind: "filesystem", relativePath: "file.png" }]; state.currentId = null; state.settings.saving.parallelism = 1; runtime.setHandler(async (url) => {
     if (url === "/api/save/prepare") return { entries: [{ imageId: "file", candidateRevision: 1, relativePath: "file.png" }] };
@@ -565,9 +564,9 @@ async function saveCoverageMatrix() {
   }
 
   const runCases = [
-    { mode: "copy", deleteOriginal: false, sourceKind: "filesystem", committed: { cleared: true, stale: true, deleted: false }, removeAfterSave: true },
-    { mode: "copy", deleteOriginal: true, sourceKind: "session", committed: { cleared: true, stale: false, deleted: true }, removeAfterSave: true },
-    { mode: "overwrite", deleteOriginal: false, sourceKind: "filesystem", committed: { cleared: true, stale: false, deleted: false }, removeAfterSave: false },
+    { mode: "copy", deleteOriginal: false, sourceKind: "filesystem", committed: { cleared: true, stale: true, deleted: false } },
+    { mode: "copy", deleteOriginal: true, sourceKind: "session", committed: { cleared: true, stale: false, deleted: true } },
+    { mode: "overwrite", deleteOriginal: false, sourceKind: "filesystem", committed: { cleared: true, stale: false, deleted: false } },
   ];
   for (const scenario of runCases) {
     const runtime = makeSaveRuntime(); const { state } = runtime;
@@ -575,8 +574,8 @@ async function saveCoverageMatrix() {
     const access = { fileHandle: { name: file.name, async queryPermission() { return "granted"; }, async getFile() { return file; }, async createWritable() { return { async write() {}, async close() {}, async abort() {} }; } }, name: file.name, size: 1, lastModified: 1 };
     if (scenario.deleteOriginal) access.parentHandle = { async removeEntry() {}, async getFileHandle() { return access.fileHandle; } };
     state.images = [{ id: "file", sourceKind: scenario.sourceKind, relativePath: "file.png" }]; state.currentId = "file"; state.sourceAccess = new Map([["file", access]]); state.outputDirectoryHandle = { name: "out", async getFileHandle(_name, options) { if (!options?.create) return missing(); return { async createWritable() { return { async write() {}, async close() {}, async abort() {} }; } }; }, async removeEntry() {} };
-    runtime.setHandler(async (url) => url === "/api/save/prepare" ? { entries: [{ imageId: "file", candidateRevision: 1, relativePath: "file.png" }] } : url === "/api/save/render" ? response() : url === "/api/save/commit" ? scenario.committed : url === "/api/catalog/remove" ? { images: state.images, removedImageIds: [] } : url === "/api/images" ? { images: state.images } : {});
-    await runtime.runBrowserSave(["file"], "_m", scenario.deleteOriginal, scenario.mode, scenario.removeAfterSave);
+    runtime.setHandler(async (url) => url === "/api/save/prepare" ? { entries: [{ imageId: "file", candidateRevision: 1, relativePath: "file.png" }] } : url === "/api/save/render" ? response() : url === "/api/save/commit" ? scenario.committed : url === "/api/images" ? { images: state.images } : {});
+    await runtime.runBrowserSave(["file"], "_m", scenario.deleteOriginal, scenario.mode);
   }
 
   const browserBatchFailureCases = [
@@ -857,16 +856,6 @@ async function saveCoverageMatrix() {
       },
     },
     {
-      label: "catalog cleanup infers removed images when the server omits them",
-      run: async (runtime) => {
-        const { state } = runtime;
-        state.images = [{ id: "file" }, { id: "kept" }]; state.currentId = "file";
-        runtime.setHandler(async (url) => url === "/api/catalog/remove" ? { images: [{ id: "kept" }] } : {});
-        await runtime.removeCompletedImagesFromCatalog(["file"], ["file", "kept"], new Map([["file", { id: "file" }]]));
-        assert.ok(runtime.calls.includes("cache:file"));
-      },
-    },
-    {
       label: "uncertain commit reports the server save state",
       run: async (runtime) => {
         runtime.setHandler(async (url) => {
@@ -917,17 +906,6 @@ async function saveCoverageMatrix() {
         runtime.setHandler(async (url) => url === "/api/images" ? { images: [{ id: "file" }] } : {});
         await runtime.finishApplyJob({ kind: "apply", state: "complete", completed: 0, completedImageIds: null });
         assert.equal(state.images[0].id, "file");
-      },
-    },
-    {
-      label: "apply cleanup stops if its catalog epoch changes",
-      run: async (runtime) => {
-        const { state } = runtime;
-        state.images = [{ id: "file" }]; state.currentId = "file";
-        runtime.context.removeCompletedImagesFromCatalog = async () => { state.catalogEpoch += 1; };
-        runtime.setHandler(async (url) => url === "/api/images" ? { images: [{ id: "file" }] } : {});
-        await runtime.finishApplyJob({ kind: "apply", state: "complete", completed: 1, imageIds: ["file"], completedImageIds: ["file"], removeAfterSave: true });
-        assert.equal(state.applyFinishing, false);
       },
     },
     {

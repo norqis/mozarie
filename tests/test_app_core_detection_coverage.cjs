@@ -576,7 +576,7 @@ async function testDetectionImportAndSaveBehaviour() {
   assert.equal(state.detectCancelRequested, true, "cancelling detection records the in-flight cancellation");
   context.activeDetection = () => false; state.detectCancelRequested = false;
   await context.detectionCoverage.saveAll();
-  assert.deepEqual(calls.slice(-3), ["draft", "refresh", "masked"]);
+  assert.deepEqual(calls.slice(-3), ["draft", "refresh", "all"]);
   context.busy = true; context.isBusy = () => context.busy;
   await context.detectionCoverage.saveAll();
   context.busy = false; state.importing = true;

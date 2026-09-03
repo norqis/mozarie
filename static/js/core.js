@@ -355,9 +355,13 @@ function abortCatalogLoads() {
 function cancelFillWork() { state.fillWorker?.terminate?.(); state.fillWorker = null; state.fillPending = false; }
 function isGestureActive() { return state.drawing || state.panning || state.boundaryDragging; }
 function imageHasMask(image) { return state.maskStatus.get(image.id) ?? image.hasEffectiveMask === true; }
-function saveTargets(mode = "masked") {
-  if (mode === "current") return state.currentId && imageHasMask(currentRecord()) ? [state.currentId] : [];
-  return state.images.filter((image) => !isHidden(image) && imageHasMask(image) && (mode !== "reviewed" || isReviewed(image))).map((image) => image.id);
+function saveTargets(mode = "all") {
+  if (mode === "current") return state.currentId ? [state.currentId] : [];
+  // Saving never consumes editor state. The normal batch path starts from the
+  // complete catalogue every time; narrower targets are explicit choices.
+  if (mode === "masked") return state.images.filter(imageHasMask).map((image) => image.id);
+  if (mode === "reviewed") return state.images.filter(isReviewed).map((image) => image.id);
+  return state.images.map((image) => image.id);
 }
 function normaliseReviewRoot(value) { return String(value || "").trim().replaceAll("/", "\\").replace(/\\+$/, "").toLowerCase(); }
 function reviewPath(image) { return String(image?.relativePath || "").replaceAll("\\", "/").toLowerCase(); }
@@ -516,7 +520,7 @@ function updateActionButtons() {
   for (const id of ["#clearAllMasksButton", "#clearCatalogButton", "#batchMoreButton"]) $(id).disabled = running || state.images.length === 0;
   $("#batchModeButton").disabled = locked || state.images.length === 0;
   $("#galleryFilter").disabled = running;
-  $("#saveAllButton").disabled = running || mutatingCandidates || saveTargets().length === 0;
+  $("#saveAllButton").disabled = running || mutatingCandidates || state.images.length === 0;
   const currentSaveDisabled = running || mutatingCandidates || !hasImage || !imageHasMask(current) || Boolean(current?.sourceDimensionsChanged);
   $("#saveButton").disabled = currentSaveDisabled;
   $("#applyStartButton").disabled = running || mutatingCandidates || state.applyTargetIds.length === 0 || Boolean(applyRestrictionMessage());

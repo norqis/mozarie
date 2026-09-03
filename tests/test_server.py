@@ -6307,7 +6307,7 @@ class MozarieTests(unittest.TestCase):
         self.assertTrue(committed["cleared"])
         self.assertFalse(rendered_path.exists())
         self.assertEqual(Image.open(record.path).text["prompt"], '{"seed": 9}')
-        self.assertEqual(state.candidates.get(image_id, []), [])
+        self.assertEqual(len(state.candidates.get(image_id, [])), 1)
         with state.workspace_store._connect() as db:
             stored = db.execute("SELECT size_bytes,mtime_ns FROM images WHERE image_id=?", (image_id,)).fetchone()
         self.assertEqual(int(stored["size_bytes"]), record.path.stat().st_size)
@@ -6333,9 +6333,9 @@ class MozarieTests(unittest.TestCase):
             self.assertIn(token, state.browser_save_tokens)
             self.assertNotIn(token, state.browser_save_claims)
             self.assertTrue(state.commit_browser_save(image_id, rendered_revision, token, "overwrite")["cleared"])
-            self.assertEqual(state._candidate_revision(image_id), revision + 1)
+            self.assertEqual(state._candidate_revision(image_id), revision)
             with state.workspace_store._connect() as db:
-                self.assertEqual(db.execute("SELECT candidate_revision FROM images WHERE image_id=?", (image_id,)).fetchone()["candidate_revision"], revision + 1)
+                self.assertEqual(db.execute("SELECT candidate_revision FROM images WHERE image_id=?", (image_id,)).fetchone()["candidate_revision"], 0)
 
     def test_pending_browser_copy_token_can_be_checked_and_cancelled(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -6558,7 +6558,7 @@ class MozarieTests(unittest.TestCase):
             self.assertFalse((output_directory / "source_censored.png").exists())
             self.assertEqual(list(output_directory.glob("*.mozarie.tmp")), [])
 
-    def test_browser_save_renders_then_clears_only_matching_revision(self):
+    def test_browser_save_renders_and_keeps_the_matching_workspace_revision(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             source = root / "source.png"
@@ -6580,7 +6580,8 @@ class MozarieTests(unittest.TestCase):
             self.assertEqual(Image.open(io.BytesIO(output)).text["prompt"], '{"seed": 1}')
             committed = state.commit_browser_save(image_id, revision, save_token, "overwrite")
             self.assertTrue(committed["cleared"])
-            self.assertEqual(state.candidates.get(image_id, []), [])
+            self.assertEqual(len(state.candidates.get(image_id, [])), 1)
+            self.assertTrue(mask_path.exists())
 
     def test_browser_save_does_not_clear_candidates_changed_after_render(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -7067,7 +7068,7 @@ class MozarieTests(unittest.TestCase):
             _output, _record, rendered_revision, token = state.render_browser_save(image_id, revision, 100, None)
             first = state.commit_browser_save(image_id, rendered_revision, token, "overwrite")
             retried = state.commit_browser_save(image_id, rendered_revision, token, "overwrite")
-            self.assertFalse(mask_path.exists())
+            self.assertTrue(mask_path.exists())
             self.assertEqual(retried["cleared"], first["cleared"])
             self.assertIn(token, state.browser_save_receipts)
             state.clear_catalog()
@@ -7472,6 +7473,11 @@ image_io._stage_record_replacement(record, rendered, (source.stat().st_mtime_ns,
             source_bytes = source.read_bytes()
             state = self.new_state()
             record = state.image_for_id(state.set_root(directory)[0]["id"])
+            mask_path = state.cache_dir / record.image_id / "candidate.png"; mask_path.parent.mkdir(parents=True, exist_ok=True)
+            Image.fromarray(self._mask(16, 16)).save(mask_path)
+            candidate = Candidate("candidate", "penis", 0.9, mask_path)
+            state.candidates[record.image_id] = [candidate]
+            revision = state._touch_candidates(record.image_id)
 
             with patch.object(saving_module, "render_with_mask", wraps=saving_module.render_with_mask) as render, \
                  patch.object(saving_module, "write_rendered_copy") as write_copy:
@@ -7479,6 +7485,9 @@ image_io._stage_record_replacement(record, rendered, (source.stat().st_mtime_ns,
             write_copy.assert_called_once()
             self.assertEqual(render.call_count, 1)
             self.assertEqual(source.read_bytes(), source_bytes)
+            self.assertEqual(state.candidates[record.image_id], [candidate])
+            self.assertEqual(state._candidate_revision(record.image_id), revision)
+            self.assertTrue(mask_path.is_file())
 
     def test_background_copy_database_failure_removes_output_and_keeps_masks(self):
         with tempfile.TemporaryDirectory() as directory:

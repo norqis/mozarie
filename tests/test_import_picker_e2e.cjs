@@ -420,7 +420,7 @@ function startFixtureServer() {
       applyRequests.push(apply);
       currentJob = {
         kind: "apply", state: "running", total: apply.imageIds.length, completed: 0, current: "sample.png",
-        startedAt: Date.now() / 1000, imageIds: apply.imageIds, completedImageIds: [], removeAfterSave: Boolean(apply.removeAfterSave),
+        startedAt: Date.now() / 1000, imageIds: apply.imageIds, completedImageIds: [],
       };
       response.writeHead(200, { "Content-Type": "application/json" });
       response.end(JSON.stringify({ ok: true }));
@@ -1969,7 +1969,7 @@ async function runControlLedger(page, fixtureUrl, contracts, dynamicContracts, f
   await page.evaluate(() => { addCtx.fillStyle = "#fff"; addCtx.fillRect(0, 0, 1, 1); markMaskDirty(); refreshMaskStatus(true); });
   await page.waitForFunction(() => !document.querySelector("#saveAllButton").disabled);
   await click("saveAllButton");
-  for (const [id, value] of [["applyTargetMode", "masked"], ["applyCopyMode", true], ["applySuffix", "_ledger"], ["deleteOriginal", true], ["removeAfterSave", true], ["applyDivisor", "102"]]) await input(id, value);
+  for (const [id, value] of [["applyTargetMode", "masked"], ["applyCopyMode", true], ["applySuffix", "_ledger"], ["deleteOriginal", true], ["applyDivisor", "102"]]) await input(id, value);
   await click("chooseOutputDirectoryButton"); await page.waitForTimeout(50);
   if (await page.locator("#errorDialog").evaluate((dialog) => dialog.open)) await page.locator("#errorDialogClose").click();
   await input("applyOverwriteMode", true); await input("applyCopyMode", true); await click("applyCloseButton");
@@ -2806,17 +2806,8 @@ async function main() {
     await page.locator("#applyDialog").evaluate((dialog) => dialog.showModal());
     assert.equal(await page.locator('#applyDialog [data-i18n="apply.metadata"]').textContent(), "対応するメタデータを引き継ぎます。同名時は自動連番です。", "save dialog describes only supported metadata carryover");
     assert.doesNotMatch(await page.locator('#applyDialog [data-i18n="apply.metadata"]').textContent(), /検証|validated/, "save dialog makes no verification claim");
-    await page.locator("#applyCopyMode").check();
-    await page.locator("#applySuffix").fill("_kept");
-    await page.locator("#applyOverwriteMode").check();
-    assert.equal(await page.locator("#applySuffixRow").isVisible(), false);
-    assert.equal(await page.locator("#deleteOriginalRow").isVisible(), false);
-    assert.equal(await page.locator("#applyOutputDirectoryRow").isVisible(), false);
-    assert.equal(await page.locator("#applyOverwriteNote").count(), 0);
-    await page.locator("#applyCopyMode").check();
-    assert.equal(await page.locator("#applySuffix").inputValue(), "_kept");
+    assert.equal(await page.locator("#applyTargetMode").inputValue(), "all", "the normal batch save target is the complete image list");
     assert.equal(await page.locator("#applySuffix").isDisabled(), false);
-    assert.equal(await page.locator("#removeAfterSave").isVisible(), true);
     await page.locator("#applyDialog").evaluate((dialog) => dialog.close());
 
     await page.locator('.gallery-item[data-id="sample"]').click();
@@ -2827,6 +2818,7 @@ async function main() {
     });
     assert.deepEqual(await page.evaluate(() => ({ currentId: state.currentId, targets: saveTargets("masked"), hasMask: hasEffectiveMask() })), { currentId: "sample", targets: ["sample"], hasMask: true }, "the batch test has one real masked filesystem source");
     await page.locator("#saveAllButton").click();
+    await page.locator("#applyTargetMode").selectOption("masked");
     await page.locator("#applyOverwriteMode").check();
     const saveRequestStart = saveRequests.length;
     await page.locator("#applyStartButton").click();
@@ -2844,7 +2836,7 @@ async function main() {
     await selectFixtureImage(page, pageErrors, consoleErrors);
     assert.equal(await page.locator("#removeAndNextButton").isDisabled(), false, "remove and next enables after selecting an image");
     assert.equal(await page.locator("#hideAndNextButton").isDisabled(), false, "hide and next enables after selecting an image");
-    assert.equal(await page.locator("[data-candidate-batch]").evaluateAll((buttons) => buttons.every((button) => button.disabled)), true, "candidate batch actions stay disabled when the selected image has no candidates");
+    assert.equal(await page.locator("[data-candidate-batch]").evaluateAll((buttons) => buttons.some((button) => !button.disabled)), true, "saving preserves the selected image's candidate actions");
     await page.locator("#confidence").evaluate((input) => {
       input.value = "1.00";
       input.dispatchEvent(new Event("input", { bubbles: true }));
@@ -3437,9 +3429,9 @@ async function main() {
       state.maskStatus.set("sample", true); state.maskStatus.set("sample-two", true);
       await setReviewed(state.images.find((image) => image.id === "sample"), true);
       state.currentId = "sample-two";
-      return ["current", "masked", "reviewed"].map((mode) => ({ mode, ids: saveTargets(mode), count: saveTargets(mode).length }));
+      return ["current", "all", "masked", "reviewed"].map((mode) => ({ mode, ids: saveTargets(mode), count: saveTargets(mode).length }));
     });
-    assert.deepEqual(targetModes, [{ mode: "current", ids: ["sample-two"], count: 1 }, { mode: "masked", ids: ["sample", "sample-two"], count: 2 }, { mode: "reviewed", ids: ["sample"], count: 1 }], "save target modes select explicit current, mosaicked, and reviewed IDs");
+    assert.deepEqual(targetModes, [{ mode: "current", ids: ["sample-two"], count: 1 }, { mode: "all", ids: ["sample", "sample-two"], count: 2 }, { mode: "masked", ids: ["sample", "sample-two"], count: 2 }, { mode: "reviewed", ids: ["sample"], count: 1 }], "save target modes keep the full catalogue as the normal batch target while retaining explicit filters");
     const editorHistoryAndDisplay = await page.evaluate(async () => {
       // This block verifies the transient editor-history implementation itself.
       // Folder import now creates a durable project, so isolate the legacy
@@ -3941,10 +3933,10 @@ async function main() {
       assert.deepEqual(await browserSavePage.evaluate(() => window.__outputPermission.calls), [["query", "readwrite"], ["request", "readwrite"]], "single save requests read/write access from the restored handle in its click chain");
       await browserSavePage.locator("#confirmAccept").click();
       await browserSavePage.waitForFunction(() => state.saving, null, { timeout: 5000 });
-      await browserSavePage.waitForFunction(() => !state.saving && state.images.find((image) => image.id === "sample")?.reviewed, null, { timeout: 5000 });
+      await browserSavePage.waitForFunction(() => !state.saving, null, { timeout: 5000 });
       assert.deepEqual(saveRequests.map((request) => request.path), ["/api/save/prepare", "/api/save/render", "/api/save/commit"], "single copy-and-delete drives prepare, render, and commit in order");
       assert.equal(await browserSavePage.evaluate(() => window.__singleSaveFiles.has("sample_検証_1.png")), true, "single save keeps Unicode suffixes and avoids an existing output name");
-      assert.deepEqual(await browserSavePage.evaluate(() => ({ imageIds: state.images.map((image) => image.id), currentId: state.currentId, reviewed: state.images.find((image) => image.id === "sample")?.reviewed })), { imageIds: ["sample", "sample-two"], currentId: "sample", reviewed: true }, "single save reloads and reviews the current image without changing the catalogue");
+      assert.deepEqual(await browserSavePage.evaluate(() => ({ imageIds: state.images.map((image) => image.id), currentId: state.currentId, reviewed: state.images.find((image) => image.id === "sample")?.reviewed })), { imageIds: ["sample", "sample-two"], currentId: "sample", reviewed: false }, "single save reloads without changing catalogue or reviewed state");
       await browserSavePage.evaluate(() => window.__outputPermission.set("prompt"));
       await browserSavePage.locator("#singleSaveChooseOutputDirectoryButton").click();
       await browserSavePage.waitForFunction(() => window.__outputPermission.calls.length === 4);

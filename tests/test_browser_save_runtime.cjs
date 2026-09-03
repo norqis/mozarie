@@ -52,7 +52,6 @@ function createRuntime({ commit, copy = null, deleteOriginal = false, renderBina
   getElement("#applyDivisor").value = "100";
   getElement("#applySuffix");
   getElement("#deleteOriginal");
-  getElement("#removeAfterSave");
   getElement('input[name="batchSaveMode"]:checked').value = "copy";
   const canvas = getElement("#editorCanvas");
   canvas.getContext = () => ({ clearRect() {}, drawImage() {}, setTransform() {}, save() {}, restore() {}, translate() {}, scale() {} });
@@ -710,14 +709,10 @@ async function runCancelCase() {
     runtime = createRuntime({
     renderBinary: () => binaryResponse([4, 5, 6], "runtime-render-token", () => { runtime.state.browserSave.cancelled = true; }),
     commit: () => jsonResponse({ cleared: true, stale: false, images: [] }),
-    removeCatalog: ({ options }) => {
-      assert.deepEqual(JSON.parse(options.body), { imageIds: ["image-1"] });
-      return jsonResponse({ images: [], removedImageIds: ["image-1"] });
-    },
   });
-  await runtime.runBrowserSave(["image-1"], "_censored", false, "copy", true);
+  await runtime.runBrowserSave(["image-1"], "_censored", false, "copy");
 
-  assert.deepEqual(runtime.requests.map((request) => request.path), ["/api/save/prepare", "/api/save/render", "/api/save/commit", "/api/catalog/remove"]);
+  assert.deepEqual(runtime.requests.map((request) => request.path), ["/api/save/prepare", "/api/save/render", "/api/save/commit"]);
   assert.equal(runtime.elements.get("#applyResult").textContent, "cancelled 1");
 }
 
@@ -1025,16 +1020,45 @@ async function runServerCopyRemovalCases() {
   assert.equal(empty.requests.some((request) => request.path === "/api/catalog/remove"), false, "server-copy all-empty batches stay in the catalog");
 }
 
+async function runSaveKeepsCatalogueAndEditorStateCase() {
+  const first = { id: "image-1", relativePath: "first.png", width: 32, height: 32, candidateCount: 1, enabledCandidateCount: 1, reviewed: true, hidden: false };
+  const second = { id: "image-2", relativePath: "second.png", width: 32, height: 32, candidateCount: 1, enabledCandidateCount: 1, reviewed: true, hidden: true };
+  const runtime = createRuntime({
+    initialImages: [first, second],
+    entries: [
+      { imageId: first.id, relativePath: first.relativePath, candidateRevision: 7 },
+      { imageId: second.id, relativePath: second.relativePath, candidateRevision: 7 },
+    ],
+    commit: () => jsonResponse({ cleared: true, stale: false, deleted: false }),
+  });
+  runtime.state.currentId = first.id;
+  runtime.state.currentImage = { width: 32, height: 32 };
+  runtime.state.candidates = [{ id: "candidate", enabled: true }];
+  runtime.state.candidateImages = new Map([["candidate", {}]]);
+  runtime.state.drafts = new Map([[first.id, { add: "manual", exclusion: "exclude", hasEffectiveMask: true }], [second.id, { add: "manual-2", hasEffectiveMask: true }]]);
+  runtime.state.maskStatus = new Map([[first.id, true], [second.id, true]]);
+  runtime.state.reviewedPaths = new Set([first.relativePath, second.relativePath]);
+  runtime.state.hiddenPaths = new Set([second.relativePath]);
+
+  assert.deepEqual(Array.from(runtime.saveTargets()), [first.id, second.id], "the normal batch target is every image in the list");
+  await runtime.runBrowserSave([first.id, second.id], "_censored", false, "copy");
+  await runtime.runBrowserSave([first.id, second.id], "_censored", false, "copy");
+
+  assert.deepEqual(runtime.state.images, [first, second], "two consecutive saves keep every catalogue image");
+  assert.equal(runtime.state.drafts.get(first.id).add, "manual", "saving retains manual masks");
+  assert.equal(runtime.state.drafts.get(first.id).exclusion, "exclude", "saving retains exclusions");
+  assert.equal(runtime.state.candidates.length, 1, "saving retains current candidates");
+  assert.deepEqual(Array.from(runtime.state.reviewedPaths), [first.relativePath, second.relativePath], "saving does not change reviewed state");
+  assert.deepEqual(Array.from(runtime.state.hiddenPaths), [second.relativePath], "saving does not change hidden state");
+  assert.equal(runtime.requests.some((request) => request.path === "/api/catalog/remove"), false, "saving never removes list entries");
+}
+
 (async () => {
   await runOutputDirectoryPermissionCases();
   await runOutputPermissionSubmissionLockCases();
   await runSuccessCase();
   await runDraftBarrierBeforeDefaultApplyCase();
   await runStaleCommitCase();
-  await runRemoveAfterSaveCase();
-  await runRemoveAfterSaveAlreadyAbsentCase();
-  await runRemoveAfterSavePartialAndStaleCase();
-  await runRemoveAfterSaveUiCleanupCase();
   await runCopyFailureCase();
   await runCommitFailureCase();
   await runRecoverableCommitFailureCases();
@@ -1047,10 +1071,7 @@ async function runServerCopyRemovalCases() {
   await runHandleDeleteAfterCopyCase();
   await runQueuedHandleChangeCases();
   await runCatalogEpochGuardCase();
-  await runPartialCommitFailureReconcileCase();
-  await runRemoveAfterSaveCases();
-  await runNoEffectiveMaskBatchCases();
-  await runServerCopyRemovalCases();
+  await runSaveKeepsCatalogueAndEditorStateCase();
   await runExclusiveWritableCases();
   await runPartialOutputCleanupCases();
   await runConcurrentOutputLockCases();
