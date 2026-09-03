@@ -320,6 +320,11 @@ class ProjectHttpCoverageTests(unittest.TestCase):
                 self.assertEqual(status, 409)
                 self.assertEqual(json.loads(body)["error_code"], "workspace_recreate_required")
 
+            for method in ("POST", "DELETE"):
+                status, _headers, body = self.request(method, "/not-api", {} if method == "POST" else None)
+                self.assertEqual(status, 404)
+                self.assertEqual(json.loads(body)["error_code"], "api_not_found")
+
             with patch.object(state_module, "recreate_workspace", return_value=self.state) as recreate:
                 status, _headers, body = self.request("POST", "/api/workspace/recreate", {}, authorized=True)
             self.assertEqual(status, 200)

@@ -317,11 +317,11 @@ class MosaicHandler(BaseHTTPRequestHandler):
                     self._json({"ok": True})
                     return
                 self._require_local_host()
+                self.close_connection = True
                 if _is_api_path(path):
                     # The unavailable-state route does not consume arbitrary
                     # request bodies.  Close this connection so a rejected
                     # JSON body cannot be parsed as a second HTTP request.
-                    self.close_connection = True
                     self._workspace_recreate_required()
                 else:
                     self._client_error(ClientError("ページが見つかりません。", "api_not_found"), HTTPStatus.NOT_FOUND)
