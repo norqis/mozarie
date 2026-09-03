@@ -31,6 +31,21 @@ vm.runInNewContext("globalThis.workspaceTest={queueWorkspaceDraft,flushDraftSave
   await context.workspaceTest.queueWorkspaceDraft("one", true);
   assert.deepEqual(calls.map(([, method]) => method), ["DELETE", "POST"], "draft snapshots choose DELETE or POST at enqueue time");
 
+  state.project = { id: "project-one" }; state.currentId = null; state.workspaceDraftChains.clear(); state.workspaceDraftTimers.clear(); state.workspaceMutationErrors.clear(); state.draftSaveChains.clear();
+  const durableDraft = { add: "data:image/png;base64,durable", hasEffectiveMask: true };
+  state.drafts.set("one", durableDraft); state.maskStatus = new Map([["one", true]]);
+  await context.workspaceTest.queueWorkspaceDraft("one", true);
+  assert.equal(state.drafts.has("one"), false, "a durable inactive project draft is evicted from the live bitmap cache");
+  assert.equal(state.maskStatus.has("one"), false, "evicting a durable project draft also drops its derived mask state");
+  const originalApiForRestore = context.api;
+  context.api = async () => ({ draft: { add: "data:image/png;base64,durable", hasEffectiveMask: true } });
+  assert.equal((await context.workspaceTest.loadWorkspaceDraft("one")).add, "data:image/png;base64,durable", "revisiting an evicted project draft reloads its durable payload");
+  context.api = originalApiForRestore;
+  state.project = null;
+  state.drafts.set("one", durableDraft); state.maskStatus.set("one", true);
+  await context.workspaceTest.queueWorkspaceDraft("one", true);
+  assert.equal(state.drafts.get("one"), durableDraft, "projectless sessions keep their only in-memory draft copy");
+
   calls.length = 0; state.drafts.set("one", { add: "data:image/png;base64,a", hasEffectiveMask: true }); rejectFirst = true;
   const failed = context.workspaceTest.queueWorkspaceDraft("one", true);
   state.drafts.delete("one");

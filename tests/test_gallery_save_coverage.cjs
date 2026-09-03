@@ -776,7 +776,7 @@ async function saveCoverageMatrix() {
       },
     },
     {
-      label: "filesystem overwrite and invalid parallelism fall back to one serial worker",
+      label: "filesystem overwrite and invalid parallelism use the public two-worker default",
       mode: "overwrite",
       run: async (runtime) => {
         const { state } = runtime; let active = 0; let maximum = 0;
@@ -789,7 +789,7 @@ async function saveCoverageMatrix() {
           return {};
         });
         await runtime.runBrowserSave(["one", "two"], "_m", false, "overwrite");
-        assert.equal(maximum, 1);
+        assert.equal(maximum, 2);
       },
     },
   ];

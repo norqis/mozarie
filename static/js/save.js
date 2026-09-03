@@ -146,8 +146,9 @@ function singleOutputName(relativePath, suffix, sequence = 0) {
 async function writeSingleOutput(handle, relativePath, suffix, response) {
   if (!navigator.locks || typeof navigator.locks.request !== "function") throw codedError("output_write_unsupported");
   let entered = false;
+  let reservation;
   try {
-    return await navigator.locks.request("mozarie-output-write", { mode: "exclusive" }, async () => {
+    reservation = await navigator.locks.request("mozarie-output-name", { mode: "exclusive" }, async () => {
       entered = true;
       let fileHandle; let name; let created = false;
       for (let sequence = 0; sequence < 10000; sequence += 1) {
@@ -159,34 +160,35 @@ async function writeSingleOutput(handle, relativePath, suffix, response) {
         }
       }
       if (!fileHandle) { const error = new Error("output_name_exhausted"); error.code = "output_name_exhausted"; throw error; }
-      let stream;
-      try {
-        try { stream = await fileHandle.createWritable({ keepExistingData: false, mode: "exclusive" }); }
-        catch (error) {
-          if (["TypeError", "NotSupportedError"].includes(error?.name)) throw codedError("output_write_unsupported");
-          throw error;
-        }
-        await response.body.pipeTo(stream);
-      } catch (error) {
-        try { await stream?.abort?.(); } catch {}
-        if (created) {
-          try { await handle.removeEntry(name); }
-          catch (cleanupError) {
-            const cleanupFailure = codedError("output_cleanup_failed");
-            cleanupFailure.cause = error;
-            cleanupFailure.cleanupCause = cleanupError;
-            throw cleanupFailure;
-          }
-        }
-        throw error;
-      }
-      return { name, fileHandle };
+      return { name, fileHandle, created };
     });
   } catch (error) {
     if (!entered) {
       const lockFailure = codedError("output_write_unsupported");
       lockFailure.cause = error;
       throw lockFailure;
+    }
+    throw error;
+  }
+  let stream;
+  try {
+    try { stream = await reservation.fileHandle.createWritable({ keepExistingData: false, mode: "exclusive" }); }
+    catch (error) {
+      if (["TypeError", "NotSupportedError"].includes(error?.name)) throw codedError("output_write_unsupported");
+      throw error;
+    }
+    await response.body.pipeTo(stream);
+    return reservation;
+  } catch (error) {
+    try { await stream?.abort?.(); } catch {}
+    if (reservation.created) {
+      try { await handle.removeEntry(reservation.name); }
+      catch (cleanupError) {
+        const cleanupFailure = codedError("output_cleanup_failed");
+        cleanupFailure.cause = error;
+        cleanupFailure.cleanupCause = cleanupError;
+        throw cleanupFailure;
+      }
     }
     throw error;
   }
@@ -241,6 +243,8 @@ async function startSingleSave(event) {
       if (sourceChanged && (isDefinitiveCommitRejection(error) || error.saveState === "pending")) await restoreSourceHandle(access, sourceSnapshot, deleteOriginal);
       if (output) await state.outputDirectoryHandle.removeEntry(output.name).catch(() => {});
       throw error;
+    } finally {
+      sourceSnapshot = null;
     }
     // Copying to another folder does not change the source catalogue or any
     // editor state.  Reconcile only when the source itself was overwritten or
@@ -467,9 +471,23 @@ async function restoreSourceHandle(access, snapshot, deleted) {
 }
 
 async function runBrowserSave(imageIds, suffix, deleteOriginal, mode = "copy") {
+  const inputs = {
+    imageIds: [...imageIds],
+    divisor: Number($("#applyDivisor").value),
+    suffix,
+    deleteOriginal,
+    mode,
+    outputDirectoryHandle: state.outputDirectoryHandle,
+    parallelism: Math.min(8, Math.max(1, Math.round(Number(state.settings?.saving?.parallelism) || 2))),
+    drafts: new Map(Object.entries(draftPayload(imageIds))),
+    sources: new Map(imageIds.map((imageId) => [imageId, {
+      image: state.images.find((image) => image.id === imageId),
+      access: sourceAccessFor(imageId) ? { ...sourceAccessFor(imageId) } : null,
+    }])),
+  };
   const result = await api("/api/save/prepare", {
     method: "POST",
-    body: JSON.stringify({ imageIds, divisor: Number($("#applyDivisor").value), suffix, deleteOriginal: false }),
+    body: JSON.stringify({ imageIds: inputs.imageIds, divisor: inputs.divisor, suffix: inputs.suffix, deleteOriginal: false }),
   });
   const save = {
     entries: result.entries, completed: 0, stale: 0, paused: false, cancelled: false, failed: false,
@@ -487,69 +505,92 @@ async function runBrowserSave(imageIds, suffix, deleteOriginal, mode = "copy") {
   updateActionButtons();
   try {
     {
+      const serializeBrowserHandleMutation = (work) => {
+        const previous = save.browserHandleMutationChain || Promise.resolve();
+        const next = previous.catch(() => {}).then(work);
+        save.browserHandleMutationChain = next;
+        return next;
+      };
       const saveEntry = async (entry) => {
         showBrowserSaveProgress(save, entry);
-        const draft = draftPayload([entry.imageId])[entry.imageId] || null;
-        const sourceImage = state.images.find((image) => image.id === entry.imageId);
-        const access = sourceAccessFor(entry.imageId);
+        const draft = inputs.drafts.get(entry.imageId) || null;
+        const source = inputs.sources.get(entry.imageId) || {};
+        const sourceImage = source.image;
+        const access = source.access;
         let sourceAction = "keep";
-        let sourceSnapshot = null;
-        let sourceChanged = false;
-        if (mode === "copy") {
-          const response = await renderSingleSave({ imageId: entry.imageId, candidateRevision: entry.candidateRevision,
-            divisor: Number($("#applyDivisor").value), draft, copyToBrowser: true, suffix });
-          const output = await writeSingleOutput(state.outputDirectoryHandle, entry.relativePath, suffix, response);
+        if (inputs.mode === "copy") {
+          let response;
+          try {
+            response = await renderSingleSave({ imageId: entry.imageId, candidateRevision: entry.candidateRevision,
+              divisor: inputs.divisor, draft, copyToBrowser: true, suffix: inputs.suffix });
+          } finally { inputs.drafts.delete(entry.imageId); }
           const saveToken = response.headers.get("X-Mozarie-Save-Token") || "";
           if (!saveToken) throw Object.assign(new Error("save_state_changed"), { code: "save_state_changed" });
-          if (deleteOriginal) {
-            if (access?.fileHandle) {
+          const output = await writeSingleOutput(inputs.outputDirectoryHandle, entry.relativePath, inputs.suffix, response);
+          const commitCopy = async () => {
+            let sourceSnapshot = null;
+            let sourceChanged = false;
+            if (inputs.deleteOriginal && access?.fileHandle) {
               await ensureHandlePermission(access, true);
               sourceSnapshot = await snapshotSourceHandle(access);
               await removeSourceHandle(access);
               sourceChanged = true;
             }
-            sourceAction = "deleted";
-          }
-          let committed;
-          try { committed = await commitBrowserSaveWithRetry({
-            imageId: entry.imageId, candidateRevision: entry.candidateRevision, deleteOriginal, sourceAction, saveToken,
-          }); }
-          catch (error) {
-            if (error.saveState === "pending") await cancelBrowserSave(entry, saveToken);
-            if (sourceChanged && (isDefinitiveCommitRejection(error) || error.saveState === "pending")) try { if (sourceSnapshot === null) throw new Error(); await restoreSourceHandle(access, sourceSnapshot, true); } catch { throw codedError("source_restore_failed"); }
-            await state.outputDirectoryHandle.removeEntry(output.name).catch(() => {});
-            throw error;
-          }
+            const sourceAction = inputs.deleteOriginal ? "deleted" : "keep";
+            try { return await commitBrowserSaveWithRetry({
+              imageId: entry.imageId, candidateRevision: entry.candidateRevision, deleteOriginal: inputs.deleteOriginal, sourceAction, saveToken,
+            }); }
+            catch (error) {
+              if (error.saveState === "pending") await cancelBrowserSave(entry, saveToken);
+              if (sourceChanged && (isDefinitiveCommitRejection(error) || error.saveState === "pending")) try { if (sourceSnapshot === null) throw new Error(); await restoreSourceHandle(access, sourceSnapshot, true); } catch { throw codedError("source_restore_failed"); }
+              await inputs.outputDirectoryHandle.removeEntry(output.name).catch(() => {});
+              throw error;
+            } finally { sourceSnapshot = null; }
+          };
+          sourceAction = inputs.deleteOriginal ? "deleted" : "keep";
+          const committed = inputs.deleteOriginal && access?.fileHandle
+            ? await serializeBrowserHandleMutation(commitCopy)
+            : await commitCopy();
           return finishBrowserSaveEntry(committed, entry, save, sourceAction);
         } else if (access?.fileHandle) {
-          const binary = await fetch("/api/save/render", {
+          let binary;
+          try {
+            binary = await fetch("/api/save/render", {
             method: "POST", headers: { "Content-Type": "application/json", "X-Mozarie-Token": document.querySelector('meta[name="mozarie-token"]')?.content || "" },
-            body: JSON.stringify({ imageId: entry.imageId, candidateRevision: entry.candidateRevision, divisor: Number($("#applyDivisor").value), draft }),
-          });
+            body: JSON.stringify({ imageId: entry.imageId, candidateRevision: entry.candidateRevision, divisor: inputs.divisor, draft }),
+            });
+          } finally { inputs.drafts.delete(entry.imageId); }
           if (!binary.ok) throw responseError(binary, await binary.json().catch(() => ({})));
           const saveToken = binary.headers?.get("X-Mozarie-Save-Token") || "";
-          await ensureHandlePermission(access, true);
-          sourceSnapshot = await snapshotSourceHandle(access);
-          await writeSourceHandle(access, binary);
-          sourceChanged = true;
-          sourceAction = "overwrite";
-          let committed;
-          try { committed = await commitBrowserSaveWithRetry({ imageId: entry.imageId, candidateRevision: entry.candidateRevision, deleteOriginal, sourceAction, saveToken }); }
-          catch (error) {
-            if (error.saveState === "pending") await cancelBrowserSave(entry, saveToken);
-            if (isDefinitiveCommitRejection(error) || error.saveState === "pending") try { if (sourceSnapshot === null) throw new Error(); await restoreSourceHandle(access, sourceSnapshot, false); } catch { throw codedError("source_restore_failed"); }
-            throw error;
-          }
-          return finishBrowserSaveEntry(committed, entry, save, sourceAction);
+          return serializeBrowserHandleMutation(async () => {
+            let sourceSnapshot = null;
+            await ensureHandlePermission(access, true);
+            sourceSnapshot = await snapshotSourceHandle(access);
+            await writeSourceHandle(access, binary);
+            sourceAction = "overwrite";
+            try {
+              const committed = await commitBrowserSaveWithRetry({ imageId: entry.imageId, candidateRevision: entry.candidateRevision, deleteOriginal: inputs.deleteOriginal, sourceAction, saveToken });
+              const liveAccess = sourceAccessFor(entry.imageId);
+              if (liveAccess) Object.assign(liveAccess, access);
+              return finishBrowserSaveEntry(committed, entry, save, sourceAction);
+            } catch (error) {
+              if (error.saveState === "pending") await cancelBrowserSave(entry, saveToken);
+              if (isDefinitiveCommitRejection(error) || error.saveState === "pending") try { if (sourceSnapshot === null) throw new Error(); await restoreSourceHandle(access, sourceSnapshot, false); } catch { throw codedError("source_restore_failed"); }
+              throw error;
+            } finally { sourceSnapshot = null; }
+          });
         } else if (sourceImage?.sourceKind === "filesystem") {
-          const binary = await fetch("/api/save/render", {
+          let binary;
+          try {
+            binary = await fetch("/api/save/render", {
             method: "POST", headers: { "Content-Type": "application/json", "X-Mozarie-Token": document.querySelector('meta[name="mozarie-token"]')?.content || "" },
-            body: JSON.stringify({ imageId: entry.imageId, candidateRevision: entry.candidateRevision, divisor: Number($("#applyDivisor").value), draft }),
-          });
+            body: JSON.stringify({ imageId: entry.imageId, candidateRevision: entry.candidateRevision, divisor: inputs.divisor, draft }),
+            });
+          } finally { inputs.drafts.delete(entry.imageId); }
           if (!binary.ok) throw responseError(binary, await binary.json().catch(() => ({})));
           const saveToken = binary.headers?.get("X-Mozarie-Save-Token") || "";
           sourceAction = "overwrite";
-          const committed = await commitBrowserSaveWithRetry({ imageId: entry.imageId, candidateRevision: entry.candidateRevision, deleteOriginal, sourceAction, saveToken });
+          const committed = await commitBrowserSaveWithRetry({ imageId: entry.imageId, candidateRevision: entry.candidateRevision, deleteOriginal: inputs.deleteOriginal, sourceAction, saveToken });
           return finishBrowserSaveEntry(committed, entry, save, sourceAction);
         } else {
           throw codedError("source_action_unavailable");
@@ -565,7 +606,7 @@ async function runBrowserSave(imageIds, suffix, deleteOriginal, mode = "copy") {
         showBrowserSaveProgress(save, entry);
       };
       let nextEntry = 0;
-      const parallelism = mode === "copy" ? 1 : Math.min(save.entries.length, Math.max(1, Math.round(Number(state.settings?.saving?.parallelism) || 1)));
+      const parallelism = Math.min(save.entries.length, inputs.parallelism);
       const settled = await Promise.allSettled(Array.from({ length: parallelism }, async () => {
         while (true) {
           // Cancellation is observed only before an entry starts. Once an output or source has
@@ -590,6 +631,8 @@ async function runBrowserSave(imageIds, suffix, deleteOriginal, mode = "copy") {
       ? t("apply.cancelled", { completed: save.completed })
       : (save.stale ? t("apply.completeWithStale", { completed: save.completed, stale: save.stale }) : t("apply.complete", { completed: save.completed })));
   } finally {
+    inputs.drafts.clear();
+    inputs.sources.clear();
     try {
       let catalogCurrent = false;
       try {

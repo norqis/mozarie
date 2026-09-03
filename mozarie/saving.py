@@ -216,7 +216,12 @@ class SavingMixin:
                         raise ClientError("保存先フォルダへ保存できませんでした。設定で変更してください。", "save_write_failed") from exc
                     finally:
                         self._release_output_destination(output_path)
-                else:
+                elif not copy_to_browser:
+                    # Browser copies stream the render straight to the chosen
+                    # File System Access destination.  Keeping a second cache
+                    # file until the browser acknowledges the commit made large
+                    # batches both memory- and disk-bound for no benefit.  An
+                    # overwrite still needs this staged replacement.
                     rendered_dir = self.cache_dir / "browser-save"
                     rendered_dir.mkdir(parents=True, exist_ok=True)
                     with tempfile.NamedTemporaryFile(dir=rendered_dir, suffix=record.path.suffix.lower(), delete=False) as handle:

@@ -153,7 +153,24 @@ function queueWorkspaceDraft(imageId, immediate = false) {
     const request = draft
       ? { method: "POST", body: JSON.stringify(payload) }
       : { method: "DELETE" };
-    return queueWorkspaceMutation(imageId, () => api(`/api/workspace/manual/${encodeURIComponent(imageId)}`, request));
+    const persisted = queueWorkspaceMutation(imageId, () => api(`/api/workspace/manual/${encodeURIComponent(imageId)}`, request));
+    return persisted.then((result) => {
+      // A project has a durable copy and can reload an inactive draft on
+      // demand.  Projectless sessions have no equivalent recovery path, so
+      // they deliberately keep the in-memory bitmap.
+      if (
+        state.project?.id && state.currentId !== imageId
+        && state.drafts.get(imageId) === draft
+        && !state.workspaceDraftTimers.has(imageId)
+        && !state.draftSaveChains.has(imageId)
+        && !state.workspaceMutationErrors.has(imageId)
+        && state.workspaceDraftChains.get(imageId) === persisted
+      ) {
+        state.drafts.delete(imageId);
+        state.maskStatus.delete(imageId);
+      }
+      return result;
+    });
   };
   if (immediate) return write();
   const promise = new Promise((resolve) => state.workspaceDraftTimers.set(imageId, setTimeout(() => resolve(write().catch((error) => { showUserError(error); })), 250)));

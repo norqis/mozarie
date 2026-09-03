@@ -425,9 +425,9 @@ async function runConcurrentOutputLockCases() {
   assert.deepEqual([first.name, second.name], ["same.png", "same_1.png"], "simultaneous saves reserve different sequence names under one origin lock");
   assert.deepEqual([...files], [["same.png", [1, 2]], ["same_1.png", [3, 4]]], "simultaneous saves retain each file's own bytes");
   assert.deepEqual(JSON.parse(JSON.stringify(runtime.lockRequests)), [
-    ["mozarie-output-write", { mode: "exclusive" }],
-    ["mozarie-output-write", { mode: "exclusive" }],
-  ], "every output reservation and write uses the same exclusive Web Lock");
+    ["mozarie-output-name", { mode: "exclusive" }],
+    ["mozarie-output-name", { mode: "exclusive" }],
+  ], "only output-name reservation uses the short exclusive Web Lock");
 
   const failedResponse = { body: { async pipeTo(stream) { await stream.write(Uint8Array.from([9])); throw new Error("write failed"); } } };
   const settled = await Promise.allSettled([
@@ -447,6 +447,97 @@ async function runConcurrentOutputLockCases() {
   });
   runtime.navigator.locks = null;
   await assert.rejects(runtime.writeSingleOutput(directory, "missing-lock.png", "", binaryResponse([8])), (error) => error.code === "output_write_unsupported", "missing Web Locks support fails closed without creating an output");
+}
+
+async function runBrowserCopyPoolAndWriteOverlapCases() {
+  const entries = ["one", "two", "three"].map((id) => ({ imageId: id, relativePath: `${id}.png`, candidateRevision: 7 }));
+  const images = entries.map((entry) => ({ id: entry.imageId, relativePath: entry.relativePath, width: 32, height: 32, candidateCount: 1, enabledCandidateCount: 1 }));
+  const releaseRenders = deferred(); const twoRendersStarted = deferred();
+  let activeRenders = 0; let maxActiveRenders = 0; let renderStarts = 0;
+  const runtime = createRuntime({
+    entries, initialImages: images,
+    renderBinary: async () => {
+      activeRenders += 1; maxActiveRenders = Math.max(maxActiveRenders, activeRenders);
+      if (++renderStarts === 2) twoRendersStarted.resolve();
+      await releaseRenders.promise;
+      activeRenders -= 1;
+      return binaryResponse([1, 2, 3]);
+    },
+    commit: () => jsonResponse({ cleared: true, stale: false }),
+  });
+  runtime.state.settings.saving.parallelism = 2;
+  const batch = runtime.runBrowserSave(entries.map((entry) => entry.imageId), "_censored", false, "copy");
+  await twoRendersStarted.promise;
+  assert.equal(maxActiveRenders, 2, "browser copies use the configured bounded save pool");
+  releaseRenders.resolve();
+  await batch;
+
+  const releaseWrites = deferred(); const twoWritesOpened = deferred();
+  let openedWrites = 0;
+  const files = new Map();
+  const directory = {
+    async getFileHandle(name, options = {}) {
+      if (!files.has(name)) {
+        if (!options.create) throw new DOMException("missing", "NotFoundError");
+        files.set(name, []);
+      }
+      return { async createWritable() {
+        if (++openedWrites === 2) twoWritesOpened.resolve();
+        return { async write(bytes) { files.set(name, [...bytes]); }, async close() {}, async abort() {} };
+      } };
+    },
+    async removeEntry(name) { files.delete(name); },
+  };
+  const slowResponse = (value) => ({ body: { async pipeTo(stream) { await releaseWrites.promise; await stream.write(Uint8Array.from([value])); await stream.close(); } } });
+  const first = runtime.writeSingleOutput(directory, "same.png", "", slowResponse(1));
+  const second = runtime.writeSingleOutput(directory, "same.png", "", slowResponse(2));
+  const overlapped = await Promise.race([twoWritesOpened.promise.then(() => true), new Promise((resolve) => setTimeout(() => resolve(false), 100))]);
+  releaseWrites.resolve();
+  await Promise.all([first, second]);
+  assert.equal(overlapped, true, "copy writes begin together after only their distinct names are reserved");
+  assert.deepEqual([...files.values()], [[1], [2]], "parallel copy writes retain their separate reserved outputs");
+}
+
+async function runBrowserHandleSnapshotSerializationCase() {
+  const entries = ["one", "two"].map((id) => ({ imageId: id, relativePath: `${id}.png`, candidateRevision: 7 }));
+  const images = entries.map((entry) => ({ id: entry.imageId, sourceKind: "session", relativePath: entry.relativePath, width: 32, height: 32, candidateCount: 1, enabledCandidateCount: 1 }));
+  const releaseSnapshot = deferred(); const firstSnapshot = deferred();
+  let activeSnapshots = 0; let maxActiveSnapshots = 0;
+  const sourceHandle = (name) => ({
+    async queryPermission() { return "granted"; }, async requestPermission() { return "granted"; },
+    async getFile() { return {
+      name, size: 3, lastModified: 1,
+      async arrayBuffer() {
+        activeSnapshots += 1; maxActiveSnapshots = Math.max(maxActiveSnapshots, activeSnapshots);
+        if (activeSnapshots === 1) firstSnapshot.resolve();
+        await releaseSnapshot.promise;
+        activeSnapshots -= 1;
+        return Uint8Array.from([1, 2, 3]).buffer;
+      },
+    }; },
+    async createWritable() { return { async write() {}, async close() {}, async abort() {} }; },
+  });
+  const runtime = createRuntime({ entries, initialImages: images, commit: () => jsonResponse({ cleared: true, stale: false }) });
+  runtime.state.settings.saving.parallelism = 2;
+  runtime.state.sourceAccess = new Map(entries.map((entry) => [entry.imageId, { fileHandle: sourceHandle(entry.relativePath), name: entry.relativePath, size: 3, lastModified: 1 }]));
+  const batch = runtime.runBrowserSave(entries.map((entry) => entry.imageId), "_censored", false, "overwrite");
+  await firstSnapshot.promise;
+  await Promise.resolve();
+  assert.equal(maxActiveSnapshots, 1, "File System Access overwrites retain only one source snapshot at a time");
+  releaseSnapshot.resolve();
+  await batch;
+}
+
+async function runSingleSaveKeepsReviewAndDraftCase() {
+  const image = { id: "image-1", relativePath: "nested/source.png", width: 32, height: 32, candidateCount: 1, enabledCandidateCount: 1, reviewed: false };
+  const runtime = createRuntime({ initialImages: [image], commit: () => jsonResponse({ cleared: true, stale: false, images: [image] }) });
+  runtime.element('input[name="singleSaveMode"]:checked').value = "copy";
+  runtime.state.currentId = image.id;
+  runtime.state.singleSave = { imageId: image.id, divisor: 100, draft: { add: "manual" } };
+  runtime.state.drafts.set(image.id, { add: "manual", hasEffectiveMask: true });
+  await runtime.startSingleSave({ preventDefault() {} });
+  assert.equal(runtime.state.images[0].reviewed, false, "single save does not mark an unreviewed image as reviewed");
+  assert.equal(runtime.state.drafts.get(image.id).add, "manual", "single save keeps the editor draft in memory");
 }
 
 function runOutputDirectoryDisplayCase() {
@@ -1106,6 +1197,9 @@ async function runSaveKeepsCatalogueAndEditorStateCase() {
   await runExclusiveWritableCases();
   await runPartialOutputCleanupCases();
   await runConcurrentOutputLockCases();
+  await runBrowserCopyPoolAndWriteOverlapCases();
+  await runBrowserHandleSnapshotSerializationCase();
+  await runSingleSaveKeepsReviewAndDraftCase();
   runOutputDirectoryDisplayCase();
   console.log("test_browser_save_runtime: passed");
 })().catch((error) => { console.error(error); process.exitCode = 1; });
