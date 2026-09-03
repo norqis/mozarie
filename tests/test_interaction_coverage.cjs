@@ -114,7 +114,7 @@ const context = {
 const interactionPath = path.join(__dirname, "..", "static", "js", "interaction.js");
 const source = fs.readFileSync(interactionPath, "utf8");
 vm.runInNewContext(source, context, { filename: interactionPath });
-vm.runInNewContext("globalThis.interactionTest={setTool,setBoundaryModeMenuOpen,closeBoundaryModeMenu,updateBrushSize,updateBlockSizeDisplay,confirmAction,confirmationRequired,resetCurrentDraft,clearMasks,clearCatalog,closeCatalogContextMenu,positionCatalogContextMenu,openCatalogContextMenu,copyContextMenuImagePath,clearReviewForRemovedImage,removeImageFromCatalog,runSelectionAction,droppedFile,directFilesFromDrop,isSupportedImageFile,newClientKey,pruneSourceAccess,rememberImportedSource,importFiles,importSingleFile,beginImportSession,remapImportedImageIds,finishImportSession,waitForImportSession,importHandleEntries,importFileHandles,importDirectoryHandle,importProjectFileHandles,pickImageFiles,pickImageDirectory,importDroppedFiles,setGalleryDropOverlay,handleEditorKeydown,navigationShortcutAction,handleNavigationKeydown,handleWindowKeydown};", context, { filename: "test-interaction-exports.js" });
+vm.runInNewContext("globalThis.interactionTest={setTool,setBoundaryModeMenuOpen,closeBoundaryModeMenu,updateBrushSize,updateBlockSizeDisplay,rememberFillToleranceTrigger,confirmAction,confirmationRequired,resetCurrentDraft,clearMasks,clearCatalog,closeCatalogContextMenu,positionCatalogContextMenu,openCatalogContextMenu,copyContextMenuImagePath,clearReviewForRemovedImage,removeImageFromCatalog,runSelectionAction,droppedFile,directFilesFromDrop,isSupportedImageFile,newClientKey,pruneSourceAccess,rememberImportedSource,importFiles,importSingleFile,beginImportSession,remapImportedImageIds,finishImportSession,waitForImportSession,importHandleEntries,importFileHandles,importDirectoryHandle,importProjectDirectoryHandle,importProjectFileHandles,pickImageFiles,pickImageDirectory,importDroppedFiles,setGalleryDropOverlay,handleEditorKeydown,navigationShortcutAction,handleNavigationKeydown,handleWindowKeydown};", context, { filename: "test-interaction-exports.js" });
 
 const test = context.interactionTest;
 const event = (binding, type = "keydown") => ({ binding, type, currentTarget: element("#origin"), clientX: 30, clientY: 40, preventDefault() { this.prevented = true; }, stopPropagation() { this.stopped = true; } });
@@ -131,6 +131,7 @@ const tolerancePanelCss = styleSource.match(/\.bucket-tolerance-panel\s*\{([^}]*
   assert.match(tolerancePanelCss, /position:\s*fixed;/, "the top-layer tolerance panel is positioned against the viewport");
   assert.doesNotMatch(tolerancePanelCss, /transform:\s*translateX\(-50%\)/, "the tolerance panel does not overflow left by centering itself");
   test.setTool("bucket");
+  test.rememberFillToleranceTrigger("bucket");
   assert.equal(element("#bucketTool").getAttribute("aria-expanded"), "true", "mosaic fill marks its tolerance control expanded");
   assert.equal(element("#excludeBucketTool").getAttribute("aria-expanded"), "false", "only the active fill control is expanded");
   const toleranceParent = element("#bucketToleranceControl").parentElement;
@@ -220,6 +221,8 @@ const tolerancePanelCss = styleSource.match(/\.bucket-tolerance-panel\s*\{([^}]*
   context.fetch = originalFetch; context.api = apiBeforeProjectRestore;
   const nestedDirectory = { name: "folder", kind: "directory", async *values() { yield directory; } };
   await test.importDirectoryHandle(nestedDirectory);
+  state.importing = false; state.importSession = null;
+  await test.importProjectDirectoryHandle(nestedDirectory, "project", "source-directory");
   context.window.showOpenFilePicker = async () => handles; await test.pickImageFiles();
   context.window.showOpenFilePicker = async () => { const error = new Error(); error.name = "AbortError"; throw error; }; await test.pickImageFiles();
   context.window.showDirectoryPicker = async () => directory; await test.pickImageDirectory();

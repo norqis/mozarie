@@ -23,7 +23,7 @@ const context = {
   },
 };
 vm.runInNewContext(source, context, { filename: workspacePath });
-vm.runInNewContext("globalThis.workspaceTest={queueWorkspaceDraft,flushDraftSaves,flushWorkspaceDraft,flushAllWorkspaceMutations,queueWorkspaceMutation,queueWorkspaceFlags,workspaceDraftPayload,directoryCatalogStore,rememberedOutputDirectoryHandle,rememberOutputDirectoryHandle,rememberedProjectFileSources,forgetProjectSources,catalogForDirectoryHandle,loadWorkspaceDraft,scheduleManualWorkspaceSave};", context, { filename: "test-workspace-exports.js" });
+vm.runInNewContext("globalThis.workspaceTest={queueWorkspaceDraft,flushDraftSaves,flushWorkspaceDraft,flushAllWorkspaceMutations,queueWorkspaceMutation,queueWorkspaceFlags,workspaceDraftPayload,directoryCatalogStore,rememberedOutputDirectoryHandle,rememberOutputDirectoryHandle,rememberedProjectSource,rememberedProjectFileSources,rememberedProjectDirectorySources,forgetProjectSources,ensureProjectSourcePermission,catalogForDirectoryHandle,loadWorkspaceDraft,scheduleManualWorkspaceSave};", context, { filename: "test-workspace-exports.js" });
 
 (async () => {
   await context.workspaceTest.queueWorkspaceDraft("one", true);
@@ -196,7 +196,12 @@ vm.runInNewContext("globalThis.workspaceTest={queueWorkspaceDraft,flushDraftSave
     ]; return request; } }; } }; },
   };
   context.indexedDB = context.window.indexedDB = { open() { const request = { result: fileRowsDb }; queueMicrotask(() => request.onsuccess()); return request; } };
+  assert.equal((await context.workspaceTest.rememberedProjectSource("project", "source-a", "one")).name, "a.png", "a remembered project source resolves by its durable source and image IDs");
   assert.equal(JSON.stringify(await context.workspaceTest.rememberedProjectFileSources("project")), JSON.stringify([{ sourceId: "source-a", handle: { kind: "file", name: "a.png" } }]), "browser file handles retain the durable source ID needed to restore the same project images");
+  assert.equal(JSON.stringify(await context.workspaceTest.rememberedProjectDirectorySources("project")), JSON.stringify([{ sourceId: "source-a", handle: { kind: "directory", name: "folder" } }]), "a remembered project directory restores its durable source ID");
+  assert.equal(await context.workspaceTest.ensureProjectSourcePermission({ queryPermission: async () => "granted" }), true, "a granted project source opens without another prompt");
+  assert.equal(await context.workspaceTest.ensureProjectSourcePermission({ queryPermission: async () => "prompt", requestPermission: async () => "granted" }, true), true, "an explicitly requested project source can obtain browser read permission");
+  assert.equal(await context.workspaceTest.ensureProjectSourcePermission({ queryPermission: async () => { throw new Error("denied"); } }), false, "a project source permission failure remains closed");
 
   const deletedHandleKeys = [];
   const cleanupDb = {
@@ -223,6 +228,9 @@ vm.runInNewContext("globalThis.workspaceTest={queueWorkspaceDraft,flushDraftSave
     return { project: { id: "fresh", name: null, status: "working" } };
   };
   assert.equal(await context.workspaceTest.catalogForDirectoryHandle({}), "fresh", "a remembered directory never silently reopens old work");
+  context.state.project = { id: "fresh" };
+  context.api = async (url) => { assert.equal(url, "/api/workspace/catalog", "an active project activates its existing workspace catalog"); return { catalogId: "active" }; };
+  assert.equal(await context.workspaceTest.catalogForDirectoryHandle({}), "active", "a selected directory activates the current project rather than creating another one");
 
   state.currentId = null; state.draftDirty = false; state.draftSaveChains.clear(); state.workspaceDraftChains.clear(); state.workspaceMutationErrors.clear(); state.workspaceDraftTimers.clear();
   assert.equal(JSON.stringify(context.workspaceTest.workspaceDraftPayload({})), JSON.stringify({ add: "", exclusion: "", exclusionErase: "", manualEnabled: true, manualExclusionEnabled: true, manualExclusionEraseEnabled: true, manualExclusionForced: true, hasEffectiveMask: false, removedCandidateIds: [], candidateRevision: 0 }), "a partially initialized manual draft receives the persisted defaults");
