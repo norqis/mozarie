@@ -538,6 +538,14 @@ async function runSingleSaveKeepsReviewAndDraftCase() {
   await runtime.startSingleSave({ preventDefault() {} });
   assert.equal(runtime.state.images[0].reviewed, false, "single save does not mark an unreviewed image as reviewed");
   assert.equal(runtime.state.drafts.get(image.id).add, "manual", "single save keeps the editor draft in memory");
+
+  const reviewed = { ...image, reviewed: true };
+  const reviewedRuntime = createRuntime({ initialImages: [reviewed], commit: () => jsonResponse({ cleared: true, stale: false, images: [reviewed] }) });
+  reviewedRuntime.element('input[name="singleSaveMode"]:checked').value = "copy";
+  reviewedRuntime.state.currentId = reviewed.id;
+  reviewedRuntime.state.singleSave = { imageId: reviewed.id, divisor: 100, draft: { add: "manual" } };
+  await reviewedRuntime.startSingleSave({ preventDefault() {} });
+  assert.equal(reviewedRuntime.state.images[0].reviewed, true, "single save keeps an already reviewed image reviewed");
 }
 
 function runOutputDirectoryDisplayCase() {
