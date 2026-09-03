@@ -71,6 +71,12 @@ test("workspace recovery page loads translations once and recreates once before 
   assert.equal(pageErrors.length, 0, `recovery page must not throw: ${pageErrors.join("\n")}`);
   assert.equal(requests.filter((pathname) => /^\/i18n\/(?:ja|en)\.json$/.test(pathname)).length, 1, "translations are requested once");
 
+  const englishPage = await browser.newPage();
+  await englishPage.addInitScript(() => localStorage.setItem("mozarie-language", "en"));
+  await englishPage.goto(`${origin}/index.html`, { waitUntil: "networkidle" });
+  assert.match(await englishPage.locator("#recreate").innerText(), /recreate/i, "the canonical English recovery page is translated");
+  await englishPage.close();
+
   const navigation = page.waitForNavigation({ waitUntil: "domcontentloaded" });
   await page.evaluate(() => {
     document.querySelector("#recreate").click();

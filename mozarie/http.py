@@ -201,7 +201,7 @@ class MosaicHandler(BaseHTTPRequestHandler):
             if STATE is None:
                 if path == "/api/workspace/recovery":
                     self._json({"required": True, "errorCode": "workspace_recreate_required"})
-                elif path in {"/", "/index"}:
+                elif path in {"/", "/index.html"}:
                     self._send_workspace_recovery_page()
                 elif path in {"/i18n/ja.json", "/i18n/en.json"}:
                     self._send_workspace_recovery_translation(path)

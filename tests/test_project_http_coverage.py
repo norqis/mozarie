@@ -296,7 +296,7 @@ class ProjectHttpCoverageTests(unittest.TestCase):
         previous = http_module.STATE
         http_module.STATE = None
         try:
-            for path in ("/", "/index"):
+            for path in ("/", "/index.html"):
                 status, headers, body = self.request("GET", path)
                 self.assertEqual(status, 200)
                 self.assertEqual(headers["Content-Type"], "text/html; charset=utf-8")
@@ -310,7 +310,7 @@ class ProjectHttpCoverageTests(unittest.TestCase):
                 self.assertEqual(headers["Content-Type"], "application/json; charset=utf-8")
                 self.assertIn("workspaceRecovery.title", json.loads(body))
 
-            for path in ("/index.html", "/favicon.ico", "/i18n/ja", "/i18n/ja.json/extra"):
+            for path in ("/index", "/favicon.ico", "/i18n/ja", "/i18n/ja.json/extra"):
                 status, _headers, body = self.request("GET", path)
                 self.assertEqual(status, 404)
                 self.assertEqual(json.loads(body)["error_code"], "api_not_found")
