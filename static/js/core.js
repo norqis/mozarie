@@ -532,7 +532,7 @@ function updateActionButtons() {
   updateHistoryButtons();
   if (locked) for (const control of controls) {
     const availableInReadOnly = new Set([
-      "projectButton", "projectClose", "projectOpenList", "projectListClose", "projectSort", "projectResume",
+      "projectButton", "projectClose", "projectOpenList", "projectListClose", "projectSort", "projectResume", "projectDelete",
       "projectMosaicZip", "projectExcludeZip", "downloadCurrentMosaicMask", "downloadCurrentExcludeMask",
       "singleViewButton", "compareViewButton", "fitButton", "previousImageButton", "nextImageButton",
       "settingsButton", "errorDialogClose",

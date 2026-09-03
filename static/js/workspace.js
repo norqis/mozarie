@@ -61,7 +61,10 @@ async function rememberedProjectFileSources(projectId) {
     request.onsuccess = () => resolve(request.result || []); request.onerror = () => resolve([]);
   });
   db.close();
-  return rows.filter((row) => row.projectId === projectId && row.imageId && row.handle?.kind === "file").map((row) => row.handle);
+  // Preserve the server source ID.  Recreating one on every reopen would
+  // create a second source and duplicate every browser-imported image.
+  return rows.filter((row) => row.projectId === projectId && row.imageId && row.handle?.kind === "file")
+    .map((row) => ({ sourceId: row.sourceId, handle: row.handle }));
 }
 async function rememberedProjectDirectorySources(projectId) {
   const db = await directoryCatalogStore(); if (!db || !projectId) return [];
@@ -72,6 +75,18 @@ async function rememberedProjectDirectorySources(projectId) {
   db.close();
   return rows.filter((row) => row.projectId === projectId && !row.imageId && row.handle?.kind === "directory")
     .map((row) => ({ sourceId: row.sourceId, handle: row.handle }));
+}
+async function forgetProjectSources(projectId) {
+  const db = await directoryCatalogStore(); if (!db || !projectId) return;
+  try {
+    const rows = await new Promise((resolve) => {
+      const request = db.transaction("projectSources").objectStore("projectSources").getAll();
+      request.onsuccess = () => resolve(request.result || []); request.onerror = () => resolve([]);
+    });
+    const store = db.transaction("projectSources", "readwrite").objectStore("projectSources");
+    for (const row of rows) if (row.projectId === projectId) store.delete(row.key);
+  } catch { /* Local handle cleanup is best effort and never blocks deletion. */ }
+  finally { db.close(); }
 }
 async function ensureProjectSourcePermission(handle, request = false) {
   if (!handle?.queryPermission) return Boolean(handle);

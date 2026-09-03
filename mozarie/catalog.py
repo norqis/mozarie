@@ -316,6 +316,32 @@ class CatalogMixin:
     def close_project(self) -> None:
         self.detach_catalog()
 
+    def delete_project(self, catalog_id: str) -> None:
+        """Delete project-only state while leaving every original image untouched."""
+        project = self.workspace_store.project(catalog_id)
+        if not project:
+            raise ClientError("プロジェクトが見つかりません。", "project_not_found")
+        image_ids = [str(image["id"]) for image in self.workspace_store.project_images(catalog_id)]
+        with self.import_lock:
+            with self.lock:
+                if self.catalog_id == catalog_id and self._has_active_worker():
+                    raise ClientError("処理中のプロジェクトは削除できません。", "operation_in_progress")
+                active = self.catalog_id == catalog_id
+                if active:
+                    # Deletion is permitted for completed projects too; it is
+                    # not an editing operation and intentionally never flushes drafts.
+                    self.project_read_only = False
+            if active:
+                self.detach_catalog()
+            self.workspace_store.delete_project(catalog_id)
+            for image_id in image_ids:
+                shutil.rmtree(self.cache_dir / image_id, ignore_errors=True)
+                for thumbnail_path in (self.cache_dir / "thumbnails").glob(f"{image_id}-*.jpg"):
+                    try:
+                        thumbnail_path.unlink(missing_ok=True)
+                    except OSError:
+                        LOGGER.warning("Could not remove deleted-project thumbnail %s", thumbnail_path)
+
     def resume_project(self, catalog_id: str) -> dict[str, Any]:
         project = self.workspace_store.set_project_status(catalog_id, "working")
         with self.lock:

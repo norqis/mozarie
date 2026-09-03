@@ -438,6 +438,19 @@ class WorkspaceStore:
                 db.execute("ROLLBACK")
                 raise
 
+    def delete_project(self, catalog_id: str) -> None:
+        """Permanently remove one explicit project and all of its workspace rows."""
+        with self._lock, self._connect() as db:
+            db.execute("BEGIN IMMEDIATE")
+            try:
+                cursor = db.execute("DELETE FROM catalogs WHERE catalog_id=?", (catalog_id,))
+                if not cursor.rowcount:
+                    raise ValueError("project is missing")
+                db.execute("COMMIT")
+            except Exception:
+                db.execute("ROLLBACK")
+                raise
+
     def best_catalog_for_manifest(self, entries: list[tuple[str, str]], exclude_catalog: str) -> str | None:
         # Projects are explicit.  Never infer a project from file content or
         # silently merge browser imports into a similarly shaped project.

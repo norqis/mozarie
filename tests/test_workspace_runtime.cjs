@@ -23,7 +23,7 @@ const context = {
   },
 };
 vm.runInNewContext(source, context, { filename: workspacePath });
-vm.runInNewContext("globalThis.workspaceTest={queueWorkspaceDraft,flushDraftSaves,flushWorkspaceDraft,flushAllWorkspaceMutations,queueWorkspaceMutation,queueWorkspaceFlags,workspaceDraftPayload,directoryCatalogStore,rememberedOutputDirectoryHandle,rememberOutputDirectoryHandle,catalogForDirectoryHandle,loadWorkspaceDraft,scheduleManualWorkspaceSave};", context, { filename: "test-workspace-exports.js" });
+vm.runInNewContext("globalThis.workspaceTest={queueWorkspaceDraft,flushDraftSaves,flushWorkspaceDraft,flushAllWorkspaceMutations,queueWorkspaceMutation,queueWorkspaceFlags,workspaceDraftPayload,directoryCatalogStore,rememberedOutputDirectoryHandle,rememberOutputDirectoryHandle,rememberedProjectFileSources,forgetProjectSources,catalogForDirectoryHandle,loadWorkspaceDraft,scheduleManualWorkspaceSave};", context, { filename: "test-workspace-exports.js" });
 
 (async () => {
   await context.workspaceTest.queueWorkspaceDraft("one", true);
@@ -136,6 +136,28 @@ vm.runInNewContext("globalThis.workspaceTest={queueWorkspaceDraft,flushDraftSave
   assert.equal(await context.workspaceTest.directoryCatalogStore(), null, "browsers without IndexedDB keep folder import usable");
   assert.equal(await context.workspaceTest.rememberedOutputDirectoryHandle(), null, "browsers without IndexedDB have no remembered output directory");
   await context.workspaceTest.rememberOutputDirectoryHandle({ name: "output" });
+
+  const fileRowsDb = {
+    close() {},
+    transaction() { return { objectStore() { return { getAll() { const request = {}; queueMicrotask(() => request.onsuccess()); request.result = [
+      { projectId: "project", imageId: "one", sourceId: "source-a", handle: { kind: "file", name: "a.png" } },
+      { projectId: "project", imageId: null, sourceId: "source-a", handle: { kind: "directory", name: "folder" } },
+      { projectId: "other", imageId: "two", sourceId: "source-b", handle: { kind: "file", name: "b.png" } },
+    ]; return request; } }; } }; },
+  };
+  context.indexedDB = context.window.indexedDB = { open() { const request = { result: fileRowsDb }; queueMicrotask(() => request.onsuccess()); return request; } };
+  assert.equal(JSON.stringify(await context.workspaceTest.rememberedProjectFileSources("project")), JSON.stringify([{ sourceId: "source-a", handle: { kind: "file", name: "a.png" } }]), "browser file handles retain the durable source ID needed to restore the same project images");
+
+  const deletedHandleKeys = [];
+  const cleanupDb = {
+    close() {},
+    transaction(_name, mode) { return { objectStore() { return mode === "readwrite" ? { delete(key) { deletedHandleKeys.push(key); } } : { getAll() { const request = {}; queueMicrotask(() => request.onsuccess()); request.result = [
+      { key: "project:source-a:one", projectId: "project" }, { key: "project:dir:root", projectId: "project" }, { key: "other:source-b:two", projectId: "other" },
+    ]; return request; } }; } }; },
+  };
+  context.indexedDB = context.window.indexedDB = { open() { const request = { result: cleanupDb }; queueMicrotask(() => request.onsuccess()); return request; } };
+  await context.workspaceTest.forgetProjectSources("project");
+  assert.deepEqual(deletedHandleKeys, ["project:source-a:one", "project:dir:root"], "deleting a project removes only its persisted browser handles");
 
   const outputReadErrorDb = {
     close() {},

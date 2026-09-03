@@ -504,8 +504,16 @@ else:
 def recreate_workspace() -> StudioState:
     """Explicit recovery action; source images are never part of this deletion."""
     global STATE, STATE_STARTUP_ERROR
-    WorkspaceStore.recreate(APP_DIR / "data")
-    STATE = StudioState()
+    try:
+        WorkspaceStore.recreate(APP_DIR / "data")
+        restored = StudioState()
+    except (WorkspaceOpenError, sqlite3.DatabaseError) as exc:
+        # Keep the recovery screen active if recreating the local store itself
+        # fails; leaving a stale state here would make the next request lie.
+        STATE = None
+        STATE_STARTUP_ERROR = exc
+        raise
+    STATE = restored
     STATE_STARTUP_ERROR = None
     atexit.register(STATE.shutdown)
     return STATE

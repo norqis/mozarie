@@ -196,11 +196,34 @@ function startFixtureServer() {
       }));
       return;
     }
+    // Folder imports preflight existing project sources before posting the
+    // selected path.  This fixture has no persisted projects, so it must
+    // explicitly answer the read route rather than turning a normal import
+    // into a spurious project-list error.
+    if (requestPath === "/api/projects" && request.method === "GET") {
+      response.writeHead(200, { "Content-Type": "application/json" });
+      response.end(JSON.stringify({ projects: [] }));
+      return;
+    }
+    if (requestPath === "/api/project/mismatches" && request.method === "GET") {
+      response.writeHead(200, { "Content-Type": "application/json" });
+      response.end(JSON.stringify({ images: [] }));
+      return;
+    }
     if (requestPath === "/api/folder" && request.method === "POST") {
       let body = ""; for await (const chunk of request) body += chunk;
       folderRequests.push(JSON.parse(body));
       response.writeHead(200, { "Content-Type": "application/json" });
       response.end(JSON.stringify({ images: catalog, root: folderRequests.at(-1).path }));
+      return;
+    }
+    // Folder selection now begins explicit unnamed project work.  Keep this
+    // browser fixture aligned with the real project contract so the picker
+    // flow does not surface a spurious error dialog.
+    if (requestPath === "/api/projects" && request.method === "POST") {
+      for await (const _chunk of request) { /* consume project payload */ }
+      response.writeHead(200, { "Content-Type": "application/json" });
+      response.end(JSON.stringify({ project: { id: "fixture-project", name: null, status: "working", imageCount: catalog.length } }));
       return;
     }
     if (requestPath === "/api/output-directory/pick" && request.method === "POST") {
@@ -288,6 +311,12 @@ function startFixtureServer() {
     if (requestPath === "/api/workspace/catalog/finalize" && request.method === "POST") {
       response.writeHead(200, { "Content-Type": "application/json" });
       response.end(JSON.stringify({ catalogId: "fixture-catalog", imageIds: {}, images: [], workspace: true }));
+      return;
+    }
+    if (requestPath.startsWith("/api/project/history/")) {
+      for await (const _chunk of request) { /* consume an optional undo request */ }
+      response.writeHead(200, { "Content-Type": "application/json" });
+      response.end(JSON.stringify({ canUndo: false, canRedo: false, changedImageIds: [] }));
       return;
     }
     if (requestPath.startsWith("/api/workspace/image/") && request.method === "POST") {
@@ -888,6 +917,8 @@ async function assertDesktopLayout(page, width, height) {
   assert.equal(appbar.logoLoaded && appbar.logoHit, true, `brand logo loads and owns its hit target at ${width}x${height}`);
   assert.equal(Math.round(appbar.logo.width), 28, `brand logo uses the intended 28px size at ${width}x${height}`);
   assert.equal(appbar.noBrandText && appbar.logo.top >= appbar.appbar.top && appbar.logo.bottom <= appbar.appbar.bottom, true, `header uses only the logo at ${width}x${height}`);
+  const unreviewedBadgeColor = await page.locator(".gallery-item:not(.reviewed) .gallery-review-badge").first().evaluate((badge) => getComputedStyle(badge).color);
+  assert.equal(unreviewedBadgeColor, "rgb(216, 255, 243)", `unreviewed gallery status keeps the requested green at ${width}x${height}`);
   await page.locator("#mosaicHelpButton").focus();
   assert.equal(await page.locator("#mosaicHelpButton").evaluate((button) => document.activeElement === button), true, `mosaic help accepts keyboard focus at ${width}x${height}`);
   if (width >= 1280) {
@@ -1568,7 +1599,14 @@ async function runControlLedger(page, fixtureUrl, contracts, dynamicContracts, f
     pickFolder: (before, after) => assert.equal(after.popovers.pickerMenu, true, "pickFolder must open the image-import menu"),
     pickImages: (before, after) => assert.ok(after.pickers.files > before.pickers.files, "pickImages must invoke the file picker"),
     pickFolderFiles: (before, after) => assert.ok(after.pickers.directory > before.pickers.directory, "pickFolderFiles must invoke the directory picker"),
-    loadFolderButton: (before, after) => apiChanged(before, after, "loadFolderButton", "/api/folder"),
+    // Project-aware folder imports first ask whether the source belongs to an
+    // existing project.  The decisive import is still the folder request;
+    // wait for it rather than mistaking that harmless preflight for the
+    // control's result.
+    loadFolderButton: async (before) => {
+      await page.waitForFunction((count) => window.__ledgerApi.slice(count).some((request) => request.url.includes("/api/folder")), before.api.length);
+      apiChanged(before, await snapshot(), "loadFolderButton", "/api/folder");
+    },
     settingsButton: dialog("settingsDialog", true, "settingsButton"), updateToast: dialog("settingsDialog", true, "updateToast"),
     batchMoreButton: (before, after) => assert.equal(after.popovers.batchMoreMenu, true, "batchMoreButton must open the batch menu"),
     clearAllMasksButton: dialog("confirmDialog", true, "clearAllMasksButton"), clearCatalogButton: dialog("confirmDialog", true, "clearCatalogButton"),
@@ -2976,6 +3014,7 @@ async function main() {
     assert.equal(await page.locator("footer.batch-bar").count(), 0, "batch controls must not live below the editor");
     const batchMenu = page.locator("#batchMoreMenu");
     assert.equal(await batchMenu.isVisible(), false, "destructive batch commands should not be visible by default");
+    assert.equal(await page.locator("#errorDialog").evaluate((dialog) => dialog.open), false, `folder picker must not leave an error dialog open: ${await page.locator("#errorDialog").textContent()}`);
     await page.locator("#batchMoreButton").evaluate((button) => { button.disabled = false; });
     await page.locator("#batchMoreButton").click();
     assert.equal(await batchMenu.isVisible(), true, "batch menu should reveal destructive commands on demand");
@@ -3402,7 +3441,12 @@ async function main() {
     });
     assert.deepEqual(targetModes, [{ mode: "current", ids: ["sample-two"], count: 1 }, { mode: "masked", ids: ["sample", "sample-two"], count: 2 }, { mode: "reviewed", ids: ["sample"], count: 1 }], "save target modes select explicit current, mosaicked, and reviewed IDs");
     const editorHistoryAndDisplay = await page.evaluate(async () => {
-      const original = { candidates: state.candidates, images: state.candidateImages, removed: state.removedCandidateIds, history: state.history, index: state.historyIndex, baseRemoved: state.historyRemovedCandidateIds, baseCandidates: state.historyCandidateIds, settings: state.settings.confirmations.candidateDelete };
+      // This block verifies the transient editor-history implementation itself.
+      // Folder import now creates a durable project, so isolate the legacy
+      // in-memory history scenario instead of accidentally routing it through
+      // the project's HTTP undo endpoint.
+      const original = { candidates: state.candidates, images: state.candidateImages, removed: state.removedCandidateIds, history: state.history, index: state.historyIndex, baseRemoved: state.historyRemovedCandidateIds, baseCandidates: state.historyCandidateIds, settings: state.settings.confirmations.candidateDelete, project: state.project, projectReadOnly: state.projectReadOnly };
+      state.project = null; state.projectReadOnly = false;
       const mask = document.createElement("canvas"); mask.width = addCanvas.width; mask.height = addCanvas.height; mask.getContext("2d").fillRect(0, 0, 16, 16);
       const candidate = { id: "history-candidate", role: "apply", enabled: true, labelToken: "penis", source: "target", refinement: null, color: "#fff" };
       state.candidates = [candidate]; state.candidateImages = new Map([[candidate.id, mask]]); state.removedCandidateIds = new Set(); state.settings.confirmations.candidateDelete = false; resetHistoryToCurrentManualMask();
@@ -3414,7 +3458,7 @@ async function main() {
       renderCandidates();
       document.querySelector('[data-candidate-effective-toggle="apply"]').click();
       const effective = state.blinkModes.get(candidate.id) === "effective"; state.currentId = "sample"; state.drafts.set("sample-two", { candidateRevision: 0, removedCandidateIds: [] }); await selectImage("sample-two", true); const cleared = state.blinkCandidateIds.size === 0 && state.blinkModes.size === 0;
-      state.candidates = original.candidates; state.candidateImages = original.images; state.removedCandidateIds = original.removed; state.history = original.history; state.historyIndex = original.index; state.historyRemovedCandidateIds = original.baseRemoved; state.historyCandidateIds = original.baseCandidates; state.settings.confirmations.candidateDelete = original.settings;
+      state.candidates = original.candidates; state.candidateImages = original.images; state.removedCandidateIds = original.removed; state.history = original.history; state.historyIndex = original.index; state.historyRemovedCandidateIds = original.baseRemoved; state.historyCandidateIds = original.baseCandidates; state.settings.confirmations.candidateDelete = original.settings; state.project = original.project; state.projectReadOnly = original.projectReadOnly;
       return { afterDelete, undo, redo, trimmed, effective, cleared };
     });
     assert.deepEqual(editorHistoryAndDisplay, { afterDelete: true, undo: true, redo: true, trimmed: true, effective: true, cleared: false }, `durable undo/redo and selection failure preserve the current display state: ${JSON.stringify(editorHistoryAndDisplay)}`);
@@ -3456,6 +3500,10 @@ async function main() {
     });
     assert.deepEqual(candidateDisplayLifecycle, { joinsNormal: true, joinsManualOnly: true, skipsHiddenManual: true, roleDeleteClearsDisplay: true }, `browser candidate display lifecycle clears deleted ranges and only adds an exclusion erase to a fully normal existing range: ${JSON.stringify(candidateDisplayLifecycle)}`);
     const workspaceDraftRetention = await page.evaluate(async () => {
+      // This verifies the in-memory draft/history fallback independently from
+      // the durable-project implementation exercised in the project UI suite.
+      const originalProject = state.project; const originalProjectReadOnly = state.projectReadOnly;
+      state.project = null; state.projectReadOnly = false;
       const draft = (label) => ({
         add: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAF/gL+XwUPpQAAAABJRU5ErkJggg==",
         exclusion: "", exclusionErase: "", manualEnabled: true, manualExclusionEnabled: true,
@@ -3474,7 +3522,9 @@ async function main() {
       restoreSnapshot(0); const undo = state.historyIndex === 0;
       restoreSnapshot(1); const redo = state.historyIndex === 1;
       const bulk = draftPayload(["sample", "sample-two"]);
-      return { restoredHistory, undo, redo, bulk: Object.keys(bulk).sort(), retained: [state.drafts.has("sample"), state.drafts.has("sample-two")] };
+      const result = { restoredHistory, undo, redo, bulk: Object.keys(bulk).sort(), retained: [state.drafts.has("sample"), state.drafts.has("sample-two")] };
+      state.project = originalProject; state.projectReadOnly = originalProjectReadOnly;
+      return result;
     });
     assert.deepEqual(workspaceDraftRetention, { restoredHistory: true, undo: true, redo: true, bulk: ["sample", "sample-two"], retained: [true, true] }, "workspace persistence keeps per-image undo drafts and includes both manual masks in bulk saving");
 

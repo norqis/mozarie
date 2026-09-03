@@ -437,6 +437,9 @@ async function runSuccessCase() {
       return jsonResponse({ cleared: true, stale: false, images: [] });
     },
   });
+  // Project state must not put an additional workspace flush, source-handle
+  // lookup, or catalog re-render inside the per-image batch-save loop.
+  runtime.state.project = { id: "project-save-runtime", status: "working" };
   await runtime.runBrowserSave(["image-1"], "_censored", false);
 
   assert.deepEqual(runtime.requests.map((request) => request.path), ["/api/save/prepare", "/api/save/render", "/api/save/commit"]);
@@ -444,6 +447,7 @@ async function runSuccessCase() {
   assert.equal(commitPayload.saveToken, "runtime-render-token");
   assert.equal(commitPayload.deleteOriginal, false);
   assert.equal(runtime.imageFetches(), 1, "one final catalog reconciliation runs after the batch");
+  assert.equal(runtime.requests.some((request) => request.path.startsWith("/api/project/")), false, "a project batch save does not issue per-image project requests");
   assert.equal(runtime.elements.get("#applyResult").textContent, "complete 1");
 }
 

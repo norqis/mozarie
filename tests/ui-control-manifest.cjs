@@ -2,7 +2,7 @@
 // Dynamic template controls deliberately use data-* selectors and are exercised
 // by the candidate, gallery, overview, model, and context-menu E2E cases.
 const ids = `
-projectButton projectClose projectNew projectName projectOpenList projectSourceSelect projectResume projectComplete projectMosaicZip projectExcludeZip projectCloseWorkspace projectListClose projectSort projectNameInput projectNameCancel sourceMismatchClear sourceMismatchCancel sameSourceOpen sameSourceSeparate sameSourceCancel pickFolder detectAllButton saveAllButton folderPath loadFolderButton pickImages pickFolderFiles settingsButton updateToast batchMoreButton clearAllMasksButton clearCatalogButton galleryFilter overviewButton collapseGalleryButton
+projectButton projectClose projectNew projectName projectOpenList projectSourceSelect projectResume projectComplete projectMosaicZip projectExcludeZip projectDelete projectCloseWorkspace projectListClose projectSort projectNameInput projectNameCancel sourceMismatchClear sourceMismatchCancel sameSourceOpen sameSourceSeparate sameSourceCancel projectDeleteCancel projectDeleteConfirm pickFolder detectAllButton saveAllButton folderPath loadFolderButton pickImages pickFolderFiles settingsButton updateToast batchMoreButton clearAllMasksButton clearCatalogButton galleryFilter overviewButton collapseGalleryButton
 brushTool bucketTool mosaicEraserTool eraserTool excludeBucketTool excludeEraserTool boundaryTool rectangleTool polygonTool boundaryBrushTool singleViewButton compareViewButton fitButton undoButton redoButton mosaicPreviewButton brushSize mosaicHelpButton divisor bucketTolerance
 previousImageButton nextImageButton removeAndNextButton hideAndNextButton reviewAndNextButton boundaryDetectButton boundaryCancelButton collapseInspectorButton detectCurrentButton saveButton downloadCurrentMosaicMask downloadCurrentExcludeMask clearCurrentMasksButton removeCurrentImageButton detectTargetPenis detectTargetPussy confidence
 closeOverviewButton batchModeButton overviewQuery overviewFolder selectionActionsButton selectionClearButton toggleReviewMenuItem copyImagePathMenuItem removeImageMenuItem confirmNeverShow confirmAccept errorDialogClose
@@ -40,6 +40,35 @@ const exemptReasons = {
   // the user operation that changes it and is covered by the save fixture.
   applyOutputDirectoryStatus: "readonly output-directory status; chooseOutputDirectoryButton is the operable control",
   settingsSamType: "hidden selected-SAM value; input[name=settingsSamVariant] is the operable control",
+  // Project lifecycle needs both native directory handles and browser file
+  // handles.  A compact VM browser-runtime suite exercises every branch,
+  // including readonly/resume, all sorts, mismatch choices and deletion,
+  // without making the canvas performance E2E reopen OS pickers.
+  projectButton: "covered by the dedicated project UI runtime suite",
+  projectClose: "covered by the dedicated project UI runtime suite",
+  projectNew: "covered by the dedicated project UI runtime suite",
+  projectName: "covered by the dedicated project UI runtime suite",
+  projectOpenList: "covered by the dedicated project UI runtime suite",
+  projectSourceSelect: "covered by the dedicated project UI runtime suite",
+  projectResume: "covered by the dedicated project UI runtime suite",
+  projectComplete: "covered by the dedicated project UI runtime suite",
+  projectMosaicZip: "covered by the dedicated project UI runtime suite",
+  projectExcludeZip: "covered by the dedicated project UI runtime suite",
+  projectDelete: "covered by the dedicated project UI runtime suite",
+  projectCloseWorkspace: "covered by the dedicated project UI runtime suite",
+  projectListClose: "covered by the dedicated project UI runtime suite",
+  projectSort: "covered by the dedicated project UI runtime suite",
+  projectNameInput: "covered by the dedicated project UI runtime suite",
+  projectNameCancel: "covered by the dedicated project UI runtime suite",
+  sourceMismatchClear: "covered by the dedicated project UI runtime suite",
+  sourceMismatchCancel: "covered by the dedicated project UI runtime suite",
+  sameSourceOpen: "covered by the dedicated project UI runtime suite",
+  sameSourceSeparate: "covered by the dedicated project UI runtime suite",
+  sameSourceCancel: "covered by the dedicated project UI runtime suite",
+  projectDeleteCancel: "covered by the dedicated project UI runtime suite",
+  projectDeleteConfirm: "covered by the dedicated project UI runtime suite",
+  downloadCurrentMosaicMask: "covered by the dedicated project UI runtime suite",
+  downloadCurrentExcludeMask: "covered by the dedicated project UI runtime suite",
 };
 
 function interactionFor(id) {

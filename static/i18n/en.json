@@ -650,5 +650,11 @@
   "workspaceRecovery.message": "Existing local workspace data cannot be opened by this version. Source images are not deleted.",
   "workspaceRecovery.recreate": "Recreate workspace data",
   "workspaceRecovery.confirm": "This removes local project, mask, and history data. Source images are not deleted.",
-  "workspaceRecovery.failed": "Workspace data could not be recreated. Close Mozarie and try again."
+  "workspaceRecovery.failed": "Workspace data could not be recreated. Close Mozarie and try again.",
+  "project.delete": "Delete project",
+  "project.deleteTitle": "Delete project",
+  "project.deleteData": "Delete this project's operation history, mosaic ranges, exclusion ranges, candidates, and per-image state.",
+  "project.deleteSource": "Original images are not deleted.",
+  "project.deleteIrreversible": "This cannot be undone.",
+  "project.deleteConfirm": "Delete project"
 }
