@@ -249,3 +249,63 @@ class ProjectCatalogCoverageTests(unittest.TestCase):
             with self.assertRaises(ClientError): state.export_mask_png(image_id, "mosaic")
         state.workspace_store.delete_images([image_id])
         self.assertEqual(state.project_history_status(image_id), {"canUndo": False, "canRedo": False})
+
+    def test_delete_project_cleans_only_project_state_and_leaves_sources(self) -> None:
+        source = self.root / "delete-source"; original = self.image(source, "original.png")
+        state = self.state(); project = state.create_project("delete active")
+        image_id = state.set_root(str(source))[0]["id"]
+        candidate_dir = state.cache_dir / image_id; candidate_dir.mkdir(parents=True)
+        (candidate_dir / "cached.png").write_bytes(self.png())
+        thumbnail_dir = state.cache_dir / "thumbnails"; thumbnail_dir.mkdir(parents=True)
+        thumbnail = thumbnail_dir / f"{image_id}-small.jpg"; thumbnail.write_bytes(b"thumbnail")
+
+        state.delete_project(project["id"])
+        self.assertIsNone(state.workspace_store.project(project["id"]))
+        self.assertIsNone(state.catalog_id)
+        self.assertEqual(state.list_images(), [])
+        self.assertTrue(original.is_file())
+        self.assertFalse(candidate_dir.exists())
+        self.assertFalse(thumbnail.exists())
+
+        with self.assertRaises(ClientError): state.delete_project(project["id"])
+
+    def test_delete_project_handles_current_read_only_noncurrent_and_thumbnail_failure(self) -> None:
+        first_root = self.root / "first-project"; second_root = self.root / "second-project"
+        first_source = self.image(first_root, "first.png")
+        state = self.state(); first = state.create_project("delete read only")
+        first_id = state.set_root(str(first_root))[0]["id"]
+        state.complete_project()
+        state.open_project(first["id"])
+        self.assertTrue(state.project_read_only)
+        state.delete_project(first["id"])
+        self.assertTrue(first_source.exists())
+        self.assertIsNone(state.workspace_store.project(first["id"]))
+
+        self.image(second_root, "second.png")
+        state.create_project("delete other")
+        state.set_root(str(second_root))
+        inactive = state.create_project("inactive delete")
+        state.set_root(str(first_root))
+        inactive_image_id = state.order[0]
+        state.create_project("current project")
+        current_id = state.catalog_id
+        inactive_cache = state.cache_dir / inactive_image_id; inactive_cache.mkdir(parents=True, exist_ok=True)
+        thumbnail_dir = state.cache_dir / "thumbnails"; thumbnail_dir.mkdir(exist_ok=True)
+        stubborn = thumbnail_dir / f"{inactive_image_id}-stubborn.jpg"; stubborn.write_bytes(b"thumbnail")
+
+        original_unlink = Path.unlink
+        def reject_stubborn(path: Path, *args: object, **kwargs: object) -> None:
+            if path == stubborn:
+                raise OSError("busy")
+            original_unlink(path, *args, **kwargs)
+
+        with patch.object(Path, "unlink", new=reject_stubborn):
+            state.delete_project(inactive["id"])
+        self.assertEqual(state.catalog_id, current_id)
+        self.assertIsNone(state.workspace_store.project(inactive["id"]))
+        self.assertTrue(stubborn.exists())
+
+        state.worker_thread = types.SimpleNamespace(is_alive=lambda: True)
+        with self.assertRaises(ClientError): state.delete_project(current_id or "")
+        self.assertIsNotNone(state.workspace_store.project(current_id or ""))
+        state.worker_thread = None
