@@ -35,6 +35,8 @@ function diagnosticCases() {
     "----------------------------------------------------------------------",
     "Ran 14 tests in 0.012s",
     "FAILED (failures=13, errors=1)",
+    "unrelated child output after the unittest summary",
+    "misleading-tail-marker",
   ].join("\r\n");
   const pythonDiagnostic = runner.diagnostic(pythonFailures);
   assert.match(pythonDiagnostic, /Ran 14 tests/, "Python diagnostics preserve the run summary");
@@ -45,6 +47,7 @@ function diagnosticCases() {
   }
   assert.match(pythonDiagnostic, /test_subtest/, "Python subtests are named");
   assert.match(pythonDiagnostic, /import-marker/, "Python errors retain their useful exception");
+  assert.doesNotMatch(pythonDiagnostic, /misleading-tail-marker/, "output after the unittest summary cannot replace the failure detail");
 
   const tapFailures = [
     "TAP version 13",

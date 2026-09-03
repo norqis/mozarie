@@ -45,7 +45,8 @@ function shorten(value, maximum = MAX_NAME_CHARACTERS) {
 }
 
 function cleanDetail(lines) {
-  const useful = lines
+  const summaryIndex = lines.findIndex((line) => /^Ran \d+ tests? in\b/.test(line.trim()) || /^FAILED \(.+\)$/.test(line.trim()));
+  const useful = lines.slice(0, summaryIndex < 0 ? undefined : summaryIndex)
     .map((line) => line.trim())
     .filter((line) => line && !/^[=\-]{3,}$/.test(line))
     .filter((line) => !/^Traceback \(most recent call last\):$/.test(line));
