@@ -5340,6 +5340,14 @@ class MozarieTests(unittest.TestCase):
             mask_path.parent.mkdir(parents=True, exist_ok=True)
             Image.fromarray(self._mask(16, 16)).save(mask_path)
             state.candidates[first_id] = [Candidate("candidate", "penis", 0.9, mask_path)]
+            revision = self.commit_candidates(state, first_id)
+            state.set_image_flags(first_id, {"hidden": True, "reviewed": True})
+            manual_png = io.BytesIO(); Image.new("L", (16, 16), 255).save(manual_png, format="PNG")
+            manual = "data:image/png;base64," + base64.b64encode(manual_png.getvalue()).decode("ascii")
+            state.save_manual_workspace(first_id, {
+                "add": manual, "exclusion": "", "exclusionErase": "", "removedCandidateIds": [],
+                "candidateRevision": revision, "hasEffectiveMask": True, "manualEnabled": False,
+            })
             state.job = core_module.Job(kind="apply", state="running", total=2, image_ids=(first_id, second_id))
 
             state._apply_worker([first_record, second_record], 100, {})
@@ -5350,7 +5358,11 @@ class MozarieTests(unittest.TestCase):
                 [os.path.normcase(str(Path(output).resolve())) for output in state.job.outputs],
                 [os.path.normcase(str(first.resolve()))],
             )
-            self.assertEqual(state.candidates[first_id], [])
+            self.assertEqual([candidate.candidate_id for candidate in state.candidates[first_id]], ["candidate"])
+            self.assertTrue(mask_path.is_file())
+            self.assertEqual(state.manual_workspace(first_id)["add"], manual)
+            self.assertFalse(state.manual_workspace(first_id)["manualEnabled"])
+            self.assertEqual(state.workspace_store.image_state(first_id), (True, True))
             self.assertEqual(second.read_bytes(), original_second)
 
     def test_apply_all_empty_masks_completes_without_changing_images(self):

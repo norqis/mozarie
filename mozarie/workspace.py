@@ -906,7 +906,7 @@ class WorkspaceStore:
         ys, xs = np.where(changed)
         if not len(xs): return {"existsBefore": before is not None, "existsAfter": after is not None, "box": None}
         left, right, top, bottom = int(xs.min()), int(xs.max()) + 1, int(ys.min()), int(ys.max()) + 1
-        output = io.BytesIO(); Image.fromarray(changed[top:bottom, left:right].astype(np.uint8) * 255, "L").save(output, format="PNG")
+        output = io.BytesIO(); Image.fromarray(changed[top:bottom, left:right].astype(np.uint8) * 255).save(output, format="PNG")
         return {"existsBefore": before is not None, "existsAfter": after is not None,
                 "box": [left, top, right - left, bottom - top], "png": base64.b64encode(output.getvalue()).decode("ascii"), "size": [width, height]}
 
@@ -942,7 +942,7 @@ class WorkspaceStore:
             raise ValueError("workspace history is invalid")
         canvas[top:top + box_height, left:left + box_width] ^= region.astype(np.uint8) * 255
         if not target_exists: return None
-        output = io.BytesIO(); Image.fromarray(canvas, "L").save(output, format="PNG"); return output.getvalue()
+        output = io.BytesIO(); Image.fromarray(canvas).save(output, format="PNG"); return output.getvalue()
 
     @staticmethod
     def _history_candidate_ids(state: dict[str, Any]) -> set[str]:
