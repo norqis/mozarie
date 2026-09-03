@@ -480,15 +480,27 @@ async function importProjectDirectoryHandle(directoryHandle, projectId, sourceId
   finally { finishImportSession(session); }
 }
 
-async function importProjectFileHandles(handles, projectId) {
-  const session = beginImportSession(); if (!session) return;
-  try {
-    await flushAllWorkspaceMutations();
-    session.catalogId = projectId;
-    session.sourceId = crypto.randomUUID();
-    session.sourceKind = "browser-files";
-    await importFileHandles(handles, session);
-  } finally { finishImportSession(session); }
+async function importProjectFileHandles(sources, projectId) {
+  // File handles are stored one row per image.  Restore them in their original
+  // source groups so their durable image IDs, masks, and history are reused.
+  const groups = new Map();
+  for (const source of sources) {
+    const handle = source?.handle || source;
+    if (!handle) continue;
+    const sourceId = source?.sourceId || crypto.randomUUID();
+    const handles = groups.get(sourceId) || [];
+    handles.push(handle); groups.set(sourceId, handles);
+  }
+  for (const [sourceId, handles] of groups) {
+    const session = beginImportSession(); if (!session) return;
+    try {
+      await flushAllWorkspaceMutations();
+      session.catalogId = projectId;
+      session.sourceId = sourceId;
+      session.sourceKind = "browser-files";
+      await importFileHandles(handles, session);
+    } finally { finishImportSession(session); }
+  }
 }
 
 async function pickImageFiles() {

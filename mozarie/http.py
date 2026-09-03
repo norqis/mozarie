@@ -534,7 +534,9 @@ class MosaicHandler(BaseHTTPRequestHandler):
         except ClientError as exc:
             self._client_error(exc, HTTPStatus.BAD_REQUEST)
         except Exception as exc:
-            if (gpu_oom := STATE.recover_gpu_oom_for_request(exc)) is not None:
+            # Recovery can fail while no state exists.  It is not a GPU error,
+            # and must still return the normal structured server error.
+            if STATE is not None and (gpu_oom := STATE.recover_gpu_oom_for_request(exc)) is not None:
                 LOGGER.error("POST リクエストでGPUメモリが不足: %s", self.path)
                 self._client_error(gpu_oom, HTTPStatus.BAD_REQUEST)
                 return
@@ -548,6 +550,12 @@ class MosaicHandler(BaseHTTPRequestHandler):
             if path.startswith("/api/catalog/image/"):
                 image_id = path.removeprefix("/api/catalog/image/")
                 self._json({"images": STATE.remove_image_from_catalog(image_id)})
+            elif path.startswith("/api/project/"):
+                project_id = path.removeprefix("/api/project/")
+                if not project_id or "/" in project_id:
+                    raise ClientError("プロジェクトが見つかりません。", "project_not_found")
+                STATE.delete_project(project_id)
+                self._json({"deleted": True})
             elif path.startswith("/api/candidate/"):
                 image_id, candidate_id = _route_ids(path, "/api/candidate/")
                 deleted = STATE.delete_candidate(image_id, candidate_id)

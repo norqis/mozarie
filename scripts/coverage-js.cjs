@@ -32,6 +32,7 @@ const testFiles = [
   "tests/test_flood_fill_worker.cjs",
   "tests/test_masked_mosaic_worker.cjs",
   "tests/test_mosaic_preview_runtime.cjs",
+  "tests/test_project_ui_runtime.cjs",
   "tests/test_quiet_runner.cjs",
   "tests/test_resources.cjs",
   "tests/test_settings_runtime.cjs",

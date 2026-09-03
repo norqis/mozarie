@@ -650,5 +650,11 @@
   "workspaceRecovery.message": "既存のローカル作業データはこの版では開けません。元画像は削除されません。",
   "workspaceRecovery.recreate": "作業データを作り直す",
   "workspaceRecovery.confirm": "プロジェクト・マスク・履歴のローカルデータを削除して作り直します。元画像は削除されません。",
-  "workspaceRecovery.failed": "作り直せませんでした。Mozarieを閉じてからもう一度お試しください。"
+  "workspaceRecovery.failed": "作り直せませんでした。Mozarieを閉じてからもう一度お試しください。",
+  "project.delete": "プロジェクトを削除",
+  "project.deleteTitle": "プロジェクトを削除",
+  "project.deleteData": "このプロジェクトの操作履歴、モザイク範囲、除外範囲、候補、画像ごとの状態をすべて削除します。",
+  "project.deleteSource": "元画像は削除しません。",
+  "project.deleteIrreversible": "この操作は元に戻せません。",
+  "project.deleteConfirm": "プロジェクトを削除"
 }

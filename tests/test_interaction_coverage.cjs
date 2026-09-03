@@ -105,7 +105,7 @@ const context = {
   setHidden: async (image, value) => { image.hidden = value; }, setReviewed: async (image, value) => { if (value) state.reviewedPaths.add(image.id); },
   openDetectionDialog: () => calls.push(["detect"]), importParallelism: () => 2,
   showProcessing: () => {}, closeProcessing: () => {}, remapImportedImageIds: undefined, loadReviewedPaths: () => {},
-  catalogForDirectoryHandle: async () => "directory-catalog",
+  catalogForDirectoryHandle: async () => "directory-catalog", rememberProjectSource: async (_projectId, _handle, _imageId, sourceId) => sourceId || "remembered-source",
   fetch: async () => ({ ok: true, status: 200, json: async () => ({ imported: [], catalogId: "final", provisional: false }) }),
   setGalleryDropOverlay: undefined, shortcutFromEvent: (event) => event.binding, isEditableTarget: () => editable, hasOpenDialog: () => dialogOpen,
   isGestureActive: () => gesture, moveCurrentBy: () => {}, setViewMode: (mode) => { state.viewMode = mode; }, reviewAndMoveNext: () => {}, restoreSnapshot: () => {},
@@ -114,7 +114,7 @@ const context = {
 const interactionPath = path.join(__dirname, "..", "static", "js", "interaction.js");
 const source = fs.readFileSync(interactionPath, "utf8");
 vm.runInNewContext(source, context, { filename: interactionPath });
-vm.runInNewContext("globalThis.interactionTest={setTool,setBoundaryModeMenuOpen,closeBoundaryModeMenu,updateBrushSize,updateBlockSizeDisplay,confirmAction,confirmationRequired,resetCurrentDraft,clearMasks,clearCatalog,closeCatalogContextMenu,positionCatalogContextMenu,openCatalogContextMenu,copyContextMenuImagePath,clearReviewForRemovedImage,removeImageFromCatalog,runSelectionAction,droppedFile,directFilesFromDrop,isSupportedImageFile,newClientKey,pruneSourceAccess,rememberImportedSource,importFiles,importSingleFile,beginImportSession,remapImportedImageIds,finishImportSession,waitForImportSession,importHandleEntries,importFileHandles,importDirectoryHandle,pickImageFiles,pickImageDirectory,importDroppedFiles,setGalleryDropOverlay,handleEditorKeydown,navigationShortcutAction,handleNavigationKeydown,handleWindowKeydown};", context, { filename: "test-interaction-exports.js" });
+vm.runInNewContext("globalThis.interactionTest={setTool,setBoundaryModeMenuOpen,closeBoundaryModeMenu,updateBrushSize,updateBlockSizeDisplay,confirmAction,confirmationRequired,resetCurrentDraft,clearMasks,clearCatalog,closeCatalogContextMenu,positionCatalogContextMenu,openCatalogContextMenu,copyContextMenuImagePath,clearReviewForRemovedImage,removeImageFromCatalog,runSelectionAction,droppedFile,directFilesFromDrop,isSupportedImageFile,newClientKey,pruneSourceAccess,rememberImportedSource,importFiles,importSingleFile,beginImportSession,remapImportedImageIds,finishImportSession,waitForImportSession,importHandleEntries,importFileHandles,importDirectoryHandle,importProjectFileHandles,pickImageFiles,pickImageDirectory,importDroppedFiles,setGalleryDropOverlay,handleEditorKeydown,navigationShortcutAction,handleNavigationKeydown,handleWindowKeydown};", context, { filename: "test-interaction-exports.js" });
 
 const test = context.interactionTest;
 const event = (binding, type = "keydown") => ({ binding, type, currentTarget: element("#origin"), clientX: 30, clientY: 40, preventDefault() { this.prevented = true; }, stopPropagation() { this.stopped = true; } });
@@ -200,6 +200,23 @@ const tolerancePanelCss = styleSource.match(/\.bucket-tolerance-panel\s*\{([^}]*
   context.fetch = originalFetch;
   const importSession = test.beginImportSession(); assert.ok(importSession); test.finishImportSession(importSession); assert.equal(await test.waitForImportSession({ paused: false, cancelled: false }), false);
   const handles = [{ name: "a.png", getFile: async () => file("a.png") }]; await test.importFileHandles(handles);
+  // A restored browser project must upload each old source under the same
+  // durable source ID; otherwise its masks/history would be duplicated.
+  const sourceIds = [];
+  const apiBeforeProjectRestore = context.api;
+  context.fetch = async (_url, options) => {
+    sourceIds.push(options.headers["X-Mozarie-Source-Id"]);
+    return { ok: true, status: 200, json: async () => ({ imported: [], catalogId: "project", provisional: false }) };
+  };
+  context.api = async (url) => url === "/api/images" ? { images } : {};
+  state.importing = false; state.importSession = null;
+  await test.importProjectFileHandles([
+    { sourceId: "source-a", handle: { name: "a.png", getFile: async () => file("a.png") } },
+    { sourceId: "source-a", handle: { name: "b.png", getFile: async () => file("b.png") } },
+    { sourceId: "source-b", handle: { name: "c.png", getFile: async () => file("c.png") } },
+  ], "project");
+  assert.deepEqual(sourceIds, ["source-a", "source-a", "source-b"], "reopening browser files keeps their original source groups and does not duplicate project images");
+  context.fetch = originalFetch; context.api = apiBeforeProjectRestore;
   const nestedDirectory = { name: "folder", kind: "directory", async *values() { yield directory; } };
   await test.importDirectoryHandle(nestedDirectory);
   context.window.showOpenFilePicker = async () => handles; await test.pickImageFiles();
