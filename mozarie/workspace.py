@@ -44,7 +44,7 @@ class _ClosingConnection(sqlite3.Connection):
 class WorkspaceStore:
     # v7 deliberately replaces the old folder catalogue with a project store.
     # There is no migration path: the user chooses whether to recreate v4 data.
-    VERSION = 10
+    VERSION = 11
 
     def __init__(self, data_dir: Path) -> None:
         self.path = data_dir / "workspaces.sqlite3"
@@ -121,6 +121,8 @@ class WorkspaceStore:
                     created_at INTEGER NOT NULL
                 );
                 CREATE INDEX IF NOT EXISTS project_sources_identity ON project_sources(source_identity);
+                CREATE INDEX IF NOT EXISTS images_catalog_source ON images(catalog_id,source_id,relative_path);
+                CREATE INDEX IF NOT EXISTS candidates_image_active ON candidates(image_id,deleted,candidate_id);
                 CREATE INDEX IF NOT EXISTS history_entries_image_entry ON history_entries(image_id, entry_id);
                 CREATE INDEX IF NOT EXISTS history_entries_group ON history_entries(group_id);
                 CREATE TABLE IF NOT EXISTS history_candidate_refs (
@@ -251,25 +253,25 @@ class WorkspaceStore:
 
     @staticmethod
     def _candidate_row(row: sqlite3.Row) -> dict[str, Any]:
-        """Attach the candidate's PNG-only padding metadata to its hydrated row."""
-        if "expand_px" in row.keys():
-            value = row["expand_px"]
-            if isinstance(value, int) and value >= 0:
-                hydrated = dict(row); hydrated["expand_px"] = value
-                return hydrated
-        raw = row["mask_png"]
-        if not isinstance(raw, bytes):
-            raise ValueError("workspace candidate mask is not a PNG")
-        with Image.open(io.BytesIO(raw)) as image:
-            value = image.text.get("mozarie_expand_px", "0")
-        try:
-            expand_px = int(value)
-        except (TypeError, ValueError) as exc:
-            raise ValueError("workspace candidate expand pixels are invalid") from exc
-        if expand_px < 0 or str(expand_px) != value:
+        """Hydrate candidate metadata without reading the mask BLOB."""
+        value = row["expand_px"] if "expand_px" in row.keys() else None
+        if value is None and "mask_png" in row.keys():
+            # Direct callers may inspect a pre-v11 row, but normal catalogue
+            # hydration selects only the metadata column above.
+            raw = row["mask_png"]
+            if not isinstance(raw, bytes):
+                raise ValueError("workspace candidate mask is not a PNG")
+            try:
+                with Image.open(io.BytesIO(raw)) as image:
+                    value = image.text.get("mozarie_expand_px", "0")
+                value = int(value)
+            except (OSError, ValueError, TypeError) as exc:
+                raise ValueError("workspace candidate expand pixels are invalid") from exc
+        if value is None:
+            value = 0
+        if isinstance(value, bool) or not isinstance(value, int) or value < 0:
             raise ValueError("workspace candidate expand pixels are invalid")
-        hydrated = dict(row)
-        hydrated["expand_px"] = expand_px
+        hydrated = dict(row); hydrated["expand_px"] = value
         return hydrated
 
     def catalog_for_root(self, root: Path) -> str:
@@ -506,6 +508,15 @@ class WorkspaceStore:
                 raise
         return result
 
+    def source_image_metadata(self, source_id: str) -> dict[str, tuple[int, int, int, int]]:
+        """Return the fingerprint needed to skip image decoding during a reopen."""
+        with self._connect() as db:
+            rows = db.execute("SELECT relative_path,size_bytes,mtime_ns,width,height FROM images WHERE source_id=?", (source_id,)).fetchall()
+        return {
+            str(row["relative_path"]): (int(row["size_bytes"]), int(row["mtime_ns"]), int(row["width"]), int(row["height"]))
+            for row in rows
+        }
+
     def accept_source_metadata(self, records: list[Any], *, preserve_mask_dimensions: bool = False) -> None:
         if not records: return
         with self._lock, self._connect() as db:
@@ -695,16 +706,11 @@ class WorkspaceStore:
     def hydrate_candidates(self, image_id: str, directory: Path, candidate_factory: Any) -> tuple[int, list[Any]]:
         with self._connect() as db:
             image = db.execute("SELECT candidate_revision FROM images WHERE image_id=?", (image_id,)).fetchone()
-            rows = db.execute("""SELECT candidates.candidate_id,label_token,confidence,mask_png,enabled,color,source,origin,refinement,role,forced,
-                candidate_metadata.expand_px FROM candidates LEFT JOIN candidate_metadata USING(image_id,candidate_id)
+            rows = db.execute("""SELECT candidates.candidate_id,label_token,confidence,enabled,color,source,origin,refinement,role,forced,
+                COALESCE(candidate_metadata.expand_px,0) AS expand_px FROM candidates LEFT JOIN candidate_metadata USING(image_id,candidate_id)
                 WHERE candidates.image_id=? AND deleted=0""", (image_id,)).fetchall()
         if not image: return 0, []
         if not rows: return int(image["candidate_revision"]), []
-        for row in rows:
-            mask = row["mask_png"]
-            if not isinstance(mask, bytes):
-                raise ValueError("workspace candidate mask is not a PNG")
-            self._require_png_mask(mask)
         candidates = [candidate_factory(self._candidate_row(row), directory / f"{row['candidate_id']}.png") for row in rows]
         return int(image["candidate_revision"]), candidates
 
@@ -719,13 +725,9 @@ class WorkspaceStore:
                 placeholders = ",".join("?" for _ in chunk)
                 for row in db.execute(f"SELECT image_id,candidate_revision FROM images WHERE image_id IN ({placeholders})", chunk):
                     images[str(row["image_id"])] = int(row["candidate_revision"])
-                for row in db.execute(f"""SELECT candidates.image_id,candidates.candidate_id,label_token,confidence,mask_png,enabled,color,source,origin,refinement,role,forced,
-                    candidate_metadata.expand_px FROM candidates LEFT JOIN candidate_metadata USING(image_id,candidate_id)
+                for row in db.execute(f"""SELECT candidates.image_id,candidates.candidate_id,label_token,confidence,enabled,color,source,origin,refinement,role,forced,
+                    COALESCE(candidate_metadata.expand_px,0) AS expand_px FROM candidates LEFT JOIN candidate_metadata USING(image_id,candidate_id)
                     WHERE candidates.image_id IN ({placeholders}) AND deleted=0""", chunk):
-                    mask = row["mask_png"]
-                    if not isinstance(mask, bytes):
-                        raise ValueError("workspace candidate mask is not a PNG")
-                    self._require_png_mask(mask)
                     image_id = str(row["image_id"])
                     candidates.setdefault(image_id, []).append(candidate_factory(self._candidate_row(row), cache_dir / image_id / f"{row['candidate_id']}.png"))
         return {image_id: (revision, candidates.get(image_id, [])) for image_id, revision in images.items()}
@@ -755,12 +757,17 @@ class WorkspaceStore:
         # truth for undo/redo after reopening a project.
         history_json = "{}"
         add, exclusion, erase = (decoder(payload.get(key)) for key in ("add", "exclusion", "exclusionErase"))
-        for mask in (add, exclusion, erase):
-            self._require_png_mask(mask)
         with self._lock, self._connect() as db:
             db.execute("BEGIN IMMEDIATE")
             try:
                 before = self._history_state_db(db, image_id)
+                previous_layers = before.get("_manual_raw") or {}
+                # Browser saves include all three layers, but a normal stroke
+                # changes one. Validate only newly inserted bytes; immutable
+                # old layers were validated at their own insertion.
+                for key, mask in zip(("add", "exclusion", "erase"), (add, exclusion, erase)):
+                    if mask != previous_layers.get(key):
+                        self._require_png_mask(mask)
                 image = db.execute("SELECT candidate_revision FROM images WHERE image_id=?", (image_id,)).fetchone()
                 revision = int(image["candidate_revision"])
                 valid_ids = {str(row["candidate_id"]) for row in db.execute(
@@ -841,8 +848,6 @@ class WorkspaceStore:
         manual = db.execute("SELECT * FROM manual_edits WHERE image_id=?", (image_id,)).fetchone()
         packed_candidates = []
         for row in candidates:
-            raw = row["mask_png"]
-            self._require_png_mask(raw)
             packed_candidates.append({
                 "id": str(row["candidate_id"]), "label": str(row["label_token"]), "confidence": row["confidence"],
                 "enabled": bool(row["enabled"]), "color": str(row["color"]),
@@ -854,7 +859,6 @@ class WorkspaceStore:
         manual_raw: dict[str, bytes | None] | None = None
         if manual is not None:
             manual_raw = {"add": manual["add_png"], "exclusion": manual["exclusion_png"], "erase": manual["exclusion_erase_png"]}
-            for raw in manual_raw.values(): self._require_png_mask(raw)
             packed_manual = {
                 "manualEnabled": bool(manual["manual_enabled"]),
                 "exclusionEnabled": bool(manual["exclusion_enabled"]), "eraseEnabled": bool(manual["exclusion_erase_enabled"]),
@@ -881,6 +885,51 @@ class WorkspaceStore:
             manual.update({key: self._pack_blob(raw.get(key)) for key in ("add", "exclusion", "erase")})
         return self._history_public_state(state)
 
+    def iter_project_export_states(self, catalog_id: str):
+        """Yield project masks from one read transaction without text encoding them.
+
+        Each chunk is deliberately bounded: a ZIP export should retain only one
+        image's composed mask plus the candidate BLOBs required for that image.
+        """
+        with self._connect() as db:
+            db.execute("BEGIN")
+            try:
+                images = db.execute("""SELECT images.image_id,images.relative_path,images.width,images.height,images.source_id,
+                    project_sources.display_name FROM images JOIN project_sources ON project_sources.source_id=images.source_id
+                    WHERE images.catalog_id=? ORDER BY project_sources.display_name COLLATE NOCASE,images.relative_path COLLATE NOCASE,images.image_id""", (catalog_id,)).fetchall()
+                image_by_id = {str(row["image_id"]): row for row in images}
+                for image_chunk in _chunks(list(image_by_id)):
+                    placeholders = ",".join("?" for _ in image_chunk)
+                    candidates: dict[str, list[dict[str, Any]]] = {}
+                    for row in db.execute(f"""SELECT candidates.image_id,candidates.candidate_id,candidates.mask_png,candidates.enabled,
+                        candidates.role,candidates.forced,candidate_metadata.expand_px FROM candidates
+                        LEFT JOIN candidate_metadata USING(image_id,candidate_id)
+                        WHERE candidates.image_id IN ({placeholders}) AND candidates.deleted=0""", image_chunk):
+                        candidates.setdefault(str(row["image_id"]), []).append({
+                            "id": str(row["candidate_id"]), "mask": row["mask_png"], "enabled": bool(row["enabled"]),
+                            "role": str(row["role"]), "forced": bool(row["forced"]), "expandPx": int(row["expand_px"] or 0),
+                        })
+                    manuals = {
+                        str(row["image_id"]): row for row in db.execute(f"SELECT * FROM manual_edits WHERE image_id IN ({placeholders})", image_chunk)
+                    }
+                    for image_id in image_chunk:
+                        image = image_by_id[image_id]
+                        manual = manuals.get(str(image["image_id"]))
+                        yield {
+                            "image": {"id": str(image["image_id"]), "relativePath": str(image["relative_path"]),
+                                      "width": int(image["width"]), "height": int(image["height"]),
+                                      "sourceId": str(image["source_id"]), "sourceDisplay": str(image["display_name"])},
+                            "candidates": candidates.get(str(image["image_id"]), []),
+                            "manual": None if manual is None else {
+                                "add": manual["add_png"], "exclusion": manual["exclusion_png"], "erase": manual["exclusion_erase_png"],
+                                "manualEnabled": bool(manual["manual_enabled"]), "exclusionEnabled": bool(manual["exclusion_enabled"]),
+                                "eraseEnabled": bool(manual["exclusion_erase_enabled"]), "exclusionForced": bool(manual["exclusion_forced"]),
+                                "removed": str(manual["removed_candidate_ids"]),
+                            },
+                        }
+            finally:
+                db.execute("ROLLBACK")
+
     @staticmethod
     def _history_public_state(state: dict[str, Any]) -> dict[str, Any]:
         return {key: value for key, value in state.items() if key != "_manual_raw"}
@@ -893,6 +942,7 @@ class WorkspaceStore:
     def _manual_xor(before: bytes | None, after: bytes | None) -> dict[str, Any] | None:
         """Encode only the changed rectangle of a binary manual layer."""
         if before is None and after is None: return None
+        if before == after: return None
         source = before if before is not None else after
         assert source is not None
         with Image.open(io.BytesIO(source)) as image: width, height = image.size

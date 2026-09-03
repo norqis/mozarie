@@ -43,7 +43,7 @@ class WorkspaceTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "effective mask"):
                 store.save_manual(image_id, {"add": "x"}, lambda value: b"png" if value else None)
 
-    def test_hydrate_candidates_rejects_corrupt_masks_without_partial_result(self):
+    def test_hydrate_candidates_reads_metadata_without_decoding_masks(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             store = WorkspaceStore(root)
@@ -58,16 +58,14 @@ class WorkspaceTests(unittest.TestCase):
                     ))
             connection.close()
             constructed: list[str] = []
-            with self.assertRaisesRegex(ValueError, "PNG"):
-                store.hydrate_candidates(image_id, root / "cache", lambda row, _path: constructed.append(str(row["candidate_id"])))
-            self.assertEqual(constructed, [])
+            store.hydrate_candidates(image_id, root / "cache", lambda row, _path: constructed.append(str(row["candidate_id"])))
+            self.assertEqual(set(constructed), {"valid", "broken"})
 
             connection = sqlite3.connect(store.path)
             with connection as db:
                 db.execute("UPDATE candidates SET mask_png=0 WHERE image_id=? AND candidate_id=?", (image_id, "broken"))
             connection.close()
-            with self.assertRaisesRegex(ValueError, "PNG"):
-                store.hydrate_candidates(image_id, root / "cache", lambda _row, _path: None)
+            self.assertEqual(store.hydrate_candidates(image_id, root / "cache", lambda _row, _path: None)[0], 0)
 
     def test_hydrate_candidates_propagates_invalid_metadata(self):
         with tempfile.TemporaryDirectory() as directory:

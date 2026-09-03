@@ -79,7 +79,7 @@ class ProjectWorkspaceCoverageTests(unittest.TestCase):
             with self.subTest(raw=raw[:8]), self.assertRaisesRegex(ValueError, "mask"):
                 WorkspaceStore._decode_png_mask(raw)
 
-    def test_candidate_metadata_png_fallback_and_validation(self):
+    def test_candidate_metadata_is_loaded_without_reading_candidate_pngs(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory); store, _, image_id = self.store_image(root)
             db = sqlite3.connect(store.path)
@@ -91,15 +91,14 @@ class ProjectWorkspaceCoverageTests(unittest.TestCase):
             # sqlite's default tuple does not offer keys; fetch the hydrated row through store's query.
             captured = []
             store.hydrate_candidates(image_id, root, lambda row, _: captured.append(row) or row)
-            self.assertEqual(captured[0]["expand_px"], 3)
+            self.assertEqual(captured[0]["expand_px"], 0)
             db = sqlite3.connect(store.path)
             try:
                 db.execute("UPDATE candidates SET mask_png=? WHERE image_id=?", (self.png(text={"mozarie_expand_px": "-1"}), image_id))
                 db.commit()
             finally:
                 db.close()
-            with self.assertRaisesRegex(ValueError, "expand"):
-                store.hydrate_candidates(image_id, root, lambda row, _: row)
+            self.assertEqual(store.hydrate_candidates(image_id, root, lambda row, _: row)[1][0]["expand_px"], 0)
 
     def test_catalog_source_project_listing_lifecycle_and_sorting(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -404,8 +403,7 @@ class ProjectWorkspaceCoverageTests(unittest.TestCase):
                 db.commit()
             finally:
                 db.close()
-            with self.assertRaisesRegex(ValueError, "PNG"):
-                store.hydrate_candidates_bulk([image_id], root, lambda *_: None)
+            self.assertEqual(store.hydrate_candidates_bulk([image_id], root, lambda *_: None)[image_id][0], 5)
 
     def test_history_failure_and_group_readiness_boundaries(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -477,7 +475,7 @@ class ProjectWorkspaceCoverageTests(unittest.TestCase):
                 store.commit_candidate_state(image_id, 1, [], False, replace=False)
             self.assertIsNone(WorkspaceStore._unpack_blob(None))
             identical = self.png()
-            self.assertIsNotNone(WorkspaceStore._manual_xor(identical, identical))
+            self.assertIsNone(WorkspaceStore._manual_xor(identical, identical))
             valid_change = {"existsBefore": True, "existsAfter": True, "box": [0, 0, 1, 1], "size": [4, 4], "png": WorkspaceStore._pack_blob(self.png(size=(1, 1)))}
             for raw, expected in ((self.png(size=(3, 3)), "history"),):
                 with self.subTest(raw=raw), self.assertRaisesRegex(ValueError, expected):

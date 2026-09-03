@@ -248,6 +248,12 @@ class DetectionMixin:
                         self._discard_candidates(candidates)
                         raise
                     with image_lock:
+                        with self.lock:
+                            if ((control is not None and (control.cancel_requested.is_set() or control.failed.is_set()))
+                                    or not self._job_is_current(job_generation, catalog_generation)
+                                    or self.images.get(record.image_id) is not record):
+                                self._discard_candidates(candidates)
+                                return
                         try:
                             self._assert_record_stat_matches(record)
                         except ClientError:
@@ -261,6 +267,7 @@ class DetectionMixin:
                                 return
                             boundary_candidates = [candidate for candidate in self.candidates.get(record.image_id, []) if candidate.origin == "boundary"]
                             stale_paths = [candidate.mask_path for candidate in self.candidates.get(record.image_id, []) if candidate.origin != "boundary"]
+                            expected_revision = self._candidate_revision(record.image_id)
                         try:
                             for candidate in candidates:
                                 final_path = self.cache_dir / record.image_id / f"{candidate.candidate_id}.png"
@@ -270,20 +277,23 @@ class DetectionMixin:
                         except Exception:
                             self._discard_candidates(candidates)
                             raise
+                        try:
+                            # PNG publication, effective-mask composition and
+                            # SQLite history are all deliberately outside the
+                            # global state lock.  The per-image lock above
+                            # keeps this epoch stable until the short publish.
+                            self._commit_candidate_snapshot_outside_state_lock(
+                                record.image_id, [*boundary_candidates, *candidates], replace=True,
+                                expected_revision=expected_revision, expected_catalog_generation=catalog_generation,
+                                history_group=getattr(self, "_detection_history_group", None),
+                            )
+                        except Exception:
+                            # The durable transaction did not publish this run:
+                            # remove every new final-path mask. The previous
+                            # candidate generation remains intact.
+                            self._discard_candidates(candidates)
+                            raise
                         with self.lock:
-                            if ((control is not None and (control.cancel_requested.is_set() or control.failed.is_set()))
-                                    or not self._job_is_current(job_generation, catalog_generation)
-                                    or self.images.get(record.image_id) is not record):
-                                self._discard_candidates(candidates)
-                                return
-                            try:
-                                self._commit_candidate_snapshot(record.image_id, [*boundary_candidates, *candidates], replace=True, history_group=getattr(self, "_detection_history_group", None))
-                            except Exception:
-                                # The durable transaction did not publish this
-                                # run: remove every new final-path mask.  The
-                                # previously committed candidates remain intact.
-                                self._discard_candidates(candidates)
-                                raise
                             self._record_job_success(index, record.image_id, None, job_generation, catalog_generation)
                         for path in stale_paths:
                             path.unlink(missing_ok=True)

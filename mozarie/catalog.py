@@ -92,6 +92,29 @@ class CatalogMixin:
         self.candidate_revisions[image_id] = revision
         return revision
 
+    def _commit_candidate_snapshot_outside_state_lock(
+        self, image_id: str, candidates: list[Candidate], *, replace: bool,
+        expected_revision: int, expected_catalog_generation: int, history_group: str | None = None,
+    ) -> int:
+        """Persist a detector result while only publishing under ``self.lock``.
+
+        The caller holds the image lock, so edits or a catalogue replacement
+        cannot interleave with the expensive PNG composition and SQLite work.
+        """
+        revision = expected_revision + 1
+        if self.workspace_store.has_image(image_id):
+            draft = self.workspace_store.manual(image_id, self._encode_workspace_mask) or {}
+            effective = self._effective_mask_for_draft(image_id, candidates, draft)
+            self.workspace_store.commit_candidate_state(
+                image_id, revision, candidates, effective, replace=replace, history_group=history_group,
+            )
+        with self.lock:
+            if self.catalog_generation != expected_catalog_generation or self._candidate_revision(image_id) != expected_revision:
+                raise ClientError("フォルダを再読み込みしたため、検出結果を破棄しました。", "catalog_changed")
+            self.candidates[image_id] = candidates
+            self.candidate_revisions[image_id] = revision
+        return revision
+
     def _replace_catalog(self, root: Path, records: list[ImageRecord]) -> list[dict[str, Any]]:
         with self.lock:
             previous_ids = tuple(self.images)
@@ -176,7 +199,7 @@ class CatalogMixin:
                 self.browser_catalog_provisional = False
             return source_catalog, {}
 
-    def _set_root(self, raw_path: str, project_id: str | None = None) -> list[dict[str, Any]]:
+    def _set_root(self, raw_path: str, project_id: str | None = None, *, defer_replace: bool = False) -> list[Any]:
         if not raw_path or not isinstance(raw_path, str):
             raise ClientError("Windowsフォルダを入力してください。", "input_invalid")
         root = Path(raw_path).expanduser().resolve()
@@ -184,6 +207,15 @@ class CatalogMixin:
             raise ClientError("指定フォルダが見つかりません。", "folder_not_found")
         with self.lock:
             self._assert_catalog_mutable()
+
+        previous_catalog_id = self.catalog_id
+        catalog_id = project_id or previous_catalog_id or self.workspace_store.catalog_for_root(root)
+        if not self.workspace_store.catalog_exists(catalog_id):
+            raise ClientError("プロジェクトが見つかりません。", "project_not_found")
+        source_id = self.workspace_store.ensure_project_source(
+            catalog_id, kind="native-folder", display_name=root.name or str(root), identity=str(root.resolve()),
+        )
+        stored_metadata = self.workspace_store.source_image_metadata(source_id)
 
         paths = [path for path in root.rglob("*") if path.is_file() and path.suffix.lower() in IMAGE_SUFFIXES]
         records: list[ImageRecord] = []
@@ -203,7 +235,11 @@ class CatalogMixin:
                     resolved = path.resolve()
                     relative_path = resolved.relative_to(root).as_posix()
                     before = resolved.stat()
-                    width, height = inspect_import_image(resolved, resolved.suffix)
+                    saved = stored_metadata.get(relative_path)
+                    if saved is not None and saved[:2] == (before.st_size, before.st_mtime_ns):
+                        width, height = saved[2:]
+                    else:
+                        width, height = inspect_import_image(resolved, resolved.suffix)
                     after = resolved.stat()
                     if (before.st_mtime_ns, before.st_size) != (after.st_mtime_ns, after.st_size):
                         continue
@@ -231,13 +267,6 @@ class CatalogMixin:
                 for worker in workers:
                     worker.result()
         records.sort(key=lambda record: (record.relative_path.casefold(), record.relative_path))
-        previous_catalog_id = self.catalog_id
-        catalog_id = project_id or previous_catalog_id or self.workspace_store.catalog_for_root(root)
-        if not self.workspace_store.catalog_exists(catalog_id):
-            raise ClientError("プロジェクトが見つかりません。", "project_not_found")
-        source_id = self.workspace_store.ensure_project_source(
-            catalog_id, kind="native-folder", display_name=root.name or str(root), identity=str(root.resolve()),
-        )
         stored = self.workspace_store.reconcile_images(catalog_id, records, source_id=source_id)
         # A project can have several sources. Missing files remain durable so
         # their masks can still be exported or relinked later.
@@ -267,6 +296,8 @@ class CatalogMixin:
         completed = (self.workspace_store.project(catalog_id) or {}).get("status") == "completed"
         self.workspace_store.set_project_source_root(catalog_id, str(root))
         self.browser_catalog_provisional = False
+        if defer_replace:
+            return records
         # Adding another folder to an open project is additive.  Replace only
         # this source's live records so same relative names stay independent.
         if previous_catalog_id == catalog_id:
@@ -361,10 +392,12 @@ class CatalogMixin:
             # Loading source bytes is not an edit.  Temporarily permit the
             # catalogue replacement, then restore completed read-only state.
             self.project_read_only = False
-            images: list[dict[str, Any]] = []
+            records: list[ImageRecord] = []
             for root in native_roots:
                 self.project_read_only = False
-                images = self._set_root(str(root), catalog_id)
+                records.extend(self._set_root(str(root), catalog_id, defer_replace=True))
+            records.sort(key=lambda record: (record.relative_path.casefold(), record.relative_path, record.image_id))
+            images = self._replace_catalog(native_roots[0], records)
             self.project_read_only = project["status"] == "completed"
             # Browser sources may still need a user-granted handle.  Native
             # images are shown immediately and the UI can add the rest.
@@ -442,6 +475,80 @@ class CatalogMixin:
         if image is None:
             raise ClientError("画像が見つかりません。", "image_not_found")
         return self._export_workspace_mask(image_id, kind, int(image["width"]), int(image["height"]))
+
+    def iter_project_mask_exports(self, kind: str):
+        """Compose a project ZIP one image at a time from raw workspace BLOBs."""
+        if kind not in {"mosaic", "exclude"}:
+            raise ClientError("マスク種別が正しくありません。", "input_invalid")
+        if not self.catalog_id:
+            raise ClientError("プロジェクトを開いていません。", "project_not_found")
+        for state in self.workspace_store.iter_project_export_states(self.catalog_id):
+            yield state["image"], self._export_workspace_mask_raw(state, kind)
+
+    @staticmethod
+    def _raw_workspace_mask(raw: bytes | None, width: int, height: int) -> np.ndarray | None:
+        if raw is None:
+            return None
+        try:
+            with Image.open(io.BytesIO(raw)) as image:
+                if image.format != "PNG" or image.size != (width, height):
+                    raise ValueError("workspace mask is invalid")
+                return np.asarray(image.convert("L"), dtype=np.uint8)
+        except (OSError, ValueError) as exc:
+            raise ClientError("保存済みマスクが正しくありません。", "workspace_write_failed") from exc
+
+    def _export_workspace_mask_raw(self, state: dict[str, Any], kind: str) -> bytes:
+        image = state["image"]
+        width, height = int(image["width"]), int(image["height"])
+        manual = state.get("manual") or {}
+        sample = next((item.get("mask") for item in state["candidates"] if item.get("mask")), None)
+        if sample is None:
+            sample = next((manual.get(key) for key in ("add", "exclusion", "erase") if manual.get(key)), None)
+        if sample is not None:
+            try:
+                with Image.open(io.BytesIO(sample)) as mask_image:
+                    width, height = mask_image.size
+            except OSError as exc:
+                raise ClientError("保存済みマスクが正しくありません。", "workspace_write_failed") from exc
+        try:
+            removed = {str(value) for value in json.loads(manual.get("removed", "[]"))}
+        except (TypeError, ValueError, json.JSONDecodeError) as exc:
+            raise ClientError("保存済みマスクが正しくありません。", "workspace_write_failed") from exc
+        add = self._raw_workspace_mask(manual.get("add"), width, height)
+        manual_exclude = self._raw_workspace_mask(manual.get("exclusion"), width, height)
+        erase = self._raw_workspace_mask(manual.get("erase"), width, height)
+        apply_masks: list[np.ndarray] = []; exclude_masks: list[np.ndarray] = []; forced: list[np.ndarray] = []
+        for candidate in state["candidates"]:
+            if not candidate.get("enabled") or candidate["id"] in removed:
+                continue
+            mask = self._raw_workspace_mask(candidate.get("mask"), width, height)
+            if mask is None:
+                raise ClientError("保存済みマスクが正しくありません。", "workspace_write_failed")
+            mask = expand_mask(mask, int(candidate.get("expandPx", 0)))
+            if candidate.get("role") == CandidateRole.APPLY.value:
+                apply_masks.append(mask)
+            else:
+                exclude_masks.append(mask)
+                if candidate.get("forced"):
+                    forced.append(mask)
+        if kind == "mosaic":
+            value = compose_masks(
+                (height, width), apply_masks, exclude_masks,
+                add if manual.get("manualEnabled", True) else None,
+                manual_exclude if manual.get("exclusionEnabled", True) else None,
+                forced, bool(manual.get("exclusionForced", True)),
+                erase if manual.get("eraseEnabled", True) else None,
+            )
+        else:
+            value = np.zeros((height, width), dtype=np.uint8)
+            for mask in exclude_masks:
+                value = np.maximum(value, np.asarray(mask > 0, dtype=np.uint8) * 255)
+            if manual_exclude is not None and manual.get("exclusionEnabled", True):
+                value = np.maximum(value, np.asarray(manual_exclude > 0, dtype=np.uint8) * 255)
+            if erase is not None and manual.get("eraseEnabled", True):
+                value[np.asarray(erase) > 0] = 0
+        output = io.BytesIO(); Image.fromarray(value, "L").save(output, format="PNG")
+        return output.getvalue()
 
     def resolve_source_mismatches(self, image_ids: list[str], clear_masks: bool) -> None:
         with self.lock:
@@ -1162,15 +1269,6 @@ class CatalogMixin:
             raise ClientError("手描きマスクが正しくありません。", "input_invalid") from exc
         if len(raw) > MAX_BODY_BYTES or not raw.startswith(PNG_SIGNATURE):
             raise ClientError("手描きマスクが正しくありません。", "input_invalid")
-        try:
-            with Image.open(io.BytesIO(raw)) as image:
-                if image.format != "PNG":
-                    raise ClientError("手描きマスクが正しくありません。", "input_invalid")
-                image.load()
-                if image.mode not in {"RGBA", "LA", "L", "1"}:
-                    raise ClientError("手描きマスクが正しくありません。", "input_invalid")
-        except (OSError, UnidentifiedImageError) as exc:
-            raise ClientError("手描きマスクが正しくありません。", "input_invalid") from exc
         return raw
 
     @staticmethod

@@ -257,13 +257,13 @@ class MosaicHandler(BaseHTTPRequestHandler):
                     archive_path = Path(output.name)
                 try:
                     with zipfile.ZipFile(archive_path, "w", zipfile.ZIP_DEFLATED) as archive:
-                        for image in STATE.project_mask_images():
+                        for image, png in STATE.iter_project_mask_exports(kind):
                             # Keep source identity and original extension so
                             # same-named files from different folders cannot
                             # collide in one project archive.
                             display = "".join(char if char not in r'\\/:*?\"<>|' else "_" for char in str(image.get("sourceDisplay", "source"))) or "source"
                             name = f"{display}-{str(image.get('sourceId', 'source'))[:8]}/{Path(image['relativePath']).as_posix()}.{kind}.png"
-                            archive.writestr(name, STATE.export_project_mask_png(str(image["id"]), kind))
+                            archive.writestr(name, png)
                     self._stream_path(archive_path, "application/zip", {"Content-Disposition": f'attachment; filename="{kind}-masks.zip"'})
                 finally:
                     archive_path.unlink(missing_ok=True)
