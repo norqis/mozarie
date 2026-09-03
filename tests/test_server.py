@@ -233,6 +233,36 @@ class MozarieTests(unittest.TestCase):
             self.assertEqual(state.workspace_store.hydrate_candidates(image_id, state.cache_dir, lambda *_: None), (0, []))
             self.assertEqual(state.candidates.get(image_id, []), [])
 
+    def test_detector_preparation_does_not_block_catalog_polling(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "source.png"; Image.new("RGB", (16, 16), "white").save(source)
+            state = self.new_state(); image_id = state.set_root(directory)[0]["id"]
+            mask_path = state.cache_dir / image_id / "candidate.png"; mask_path.parent.mkdir(parents=True, exist_ok=True)
+            Image.new("L", (16, 16), 255).save(mask_path)
+            candidate = Candidate("candidate", "penis", .9, mask_path)
+            entered, release = threading.Event(), threading.Event()
+            original = state.workspace_store.prepare_candidate_state
+            errors = []
+            def delayed_prepare(*args, **kwargs):
+                entered.set(); self.assertTrue(release.wait(5)); return original(*args, **kwargs)
+            def commit() -> None:
+                try:
+                    with state.image_io_lock(image_id):
+                        state._commit_candidate_snapshot_outside_state_lock(
+                            image_id, [candidate], replace=True, expected_revision=0,
+                            expected_catalog_generation=state.catalog_generation,
+                        )
+                except Exception as exc: errors.append(exc)
+            with patch.object(state.workspace_store, "prepare_candidate_state", side_effect=delayed_prepare), \
+                 patch.object(state, "_effective_mask_for_draft", return_value=True):
+                worker = threading.Thread(target=commit); worker.start()
+                self.assertTrue(entered.wait(2))
+                started = time.perf_counter(); snapshot = state.catalog_snapshot(); elapsed = time.perf_counter() - started
+                self.assertEqual(snapshot["images"][0]["id"], image_id)
+                self.assertLess(elapsed, .25, f"catalog poll was blocked for {elapsed:.3f}s")
+                release.set(); worker.join(5)
+            self.assertFalse(worker.is_alive()); self.assertEqual(errors, [])
+
     def test_flag_change_does_not_publish_after_the_catalog_changes_during_a_write(self):
         with tempfile.TemporaryDirectory() as directory:
             source = Path(directory) / "source.png"; Image.new("RGB", (16, 16), "white").save(source)

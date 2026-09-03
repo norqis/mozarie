@@ -5,10 +5,13 @@ from __future__ import annotations
 import base64
 import io
 import shutil
+import sqlite3
 import tempfile
+import time
 import types
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from PIL import Image
@@ -136,6 +139,61 @@ class ProjectCatalogCoverageTests(unittest.TestCase):
         self.states[-1].resume_project(project["id"])
         self.assertFalse(self.states[-1].project_read_only)
         self.states[-1].close_project()
+
+    def test_twenty_thousand_project_reopen_scans_metadata_and_hydrates_once(self) -> None:
+        """The actual open_project path is linear metadata work, not PNG decoding."""
+        source = self.root / "large-source"; source.mkdir()
+        count = 20_000
+        records = []
+        for index in range(count):
+            path = source / f"{index:05}.png"; path.write_bytes(b"x")
+            stat = path.stat()
+            records.append(SimpleNamespace(relative_path=path.name, size_bytes=stat.st_size,
+                                           mtime_ns=stat.st_mtime_ns, width=3840, height=2160))
+        state = self.state(); project = state.create_project("large reopen")
+        source_id = state.workspace_store.ensure_project_source(
+            project["id"], kind="native-folder", display_name=source.name, identity=str(source.resolve()),
+        )
+        stored = state.workspace_store.reconcile_images(project["id"], records, source_id)
+        raw = self.png()
+        db = sqlite3.connect(state.workspace_store.path)
+        try:
+            db.executemany("""INSERT INTO candidates(image_id,candidate_id,label_token,confidence,mask_png,enabled,color,source,origin,refinement,role,forced,deleted)
+                VALUES(?,?,?,?,?,?,?,?,?,?,?,?,0)""",
+                [(str(stored[record.relative_path]["image_id"]), "detector", "hand", .8, raw, 1,
+                  "#112233", "auto", "automatic", None, "apply", 0) for record in records])
+            db.commit()
+        finally:
+            db.close()
+        started = time.perf_counter()
+        with patch("mozarie.catalog.inspect_import_image", side_effect=AssertionError("unchanged file was inspected")) as inspected, \
+             patch("mozarie.workspace.Image.open", side_effect=AssertionError("candidate PNG was decoded")) as decoded, \
+             patch.object(state.workspace_store, "hydrate_candidates_bulk", wraps=state.workspace_store.hydrate_candidates_bulk) as hydrated:
+            reopened = state.open_project(project["id"])
+        elapsed = time.perf_counter() - started
+        self.assertEqual(len(reopened["images"]), count)
+        self.assertEqual(hydrated.call_count, 1)
+        self.assertEqual(inspected.call_count, 0)
+        self.assertEqual(decoded.call_count, 0)
+        self.assertLess(elapsed, 25.0, f"20k project reopen took {elapsed:.3f}s")
+
+    def test_multi_source_reopen_reconciles_before_one_replace_and_keeps_dimension_lock(self) -> None:
+        first_root = self.root / "one"; second_root = self.root / "two"
+        first_path = self.image(first_root, "first.png", (8, 8)); self.image(second_root, "second.png", (8, 8))
+        state = self.state(); project = state.create_project("two sources")
+        first_id = state.set_root(str(first_root))[0]["id"]
+        state.set_root(str(second_root))
+        Image.new("RGB", (12, 6), "black").save(first_path)
+        with patch.object(state, "_replace_catalog", wraps=state._replace_catalog) as replaced, \
+             patch.object(state.workspace_store, "hydrate_candidates_bulk", wraps=state.workspace_store.hydrate_candidates_bulk) as hydrated:
+            state.open_project(project["id"])
+        self.assertEqual(replaced.call_count, 1)
+        self.assertEqual(hydrated.call_count, 1)
+        self.assertEqual(state.source_mismatch_snapshot(), [{"id": first_id, "relativePath": "first.png", "dimensionsChanged": True}])
+        state.resolve_source_mismatches([first_id], False)
+        self.assertTrue(state.source_mismatch_snapshot(), "dimension change remains locked until mask deletion is chosen")
+        state.resolve_source_mismatches([first_id], True)
+        self.assertEqual(state.source_mismatch_snapshot(), [])
 
     def test_candidate_history_batch_and_failure_guards(self) -> None:
         root = self.root / "images"; self.image(root, "one.png"); self.image(root, "two.png")

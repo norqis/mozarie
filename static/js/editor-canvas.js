@@ -409,7 +409,13 @@ async function saveDraft() {
     const pendingLayers = new Set(previous.dirtyLayers || []);
     dirtyLayers.forEach((layer) => pendingLayers.add(layer));
     const pendingRois = { ...(previous.dirtyRois || {}) };
-    for (const [layer, roi] of Object.entries(dirtyRois)) pendingRois[layer] = roi;
+    for (const [layer, roi] of Object.entries(dirtyRois)) {
+      const earlier = pendingRois[layer];
+      pendingRois[layer] = earlier ? {
+        left: Math.min(earlier.left, roi.left), top: Math.min(earlier.top, roi.top),
+        right: Math.max(earlier.right, roi.right), bottom: Math.max(earlier.bottom, roi.bottom),
+      } : roi;
+    }
     state.drafts.set(imageId, {
       ...previous,
       add: hasAdd,

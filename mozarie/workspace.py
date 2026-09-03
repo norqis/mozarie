@@ -1089,9 +1089,13 @@ class WorkspaceStore:
                            manual_rois: dict[str, tuple[int, int, int, int]] | None = None) -> None:
         """Append history in the same transaction as the state mutation."""
         before_json = self._history_json(before); after_json = self._history_json(after)
-        if before_json == after_json:
+        manual_delta = self._manual_delta(before, after, manual_rois)
+        # Manual PNGs deliberately stay out of the public JSON snapshot.  A
+        # brush can therefore have identical metadata while still changing a
+        # layer; preserve that one durable operation via its compact delta.
+        if before_json == after_json and not manual_delta:
             return
-        delta_json = json.dumps({"manual": self._manual_delta(before, after, manual_rois)}, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
+        delta_json = json.dumps({"manual": manual_delta}, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
         image = db.execute("SELECT catalog_id FROM images WHERE image_id=?", (image_id,)).fetchone()
         if image is None:
             raise ValueError("workspace image is missing")

@@ -13,6 +13,7 @@ import io
 import json
 import sqlite3
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
@@ -209,6 +210,92 @@ class ProjectWorkspaceCoverageTests(unittest.TestCase):
             self.assertEqual(store.manual_mask_statuses([]), {})
             with self.assertRaisesRegex(ValueError, "removed"):
                 store.save_manual(first, {"removedCandidateIds": "bad", "hasEffectiveMask": False}, lambda _: None)
+
+    def test_project_export_streams_three_ordered_queries_and_one_image_payload(self):
+        """Export keeps raw blobs binary and advances one ordered image at a time."""
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); store = WorkspaceStore(root); catalog = store.ensure_catalog()
+            count = 400
+            records = [self.record(f"4k/{index:04}.png", size=index + 1, mtime=index + 100,
+                                   width=3840, height=2160) for index in range(count)]
+            stored = store.reconcile_images(catalog, records)
+            image_ids = [str(stored[record.relative_path]["image_id"]) for record in records]
+            raw = self.png()  # deterministic small BLOB; dimensions model 4K source metadata.
+            db = sqlite3.connect(store.path)
+            try:
+                db.executemany("""INSERT INTO candidates(image_id,candidate_id,label_token,confidence,mask_png,enabled,color,source,origin,refinement,role,forced,deleted)
+                    VALUES(?,?,?,?,?,?,?,?,?,?,?,?,0)""",
+                    [(image_id, "candidate", "hand", .8, raw, 1, "#112233", "detector", "automatic", None, "apply", 0)
+                     for image_id in image_ids])
+                db.executemany("""INSERT INTO manual_edits(image_id,add_png,exclusion_png,exclusion_erase_png,manual_enabled,exclusion_enabled,
+                    exclusion_erase_enabled,exclusion_forced,removed_candidate_ids,candidate_revision,has_effective_mask,history_json,updated_at)
+                    VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                    [(image_id, raw, raw, raw, 1, 1, 1, 1, "[]", 0, 1, "{}", index + 1)
+                     for index, image_id in enumerate(image_ids)])
+                db.commit()
+            finally:
+                db.close()
+            traced: list[str] = []
+            original_connect = store._connect
+            def tracked_connect():
+                connection = original_connect()
+                connection.set_trace_callback(traced.append)
+                return connection
+            started = time.perf_counter()
+            with patch.object(store, "_connect", side_effect=tracked_connect):
+                iterator = store.iter_project_export_states(catalog)
+                first = next(iterator)
+                first_yield = time.perf_counter() - started
+                yielded = 1
+                for item in iterator:
+                    # The caller composes and releases one image before asking
+                    # for the next.  Keeping only this reference makes the
+                    # bounded-BLOB contract deterministic in the fixture too.
+                    self.assertEqual(len(item["candidates"]), 1)
+                    self.assertEqual(item["manual"]["add"], raw)
+                    yielded += 1
+            selects = [sql for sql in traced if sql.lstrip().upper().startswith("SELECT")]
+            self.assertLess(first_yield, 1.0, f"first ZIP source item took {first_yield:.3f}s")
+            self.assertEqual(len(selects), 3)
+            self.assertEqual(yielded, count)
+            self.assertEqual(len(first["candidates"]), 1)
+            self.assertEqual(first["manual"]["add"], raw)
+            # Each yielded state owns only its current candidate/manual payload;
+            # there is no all-project BLOB map or base64 copy in this iterator.
+            self.assertEqual(len(first["candidates"]), 1)
+
+    def test_incremental_manual_save_decodes_only_dirty_roi_and_restores_exactly(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); store, _, image_id = self.store_image(root)
+            base = self.png(size=(8, 8), value=0)
+            changed_image = Image.open(io.BytesIO(base)); changed_image.putpixel((3, 4), 255)
+            output = io.BytesIO(); changed_image.save(output, format="PNG"); changed = output.getvalue()
+            initial = {"add": "add", "exclusion": "exclusion", "exclusionErase": "erase", "removedCandidateIds": [],
+                       "hasEffectiveMask": True}
+            store.save_manual(image_id, initial, lambda _: base)
+            decoded: list[str | None] = []
+            incremental = {"add": "changed", "dirtyLayers": ["add"],
+                           "dirtyRois": {"add": {"left": 3, "top": 4, "right": 4, "bottom": 5}},
+                           "removedCandidateIds": [], "hasEffectiveMask": True}
+            def decoder(value):
+                decoded.append(value)
+                return changed if value == "changed" else None
+            store.save_manual(image_id, incremental, decoder)
+            self.assertEqual(decoded, ["changed"])
+            db = sqlite3.connect(store.path)
+            try:
+                delta = json.loads(db.execute("SELECT delta_json FROM history_entries WHERE image_id=? ORDER BY entry_id DESC LIMIT 1", (image_id,)).fetchone()[0])
+            finally:
+                db.close()
+            self.assertEqual(set(delta["manual"]), {"add"})
+            self.assertEqual(delta["manual"]["add"]["box"], [3, 4, 1, 1])
+            self.assertEqual(store.restore_history(image_id, "undo"), [image_id])
+            self.assertEqual(store.manual(image_id, lambda value: value)["add"], base)
+            self.assertEqual(store.restore_history(image_id, "redo"), [image_id])
+            self.assertEqual(store.manual(image_id, lambda value: value)["add"], changed)
+            reopened = WorkspaceStore(root)
+            restored = reopened.manual(image_id, lambda value: value)
+            self.assertEqual((restored["add"], restored["exclusion"], restored["exclusionErase"]), (changed, base, base))
 
     def test_history_delta_validation_gc_groups_and_atomicity(self):
         with tempfile.TemporaryDirectory() as directory:
