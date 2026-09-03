@@ -58,14 +58,16 @@ class WorkspaceTests(unittest.TestCase):
                     ))
             connection.close()
             constructed: list[str] = []
-            store.hydrate_candidates(image_id, root / "cache", lambda row, _path: constructed.append(str(row["candidate_id"])))
-            self.assertEqual(set(constructed), {"valid", "broken"})
+            with self.assertRaisesRegex(ValueError, "PNG"):
+                store.hydrate_candidates(image_id, root / "cache", lambda row, _path: constructed.append(str(row["candidate_id"])))
+            self.assertEqual(constructed, [])
 
             connection = sqlite3.connect(store.path)
             with connection as db:
                 db.execute("UPDATE candidates SET mask_png=0 WHERE image_id=? AND candidate_id=?", (image_id, "broken"))
             connection.close()
-            self.assertEqual(store.hydrate_candidates(image_id, root / "cache", lambda _row, _path: None)[0], 0)
+            with self.assertRaisesRegex(ValueError, "PNG"):
+                store.hydrate_candidates(image_id, root / "cache", lambda _row, _path: None)
 
     def test_hydrate_candidates_propagates_invalid_metadata(self):
         with tempfile.TemporaryDirectory() as directory:

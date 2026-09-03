@@ -30,6 +30,7 @@ from .domain import Candidate, CandidateRole
 from .image_io import _valid_color, decode_draft_masks, draft_manual_exclusion_forced, inspect_import_image, oriented_image_size, unique_session_import_destination
 from .masks import compose_masks, expand_mask
 from .runtime import patch_directml_sam_prompt_encoder, runtime_backend, torch_device
+from .workspace import WorkspaceStore
 
 class CatalogMixin:
     def _assert_image_editable(self, image_id: str) -> None:
@@ -1278,6 +1279,13 @@ class CatalogMixin:
             raise ClientError("手描きマスクが正しくありません。", "input_invalid") from exc
         if len(raw) > MAX_BODY_BYTES or not raw.startswith(PNG_SIGNATURE):
             raise ClientError("手描きマスクが正しくありません。", "input_invalid")
+        # Only dirty layers reach this decoder during an incremental save, so
+        # validating here preserves the old API contract without reopening the
+        # two unchanged 4K layers.
+        try:
+            WorkspaceStore._decode_png_mask(raw)
+        except ValueError as exc:
+            raise ClientError("手描きマスクが正しくありません。", "input_invalid") from exc
         return raw
 
     @staticmethod

@@ -284,6 +284,9 @@ class DetectionMixin:
                         except Exception:
                             self._discard_candidates(candidates)
                             raise
+                        if control is not None and (control.cancel_requested.is_set() or control.failed.is_set()):
+                            self._discard_candidates(candidates)
+                            return
                         try:
                             # PNG publication, effective-mask composition and
                             # SQLite history are all deliberately outside the

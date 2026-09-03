@@ -281,8 +281,10 @@ class WorkspaceStore:
                 raise ValueError("workspace candidate mask is not a PNG")
             try:
                 with Image.open(io.BytesIO(raw)) as image:
-                    value = image.text.get("mozarie_expand_px", "0")
-                value = int(value)
+                    text = image.text.get("mozarie_expand_px", "0")
+                value = int(text)
+                if str(value) != text:
+                    raise ValueError("noncanonical padding")
             except (OSError, ValueError, TypeError) as exc:
                 raise ValueError("workspace candidate expand pixels are invalid") from exc
         if value is None:

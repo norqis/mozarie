@@ -490,7 +490,8 @@ class ProjectWorkspaceCoverageTests(unittest.TestCase):
                 db.commit()
             finally:
                 db.close()
-            self.assertEqual(store.hydrate_candidates_bulk([image_id], root, lambda *_: None)[image_id][0], 5)
+            with self.assertRaisesRegex(ValueError, "PNG"):
+                store.hydrate_candidates_bulk([image_id], root, lambda *_: None)
 
     def test_history_failure_and_group_readiness_boundaries(self):
         with tempfile.TemporaryDirectory() as directory:
