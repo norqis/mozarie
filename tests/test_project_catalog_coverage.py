@@ -1,0 +1,251 @@
+"""End-to-end coverage for project catalogue persistence and mutations."""
+
+from __future__ import annotations
+
+import base64
+import io
+import shutil
+import tempfile
+import types
+import unittest
+from pathlib import Path
+from unittest.mock import patch
+
+from PIL import Image
+
+import mozarie.state as state_module
+from mozarie.core import ClientError
+from mozarie.domain import Candidate, CandidateRole
+from mozarie.state import StudioState
+
+
+class ProjectCatalogCoverageTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self._temporary = tempfile.TemporaryDirectory()
+        self.root = Path(self._temporary.name)
+        self.app_dir = self.root / "app"
+        shutil.copytree(Path(__file__).resolve().parents[1] / "config", self.app_dir / "config")
+        self.cache_dir = self.root / "cache"
+        self.states: list[StudioState] = []
+
+    def tearDown(self) -> None:
+        for state in self.states:
+            state.shutdown()
+        self._temporary.cleanup()
+
+    def state(self) -> StudioState:
+        with patch.object(state_module, "APP_DIR", self.app_dir):
+            state = StudioState(self.cache_dir, self.root / "sessions")
+        self.states.append(state)
+        return state
+
+    @staticmethod
+    def png(size: tuple[int, int] = (8, 8), *, pixel: tuple[int, int] | None = None) -> bytes:
+        image = Image.new("L", size, 0)
+        if pixel is not None:
+            image.putpixel(pixel, 255)
+        output = io.BytesIO(); image.save(output, format="PNG")
+        return output.getvalue()
+
+    def image(self, directory: Path, name: str, size: tuple[int, int] = (8, 8)) -> Path:
+        path = directory / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        Image.new("RGB", size, "white").save(path)
+        return path
+
+    def candidate(self, state: StudioState, image_id: str, candidate_id: str, *, role: CandidateRole = CandidateRole.APPLY, enabled: bool = True, forced: bool = False, pixel: tuple[int, int] = (1, 1)) -> Candidate:
+        path = state.cache_dir / image_id / f"{candidate_id}.png"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(self.png(pixel=pixel))
+        return Candidate(candidate_id, "penis" if role == CandidateRole.APPLY else "hand", .9, path,
+                         enabled=enabled, role=role, forced=forced,
+                         source="auto" if role == CandidateRole.APPLY else "hand_exclusion")
+
+    def commit_candidates(self, state: StudioState, image_id: str, candidates: list[Candidate], *, replace: bool = True) -> int:
+        with state.image_io_lock(image_id):
+            with state.lock:
+                return state._commit_candidate_snapshot(image_id, candidates, replace=replace)
+
+    def test_project_lifecycle_sources_exports_mismatch_and_read_only(self) -> None:
+        first_root = self.root / "first"; second_root = self.root / "second"
+        first_path = self.image(first_root, "a.png")
+        self.image(second_root, "nested/b.png")
+        state = self.state()
+        project = state.create_project("catalog coverage")
+        first = state.set_root(str(first_root)); first_id = first[0]["id"]
+        both = state.set_root(str(second_root))
+        self.assertEqual(len(both), 2)
+        # The active project is deliberately excluded: this query drives the
+        # warning shown only when another project already owns the folder.
+        self.assertEqual(state.projects_for_source_root(str(first_root)), [])
+        self.assertEqual(state.projects()[0]["name"], "catalog coverage")
+
+        apply = self.candidate(state, first_id, "apply", pixel=(1, 1))
+        exclude = self.candidate(state, first_id, "exclude", role=CandidateRole.EXCLUDE, forced=True, pixel=(2, 2))
+        self.commit_candidates(state, first_id, [apply, exclude])
+        manual = "data:image/png;base64," + base64.b64encode(self.png(pixel=(3, 3))).decode("ascii")
+        state.save_manual_workspace(first_id, {
+            "add": manual, "exclusion": "", "exclusionErase": "", "removedCandidateIds": [],
+            "candidateRevision": state._candidate_revision(first_id), "manualEnabled": True,
+            "manualExclusionEnabled": True, "manualExclusionEraseEnabled": True,
+        })
+        mosaic = Image.open(io.BytesIO(state.export_mask_png(first_id, "mosaic"))).convert("L")
+        excluded = Image.open(io.BytesIO(state.export_mask_png(first_id, "exclude"))).convert("L")
+        self.assertEqual(mosaic.size, (8, 8)); self.assertEqual(mosaic.getpixel((1, 1)), 255)
+        self.assertEqual(excluded.getpixel((2, 2)), 255)
+        self.assertEqual(state.project_mask_images()[0]["id"], first_id)
+        self.assertEqual(Image.open(io.BytesIO(state.export_project_mask_png(first_id, "exclude"))).size, (8, 8))
+        with self.assertRaises(ClientError): state.export_mask_png(first_id, "bad")
+        with self.assertRaises(ClientError): state.export_project_mask_png("missing", "mosaic")
+
+        # A same-size source change can retain masks after explicit confirmation.
+        Image.new("RGB", (8, 8), "black").save(first_path)
+        state.set_root(str(first_root))
+        self.assertEqual(state.source_mismatch_snapshot()[0]["dimensionsChanged"], False)
+        with self.assertRaisesRegex(ClientError, "元画像が変更"):
+            state.set_candidate_state(first_id, "apply", {"enabled": False})
+        state.resolve_source_mismatches([first_id], False)
+        self.assertEqual(state.source_mismatch_snapshot(), [])
+
+        # A changed geometry remains blocked until the user selects mask deletion.
+        Image.new("RGB", (12, 6), "gray").save(first_path)
+        state.set_root(str(first_root))
+        self.assertTrue(state.source_mismatch_snapshot()[0]["dimensionsChanged"])
+        state.resolve_source_mismatches([first_id], False)
+        self.assertTrue(state.source_mismatch_snapshot())
+        second_path = second_root / "nested/b.png"
+        Image.new("RGB", (9, 9), "gray").save(second_path)
+        state.set_root(str(second_root))
+        changed_ids = [entry["id"] for entry in state.source_mismatch_snapshot()]
+        with patch.object(state.workspace_store, "clear_image_workspaces", side_effect=RuntimeError("clear failed")):
+            with self.assertRaisesRegex(RuntimeError, "clear failed"):
+                state.resolve_source_mismatches(changed_ids, True)
+        state.resolve_source_mismatches(changed_ids, True)
+        self.assertEqual(state.source_mismatch_snapshot(), [])
+        self.assertEqual(state.candidates[first_id], [])
+
+        completed = state.complete_project()
+        self.assertEqual(completed["status"], "completed")
+        inactive = state.workspace_store.create_project("inactive resume")
+        self.assertEqual(state.resume_project(inactive["id"])["status"], "working")
+        reopened = self.state().open_project(project["id"])
+        self.assertEqual(reopened["project"]["status"], "completed")
+        self.assertTrue(self.states[-1].project_read_only)
+        with self.assertRaisesRegex(ClientError, "完了したプロジェクト"):
+            self.states[-1].clear_masks([])
+        self.states[-1].resume_project(project["id"])
+        self.assertFalse(self.states[-1].project_read_only)
+        self.states[-1].close_project()
+
+    def test_candidate_history_batch_and_failure_guards(self) -> None:
+        root = self.root / "images"; self.image(root, "one.png"); self.image(root, "two.png")
+        state = self.state(); state.create_project("history")
+        image_ids = [item["id"] for item in state.set_root(str(root))]
+        for index, image_id in enumerate(image_ids):
+            self.commit_candidates(state, image_id, [self.candidate(state, image_id, f"apply-{index}")])
+
+        self.assertEqual(state.set_candidate_state(image_ids[0], "apply-0", {"expandPx": 3, "color": "#112233", "enabled": False}), 2)
+        self.assertTrue(state.project_history_status(image_ids[0])["canUndo"])
+        undone = state.restore_project_history(image_ids[0], "undo")
+        self.assertTrue(undone["current"]["candidates"][0]["enabled"])
+        self.assertEqual(state.restore_project_history(image_ids[0], "redo")["current"]["candidates"][0]["expandPx"], 3)
+        with self.assertRaises(ClientError): state.set_candidate_state(image_ids[0], "apply-0", {"role": "wrong"})
+        with self.assertRaises(ClientError): state.set_candidate_state(image_ids[0], "apply-0", {"forced": True})
+        with self.assertRaises(ClientError): state.set_candidate_state(image_ids[0], "apply-0", {"expandPx": True})
+
+        revisions = state.batch_update_candidates_many(image_ids + [image_ids[0]], {"role": "apply", "operation": "enable"})
+        self.assertEqual(set(revisions), set(image_ids))
+        self.assertEqual(set(state.restore_project_history(image_ids[1], "undo")["changedImageIds"]), set(image_ids))
+        self.assertGreater(state.batch_update_candidates(image_ids[0], {"role": "apply", "operation": "delete"}), 0)
+        self.assertFalse((state.cache_dir / image_ids[0] / "apply-0.png").exists())
+        self.assertFalse(state.delete_candidate(image_ids[0], "missing"))
+        with self.assertRaises(ClientError): state.batch_update_candidates_many([], {"role": "apply", "operation": "enable"})
+        with self.assertRaises(ClientError): state.batch_update_candidates(image_ids[0], {"role": "bad", "operation": "enable"})
+
+        # The clear transaction must mark a batch history group failed if SQLite rejects it.
+        with patch.object(state.workspace_store, "clear_image_workspaces", side_effect=RuntimeError("write failed")):
+            with self.assertRaisesRegex(RuntimeError, "write failed"):
+                state.clear_masks(image_ids)
+        state.clear_masks(image_ids)
+        self.assertEqual(state.candidates[image_ids[0]], [])
+
+        state.worker_thread = types.SimpleNamespace(is_alive=lambda: True)
+        with patch.object(state, "_assert_image_editable"):
+            with self.assertRaises(ClientError): state.set_candidate_state(image_ids[0], "missing", {"enabled": True})
+            with self.assertRaises(ClientError): state.batch_update_candidates(image_ids[0], {"role": "apply", "operation": "enable"})
+            with self.assertRaises(ClientError): state.delete_candidate(image_ids[0], "missing")
+        with patch.object(state, "_assert_catalog_mutable", side_effect=[None, None]):
+            with self.assertRaises(ClientError): state.clear_masks(image_ids)
+        state.worker_thread = None
+
+        state.candidates[image_ids[0]] = [self.candidate(state, image_ids[0], "role", enabled=True)]
+        state.set_candidate_state(image_ids[0], "role", {"role": "exclude", "forced": True})
+
+        # A failing member marks the multi-image history group failed.
+        with patch.object(state, "batch_update_candidates", side_effect=[1, RuntimeError("second failed")]):
+            with self.assertRaisesRegex(RuntimeError, "second failed"):
+                state.batch_update_candidates_many(image_ids, {"role": "apply", "operation": "enable"})
+
+    def test_catalog_input_validation_provisional_and_removed_sources(self) -> None:
+        state = self.state()
+        with self.assertRaises(ClientError): state.set_root("")
+        with self.assertRaises(ClientError): state.projects_for_source_root("relative")
+        with self.assertRaises(ClientError): state.open_project("missing")
+        with self.assertRaises(ClientError): state.name_current_project("name")
+        with self.assertRaises(ClientError): state.complete_project()
+        with self.assertRaises(ClientError): state.project_mask_images()
+        with self.assertRaises(ClientError): state.activate_browser_catalog("missing")
+
+        catalog_id = state.activate_browser_catalog()
+        self.assertEqual(state.finalize_browser_catalog(), (catalog_id, {}))
+        self.assertEqual(state.finalize_browser_catalog(), (catalog_id, {}))
+        state.detach_catalog()
+        with self.assertRaises(ClientError): state._set_root(str(self.root), "missing")
+
+        # A project that only has browser sources opens without a filesystem
+        # root and asks the UI to restore a granted browser handle.
+        browser = state.create_project("browser-only")
+        opened = state.open_project(browser["id"])
+        self.assertEqual(opened["images"], [])
+        self.assertFalse(opened["needsSource"])
+        state.name_current_project("browser-renamed")
+        with self.assertRaises(ClientError): state.name_current_project("")
+        duplicate = state.create_project("duplicate")
+        with self.assertRaises(ClientError): state.name_current_project("browser-renamed")
+
+        # Browser imports preserve the source identity and reject impossible
+        # client metadata before they mutate a session directory.
+        staged = self.root / "staged.png"; staged.write_bytes(self.png())
+        with self.assertRaises(ClientError):
+            state._import_images([{"name": "bad.png", "relativePath": "bad.png", "stagedPath": staged, "mtimeNs": -1}])
+        with self.assertRaises(ClientError):
+            state._import_images([{"name": "bad.png", "relativePath": "bad.png", "stagedPath": staged, "sizeBytes": 1}])
+        images, imported = state._import_images([{"name": "ok.png", "relativePath": "ok.png", "stagedPath": staged,
+                                                   "mtimeNs": 123, "sizeBytes": len(self.png()), "clientKey": "ok"}],
+                                                 source_identity="directory-id", source_kind="browser-directory")
+        self.assertEqual(imported[0]["clientKey"], "ok")
+        self.assertEqual(images[0]["sourceKind"], "session")
+
+        source = self.root / "source"; self.image(source, "saved.png")
+        state.create_project("remove"); image_id = state.set_root(str(source))[0]["id"]
+        original = state.image_for_id(image_id).path
+        result = state.remove_images_from_catalog([image_id, image_id])
+        self.assertEqual(result["removedImageIds"], [image_id])
+        self.assertTrue(original.is_file())
+        with self.assertRaises(ClientError): state.remove_images_from_catalog([])
+        with self.assertRaises(ClientError): state.remove_images_from_catalog("not a list")
+
+    def test_export_error_paths_and_empty_history_status(self) -> None:
+        root = self.root / "errors"; self.image(root, "image.png")
+        state = self.state(); state.create_project("errors"); image_id = state.set_root(str(root))[0]["id"]
+        self.assertIsNone(Image.open(io.BytesIO(state.export_mask_png(image_id, "mosaic"))).convert("L").getbbox())
+        with patch.object(state.workspace_store, "export_state", return_value={"manual": {"removed": "not json"}, "candidates": []}):
+            with self.assertRaises(ClientError): state.export_mask_png(image_id, "mosaic")
+        with patch.object(state.workspace_store, "export_state", return_value={"manual": {"add": "not-base64"}, "candidates": []}):
+            with self.assertRaises(ClientError): state.export_mask_png(image_id, "mosaic")
+        with patch.object(state.workspace_store, "export_state", return_value={"manual": {}, "candidates": [{"enabled": False}]}):
+            self.assertIsNotNone(state.export_mask_png(image_id, "mosaic"))
+        with patch.object(state.workspace_store, "export_state", return_value={"manual": {}, "candidates": [{"id": "bad", "enabled": True}]}):
+            with self.assertRaises(ClientError): state.export_mask_png(image_id, "mosaic")
+        state.workspace_store.delete_images([image_id])
+        self.assertEqual(state.project_history_status(image_id), {"canUndo": False, "canRedo": False})

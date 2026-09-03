@@ -248,7 +248,21 @@ class CatalogMixin:
             record.reviewed = bool(saved["reviewed"])
             record.source_id = source_id
             record.source_root = root
-        self.source_mismatches = {str(saved["image_id"]): bool(saved.get("dimensions_changed")) for saved in stored.values() if saved.get("changed")}
+        source_image_ids = {record.image_id for record in records}
+        source_mismatches = {
+            str(saved["image_id"]): bool(saved.get("dimensions_changed"))
+            for saved in stored.values() if saved.get("changed")
+        }
+        # Re-importing one source of a multi-folder project must not dismiss a
+        # change acknowledgement still required for another source.
+        with self.lock:
+            retained_mismatches = {
+                image_id: dimensions_changed
+                for image_id, dimensions_changed in self.source_mismatches.items()
+                if image_id not in source_image_ids
+            }
+            retained_mismatches.update(source_mismatches)
+            self.source_mismatches = retained_mismatches
         self.catalog_id = catalog_id
         completed = (self.workspace_store.project(catalog_id) or {}).get("status") == "completed"
         self.workspace_store.set_project_source_root(catalog_id, str(root))
@@ -283,14 +297,16 @@ class CatalogMixin:
 
     def name_current_project(self, name: str) -> dict[str, Any]:
         with self.lock:
-            if not self.catalog_id: raise ClientError("プロジェクトを開いていません。", "project_not_found")
+            if not self.catalog_id:
+                raise ClientError("プロジェクトを開いていません。", "project_not_found")
             catalog_id = self.catalog_id
         try: return self.workspace_store.name_project(catalog_id, name)
         except ValueError as exc: raise ClientError("プロジェクト名を確認してください。", "project_name_invalid") from exc
 
     def complete_project(self) -> dict[str, Any]:
         with self.lock:
-            if not self.catalog_id: raise ClientError("プロジェクトを開いていません。", "project_not_found")
+            if not self.catalog_id:
+                raise ClientError("プロジェクトを開いていません。", "project_not_found")
             self._assert_catalog_mutable()
             catalog_id = self.catalog_id
         project = self.workspace_store.set_project_status(catalog_id, "completed")
@@ -309,7 +325,8 @@ class CatalogMixin:
 
     def open_project(self, catalog_id: str) -> dict[str, Any]:
         project = self.workspace_store.project(catalog_id)
-        if not project: raise ClientError("プロジェクトが見つかりません。", "project_not_found")
+        if not project:
+            raise ClientError("プロジェクトが見つかりません。", "project_not_found")
         sources = self.workspace_store.project_sources(catalog_id)
         native_roots = [Path(str(source["nativePath"])) for source in sources
                         if source["kind"] == "native-folder" and source.get("nativePath") and Path(str(source["nativePath"])).is_dir()]
@@ -339,7 +356,8 @@ class CatalogMixin:
 
     def export_mask_png(self, image_id: str, kind: str) -> bytes:
         """Return original-size grayscale project masks; never touches source files."""
-        if kind not in {"mosaic", "exclude"}: raise ClientError("マスク種別が正しくありません。", "input_invalid")
+        if kind not in {"mosaic", "exclude"}:
+            raise ClientError("マスク種別が正しくありません。", "input_invalid")
         record = self.image_snapshot(image_id)
         return self._export_workspace_mask(image_id, kind, record.width, record.height)
 
@@ -370,7 +388,8 @@ class CatalogMixin:
         removed = {str(item) for item in draft.get("removedCandidateIds", [])}
         apply_masks: list[np.ndarray] = []; exclude_masks: list[np.ndarray] = []; forced: list[np.ndarray] = []
         for candidate in state["candidates"]:
-            if not candidate.get("enabled") or candidate.get("deleted") or candidate.get("id") in removed: continue
+            if not candidate.get("enabled") or candidate.get("deleted") or candidate.get("id") in removed:
+                continue
             try: raw = base64.b64decode(str(candidate["mask"]), validate=True)
             except (KeyError, ValueError, binascii.Error) as exc: raise ClientError("保存済みマスクが正しくありません。", "workspace_write_failed") from exc
             with Image.open(io.BytesIO(raw)) as image: mask = expand_mask(np.asarray(image.convert("L"), dtype=np.uint8), int(image.text.get("mozarie_expand_px", "0")))
@@ -388,12 +407,14 @@ class CatalogMixin:
         output = io.BytesIO(); Image.fromarray(value, "L").save(output, format="PNG"); return output.getvalue()
 
     def project_mask_images(self) -> list[dict[str, Any]]:
-        if not self.catalog_id: raise ClientError("プロジェクトを開いていません。", "project_not_found")
+        if not self.catalog_id:
+            raise ClientError("プロジェクトを開いていません。", "project_not_found")
         return self.workspace_store.project_images(self.catalog_id)
 
     def export_project_mask_png(self, image_id: str, kind: str) -> bytes:
         image = self.workspace_store.project_image(image_id)
-        if image is None: raise ClientError("画像が見つかりません。", "image_not_found")
+        if image is None:
+            raise ClientError("画像が見つかりません。", "image_not_found")
         return self._export_workspace_mask(image_id, kind, int(image["width"]), int(image["height"]))
 
     def resolve_source_mismatches(self, image_ids: list[str], clear_masks: bool) -> None:
