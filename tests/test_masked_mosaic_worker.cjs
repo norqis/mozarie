@@ -140,6 +140,16 @@ self.onmessage({ data: { type: "source", sourceId: "missing-output-context", sou
 self.onmessage({ data: { type: "render", sourceId: "missing-output-context", mask: { width: 1, height: 1, pixels: new Uint8ClampedArray([0, 0, 0, 255]) }, width: 1, height: 1, blockSize: 1, generation: 15 } });
 assert.equal(response.type, "error", "a missing output context reports the preview failure");
 
+contextCalls = 0; contextFailure = 3;
+self.onmessage({ data: { type: "source", sourceId: "missing-patch-output-context", source: { width: 1, height: 1, pixels: new Uint8ClampedArray([1, 2, 3, 255]) }, generation: 15 } });
+self.onmessage({ data: { type: "patch", sourceId: "missing-patch-output-context", mask: { width: 1, height: 1, pixels: new Uint8ClampedArray([0, 0, 0, 255]) }, left: 0, top: 0, width: 1, height: 1, blockSize: 1, generation: 15 } });
+assert.equal(response.type, "error", "a missing drag-patch output context reports the preview failure");
+
+contextCalls = 0; contextFailure = 0;
+self.onmessage({ data: { type: "source", sourceId: "transparent-patch", source: { width: 1, height: 1, pixels: new Uint8ClampedArray([30, 40, 50, 0]) }, generation: 15 } });
+self.onmessage({ data: { type: "patch", sourceId: "transparent-patch", mask: { width: 1, height: 1, pixels: new Uint8ClampedArray([0, 0, 0, 255]) }, left: 0, top: 0, width: 1, height: 1, blockSize: 1, generation: 15 } });
+assert.deepEqual([...response.output.pixels], [30, 40, 50, 0], "a transparent drag-patch pixel retains its source colour when it has no alpha weight");
+
 contextCalls = 0; contextFailure = 0;
 self.onmessage({ data: { type: "source", sourceId: "reused", source: { width: 1, height: 1, pixels: new Uint8ClampedArray([1, 2, 3, 255]) }, generation: 16 } });
 for (const generation of [16, 17]) self.onmessage({ data: { type: "render", sourceId: "reused", mask: { width: 1, height: 1, pixels: new Uint8ClampedArray([0, 0, 0, 255]) }, width: 1, height: 1, blockSize: 1, generation } });
