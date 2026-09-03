@@ -69,6 +69,24 @@ async function testDetectionStartFailureClosesProcessing() {
   assert.equal(state.detectionStarting, false, "a start failure releases the starting state");
 }
 
+async function testDetectionSettingsFailureDoesNotStartDetect() {
+  const controls = new Map(); const events = [];
+  const control = (id) => {
+    if (!controls.has(id)) controls.set(id, { value: id === "#detectConfidenceNumber" ? "0.5" : id === "#detectCandidatePadding" ? "9" : "1", checked: id === "#dialogTargetPenis", textContent: "", hidden: false, disabled: false, setAttribute() {}, close() {} });
+    return controls.get(id);
+  };
+  const state = { detectionStarting: false, importing: false, detectionTargetIds: [], detectCancelRequested: false, job: null, pendingDetectionTargetIds: ["one"], settings: { detection: { targets: ["penis"], default_candidate_padding_px: 0 } }, settingsStatus: null };
+  const context = {
+    state, Math, Promise, structuredClone, normaliseDetectionConfidence: Number, $: control, isBusy: () => false,
+    saveDraft: async () => { events.push("draft"); }, api: async (path) => { events.push(path); throw new Error("settings failed"); },
+    setSettingsForm() {}, updateActionButtons() {}, showProcessing() { events.push("modal"); }, closeProcessing() { events.push("close"); }, updateProgress() {}, setStatusKey() {}, setStatus() {}, showUserError() { events.push("error"); }, t: (key) => key,
+  };
+  vm.runInNewContext(fs.readFileSync(path.join(root, "detection.js"), "utf8"), context, { filename: path.join(root, "detection.js") });
+  vm.runInNewContext("globalThis.startDetectionForTest=startDetectionFromDialog;", context);
+  await context.startDetectionForTest({ preventDefault() {} });
+  assert.deepEqual(events, ["modal", "/api/settings?status=0", "close", "error"], "a settings-save failure never sends a detection request");
+}
+
 async function testCompletionInvalidatesAndReloadsCandidates() {
   const oldRecord = { id: "image", candidateRevision: 1 };
   const newRecord = { id: "image", candidateRevision: 2 };
@@ -109,6 +127,7 @@ Promise.resolve()
   .then(testDetectionWaitsForDraft)
   .then(testDetectionShowsProcessingBeforeDelayedRequests)
   .then(testDetectionStartFailureClosesProcessing)
+  .then(testDetectionSettingsFailureDoesNotStartDetect)
   .then(testCompletionInvalidatesAndReloadsCandidates)
   .then(() => console.log("test_detection_refresh_runtime: passed"))
   .catch((error) => { console.error(error); process.exitCode = 1; });

@@ -1,5 +1,6 @@
 import io
 import tempfile
+import time
 import unittest
 from pathlib import Path
 
@@ -43,6 +44,15 @@ class CandidateExpandTests(unittest.TestCase):
         source[8, 15] = 255
         self.assertTrue(np.all(expand_mask(source, 34) == 255))
         self.assertFalse(np.any(expand_mask(np.zeros_like(source), 34)))
+
+    def test_4k_large_padding_uses_a_bounded_image_space_operation(self):
+        source = np.zeros((2160, 3840), dtype=np.uint8)
+        source[1080, 1920] = 255
+        started = time.perf_counter()
+        expanded = expand_mask(source, 129)
+        self.assertLess(time.perf_counter() - started, 3.0)
+        self.assertEqual(expanded.shape, source.shape)
+        self.assertEqual(int(expanded[1080, 1920]), 255)
 
     def test_new_candidate_png_records_zero_padding_without_changing_pixels(self):
         with tempfile.TemporaryDirectory() as directory:
