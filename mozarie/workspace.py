@@ -41,6 +41,24 @@ class _ClosingConnection(sqlite3.Connection):
             self.close()
 
 
+class _PendingWorkspaceCommit:
+    """One already-prepared SQLite transaction, finished by the state publisher."""
+    def __init__(self, db: sqlite3.Connection) -> None:
+        self._db = db
+
+    def commit(self) -> None:
+        try:
+            self._db.execute("COMMIT")
+        finally:
+            self._db.close()
+
+    def rollback(self) -> None:
+        try:
+            self._db.execute("ROLLBACK")
+        finally:
+            self._db.close()
+
+
 class WorkspaceStore:
     # v7 deliberately replaces the old folder catalogue with a project store.
     # There is no migration path: the user chooses whether to recreate v4 data.
@@ -657,11 +675,24 @@ class WorkspaceStore:
             WHERE image_id=?""", (json.dumps(sorted(set(removed) & candidate_ids)), revision, int(effective), time.time_ns(), image_id))
 
     def commit_candidate_state(self, image_id: str, revision: int, candidates: list[Any], effective: bool, *, replace: bool,
-                               history_group: str | None = None) -> None:
+                               history_group: str | None = None, expected_revision: int | None = None) -> None:
         """Atomically store one complete candidate/manual revision before publication."""
-        with self._lock, self._connect() as db:
+        self.prepare_candidate_state(
+            image_id, revision, candidates, effective, replace=replace, history_group=history_group,
+            expected_revision=expected_revision,
+        ).commit()
+
+    def prepare_candidate_state(self, image_id: str, revision: int, candidates: list[Any], effective: bool, *, replace: bool,
+                                history_group: str | None = None, expected_revision: int | None = None) -> _PendingWorkspaceCommit:
+        """Write a candidate revision but leave COMMIT to the state publisher."""
+        with self._lock:
+            db = self._connect()
             db.execute("BEGIN IMMEDIATE")
             try:
+                if expected_revision is not None:
+                    current = db.execute("SELECT candidate_revision FROM images WHERE image_id=?", (image_id,)).fetchone()
+                    if current is None or int(current["candidate_revision"]) != expected_revision:
+                        raise ValueError("workspace candidate revision changed")
                 before = self._history_state_db(db, image_id)
                 db.execute("UPDATE images SET candidate_revision=?, reviewed=0, updated_at=? WHERE image_id=?", (revision, time.time_ns(), image_id))
                 if replace:
@@ -698,9 +729,10 @@ class WorkspaceStore:
                                    (image_id, candidate.candidate_id, int(candidate.expand_px)))
                 self._update_manual_candidate_state(db, image_id, revision, {candidate.candidate_id for candidate in candidates}, effective)
                 self._record_history_db(db, image_id, before, self._history_state_db(db, image_id), group_id=history_group)
-                db.execute("COMMIT")
+                return _PendingWorkspaceCommit(db)
             except Exception:
                 db.execute("ROLLBACK")
+                db.close()
                 raise
 
     def hydrate_candidates(self, image_id: str, directory: Path, candidate_factory: Any) -> tuple[int, list[Any]]:
@@ -756,16 +788,36 @@ class WorkspaceStore:
         # journal.  The SQLite operation delta below is the single source of
         # truth for undo/redo after reopening a project.
         history_json = "{}"
-        add, exclusion, erase = (decoder(payload.get(key)) for key in ("add", "exclusion", "exclusionErase"))
+        request_keys = {"add": "add", "exclusion": "exclusion", "erase": "exclusionErase"}
+        dirty_layers = payload.get("dirtyLayers")
+        if dirty_layers is None:
+            dirty = set(request_keys)
+        elif not isinstance(dirty_layers, list) or any(layer not in request_keys for layer in dirty_layers):
+            raise ValueError("invalid manual dirty layers")
+        else:
+            dirty = set(dirty_layers)
+        decoded = {layer: decoder(payload.get(request_keys[layer])) for layer in dirty}
+        raw_rois = payload.get("dirtyRois", {})
+        if not isinstance(raw_rois, dict):
+            raise ValueError("invalid manual dirty regions")
+        rois: dict[str, tuple[int, int, int, int]] = {}
+        for layer, raw in raw_rois.items():
+            if layer not in dirty or not isinstance(raw, dict):
+                raise ValueError("invalid manual dirty regions")
+            values = tuple(raw.get(key) for key in ("left", "top", "right", "bottom"))
+            if any(isinstance(value, bool) or not isinstance(value, int) for value in values) or values[0] < 0 or values[1] < 0 or values[2] <= values[0] or values[3] <= values[1]:
+                raise ValueError("invalid manual dirty regions")
+            rois[layer] = values
         with self._lock, self._connect() as db:
             db.execute("BEGIN IMMEDIATE")
             try:
                 before = self._history_state_db(db, image_id)
                 previous_layers = before.get("_manual_raw") or {}
+                layers = {layer: decoded[layer] if layer in dirty else previous_layers.get(layer) for layer in request_keys}
                 # Browser saves include all three layers, but a normal stroke
                 # changes one. Validate only newly inserted bytes; immutable
                 # old layers were validated at their own insertion.
-                for key, mask in zip(("add", "exclusion", "erase"), (add, exclusion, erase)):
+                for key, mask in layers.items():
                     if mask != previous_layers.get(key):
                         self._require_png_mask(mask)
                 image = db.execute("SELECT candidate_revision FROM images WHERE image_id=?", (image_id,)).fetchone()
@@ -784,8 +836,8 @@ class WorkspaceStore:
                 add_png=excluded.add_png,exclusion_png=excluded.exclusion_png,exclusion_erase_png=excluded.exclusion_erase_png,
                 manual_enabled=excluded.manual_enabled,exclusion_enabled=excluded.exclusion_enabled,exclusion_erase_enabled=excluded.exclusion_erase_enabled,
                 exclusion_forced=excluded.exclusion_forced,removed_candidate_ids=excluded.removed_candidate_ids,candidate_revision=excluded.candidate_revision,has_effective_mask=excluded.has_effective_mask,history_json=excluded.history_json,updated_at=excluded.updated_at""",
-                    (image_id,add,exclusion,erase,int(payload.get("manualEnabled", True)),int(payload.get("manualExclusionEnabled", True)),int(payload.get("manualExclusionEraseEnabled", True)),int(payload.get("manualExclusionForced", True)),json.dumps(removed),revision,int(has_effective_mask),history_json,time.time_ns()))
-                self._record_history_db(db, image_id, before, self._history_state_db(db, image_id))
+                    (image_id,layers["add"],layers["exclusion"],layers["erase"],int(payload.get("manualEnabled", True)),int(payload.get("manualExclusionEnabled", True)),int(payload.get("manualExclusionEraseEnabled", True)),int(payload.get("manualExclusionForced", True)),json.dumps(removed),revision,int(has_effective_mask),history_json,time.time_ns()))
+                self._record_history_db(db, image_id, before, self._history_state_db(db, image_id), manual_rois=rois)
                 db.execute("COMMIT")
             except Exception:
                 db.execute("ROLLBACK")
@@ -841,7 +893,7 @@ class WorkspaceStore:
         image = db.execute("SELECT catalog_id,candidate_revision,hidden,reviewed FROM images WHERE image_id=?", (image_id,)).fetchone()
         if image is None:
             raise ValueError("workspace image is missing")
-        candidates = db.execute("""SELECT candidates.candidate_id,label_token,confidence,mask_png,enabled,color,source,origin,
+        candidates = db.execute("""SELECT candidates.candidate_id,label_token,confidence,enabled,color,source,origin,
             refinement,role,forced,deleted,candidate_metadata.expand_px FROM candidates
             LEFT JOIN candidate_metadata USING(image_id,candidate_id) WHERE candidates.image_id=? AND candidates.deleted=0
             ORDER BY candidates.candidate_id""", (image_id,)).fetchall()
@@ -886,47 +938,45 @@ class WorkspaceStore:
         return self._history_public_state(state)
 
     def iter_project_export_states(self, catalog_id: str):
-        """Yield project masks from one read transaction without text encoding them.
-
-        Each chunk is deliberately bounded: a ZIP export should retain only one
-        image's composed mask plus the candidate BLOBs required for that image.
-        """
+        """Yield project masks from one read transaction without text encoding them."""
         with self._connect() as db:
             db.execute("BEGIN")
             try:
                 images = db.execute("""SELECT images.image_id,images.relative_path,images.width,images.height,images.source_id,
                     project_sources.display_name FROM images JOIN project_sources ON project_sources.source_id=images.source_id
-                    WHERE images.catalog_id=? ORDER BY project_sources.display_name COLLATE NOCASE,images.relative_path COLLATE NOCASE,images.image_id""", (catalog_id,)).fetchall()
-                image_by_id = {str(row["image_id"]): row for row in images}
-                for image_chunk in _chunks(list(image_by_id)):
-                    placeholders = ",".join("?" for _ in image_chunk)
-                    candidates: dict[str, list[dict[str, Any]]] = {}
-                    for row in db.execute(f"""SELECT candidates.image_id,candidates.candidate_id,candidates.mask_png,candidates.enabled,
-                        candidates.role,candidates.forced,candidate_metadata.expand_px FROM candidates
-                        LEFT JOIN candidate_metadata USING(image_id,candidate_id)
-                        WHERE candidates.image_id IN ({placeholders}) AND candidates.deleted=0""", image_chunk):
-                        candidates.setdefault(str(row["image_id"]), []).append({
-                            "id": str(row["candidate_id"]), "mask": row["mask_png"], "enabled": bool(row["enabled"]),
-                            "role": str(row["role"]), "forced": bool(row["forced"]), "expandPx": int(row["expand_px"] or 0),
+                    WHERE images.catalog_id=? ORDER BY images.image_id""", (catalog_id,))
+                candidate_rows = iter(db.execute("""SELECT candidates.image_id,candidates.candidate_id,candidates.mask_png,candidates.enabled,
+                    candidates.role,candidates.forced,candidate_metadata.expand_px FROM candidates JOIN images USING(image_id)
+                    LEFT JOIN candidate_metadata USING(image_id,candidate_id)
+                    WHERE images.catalog_id=? AND candidates.deleted=0 ORDER BY candidates.image_id,candidates.candidate_id""", (catalog_id,)))
+                manual_rows = iter(db.execute("""SELECT manual_edits.* FROM manual_edits JOIN images USING(image_id)
+                    WHERE images.catalog_id=? ORDER BY manual_edits.image_id""", (catalog_id,)))
+                candidate = next(candidate_rows, None)
+                manual = next(manual_rows, None)
+                for image in images:
+                    image_id = str(image["image_id"])
+                    candidates: list[dict[str, Any]] = []
+                    while candidate is not None and str(candidate["image_id"]) == image_id:
+                        candidates.append({
+                            "id": str(candidate["candidate_id"]), "mask": candidate["mask_png"], "enabled": bool(candidate["enabled"]),
+                            "role": str(candidate["role"]), "forced": bool(candidate["forced"]), "expandPx": int(candidate["expand_px"] or 0),
                         })
-                    manuals = {
-                        str(row["image_id"]): row for row in db.execute(f"SELECT * FROM manual_edits WHERE image_id IN ({placeholders})", image_chunk)
+                        candidate = next(candidate_rows, None)
+                    current_manual = manual if manual is not None and str(manual["image_id"]) == image_id else None
+                    if current_manual is not None:
+                        manual = next(manual_rows, None)
+                    yield {
+                        "image": {"id": image_id, "relativePath": str(image["relative_path"]),
+                                  "width": int(image["width"]), "height": int(image["height"]),
+                                  "sourceId": str(image["source_id"]), "sourceDisplay": str(image["display_name"])},
+                        "candidates": candidates,
+                        "manual": None if current_manual is None else {
+                            "add": current_manual["add_png"], "exclusion": current_manual["exclusion_png"], "erase": current_manual["exclusion_erase_png"],
+                            "manualEnabled": bool(current_manual["manual_enabled"]), "exclusionEnabled": bool(current_manual["exclusion_enabled"]),
+                            "eraseEnabled": bool(current_manual["exclusion_erase_enabled"]), "exclusionForced": bool(current_manual["exclusion_forced"]),
+                            "removed": str(current_manual["removed_candidate_ids"]),
+                        },
                     }
-                    for image_id in image_chunk:
-                        image = image_by_id[image_id]
-                        manual = manuals.get(str(image["image_id"]))
-                        yield {
-                            "image": {"id": str(image["image_id"]), "relativePath": str(image["relative_path"]),
-                                      "width": int(image["width"]), "height": int(image["height"]),
-                                      "sourceId": str(image["source_id"]), "sourceDisplay": str(image["display_name"])},
-                            "candidates": candidates.get(str(image["image_id"]), []),
-                            "manual": None if manual is None else {
-                                "add": manual["add_png"], "exclusion": manual["exclusion_png"], "erase": manual["exclusion_erase_png"],
-                                "manualEnabled": bool(manual["manual_enabled"]), "exclusionEnabled": bool(manual["exclusion_enabled"]),
-                                "eraseEnabled": bool(manual["exclusion_erase_enabled"]), "exclusionForced": bool(manual["exclusion_forced"]),
-                                "removed": str(manual["removed_candidate_ids"]),
-                            },
-                        }
             finally:
                 db.execute("ROLLBACK")
 
@@ -939,31 +989,38 @@ class WorkspaceStore:
         return json.dumps(WorkspaceStore._history_public_state(state), ensure_ascii=False, separators=(",", ":"), sort_keys=True)
 
     @staticmethod
-    def _manual_xor(before: bytes | None, after: bytes | None) -> dict[str, Any] | None:
+    def _manual_xor(before: bytes | None, after: bytes | None, roi: tuple[int, int, int, int] | None = None) -> dict[str, Any] | None:
         """Encode only the changed rectangle of a binary manual layer."""
         if before is None and after is None: return None
         if before == after: return None
         source = before if before is not None else after
         assert source is not None
         with Image.open(io.BytesIO(source)) as image: width, height = image.size
+        if roi is None:
+            left, top, right, bottom = 0, 0, width, height
+        else:
+            left, top, right, bottom = roi
+            if right > width or bottom > height:
+                raise ValueError("workspace manual dirty region is invalid")
         def pixels(raw: bytes | None) -> np.ndarray:
-            if raw is None: return np.zeros((height, width), dtype=np.uint8)
+            if raw is None: return np.zeros((bottom - top, right - left), dtype=np.uint8)
             with Image.open(io.BytesIO(raw)) as image:
                 if image.size != (width, height):
                     raise ValueError("workspace manual mask dimensions are invalid")
-                return np.asarray(image.convert("L"), dtype=np.uint8) > 0
+                return np.asarray(image.crop((left, top, right, bottom)).convert("L"), dtype=np.uint8) > 0
         changed = np.logical_xor(pixels(before), pixels(after))
         ys, xs = np.where(changed)
         if not len(xs): return {"existsBefore": before is not None, "existsAfter": after is not None, "box": None}
-        left, right, top, bottom = int(xs.min()), int(xs.max()) + 1, int(ys.min()), int(ys.max()) + 1
-        output = io.BytesIO(); Image.fromarray(changed[top:bottom, left:right].astype(np.uint8) * 255).save(output, format="PNG")
+        changed_left, changed_right = left + int(xs.min()), left + int(xs.max()) + 1
+        changed_top, changed_bottom = top + int(ys.min()), top + int(ys.max()) + 1
+        output = io.BytesIO(); Image.fromarray(changed[ys.min():ys.max() + 1, xs.min():xs.max() + 1].astype(np.uint8) * 255).save(output, format="PNG")
         return {"existsBefore": before is not None, "existsAfter": after is not None,
-                "box": [left, top, right - left, bottom - top], "png": base64.b64encode(output.getvalue()).decode("ascii"), "size": [width, height]}
+                "box": [changed_left, changed_top, changed_right - changed_left, changed_bottom - changed_top], "png": base64.b64encode(output.getvalue()).decode("ascii"), "size": [width, height]}
 
     @classmethod
-    def _manual_delta(cls, before: dict[str, Any], after: dict[str, Any]) -> dict[str, Any]:
+    def _manual_delta(cls, before: dict[str, Any], after: dict[str, Any], rois: dict[str, tuple[int, int, int, int]] | None = None) -> dict[str, Any]:
         old = before.get("_manual_raw") or {}; new = after.get("_manual_raw") or {}
-        return {key: value for key in ("add", "exclusion", "erase") if (value := cls._manual_xor(old.get(key), new.get(key))) is not None}
+        return {key: value for key in ("add", "exclusion", "erase") if (value := cls._manual_xor(old.get(key), new.get(key), (rois or {}).get(key))) is not None}
 
     @staticmethod
     def _apply_manual_xor(raw: bytes | None, change: dict[str, Any], *, forward: bool) -> bytes | None:
@@ -1028,12 +1085,13 @@ class WorkspaceStore:
             db.execute("UPDATE history_groups SET status=? WHERE group_id=? AND status='building'", ("failed" if failed else "committed", group_id))
             db.execute("DELETE FROM history_groups WHERE group_id=? AND NOT EXISTS (SELECT 1 FROM history_entries WHERE group_id=?)", (group_id, group_id))
 
-    def _record_history_db(self, db: sqlite3.Connection, image_id: str, before: dict[str, Any], after: dict[str, Any], *, group_id: str | None = None) -> None:
+    def _record_history_db(self, db: sqlite3.Connection, image_id: str, before: dict[str, Any], after: dict[str, Any], *, group_id: str | None = None,
+                           manual_rois: dict[str, tuple[int, int, int, int]] | None = None) -> None:
         """Append history in the same transaction as the state mutation."""
         before_json = self._history_json(before); after_json = self._history_json(after)
         if before_json == after_json:
             return
-        delta_json = json.dumps({"manual": self._manual_delta(before, after)}, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
+        delta_json = json.dumps({"manual": self._manual_delta(before, after, manual_rois)}, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
         image = db.execute("SELECT catalog_id FROM images WHERE image_id=?", (image_id,)).fetchone()
         if image is None:
             raise ValueError("workspace image is missing")

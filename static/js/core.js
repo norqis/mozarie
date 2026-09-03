@@ -30,7 +30,7 @@ const state = {
   fillWorker: null, fillPending: false,
   project: null, projectReadOnly: false, projectHistory: new Map(), projectHistoryBusy: false,
   renderFrame: 0,
-  maskDirty: false, draftDirty: false, draftLayerDirty: new Set(), historyBaseDirty: false, draftSaveChains: new Map(),
+  maskDirty: false, draftDirty: false, draftLayerDirty: new Set(), draftDirtyRois: new Map(), historyBaseDirty: false, draftSaveChains: new Map(),
 };
 
 const canvas = $("#editorCanvas");

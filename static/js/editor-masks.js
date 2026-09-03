@@ -752,8 +752,7 @@ function strokeDirtyRoi(points, tool, size) {
   };
 }
 
-function refreshManualStrokeRoi(points, tool, size) {
-  const roi = strokeDirtyRoi(points, tool, size);
+function refreshManualStrokeRoi(roi) {
   if (!roi) return;
   composeCurrentMask(roi);
   requestMosaicPreview(roi);
@@ -765,11 +764,12 @@ function paintStroke(from, to, tool, size) {
 }
 
 function markStrokeDirty(tool, points = null, size = Number($("#brushSize").value)) {
+  const roi = points?.length ? strokeDirtyRoi(points, tool, size) : null;
   markMaskDirty();
-  if (tool === "brush" || tool === "mosaic_eraser") markDraftDirty("add");
-  if (tool === "eraser") markDraftDirty("exclusion", "exclusionErase");
-  if (tool === "exclude_eraser") markDraftDirty("exclusionErase");
-  if (state.activeStroke && points) refreshManualStrokeRoi(points, tool, size);
+  if (tool === "brush" || tool === "mosaic_eraser") markDraftDirtyRoi("add", roi);
+  if (tool === "eraser") { markDraftDirtyRoi("exclusion", roi); markDraftDirtyRoi("exclusionErase", roi); }
+  if (tool === "exclude_eraser") markDraftDirtyRoi("exclusionErase", roi);
+  if (state.activeStroke) refreshManualStrokeRoi(roi);
 }
 
 function paintStrokePath(points, tool, size) {
@@ -820,9 +820,21 @@ function paintFillSpans(addContext, exclusionContext, exclusionEraseContext, spa
   target.restore();
   if (tool === "eraser" || tool === "exclude_bucket") exclusionEraseContext.restore();
   else if (!state.manualExclusionForced && tool === "bucket") exclusionContext.restore();
-  if (tool === "bucket") markDraftDirty("add", ...(state.manualExclusionForced ? [] : ["exclusion"]));
-  if (tool === "eraser" || tool === "exclude_bucket") markDraftDirty("exclusion", "exclusionErase");
-  if (tool === "exclude_eraser") markDraftDirty("exclusionErase");
+  let left = originalCanvas.width, top = originalCanvas.height, right = 0, bottom = 0;
+  for (let index = 0; index < spans.length; index += 3) {
+    left = Math.min(left, spans[index + 1]); top = Math.min(top, spans[index]);
+    right = Math.max(right, spans[index + 2]); bottom = Math.max(bottom, spans[index] + 1);
+  }
+  const roi = spans.length ? { left, top, right, bottom } : null;
+  if (typeof markDraftDirtyRoi !== "function") {
+    if (tool === "bucket") markDraftDirty("add", ...(state.manualExclusionForced ? [] : ["exclusion"]));
+    if (tool === "eraser" || tool === "exclude_bucket") markDraftDirty("exclusion", "exclusionErase");
+    if (tool === "exclude_eraser") markDraftDirty("exclusionErase");
+  } else {
+    if (tool === "bucket") { markDirtyRoi("add", roi); if (!state.manualExclusionForced) markDirtyRoi("exclusion", roi); }
+    if (tool === "eraser" || tool === "exclude_bucket") { markDirtyRoi("exclusion", roi); markDirtyRoi("exclusionErase", roi); }
+    if (tool === "exclude_eraser") markDirtyRoi("exclusionErase", roi);
+  }
 }
 
 function applyFillSpans(spans, tool = "bucket") {

@@ -102,15 +102,24 @@ class CatalogMixin:
         cannot interleave with the expensive PNG composition and SQLite work.
         """
         revision = expected_revision + 1
+        pending = None
         if self.workspace_store.has_image(image_id):
             draft = self.workspace_store.manual(image_id, self._encode_workspace_mask) or {}
             effective = self._effective_mask_for_draft(image_id, candidates, draft)
-            self.workspace_store.commit_candidate_state(
+            pending = self.workspace_store.prepare_candidate_state(
                 image_id, revision, candidates, effective, replace=replace, history_group=history_group,
+                expected_revision=expected_revision,
             )
         with self.lock:
             if self.catalog_generation != expected_catalog_generation or self._candidate_revision(image_id) != expected_revision:
+                if pending is not None:
+                    pending.rollback()
                 raise ClientError("フォルダを再読み込みしたため、検出結果を破棄しました。", "catalog_changed")
+            # The durable commit and runtime publication are one short state
+            # critical section. A stale detector result is rolled back before
+            # either state becomes externally visible.
+            if pending is not None:
+                pending.commit()
             self.candidates[image_id] = candidates
             self.candidate_revisions[image_id] = revision
         return revision

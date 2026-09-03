@@ -137,13 +137,24 @@ async function catalogForDirectoryHandle(handle) {
 
 function workspaceDraftPayload(draft) {
   if (!draft) return { add: "", exclusion: "", exclusionErase: "", hasEffectiveMask: false, removedCandidateIds: [], candidateRevision: 0 };
-  return {
+  const incremental = Array.isArray(draft.dirtyLayers);
+  const dirtyLayers = incremental ? draft.dirtyLayers : ["add", "exclusion", "exclusionErase"];
+  const payload = {
     add: draft.add || "", exclusion: draft.exclusion || "", exclusionErase: draft.exclusionErase || "",
     manualEnabled: draft.manualEnabled !== false, manualExclusionEnabled: draft.manualExclusionEnabled !== false,
     manualExclusionEraseEnabled: draft.manualExclusionEraseEnabled !== false, manualExclusionForced: draft.manualExclusionForced !== false,
     hasEffectiveMask: draft.hasEffectiveMask === true,
     removedCandidateIds: draft.removedCandidateIds || [], candidateRevision: Number(draft.candidateRevision || 0),
   };
+  if (incremental) {
+    delete payload.add; delete payload.exclusion; delete payload.exclusionErase;
+    payload.dirtyLayers = dirtyLayers;
+    if (dirtyLayers.includes("add")) payload.add = draft.add || "";
+    if (dirtyLayers.includes("exclusion")) payload.exclusion = draft.exclusion || "";
+    if (dirtyLayers.includes("exclusionErase")) payload.exclusionErase = draft.exclusionErase || "";
+  }
+  if (draft.dirtyRois) payload.dirtyRois = draft.dirtyRois;
+  return payload;
 }
 
 function queueWorkspaceDraft(imageId, immediate = false) {
@@ -159,6 +170,10 @@ function queueWorkspaceDraft(imageId, immediate = false) {
       : { method: "DELETE" };
     const persisted = queueWorkspaceMutation(imageId, () => api(`/api/workspace/manual/${encodeURIComponent(imageId)}`, request));
     return persisted.then((result) => {
+      if (draft && state.drafts.get(imageId) === draft) {
+        draft.dirtyLayers = [];
+        draft.dirtyRois = {};
+      }
       // A project has a durable copy and can reload an inactive draft on
       // demand.  Projectless sessions have no equivalent recovery path, so
       // they deliberately keep the in-memory bitmap.

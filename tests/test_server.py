@@ -207,6 +207,32 @@ class MozarieTests(unittest.TestCase):
             self.assertFalse(record.hidden)
             self.assertFalse(record.reviewed)
 
+    def test_detector_prepare_rolls_back_when_catalog_reloads_before_publish(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "source.png"; Image.new("RGB", (16, 16), "white").save(source)
+            state = self.new_state(); image_id = state.set_root(directory)[0]["id"]
+            record = state.image_for_id(image_id)
+            mask_path = state.cache_dir / image_id / "candidate.png"; mask_path.parent.mkdir(parents=True, exist_ok=True)
+            Image.new("L", (16, 16), 255).save(mask_path)
+            candidate = Candidate("candidate", "penis", .9, mask_path)
+            generation = state.catalog_generation
+            prepare = state.workspace_store.prepare_candidate_state
+
+            def prepare_then_reload(*args, **kwargs):
+                pending = prepare(*args, **kwargs)
+                # Preserve the same image ID/revision while exercising the real
+                # catalogue replacement path (including lock-map clearing).
+                state._replace_catalog(record.path.parent, [record])
+                return pending
+
+            with state.image_io_lock(image_id), patch.object(state.workspace_store, "prepare_candidate_state", side_effect=prepare_then_reload):
+                with self.assertRaises(ClientError):
+                    state._commit_candidate_snapshot_outside_state_lock(
+                        image_id, [candidate], replace=True, expected_revision=0, expected_catalog_generation=generation,
+                    )
+            self.assertEqual(state.workspace_store.hydrate_candidates(image_id, state.cache_dir, lambda *_: None), (0, []))
+            self.assertEqual(state.candidates.get(image_id, []), [])
+
     def test_flag_change_does_not_publish_after_the_catalog_changes_during_a_write(self):
         with tempfile.TemporaryDirectory() as directory:
             source = Path(directory) / "source.png"; Image.new("RGB", (16, 16), "white").save(source)

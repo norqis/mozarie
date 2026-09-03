@@ -8,6 +8,7 @@ function canvasSizeForImage(image) {
   state.maskDirty = true;
   state.draftDirty = false;
   state.draftLayerDirty.clear();
+  state.draftDirtyRois?.clear();
   state.historyBaseDirty = false;
   state.manualMaskPresent = false;
   state.manualEnabled = true;
@@ -33,6 +34,7 @@ function clearEditor() {
   state.maskDirty = false;
   state.draftDirty = false;
   state.draftLayerDirty.clear();
+  state.draftDirtyRois?.clear();
   state.historyBaseDirty = false;
   addCanvas.width = exclusionCanvas.width = exclusionEraseCanvas.width = effectiveExclusionCanvas.width = combinedCanvas.width = mosaicCanvas.width = originalCanvas.width = 1;
   addCanvas.height = exclusionCanvas.height = exclusionEraseCanvas.height = effectiveExclusionCanvas.height = combinedCanvas.height = mosaicCanvas.height = originalCanvas.height = 1;
@@ -361,6 +363,7 @@ async function saveDraft() {
   if (!state.currentId || !state.currentImage || !state.draftDirty) return;
   const imageId = state.currentId;
   const dirtyLayers = new Set(state.draftLayerDirty);
+  const dirtyRois = Object.fromEntries([...(state.draftDirtyRois || [])]);
   const historyBaseDirty = state.historyBaseDirty;
   const snapshot = {
     manualEnabled: state.manualEnabled, manualExclusionEnabled: state.manualExclusionEnabled, manualExclusionEraseEnabled: state.manualExclusionEraseEnabled,
@@ -372,6 +375,7 @@ async function saveDraft() {
   };
   state.draftDirty = false;
   state.draftLayerDirty.clear();
+  state.draftDirtyRois?.clear();
   state.historyBaseDirty = false;
   flushMaskComposition();
   const layers = {
@@ -402,6 +406,10 @@ async function saveDraft() {
       void queueWorkspaceDraft(imageId);
       return;
     }
+    const pendingLayers = new Set(previous.dirtyLayers || []);
+    dirtyLayers.forEach((layer) => pendingLayers.add(layer));
+    const pendingRois = { ...(previous.dirtyRois || {}) };
+    for (const [layer, roi] of Object.entries(dirtyRois)) pendingRois[layer] = roi;
     state.drafts.set(imageId, {
       ...previous,
       add: hasAdd,
@@ -422,6 +430,7 @@ async function saveDraft() {
         removedCandidateIds: snapshot.historyRemovedCandidateIds,
         candidateIds: snapshot.historyCandidateIds,
       },
+      dirtyLayers: [...pendingLayers], dirtyRois: pendingRois,
     });
     void queueWorkspaceDraft(imageId);
   });
@@ -792,6 +801,16 @@ function composeCurrentMask(roi = null) {
 function markDraftDirty(...layers) {
   state.draftDirty = true;
   layers.forEach((layer) => state.draftLayerDirty.add(layer));
+}
+function markDraftDirtyRoi(layer, roi) {
+  markDraftDirty(layer);
+  if (!roi) return;
+  state.draftDirtyRois ||= new Map();
+  const previous = state.draftDirtyRois.get(layer);
+  state.draftDirtyRois.set(layer, previous ? {
+    left: Math.min(previous.left, roi.left), top: Math.min(previous.top, roi.top),
+    right: Math.max(previous.right, roi.right), bottom: Math.max(previous.bottom, roi.bottom),
+  } : roi);
 }
 function markMaskDirty() { state.maskDirty = true; markDraftDirty(); }
 function flushMaskComposition() { if (state.maskDirty && !state.activeStroke) composeCurrentMask(); }
