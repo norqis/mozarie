@@ -292,6 +292,7 @@ function rememberImportedSource(result) {
       fileHandle: result.entry.fileHandle, parentHandle: result.entry.parentHandle || null,
       name: result.entry.file.name, size: result.entry.file.size, lastModified: result.entry.file.lastModified,
     });
+    if (state.project?.id) void rememberProjectSource(state.project.id, result.entry.fileHandle, imported.imageId);
   }
 }
 
@@ -357,6 +358,7 @@ async function importFiles(files) {
     }
     const latest = await api("/api/images");
     state.images = latest.images;
+    applyProjectSnapshot(latest);
     loadReviewedPaths();
     pruneSourceAccess(); renderCatalogViews(); setStatusKey("gallery.imported", { count: supportedFiles.length });
   } catch (error) {

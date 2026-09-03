@@ -208,6 +208,10 @@ class MosaicHandler(BaseHTTPRequestHandler):
                 self._json(_update_status())
             elif path == "/api/images":
                 self._json(STATE.catalog_snapshot())
+            elif path == "/api/projects":
+                self._json({"projects": STATE.projects(parse_qs(parsed.query).get("sort", ["updated_desc"])[0])})
+            elif path == "/api/project/mismatches":
+                self._json({"images": STATE.source_mismatch_snapshot()})
             elif path == "/api/job":
                 STATE.cleanup_expired_browser_save_tokens()
                 with STATE.lock:
@@ -292,6 +296,23 @@ class MosaicHandler(BaseHTTPRequestHandler):
             if path == "/api/folder":
                 images = STATE.set_root(str(payload.get("path", "")))
                 self._json({"images": images, "workspace": True})
+            elif path == "/api/projects":
+                self._json({"project": STATE.create_project(payload.get("name"))})
+            elif path == "/api/project/name":
+                self._json({"project": STATE.name_current_project(str(payload.get("name", "")))})
+            elif path == "/api/project/complete":
+                self._json({"project": STATE.complete_project()})
+            elif path == "/api/project/close":
+                STATE.close_project(); self._json({"ok": True})
+            elif path == "/api/project/open":
+                self._json(STATE.open_project(str(payload.get("projectId", ""))))
+            elif path == "/api/project/resume":
+                self._json({"project": STATE.resume_project(str(payload.get("projectId", "")))})
+            elif path == "/api/project/mismatches":
+                ids = payload.get("imageIds", [])
+                if not isinstance(ids, list): raise ClientError("画像IDの一覧が正しくありません。", "input_invalid")
+                STATE.resolve_source_mismatches(ids, bool(payload.get("clearMasks")))
+                self._json(STATE.catalog_snapshot())
             elif path == "/api/workspace/catalog":
                 if payload.get("provisional") is True:
                     if payload.get("catalogId"):

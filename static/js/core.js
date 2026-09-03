@@ -28,6 +28,7 @@ const state = {
   imageCache: null, candidateBundleCache: null, catalogLoadControllers: new Set(),
   prefetchQueue: [], prefetchActive: 0, prefetchTimer: null,
   fillWorker: null, fillPending: false,
+  project: null, projectReadOnly: false,
   renderFrame: 0,
   maskDirty: false, draftDirty: false, draftLayerDirty: new Set(), historyBaseDirty: false, draftSaveChains: new Map(),
 };
@@ -486,7 +487,7 @@ function setNavigationShortcutsEnabled(enabled) {
 
 function updateActionButtons() {
   const running = isBusy();
-  const locked = running || state.importing;
+  const locked = running || state.importing || state.projectReadOnly;
   const mutatingCandidates = state.candidateUpdateChains.size > 0;
   const switchingImages = state.candidateBatchPending.size > 0;
   const current = currentRecord();
@@ -514,7 +515,7 @@ function updateActionButtons() {
   $("#batchModeButton").disabled = locked || state.images.length === 0;
   $("#galleryFilter").disabled = running;
   $("#saveAllButton").disabled = running || mutatingCandidates || saveTargets().length === 0;
-  const currentSaveDisabled = running || mutatingCandidates || !hasImage || !imageHasMask(current);
+  const currentSaveDisabled = running || mutatingCandidates || !hasImage || !imageHasMask(current) || Boolean(current?.sourceDimensionsChanged);
   $("#saveButton").disabled = currentSaveDisabled;
   $("#applyStartButton").disabled = running || mutatingCandidates || state.applyTargetIds.length === 0 || Boolean(applyRestrictionMessage());
   $("#overviewButton").disabled = running || state.images.length === 0;
@@ -630,6 +631,12 @@ function resetCatalog(images, root) {
   renderCatalogViews(); updateSelectionActionBar(); clearEditor();
 }
 
+function applyProjectSnapshot(snapshot) {
+  state.project = snapshot?.project || null;
+  state.projectReadOnly = snapshot?.readOnly === true || state.project?.status === "completed";
+  updateActionButtons();
+}
+
 function discardCatalogNodes(nodes, container) {
   for (const item of nodes.values()) {
     const preview = item.querySelector?.("img");
@@ -663,5 +670,8 @@ async function loadFolder() {
     if (!isCurrentCatalogEpoch(catalogEpoch)) return;
     resetCatalog(data.images, path);
     setStatusKey("status.imagesLoaded", { count: state.images.length });
+    const snapshot = await api("/api/images");
+    applyProjectSnapshot(snapshot);
+    if (typeof showSourceMismatches === "function") await showSourceMismatches();
   } catch (error) { if (isCurrentCatalogEpoch(catalogEpoch)) showUserError(error); }
 }

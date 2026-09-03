@@ -2,7 +2,7 @@
 // Dynamic template controls deliberately use data-* selectors and are exercised
 // by the candidate, gallery, overview, model, and context-menu E2E cases.
 const ids = `
-pickFolder detectAllButton saveAllButton folderPath loadFolderButton pickImages pickFolderFiles settingsButton updateToast batchMoreButton clearAllMasksButton clearCatalogButton galleryFilter overviewButton collapseGalleryButton
+projectButton projectClose projectNew projectName projectOpenList projectComplete projectCloseWorkspace projectListClose projectSort projectNameInput projectNameCancel sourceMismatchClear sourceMismatchCancel pickFolder detectAllButton saveAllButton folderPath loadFolderButton pickImages pickFolderFiles settingsButton updateToast batchMoreButton clearAllMasksButton clearCatalogButton galleryFilter overviewButton collapseGalleryButton
 brushTool bucketTool mosaicEraserTool eraserTool excludeBucketTool excludeEraserTool boundaryTool rectangleTool polygonTool boundaryBrushTool singleViewButton compareViewButton fitButton undoButton redoButton mosaicPreviewButton brushSize mosaicHelpButton divisor bucketTolerance
 previousImageButton nextImageButton removeAndNextButton hideAndNextButton reviewAndNextButton boundaryDetectButton boundaryCancelButton collapseInspectorButton detectCurrentButton saveButton clearCurrentMasksButton removeCurrentImageButton detectTargetPenis detectTargetPussy confidence
 closeOverviewButton batchModeButton overviewQuery overviewFolder selectionActionsButton selectionClearButton toggleReviewMenuItem copyImagePathMenuItem removeImageMenuItem confirmNeverShow confirmAccept errorDialogClose
@@ -16,10 +16,10 @@ modelDownloadClose modelDownloadCopy modelDownloadStart modelDownloadCancel appl
 // id is a button-style activation.  The separate list keeps a new control from
 // silently bypassing the interaction sweep.
 const keyboardIds = new Set(`
-folderPath overviewQuery settingsDefaultOutputDirectory settingsTargetModel settingsNtd11Model settingsSensitiveModel settingsSamModel settingsHandModel settingsHandSegmentationModel applySuffix applyOutputDirectoryStatus singleSaveSuffix
+projectNameInput folderPath overviewQuery settingsDefaultOutputDirectory settingsTargetModel settingsNtd11Model settingsSensitiveModel settingsSamModel settingsHandModel settingsHandSegmentationModel applySuffix applyOutputDirectoryStatus singleSaveSuffix
 `.trim().split(/\s+/));
 const changeIds = new Set(`
-  galleryFilter brushSize divisor bucketTolerance confidence detectTargetPenis detectTargetPussy detectParallelism dialogTargetPenis dialogTargetPussy detectConfidenceRange detectConfidenceNumber overviewFolder confirmNeverShow settingsLanguage settingsPort settingsImportParallelism settingsSaveParallelism settingsOpenBrowser settingsProvider settingsGpuDevice settingsNtd11Toggle settingsSensitiveToggle settingsPrecisionToggle settingsSamType settingsHandToggle settingsHandSegmentationToggle settingsFluidToggle settingsApplyColor settingsExcludeColor settingsOpacity settingsMosaicPreview settingsExcludeForcedDefault settingsShortcutsEnabled confirmClearMasks confirmClearCatalog confirmRemoveImage confirmCandidateDelete confirmCandidateRoleDelete confirmOverwriteSource confirmDeleteSourceAfterCopy applyTargetMode applyCopyMode applyOverwriteMode deleteOriginal removeAfterSave applyDivisor singleSaveCopyMode singleSaveOverwriteMode singleSaveDeleteOriginal
+  projectSort sourceMismatchClear galleryFilter brushSize divisor bucketTolerance confidence detectTargetPenis detectTargetPussy detectParallelism dialogTargetPenis dialogTargetPussy detectConfidenceRange detectConfidenceNumber overviewFolder confirmNeverShow settingsLanguage settingsPort settingsImportParallelism settingsSaveParallelism settingsOpenBrowser settingsProvider settingsGpuDevice settingsNtd11Toggle settingsSensitiveToggle settingsPrecisionToggle settingsSamType settingsHandToggle settingsHandSegmentationToggle settingsFluidToggle settingsApplyColor settingsExcludeColor settingsOpacity settingsMosaicPreview settingsExcludeForcedDefault settingsShortcutsEnabled confirmClearMasks confirmClearCatalog confirmRemoveImage confirmCandidateDelete confirmCandidateRoleDelete confirmOverwriteSource confirmDeleteSourceAfterCopy applyTargetMode applyCopyMode applyOverwriteMode deleteOriginal removeAfterSave applyDivisor singleSaveCopyMode singleSaveOverwriteMode singleSaveDeleteOriginal
 `.trim().split(/\s+/));
 
 const fixtureForScenario = {
@@ -46,7 +46,9 @@ function interactionFor(id) {
   const action = keyboardIds.has(id) ? "keyboard" : changeIds.has(id) ? "change" : "click";
   let resultKind = "dom";
   let scenario = "workspace";
-  if (/^(pickFolder|folderPath|loadFolderButton|pickImages|pickFolderFiles)/.test(id)) {
+  if (/^project/.test(id) || /^sourceMismatch/.test(id)) {
+    resultKind = "dialog"; scenario = "workspace";
+  } else if (/^(pickFolder|folderPath|loadFolderButton|pickImages|pickFolderFiles)/.test(id)) {
     resultKind = "dialog"; scenario = "import";
   } else if (/^(detect|confidence|boundaryDetectButton|boundaryCancelButton)/.test(id)) {
     resultKind = "api"; scenario = "detection";

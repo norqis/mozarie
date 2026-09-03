@@ -123,7 +123,7 @@ vm.runInNewContext("globalThis.workspaceTest={queueWorkspaceDraft,flushDraftSave
     },
   };
   assert.equal(await context.workspaceTest.directoryCatalogStore(), openedDb, "a directory database creates its store on first open and returns the opened database");
-  assert.equal(createdStores, 1, "the directory database owns one catalog object store");
+  assert.equal(createdStores, 2, "the directory database owns catalog and project-source stores");
   context.indexedDB = context.window.indexedDB = {
     open() {
       const request = {};

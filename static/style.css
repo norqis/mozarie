@@ -332,3 +332,9 @@ button { overflow: visible; text-overflow: clip; white-space: nowrap; }
 @media (min-width: 1280px) { .studio-grid { grid-template-columns: 216px minmax(0, 1fr) 292px; } .studio-grid.gallery-collapsed { grid-template-columns: 40px minmax(0, 1fr) 292px; } .studio-grid.inspector-collapsed { grid-template-columns: 216px minmax(0, 1fr) 40px; } }
 @media (min-width: 1600px) { .studio-grid { grid-template-columns: 260px minmax(0, 1fr) 320px; } .studio-grid.gallery-collapsed { grid-template-columns: 40px minmax(0, 1fr) 320px; } .studio-grid.inspector-collapsed { grid-template-columns: 260px minmax(0, 1fr) 40px; } }
 .update-toast { position: fixed; right: 1rem; bottom: 1rem; z-index: 20; }
+/* Project list intentionally uses ordinary buttons: it remains usable at
+   narrow window sizes and does not introduce a second custom widget. */
+.project-list { display: grid; gap: .5rem; margin-top: .75rem; max-height: min(55vh, 34rem); overflow: auto; }
+.project-list-item { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: .35rem .75rem; align-items: center; text-align: left; }
+.project-list-item small { grid-column: 1; color: var(--muted, #777); }
+.project-actions { align-items: stretch; }

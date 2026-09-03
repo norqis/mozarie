@@ -64,8 +64,77 @@ async function copyCommand(commandId, resultId) {
   } catch (error) { showUserError(error); }
 }
 
+let projectNameMode = "name";
+
+function projectTitle(project) { return project?.name || t("project.unnamed"); }
+function renderProjectCurrent() {
+  const project = state.project;
+  $("#projectCurrent").textContent = project ? `${projectTitle(project)} · ${t(`project.${project.status}`)}` : t("project.unnamed");
+  $("#projectName").disabled = !project || state.projectReadOnly;
+  $("#projectComplete").disabled = !project || state.projectReadOnly;
+}
+function openProjectNameDialog(mode) {
+  projectNameMode = mode; $("#projectNameInput").value = mode === "name" ? (state.project?.name || "") : "";
+  showModalFromInvoker($("#projectNameDialog")); focusElement($("#projectNameInput"));
+}
+async function showProjectList() {
+  const sort = $("#projectSort").value;
+  const data = await api(`/api/projects?sort=${encodeURIComponent(sort)}`);
+  const list = $("#projectList"); list.replaceChildren();
+  for (const project of data.projects || []) {
+    const row = document.createElement("div"); row.className = "project-list-item";
+    const open = document.createElement("button"); open.type = "button"; open.textContent = projectTitle(project);
+    open.addEventListener("click", () => { void openProject(project); });
+    const status = document.createElement("small");
+    status.textContent = `${t(`project.${project.status}`)} · ${project.imageCount}`;
+    const action = document.createElement("button"); action.type = "button"; action.textContent = t(project.status === "completed" ? "project.resume" : "project.openAction");
+    action.addEventListener("click", () => { void openProject(project, project.status === "completed"); });
+    row.append(open, action, status); list.append(row);
+  }
+  showModalFromInvoker($("#projectListDialog"));
+}
+async function showSourceMismatches() {
+  const data = await api("/api/project/mismatches"); const images = data.images || [];
+  if (!images.length) return;
+  const list = $("#sourceMismatchList"); list.replaceChildren();
+  for (const image of images) { const item = document.createElement("li"); item.textContent = image.relativePath; list.append(item); }
+  $("#sourceMismatchClear").checked = false;
+  const dialog = $("#sourceMismatchDialog");
+  dialog.dataset.imageIds = JSON.stringify(images.map((image) => image.id));
+  showModalFromInvoker(dialog);
+}
+async function openProject(project, resume = false) {
+  try {
+    if (resume) await api("/api/project/resume", { method: "POST", body: JSON.stringify({ projectId: project.id }) });
+    const data = await api("/api/project/open", { method: "POST", body: JSON.stringify({ projectId: project.id }) });
+    state.project = data.project; state.projectReadOnly = data.project?.status === "completed";
+    $("#projectListDialog").close(); $("#projectDialog").close();
+    if (data.needsSource) {
+      const handle = await rememberedProjectSource(project.id);
+      if (handle) await importDirectoryHandle(handle);
+      else { resetCatalog([], ""); showUserError({ code: "source_restore_failed" }); }
+    } else {
+      resetCatalog(data.images || [], data.project?.sourceRoot || "");
+      applyProjectSnapshot(await api("/api/images")); await showSourceMismatches();
+    }
+  } catch (error) { showUserError(error); }
+}
+
 function bindEvents() {
   document.querySelectorAll("dialog").forEach((dialog) => dialog.addEventListener("keydown", trapModalTab));
+  $("#projectButton").addEventListener("click", () => { renderProjectCurrent(); showModalFromInvoker($("#projectDialog")); });
+  $("#projectClose").addEventListener("click", () => $("#projectDialog").close());
+  $("#projectNew").addEventListener("click", () => openProjectNameDialog("new"));
+  $("#projectName").addEventListener("click", () => openProjectNameDialog("name"));
+  $("#projectOpenList").addEventListener("click", () => { void showProjectList(); });
+  $("#projectListClose").addEventListener("click", () => $("#projectListDialog").close());
+  $("#projectSort").addEventListener("change", () => { void showProjectList(); });
+  $("#projectCloseWorkspace").addEventListener("click", () => { void (async () => { try { await flushAllWorkspaceMutations(); await api("/api/project/close", { method: "POST", body: "{}" }); resetCatalog([], ""); state.project = null; state.projectReadOnly = false; $("#projectDialog").close(); } catch (error) { showUserError(error); } })(); });
+  $("#projectComplete").addEventListener("click", () => { void (async () => { if (!await confirmAction(t("project.complete"), t("project.completeConfirm"))) return; try { await flushAllWorkspaceMutations(); await api("/api/project/complete", { method: "POST", body: "{}" }); resetCatalog([], ""); state.project = null; state.projectReadOnly = false; $("#projectDialog").close(); } catch (error) { showUserError(error); } })(); });
+  $("#projectNameCancel").addEventListener("click", () => $("#projectNameDialog").close());
+  $("#projectNameForm").addEventListener("submit", (event) => { event.preventDefault(); void (async () => { try { const name = $("#projectNameInput").value.trim(); const data = projectNameMode === "new" ? await api("/api/projects", { method: "POST", body: JSON.stringify({ name }) }) : await api("/api/project/name", { method: "POST", body: JSON.stringify({ name }) }); state.project = data.project; state.projectReadOnly = false; $("#projectNameDialog").close(); if (projectNameMode === "new") resetCatalog([], ""); renderProjectCurrent(); } catch (error) { showUserError(error); } })(); });
+  $("#sourceMismatchCancel").addEventListener("click", () => $("#sourceMismatchDialog").close());
+  $("#sourceMismatchForm").addEventListener("submit", (event) => { event.preventDefault(); void (async () => { try { const ids = JSON.parse($("#sourceMismatchDialog").dataset.imageIds || "[]"); const snapshot = await api("/api/project/mismatches", { method: "POST", body: JSON.stringify({ imageIds: ids, clearMasks: $("#sourceMismatchClear").checked }) }); state.images = snapshot.images || state.images; applyProjectSnapshot(snapshot); $("#sourceMismatchDialog").close(); renderCatalogViews(); } catch (error) { showUserError(error); } })(); });
   document.querySelectorAll("dialog").forEach((dialog) => dialog.addEventListener("close", () => {
     const invoker = modalInvokers.get(dialog);
     modalInvokers.delete(dialog);
@@ -543,6 +612,7 @@ async function initialise() {
   updateBrushSize($("#brushSize").value); resizeRenderCanvas(); updateHistoryButtons(); updateNavigationControls(); updateActionButtons();
   try {
     const data = await api("/api/images");
+    if (typeof applyProjectSnapshot === "function") applyProjectSnapshot(data);
     if (data.images.length) {
       $("#folderPath").value = data.root || "";
       resetCatalog(data.images, data.root);

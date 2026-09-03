@@ -116,6 +116,8 @@ class CatalogMixin:
         return self.worker_thread is not None and self.worker_thread.is_alive()
 
     def _assert_catalog_mutable(self, *, allow_terminal_cleanup: bool = False) -> None:
+        if self.project_read_only:
+            raise ClientError("完了したプロジェクトは再開するまで編集できません。", "project_read_only")
         worker_cleanup = (
             allow_terminal_cleanup
             and self.job.state in {"complete", "cancelled", "error"}
@@ -213,7 +215,7 @@ class CatalogMixin:
             self.workspace_store.delete_catalog(source_catalog)
             return target, image_id_map
 
-    def _set_root(self, raw_path: str) -> list[dict[str, Any]]:
+    def _set_root(self, raw_path: str, project_id: str | None = None) -> list[dict[str, Any]]:
         if not raw_path or not isinstance(raw_path, str):
             raise ClientError("Windowsフォルダを入力してください。", "input_invalid")
         root = Path(raw_path).expanduser().resolve()
@@ -268,7 +270,9 @@ class CatalogMixin:
                 for worker in workers:
                     worker.result()
         records.sort(key=lambda record: (record.relative_path.casefold(), record.relative_path))
-        catalog_id = self.workspace_store.catalog_for_root(root)
+        catalog_id = project_id or self.catalog_id or self.workspace_store.catalog_for_root(root)
+        if not self.workspace_store.catalog_exists(catalog_id):
+            raise ClientError("プロジェクトが見つかりません。", "project_not_found")
         stored = self.workspace_store.reconcile_images(catalog_id, records)
         # This is the only missing-file prune path: the complete directory
         # scan above is authoritative. Browser imports and partial operations
@@ -279,14 +283,90 @@ class CatalogMixin:
             record.image_id = str(saved["image_id"])
             record.hidden = bool(saved["hidden"])
             record.reviewed = bool(saved["reviewed"])
+        self.source_mismatches = {str(saved["image_id"]): bool(saved.get("dimensions_changed")) for saved in stored.values() if saved.get("changed")}
         self.catalog_id = catalog_id
+        self.project_read_only = (self.workspace_store.project(catalog_id) or {}).get("status") == "completed"
+        self.workspace_store.set_project_source_root(catalog_id, str(root))
         self.browser_catalog_provisional = False
         self.browser_import_hashes = {}
         return self._replace_catalog(root, records)
 
+    def projects(self, sort: str = "updated_desc") -> list[dict[str, Any]]:
+        return self.workspace_store.projects(sort)
+
+    def create_project(self, name: str | None = None) -> dict[str, Any]:
+        self.detach_catalog()
+        project = self.workspace_store.create_project(name)
+        with self.lock:
+            self.catalog_id = str(project["id"]); self.project_read_only = False; self.source_mismatches = {}
+        return project
+
+    def name_current_project(self, name: str) -> dict[str, Any]:
+        with self.lock:
+            if not self.catalog_id: raise ClientError("プロジェクトを開いていません。", "project_not_found")
+            catalog_id = self.catalog_id
+        try: return self.workspace_store.name_project(catalog_id, name)
+        except ValueError as exc: raise ClientError("プロジェクト名を確認してください。", "project_name_invalid") from exc
+
+    def complete_project(self) -> dict[str, Any]:
+        with self.lock:
+            if not self.catalog_id: raise ClientError("プロジェクトを開いていません。", "project_not_found")
+            catalog_id = self.catalog_id
+        project = self.workspace_store.set_project_status(catalog_id, "completed")
+        self.detach_catalog()
+        return project
+
+    def close_project(self) -> None:
+        self.detach_catalog()
+
+    def resume_project(self, catalog_id: str) -> dict[str, Any]:
+        project = self.workspace_store.set_project_status(catalog_id, "working")
+        return project
+
+    def open_project(self, catalog_id: str) -> dict[str, Any]:
+        project = self.workspace_store.project(catalog_id)
+        if not project: raise ClientError("プロジェクトが見つかりません。", "project_not_found")
+        root = project.get("sourceRoot")
+        if root and Path(str(root)).is_dir():
+            self.detach_catalog()
+            # Loading source bytes is not an edit.  Temporarily permit the
+            # catalogue replacement, then restore completed read-only state.
+            self.project_read_only = False
+            images = self._set_root(str(root), catalog_id)
+            self.project_read_only = project["status"] == "completed"
+            return {"project": project, "images": images, "needsSource": False}
+        self.detach_catalog()
+        with self.lock:
+            self.catalog_id = catalog_id; self.project_read_only = project["status"] == "completed"; self.source_mismatches = {}
+        return {"project": project, "images": [], "needsSource": True}
+
+    def source_mismatch_snapshot(self) -> list[dict[str, Any]]:
+        with self.lock:
+            return [{"id": image_id, "relativePath": self.images[image_id].relative_path, "dimensionsChanged": dimensions}
+                    for image_id, dimensions in self.source_mismatches.items() if image_id in self.images]
+
+    def resolve_source_mismatches(self, image_ids: list[str], clear_masks: bool) -> None:
+        requested = set(str(value) for value in image_ids)
+        with self.lock:
+            known = requested & set(self.source_mismatches)
+            if clear_masks:
+                revisions = {image_id: self._candidate_revision(image_id) + 1 for image_id in known}
+                self.workspace_store.clear_image_workspaces(revisions)
+                for image_id in known:
+                    self.candidates[image_id] = []; self.candidate_revisions[image_id] = revisions[image_id]
+            for image_id in known:
+                # Same-size changes can be acknowledged while retaining masks.
+                # A dimension mismatch remains blocked until it is explicitly
+                # cleared, because no silent mask scaling is ever performed.
+                if clear_masks or not self.source_mismatches.get(image_id):
+                    self.source_mismatches.pop(image_id, None)
+
     def detach_catalog(self) -> str | None:
         """Clear only the live screen state while retaining durable work."""
         with self.import_lock:
+            # Closing a completed project is always allowed; it does not alter
+            # project data.
+            self.project_read_only = False
             with self.lock:
                 image_ids = tuple(self.images)
             locks = [(image_id, self.image_io_lock(image_id)) for image_id in image_ids]
@@ -304,6 +384,7 @@ class CatalogMixin:
                     catalog_id = self.catalog_id
                     provisional_catalog = catalog_id if self.browser_catalog_provisional else None
                     self.catalog_id = None
+                    self.source_mismatches = {}
                     self.browser_import_hashes = {}
                     self.browser_catalog_provisional = False
                     self.catalog_generation += 1
@@ -1017,6 +1098,8 @@ class CatalogMixin:
                     "candidateRevision": candidate_revision,
                     "hidden": record.hidden,
                     "reviewed": record.reviewed,
+                    "sourceMismatch": record.image_id in self.source_mismatches,
+                    "sourceDimensionsChanged": bool(self.source_mismatches.get(record.image_id)),
                 }
                 if record.source_kind == "filesystem":
                     item["sourcePath"] = str(record.path)
@@ -1026,6 +1109,8 @@ class CatalogMixin:
                 "images": output,
                 "catalogGeneration": self.catalog_generation,
                 "workspace": self.catalog_id is not None,
+                "project": self.workspace_store.project(self.catalog_id) if self.catalog_id else None,
+                "readOnly": self.project_read_only,
             }
 
     def list_candidates(self, image_id: str) -> list[dict[str, Any]]:

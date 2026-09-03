@@ -26,11 +26,27 @@ const DIRECTORY_DB = "mozarie-directory-catalogs";
 async function directoryCatalogStore() {
   if (!window.indexedDB) return null;
   return new Promise((resolve) => {
-    const request = indexedDB.open(DIRECTORY_DB, 1);
-    request.onupgradeneeded = () => request.result.createObjectStore("directories", { keyPath: "catalogId" });
+    const request = indexedDB.open(DIRECTORY_DB, 2);
+    request.onupgradeneeded = () => {
+      const names = request.result.objectStoreNames;
+      if (!names?.contains?.("directories")) request.result.createObjectStore("directories", { keyPath: "catalogId" });
+      if (!names?.contains?.("projectSources")) request.result.createObjectStore("projectSources", { keyPath: "key" });
+    };
     request.onsuccess = () => resolve(request.result);
     request.onerror = () => resolve(null);
   });
+}
+
+async function rememberProjectSource(projectId, handle, imageId = null) {
+  const db = await directoryCatalogStore(); if (!db || !projectId || !handle) return;
+  try { db.transaction("projectSources", "readwrite").objectStore("projectSources").put({ key: `${projectId}:${imageId || "directory"}`, projectId, imageId, handle }); }
+  catch { /* A source can still be selected again later. */ }
+  db.close();
+}
+async function rememberedProjectSource(projectId, imageId = null) {
+  const db = await directoryCatalogStore(); if (!db || !projectId) return null;
+  const value = await new Promise((resolve) => { const request = db.transaction("projectSources").objectStore("projectSources").get(`${projectId}:${imageId || "directory"}`); request.onsuccess = () => resolve(request.result?.handle || null); request.onerror = () => resolve(null); });
+  db.close(); return value;
 }
 async function rememberedOutputDirectoryHandle() {
   const db = await directoryCatalogStore();
@@ -50,6 +66,11 @@ async function rememberOutputDirectoryHandle(handle) {
   db.close();
 }
 async function catalogForDirectoryHandle(handle) {
+  if (state.project?.id) {
+    const activated = await api("/api/workspace/catalog", { method: "POST", body: JSON.stringify({ catalogId: state.project.id }) });
+    await rememberProjectSource(state.project.id, handle);
+    return activated.catalogId || state.project.id;
+  }
   const db = await directoryCatalogStore();
   if (db) {
     const rows = await new Promise((resolve) => { const request = db.transaction("directories").objectStore("directories").getAll(); request.onsuccess = () => resolve(request.result || []); request.onerror = () => resolve([]); });
@@ -94,6 +115,11 @@ function workspaceDraftPayload(draft) {
     manualExclusionEraseEnabled: draft.manualExclusionEraseEnabled !== false, manualExclusionForced: draft.manualExclusionForced !== false,
     hasEffectiveMask: draft.hasEffectiveMask === true,
     removedCandidateIds: draft.removedCandidateIds || [], candidateRevision: Number(draft.candidateRevision || 0),
+    history: {
+      operations: Array.isArray(draft.history) ? draft.history : [],
+      index: Number(draft.historyIndex || 0),
+      base: draft.historyBase || {},
+    },
   };
 }
 
@@ -172,7 +198,10 @@ async function flushAllWorkspaceMutations() {
 
 async function loadWorkspaceDraft(imageId) {
   const data = await api(`/api/workspace/manual/${encodeURIComponent(imageId)}`);
-  return data.draft || null;
+  const draft = data.draft;
+  if (!draft) return null;
+  const history = draft.history && typeof draft.history === "object" ? draft.history : {};
+  return { ...draft, history: Array.isArray(history.operations) ? history.operations : [], historyIndex: Number(history.index || 0), historyBase: history.base || {} };
 }
 
 function scheduleManualWorkspaceSave() {

@@ -701,14 +701,8 @@ function replayManualStroke(stroke, addContext = addCtx, exclusionContext = excl
 
 function historyWeight(stroke) { return stroke.spans?.byteLength || (stroke.spans?.length || 0) * 4 || (stroke.points?.length || 0) * 16; }
 function trimHistory() {
-  while (state.history.length > 12 || state.history.reduce((total, stroke) => total + historyWeight(stroke), 0) > 64 * 1024 * 1024) {
-    const operation = state.history.shift();
-    replayManualStroke(operation, historyAddCanvas.getContext("2d"), historyExclusionCanvas.getContext("2d"), historyExclusionEraseCanvas.getContext("2d"));
-    if (operation.kind === "removeCandidates") operation.ids.forEach((id) => state.historyRemovedCandidateIds.add(id));
-    if (operation.kind === "restoreCandidates") operation.ids.forEach((id) => state.historyRemovedCandidateIds.delete(id));
-    if (operation.kind === "addCandidates") operation.ids.forEach((id) => { state.historyCandidateIds.add(id); state.historyRemovedCandidateIds.delete(id); });
-    state.historyBaseDirty = true;
-  }
+  // Project history is durable.  The user can explicitly clear it later;
+  // silently dropping older edits makes Ctrl+Z unreliable after a restart.
 }
 
 function recordHistoryOperation(operation) {
