@@ -8,13 +8,26 @@ import cv2
 
 def expand_mask(mask: np.ndarray, expand_px: int) -> np.ndarray:
     """Expand a binary candidate mask in source-image pixels."""
-    if isinstance(expand_px, bool) or not isinstance(expand_px, int) or expand_px < 0 or expand_px > max(mask.shape):
+    limit = int(np.ceil(np.hypot(mask.shape[0] - 1, mask.shape[1] - 1)))
+    if isinstance(expand_px, bool) or not isinstance(expand_px, int) or expand_px < 0 or expand_px > limit:
         raise ValueError("candidate expand pixels are invalid")
     binary = np.asarray(mask > 0, dtype=np.uint8) * 255
     if expand_px == 0:
         return binary
-    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (expand_px * 2 + 1, expand_px * 2 + 1))
-    return cv2.dilate(binary, kernel)
+    if not np.any(binary):
+        return binary
+    # No source pixel can be farther than the image diagonal from a foreground
+    # pixel. Avoid even the distance-map allocation once the result is known.
+    if expand_px >= int(np.ceil(np.hypot(mask.shape[0] - 1, mask.shape[1] - 1))):
+        return np.full(mask.shape, 255, dtype=np.uint8)
+    # Small radii retain the exact OpenCV ellipse users already have.  A large
+    # structuring-element matrix grows quadratically, though, so switch to a
+    # per-pixel distance transform before allocating an enormous kernel.
+    if expand_px <= 128:
+        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (expand_px * 2 + 1, expand_px * 2 + 1))
+        return cv2.dilate(binary, kernel)
+    distance = cv2.distanceTransform(255 - binary, cv2.DIST_L2, cv2.DIST_MASK_PRECISE)
+    return np.where(distance <= expand_px, 255, 0).astype(np.uint8)
 
 
 def compose_masks(

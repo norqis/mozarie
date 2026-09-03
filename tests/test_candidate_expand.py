@@ -36,7 +36,13 @@ class CandidateExpandTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             expand_mask(source, -1)
         with self.assertRaises(ValueError):
-            expand_mask(source, 8)
+            expand_mask(source, 10)
+
+    def test_large_padding_uses_image_space_and_saturates_without_a_large_kernel(self):
+        source = np.zeros((17, 31), dtype=np.uint8)
+        source[8, 15] = 255
+        self.assertTrue(np.all(expand_mask(source, 34) == 255))
+        self.assertFalse(np.any(expand_mask(np.zeros_like(source), 34)))
 
     def test_new_candidate_png_records_zero_padding_without_changing_pixels(self):
         with tempfile.TemporaryDirectory() as directory:

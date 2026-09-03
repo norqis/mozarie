@@ -13,7 +13,7 @@ let candidatePaddingSession = null;
 
 function candidatePaddingLimit() {
   const record = currentRecord();
-  return Math.max(0, Number(record?.width) || 0, Number(record?.height) || 0);
+  return Math.max(0, Math.ceil(Math.hypot((Number(record?.width) || 1) - 1, (Number(record?.height) || 1) - 1)));
 }
 
 function candidatePaddingValue(input = $("#candidatePaddingInput")) {
@@ -55,9 +55,24 @@ function openCandidatePadding(candidateId, trigger) {
   closeCandidatePadding();
   const input = $("#candidatePaddingInput");
   const value = candidate.expandPx || 0;
-  input.max = String(candidatePaddingLimit()); input.value = String(value);
+  input.max = String(candidatePaddingLimit()); input.value = String(value); input.placeholder = "";
   input.setAttribute("aria-invalid", "false"); $("#candidatePaddingValidation").textContent = "";
-  candidatePaddingSession = { imageId: state.currentId, candidateId, original: value, trigger, committing: false };
+  candidatePaddingSession = { mode: "single", imageId: state.currentId, candidateId, original: value, trigger, committing: false };
+  const popover = $("#candidatePaddingPopover"); popover.showPopover(); positionCandidatePadding(trigger);
+  input.focus(); input.select();
+}
+
+function openBatchCandidatePadding(role, trigger) {
+  if (trigger.disabled) return;
+  const candidates = state.candidates.filter((candidate) => candidate.role === role && !state.removedCandidateIds.has(candidate.id));
+  if (!candidates.length) return;
+  closeCandidatePadding();
+  const values = new Set(candidates.map((candidate) => candidate.expandPx || 0));
+  const input = $("#candidatePaddingInput");
+  input.max = String(candidatePaddingLimit()); input.value = values.size === 1 ? String(values.values().next().value) : "";
+  input.placeholder = values.size === 1 ? "" : t("candidates.paddingMixed");
+  input.setAttribute("aria-invalid", "false"); $("#candidatePaddingValidation").textContent = "";
+  candidatePaddingSession = { mode: "batch", imageId: state.currentId, role, original: values.size === 1 ? values.values().next().value : null, trigger, committing: false };
   const popover = $("#candidatePaddingPopover"); popover.showPopover(); positionCandidatePadding(trigger);
   input.focus(); input.select();
 }
@@ -70,8 +85,8 @@ async function commitCandidatePadding() {
   if (session.imageId !== state.currentId || state.projectReadOnly || isBusy() || state.importing || state.candidateBatchPending.has(state.currentId)) {
     closeCandidatePadding({ restoreFocus: true }); return false;
   }
+  if (session.mode === "batch") return commitBatchCandidatePadding(session, value);
   const candidate = state.candidates.find((item) => item.id === session.candidateId);
-  if (!candidate) { closeCandidatePadding(); return false; }
   if (value === session.original) { closeCandidatePadding({ restoreFocus: true }); return true; }
   session.committing = true;
   const previousMaskStatus = state.maskStatus.has(state.currentId) ? state.maskStatus.get(state.currentId) : imageHasMask(currentRecord());
@@ -80,6 +95,35 @@ async function commitCandidatePadding() {
   closeCandidatePadding();
   await updateCandidate(candidate, candidate.enabled, previousMaskStatus, candidate.forced, session.original);
   return true;
+}
+
+async function commitBatchCandidatePadding(session, value) {
+  const changed = state.candidates.filter((candidate) => candidate.role === session.role && !state.removedCandidateIds.has(candidate.id));
+  if (!changed.length || changed.every((candidate) => (candidate.expandPx || 0) === value)) {
+    closeCandidatePadding({ restoreFocus: true }); return true;
+  }
+  session.committing = true;
+  const imageId = session.imageId; const generation = state.imageGeneration;
+  state.candidateBatchPending.add(imageId); closeCandidatePadding(); renderCandidates();
+  try {
+    const result = await api("/api/candidates/batch", { method: "POST", body: JSON.stringify({ imageId, role: session.role, operation: "set_padding", expandPx: value }) });
+    if (state.currentId === imageId && isCurrentGeneration(generation)) {
+      await reconcileCurrentCandidates(imageId, generation);
+      retainCurrentCandidateBundle(imageId, result.candidateRevision);
+      markMaskDirty(); setReviewed(currentRecord(), false); syncCurrentCandidateRecord(); refreshCurrentReviewAndMask(); requestMosaicPreview(); render();
+    } else await refreshCandidateRecord(imageId, true);
+    return true;
+  } catch (error) {
+    if (state.currentId === imageId && isCurrentGeneration(generation)) {
+      try { await reconcileCurrentCandidates(imageId, generation); } catch { /* Existing visible state remains usable. */ }
+      showUserError(error);
+    }
+    return false;
+  } finally {
+    state.candidateBatchPending.delete(imageId);
+    if (state.currentId === imageId && isCurrentGeneration(generation)) renderCandidates();
+    updateActionButtons();
+  }
 }
 
 function changeCandidatePaddingDraft(delta) {
@@ -103,6 +147,7 @@ function initCandidatePaddingPopover() {
       if (trigger) openCandidatePadding(trigger.dataset.candidatePaddingId, trigger);
     });
   }
+  document.querySelectorAll("[data-candidate-padding-batch]").forEach((trigger) => trigger.addEventListener("click", () => openBatchCandidatePadding(trigger.dataset.candidatePaddingBatch, trigger)));
   $("#candidatePaddingInput").addEventListener("input", validateCandidatePadding);
   $("#candidatePaddingInput").addEventListener("keydown", handleCandidatePaddingKeydown);
   $("#candidatePaddingForm").addEventListener("submit", (event) => { event.preventDefault(); void commitCandidatePadding(); });

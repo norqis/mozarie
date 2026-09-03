@@ -29,7 +29,7 @@ async function testDetectionShowsProcessingBeforeDelayedRequests() {
   const settings = deferred(); const draft = deferred(); const detect = deferred();
   const controls = new Map();
   const control = (id) => {
-    if (!controls.has(id)) controls.set(id, { id, value: id === "#detectConfidenceNumber" ? "0.5" : "1", checked: id === "#dialogTargetPenis", textContent: "", hidden: false, disabled: false, close() { this.closed = true; } });
+    if (!controls.has(id)) controls.set(id, { id, value: id === "#detectConfidenceNumber" ? "0.5" : id === "#detectCandidatePadding" ? "0" : "1", checked: id === "#dialogTargetPenis", textContent: "", hidden: false, disabled: false, attributes: new Map(), setAttribute(name, value) { this.attributes.set(name, value); }, close() { this.closed = true; } });
     return controls.get(id);
   };
   const events = [];

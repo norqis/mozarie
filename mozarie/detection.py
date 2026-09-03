@@ -109,6 +109,9 @@ class DetectionMixin:
             # The worker still commits each image as it finishes, so detection
             # progress and cancellation remain responsive.
             self._detection_history_group = self.workspace_store.begin_history_group()
+            # Capture the default here. Settings may be changed after the job
+            # starts, but one detection run must use one coherent value.
+            self._active_detection_default_padding = int(self.settings["detection"]["default_candidate_padding_px"])
             args: tuple[Any, ...] = (confidence, _read_detection_parallelism(parallelism))
             if targets != TARGET_CLASSES:
                 args = (*args, targets)
@@ -629,9 +632,15 @@ class DetectionMixin:
     def _detect_image(
         self, models: DetectionModels, record: ImageRecord, confidence: float, mode: str | None = None,
         target_classes: set[str] | None = None,
+        default_padding: int | None = None,
     ) -> list[Candidate]:
         # Decode is a short per-image phase. Do not hold the image
         # lock while detector/SAM inference runs.
+        if default_padding is None:
+            default_padding = min(
+                int(self._active_detection_default_padding),
+                int(np.ceil(np.hypot(record.width - 1, record.height - 1))),
+            )
         with self.image_io_lock(record.image_id):
             self._assert_record_stat_matches(record)
             with Image.open(record.path) as image:
@@ -680,6 +689,7 @@ class DetectionMixin:
                     origin="auto",
                     role=CandidateRole.EXCLUDE,
                     forced=self.settings["detection"].get("exclude_forced_default", True),
+                    expand_px=default_padding,
                 ))
             for exclusion_kind, exclusion_mask in dict(segment.get("metadata_exclusions", {})).items():
                 exclusion_id = uuid.uuid4().hex
@@ -689,6 +699,7 @@ class DetectionMixin:
                     candidate_id=exclusion_id, label_token=exclusion_kind, confidence=None,
                     mask_path=exclusion_path, color="#4ac3df", source=f"{exclusion_kind}_exclusion",
                     origin="auto", role=CandidateRole.EXCLUDE, enabled=True, forced=False,
+                    expand_px=default_padding,
                 ))
             if segment["class_name"] not in DETECTED_TARGET_CLASSES:
                 continue
@@ -708,6 +719,7 @@ class DetectionMixin:
                     color=DEFAULT_COLORS.get(segment["class_name"], "#5bb6d5"),
                     source=segment["source"],
                     refinement=segment.get("refinement"),
+                    expand_px=default_padding,
                 )
             )
             for exclusion_kind, exclusion_mask in dict(segment.get("exclusions", {})).items():
@@ -728,6 +740,7 @@ class DetectionMixin:
                     role=CandidateRole.EXCLUDE,
                     enabled=True,
                     forced=self.settings["detection"].get("exclude_forced_default", True),
+                    expand_px=default_padding,
                 ))
         return candidates
 
@@ -814,12 +827,13 @@ class DetectionMixin:
                 boundary_segment["image_exclusions"] = {"hand": hand_mask}
             boundary_segment = self._finalize_exclusions(rgb, [boundary_segment])[0]
             candidate_id = uuid.uuid4().hex
+            default_padding = min(int(self.settings["detection"]["default_candidate_padding_px"]), int(np.ceil(np.hypot(record.width - 1, record.height - 1))))
             created = [Candidate(
                 candidate_id=candidate_id,
                 label_token="boundary_polygon" if polygon_mask is not None else "boundary",
                 confidence=confidence,
                 mask_path=self.cache_dir / record.image_id / f"{candidate_id}.png",
-                color="#ffffff", source="boundary", origin="boundary",
+                color="#ffffff", source="boundary", origin="boundary", expand_px=default_padding,
             )]
             masks = [np.asarray(clipped, dtype=np.uint8)]
             exclusions = {
@@ -837,6 +851,7 @@ class DetectionMixin:
                     source=exclusion_source, origin="boundary", role=CandidateRole.EXCLUDE,
                     enabled=True,
                     forced=self.settings["detection"].get("exclude_forced_default", True),
+                    expand_px=default_padding,
                 ))
                 masks.append(np.asarray(exclusion_mask, dtype=np.uint8))
             temporary_paths: list[Path] = []

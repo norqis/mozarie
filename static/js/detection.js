@@ -13,6 +13,18 @@ function setDetectionTargets(targets, prefix = "detectTarget") {
 }
 
 function persistedDetectionTargets() { return state.settings?.detection?.targets || []; }
+function detectionCandidatePadding() {
+  const text = String($("#detectCandidatePadding").value).trim();
+  const value = Number(text);
+  return /^\d+$/.test(text) && Number.isSafeInteger(value) && value <= 16384 ? value : null;
+}
+function validateDetectionCandidatePadding() {
+  const valid = detectionCandidatePadding() !== null;
+  const message = $("#detectPaddingValidation");
+  message.textContent = valid ? "" : t("detectDialog.candidatePaddingInvalid"); message.hidden = valid;
+  $("#detectCandidatePadding").setAttribute("aria-invalid", String(!valid));
+  return valid;
+}
 function syncDetectionActions() {
   const enabled = persistedDetectionTargets().length > 0 && !isBusy() && !state.importing;
   $("#detectAllButton").disabled = !enabled || !state.images.length;
@@ -46,6 +58,8 @@ function openDetectionDialog(imageIds) {
   state.pendingDetectionTargetIds = [...imageIds];
   setDetectionConfidence(detectionConfidence());
   $("#detectParallelism").value = String(detectionParallelism());
+  $("#detectCandidatePadding").value = String(state.settings?.detection?.default_candidate_padding_px || 0);
+  $("#detectCandidatePadding").setAttribute("aria-invalid", "false"); $("#detectPaddingValidation").hidden = true;
   $("#detectParallelism").disabled = false;
   setDetectionTargets(state.settings?.detection?.targets, "dialogTarget");
   validateDetectionTargets(detectionTargets("dialogTarget"), $("#detectTargetValidation"));
@@ -96,13 +110,14 @@ async function startDetectionFromDialog(event) {
   const confidence = normaliseDetectionConfidence($("#detectConfidenceNumber").value);
   const parallelism = detectionParallelism();
   const targetClasses = detectionTargets("dialogTarget");
-  if (!validateDetectionTargets(targetClasses, $("#detectTargetValidation"))) return;
+  if (!validateDetectionTargets(targetClasses, $("#detectTargetValidation")) || !validateDetectionCandidatePadding()) return;
+  const defaultCandidatePadding = detectionCandidatePadding();
   $("#detectDialog").close();
   state.pendingDetectionTargetIds = [];
   beginDetectionStart(imageIds);
   if (state.settings) {
     const settings = structuredClone(state.settings);
-    settings.detection = { ...settings.detection, threshold: confidence, parallelism, targets: targetClasses };
+    settings.detection = { ...settings.detection, threshold: confidence, parallelism, targets: targetClasses, default_candidate_padding_px: defaultCandidatePadding };
     try {
       const saved = await api("/api/settings?status=0", { method: "POST", body: JSON.stringify(settings) });
       state.settings = saved.settings;

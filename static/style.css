@@ -132,7 +132,7 @@ h2 { margin: 0 0 2px; font-size: 14px; } .muted { color: #98a2ad; font-size: 12p
 .candidate-delete { width: 26px; height: 26px; min-width: 26px; min-height: 26px; padding: 0; border-color: #70464b; color: #f08b95; font-size: 18px; line-height: 1; }
 .candidate-delete:hover:not(:disabled) { border-color: #d65f6b; background: #4b2d31; color: #ffd8dc; }
 .candidate-section-heading { display: grid; gap: 7px; padding: 10px 10px 8px; }
-.candidate-section-actions { display: flex; flex-wrap: nowrap; gap: 5px; align-items: center; min-width: 0; }
+.candidate-section-actions { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; min-width: 0; }
 .candidate-section-actions > button { min-width: 0; min-height: 26px; height: 26px; padding: 2px 6px; font-size: 11px; line-height: 1; }
 .candidate-section-actions > [data-candidate-batch="apply:delete"], .candidate-section-actions > [data-candidate-batch="exclude:delete"] { margin-left: auto; }
 .nested-choice { margin-left: 22px; }

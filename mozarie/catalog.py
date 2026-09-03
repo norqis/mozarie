@@ -1415,7 +1415,7 @@ class CatalogMixin:
                     candidate.forced = payload["forced"]
                 if "expandPx" in payload:
                     expand_px = payload["expandPx"]
-                    max_expand_px = max(record.width, record.height)
+                    max_expand_px = int(np.ceil(np.hypot(record.width - 1, record.height - 1)))
                     if isinstance(expand_px, bool) or not isinstance(expand_px, int) or not 0 <= expand_px <= max_expand_px:
                         raise ClientError(f"候補の枠pxは0から{max_expand_px}までの整数で指定してください。", "input_invalid")
                     if candidate.expand_px != expand_px:
@@ -1430,14 +1430,26 @@ class CatalogMixin:
         self._assert_image_editable(image_id)
         role = payload.get("role")
         operation = payload.get("operation")
-        if role not in {"apply", "exclude"} or operation not in {"enable", "disable", "delete"}:
+        if role not in {"apply", "exclude"} or operation not in {"enable", "disable", "delete", "set_padding"}:
             raise ClientError("候補の一括操作が正しくありません。", "input_invalid")
+        expand_px = payload.get("expandPx")
+        record = self.image_for_id(image_id)
+        if operation == "set_padding":
+            max_expand_px = int(np.ceil(np.hypot(record.width - 1, record.height - 1)))
+            if (isinstance(expand_px, bool) or not isinstance(expand_px, int)
+                    or not 0 <= expand_px <= max_expand_px):
+                raise ClientError(f"候補の枠pxは0から{max_expand_px}までの整数で指定してください。", "input_invalid")
         with self.image_io_lock(image_id):
             with self.lock:
                 if self._has_active_worker():
                     raise ClientError("バックグラウンド処理中は候補を変更できません。", "operation_in_progress")
                 current = self.candidates.get(image_id, [])
                 selected = [item for item in current if item.role.value == role]
+                if operation == "set_padding":
+                    if not selected:
+                        raise ClientError("更新する候補がありません。", "candidate_not_found")
+                    if all(item.expand_px == expand_px for item in selected):
+                        return self._candidate_revision(image_id)
                 if operation == "delete":
                     candidates = [replace(item) for item in current if item not in selected]
                     paths = [item.mask_path for item in selected]
@@ -1447,7 +1459,10 @@ class CatalogMixin:
                     for item in candidates:
                         if item.role.value != role:
                             continue
-                        item.enabled = operation == "enable"
+                        if operation == "set_padding":
+                            item.expand_px = expand_px
+                        else:
+                            item.enabled = operation == "enable"
                 revision = self._commit_candidate_snapshot(image_id, candidates, replace=operation == "delete", history_group=history_group)
             for path in paths:
                 path.unlink(missing_ok=True)

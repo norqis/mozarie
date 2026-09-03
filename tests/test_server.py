@@ -336,8 +336,8 @@ class MozarieTests(unittest.TestCase):
             Image.new("L", (16, 10), 255).save(mask_path)
             state.candidates[image_id] = [Candidate("candidate", "penis", 0.9, mask_path)]
             self.commit_candidates(state, image_id)
-            with self.assertRaisesRegex(ClientError, "0から16") as raised:
-                state.set_candidate_state(image_id, "candidate", {"expandPx": 17})
+            with self.assertRaisesRegex(ClientError, "0から18") as raised:
+                state.set_candidate_state(image_id, "candidate", {"expandPx": 19})
             self.assertEqual(raised.exception.error_code, "input_invalid")
 
     def test_candidate_padding_updates_metadata_without_rewriting_the_durable_png(self):
@@ -359,6 +359,25 @@ class MozarieTests(unittest.TestCase):
             with state.workspace_store._connect() as db:
                 self.assertEqual(db.execute("SELECT expand_px FROM candidate_metadata WHERE image_id=? AND candidate_id=?", (image_id, "candidate")).fetchone()["expand_px"], 3)
             self.assertGreater(state.set_candidate_state(image_id, "candidate", {"expandPx": 3}), revision)
+
+    def test_batch_candidate_padding_updates_one_role_without_rewriting_pngs(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); Image.new("RGB", (16, 10), "white").save(root / "source.png")
+            state = self.new_state(); image_id = state.set_root(str(root))[0]["id"]
+            paths = []
+            for candidate_id, role in (("apply", CandidateRole.APPLY), ("exclude", CandidateRole.EXCLUDE)):
+                path = state.cache_dir / image_id / f"{candidate_id}.png"; path.parent.mkdir(parents=True, exist_ok=True)
+                Image.new("L", (16, 10), 255).save(path); paths.append(path)
+                state.candidates.setdefault(image_id, []).append(Candidate(candidate_id, "penis" if role == CandidateRole.APPLY else "hand", .9, path, role=role))
+            self.commit_candidates(state, image_id)
+            before = [state.workspace_store.candidate_png(image_id, candidate_id) for candidate_id in ("apply", "exclude")]
+            revision = state.batch_update_candidates(image_id, {"role": "apply", "operation": "set_padding", "expandPx": 4})
+            self.assertGreater(revision, 1)
+            self.assertEqual([candidate.expand_px for candidate in state.candidates[image_id]], [4, 0])
+            self.assertEqual([state.workspace_store.candidate_png(image_id, candidate_id) for candidate_id in ("apply", "exclude")], before)
+            for value in (True, 1.5, "4", -1, 19):
+                with self.subTest(value=value), self.assertRaises(ClientError):
+                    state.batch_update_candidates(image_id, {"role": "apply", "operation": "set_padding", "expandPx": value})
 
     def test_candidate_mutation_updates_manual_revision_removed_ids_and_effective_together(self):
         with tempfile.TemporaryDirectory() as directory:

@@ -558,8 +558,13 @@ function updateActionButtons() {
 function updateCandidateBatchButtons(hasImage = Boolean(state.currentId && state.currentImage && currentRecord()), locked = isBusy() || state.importing || state.candidateBatchPending.has(state.currentId), presence) {
   if (locked) {
     for (const button of document.querySelectorAll("[data-candidate-batch]")) button.disabled = true;
+    for (const button of document.querySelectorAll("[data-candidate-padding-batch]")) button.disabled = true;
     for (const button of document.querySelectorAll("[data-candidate-display-toggle], [data-candidate-effective-toggle]")) button.disabled = true;
     return;
+  }
+  for (const button of document.querySelectorAll("[data-candidate-padding-batch]")) {
+    const role = button.dataset.candidatePaddingBatch;
+    button.disabled = !hasImage || !state.candidates.some((candidate) => candidate.role === role);
   }
   const manualPresence = presence || {
     hasManualExclude: canvasHasPixels(exclusionCtx, exclusionCanvas),

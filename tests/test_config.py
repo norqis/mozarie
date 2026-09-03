@@ -17,6 +17,19 @@ def default_settings() -> dict:
 
 
 class SettingsTests(unittest.TestCase):
+    def test_default_candidate_padding_round_trips_and_rejects_non_integer_values(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); config = root / "config"; config.mkdir()
+            (config / "defaults.json").write_text(json.dumps(default_settings()), encoding="utf-8")
+            store = SettingsStore(root)
+            self.assertEqual(store.load()["detection"]["default_candidate_padding_px"], 0)
+            saved = store.save({"detection": {"default_candidate_padding_px": 12}})
+            self.assertEqual(saved["detection"]["default_candidate_padding_px"], 12)
+            self.assertEqual(SettingsStore(root).load()["detection"]["default_candidate_padding_px"], 12)
+            for value in (True, 1.5, "12", -1, 16385):
+                with self.subTest(value=value), self.assertRaises(SettingsError):
+                    store.validate_update({"detection": {"default_candidate_padding_px": value}})
+
     def test_missing_builtin_output_directory_is_created_for_load_save_and_reset(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

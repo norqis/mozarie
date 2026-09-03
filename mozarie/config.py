@@ -139,6 +139,10 @@ def validate_settings(value: Any) -> dict[str, Any]:
         detection.get("fluid_exclusion_enabled"), "detection.fluid_exclusion_enabled"
     )
     exclude_forced_default = _expect_bool(detection.get("exclude_forced_default"), "detection.exclude_forced_default")
+    default_candidate_padding_px = detection.get("default_candidate_padding_px", 0)
+    if (isinstance(default_candidate_padding_px, bool) or not isinstance(default_candidate_padding_px, int)
+            or not 0 <= default_candidate_padding_px <= 16384):
+        raise SettingsError("detection.default_candidate_padding_px must be an integer between 0 and 16384")
     fill_color_tolerance = editing.get("fill_color_tolerance")
     if isinstance(fill_color_tolerance, bool) or not isinstance(fill_color_tolerance, int) or not 0 <= fill_color_tolerance <= 255:
         raise SettingsError("editing.fill_color_tolerance must be an integer between 0 and 255")
@@ -196,6 +200,7 @@ def validate_settings(value: Any) -> dict[str, Any]:
             "mode": mode,
             "fluid_exclusion_enabled": fluid_exclusion_enabled,
             "exclude_forced_default": exclude_forced_default,
+            "default_candidate_padding_px": default_candidate_padding_px,
             "threshold": _expect_number(detection.get("threshold"), "detection.threshold", 0.1, 1),
             "parallelism": int(_expect_number(detection.get("parallelism"), "detection.parallelism", 1, 4)),
             "targets": _validate_targets(detection.get("targets", ["penis", "pussy"])),

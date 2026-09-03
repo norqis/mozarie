@@ -128,7 +128,7 @@ const context = {
 const masksPath = path.join(__dirname, "..", "static", "js", "editor-masks.js");
 const source = fs.readFileSync(masksPath, "utf8");
 vm.runInNewContext(source, context, { filename: masksPath });
-vm.runInNewContext("globalThis.masksTest = { candidateLabel, manualLayerPresence, renderCandidateRows: renderCandidates, candidatePaddingLimit, candidatePaddingValue, validateCandidatePadding, openCandidatePadding, closeCandidatePadding, commitCandidatePadding, changeCandidatePaddingDraft, candidateDisplayMode, candidateDisplayIdsForRole, syncCandidateDisplayButtons, syncCandidateBlinkTimer, setCandidateDisplayMode, toggleCandidateDisplay, toggleCandidateEffective, candidateDisplayToggle, candidateEffectiveToggle, clearCandidateBlink, clearCandidateMutationState, candidateMutationKey, nextCandidateMutationVersion, enqueueCandidateMutation, waitForCandidateMutations, updateCandidate, deleteCandidate, deleteManualMask, deleteManualExclusion, deleteManualExclusionErase, shouldBlinkNewManual, batchCandidateOperation, escapeHtml, pointFromEvent, clampPoint, boundaryDragStarted, polygonVertexAt, completedPolygonVertexAt, rectangleDraftAt, paintStrokeOnContexts, paintStrokePath, paintFillSpans, applyFillSpans, enableManualLayerForTool, beginManualStroke, appendManualStrokePoint, paintPendingManualStroke, completeManualStroke, cancelManualStroke, replayManualStroke, historyWeight, trimHistory, rebuildManualMaskFromHistory, recordHistoryOperation, resetHistoryToCurrentManualMask, restoreSnapshot, buildCombinedMask, addBoundaryCandidate, cancelBoundary, fillAt };\nrenderCandidates = globalThis.renderCandidates; render = globalThis.render;", context, { filename: "test-editor-masks-exports.js" });
+vm.runInNewContext("globalThis.masksTest = { candidateLabel, manualLayerPresence, renderCandidateRows: renderCandidates, candidatePaddingLimit, candidatePaddingValue, validateCandidatePadding, openCandidatePadding, openBatchCandidatePadding, closeCandidatePadding, commitCandidatePadding, commitBatchCandidatePadding, changeCandidatePaddingDraft, candidateDisplayMode, candidateDisplayIdsForRole, syncCandidateDisplayButtons, syncCandidateBlinkTimer, setCandidateDisplayMode, toggleCandidateDisplay, toggleCandidateEffective, candidateDisplayToggle, candidateEffectiveToggle, clearCandidateBlink, clearCandidateMutationState, candidateMutationKey, nextCandidateMutationVersion, enqueueCandidateMutation, waitForCandidateMutations, updateCandidate, deleteCandidate, deleteManualMask, deleteManualExclusion, deleteManualExclusionErase, shouldBlinkNewManual, batchCandidateOperation, escapeHtml, pointFromEvent, clampPoint, boundaryDragStarted, polygonVertexAt, completedPolygonVertexAt, rectangleDraftAt, paintStrokeOnContexts, paintStrokePath, paintFillSpans, applyFillSpans, enableManualLayerForTool, beginManualStroke, appendManualStrokePoint, paintPendingManualStroke, completeManualStroke, cancelManualStroke, replayManualStroke, historyWeight, trimHistory, rebuildManualMaskFromHistory, recordHistoryOperation, resetHistoryToCurrentManualMask, restoreSnapshot, buildCombinedMask, addBoundaryCandidate, cancelBoundary, fillAt };\nrenderCandidates = globalThis.renderCandidates; render = globalThis.render;", context, { filename: "test-editor-masks-exports.js" });
 const test = context.masksTest;
 
 const candidateLabelFixtures = [
@@ -356,7 +356,7 @@ assert.equal(state.manualExclusionEraseEnabled, true);
   assert.equal(paddingButton.textContent, "candidates.paddingButton", "padding is represented by one compact localized button");
   test.openCandidatePadding("apply", paddingButton);
   const paddingInput = element("#candidatePaddingInput");
-  assert.equal(paddingInput.max, "100", "candidate padding cannot exceed the current image long edge");
+  assert.equal(paddingInput.max, "127", "candidate padding cannot exceed the current image diagonal");
   const callsBeforeInvalidPadding = candidateCalls.length;
   element("#candidateList").scrollTop = 41;
   const arrowEvent = (key) => ({ key, prevented: false, stopped: false, preventDefault() { this.prevented = true; }, stopPropagation() { this.stopped = true; } });
@@ -365,10 +365,10 @@ assert.equal(state.manualExclusionEraseEnabled, true);
   assert.deepEqual([paddingInput.value, up.prevented, up.stopped, element("#candidateList").scrollTop], ["1", true, true, 41], "ArrowUp recovers from invalid input using the persisted value without scrolling the list");
   paddingInput.value = "0"; const down = arrowEvent("ArrowDown"); context.handleCandidatePaddingKeydown(down);
   assert.deepEqual([paddingInput.value, down.prevented, down.stopped], ["0", true, true], "ArrowDown clamps at zero");
-  paddingInput.value = "100"; context.handleCandidatePaddingKeydown(arrowEvent("ArrowUp")); assert.equal(paddingInput.value, "100", "ArrowUp clamps at the image long edge");
+  paddingInput.value = "127"; context.handleCandidatePaddingKeydown(arrowEvent("ArrowUp")); assert.equal(paddingInput.value, "127", "ArrowUp clamps at the image diagonal");
   const pageDown = arrowEvent("PageDown"); context.handleCandidatePaddingKeydown(pageDown); assert.deepEqual([pageDown.prevented, pageDown.stopped], [false, false], "unrelated numeric-field keys retain their native behavior");
   assert.equal(candidateCalls.length, callsBeforeInvalidPadding, "repeated padding keys remain draft-only");
-  paddingInput.value = "101";
+  paddingInput.value = "128";
   assert.equal(await test.commitCandidatePadding(), false);
   assert.equal(candidateCalls.length, callsBeforeInvalidPadding, "out-of-range padding does not call the candidate API");
   assert.equal(paddingInput.attributes.get("aria-invalid"), "true", "invalid padding is exposed to assistive technology");
@@ -847,5 +847,17 @@ assert.equal(state.manualExclusionEraseEnabled, true);
   test.beginManualStroke({ x: 1, y: 1 }); test.cancelManualStroke();
   resetCandidateState(); state.tool = "eraser"; test.setCandidateDisplayMode(["exclude"], "normal");
   test.beginManualStroke({ x: 1, y: 1 }); test.cancelManualStroke();
+
+  resetCandidateState();
+  state.candidates[0].expandPx = 1; state.candidates[1].expandPx = 3;
+  const batchTrigger = { disabled: false, isConnected: true, focus() { this.focused = true; }, getBoundingClientRect() { return { left: 10, right: 80, top: 10, bottom: 38 }; } };
+  test.openBatchCandidatePadding("apply", batchTrigger);
+  assert.equal(element("#candidatePaddingInput").value, "1", "a single-role batch seeds its common padding");
+  const paddingBatchCalls = [];
+  context.api = async (path, options) => { paddingBatchCalls.push({ path, payload: JSON.parse(options.body) }); return { candidateRevision: 22 }; };
+  element("#candidatePaddingInput").value = "0";
+  await test.commitCandidatePadding();
+  assert.deepEqual(paddingBatchCalls, [{ path: "/api/candidates/batch", payload: { imageId: "image", role: "apply", operation: "set_padding", expandPx: 0 } }], "batch padding is one API mutation with the shared payload");
+  assert.equal(state.candidates[1].expandPx, 3, "the other role remains unchanged by apply padding");
   console.log("test_editor_masks_behavior: passed");
 })().catch((error) => { console.error(error); process.exitCode = 1; });
