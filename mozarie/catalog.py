@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
-from PIL import Image, PngImagePlugin, UnidentifiedImageError
+from PIL import Image, UnidentifiedImageError
 
 from .core import (
     IMAGE_SUFFIXES, IO_CHUNK_BYTES, MAX_BODY_BYTES, PNG_SIGNATURE,
@@ -233,7 +233,8 @@ class CatalogMixin:
                 for worker in workers:
                     worker.result()
         records.sort(key=lambda record: (record.relative_path.casefold(), record.relative_path))
-        catalog_id = project_id or self.catalog_id or self.workspace_store.catalog_for_root(root)
+        previous_catalog_id = self.catalog_id
+        catalog_id = project_id or previous_catalog_id or self.workspace_store.catalog_for_root(root)
         if not self.workspace_store.catalog_exists(catalog_id):
             raise ClientError("プロジェクトが見つかりません。", "project_not_found")
         source_id = self.workspace_store.ensure_project_source(
@@ -256,7 +257,7 @@ class CatalogMixin:
         self.browser_catalog_provisional = False
         # Adding another folder to an open project is additive.  Replace only
         # this source's live records so same relative names stay independent.
-        if self.catalog_id == catalog_id:
+        if previous_catalog_id == catalog_id:
             with self.lock:
                 retained = [record for record in self.images.values() if record.source_id != source_id]
             records = retained + records
@@ -346,7 +347,7 @@ class CatalogMixin:
 
     def _export_workspace_mask(self, image_id: str, kind: str, width: int, height: int) -> bytes:
         """Render from the durable project state so disconnected sources export too."""
-        state = self.workspace_store.history_state(image_id)
+        state = self.workspace_store.export_state(image_id)
         manual = state.get("manual") or {}
         # A size-changed source may deliberately retain its old project
         # masks. Export that stored geometry rather than silently scaling it.
@@ -1369,17 +1370,9 @@ class CatalogMixin:
                     if isinstance(expand_px, bool) or not isinstance(expand_px, int) or not 0 <= expand_px <= max_expand_px:
                         raise ClientError(f"候補の枠pxは0から{max_expand_px}までの整数で指定してください。", "input_invalid")
                     if candidate.expand_px != expand_px:
-                        self.materialize_candidate_mask(candidate, image_id)
-                        with Image.open(candidate.mask_path) as mask_image:
-                            raw_mask = mask_image.convert("L")
-                            metadata = PngImagePlugin.PngInfo()
-                            metadata.add_text("mozarie_expand_px", str(expand_px))
-                            raw_mask.save(candidate.mask_path, format="PNG", pnginfo=metadata)
                         candidate.expand_px = expand_px
-                        # This is the only candidate mutation that changes its
-                        # durable PNG bytes. Ordinary metadata toggles must not
-                        # reread the source mask.
-                        replace_snapshot = True
+                        # Padding is metadata.  Do not rewrite or duplicate
+                        # the detector's PNG merely to change this control.
                 return self._commit_candidate_snapshot(image_id, candidates, replace=replace_snapshot)
 
     def batch_update_candidates(self, image_id: str, payload: dict[str, Any], *, history_group: str | None = None) -> int:

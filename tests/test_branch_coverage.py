@@ -311,7 +311,7 @@ class HttpBranchTests(unittest.TestCase):
             with patch.object(http_module, "STATE", state):
                 staged = handler._read_binary_body_to_file()
                 self.assertEqual(staged.read_bytes(), payload)
-                self.assertEqual(handler._upload_sha256, __import__("hashlib").sha256(payload).hexdigest())
+                self.assertFalse(hasattr(handler, "_upload_sha256"))
                 staged.unlink()
                 with self.assertRaises(ClientError):
                     self.handler(headers={"Content-Length": "7"}, body=payload)._read_binary_body_to_file()
@@ -555,8 +555,7 @@ class HttpBranchTests(unittest.TestCase):
 
 class RootEntrypointBranchTests(unittest.TestCase):
     def test_server_startup_and_error_handler_cover_failure_paths(self) -> None:
-        with self.assertRaises(SystemExit):
-            server._startup_state(SimpleNamespace(STATE_STARTUP_ERROR=RuntimeError("locked"), STATE=None))
+        self.assertIsNone(server._startup_state(SimpleNamespace(STATE_STARTUP_ERROR=RuntimeError("locked"), STATE=None)))
         http_server = Mock()
         with patch("server.ThreadingHTTPServer.handle_error") as handler, patch("server.sys.exc_info", return_value=(RuntimeError, RuntimeError("bad"), None)):
             server._handle_server_error(http_server, Mock(), ("127.0.0.1", 1))

@@ -5,6 +5,7 @@ import sys
 import tempfile
 import unittest
 import io
+import json
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -155,6 +156,44 @@ class WorkspaceTests(unittest.TestCase):
             self.assertEqual(set(store.restore_history(ids[0], "undo")), set(ids))
             self.assertTrue(all(store.manual(image_id, lambda value: value) is None for image_id in ids))
             self.assertEqual(set(store.restore_history(ids[1], "redo")), set(ids))
+
+    def test_history_uses_manual_xor_delta_without_candidate_blob_copies(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = WorkspaceStore(Path(directory)); catalog = store.ensure_catalog()
+            image_id = str(store.reconcile_images(catalog, [SimpleNamespace(relative_path="001.png", size_bytes=1, mtime_ns=1, width=8, height=8)])["001.png"]["image_id"])
+            before = store.history_state(image_id)
+            mask = Image.new("L", (8, 8), 0); mask.putpixel((3, 4), 255)
+            output = io.BytesIO(); mask.save(output, format="PNG")
+            store.save_manual(image_id, {"add": "draw", "exclusion": "", "exclusionErase": "", "removedCandidateIds": [], "hasEffectiveMask": True, "history": {"browser": "ignored"}}, lambda value: output.getvalue() if value else None)
+            after = store.history_state(image_id); store.record_history(image_id, before, after)
+            db = sqlite3.connect(store.path)
+            before_json, after_json, delta_json, history_json = db.execute("""SELECT history_entries.before_json,history_entries.after_json,
+                history_entries.delta_json,manual_edits.history_json FROM history_entries JOIN manual_edits USING(image_id)""").fetchone()
+            db.close()
+            self.assertNotIn("base64", before_json + after_json)
+            delta = json.loads(delta_json)["manual"]["add"]
+            self.assertEqual(delta["box"][:2], [3, 4])
+            self.assertEqual(history_json, "{}")
+            self.assertEqual(store.restore_history(image_id, "undo"), [image_id])
+            self.assertIsNone(store.manual(image_id, lambda value: value))
+            self.assertEqual(store.restore_history(image_id, "redo"), [image_id])
+            self.assertIsNotNone(store.manual(image_id, lambda value: value))
+
+    def test_candidate_history_references_existing_png_and_restores_metadata(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = WorkspaceStore(Path(directory)); catalog = store.ensure_catalog()
+            image_id = str(store.reconcile_images(catalog, [SimpleNamespace(relative_path="001.png", size_bytes=1, mtime_ns=1, width=4, height=4)])["001.png"]["image_id"])
+            db = sqlite3.connect(store.path); db.execute("INSERT INTO candidates VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)", (image_id, "candidate", "penis", .9, self._png(), 1, "#fff", "auto", "auto", None, "apply", 0, 0)); db.commit(); db.close()
+            before = store.history_state(image_id)
+            store.commit_candidate_state(image_id, 1, [SimpleNamespace(candidate_id="candidate", label_token="penis", confidence=.9, mask_path=Path("missing"), enabled=False, color="#fff", source="auto", origin="auto", refinement=None, role=SimpleNamespace(value="apply"), forced=False, expand_px=12)], False, replace=False)
+            store.record_history(image_id, before, store.history_state(image_id))
+            db = sqlite3.connect(store.path); before_json, after_json, blob_count = db.execute("SELECT before_json,after_json,(SELECT COUNT(*) FROM candidates) FROM history_entries").fetchone(); db.close()
+            self.assertNotIn("iVBOR", before_json + after_json)
+            self.assertEqual(blob_count, 1)
+            self.assertEqual(store.restore_history(image_id, "undo"), [image_id])
+            db = sqlite3.connect(store.path); self.assertEqual(db.execute("SELECT enabled FROM candidates WHERE image_id=?", (image_id,)).fetchone()[0], 1); db.close()
+            self.assertEqual(store.restore_history(image_id, "redo"), [image_id])
+            db = sqlite3.connect(store.path); self.assertEqual(db.execute("SELECT expand_px FROM candidate_metadata WHERE image_id=?", (image_id,)).fetchone()[0], 12); db.close()
 
     def test_future_database_is_not_touched(self):
         with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as directory:

@@ -185,7 +185,7 @@ class MozarieTests(unittest.TestCase):
             manual = "data:image/png;base64," + base64.b64encode(buffer.getvalue()).decode("ascii")
             state.save_manual_workspace(image_id, {"add": manual, "exclusion": "", "exclusionErase": "", "removedCandidateIds": ["candidate"], "candidateRevision": 1, "hasEffectiveMask": True})
             replacement = self.new_state()
-            restored = replacement.set_root(str(root))[0]
+            restored = replacement.open_project(state.catalog_id)["images"][0]
             self.assertEqual(restored["id"], image_id)
             self.assertTrue(restored["hidden"])
             self.assertTrue(restored["reviewed"])
@@ -242,7 +242,7 @@ class MozarieTests(unittest.TestCase):
 
             replacement = self.new_state()
             with self.assertRaisesRegex(ValueError, "PNG"):
-                replacement.set_root(str(root))
+                replacement.open_project(state.catalog_id)
             self.assertEqual(replacement.candidates, {})
 
     def test_workspace_restore_rejects_invalid_candidate_metadata(self):
@@ -263,7 +263,7 @@ class MozarieTests(unittest.TestCase):
 
             replacement = self.new_state()
             with self.assertRaisesRegex(ValueError, "not-a-role"):
-                replacement.set_root(str(root))
+                replacement.open_project(state.catalog_id)
             self.assertEqual(replacement.candidates, {})
 
     def test_lazy_workspace_candidates_survive_toggle_and_delete_after_restart(self):
@@ -282,12 +282,12 @@ class MozarieTests(unittest.TestCase):
             self.commit_candidates(state, image_id)
 
             reopened = self.new_state()
-            reopened.set_root(str(root))
+            reopened.open_project(state.catalog_id)
             self.assertFalse(any(candidate.mask_path.is_file() for candidate in reopened.candidates[image_id]))
             reopened.set_candidate_state(image_id, "first", {"enabled": False})
 
             after_toggle = self.new_state()
-            after_toggle.set_root(str(root))
+            after_toggle.open_project(state.catalog_id)
             # Listing metadata must not fetch the lazy PNG BLOBs.
             with patch.object(after_toggle.workspace_store, "candidate_png", side_effect=AssertionError("BLOB read")):
                 restored = {candidate["id"]: candidate for candidate in after_toggle.candidate_snapshot(image_id)["candidates"]}
@@ -298,7 +298,7 @@ class MozarieTests(unittest.TestCase):
 
             self.assertTrue(after_toggle.delete_candidate(image_id, "first"))
             after_delete = self.new_state()
-            after_delete.set_root(str(root))
+            after_delete.open_project(state.catalog_id)
             self.assertEqual([candidate["id"] for candidate in after_delete.candidate_snapshot(image_id)["candidates"]], ["second"])
 
     def test_candidate_mutation_does_not_publish_when_workspace_write_fails(self):
@@ -340,7 +340,7 @@ class MozarieTests(unittest.TestCase):
                 state.set_candidate_state(image_id, "candidate", {"expandPx": 17})
             self.assertEqual(raised.exception.error_code, "input_invalid")
 
-    def test_candidate_padding_updates_the_durable_png_without_source_readback(self):
+    def test_candidate_padding_updates_metadata_without_rewriting_the_durable_png(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             Image.new("RGB", (16, 10), "white").save(root / "source.png")
@@ -351,11 +351,13 @@ class MozarieTests(unittest.TestCase):
             Image.new("L", (16, 10), 255).save(mask_path)
             state.candidates[image_id] = [Candidate("candidate", "penis", 0.9, mask_path)]
             self.commit_candidates(state, image_id)
+            before_png = state.workspace_store.candidate_png(image_id, "candidate")
             revision = state.set_candidate_state(image_id, "candidate", {"expandPx": 3})
             self.assertEqual(state.candidates[image_id][0].expand_px, 3)
             self.assertGreater(revision, 1)
-            with Image.open(io.BytesIO(state.workspace_store.candidate_png(image_id, "candidate"))) as mask:
-                self.assertEqual(mask.text.get("mozarie_expand_px"), "3")
+            self.assertEqual(state.workspace_store.candidate_png(image_id, "candidate"), before_png)
+            with state.workspace_store._connect() as db:
+                self.assertEqual(db.execute("SELECT expand_px FROM candidate_metadata WHERE image_id=? AND candidate_id=?", (image_id, "candidate")).fetchone()["expand_px"], 3)
             self.assertGreater(state.set_candidate_state(image_id, "candidate", {"expandPx": 3}), revision)
 
     def test_candidate_mutation_updates_manual_revision_removed_ids_and_effective_together(self):
@@ -448,7 +450,7 @@ class MozarieTests(unittest.TestCase):
             self.assertEqual({item["id"]: item["hasEffectiveMask"] for item in state.catalog_snapshot()["images"]}, expected)
 
             reopened = self.new_state()
-            reopened.set_root(str(root))
+            reopened.open_project(state.catalog_id)
             with patch.object(reopened.workspace_store, "manual", side_effect=AssertionError("manual draft read")):
                 self.assertEqual({item["id"]: item["hasEffectiveMask"] for item in reopened.catalog_snapshot()["images"]}, expected)
 
@@ -471,7 +473,7 @@ class MozarieTests(unittest.TestCase):
             self.assertTrue(state.catalog_snapshot()["images"][0]["hasEffectiveMask"])
             state.set_candidate_state(image_id, "apply", {"enabled": False})
             self.assertFalse(state.catalog_snapshot()["images"][0]["hasEffectiveMask"])
-            reopened = self.new_state(); reopened.set_root(str(root))
+            reopened = self.new_state(); reopened.open_project(state.catalog_id)
             self.assertFalse(reopened.catalog_snapshot()["images"][0]["hasEffectiveMask"])
 
     def test_session_import_path_collision_keeps_native_image_state(self):
@@ -515,7 +517,7 @@ class MozarieTests(unittest.TestCase):
             state.save_manual_workspace(image_id, {"add": draft, "exclusion": draft, "exclusionErase": draft, "removedCandidateIds": ["old"], "candidateRevision": 0, "hasEffectiveMask": False})
             state.clear_masks([image_id])
             reopened = self.new_state()
-            reopened.set_root(str(root))
+            reopened.open_project(state.catalog_id)
             self.assertIsNone(reopened.manual_workspace(image_id))
 
     def _import_browser_manifest(self, state, files, catalog_id=None):

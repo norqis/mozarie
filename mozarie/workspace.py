@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Any
 
 from PIL import Image, UnidentifiedImageError
+import numpy as np
 
 
 # Keep every IN clause comfortably below SQLite's smallest common bind limit.
@@ -43,7 +44,7 @@ class _ClosingConnection(sqlite3.Connection):
 class WorkspaceStore:
     # v7 deliberately replaces the old folder catalogue with a project store.
     # There is no migration path: the user chooses whether to recreate v4 data.
-    VERSION = 8
+    VERSION = 9
 
     def __init__(self, data_dir: Path) -> None:
         self.path = data_dir / "workspaces.sqlite3"
@@ -100,6 +101,11 @@ class WorkspaceStore:
                     has_effective_mask INTEGER NOT NULL DEFAULT 0, history_json TEXT NOT NULL DEFAULT '{}',
                     updated_at INTEGER NOT NULL
                 );
+                CREATE TABLE IF NOT EXISTS candidate_metadata (
+                    image_id TEXT NOT NULL REFERENCES images(image_id) ON DELETE CASCADE,
+                    candidate_id TEXT NOT NULL, expand_px INTEGER NOT NULL DEFAULT 0,
+                    PRIMARY KEY(image_id, candidate_id)
+                );
                 CREATE TABLE IF NOT EXISTS history_entries (
                     entry_id INTEGER PRIMARY KEY AUTOINCREMENT,
                     catalog_id TEXT NOT NULL REFERENCES catalogs(catalog_id) ON DELETE CASCADE,
@@ -107,11 +113,19 @@ class WorkspaceStore:
                     group_id TEXT,
                     before_json TEXT NOT NULL,
                     after_json TEXT NOT NULL,
+                    delta_json TEXT NOT NULL DEFAULT '{}',
                     created_at INTEGER NOT NULL
                 );
                 CREATE INDEX IF NOT EXISTS project_sources_identity ON project_sources(source_identity);
                 CREATE INDEX IF NOT EXISTS history_entries_image_entry ON history_entries(image_id, entry_id);
                 CREATE INDEX IF NOT EXISTS history_entries_group ON history_entries(group_id);
+                CREATE TABLE IF NOT EXISTS history_candidate_refs (
+                    entry_id INTEGER NOT NULL REFERENCES history_entries(entry_id) ON DELETE CASCADE,
+                    image_id TEXT NOT NULL REFERENCES images(image_id) ON DELETE CASCADE,
+                    candidate_id TEXT NOT NULL,
+                    PRIMARY KEY(entry_id, candidate_id)
+                );
+                CREATE INDEX IF NOT EXISTS history_candidate_refs_image_candidate ON history_candidate_refs(image_id, candidate_id);
                 CREATE TABLE IF NOT EXISTS history_cursors (
                     image_id TEXT PRIMARY KEY REFERENCES images(image_id) ON DELETE CASCADE,
                     entry_id INTEGER REFERENCES history_entries(entry_id) ON DELETE SET NULL
@@ -173,7 +187,7 @@ class WorkspaceStore:
 
     @staticmethod
     def _validate_schema(db: sqlite3.Connection, tables: set[str]) -> None:
-        required = {"meta", "catalogs", "project_sources", "images", "candidates", "manual_edits", "history_entries", "history_cursors"}
+        required = {"meta", "catalogs", "project_sources", "images", "candidates", "candidate_metadata", "manual_edits", "history_entries", "history_candidate_refs", "history_cursors"}
         if not required.issubset(tables):
             raise WorkspaceOpenError("workspace database must be recreated for Mozarie v0.7")
         if tuple(row[0] for row in db.execute("PRAGMA quick_check(1)")) != ("ok",):
@@ -183,12 +197,14 @@ class WorkspaceStore:
         meta = {str(row["name"]): row for row in db.execute("PRAGMA table_info(meta)")}
         catalogs = {str(row["name"]): row for row in db.execute("PRAGMA table_info(catalogs)")}
         images = {str(row["name"]): row for row in db.execute("PRAGMA table_info(images)")}
+        history = {str(row["name"]): row for row in db.execute("PRAGMA table_info(history_entries)")}
         foreign = list(db.execute("PRAGMA foreign_key_list(images)"))
         indexes = list(db.execute("PRAGMA index_list(catalogs)"))
         if (set(meta) != {"key", "value"} or str(meta["key"]["type"]).upper() != "TEXT" or not int(meta["key"]["pk"])
                 or str(meta["value"]["type"]).upper() != "TEXT" or not int(meta["value"]["notnull"])
                 or "catalog_id" not in catalogs or not int(catalogs["catalog_id"]["pk"])
                 or not {"catalog_id", "source_id", "relative_path", "image_id", "size_bytes", "mtime_ns", "width", "height", "source_blocked"}.issubset(images)
+                or not {"entry_id", "catalog_id", "image_id", "before_json", "after_json", "delta_json", "created_at"}.issubset(history)
                 or not foreign
                 or not any(int(row["unique"]) for row in indexes)):
             raise WorkspaceOpenError("workspace database must be recreated for Mozarie v0.7")
@@ -228,6 +244,11 @@ class WorkspaceStore:
     @staticmethod
     def _candidate_row(row: sqlite3.Row) -> dict[str, Any]:
         """Attach the candidate's PNG-only padding metadata to its hydrated row."""
+        if "expand_px" in row.keys():
+            value = row["expand_px"]
+            if isinstance(value, int) and value >= 0:
+                hydrated = dict(row); hydrated["expand_px"] = value
+                return hydrated
         raw = row["mask_png"]
         if not isinstance(raw, bytes):
             raise ValueError("workspace candidate mask is not a PNG")
@@ -499,12 +520,11 @@ class WorkspaceStore:
             db.execute("BEGIN IMMEDIATE")
             try:
                 for image_id, revision in revisions.items():
-                    db.execute("DELETE FROM candidates WHERE image_id=?", (image_id,))
+                    # Keep immutable candidate PNGs for the undo journal.  A
+                    # clear only makes the generation inactive; explicit image
+                    # deletion still cascades all of it.
+                    db.execute("UPDATE candidates SET deleted=1 WHERE image_id=?", (image_id,))
                     db.execute("DELETE FROM manual_edits WHERE image_id=?", (image_id,))
-                    # A changed source must not keep operations whose masks
-                    # belong to its previous pixels.
-                    db.execute("DELETE FROM history_entries WHERE image_id=?", (image_id,))
-                    db.execute("DELETE FROM history_cursors WHERE image_id=?", (image_id,))
                     db.execute("UPDATE images SET candidate_revision=?,reviewed=0,updated_at=? WHERE image_id=?", (revision, time.time_ns(), image_id))
                 db.execute("COMMIT")
             except Exception:
@@ -590,32 +610,35 @@ class WorkspaceStore:
                 if replace:
                     db.execute("UPDATE candidates SET deleted=1 WHERE image_id=?", (image_id,))
                     for candidate in candidates:
-                        try:
-                            with candidate.mask_path.open("rb") as handle:
-                                mask = handle.read()
-                        except OSError:
-                            # Restored candidates intentionally do not materialise
-                            # every PNG. Keep their existing durable mask while
-                            # updating just the requested metadata.
-                            row = db.execute(
-                                "SELECT mask_png FROM candidates WHERE image_id=? AND candidate_id=?",
-                                (image_id, candidate.candidate_id),
-                            ).fetchone()
-                            mask = row["mask_png"] if row else None
-                            if not isinstance(mask, bytes):
+                        row = db.execute("SELECT mask_png FROM candidates WHERE image_id=? AND candidate_id=?", (image_id, candidate.candidate_id)).fetchone()
+                        if row is None:
+                            try:
+                                with candidate.mask_path.open("rb") as handle: mask = handle.read()
+                            except OSError:
                                 continue
-                        self._require_png_mask(mask)
-                        db.execute("""INSERT INTO candidates(image_id,candidate_id,label_token,confidence,mask_png,enabled,color,source,origin,refinement,role,forced,deleted)
-                            VALUES(?,?,?,?,?,?,?,?,?,?,?,?,0)
-                            ON CONFLICT(image_id,candidate_id) DO UPDATE SET label_token=excluded.label_token,confidence=excluded.confidence,mask_png=excluded.mask_png,enabled=excluded.enabled,color=excluded.color,source=excluded.source,origin=excluded.origin,refinement=excluded.refinement,role=excluded.role,forced=excluded.forced,deleted=0""",
-                            (image_id,candidate.candidate_id,candidate.label_token,candidate.confidence,mask,int(candidate.enabled),candidate.color,candidate.source,candidate.origin,candidate.refinement,candidate.role.value,int(candidate.forced)))
-                    db.execute("DELETE FROM candidates WHERE image_id=? AND deleted=1", (image_id,))
+                            self._require_png_mask(mask)
+                            db.execute("""INSERT INTO candidates(image_id,candidate_id,label_token,confidence,mask_png,enabled,color,source,origin,refinement,role,forced,deleted)
+                                VALUES(?,?,?,?,?,?,?,?,?,?,?,?,0)""", (image_id,candidate.candidate_id,candidate.label_token,candidate.confidence,mask,int(candidate.enabled),candidate.color,candidate.source,candidate.origin,candidate.refinement,candidate.role.value,int(candidate.forced)))
+                        else:
+                            # Existing IDs retain the one detector PNG.
+                            # Structural edits only reactivate/update metadata.
+                            db.execute("""UPDATE candidates SET label_token=?,confidence=?,enabled=?,color=?,source=?,origin=?,refinement=?,role=?,forced=?,deleted=0
+                                WHERE image_id=? AND candidate_id=?""", (candidate.label_token,candidate.confidence,int(candidate.enabled),candidate.color,candidate.source,candidate.origin,candidate.refinement,candidate.role.value,int(candidate.forced),image_id,candidate.candidate_id))
+                        db.execute("""INSERT INTO candidate_metadata(image_id,candidate_id,expand_px) VALUES(?,?,?)
+                            ON CONFLICT(image_id,candidate_id) DO UPDATE SET expand_px=excluded.expand_px""",
+                                   (image_id, candidate.candidate_id, int(candidate.expand_px)))
+                    # Deleted rows are referenced by durable undo entries.
+                    # They are collected only when the image/project is
+                    # explicitly deleted, never at every metadata operation.
                 else:
                     for candidate in candidates:
                         # Normal candidate controls only alter metadata. Keep
                         # the durable PNG BLOB untouched instead of rereading
                         # a potentially lazy cache file.
                         db.execute("UPDATE candidates SET enabled=?,color=?,role=?,forced=? WHERE image_id=? AND candidate_id=?", (int(candidate.enabled), candidate.color, candidate.role.value, int(candidate.forced), image_id, candidate.candidate_id))
+                        db.execute("""INSERT INTO candidate_metadata(image_id,candidate_id,expand_px) VALUES(?,?,?)
+                            ON CONFLICT(image_id,candidate_id) DO UPDATE SET expand_px=excluded.expand_px""",
+                                   (image_id, candidate.candidate_id, int(candidate.expand_px)))
                 self._update_manual_candidate_state(db, image_id, revision, {candidate.candidate_id for candidate in candidates}, effective)
                 db.execute("COMMIT")
             except Exception:
@@ -625,8 +648,9 @@ class WorkspaceStore:
     def hydrate_candidates(self, image_id: str, directory: Path, candidate_factory: Any) -> tuple[int, list[Any]]:
         with self._connect() as db:
             image = db.execute("SELECT candidate_revision FROM images WHERE image_id=?", (image_id,)).fetchone()
-            rows = db.execute("""SELECT candidate_id,label_token,confidence,mask_png,enabled,color,source,origin,refinement,role,forced
-                FROM candidates WHERE image_id=? AND deleted=0""", (image_id,)).fetchall()
+            rows = db.execute("""SELECT candidates.candidate_id,label_token,confidence,mask_png,enabled,color,source,origin,refinement,role,forced,
+                candidate_metadata.expand_px FROM candidates LEFT JOIN candidate_metadata USING(image_id,candidate_id)
+                WHERE candidates.image_id=? AND deleted=0""", (image_id,)).fetchall()
         if not image: return 0, []
         if not rows: return int(image["candidate_revision"]), []
         for row in rows:
@@ -648,8 +672,9 @@ class WorkspaceStore:
                 placeholders = ",".join("?" for _ in chunk)
                 for row in db.execute(f"SELECT image_id,candidate_revision FROM images WHERE image_id IN ({placeholders})", chunk):
                     images[str(row["image_id"])] = int(row["candidate_revision"])
-                for row in db.execute(f"""SELECT image_id,candidate_id,label_token,confidence,mask_png,enabled,color,source,origin,refinement,role,forced
-                    FROM candidates WHERE image_id IN ({placeholders}) AND deleted=0""", chunk):
+                for row in db.execute(f"""SELECT candidates.image_id,candidates.candidate_id,label_token,confidence,mask_png,enabled,color,source,origin,refinement,role,forced,
+                    candidate_metadata.expand_px FROM candidates LEFT JOIN candidate_metadata USING(image_id,candidate_id)
+                    WHERE candidates.image_id IN ({placeholders}) AND deleted=0""", chunk):
                     mask = row["mask_png"]
                     if not isinstance(mask, bytes):
                         raise ValueError("workspace candidate mask is not a PNG")
@@ -678,10 +703,10 @@ class WorkspaceStore:
         has_effective_mask = payload.get("hasEffectiveMask")
         if not isinstance(has_effective_mask, bool):
             raise ValueError("invalid effective mask")
-        history = payload.get("history", {})
-        if not isinstance(history, dict):
-            raise ValueError("invalid workspace history")
-        history_json = json.dumps(history, ensure_ascii=False, separators=(",", ":"))
+        # Browser stroke history is an interaction cache, not a second durable
+        # journal.  The SQLite operation delta below is the single source of
+        # truth for undo/redo after reopening a project.
+        history_json = "{}"
         add, exclusion, erase = (decoder(payload.get(key)) for key in ("add", "exclusion", "exclusionErase"))
         for mask in (add, exclusion, erase):
             self._require_png_mask(mask)
@@ -748,13 +773,20 @@ class WorkspaceStore:
             raise ValueError("workspace history is invalid") from exc
 
     def history_state(self, image_id: str) -> dict[str, Any]:
-        """Capture every durable edit field needed to restore one image exactly."""
+        """Capture durable edit metadata without copying mask PNGs into history.
+
+        The private raw layer values are used only while one operation is being
+        committed to derive a compact XOR delta.  They are never serialized.
+        Candidate PNGs remain in ``candidates`` and are referenced by ID.
+        """
         with self._connect() as db:
             image = db.execute("SELECT catalog_id,candidate_revision,hidden,reviewed FROM images WHERE image_id=?", (image_id,)).fetchone()
             if image is None:
                 raise ValueError("workspace image is missing")
-            candidates = db.execute("""SELECT candidate_id,label_token,confidence,mask_png,enabled,color,source,origin,
-                refinement,role,forced,deleted FROM candidates WHERE image_id=? ORDER BY candidate_id""", (image_id,)).fetchall()
+            candidates = db.execute("""SELECT candidates.candidate_id,label_token,confidence,mask_png,enabled,color,source,origin,
+                refinement,role,forced,deleted,candidate_metadata.expand_px FROM candidates
+                LEFT JOIN candidate_metadata USING(image_id,candidate_id) WHERE candidates.image_id=? AND candidates.deleted=0
+                ORDER BY candidates.candidate_id""", (image_id,)).fetchall()
             manual = db.execute("SELECT * FROM manual_edits WHERE image_id=?", (image_id,)).fetchone()
         packed_candidates = []
         for row in candidates:
@@ -762,33 +794,126 @@ class WorkspaceStore:
             self._require_png_mask(raw)
             packed_candidates.append({
                 "id": str(row["candidate_id"]), "label": str(row["label_token"]), "confidence": row["confidence"],
-                "mask": self._pack_blob(raw), "enabled": bool(row["enabled"]), "color": str(row["color"]),
+                "enabled": bool(row["enabled"]), "color": str(row["color"]),
                 "source": str(row["source"]), "origin": str(row["origin"]), "refinement": row["refinement"],
                 "role": str(row["role"]), "forced": bool(row["forced"]), "deleted": bool(row["deleted"]),
+                "expandPx": int(row["expand_px"] or 0),
             })
         packed_manual = None
+        manual_raw: dict[str, bytes | None] | None = None
         if manual is not None:
+            manual_raw = {"add": manual["add_png"], "exclusion": manual["exclusion_png"], "erase": manual["exclusion_erase_png"]}
+            for raw in manual_raw.values(): self._require_png_mask(raw)
             packed_manual = {
-                "add": self._pack_blob(manual["add_png"]), "exclusion": self._pack_blob(manual["exclusion_png"]),
-                "erase": self._pack_blob(manual["exclusion_erase_png"]), "manualEnabled": bool(manual["manual_enabled"]),
+                "manualEnabled": bool(manual["manual_enabled"]),
                 "exclusionEnabled": bool(manual["exclusion_enabled"]), "eraseEnabled": bool(manual["exclusion_erase_enabled"]),
                 "exclusionForced": bool(manual["exclusion_forced"]), "removed": str(manual["removed_candidate_ids"]),
                 "revision": int(manual["candidate_revision"]), "effective": bool(manual["has_effective_mask"]),
-                "history": str(manual["history_json"]),
             }
         return {"catalog": str(image["catalog_id"]), "revision": int(image["candidate_revision"]),
                 "flags": {"hidden": bool(image["hidden"]), "reviewed": bool(image["reviewed"])},
-                "candidates": packed_candidates, "manual": packed_manual}
+                "candidates": packed_candidates, "manual": packed_manual, "_manual_raw": manual_raw}
+
+    def export_state(self, image_id: str) -> dict[str, Any]:
+        """Return current masks for an explicit mask download, never history."""
+        state = self.history_state(image_id)
+        with self._connect() as db:
+            rows = db.execute("SELECT candidate_id,mask_png FROM candidates WHERE image_id=?", (image_id,)).fetchall()
+        masks = {str(row["candidate_id"]): row["mask_png"] for row in rows}
+        for candidate in state["candidates"]:
+            raw = masks.get(candidate["id"])
+            self._require_png_mask(raw)
+            candidate["mask"] = self._pack_blob(raw)
+        manual = state.get("manual")
+        if manual is not None:
+            raw = state.get("_manual_raw") or {}
+            manual.update({key: self._pack_blob(raw.get(key)) for key in ("add", "exclusion", "erase")})
+        return self._history_public_state(state)
+
+    @staticmethod
+    def _history_public_state(state: dict[str, Any]) -> dict[str, Any]:
+        return {key: value for key, value in state.items() if key != "_manual_raw"}
 
     @staticmethod
     def _history_json(state: dict[str, Any]) -> str:
-        return json.dumps(state, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
+        return json.dumps(WorkspaceStore._history_public_state(state), ensure_ascii=False, separators=(",", ":"), sort_keys=True)
+
+    @staticmethod
+    def _manual_xor(before: bytes | None, after: bytes | None) -> dict[str, Any] | None:
+        """Encode only the changed rectangle of a binary manual layer."""
+        if before is None and after is None: return None
+        source = before if before is not None else after
+        assert source is not None
+        with Image.open(io.BytesIO(source)) as image: width, height = image.size
+        def pixels(raw: bytes | None) -> np.ndarray:
+            if raw is None: return np.zeros((height, width), dtype=np.uint8)
+            with Image.open(io.BytesIO(raw)) as image:
+                if image.size != (width, height): raise ValueError("workspace manual mask dimensions are invalid")
+                return np.asarray(image.convert("L"), dtype=np.uint8) > 0
+        changed = np.logical_xor(pixels(before), pixels(after))
+        ys, xs = np.where(changed)
+        if not len(xs): return {"existsBefore": before is not None, "existsAfter": after is not None, "box": None}
+        left, right, top, bottom = int(xs.min()), int(xs.max()) + 1, int(ys.min()), int(ys.max()) + 1
+        output = io.BytesIO(); Image.fromarray(changed[top:bottom, left:right].astype(np.uint8) * 255, "L").save(output, format="PNG")
+        return {"existsBefore": before is not None, "existsAfter": after is not None,
+                "box": [left, top, right - left, bottom - top], "png": base64.b64encode(output.getvalue()).decode("ascii"), "size": [width, height]}
+
+    @classmethod
+    def _manual_delta(cls, before: dict[str, Any], after: dict[str, Any]) -> dict[str, Any]:
+        old = before.get("_manual_raw") or {}; new = after.get("_manual_raw") or {}
+        return {key: value for key in ("add", "exclusion", "erase") if (value := cls._manual_xor(old.get(key), new.get(key))) is not None}
+
+    @staticmethod
+    def _apply_manual_xor(raw: bytes | None, change: dict[str, Any], *, forward: bool) -> bytes | None:
+        target_exists = bool(change["existsAfter"] if forward else change["existsBefore"])
+        box = change.get("box")
+        if box is None: return raw if target_exists else None
+        size = change.get("size"); encoded = change.get("png")
+        if not (isinstance(size, list) and len(size) == 2 and all(isinstance(value, int) and value > 0 for value in size)
+                and isinstance(box, list) and len(box) == 4 and all(isinstance(value, int) and value >= 0 for value in box)
+                and isinstance(encoded, str)):
+            raise ValueError("workspace history is invalid")
+        width, height = size; left, top, box_width, box_height = box
+        if left + box_width > width or top + box_height > height: raise ValueError("workspace history is invalid")
+        if raw is None: canvas = np.zeros((height, width), dtype=np.uint8)
+        else:
+            with Image.open(io.BytesIO(raw)) as image:
+                if image.size != (width, height): raise ValueError("workspace history is invalid")
+                canvas = (np.asarray(image.convert("L"), dtype=np.uint8) > 0).astype(np.uint8) * 255
+        delta = WorkspaceStore._unpack_blob(encoded)
+        WorkspaceStore._require_png_mask(delta)
+        assert delta is not None
+        with Image.open(io.BytesIO(delta)) as image: region = (np.asarray(image.convert("L"), dtype=np.uint8) > 0)
+        if region.shape != (box_height, box_width): raise ValueError("workspace history is invalid")
+        canvas[top:top + box_height, left:left + box_width] ^= region.astype(np.uint8) * 255
+        if not target_exists: return None
+        output = io.BytesIO(); Image.fromarray(canvas, "L").save(output, format="PNG"); return output.getvalue()
+
+    @staticmethod
+    def _history_candidate_ids(state: dict[str, Any]) -> set[str]:
+        candidates = state.get("candidates", [])
+        if not isinstance(candidates, list): raise ValueError("workspace history is invalid")
+        values = {item.get("id") for item in candidates if isinstance(item, dict)}
+        if not all(isinstance(value, str) and value for value in values): raise ValueError("workspace history is invalid")
+        return values
+
+    @staticmethod
+    def _prune_unreferenced_candidates(db: sqlite3.Connection, image_id: str) -> None:
+        """Collect discarded redo-only PNGs with indexed reference checks."""
+        db.execute("""DELETE FROM candidate_metadata WHERE image_id=? AND candidate_id IN (
+            SELECT candidate_id FROM candidates WHERE image_id=? AND deleted=1
+            AND NOT EXISTS (SELECT 1 FROM history_candidate_refs WHERE history_candidate_refs.image_id=candidates.image_id
+                            AND history_candidate_refs.candidate_id=candidates.candidate_id))""", (image_id, image_id))
+        db.execute("""DELETE FROM candidates WHERE image_id=? AND deleted=1
+            AND NOT EXISTS (SELECT 1 FROM history_candidate_refs WHERE history_candidate_refs.image_id=candidates.image_id
+                            AND history_candidate_refs.candidate_id=candidates.candidate_id)""", (image_id,))
 
     def record_history(self, image_id: str, before: dict[str, Any], after: dict[str, Any], *, group_id: str | None = None) -> None:
         """Append one completed operation, dropping only this image's abandoned redo path."""
         before_json = self._history_json(before); after_json = self._history_json(after)
         if before_json == after_json:
             return
+        delta_json = json.dumps({"manual": self._manual_delta(before, after)}, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
         with self._lock, self._connect() as db:
             db.execute("BEGIN IMMEDIATE")
             try:
@@ -803,8 +928,12 @@ class WorkspaceStore:
                 db.execute("DELETE FROM history_entries WHERE image_id=? AND entry_id>? AND group_id IS NULL", (image_id, last))
                 for stale_group in redo_groups:
                     db.execute("DELETE FROM history_entries WHERE group_id=?", (stale_group,))
-                cursor = db.execute("""INSERT INTO history_entries(catalog_id,image_id,group_id,before_json,after_json,created_at)
-                    VALUES(?,?,?,?,?,?)""", (image["catalog_id"], image_id, group_id, before_json, after_json, time.time_ns()))
+                cursor = db.execute("""INSERT INTO history_entries(catalog_id,image_id,group_id,before_json,after_json,delta_json,created_at)
+                    VALUES(?,?,?,?,?,?,?)""", (image["catalog_id"], image_id, group_id, before_json, after_json, delta_json, time.time_ns()))
+                candidate_ids = self._history_candidate_ids(before) | self._history_candidate_ids(after)
+                db.executemany("INSERT INTO history_candidate_refs(entry_id,image_id,candidate_id) VALUES(?,?,?)",
+                               ((cursor.lastrowid, image_id, candidate_id) for candidate_id in candidate_ids))
+                self._prune_unreferenced_candidates(db, image_id)
                 db.execute("""INSERT INTO history_cursors(image_id,entry_id) VALUES(?,?)
                     ON CONFLICT(image_id) DO UPDATE SET entry_id=excluded.entry_id""", (image_id, cursor.lastrowid))
                 db.execute("COMMIT")
@@ -813,38 +942,52 @@ class WorkspaceStore:
                 raise
 
     @staticmethod
-    def _restore_history_state(db: sqlite3.Connection, image_id: str, state: dict[str, Any]) -> None:
+    def _restore_history_state(db: sqlite3.Connection, image_id: str, state: dict[str, Any], manual_delta: dict[str, Any], *, forward: bool) -> None:
         if not isinstance(state, dict) or not isinstance(state.get("candidates"), list):
             raise ValueError("workspace history is invalid")
         revision = state.get("revision")
         if isinstance(revision, bool) or not isinstance(revision, int) or revision < 0:
             raise ValueError("workspace history is invalid")
         manual = state.get("manual")
-        db.execute("DELETE FROM candidates WHERE image_id=?", (image_id,))
+        # Candidate PNG BLOBs are immutable operation resources.  Retain rows
+        # from later detection generations and switch their metadata/deleted
+        # state instead of copying every PNG into history JSON.
+        db.execute("UPDATE candidates SET deleted=1 WHERE image_id=?", (image_id,))
         for candidate in state["candidates"]:
             if not isinstance(candidate, dict):
                 raise ValueError("workspace history is invalid")
-            mask = WorkspaceStore._unpack_blob(candidate.get("mask")); WorkspaceStore._require_png_mask(mask)
             required = ("id", "label", "color", "source", "origin", "role")
             if any(not isinstance(candidate.get(key), str) for key in required):
                 raise ValueError("workspace history is invalid")
-            db.execute("""INSERT INTO candidates(image_id,candidate_id,label_token,confidence,mask_png,enabled,color,source,origin,refinement,role,forced,deleted)
-                VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)""", (image_id, candidate["id"], candidate["label"], candidate.get("confidence"), mask,
-                int(bool(candidate.get("enabled"))), candidate["color"], candidate["source"], candidate["origin"], candidate.get("refinement"),
-                candidate["role"], int(bool(candidate.get("forced"))), int(bool(candidate.get("deleted")))))
+            existing = db.execute("SELECT 1 FROM candidates WHERE image_id=? AND candidate_id=?", (image_id, candidate["id"])).fetchone()
+            if existing is None:
+                raise ValueError("workspace history candidate mask is missing")
+            db.execute("""UPDATE candidates SET label_token=?,confidence=?,enabled=?,color=?,source=?,origin=?,refinement=?,role=?,forced=?,deleted=?
+                WHERE image_id=? AND candidate_id=?""", (candidate["label"], candidate.get("confidence"), int(bool(candidate.get("enabled"))),
+                candidate["color"], candidate["source"], candidate["origin"], candidate.get("refinement"), candidate["role"],
+                int(bool(candidate.get("forced"))), int(bool(candidate.get("deleted"))), image_id, candidate["id"]))
+            expand_px = candidate.get("expandPx", 0)
+            if isinstance(expand_px, bool) or not isinstance(expand_px, int) or expand_px < 0:
+                raise ValueError("workspace history is invalid")
+            db.execute("""INSERT INTO candidate_metadata(image_id,candidate_id,expand_px) VALUES(?,?,?)
+                ON CONFLICT(image_id,candidate_id) DO UPDATE SET expand_px=excluded.expand_px""", (image_id, candidate["id"], expand_px))
+        current = db.execute("SELECT * FROM manual_edits WHERE image_id=?", (image_id,)).fetchone()
+        current_blobs = {"add": current["add_png"] if current else None, "exclusion": current["exclusion_png"] if current else None,
+                         "erase": current["exclusion_erase_png"] if current else None}
+        blobs = tuple(WorkspaceStore._apply_manual_xor(current_blobs[key], manual_delta[key], forward=forward)
+                      if key in manual_delta else current_blobs[key] for key in ("add", "exclusion", "erase"))
         db.execute("DELETE FROM manual_edits WHERE image_id=?", (image_id,))
         if manual is not None:
             if not isinstance(manual, dict):
                 raise ValueError("workspace history is invalid")
-            blobs = tuple(WorkspaceStore._unpack_blob(manual.get(key)) for key in ("add", "exclusion", "erase"))
             for blob in blobs: WorkspaceStore._require_png_mask(blob)
-            for key in ("removed", "history"):
+            for key in ("removed",):
                 if not isinstance(manual.get(key), str): raise ValueError("workspace history is invalid")
             db.execute("""INSERT INTO manual_edits(image_id,add_png,exclusion_png,exclusion_erase_png,manual_enabled,exclusion_enabled,
                 exclusion_erase_enabled,exclusion_forced,removed_candidate_ids,candidate_revision,has_effective_mask,history_json,updated_at)
                 VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)""", (image_id, *blobs, int(bool(manual.get("manualEnabled"))),
                 int(bool(manual.get("exclusionEnabled"))), int(bool(manual.get("eraseEnabled"))), int(bool(manual.get("exclusionForced"))),
-                manual["removed"], int(manual.get("revision", revision)), int(bool(manual.get("effective"))), manual["history"], time.time_ns()))
+                manual["removed"], int(manual.get("revision", revision)), int(bool(manual.get("effective"))), "{}", time.time_ns()))
         flags = state.get("flags", {})
         if not isinstance(flags, dict) or not isinstance(flags.get("hidden", False), bool) or not isinstance(flags.get("reviewed", False), bool):
             raise ValueError("workspace history is invalid")
@@ -899,7 +1042,13 @@ class WorkspaceStore:
                 changed: list[str] = []
                 for member in entries:
                     state = json.loads(str(member["before_json"] if direction == "undo" else member["after_json"]))
-                    self._restore_history_state(db, str(member["image_id"]), state)
+                    try:
+                        delta = json.loads(str(member["delta_json"]))
+                    except (TypeError, ValueError, json.JSONDecodeError) as exc:
+                        raise ValueError("workspace history is invalid") from exc
+                    if not isinstance(delta, dict) or not isinstance(delta.get("manual", {}), dict):
+                        raise ValueError("workspace history is invalid")
+                    self._restore_history_state(db, str(member["image_id"]), state, delta.get("manual", {}), forward=direction == "redo")
                     if direction == "undo":
                         previous = db.execute("SELECT entry_id FROM history_entries WHERE image_id=? AND entry_id<? ORDER BY entry_id DESC LIMIT 1", (member["image_id"], member["entry_id"])).fetchone()
                         db.execute("""INSERT INTO history_cursors(image_id,entry_id) VALUES(?,?)
