@@ -404,7 +404,7 @@ class HttpBranchTests(unittest.TestCase):
             ("/api/save/commit", {"imageId": "image", "candidateRevision": 0, "saveToken": "token", "sourceAction": "copy"}),
             ("/api/save/status", {"imageId": "image", "candidateRevision": 0, "saveToken": "token", "sourceAction": "copy"}),
             ("/api/save/cancel", {"imageId": "image", "candidateRevision": 0, "saveToken": "token"}),
-            ("/api/apply", {"imageIds": [], "divisor": 100, "removeAfterSave": False, "copyToDefault": False}),
+            ("/api/apply", {"imageIds": [], "divisor": 100, "copyToDefault": False}),
             ("/api/job/pause", {}),
             ("/api/job/resume", {}),
             ("/api/job/cancel", {}),

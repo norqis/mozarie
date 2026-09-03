@@ -140,5 +140,5 @@ async function saveAll() {
   if (state.candidateUpdateChains.size) await waitForCandidateMutations();
   if (isBusy() || state.importing) return;
   saveDraft(); refreshMaskStatus();
-  if (saveTargets("masked").length) await openApplyDialog({ initialMode: "masked" });
+  if (state.images.length) await openApplyDialog({ initialMode: "all" });
 }

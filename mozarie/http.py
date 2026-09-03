@@ -512,7 +512,6 @@ class MosaicHandler(BaseHTTPRequestHandler):
                 divisor = _read_mosaic_divisor(payload.get("divisor"))
                 started = STATE.start_apply(
                     payload.get("imageIds", []), divisor, payload.get("drafts", {}),
-                    _read_bool(payload.get("removeAfterSave", False), "完了後、一覧から削除"),
                     _read_bool(payload.get("copyToDefault", False), "既定の保存先へコピー"),
                     _read_save_suffix(payload.get("suffix", "_censored")),
                 )

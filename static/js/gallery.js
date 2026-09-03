@@ -75,6 +75,7 @@ function setCatalogNode(windowState, image, index, layout, rowNode) {
   cell.setAttribute("aria-colindex", String(column + 1));
   const preview = item.querySelector("img"); observeThumbnail(preview, image, scope); preview.alt = image.relativePath;
   const reviewed = isReviewed(image);
+  item.classList.toggle("reviewed", reviewed);
   if (scope === "gallery") {
     item.querySelector(".gallery-name").textContent = image.relativePath.split("/").pop();
     item.querySelector(".gallery-meta").textContent = `${image.width} × ${image.height}`;

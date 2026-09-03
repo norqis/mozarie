@@ -236,7 +236,6 @@ class Job:
     active_count: int = 0
     parallelism: int = 0
     preparing_models: int = 0
-    remove_after_save: bool = False
 
     def as_dict(self) -> dict[str, Any]:
         active_elapsed = 0.0
@@ -258,7 +257,6 @@ class Job:
             "activeCount": self.active_count,
             "parallelism": self.parallelism,
             "phase": "preparing_models" if self.preparing_models else "",
-            "removeAfterSave": self.remove_after_save,
             "cancelRequested": self.cancel_requested,
         }
 

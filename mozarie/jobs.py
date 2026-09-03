@@ -212,7 +212,6 @@ class JobsMixin:
         worker: Any,
         *args: Any,
         expected_catalog_generation: int | None = None,
-        remove_after_save: bool = False,
     ) -> None:
         if not self.import_lock.acquire(blocking=False):
             raise ClientError("画像の追加中です。完了後にもう一度実行してください。", "operation_in_progress")
@@ -223,7 +222,6 @@ class JobsMixin:
                 worker,
                 *args,
                 expected_catalog_generation=expected_catalog_generation,
-                remove_after_save=remove_after_save,
             )
         finally:
             self.import_lock.release()
@@ -235,7 +233,6 @@ class JobsMixin:
         worker: Any,
         *args: Any,
         expected_catalog_generation: int | None = None,
-        remove_after_save: bool = False,
     ) -> None:
         with self.lock:
             if self.active_import_count or self.job.state in {"running", "pausing", "paused"} or self._has_active_worker():
@@ -252,7 +249,6 @@ class JobsMixin:
                 total=len(records),
                 started_at=time.time(),
                 image_ids=tuple(record.image_id for record in records),
-                remove_after_save=remove_after_save,
             )
             self._job_output_slots: dict[int, str] = {}
             self.job_control = control

@@ -342,7 +342,7 @@
   <dialog id="applyDialog" class="modal-dialog apply-dialog" aria-labelledby="applyDialogTitle" aria-describedby="applyTargetCount">
     <form id="applyForm" class="dialog-body">
       <h2 id="applyDialogTitle" data-i18n="apply.title">ファイルを保存</h2>
-      <label class="form-row"><span data-i18n="apply.targetMode">保存対象</span><select id="applyTargetMode"><option value="masked" data-i18n="apply.targetMasked">モザイクあり</option><option value="reviewed" data-i18n="apply.targetReviewed">確認済み</option></select></label>
+      <label class="form-row"><span data-i18n="apply.targetMode">保存対象</span><select id="applyTargetMode"><option value="all" data-i18n="apply.targetAll">画像一覧のすべて</option><option value="masked" data-i18n="apply.targetMasked">モザイクあり</option><option value="reviewed" data-i18n="apply.targetReviewed">確認済み</option></select></label>
       <p id="applyTargetCount" class="muted"></p>
       <fieldset id="applySettings">
         <label class="choice-row"><input id="applyCopyMode" type="radio" name="batchSaveMode" value="copy" checked><span data-i18n="apply.copy">コピー保存</span></label>
@@ -354,7 +354,6 @@
           <button id="chooseOutputDirectoryButton" type="button" data-i18n="apply.changeOutputDirectory">保存先を変更</button>
         </div>
         <p id="applyTemporarySourceNote" class="fixed-note" hidden data-i18n="apply.handleSource">参照元への書込み権限がある画像は、上書きとコピー後の削除を利用できます。</p>
-        <label class="choice-row"><input id="removeAfterSave" type="checkbox"><span data-i18n="apply.removeAfterSave">保存できた画像を一覧から削除</span></label>
         <label class="form-row"><span data-i18n="editor.blockSize">モザイク粗さ</span><span class="ratio-control"><span>1 /</span><input id="applyDivisor" type="number" min="1" max="10000" value="100" required><output id="applyBlockSize"></output></span></label>
         <p class="fixed-note" data-i18n="apply.metadata">対応するメタデータを引き継ぎます。同名時は自動連番です。</p>
       </fieldset>

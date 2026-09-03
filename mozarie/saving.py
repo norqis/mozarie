@@ -40,7 +40,6 @@ class SavingMixin:
         image_ids: list[str],
         divisor: int,
         drafts: dict[str, dict[str, Any]],
-        remove_after_save: bool = False,
         copy_to_default: bool = False,
         suffix: str = "_censored",
     ) -> bool:
@@ -69,7 +68,7 @@ class SavingMixin:
         self._start_job(
             "apply", records, self._apply_worker, divisor, drafts, copy_to_default, suffix,
             saving_parallelism, output_directory,
-            expected_catalog_generation=catalog_generation, remove_after_save=remove_after_save,
+            expected_catalog_generation=catalog_generation,
         )
         return True
 
@@ -358,13 +357,14 @@ class SavingMixin:
                             raise ClientError("画像一覧が変更されました。保存をやり直してください。", "save_state_changed")
                         current_revision = self._candidate_revision(image_id)
                         deleted = source_action == "deleted"
+                        # A save only writes an image. It must retain the
+                        # candidate/manual workspace and both image flags.
                         cleared = revision == current_revision
                         self.workspace_store.commit_save(
                             image_id,
                             mtime_ns=record_snapshot.mtime_ns if source_action == "overwrite" else None,
                             size_bytes=record_snapshot.size_bytes if source_action == "overwrite" else None,
-                            candidate_revision=current_revision + 1 if cleared else None,
-                            clear_workspace=deleted or cleared,
+                            clear_workspace=deleted,
                             delete_image=deleted,
                         )
                 except Exception:
@@ -390,11 +390,6 @@ class SavingMixin:
                         self.candidate_revisions.pop(image_id, None)
                         self.candidates.pop(image_id, None)
                         self._image_io_locks.pop(image_id, None)
-                    elif cleared:
-                        mask_paths = [candidate.mask_path for candidate in self.candidates.get(image_id, [])]
-                        candidate_dirs = [self.cache_dir / image_id]
-                        self.candidates[image_id] = []
-                        self._touch_candidates(image_id)
                     self.browser_save_tokens.pop(save_token, None)
                     self.browser_save_receipts[save_token] = BrowserSaveReceipt(image_id, revision, source_action, cleared, not cleared, deleted, time.monotonic())
                     rendered_path = token_details.rendered_path
@@ -500,8 +495,8 @@ class SavingMixin:
                     else:
                         source_stage = _stage_save_with_mask(record, mask, calculate_block_size(record.width, record.height, divisor))
                         output_stat = record.path.stat()
-                    # Files are fully written before the state mutation. A failed
-                    # record therefore keeps its masks, while successful records clear once.
+                    # Files are fully written before the state mutation. Saving
+                    # never clears candidates or manual workspace.
                     try:
                         with self.lock:
                             if not self._job_is_current(job_generation, catalog_generation):
@@ -512,17 +507,13 @@ class SavingMixin:
                                 record.image_id,
                                 mtime_ns=None if copy_to_default else output_stat.st_mtime_ns,
                                 size_bytes=None if copy_to_default else output_stat.st_size,
-                                candidate_revision=self._candidate_revision(record.image_id) + 1,
-                                clear_workspace=True,
+                                clear_workspace=False,
                             )
                             if not copy_to_default:
                                 live_record = self.images[record.image_id]
                                 live_record.mtime_ns = output_stat.st_mtime_ns
                                 live_record.size_bytes = output_stat.st_size
                                 live_record.asset_revision += 1
-                            mask_paths = [candidate.mask_path for candidate in self.candidates.get(record.image_id, [])]
-                            self.candidates[record.image_id] = []
-                            self._touch_candidates(record.image_id)
                             self._record_job_success(index, record.image_id, str(output_path), job_generation, catalog_generation)
                     except Exception:
                         if source_stage is not None:
@@ -534,7 +525,6 @@ class SavingMixin:
                         raise
                     if not copy_to_default:
                         source_stage.finalize()
-                    self._delete_mask_files(mask_paths, [self.cache_dir / record.image_id])
                     self.invalidate_sam_image(record.image_id)
                     self._set_job_current(record.relative_path, job_generation, catalog_generation)
 
