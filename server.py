@@ -56,8 +56,8 @@ def _schedule_browser_open(url: str) -> threading.Timer:
 def _startup_state(state_module):  # type: ignore[no-untyped-def]
     error = state_module.STATE_STARTUP_ERROR
     if error is not None:
-        LOGGER.error("作業データを開けません。data\\workspaces.sqlite3 を退避してから、もう一度起動してください。")
-        raise SystemExit(1)
+        LOGGER.warning("作業データを開けません。ブラウザで作業データを作り直してください。")
+        return None
     assert state_module.STATE is not None
     return state_module.STATE
 
@@ -66,15 +66,20 @@ def main() -> None:
     LOGGER.setLevel(logging.INFO)
     parser = argparse.ArgumentParser(description="Run Mozarie locally.")
     parser.add_argument("--port", type=int, default=None, help="Override the saved local port for this start only.")
+    parser.add_argument("--recreate-workspace", action="store_true", help="Explicitly discard incompatible local project data before starting.")
     args = parser.parse_args()
     try:
         with MaintenanceLock(APP_DIR):
+            if args.recreate_workspace:
+                from mozarie.workspace import WorkspaceStore
+                WorkspaceStore.recreate(APP_DIR / "data")
             import mozarie.state as state_module
             from mozarie.http import MosaicHandler
             state = _startup_state(state_module)
-            port = args.port if args.port is not None else int(state.settings["general"]["port"])
+            port = args.port if args.port is not None else int(state.settings["general"]["port"]) if state is not None else 31844
             LOGGER.info("Mozarieを準備しています…")
-            state.cache_dir.mkdir(parents=True, exist_ok=True)
+            if state is not None:
+                state.cache_dir.mkdir(parents=True, exist_ok=True)
             try:
                 http_server = ThreadingHTTPServer(("127.0.0.1", port), MosaicHandler)
                 http_server.handle_error = types.MethodType(_handle_server_error, http_server)
@@ -83,11 +88,12 @@ def main() -> None:
                     LOGGER.error("Mozarieを起動できません。ポート%sは使用中です。", port)
                 else:
                     LOGGER.exception("Mozarieを起動できませんでした。")
-                state.shutdown()
+                if state is not None:
+                    state.shutdown()
                 raise SystemExit(1) from None
             url = f"http://127.0.0.1:{port}"
             LOGGER.info("Mozarieを起動しました: %s", url)
-            if state.settings["general"]["open_browser"]:
+            if state is None or state.settings["general"]["open_browser"]:
                 _schedule_browser_open(url)
             try:
                 http_server.serve_forever()
@@ -95,7 +101,8 @@ def main() -> None:
                 pass
             finally:
                 http_server.server_close()
-                state.shutdown()
+                if state_module.STATE is not None:
+                    state_module.STATE.shutdown()
                 LOGGER.info("Mozarieを終了しました")
             launch_update = bool(getattr(http_server, "mozarie_update_requested", False))
     except UpdateError as exc:
