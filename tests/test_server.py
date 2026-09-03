@@ -379,6 +379,80 @@ class MozarieTests(unittest.TestCase):
                 with self.subTest(value=value), self.assertRaises(ClientError):
                     state.batch_update_candidates(image_id, {"role": "apply", "operation": "set_padding", "expandPx": value})
 
+    def test_batch_candidate_padding_undo_redo_and_restart_restore_only_its_role(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); Image.new("RGB", (20, 12), "white").save(root / "source.png")
+            state = self.new_state(); image_id = state.set_root(str(root))[0]["id"]
+            candidates = []
+            for candidate_id, label, role in (("apply-one", "penis", CandidateRole.APPLY), ("apply-two", "pussy", CandidateRole.APPLY), ("exclude", "hand", CandidateRole.EXCLUDE)):
+                path = state.cache_dir / image_id / f"{candidate_id}.png"; path.parent.mkdir(parents=True, exist_ok=True)
+                Image.new("L", (20, 12), 255).save(path)
+                candidates.append(Candidate(candidate_id, label, .9, path, role=role, expand_px=2 if role == CandidateRole.EXCLUDE else 0))
+            state.candidates[image_id] = candidates; self.commit_candidates(state, image_id)
+            state.save_manual_workspace(image_id, {"add": "", "exclusion": "", "exclusionErase": "", "removedCandidateIds": [], "candidateRevision": state._candidate_revision(image_id), "hasEffectiveMask": True})
+            state.batch_update_candidates(image_id, {"role": "apply", "operation": "set_padding", "expandPx": 5})
+            self.assertEqual([item.expand_px for item in state.candidates[image_id]], [5, 5, 2])
+            state.restore_project_history(image_id, "undo")
+            self.assertEqual([item.expand_px for item in state.candidates[image_id]], [0, 0, 2])
+            state.restore_project_history(image_id, "redo")
+            self.assertEqual([item.expand_px for item in state.candidates[image_id]], [5, 5, 2])
+            reopened = self.new_state(); reopened.open_project(state.catalog_id)
+            self.assertEqual([item.expand_px for item in reopened.candidates[image_id]], [5, 5, 2])
+
+    def test_batch_candidate_padding_hundred_candidates_writes_one_history_and_no_png(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); Image.new("RGB", (64, 64), "white").save(root / "source.png")
+            state = self.new_state(); image_id = state.set_root(str(root))[0]["id"]
+            candidates = []
+            for index in range(100):
+                candidate_id = f"candidate-{index}"; path = state.cache_dir / image_id / f"{candidate_id}.png"; path.parent.mkdir(parents=True, exist_ok=True)
+                Image.new("L", (64, 64), 255).save(path)
+                candidates.append(Candidate(candidate_id, "penis", .9, path))
+            state.candidates[image_id] = candidates; self.commit_candidates(state, image_id)
+            before_pngs = [hashlib.sha256(state.workspace_store.candidate_png(image_id, item.candidate_id)).digest() for item in candidates]
+            with state.workspace_store._connect() as db:
+                history_before = db.execute("SELECT COUNT(*) AS count FROM history_entries WHERE image_id=?", (image_id,)).fetchone()["count"]
+            revision = state._candidate_revision(image_id)
+            self.assertEqual(state.batch_update_candidates(image_id, {"role": "apply", "operation": "set_padding", "expandPx": 7}), revision + 1)
+            self.assertTrue(all(item.expand_px == 7 for item in state.candidates[image_id]))
+            self.assertEqual([hashlib.sha256(state.workspace_store.candidate_png(image_id, item.candidate_id)).digest() for item in candidates], before_pngs)
+            with state.workspace_store._connect() as db:
+                self.assertEqual(db.execute("SELECT COUNT(*) AS count FROM history_entries WHERE image_id=?", (image_id,)).fetchone()["count"], history_before + 1)
+
+    def test_detect_and_boundary_candidates_receive_the_current_padding_default(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); Image.new("RGB", (20, 12), "white").save(root / "source.png")
+            state = self.new_state(); image_id = state.set_root(str(root))[0]["id"]; record = state.image_for_id(image_id)
+            state.settings["detection"]["default_candidate_padding_px"] = 4; state._active_detection_default_padding = 4
+            mask = np.full((12, 20), 255, dtype=np.uint8)
+            segments = [{"class_name": "penis", "confidence": .9, "mask": mask, "source": "target",
+                         "image_exclusions": {"hand": mask}, "metadata_exclusions": {"fluid": mask}, "exclusions": {"hand": mask}}]
+            with patch.object(state, "_detect_arbitrated_segments", return_value=segments), \
+                 patch.object(state, "_hand_refinement_context", return_value=(segments, np.zeros_like(mask), [])), \
+                 patch.object(state, "_attach_hand_evidence", side_effect=lambda items, *_args: items), \
+                 patch.object(state, "_finalize_exclusions", side_effect=lambda _rgb, items, *_args: items):
+                detected = state._detect_image(Mock(), record, .5)
+            self.assertEqual([(item.role.value, item.label_token, item.expand_px) for item in detected], [
+                ("exclude", "hand", 4), ("exclude", "fluid", 4), ("apply", "penis", 4), ("exclude", "hand", 4),
+            ])
+            state.settings["detection"]["default_candidate_padding_px"] = 7; state._active_detection_default_padding = 7
+            with patch.object(state, "_detect_arbitrated_segments", return_value=segments), \
+                 patch.object(state, "_hand_refinement_context", return_value=(segments, np.zeros_like(mask), [])), \
+                 patch.object(state, "_attach_hand_evidence", side_effect=lambda items, *_args: items), \
+                 patch.object(state, "_finalize_exclusions", side_effect=lambda _rgb, items, *_args: items):
+                refreshed = state._detect_image(Mock(), record, .5)
+            self.assertTrue(all(item.expand_px == 4 for item in detected))
+            self.assertTrue(all(item.expand_px == 7 for item in refreshed))
+            predictor = Mock(); predictor.predict.return_value = (np.asarray([mask > 0]), np.asarray([.9]), None)
+            boundary_segment = [{"class_name": "penis", "mask": mask, "source": "boundary", "image_exclusions": {"hand": mask}, "exclusions": {"fluid": mask}}]
+            with patch.object(state, "_sam_predictor_for", return_value=predictor), \
+                 patch.object(state, "_boundary_hand_boxes", return_value=[]), \
+                 patch.object(state, "_finalize_exclusions", return_value=boundary_segment):
+                boundary = state.add_boundary_candidate(image_id, {"roi": {"left": 0, "top": 0, "right": 20, "bottom": 12}, "point": {"x": 10, "y": 6}})
+            self.assertEqual([(item["role"], item["labelToken"], item["expandPx"]) for item in boundary["candidates"]], [
+                ("apply", "boundary", 7), ("exclude", "hand", 7), ("exclude", "fluid", 7),
+            ])
+
     def test_candidate_mutation_updates_manual_revision_removed_ids_and_effective_together(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory); Image.new("RGB", (16, 16), "white").save(root / "source.png")
