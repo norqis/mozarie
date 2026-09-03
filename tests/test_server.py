@@ -6656,6 +6656,31 @@ class MozarieTests(unittest.TestCase):
             self.assertFalse((state.cache_dir / "browser-save").exists())
             self.assertTrue(state.commit_browser_save(image_id, revision, rendered.save_token, "keep")["cleared"])
 
+    def test_browser_file_system_400_copies_write_no_backend_temp_bytes(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "source.png"
+            Image.new("RGB", (16, 16), "white").save(source)
+            state = self.new_state()
+            image_id = state.set_root(str(root))[0]["id"]
+            mask_path = state.cache_dir / image_id / "candidate.png"
+            mask_path.parent.mkdir(parents=True, exist_ok=True)
+            Image.fromarray(self._mask(16, 16)).save(mask_path)
+            state.candidates[image_id] = [Candidate("candidate", "penis", 0.9, mask_path)]
+            revision = state._touch_candidates(image_id)
+
+            output_bytes = 0
+            for _index in range(400):
+                rendered = state.render_browser_save(image_id, revision, 100, None, copy_to_browser=True)
+                output_bytes += len(rendered.output)
+                self.assertIsNone(rendered.output_path)
+                self.assertIsNone(state.browser_save_tokens[rendered.save_token].rendered_path)
+                self.assertTrue(state.commit_browser_save(image_id, revision, rendered.save_token, "keep")["cleared"])
+
+            self.assertGreater(output_bytes, 0)
+            self.assertFalse((state.cache_dir / "browser-save").exists())
+            self.assertEqual(state.browser_save_tokens, {})
+
     def test_browser_copy_render_keeps_source_and_candidates_when_output_sync_fails(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

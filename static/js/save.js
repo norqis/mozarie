@@ -246,17 +246,15 @@ async function startSingleSave(event) {
     } finally {
       sourceSnapshot = null;
     }
-    // Copying to another folder does not change the source catalogue or any
-    // editor state.  Reconcile only when the source itself was overwritten or
-    // explicitly deleted, and keep its persisted masks and history intact.
+    // A copy that retains its source does not change the catalogue. Avoid the
+    // expensive image reload (and forced editor reload) in that common path.
+    // Overwrites and source deletion do need authoritative reconciliation.
     if (!copying || deleteOriginal) {
       const latest = await api("/api/images"); state.images = latest.images;
       const savedImage = state.images.find((item) => item.id === save.imageId);
       pruneSourceAccess();
-      if (state.currentId === save.imageId) {
-        if (savedImage) await selectImage(save.imageId, true, { saveCurrentDraft: false });
-        else { state.currentId = null; state.currentImage = null; clearEditor(); }
-      }
+      if (deleteOriginal) reconcileBrowserSaveState();
+      else if (savedImage && state.currentId === save.imageId) await selectImage(save.imageId, true, { saveCurrentDraft: false });
       renderCatalogViews();
     }
     setSingleSaveResult(copying ? `${t("apply.complete", { completed: 1 })} ${state.outputDirectoryHandle.name}/${output.name}` : t("apply.complete", { completed: 1 }));
@@ -526,7 +524,13 @@ async function runBrowserSave(imageIds, suffix, deleteOriginal, mode = "copy") {
           } finally { inputs.drafts.delete(entry.imageId); }
           const saveToken = response.headers.get("X-Mozarie-Save-Token") || "";
           if (!saveToken) throw Object.assign(new Error("save_state_changed"), { code: "save_state_changed" });
-          const output = await writeSingleOutput(inputs.outputDirectoryHandle, entry.relativePath, inputs.suffix, response);
+          let output;
+          try {
+            output = await writeSingleOutput(inputs.outputDirectoryHandle, entry.relativePath, inputs.suffix, response);
+          } catch (error) {
+            await cancelBrowserSave(entry, saveToken);
+            throw error;
+          }
           const commitCopy = async () => {
             let sourceSnapshot = null;
             let sourceChanged = false;
@@ -601,7 +605,7 @@ async function runBrowserSave(imageIds, suffix, deleteOriginal, mode = "copy") {
         // list state may be reset as a side effect.
         if (committed.stale) save.stale += 1;
         if (sourceAction === "overwrite" && state.currentId === entry.imageId) save.reloadCurrent = true;
-        pruneSourceAccess();
+        if (sourceAction !== "keep") save.needsCatalogReconcile = true;
         save.completed += 1;
         showBrowserSaveProgress(save, entry);
       };
@@ -635,19 +639,22 @@ async function runBrowserSave(imageIds, suffix, deleteOriginal, mode = "copy") {
     inputs.sources.clear();
     try {
       let catalogCurrent = false;
-      try {
-        // Commits may resolve out of order; apply one authoritative catalogue
-        // snapshot only after every started entry has settled.
-        const latest = await api("/api/images");
-        catalogCurrent = isCurrentCatalogEpoch(save.catalogEpoch);
-        if (catalogCurrent) state.images = latest.images;
-      } catch (error) {
-        showApplyError(error);
-      }
-      if (catalogCurrent) {
-        reconcileBrowserSaveState();
-        if (save.reloadCurrent && state.currentId && state.images.some((image) => image.id === state.currentId)) {
-          await selectImage(state.currentId, true, { saveCurrentDraft: false });
+      if (save.needsCatalogReconcile) {
+        try {
+          // Commits may resolve out of order; apply one authoritative catalogue
+          // snapshot only after every started entry has settled.
+          const latest = await api("/api/images");
+          catalogCurrent = isCurrentCatalogEpoch(save.catalogEpoch);
+          if (catalogCurrent) state.images = latest.images;
+        } catch (error) {
+          showApplyError(error);
+        }
+        if (catalogCurrent) {
+          pruneSourceAccess();
+          reconcileBrowserSaveState();
+          if (save.reloadCurrent && state.currentId && state.images.some((image) => image.id === state.currentId)) {
+            await selectImage(state.currentId, true, { saveCurrentDraft: false });
+          }
         }
       }
     } finally {

@@ -46,6 +46,41 @@ vm.runInNewContext("globalThis.workspaceTest={queueWorkspaceDraft,flushDraftSave
   await context.workspaceTest.queueWorkspaceDraft("one", true);
   assert.equal(state.drafts.get("one"), durableDraft, "projectless sessions keep their only in-memory draft copy");
 
+  const manyImages = Array.from({ length: 400 }, (_, index) => ({ id: `many-${index}` }));
+  state.images = manyImages; state.project = { id: "project-many" }; state.currentId = null;
+  state.drafts.clear(); state.maskStatus.clear(); state.workspaceDraftChains.clear(); state.workspaceMutationErrors.clear(); calls.length = 0;
+  for (let index = 0; index < manyImages.length; index += 1) {
+    const image = manyImages[index];
+    state.currentId = image.id;
+    state.drafts.set(image.id, { add: `data:image/png;base64,${image.id}`, hasEffectiveMask: true });
+    if (!index) continue;
+    await context.workspaceTest.queueWorkspaceDraft(manyImages[index - 1].id, true);
+    assert.ok(state.drafts.size <= 1, "inactive project draft bitmap data stays bounded while moving through 400 images");
+  }
+  state.currentId = null;
+  await context.workspaceTest.queueWorkspaceDraft(manyImages.at(-1).id, true);
+  assert.equal(state.drafts.size, 0, "400 persisted inactive project drafts are evicted instead of accumulating bitmap state");
+  assert.equal(state.maskStatus.size, 0, "evicted project draft status entries plateau with the bitmap cache");
+  assert.equal(state.workspaceDraftChains.size, 0, "settled project draft write chains do not grow with the catalogue");
+  assert.ok(manyImages.every((image) => image.hasEffectiveMask === true), "draft eviction preserves each durable effective-mask scalar for masked save targets");
+  assert.equal(calls.filter(([, method]) => method === "POST").length, 400, "each inactive project draft is durably saved before eviction");
+  const originalApiForManyRestore = context.api;
+  context.api = async () => ({ draft: { add: "data:image/png;base64,rehydrated", hasEffectiveMask: true } });
+  const rehydrated = await Promise.all(manyImages.map((image) => context.workspaceTest.loadWorkspaceDraft(image.id)));
+  assert.ok(rehydrated.every((draft) => draft?.add === "data:image/png;base64,rehydrated"), "evicted project drafts rehydrate on demand");
+  context.api = originalApiForManyRestore;
+  state.project = null; state.drafts.clear(); state.maskStatus.clear(); state.workspaceDraftChains.clear(); state.currentId = null;
+  for (let index = 0; index < manyImages.length; index += 1) {
+    const image = manyImages[index];
+    state.currentId = image.id;
+    state.drafts.set(image.id, { add: `data:image/png;base64,${image.id}`, hasEffectiveMask: true });
+    if (index) await context.workspaceTest.queueWorkspaceDraft(manyImages[index - 1].id, true);
+  }
+  state.currentId = null;
+  await context.workspaceTest.queueWorkspaceDraft(manyImages.at(-1).id, true);
+  assert.equal(state.drafts.size, 400, "projectless drafts are never evicted because no durable project recovery path exists");
+
+  state.images = [{ id: "one" }];
   calls.length = 0; state.drafts.set("one", { add: "data:image/png;base64,a", hasEffectiveMask: true }); rejectFirst = true;
   const failed = context.workspaceTest.queueWorkspaceDraft("one", true);
   state.drafts.delete("one");

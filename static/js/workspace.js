@@ -9,6 +9,10 @@ function queueWorkspaceMutation(imageId, send, rememberFailure = true) {
   const previous = state.workspaceDraftChains.get(imageId) || Promise.resolve();
   const next = previous.catch(() => {}).then(send);
   state.workspaceDraftChains.set(imageId, next);
+  const clearSettledChain = () => {
+    if (state.workspaceDraftChains.get(imageId) === next) state.workspaceDraftChains.delete(imageId);
+  };
+  next.then(clearSettledChain, clearSettledChain);
   if (rememberFailure) next.then(
     () => {},
     (error) => { state.workspaceMutationErrors.set(imageId, error); },
@@ -164,8 +168,14 @@ function queueWorkspaceDraft(imageId, immediate = false) {
         && !state.workspaceDraftTimers.has(imageId)
         && !state.draftSaveChains.has(imageId)
         && !state.workspaceMutationErrors.has(imageId)
-        && state.workspaceDraftChains.get(imageId) === persisted
+        && (!state.workspaceDraftChains.has(imageId) || state.workspaceDraftChains.get(imageId) === persisted)
       ) {
+        // Keep the lightweight catalogue scalar before freeing bitmap data, so
+        // filtered save targets remain correct until this draft is rehydrated.
+        if (draft?.hasEffectiveMask === true) {
+          const image = state.images.find((entry) => entry.id === imageId);
+          if (image) image.hasEffectiveMask = true;
+        }
         state.drafts.delete(imageId);
         state.maskStatus.delete(imageId);
       }
@@ -221,7 +231,7 @@ async function flushAllWorkspaceMutations() {
     const results = await Promise.allSettled(chains.map(([, chain]) => chain));
     const failed = results.find((result) => result.status === "rejected");
     if (failed) throw failed.reason;
-    const failedImageId = chains.map(([imageId]) => imageId).find((imageId) => state.workspaceMutationErrors.has(imageId));
+    const failedImageId = [...state.workspaceMutationErrors.keys()][0];
     if (failedImageId) {
       const storedFailure = state.workspaceMutationErrors.get(failedImageId);
       state.workspaceMutationErrors.delete(failedImageId);
