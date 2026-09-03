@@ -43,6 +43,7 @@ const testFiles = [
   "tests/test_workspace_flags_runtime.cjs",
   "tests/test_workspace_idb_runtime.cjs",
   "tests/test_ui_control_manifest.cjs",
+  "tests/test_workspace_recovery_e2e.cjs",
 ];
 
 function staticFiles(directory = staticRoot) {

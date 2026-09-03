@@ -44,6 +44,10 @@ def _reserve_update_start() -> bool:
         return True
 
 
+def _is_api_path(path: str) -> bool:
+    return path == "/api" or path.startswith("/api/")
+
+
 def health_device(provider: str, gpu_device: int, gpus: list[dict[str, object]]) -> dict[str, object]:
     """Format health device data without probing a GPU for a CPU selection."""
     if provider != "gpu":
@@ -170,7 +174,18 @@ class MosaicHandler(BaseHTTPRequestHandler):
             self._reject_unread_request(ClientError("JSON形式のリクエストだけを受け付けます。", "session_expired"))
 
     def _send_workspace_recovery_page(self) -> None:
-        self._binary('''<!doctype html><meta charset="utf-8"><title>Mozarie</title><main><h1 data-key="workspaceRecovery.title"></h1><p data-key="workspaceRecovery.message"></p><button id="recreate" data-key="workspaceRecovery.recreate"></button><p id="message"></p></main><script>const lang=localStorage.getItem('mozarie-language')==='en'?'en':'ja';fetch('/i18n/'+lang+'.json').then(r=>r.json()).then(d=>document.querySelectorAll('[data-key]').forEach(e=>e.textContent=d[e.dataset.key]||e.dataset.key));document.querySelector('#recreate').onclick=async()=>{let d=await fetch('/i18n/'+lang+'.json').then(r=>r.json());if(!confirm(d['workspaceRecovery.confirm']))return;let r=await fetch('/api/workspace/recreate',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});if(r.ok)location.reload();else document.querySelector('#message').textContent=d['workspaceRecovery.failed'];};</script>'''.encode("utf-8"), "text/html; charset=utf-8")
+        self._binary('''<!doctype html><html lang="ja"><meta charset="utf-8"><title>Mozarie</title><main><h1 data-key="workspaceRecovery.title"></h1><p data-key="workspaceRecovery.message"></p><button id="recreate" data-key="workspaceRecovery.recreate"></button><p id="message" aria-live="polite"></p></main><script>(()=>{const lang=localStorage.getItem('mozarie-language')==='en'?'en':'ja';const button=document.querySelector('#recreate');const message=document.querySelector('#message');let translations;const text=key=>translations[key];fetch('/i18n/'+lang+'.json',{cache:'no-store'}).then(r=>{if(!r.ok)throw new Error('translations unavailable');return r.json();}).then(data=>{translations=data;document.documentElement.lang=lang;document.querySelectorAll('[data-key]').forEach(element=>{element.textContent=text(element.dataset.key);});button.addEventListener('click',async()=>{if(button.disabled||!confirm(text('workspaceRecovery.confirm')))return;button.disabled=true;try{const response=await fetch('/api/workspace/recreate',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});if(response.ok){location.reload();return;}message.textContent=text('workspaceRecovery.failed');}catch(_error){message.textContent=text('workspaceRecovery.failed');}button.disabled=false;});}).catch(()=>{message.textContent='';});})();</script></html>'''.encode("utf-8"), "text/html; charset=utf-8")
+
+    def _send_workspace_recovery_translation(self, path: str) -> None:
+        """Serve only the two canonical locale files needed by recovery."""
+        locale = {"/i18n/ja.json": "ja.json", "/i18n/en.json": "en.json"}[path]
+        self._binary((STATIC_DIR / "i18n" / locale).read_bytes(), "application/json; charset=utf-8")
+
+    def _workspace_recreate_required(self) -> None:
+        self._client_error(
+            ClientError("作業データを作り直してから操作してください。", "workspace_recreate_required"),
+            HTTPStatus.CONFLICT,
+        )
 
     def _require_binary_import_request(self) -> None:
         self._require_mutation_request()
@@ -186,8 +201,14 @@ class MosaicHandler(BaseHTTPRequestHandler):
             if STATE is None:
                 if path == "/api/workspace/recovery":
                     self._json({"required": True, "errorCode": "workspace_recreate_required"})
-                else:
+                elif path in {"/", "/index"}:
                     self._send_workspace_recovery_page()
+                elif path in {"/i18n/ja.json", "/i18n/en.json"}:
+                    self._send_workspace_recovery_translation(path)
+                elif _is_api_path(path):
+                    self._workspace_recreate_required()
+                else:
+                    self._client_error(ClientError("ページが見つかりません。", "api_not_found"), HTTPStatus.NOT_FOUND)
                 return
             if path == "/api/health":
                 models = STATE.settings.get("models", {})
@@ -276,7 +297,7 @@ class MosaicHandler(BaseHTTPRequestHandler):
         except ClientError as exc:
             self._client_error(exc, HTTPStatus.BAD_REQUEST)
         except Exception as exc:  # Keep tracebacks in the terminal, not in browser.
-            if (gpu_oom := STATE.recover_gpu_oom_for_request(exc)) is not None:
+            if STATE is not None and (gpu_oom := STATE.recover_gpu_oom_for_request(exc)) is not None:
                 LOGGER.error("GET リクエストでGPUメモリが不足: %s", self.path)
                 self._client_error(gpu_oom, HTTPStatus.BAD_REQUEST)
                 return
@@ -288,14 +309,22 @@ class MosaicHandler(BaseHTTPRequestHandler):
             parsed = urlparse(self.path)
             path = unquote(parsed.path)
             if STATE is None:
-                if path != "/api/workspace/recreate":
-                    self._require_local_host()
-                    raise ClientError("作業データを作り直してから操作してください。", "workspace_recreate_required")
-                self._require_recovery_request()
-                self._read_json_body()
-                restored = state_module.recreate_workspace()
-                globals()["STATE"] = restored
-                self._json({"ok": True})
+                if path == "/api/workspace/recreate":
+                    self._require_recovery_request()
+                    self._read_json_body()
+                    restored = state_module.recreate_workspace()
+                    globals()["STATE"] = restored
+                    self._json({"ok": True})
+                    return
+                self._require_local_host()
+                if _is_api_path(path):
+                    # The unavailable-state route does not consume arbitrary
+                    # request bodies.  Close this connection so a rejected
+                    # JSON body cannot be parsed as a second HTTP request.
+                    self.close_connection = True
+                    self._workspace_recreate_required()
+                else:
+                    self._client_error(ClientError("ページが見つかりません。", "api_not_found"), HTTPStatus.NOT_FOUND)
                 return
             if path == "/api/import/file":
                 self._require_binary_import_request()
@@ -548,8 +577,15 @@ class MosaicHandler(BaseHTTPRequestHandler):
 
     def do_DELETE(self) -> None:  # noqa: N802
         try:
-            self._require_mutation_request()
             path = unquote(urlparse(self.path).path)
+            if STATE is None:
+                self._require_local_host()
+                if _is_api_path(path):
+                    self._workspace_recreate_required()
+                else:
+                    self._client_error(ClientError("ページが見つかりません。", "api_not_found"), HTTPStatus.NOT_FOUND)
+                return
+            self._require_mutation_request()
             if path.startswith("/api/catalog/image/"):
                 image_id = path.removeprefix("/api/catalog/image/")
                 self._json({"images": STATE.remove_image_from_catalog(image_id)})
@@ -573,7 +609,7 @@ class MosaicHandler(BaseHTTPRequestHandler):
         except ClientError as exc:
             self._client_error(exc, HTTPStatus.BAD_REQUEST)
         except Exception as exc:
-            if (gpu_oom := STATE.recover_gpu_oom_for_request(exc)) is not None:
+            if STATE is not None and (gpu_oom := STATE.recover_gpu_oom_for_request(exc)) is not None:
                 LOGGER.error("DELETE リクエストでGPUメモリが不足: %s", self.path)
                 self._client_error(gpu_oom, HTTPStatus.BAD_REQUEST)
                 return

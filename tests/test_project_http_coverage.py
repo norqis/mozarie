@@ -291,6 +291,53 @@ class ProjectHttpCoverageTests(unittest.TestCase):
             request.do_POST()
         self.assertEqual(request._client_error.call_args.args[0].error_code, "workspace_recreate_required")
 
+    def test_live_unavailable_workspace_routes_are_strict_and_recover_once(self) -> None:
+        """A missing workspace must not leak the regular app or its static aliases."""
+        previous = http_module.STATE
+        http_module.STATE = None
+        try:
+            for path in ("/", "/index"):
+                status, headers, body = self.request("GET", path)
+                self.assertEqual(status, 200)
+                self.assertEqual(headers["Content-Type"], "text/html; charset=utf-8")
+                self.assertIn(b'fetch(\'/i18n/\'+lang+\'.json\'', body)
+                self.assertIn(b"button.disabled=true", body)
+                self.assertIn(b"if(response.ok)", body)
+
+            for path in ("/i18n/ja.json", "/i18n/en.json"):
+                status, headers, body = self.request("GET", path)
+                self.assertEqual(status, 200)
+                self.assertEqual(headers["Content-Type"], "application/json; charset=utf-8")
+                self.assertIn("workspaceRecovery.title", json.loads(body))
+
+            for path in ("/index.html", "/favicon.ico", "/i18n/ja", "/i18n/ja.json/extra"):
+                status, _headers, body = self.request("GET", path)
+                self.assertEqual(status, 404)
+                self.assertEqual(json.loads(body)["error_code"], "api_not_found")
+
+            for method, path in (("GET", "/api"), ("GET", "/api/images"), ("POST", "/api/images"), ("DELETE", "/api/images")):
+                status, _headers, body = self.request(method, path, {} if method == "POST" else None)
+                self.assertEqual(status, 409)
+                self.assertEqual(json.loads(body)["error_code"], "workspace_recreate_required")
+
+            with patch.object(state_module, "recreate_workspace", return_value=self.state) as recreate:
+                status, _headers, body = self.request("POST", "/api/workspace/recreate", {}, authorized=True)
+            self.assertEqual(status, 200)
+            self.assertEqual(json.loads(body), {"ok": True})
+            recreate.assert_called_once_with()
+            self.assertIs(http_module.STATE, self.state)
+
+            # This forces the outer recovery boundary while STATE is still
+            # absent.  It must return one structured 500, not throw again when
+            # checking the normal GPU-recovery hook.
+            http_module.STATE = None
+            with patch.object(MosaicHandler, "_send_workspace_recovery_page", side_effect=RuntimeError("render failed")):
+                status, _headers, body = self.request("GET", "/")
+            self.assertEqual(status, 500)
+            self.assertEqual(json.loads(body)["error_code"], "internal_error")
+        finally:
+            http_module.STATE = previous
+
     def test_project_adjacent_batch_and_stream_error_paths(self) -> None:
         # Project batch edits are routed through the shared candidates API;
         # exercise the many-image form so its response stays plural.
