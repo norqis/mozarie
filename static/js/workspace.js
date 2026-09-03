@@ -23,6 +23,7 @@ function queueWorkspaceFlags(imageId, payload) {
 }
 
 const DIRECTORY_DB = "mozarie-directory-catalogs";
+function projectSourceId() { return globalThis.crypto?.randomUUID?.() || `source-${Date.now()}-${Math.random().toString(16).slice(2)}`; }
 async function directoryCatalogStore() {
   if (!window.indexedDB) return null;
   return new Promise((resolve) => {
@@ -37,16 +38,21 @@ async function directoryCatalogStore() {
   });
 }
 
-async function rememberProjectSource(projectId, handle, imageId = null) {
-  const db = await directoryCatalogStore(); if (!db || !projectId || !handle) return;
-  try { db.transaction("projectSources", "readwrite").objectStore("projectSources").put({ key: `${projectId}:${imageId || "directory"}`, projectId, imageId, handle }); }
-  catch { /* A source can still be selected again later. */ }
-  db.close();
+async function rememberProjectSource(projectId, handle, imageId = null, sourceId = null) {
+  const db = await directoryCatalogStore(); if (!db || !projectId || !handle) return sourceId || projectSourceId();
+  try {
+    const store = db.transaction("projectSources", "readwrite").objectStore("projectSources");
+    const stableId = sourceId || projectSourceId();
+    store.put({ key: `${projectId}:${stableId}:${imageId || "root"}`, projectId, imageId, sourceId: stableId, handle });
+    return stableId;
+  } catch { return sourceId || projectSourceId(); }
+  finally { db.close(); }
 }
-async function rememberedProjectSource(projectId, imageId = null) {
+async function rememberedProjectSource(projectId, sourceId = null, imageId = null) {
   const db = await directoryCatalogStore(); if (!db || !projectId) return null;
-  const value = await new Promise((resolve) => { const request = db.transaction("projectSources").objectStore("projectSources").get(`${projectId}:${imageId || "directory"}`); request.onsuccess = () => resolve(request.result?.handle || null); request.onerror = () => resolve(null); });
-  db.close(); return value;
+  const rows = await new Promise((resolve) => { const request = db.transaction("projectSources").objectStore("projectSources").getAll(); request.onsuccess = () => resolve(request.result || []); request.onerror = () => resolve([]); });
+  const value = rows.find((row) => row.projectId === projectId && (!sourceId || row.sourceId === sourceId) && (imageId == null ? !row.imageId : row.imageId === imageId));
+  db.close(); return value?.handle || null;
 }
 async function rememberedProjectFileSources(projectId) {
   const db = await directoryCatalogStore(); if (!db || !projectId) return [];
@@ -56,6 +62,16 @@ async function rememberedProjectFileSources(projectId) {
   });
   db.close();
   return rows.filter((row) => row.projectId === projectId && row.imageId && row.handle?.kind === "file").map((row) => row.handle);
+}
+async function rememberedProjectDirectorySources(projectId) {
+  const db = await directoryCatalogStore(); if (!db || !projectId) return [];
+  const rows = await new Promise((resolve) => {
+    const request = db.transaction("projectSources").objectStore("projectSources").getAll();
+    request.onsuccess = () => resolve(request.result || []); request.onerror = () => resolve([]);
+  });
+  db.close();
+  return rows.filter((row) => row.projectId === projectId && !row.imageId && row.handle?.kind === "directory")
+    .map((row) => ({ sourceId: row.sourceId, handle: row.handle }));
 }
 async function ensureProjectSourcePermission(handle, request = false) {
   if (!handle?.queryPermission) return Boolean(handle);
@@ -87,7 +103,7 @@ async function rememberOutputDirectoryHandle(handle) {
 async function catalogForDirectoryHandle(handle) {
   if (state.project?.id) {
     const activated = await api("/api/workspace/catalog", { method: "POST", body: JSON.stringify({ catalogId: state.project.id }) });
-    await rememberProjectSource(state.project.id, handle);
+    state.pendingDirectorySourceId = await rememberProjectSource(state.project.id, handle);
     return activated.catalogId || state.project.id;
   }
   // A folder is never silently matched to a prior project.  Project history
@@ -96,7 +112,7 @@ async function catalogForDirectoryHandle(handle) {
   state.project = created.project || null;
   state.projectReadOnly = false;
   if (!state.project?.id) return null;
-  await rememberProjectSource(state.project.id, handle);
+  state.pendingDirectorySourceId = await rememberProjectSource(state.project.id, handle);
   return state.project.id;
 }
 
@@ -108,11 +124,6 @@ function workspaceDraftPayload(draft) {
     manualExclusionEraseEnabled: draft.manualExclusionEraseEnabled !== false, manualExclusionForced: draft.manualExclusionForced !== false,
     hasEffectiveMask: draft.hasEffectiveMask === true,
     removedCandidateIds: draft.removedCandidateIds || [], candidateRevision: Number(draft.candidateRevision || 0),
-    history: {
-      operations: Array.isArray(draft.history) ? draft.history : [],
-      index: Number(draft.historyIndex || 0),
-      base: draft.historyBase || {},
-    },
   };
 }
 
@@ -193,8 +204,9 @@ async function loadWorkspaceDraft(imageId) {
   const data = await api(`/api/workspace/manual/${encodeURIComponent(imageId)}`);
   const draft = data.draft;
   if (!draft) return null;
-  const history = draft.history && typeof draft.history === "object" ? draft.history : {};
-  return { ...draft, history: Array.isArray(history.operations) ? history.operations : [], historyIndex: Number(history.index || 0), historyBase: history.base || {} };
+  // Project undo is restored by the durable history endpoint. Keeping a
+  // second operation log inside every draft duplicates PNG payloads.
+  return { ...draft, history: [], historyIndex: 0, historyBase: {} };
 }
 
 function scheduleManualWorkspaceSave() {

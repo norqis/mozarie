@@ -645,5 +645,10 @@
   "project.noSource": "元フォルダーなし",
   "project.noDate": "日時なし",
   "project.dimensionsChanged": "画像サイズが変わっています。削除するまで編集・保存できません",
-  "dialog.ok": "OK"
+  "dialog.ok": "OK",
+  "workspaceRecovery.title": "作業データを作り直す必要があります",
+  "workspaceRecovery.message": "既存のローカル作業データはこの版では開けません。元画像は削除されません。",
+  "workspaceRecovery.recreate": "作業データを作り直す",
+  "workspaceRecovery.confirm": "プロジェクト・マスク・履歴のローカルデータを削除して作り直します。元画像は削除されません。",
+  "workspaceRecovery.failed": "作り直せませんでした。Mozarieを閉じてからもう一度お試しください。"
 }

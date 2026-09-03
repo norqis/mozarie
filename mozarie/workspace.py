@@ -43,7 +43,7 @@ class _ClosingConnection(sqlite3.Connection):
 class WorkspaceStore:
     # v7 deliberately replaces the old folder catalogue with a project store.
     # There is no migration path: the user chooses whether to recreate v4 data.
-    VERSION = 7
+    VERSION = 8
 
     def __init__(self, data_dir: Path) -> None:
         self.path = data_dir / "workspaces.sqlite3"
@@ -62,7 +62,7 @@ class WorkspaceStore:
             db.executescript("""
                 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
                 CREATE TABLE IF NOT EXISTS catalogs (
-                    catalog_id TEXT PRIMARY KEY, identity_hash TEXT NOT NULL,
+                    catalog_id TEXT PRIMARY KEY,
                     name TEXT COLLATE NOCASE UNIQUE, status TEXT NOT NULL DEFAULT 'working',
                     source_root TEXT, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL
                 );
@@ -77,6 +77,7 @@ class WorkspaceStore:
                     relative_path TEXT NOT NULL, image_id TEXT NOT NULL UNIQUE,
                     size_bytes INTEGER NOT NULL, mtime_ns INTEGER NOT NULL, width INTEGER NOT NULL, height INTEGER NOT NULL,
                     hidden INTEGER NOT NULL DEFAULT 0, reviewed INTEGER NOT NULL DEFAULT 0,
+                    source_blocked INTEGER NOT NULL DEFAULT 0,
                     candidate_revision INTEGER NOT NULL DEFAULT 0, updated_at INTEGER NOT NULL,
                     PRIMARY KEY(source_id, relative_path)
                 );
@@ -120,6 +121,18 @@ class WorkspaceStore:
                 END;
                 CREATE TRIGGER IF NOT EXISTS project_image_update AFTER UPDATE ON images BEGIN
                     UPDATE catalogs SET updated_at=CAST(unixepoch('subsec')*1000000000 AS INTEGER) WHERE catalog_id=NEW.catalog_id;
+                END;
+                CREATE TRIGGER IF NOT EXISTS project_manual_insert AFTER INSERT ON manual_edits BEGIN
+                    UPDATE catalogs SET updated_at=CAST(unixepoch('subsec')*1000000000 AS INTEGER)
+                    WHERE catalog_id=(SELECT catalog_id FROM images WHERE image_id=NEW.image_id);
+                END;
+                CREATE TRIGGER IF NOT EXISTS project_manual_update AFTER UPDATE ON manual_edits BEGIN
+                    UPDATE catalogs SET updated_at=CAST(unixepoch('subsec')*1000000000 AS INTEGER)
+                    WHERE catalog_id=(SELECT catalog_id FROM images WHERE image_id=NEW.image_id);
+                END;
+                CREATE TRIGGER IF NOT EXISTS project_manual_delete AFTER DELETE ON manual_edits BEGIN
+                    UPDATE catalogs SET updated_at=CAST(unixepoch('subsec')*1000000000 AS INTEGER)
+                    WHERE catalog_id=(SELECT catalog_id FROM images WHERE image_id=OLD.image_id);
                 END;
             """)
             if not existing:
@@ -168,10 +181,16 @@ class WorkspaceStore:
         if db.execute("PRAGMA foreign_key_check").fetchone() is not None:
             raise WorkspaceOpenError("workspace database must be recreated for Mozarie v0.7")
         meta = {str(row["name"]): row for row in db.execute("PRAGMA table_info(meta)")}
+        catalogs = {str(row["name"]): row for row in db.execute("PRAGMA table_info(catalogs)")}
         images = {str(row["name"]): row for row in db.execute("PRAGMA table_info(images)")}
+        foreign = list(db.execute("PRAGMA foreign_key_list(images)"))
+        indexes = list(db.execute("PRAGMA index_list(catalogs)"))
         if (set(meta) != {"key", "value"} or str(meta["key"]["type"]).upper() != "TEXT" or not int(meta["key"]["pk"])
                 or str(meta["value"]["type"]).upper() != "TEXT" or not int(meta["value"]["notnull"])
-                or not {"catalog_id", "source_id", "relative_path", "image_id", "size_bytes", "mtime_ns", "width", "height"}.issubset(images)):
+                or "catalog_id" not in catalogs or not int(catalogs["catalog_id"]["pk"])
+                or not {"catalog_id", "source_id", "relative_path", "image_id", "size_bytes", "mtime_ns", "width", "height", "source_blocked"}.issubset(images)
+                or not foreign
+                or not any(int(row["unique"]) for row in indexes)):
             raise WorkspaceOpenError("workspace database must be recreated for Mozarie v0.7")
 
     def _connect(self) -> sqlite3.Connection:
@@ -231,7 +250,7 @@ class WorkspaceStore:
         now = time.time_ns()
         with self._lock, self._connect() as db:
             catalog_id = uuid.uuid4().hex
-            db.execute("INSERT INTO catalogs(catalog_id,identity_hash,source_root,created_at,updated_at) VALUES(?,?,?,?,?)", (catalog_id, identity, identity, now, now))
+            db.execute("INSERT INTO catalogs(catalog_id,source_root,created_at,updated_at) VALUES(?,?,?,?)", (catalog_id, identity, now, now))
             self._ensure_project_source_db(db, catalog_id, "native-folder", root.name or str(root), identity)
             return catalog_id
 
@@ -258,22 +277,21 @@ class WorkspaceStore:
         if catalog_id is not None and (len(catalog_id) != 32 or any(char not in "0123456789abcdef" for char in catalog_id)):
             raise ValueError("invalid catalog id")
         catalog_id = catalog_id or uuid.uuid4().hex
-        identity = f"browser:{catalog_id}"
         now = time.time_ns()
         with self._lock, self._connect() as db:
-            db.execute("INSERT OR IGNORE INTO catalogs(catalog_id,identity_hash,created_at,updated_at) VALUES(?,?,?,?)", (catalog_id, identity, now, now))
+            db.execute("INSERT OR IGNORE INTO catalogs(catalog_id,created_at,updated_at) VALUES(?,?,?)", (catalog_id, now, now))
             return catalog_id
 
     def ensure_provisional_catalog(self) -> str:
         catalog_id = uuid.uuid4().hex
         now = time.time_ns()
         with self._lock, self._connect() as db:
-            db.execute("INSERT INTO catalogs(catalog_id,identity_hash,created_at,updated_at) VALUES(?,?,?,?)", (catalog_id, f"browser-provisional:{catalog_id}", now, now))
+            db.execute("INSERT INTO catalogs(catalog_id,created_at,updated_at) VALUES(?,?,?)", (catalog_id, now, now))
         return catalog_id
 
     def finalize_catalog(self, catalog_id: str) -> None:
         with self._lock, self._connect() as db:
-            db.execute("UPDATE catalogs SET identity_hash=?,updated_at=? WHERE catalog_id=? AND identity_hash LIKE 'browser-provisional:%'", (f"browser:{catalog_id}", time.time_ns(), catalog_id))
+            db.execute("UPDATE catalogs SET updated_at=? WHERE catalog_id=?", (time.time_ns(), catalog_id))
 
     def catalog_exists(self, catalog_id: str) -> bool:
         with self._connect() as db:
@@ -307,16 +325,27 @@ class WorkspaceStore:
                 GROUP BY catalogs.catalog_id""", (catalog_id,)).fetchone()
         return self._project_row(row) if row else None
 
+    def project_sources(self, catalog_id: str) -> list[dict[str, Any]]:
+        with self._connect() as db:
+            rows = db.execute("""SELECT source_id,kind,display_name,native_path,source_identity
+                FROM project_sources WHERE catalog_id=? ORDER BY created_at,source_id""", (catalog_id,)).fetchall()
+        return [{"id": str(row["source_id"]), "kind": str(row["kind"]), "displayName": str(row["display_name"]),
+                 "nativePath": row["native_path"], "identity": str(row["source_identity"])} for row in rows]
+
     def project_images(self, catalog_id: str) -> list[dict[str, Any]]:
         with self._connect() as db:
-            rows = db.execute("""SELECT image_id,relative_path,width,height FROM images
-                WHERE catalog_id=? ORDER BY relative_path COLLATE NOCASE, image_id""", (catalog_id,)).fetchall()
-        return [{"id": str(row["image_id"]), "relativePath": str(row["relative_path"]), "width": int(row["width"]), "height": int(row["height"])} for row in rows]
+            rows = db.execute("""SELECT images.image_id,images.relative_path,images.width,images.height,
+                project_sources.display_name,images.source_id FROM images JOIN project_sources ON project_sources.source_id=images.source_id
+                WHERE images.catalog_id=? ORDER BY project_sources.display_name COLLATE NOCASE,images.relative_path COLLATE NOCASE,images.image_id""", (catalog_id,)).fetchall()
+        return [{"id": str(row["image_id"]), "relativePath": str(row["relative_path"]), "width": int(row["width"]), "height": int(row["height"]),
+                 "sourceId": str(row["source_id"]), "sourceDisplay": str(row["display_name"])} for row in rows]
 
     def project_image(self, image_id: str) -> dict[str, Any] | None:
         with self._connect() as db:
-            row = db.execute("SELECT image_id,relative_path,width,height FROM images WHERE image_id=?", (image_id,)).fetchone()
-        return {"id": str(row["image_id"]), "relativePath": str(row["relative_path"]), "width": int(row["width"]), "height": int(row["height"])} if row else None
+            row = db.execute("""SELECT images.image_id,images.relative_path,images.width,images.height,images.source_id,project_sources.display_name
+                FROM images JOIN project_sources ON project_sources.source_id=images.source_id WHERE images.image_id=?""", (image_id,)).fetchone()
+        return {"id": str(row["image_id"]), "relativePath": str(row["relative_path"]), "width": int(row["width"]), "height": int(row["height"]),
+                "sourceId": str(row["source_id"]), "sourceDisplay": str(row["display_name"])} if row else None
 
     def create_project(self, name: str | None = None, source_root: str | None = None) -> dict[str, Any]:
         clean_name = name.strip() if isinstance(name, str) else ""
@@ -325,8 +354,8 @@ class WorkspaceStore:
         now = time.time_ns(); catalog_id = uuid.uuid4().hex
         with self._lock, self._connect() as db:
             try:
-                db.execute("INSERT INTO catalogs(catalog_id,identity_hash,name,status,source_root,created_at,updated_at) VALUES(?,?,?,?,?,?,?)",
-                           (catalog_id, f"project:{catalog_id}", clean_name or None, "working", source_root, now, now))
+                db.execute("INSERT INTO catalogs(catalog_id,name,status,source_root,created_at,updated_at) VALUES(?,?,?,?,?,?)",
+                           (catalog_id, clean_name or None, "working", source_root, now, now))
             except sqlite3.IntegrityError as exc:
                 raise ValueError("project name already exists") from exc
         return self.project(catalog_id) or {}
@@ -381,7 +410,7 @@ class WorkspaceStore:
         # silently merge browser imports into a similarly shaped project.
         return None
 
-    def reconcile_images(self, catalog_id: str, records: list[Any], source_hashes: dict[str, str] | None = None, source_id: str | None = None) -> dict[str, dict[str, Any]]:
+    def reconcile_images(self, catalog_id: str, records: list[Any], source_id: str | None = None) -> dict[str, dict[str, Any]]:
         """Return durable state by path without silently discarding edits."""
         now = time.time_ns()
         result: dict[str, dict[str, Any]] = {}
@@ -424,7 +453,7 @@ class WorkspaceStore:
                     # Keep the old baseline until the user accepts the source
                     # change in the warning dialog. This makes a reopened
                     # project warn again instead of silently normalising it.
-                    result[record.relative_path] = {"image_id": row["image_id"], "hidden": bool(row["hidden"]), "reviewed": False if changed else bool(row["reviewed"]), "revision": int(row["candidate_revision"]), "changed": changed, "dimensions_changed": dimensions_changed}
+                    result[record.relative_path] = {"image_id": row["image_id"], "hidden": bool(row["hidden"]), "reviewed": False if changed else bool(row["reviewed"]), "revision": int(row["candidate_revision"]), "changed": changed or bool(row["source_blocked"]), "dimensions_changed": dimensions_changed or bool(row["source_blocked"])}
                 db.execute("COMMIT")
             except Exception:
                 db.execute("ROLLBACK")
@@ -438,10 +467,10 @@ class WorkspaceStore:
             try:
                 for record in records:
                     if preserve_mask_dimensions:
-                        db.execute("UPDATE images SET size_bytes=?,mtime_ns=?,reviewed=0,updated_at=? WHERE image_id=?",
+                        db.execute("UPDATE images SET size_bytes=?,mtime_ns=?,source_blocked=1,reviewed=0,updated_at=? WHERE image_id=?",
                                    (record.size_bytes, record.mtime_ns, time.time_ns(), record.image_id))
                     else:
-                        db.execute("""UPDATE images SET size_bytes=?,mtime_ns=?,width=?,height=?,reviewed=0,updated_at=?
+                        db.execute("""UPDATE images SET size_bytes=?,mtime_ns=?,width=?,height=?,source_blocked=0,reviewed=0,updated_at=?
                             WHERE image_id=?""", (record.size_bytes, record.mtime_ns, record.width, record.height, time.time_ns(), record.image_id))
                 db.execute("COMMIT")
             except Exception:
@@ -472,6 +501,10 @@ class WorkspaceStore:
                 for image_id, revision in revisions.items():
                     db.execute("DELETE FROM candidates WHERE image_id=?", (image_id,))
                     db.execute("DELETE FROM manual_edits WHERE image_id=?", (image_id,))
+                    # A changed source must not keep operations whose masks
+                    # belong to its previous pixels.
+                    db.execute("DELETE FROM history_entries WHERE image_id=?", (image_id,))
+                    db.execute("DELETE FROM history_cursors WHERE image_id=?", (image_id,))
                     db.execute("UPDATE images SET candidate_revision=?,reviewed=0,updated_at=? WHERE image_id=?", (revision, time.time_ns(), image_id))
                 db.execute("COMMIT")
             except Exception:
@@ -515,7 +548,7 @@ class WorkspaceStore:
             db.execute(f"UPDATE images SET {','.join(updates)},updated_at=? WHERE image_id=?", values)
 
     def commit_save(self, image_id: str, *, mtime_ns: int | None = None, size_bytes: int | None = None,
-                    source_hash: str | None = None, candidate_revision: int | None = None,
+                    candidate_revision: int | None = None,
                     clear_workspace: bool, delete_image: bool = False) -> None:
         """Commit one completed save before its in-memory review state is published."""
         with self._lock, self._connect() as db:
@@ -717,7 +750,7 @@ class WorkspaceStore:
     def history_state(self, image_id: str) -> dict[str, Any]:
         """Capture every durable edit field needed to restore one image exactly."""
         with self._connect() as db:
-            image = db.execute("SELECT catalog_id,candidate_revision FROM images WHERE image_id=?", (image_id,)).fetchone()
+            image = db.execute("SELECT catalog_id,candidate_revision,hidden,reviewed FROM images WHERE image_id=?", (image_id,)).fetchone()
             if image is None:
                 raise ValueError("workspace image is missing")
             candidates = db.execute("""SELECT candidate_id,label_token,confidence,mask_png,enabled,color,source,origin,
@@ -743,7 +776,9 @@ class WorkspaceStore:
                 "revision": int(manual["candidate_revision"]), "effective": bool(manual["has_effective_mask"]),
                 "history": str(manual["history_json"]),
             }
-        return {"catalog": str(image["catalog_id"]), "revision": int(image["candidate_revision"]), "candidates": packed_candidates, "manual": packed_manual}
+        return {"catalog": str(image["catalog_id"]), "revision": int(image["candidate_revision"]),
+                "flags": {"hidden": bool(image["hidden"]), "reviewed": bool(image["reviewed"])},
+                "candidates": packed_candidates, "manual": packed_manual}
 
     @staticmethod
     def _history_json(state: dict[str, Any]) -> str:
@@ -810,14 +845,30 @@ class WorkspaceStore:
                 VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)""", (image_id, *blobs, int(bool(manual.get("manualEnabled"))),
                 int(bool(manual.get("exclusionEnabled"))), int(bool(manual.get("eraseEnabled"))), int(bool(manual.get("exclusionForced"))),
                 manual["removed"], int(manual.get("revision", revision)), int(bool(manual.get("effective"))), manual["history"], time.time_ns()))
-        db.execute("UPDATE images SET candidate_revision=?,reviewed=0,updated_at=? WHERE image_id=?", (revision, time.time_ns(), image_id))
+        flags = state.get("flags", {})
+        if not isinstance(flags, dict) or not isinstance(flags.get("hidden", False), bool) or not isinstance(flags.get("reviewed", False), bool):
+            raise ValueError("workspace history is invalid")
+        db.execute("UPDATE images SET candidate_revision=?,hidden=?,reviewed=?,updated_at=? WHERE image_id=?", (revision, int(flags.get("hidden", False)), int(flags.get("reviewed", False)), time.time_ns(), image_id))
 
     def history_status(self, image_id: str) -> dict[str, bool]:
         with self._connect() as db:
             cursor = db.execute("SELECT entry_id FROM history_cursors WHERE image_id=?", (image_id,)).fetchone()
             current = int(cursor["entry_id"]) if cursor and cursor["entry_id"] is not None else 0
-            can_undo = current > 0
-            can_redo = db.execute("SELECT 1 FROM history_entries WHERE image_id=? AND entry_id>?", (image_id, current)).fetchone() is not None
+            undo_entry = db.execute("SELECT * FROM history_entries WHERE entry_id=? AND image_id=?", (current, image_id)).fetchone() if current else None
+            redo_entry = db.execute("SELECT * FROM history_entries WHERE image_id=? AND entry_id>? ORDER BY entry_id LIMIT 1", (image_id, current)).fetchone()
+            def group_ready(entry: sqlite3.Row | None, direction: str) -> bool:
+                if entry is None or not entry["group_id"]: return entry is not None
+                members = db.execute("SELECT image_id,entry_id FROM history_entries WHERE group_id=?", (entry["group_id"],)).fetchall()
+                for member in members:
+                    cursor_row = db.execute("SELECT entry_id FROM history_cursors WHERE image_id=?", (member["image_id"],)).fetchone()
+                    cursor_id = int(cursor_row["entry_id"]) if cursor_row and cursor_row["entry_id"] is not None else 0
+                    if direction == "undo" and cursor_id != int(member["entry_id"]): return False
+                    if direction == "redo":
+                        previous = db.execute("SELECT entry_id FROM history_entries WHERE image_id=? AND entry_id<? ORDER BY entry_id DESC LIMIT 1", (member["image_id"], member["entry_id"])).fetchone()
+                        if cursor_id != (int(previous["entry_id"]) if previous else 0): return False
+                return True
+            can_undo = group_ready(undo_entry, "undo")
+            can_redo = group_ready(redo_entry, "redo")
         return {"canUndo": can_undo, "canRedo": can_redo}
 
     def restore_history(self, image_id: str, direction: str) -> list[str]:
@@ -834,6 +885,17 @@ class WorkspaceStore:
                 if entry is None:
                     db.execute("COMMIT"); return []
                 entries = db.execute("SELECT * FROM history_entries WHERE group_id=? ORDER BY entry_id", (entry["group_id"],)).fetchall() if entry["group_id"] else [entry]
+                if entry["group_id"]:
+                    for member in entries:
+                        cursor_row = db.execute("SELECT entry_id FROM history_cursors WHERE image_id=?", (member["image_id"],)).fetchone()
+                        cursor_id = int(cursor_row["entry_id"]) if cursor_row and cursor_row["entry_id"] is not None else 0
+                        if direction == "undo":
+                            expected = int(member["entry_id"])
+                        else:
+                            previous = db.execute("SELECT entry_id FROM history_entries WHERE image_id=? AND entry_id<? ORDER BY entry_id DESC LIMIT 1", (member["image_id"], member["entry_id"])).fetchone()
+                            expected = int(previous["entry_id"]) if previous else 0
+                        if cursor_id != expected:
+                            db.execute("COMMIT"); return []
                 changed: list[str] = []
                 for member in entries:
                     state = json.loads(str(member["before_json"] if direction == "undo" else member["after_json"]))

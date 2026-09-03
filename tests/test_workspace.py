@@ -226,8 +226,8 @@ class WorkspaceTests(unittest.TestCase):
                 db.executescript("""
                     CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
                     INSERT INTO meta VALUES('schema_version', '3');
-                    CREATE TABLE catalogs (catalog_id TEXT PRIMARY KEY, identity_hash TEXT NOT NULL, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL);
-                    CREATE TABLE images (catalog_id TEXT NOT NULL, relative_path TEXT NOT NULL, image_id TEXT NOT NULL UNIQUE, size_bytes INTEGER NOT NULL, mtime_ns INTEGER NOT NULL, source_hash TEXT NOT NULL DEFAULT '', hidden INTEGER NOT NULL DEFAULT 0, reviewed INTEGER NOT NULL DEFAULT 0, candidate_revision INTEGER NOT NULL DEFAULT 0, updated_at INTEGER NOT NULL, PRIMARY KEY(catalog_id, relative_path));
+                    CREATE TABLE catalogs (catalog_id TEXT PRIMARY KEY, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL);
+                    CREATE TABLE images (catalog_id TEXT NOT NULL, relative_path TEXT NOT NULL, image_id TEXT NOT NULL UNIQUE, size_bytes INTEGER NOT NULL, mtime_ns INTEGER NOT NULL, hidden INTEGER NOT NULL DEFAULT 0, reviewed INTEGER NOT NULL DEFAULT 0, candidate_revision INTEGER NOT NULL DEFAULT 0, updated_at INTEGER NOT NULL, PRIMARY KEY(catalog_id, relative_path));
                     CREATE TABLE candidates (image_id TEXT NOT NULL, candidate_id TEXT NOT NULL, class_name TEXT NOT NULL, confidence REAL, mask_png BLOB NOT NULL, enabled INTEGER NOT NULL, color TEXT NOT NULL, source TEXT NOT NULL, origin TEXT NOT NULL, refinement TEXT, role TEXT NOT NULL, forced INTEGER NOT NULL, deleted INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(image_id, candidate_id));
                     CREATE TABLE manual_edits (image_id TEXT PRIMARY KEY, add_png BLOB, exclusion_png BLOB, exclusion_erase_png BLOB, manual_enabled INTEGER NOT NULL DEFAULT 1, exclusion_enabled INTEGER NOT NULL DEFAULT 1, exclusion_erase_enabled INTEGER NOT NULL DEFAULT 1, exclusion_forced INTEGER NOT NULL DEFAULT 1, removed_candidate_ids TEXT NOT NULL DEFAULT '[]', candidate_revision INTEGER NOT NULL DEFAULT 0, has_effective_mask INTEGER NOT NULL DEFAULT 0, updated_at INTEGER NOT NULL);
                 """)
@@ -337,7 +337,7 @@ class WorkspaceTests(unittest.TestCase):
             store = WorkspaceStore(root)
             catalog = store.ensure_catalog()
             entries = [(f"nested/{index:05}.png", f"hash-{index}") for index in range(5000)]
-            store.reconcile_images(catalog, [SimpleNamespace(relative_path=path, size_bytes=10, mtime_ns=20) for path, _hash in entries], dict(entries))
+            store.reconcile_images(catalog, [SimpleNamespace(relative_path=path, size_bytes=10, mtime_ns=20) for path, _hash in entries])
             statements: list[str] = []
             original_connect = store._connect
 
@@ -356,7 +356,7 @@ class WorkspaceTests(unittest.TestCase):
             # Rebuild a current-named table with a subtly incompatible default.
             with sqlite3.connect(store.path) as db:
                 db.execute("ALTER TABLE images RENAME TO images_old")
-                db.execute("CREATE TABLE images (catalog_id TEXT NOT NULL, relative_path TEXT NOT NULL, image_id TEXT NOT NULL UNIQUE, size_bytes INTEGER NOT NULL, mtime_ns INTEGER NOT NULL, source_hash TEXT NOT NULL DEFAULT 'changed', hidden INTEGER NOT NULL DEFAULT 0, reviewed INTEGER NOT NULL DEFAULT 0, candidate_revision INTEGER NOT NULL DEFAULT 0, updated_at INTEGER NOT NULL, PRIMARY KEY(catalog_id, relative_path))")
+                db.execute("CREATE TABLE images (catalog_id TEXT NOT NULL, relative_path TEXT NOT NULL, image_id TEXT NOT NULL UNIQUE, size_bytes INTEGER NOT NULL, mtime_ns INTEGER NOT NULL, hidden INTEGER NOT NULL DEFAULT 0, reviewed INTEGER NOT NULL DEFAULT 0, candidate_revision INTEGER NOT NULL DEFAULT 0, updated_at INTEGER NOT NULL, PRIMARY KEY(catalog_id, relative_path))")
                 db.execute("DROP TABLE images_old")
             before = store.path.read_bytes()
             with self.assertRaises(WorkspaceOpenError):
@@ -430,6 +430,31 @@ class WorkspaceTests(unittest.TestCase):
             with self.assertRaises(WorkspaceOpenError):
                 WorkspaceStore(root)
             self.assertEqual(store.path.read_bytes(), before)
+
+    def test_history_restores_image_flags(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = WorkspaceStore(Path(directory)); catalog = store.ensure_catalog()
+            image_id = str(store.reconcile_images(catalog, [self._image(Path(directory))])["001.png"]["image_id"])
+            before = store.history_state(image_id)
+            store.set_image_flags(image_id, hidden=True, reviewed=True)
+            store.record_history(image_id, before, store.history_state(image_id))
+            self.assertEqual(store.image_state(image_id), (True, True))
+            self.assertEqual(store.restore_history(image_id, "undo"), [image_id])
+            self.assertEqual(store.image_state(image_id), (False, False))
+
+    def test_dimension_acknowledgement_stays_blocked_until_masks_are_cleared(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = WorkspaceStore(Path(directory)); catalog = store.ensure_catalog()
+            initial = SimpleNamespace(relative_path="001.png", size_bytes=10, mtime_ns=20, width=4, height=4)
+            image_id = str(store.reconcile_images(catalog, [initial])["001.png"]["image_id"])
+            changed = SimpleNamespace(image_id=image_id, relative_path="001.png", size_bytes=11, mtime_ns=21, width=8, height=8)
+            store.accept_source_metadata([changed], preserve_mask_dimensions=True)
+            reopened = store.reconcile_images(catalog, [changed])["001.png"]
+            self.assertTrue(reopened["changed"]); self.assertTrue(reopened["dimensions_changed"])
+            store.clear_image_workspaces({image_id: 1})
+            store.accept_source_metadata([changed])
+            accepted = store.reconcile_images(catalog, [changed])["001.png"]
+            self.assertFalse(accepted["changed"]); self.assertFalse(accepted["dimensions_changed"])
 
 if __name__ == "__main__":
     unittest.main()

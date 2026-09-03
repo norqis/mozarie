@@ -133,11 +133,19 @@ async function openProject(project, resume = false) {
     state.project = data.project; state.projectReadOnly = data.project?.status === "completed";
     $("#projectListDialog").close(); $("#projectDialog").close();
     if (data.needsSource) {
-      const handle = await rememberedProjectSource(project.id);
       const files = await rememberedProjectFileSources(project.id);
-      if (handle && await ensureProjectSourcePermission(handle)) await importProjectDirectoryHandle(handle, project.id);
-      else if (files.length && await ensureProjectSourcePermission(files[0])) await importProjectFileHandles(files, project.id);
-      else { resetCatalog([], ""); renderProjectCurrent(); showUserError({ code: "project_source_unavailable" }); }
+      const directories = await rememberedProjectDirectorySources(project.id);
+      // Keep the native portion visible while browser handles are restored.
+      resetCatalog(data.images || [], data.project?.sourceRoot || "");
+      applyProjectSnapshot(await api("/api/images"));
+      const handles = [...directories.map((item) => item.handle), ...files].filter(Boolean);
+      const granted = await Promise.all(handles.map((handle) => ensureProjectSourcePermission(handle, true)));
+      for (let index = 0; index < directories.length; index += 1) {
+        if (granted[index]) await importProjectDirectoryHandle(directories[index].handle, project.id, directories[index].sourceId);
+      }
+      if (files.length && granted.slice(directories.length).every(Boolean)) await importProjectFileHandles(files, project.id);
+      if (!handles.length || granted.some((ok) => !ok)) showUserError({ code: "project_source_unavailable" });
+      await showSourceMismatches();
     } else {
       resetCatalog(data.images || [], data.project?.sourceRoot || "");
       applyProjectSnapshot(await api("/api/images")); await showSourceMismatches();
@@ -147,6 +155,8 @@ async function openProject(project, resume = false) {
 
 async function downloadProjectArtifact(path, filename) {
   try {
+    if (state.candidateUpdateChains?.size) await waitForCandidateMutations();
+    await flushAllWorkspaceMutations();
     const response = await fetch(path, { headers: { "X-Mozarie-Token": document.querySelector('meta[name="mozarie-token"]')?.content || "" } });
     if (!response.ok) throw responseError(response, await response.json().catch(() => ({})));
     const link = document.createElement("a"); link.href = URL.createObjectURL(await response.blob()); link.download = filename;

@@ -55,7 +55,7 @@ class WorkspaceCoverageTests(unittest.TestCase):
             first = store.ensure_catalog()
             second = store.ensure_catalog()
             for target, name in ((first, "one.png"), (second, "two.png")):
-                target_id = str(store.reconcile_images(target, [image_record(name) ], {name: "same"})[name]["image_id"])
+                target_id = str(store.reconcile_images(target, [image_record(name) ])[name]["image_id"])
                 self.assertTrue(store.has_image(target_id))
             self.assertIsNone(store.best_catalog_for_manifest([("one.png", "same"), ("two.png", "same")], catalog))
 
@@ -64,10 +64,10 @@ class WorkspaceCoverageTests(unittest.TestCase):
             root = Path(directory)
             store, catalog, image_id = self.new_store(root)
             store.set_image_flags(image_id, hidden=True, reviewed=True)
-            changed = store.reconcile_images(catalog, [image_record(size=11)], {"image.png": "hash-a"})["image.png"]
+            changed = store.reconcile_images(catalog, [image_record(size=11)])["image.png"]
             self.assertTrue(changed["changed"])
             self.assertFalse(changed["reviewed"])
-            store.commit_save(image_id, mtime_ns=22, size_bytes=12, source_hash="hash-b", candidate_revision=4, clear_workspace=True)
+            store.commit_save(image_id, mtime_ns=22, size_bytes=12, candidate_revision=4, clear_workspace=True)
             self.assertEqual(store.hydrate_candidates(image_id, root / "cache", lambda *_args: None)[0], 4)
             store.commit_save(image_id, mtime_ns=23, size_bytes=13, clear_workspace=False)
             store.commit_save(image_id, clear_workspace=False, delete_image=True)

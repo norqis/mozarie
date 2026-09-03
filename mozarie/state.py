@@ -89,7 +89,6 @@ class StudioState(CatalogMixin, SavingMixin, DetectionMixin, JobsMixin):
         self.catalog_id: str | None = None
         self.project_read_only = False
         self.source_mismatches: dict[str, bool] = {}
-        self.browser_import_hashes: dict[str, str] = {}
         self.browser_catalog_provisional = False
         self.settings = self.settings_store.load()
         self.lock = threading.RLock()
@@ -109,6 +108,7 @@ class StudioState(CatalogMixin, SavingMixin, DetectionMixin, JobsMixin):
         self.session_imports_dir: Path | None = None
         self._session_lock_handle: Any | None = None
         self.root: Path | None = None
+        self.source_roots: dict[str, Path] = {}
         self.images: dict[str, ImageRecord] = {}
         self.order: list[str] = []
         self.candidates: dict[str, list[Candidate]] = {}

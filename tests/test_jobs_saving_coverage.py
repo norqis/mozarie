@@ -417,7 +417,6 @@ class JobsSavingCoverageTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as raw:
             directory = Path(raw); record = self.record(directory); state = self.make_saving(directory)
             state.images[record.image_id] = record; state.order = [record.image_id]
-            self.assertEqual(state._sha256_file(record.path), __import__("hashlib").sha256(record.path.read_bytes()).hexdigest())
             output = directory / "output"; output.mkdir(); state.settings["saving"]["default_output_directory"] = str(output)
             first = state._reserve_output_destination(record, "_x", output)
             second = state._reserve_output_destination(record, "_x", output)

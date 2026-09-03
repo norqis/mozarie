@@ -150,7 +150,7 @@ class WorkspaceExtraCoverageTests(unittest.TestCase):
                 if sql == "PRAGMA table_info(catalogs)":
                     self.catalog_info_calls += 1
                     rows = list(self.db.execute(sql))
-                    if self.bad_primary and self.catalog_info_calls == 2:
+                    if self.bad_primary and self.catalog_info_calls == 1:
                         return [{**dict(row), "pk": 0} for row in rows]
                     return rows
                 if self.bad_foreign and sql == "PRAGMA foreign_key_list(images)":
@@ -698,7 +698,7 @@ class StateCatalogExtraCoverageTests(unittest.TestCase):
         Image.new("RGB", (4, 4), "white").save(staged)
         catalog_id = self.state.activate_browser_catalog()
         images, imported = self.state.import_image_file_for_api(
-            staged, name="nested/photo.png", relative_path="nested/photo.png", client_key="client-1", source_hash="source-a",
+            staged, name="nested/photo.png", relative_path="nested/photo.png", client_key="client-1",
         )
         self.assertEqual(len(images), 1)
         self.assertEqual(imported[0]["clientKey"], "client-1")

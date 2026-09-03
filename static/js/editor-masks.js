@@ -771,6 +771,8 @@ async function restoreProjectHistory(direction) {
       if (record && changedId === imageId && result.current) record.candidateRevision = Number(result.current.candidateRevision || 0);
     }
     state.projectHistory.set(imageId, { canUndo: result.canUndo === true, canRedo: result.canRedo === true });
+    const snapshot = await api("/api/images");
+    state.images = snapshot.images || state.images; applyProjectSnapshot(snapshot); if (typeof renderCatalogViews === "function") renderCatalogViews();
     if (changed.has(imageId)) await selectImage(imageId, true, { saveCurrentDraft: false });
     else updateHistoryButtons();
   } catch (error) { showUserError(error); }

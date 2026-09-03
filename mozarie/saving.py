@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 import tempfile
 import time
 from contextlib import ExitStack
@@ -26,13 +25,6 @@ from .image_io import (
 from .masks import compose_masks, expand_mask
 
 class SavingMixin:
-    @staticmethod
-    def _sha256_file(path: Path) -> str:
-        digest = hashlib.sha256()
-        with path.open("rb") as handle:
-            while chunk := handle.read(IO_CHUNK_BYTES):
-                digest.update(chunk)
-        return digest.hexdigest()
     def start_apply(
         self,
         image_ids: list[str],
@@ -44,6 +36,8 @@ class SavingMixin:
     ) -> bool:
         if not image_ids:
             return False
+        with self.lock:
+            self._assert_catalog_mutable()
         records, catalog_generation = self._records_for_ids_with_catalog(image_ids)
         if not copy_to_default and any(record.source_kind != "filesystem" for record in records):
             raise ClientError("一時画像はコピー保存を選んでください。", "save_state_changed")
@@ -91,6 +85,8 @@ class SavingMixin:
         suffix: str,
         delete_original: bool,
     ) -> list[dict[str, Any]]:
+        with self.lock:
+            self._assert_catalog_mutable()
         records, _catalog_generation = self._records_for_ids_with_catalog(image_ids)
         _read_mosaic_divisor(divisor)
         _read_save_suffix(suffix)
@@ -119,6 +115,7 @@ class SavingMixin:
         copy_to_browser: bool = False,
         suffix: str = "_censored",
     ) -> BrowserSaveRender:
+        self._assert_image_editable(image_id)
         record = self.image_snapshot(image_id)
         if draft is None:
             draft = self.workspace_store.manual(image_id, self._encode_workspace_mask)
@@ -241,6 +238,7 @@ class SavingMixin:
                 output_path.unlink(missing_ok=True)
 
     def commit_browser_save(self, image_id: str, revision: int, save_token: str, source_action: str) -> dict[str, Any]:
+        self._assert_image_editable(image_id)
         if not isinstance(save_token, str) or not save_token:
             raise ClientError("保存確認トークンがありません。保存をやり直してください。", "save_state_changed")
         if source_action not in {"keep", "overwrite", "deleted"}:
@@ -351,12 +349,10 @@ class SavingMixin:
                         current_revision = self._candidate_revision(image_id)
                         deleted = source_action == "deleted"
                         cleared = revision == current_revision
-                        source_hash = self._sha256_file(record_snapshot.path) if source_action == "overwrite" and record.source_kind == "session" else None
                         self.workspace_store.commit_save(
                             image_id,
                             mtime_ns=record_snapshot.mtime_ns if source_action == "overwrite" else None,
                             size_bytes=record_snapshot.size_bytes if source_action == "overwrite" else None,
-                            source_hash=source_hash,
                             candidate_revision=current_revision + 1 if cleared else None,
                             clear_workspace=deleted or cleared,
                             delete_image=deleted,

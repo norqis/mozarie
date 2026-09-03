@@ -292,7 +292,7 @@ function rememberImportedSource(result) {
       fileHandle: result.entry.fileHandle, parentHandle: result.entry.parentHandle || null,
       name: result.entry.file.name, size: result.entry.file.size, lastModified: result.entry.file.lastModified,
     });
-    if (state.project?.id) void rememberProjectSource(state.project.id, result.entry.fileHandle, imported.imageId);
+    if (state.project?.id) void rememberProjectSource(state.project.id, result.entry.fileHandle, imported.imageId, result.sourceId);
   }
 }
 
@@ -325,10 +325,10 @@ async function importFiles(files) {
         if (!isSupportedImageFile(file)) continue;
         const entry = { ...descriptor, file, relativePath: descriptor.relativePath || file.name };
         showProcessing({ kind: "import", state: "running", total: session.total, completed: session.completed, current: entry.relativePath });
-        const data = await importSingleFile(entry, clientKey, session.catalogId);
+        const data = await importSingleFile(entry, clientKey, session.catalogId, session.sourceId, session.sourceKind);
         if (!session.catalogId && data.catalogId) session.catalogId = data.catalogId;
         session.provisional ||= data.provisional === true;
-        const result = { entry, clientKey, data };
+        const result = { entry, clientKey, data, sourceId: session.sourceId };
         // Keep source access for each committed upload, including a later
         // cancellation or an unrelated upload failure.
         rememberImportedSource(result);
@@ -371,7 +371,7 @@ async function importFiles(files) {
   finally { finishImportSession(session); }
 }
 
-async function importSingleFile(entry, clientKey, catalogId = null) {
+async function importSingleFile(entry, clientKey, catalogId = null, sourceId = null, sourceKind = null) {
   const token = document.querySelector('meta[name="mozarie-token"]')?.content || "";
   const response = await fetch("/api/import/file", {
     method: "POST",
@@ -381,6 +381,10 @@ async function importSingleFile(entry, clientKey, catalogId = null) {
       "X-Mozarie-Name": encodeURIComponent(entry.file.name),
       "X-Mozarie-Relative-Path": encodeURIComponent(entry.relativePath),
       "X-Mozarie-Client-Key": encodeURIComponent(clientKey),
+      "X-Mozarie-File-Mtime": String(Math.max(0, Number(entry.file.lastModified || 0))),
+      "X-Mozarie-File-Size": String(Math.max(0, Number(entry.file.size || 0))),
+      ...(sourceId ? { "X-Mozarie-Source-Id": encodeURIComponent(sourceId) } : {}),
+      ...(sourceKind ? { "X-Mozarie-Source-Kind": sourceKind } : {}),
       ...(catalogId ? { "X-Mozarie-Catalog-Id": encodeURIComponent(catalogId) } : {}),
     },
     body: entry.file,
@@ -392,7 +396,7 @@ async function importSingleFile(entry, clientKey, catalogId = null) {
 
 function beginImportSession() {
   if (isBusy() || state.importing) return null;
-  const session = { id: newClientKey(), epoch: beginCatalogEpoch(), paused: false, cancelled: false, completed: 0, total: 0, catalogId: null, provisional: false };
+  const session = { id: newClientKey(), epoch: beginCatalogEpoch(), paused: false, cancelled: false, completed: 0, total: 0, catalogId: null, provisional: false, sourceId: null, sourceKind: "browser-files" };
   state.importing = true; state.importSession = session;
   updateActionButtons();
   return session;
@@ -430,6 +434,8 @@ async function importHandleEntries(entries, session) {
 
 async function importFileHandles(handles, session = beginImportSession()) {
   if (!session) return;
+  session.sourceId ||= crypto.randomUUID();
+  session.sourceKind = "browser-files";
   await importHandleEntries(handles.map((handle) => ({ handle, relativePath: handle.name, parentHandle: null })), session);
 }
 
@@ -437,6 +443,9 @@ async function importDirectoryHandle(directoryHandle, session = beginImportSessi
   if (!session) return;
   await flushAllWorkspaceMutations();
   session.catalogId = await catalogForDirectoryHandle(directoryHandle);
+  session.sourceId = await rememberProjectSource(session.catalogId, directoryHandle, null, state.pendingDirectorySourceId || session.sourceId);
+  session.sourceKind = "browser-directory";
+  state.pendingDirectorySourceId = null;
   const entries = [];
   showProcessing({ kind: "import", state: "running", total: 1, completed: 0, current: directoryHandle.name || "" });
   async function collect(handle, relativePath = "", parentHandle = null) {
@@ -450,12 +459,13 @@ async function importDirectoryHandle(directoryHandle, session = beginImportSessi
   await importHandleEntries(entries, session);
 }
 
-async function importProjectDirectoryHandle(directoryHandle, projectId) {
+async function importProjectDirectoryHandle(directoryHandle, projectId, sourceId = null) {
   const session = beginImportSession(); if (!session) return;
   try {
     await flushAllWorkspaceMutations();
     session.catalogId = projectId;
-    await rememberProjectSource(projectId, directoryHandle);
+    session.sourceId = await rememberProjectSource(projectId, directoryHandle, null, sourceId);
+    session.sourceKind = "browser-directory";
     const entries = [];
     showProcessing({ kind: "import", state: "running", total: 1, completed: 0, current: directoryHandle.name || "" });
     async function collect(handle, relativePath = "", parentHandle = null) {
@@ -475,6 +485,8 @@ async function importProjectFileHandles(handles, projectId) {
   try {
     await flushAllWorkspaceMutations();
     session.catalogId = projectId;
+    session.sourceId = crypto.randomUUID();
+    session.sourceKind = "browser-files";
     await importFileHandles(handles, session);
   } finally { finishImportSession(session); }
 }

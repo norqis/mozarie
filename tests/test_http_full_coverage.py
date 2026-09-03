@@ -87,7 +87,7 @@ class HttpBoundaryCoverageTests(unittest.TestCase):
             staged = Path(directory) / "upload.png"
             staged.write_bytes(b"fixture")
 
-            def run_upload(*, catalog_id: str | None, requested: str, source_hash: str) -> tuple[Mock, list[object]]:
+            def run_upload(*, catalog_id: str | None, requested: str) -> tuple[Mock, list[object]]:
                 state = Mock()
                 state.catalog_id = catalog_id
                 state.browser_catalog_provisional = False
@@ -102,19 +102,18 @@ class HttpBoundaryCoverageTests(unittest.TestCase):
                 request._read_binary_body_to_file = lambda: staged
                 request._client_error = lambda error, *_args, **_kwargs: emitted.append(error)
                 request._json = lambda payload, *_args, **_kwargs: emitted.append(payload)
-                with patch.object(http_module, "STATE", state), patch("mozarie.http._file_sha256", return_value=source_hash):
+                with patch.object(http_module, "STATE", state):
                     request.do_POST()
                 return state, emitted
 
-            conflict, emitted = run_upload(catalog_id="active", requested="other", source_hash="hash")
+            conflict, emitted = run_upload(catalog_id="active", requested="other")
             self.assertEqual(getattr(emitted[0], "error_code", None), "operation_in_progress")
             conflict.end_import_transfer.assert_called_once()
 
             staged.write_bytes(b"fixture")
-            fallback, emitted = run_upload(catalog_id=None, requested="", source_hash="")
+            fallback, emitted = run_upload(catalog_id=None, requested="")
             self.assertEqual(emitted[-1]["catalogId"], "provisional")
             self.assertTrue(fallback.browser_catalog_provisional)
-            self.assertNotIn("source_hash", fallback.import_image_file_for_api.call_args.kwargs)
 
     def test_post_optional_error_and_response_paths_have_stable_results(self) -> None:
         request = handler(); request._require_json_request = lambda: None

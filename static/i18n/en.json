@@ -645,5 +645,10 @@
   "project.noSource": "No source folder",
   "project.noDate": "No date",
   "project.dimensionsChanged": "The image size changed. Editing and saving stay disabled until masks are cleared.",
-  "dialog.ok": "OK"
+  "dialog.ok": "OK",
+  "workspaceRecovery.title": "Workspace data needs to be recreated",
+  "workspaceRecovery.message": "Existing local workspace data cannot be opened by this version. Source images are not deleted.",
+  "workspaceRecovery.recreate": "Recreate workspace data",
+  "workspaceRecovery.confirm": "This removes local project, mask, and history data. Source images are not deleted.",
+  "workspaceRecovery.failed": "Workspace data could not be recreated. Close Mozarie and try again."
 }

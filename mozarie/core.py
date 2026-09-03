@@ -164,6 +164,10 @@ class ImageRecord:
     asset_revision: int = 0
     hidden: bool = False
     reviewed: bool = False
+    # A project may combine independent folders or browser selections.  The
+    # opaque source id keeps identical relative paths distinct.
+    source_id: str | None = None
+    source_root: Path | None = None
 
 
 @dataclass(frozen=True)

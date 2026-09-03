@@ -144,64 +144,16 @@ vm.runInNewContext("globalThis.workspaceTest={queueWorkspaceDraft,flushDraftSave
   context.indexedDB = context.window.indexedDB = { open() { const request = { result: outputReadErrorDb }; queueMicrotask(() => request.onsuccess()); return request; } };
   assert.equal(await context.workspaceTest.rememberedOutputDirectoryHandle(), null, "an unreadable remembered output directory is treated as absent");
 
-  const sameEntry = { isSameEntry: async () => true };
   const directoryEvents = [];
-  const existingDb = {
-    close() { directoryEvents.push("close-existing"); },
-    transaction() { return { objectStore() { return { getAll() { const request = { result: [{ catalogId: "known", handle: sameEntry }] }; queueMicrotask(() => request.onsuccess()); return request; } }; } }; },
+  context.state.project = null;
+  context.api = async (url) => {
+    assert.equal(url, "/api/projects", "a directory creates explicit unnamed project work");
+    return { project: { id: "fresh", name: null, status: "working" } };
   };
-  context.indexedDB = context.window.indexedDB = { open() { const request = { result: existingDb }; queueMicrotask(() => request.onsuccess()); return request; } };
-  context.api = async (_url, options) => JSON.parse(options.body).catalogId === "known" ? { catalogId: "known" } : { catalogId: "fresh" };
-  assert.equal(await context.workspaceTest.catalogForDirectoryHandle({}), "known", "a server-accepted remembered folder catalog is reused");
-  assert.deepEqual(directoryEvents, ["close-existing"], "a reused catalog closes its IndexedDB handle before returning");
-
-  context.api = async () => ({});
-  assert.equal(await context.workspaceTest.catalogForDirectoryHandle({}), null, "a successful catalog activation without an ID returns no catalog instead of inventing one");
-
-  const brokenHandleDb = {
-    close() { directoryEvents.push("close-broken"); },
-    transaction() { return { objectStore() { return { getAll() { const request = { result: [{ catalogId: "bad", handle: { isSameEntry: async () => { throw new Error("permission lost"); } } }] }; queueMicrotask(() => request.onsuccess()); return request; }, delete() { directoryEvents.push("delete-broken"); } }; } }; },
-  };
-  const writeDb = { close() { directoryEvents.push("close-write"); }, transaction() { return { objectStore() { return { put() { throw new Error("quota"); } }; } }; } };
-  let opens = 0;
-  context.indexedDB = context.window.indexedDB = { open() { const request = { result: opens++ ? writeDb : brokenHandleDb }; queueMicrotask(() => request.onsuccess()); return request; } };
-  context.api = async () => ({ catalogId: "fresh" });
-  assert.equal(await context.workspaceTest.catalogForDirectoryHandle({}), "fresh", "a broken remembered folder falls back to a new catalog even if optional persistence fails");
-  assert.ok(directoryEvents.includes("delete-broken") && directoryEvents.includes("close-write"), "a broken handle is discarded and a failed optional replacement write is closed");
-
-  const errorReadDb = {
-    close() { directoryEvents.push("close-read-error"); },
-    transaction() { return { objectStore() { return { getAll() { const request = {}; queueMicrotask(() => request.onerror()); return request; } }; } }; },
-  };
-  context.indexedDB = context.window.indexedDB = { open() { const request = { result: errorReadDb }; queueMicrotask(() => request.onsuccess()); return request; } };
-  context.api = async () => ({ catalogId: "from-read-error" });
-  assert.equal(await context.workspaceTest.catalogForDirectoryHandle({}), "from-read-error", "an unreadable directory cache creates a fresh server catalog");
-
-  const emptyReadDb = {
-    close() { directoryEvents.push("close-read-empty"); },
-    transaction() { return { objectStore() { return { getAll() { const request = { result: null }; queueMicrotask(() => request.onsuccess()); return request; } }; } }; },
-  };
-  context.indexedDB = context.window.indexedDB = { open() { const request = { result: emptyReadDb }; queueMicrotask(() => request.onsuccess()); return request; } };
-  context.api = async () => ({ catalogId: "from-empty-read" });
-  assert.equal(await context.workspaceTest.catalogForDirectoryHandle({}), "from-empty-read", "an empty IndexedDB read is treated as an empty catalog list");
-
-  const deletionFailureDb = {
-    close() { directoryEvents.push("close-delete-error"); },
-    transaction(_name, mode) {
-      if (mode === "readwrite") throw new Error("cache deletion blocked");
-      return { objectStore() { return { getAll() { const request = { result: [{ catalogId: "expired", handle: sameEntry }] }; queueMicrotask(() => request.onsuccess()); return request; } }; } };
-    },
-  };
-  context.indexedDB = context.window.indexedDB = { open() { const request = { result: deletionFailureDb }; queueMicrotask(() => request.onsuccess()); return request; } };
-  context.api = async (_url, options) => JSON.parse(options.body).catalogId === "expired" ? Promise.reject(new Error("server reset")) : ({ catalogId: "after-delete-error" });
-  assert.equal(await context.workspaceTest.catalogForDirectoryHandle({}), "after-delete-error", "a cache deletion failure still creates a fresh catalog");
-
-  context.indexedDB = context.window.indexedDB = undefined;
-  context.api = async () => ({});
-  assert.equal(await context.workspaceTest.catalogForDirectoryHandle({}), null, "a server response without a catalog ID remains an explicit no-catalog result");
+  assert.equal(await context.workspaceTest.catalogForDirectoryHandle({}), "fresh", "a remembered directory never silently reopens old work");
 
   state.currentId = null; state.draftDirty = false; state.draftSaveChains.clear(); state.workspaceDraftChains.clear(); state.workspaceMutationErrors.clear(); state.workspaceDraftTimers.clear();
-  assert.equal(JSON.stringify(context.workspaceTest.workspaceDraftPayload({})), JSON.stringify({ add: "", exclusion: "", exclusionErase: "", manualEnabled: true, manualExclusionEnabled: true, manualExclusionEraseEnabled: true, manualExclusionForced: true, hasEffectiveMask: false, removedCandidateIds: [], candidateRevision: 0, history: { operations: [], index: 0, base: {} } }), "a partially initialized manual draft receives the persisted defaults");
+  assert.equal(JSON.stringify(context.workspaceTest.workspaceDraftPayload({})), JSON.stringify({ add: "", exclusion: "", exclusionErase: "", manualEnabled: true, manualExclusionEnabled: true, manualExclusionEraseEnabled: true, manualExclusionForced: true, hasEffectiveMask: false, removedCandidateIds: [], candidateRevision: 0 }), "a partially initialized manual draft receives the persisted defaults");
   await context.workspaceTest.flushDraftSaves(["one"]);
   state.currentId = "one"; state.draftDirty = true;
   let skippedDraftEncodes = 0;

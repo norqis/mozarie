@@ -1,4 +1,3 @@
-import hashlib
 import base64
 import io
 import json
@@ -53,14 +52,6 @@ def health_device(provider: str, gpu_device: int, gpus: list[dict[str, object]])
     name = str(selected["name"]) if selected else "unavailable"
     backend = str(selected.get("backend", "cuda")) if selected else "unavailable"
     return {"provider": "gpu", "runtimeBackend": backend, "gpuDevice": gpu_device, "gpuName": name, "device": f"GPU {gpu_device}: {name}"}
-
-
-def _file_sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        while chunk := handle.read(IO_CHUNK_BYTES):
-            digest.update(chunk)
-    return digest.hexdigest()
 
 
 def _run_native_picker(script: str, environment: dict[str, str], *, failed_message: str, busy_message: str, state: StudioState) -> str | None:
@@ -179,7 +170,7 @@ class MosaicHandler(BaseHTTPRequestHandler):
             self._reject_unread_request(ClientError("JSON形式のリクエストだけを受け付けます。", "session_expired"))
 
     def _send_workspace_recovery_page(self) -> None:
-        self._binary('''<!doctype html><meta charset="utf-8"><title>Mozarie</title><main><h1>作業データを作り直す必要があります</h1><p>既存のローカル作業データはこの版では開けません。元画像は削除されません。</p><button id="recreate">作業データを作り直す</button><p id="message"></p></main><script>document.querySelector('#recreate').onclick=async()=>{if(!confirm('プロジェクト・マスク・履歴のローカルデータを削除して作り直します。元画像は削除されません。'))return;let r=await fetch('/api/workspace/recreate',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});if(r.ok)location.reload();else document.querySelector('#message').textContent='作り直せませんでした。Mozarieを閉じてからもう一度お試しください。'};</script>'''.encode("utf-8"), "text/html; charset=utf-8")
+        self._binary('''<!doctype html><meta charset="utf-8"><title>Mozarie</title><main><h1 data-key="workspaceRecovery.title"></h1><p data-key="workspaceRecovery.message"></p><button id="recreate" data-key="workspaceRecovery.recreate"></button><p id="message"></p></main><script>const lang=localStorage.getItem('mozarie-language')==='en'?'en':'ja';fetch('/i18n/'+lang+'.json').then(r=>r.json()).then(d=>document.querySelectorAll('[data-key]').forEach(e=>e.textContent=d[e.dataset.key]||e.dataset.key));document.querySelector('#recreate').onclick=async()=>{let d=await fetch('/i18n/'+lang+'.json').then(r=>r.json());if(!confirm(d['workspaceRecovery.confirm']))return;let r=await fetch('/api/workspace/recreate',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});if(r.ok)location.reload();else document.querySelector('#message').textContent=d['workspaceRecovery.failed'];};</script>'''.encode("utf-8"), "text/html; charset=utf-8")
 
     def _require_binary_import_request(self) -> None:
         self._require_mutation_request()
@@ -253,7 +244,10 @@ class MosaicHandler(BaseHTTPRequestHandler):
                 self._send_candidate_mask(image_id, candidate_id, _request_version(parsed.query))
             elif path.startswith("/api/project/mask/"):
                 image_id, kind = _route_ids(path, "/api/project/mask/")
-                self._binary(STATE.export_mask_png(image_id, kind), "image/png", headers={"Content-Disposition": f'attachment; filename="{kind}.png"'})
+                image = STATE.workspace_store.project_image(image_id)
+                if image is None: raise ClientError("画像が見つかりません。", "image_not_found")
+                filename = Path(str(image["relativePath"])).name + f".{kind}.png"
+                self._binary(STATE.export_mask_png(image_id, kind), "image/png", headers={"Content-Disposition": f'attachment; filename="{filename}"'})
             elif path.startswith("/api/project/masks/"):
                 kind = path.removeprefix("/api/project/masks/")
                 if kind not in {"mosaic", "exclude"}: raise ClientError("マスク種別が正しくありません。", "input_invalid")
@@ -262,9 +256,11 @@ class MosaicHandler(BaseHTTPRequestHandler):
                 try:
                     with zipfile.ZipFile(archive_path, "w", zipfile.ZIP_DEFLATED) as archive:
                         for image in STATE.project_mask_images():
-                            # Keep the original extension in the ZIP name. Two
-                            # files such as a.jpg and a.png must never collide.
-                            name = Path(image["relativePath"]).as_posix() + f".{kind}.png"
+                            # Keep source identity and original extension so
+                            # same-named files from different folders cannot
+                            # collide in one project archive.
+                            display = "".join(char if char not in r'\\/:*?\"<>|' else "_" for char in str(image.get("sourceDisplay", "source"))) or "source"
+                            name = f"{display}-{str(image.get('sourceId', 'source'))[:8]}/{Path(image['relativePath']).as_posix()}.{kind}.png"
                             archive.writestr(name, STATE.export_project_mask_png(str(image["id"]), kind))
                     self._stream_path(archive_path, "application/zip", {"Content-Disposition": f'attachment; filename="{kind}-masks.zip"'})
                 finally:
@@ -301,10 +297,17 @@ class MosaicHandler(BaseHTTPRequestHandler):
                 return
             if path == "/api/import/file":
                 self._require_binary_import_request()
-                self._upload_sha256 = None
                 name = unquote(self.headers.get("X-Mozarie-Name", ""))
                 relative_path = unquote(self.headers.get("X-Mozarie-Relative-Path", ""))
                 client_key = unquote(self.headers.get("X-Mozarie-Client-Key", ""))
+                source_identity = unquote(self.headers.get("X-Mozarie-Source-Id", ""))
+                source_kind = self.headers.get("X-Mozarie-Source-Kind", "browser-files")
+                raw_mtime = self.headers.get("X-Mozarie-File-Mtime", "0")
+                raw_size = self.headers.get("X-Mozarie-File-Size", "0")
+                if (source_identity and (len(source_identity) > 128 or not source_identity.replace("-", "").isalnum())
+                        or source_kind not in {"browser-files", "browser-directory"}
+                        or not raw_mtime.isdigit() or not raw_size.isdigit()):
+                    raise ClientError("画像の更新情報が正しくありません。", "input_invalid")
                 try:
                     STATE.begin_import_transfer()
                 except ClientError as exc:
@@ -313,10 +316,6 @@ class MosaicHandler(BaseHTTPRequestHandler):
                     with STATE.import_staging_gate:
                         staged_path = self._read_binary_body_to_file()
                         requested_catalog = unquote(self.headers.get("X-Mozarie-Catalog-Id", ""))
-                        # Browser uploads have no trustworthy native path.
-                        # Streamed content fingerprints let the fallback match
-                        # a complete folder manifest after all files arrive.
-                        source_hash = getattr(self, "_upload_sha256", None) or _file_sha256(staged_path)
                         try:
                             # Keep implicit API callers from splitting a
                             # parallel empty-catalog upload across IDs. This
@@ -328,19 +327,23 @@ class MosaicHandler(BaseHTTPRequestHandler):
                                         raise ClientError("画像追加中にフォルダを切り替えることはできません。", "operation_in_progress")
                                     STATE.activate_browser_catalog(requested_catalog)
                                 elif not STATE.catalog_id:
-                                    # Never bind a fallback import based on its
-                                    # first file. Finalisation scores the full manifest.
+                                    # Imports create explicit unnamed work.
                                     STATE.catalog_id = STATE.workspace_store.ensure_provisional_catalog()
                                     STATE.browser_catalog_provisional = True
-                            import_args = {"name": name, "relative_path": relative_path, "client_key": client_key, "include_images": False, "transfer_active": True}
-                            if source_hash: import_args["source_hash"] = source_hash
+                            import_args = {
+                                "name": name, "relative_path": relative_path, "client_key": client_key,
+                                "include_images": False, "transfer_active": True,
+                                "source_identity": source_identity or None,
+                                "source_kind": source_kind,
+                                "mtime_ns": int(raw_mtime) * 1_000_000,
+                                "size_bytes": int(raw_size),
+                            }
                             _images, imported = STATE.import_image_file_for_api(staged_path, **import_args)
                         finally:
                             staged_path.unlink(missing_ok=True)
                     self._json({"imported": imported, "catalogId": STATE.catalog_id, "provisional": STATE.browser_catalog_provisional})
                 finally:
                     STATE.end_import_transfer()
-                    self._upload_sha256 = None
                 return
             self._require_json_request()
             payload = self._read_json_body()
@@ -592,7 +595,6 @@ class MosaicHandler(BaseHTTPRequestHandler):
         staging_dir.mkdir(parents=True, exist_ok=True)
         temporary_path: Path | None = None
         remaining = content_length
-        digest = hashlib.sha256()
         try:
             with tempfile.NamedTemporaryFile(dir=staging_dir, suffix=".upload.tmp", delete=False) as handle:
                 temporary_path = Path(handle.name)
@@ -601,10 +603,8 @@ class MosaicHandler(BaseHTTPRequestHandler):
                     if not chunk:
                         raise ClientError("画像データを最後まで読み込めません。", "image_read_failed")
                     handle.write(chunk)
-                    digest.update(chunk)
                     remaining -= len(chunk)
                 handle.flush()
-            self._upload_sha256 = digest.hexdigest()
             result = temporary_path
             temporary_path = None
             return result

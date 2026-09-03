@@ -533,33 +533,24 @@ class MozarieTests(unittest.TestCase):
                 upload.write_bytes(raw)
                 _images, items = state.import_image_file_for_api(
                     upload, name=Path(relative_path).name, relative_path=relative_path,
-                    client_key=f"manifest-{index}", include_images=False,
-                    source_hash=hashlib.sha256(raw).hexdigest(),
+                    client_key=f"manifest-{index}", include_images=False, mtime_ns=20, size_bytes=len(raw),
                 )
                 imported[relative_path] = items[0]["imageId"]
         return imported
 
-    def test_browser_manifest_reuses_changed_first_folder_and_preserves_unmodified_state(self):
+    def test_browser_import_creates_explicit_project_without_content_reuse(self):
         def png(color):
             buffer = io.BytesIO(); Image.new("RGB", (12, 12), color).save(buffer, format="PNG"); return buffer.getvalue()
 
         initial = [("a.png", png("red")), ("b.png", png("green")), ("nested/c.png", png("blue"))]
         first = self.new_state()
-        first_ids = self._import_browser_manifest(first, initial)
+        self._import_browser_manifest(first, initial)
         first_catalog, _ = first.finalize_browser_catalog()
-        first.set_image_flags(first_ids["b.png"], {"hidden": True, "reviewed": True})
-
-        # The first lexicographic image changed.  Reuse must wait for b/c,
-        # rather than permanently creating a fresh catalogue at a.png.
         second = self.new_state()
-        second_ids = self._import_browser_manifest(second, [("a.png", png("yellow")), *initial[1:]])
+        self._import_browser_manifest(second, [("a.png", png("yellow")), *initial[1:]])
         second_catalog, remapped = second.finalize_browser_catalog()
-        self.assertEqual(second_catalog, first_catalog)
-        self.assertNotEqual(second_ids["b.png"], remapped[second_ids["b.png"]])
-        restored = {item["relativePath"]: item for item in second.list_images()}
-        self.assertTrue(restored["b.png"]["hidden"])
-        self.assertTrue(restored["b.png"]["reviewed"])
-        self.assertFalse(restored["a.png"]["reviewed"])
+        self.assertNotEqual(second_catalog, first_catalog)
+        self.assertEqual(remapped, {})
 
     def test_browser_manifest_add_delete_and_same_name_content_are_isolated(self):
         def png(color):
@@ -570,12 +561,10 @@ class MozarieTests(unittest.TestCase):
         self._import_browser_manifest(first, files)
         first_catalog, _ = first.finalize_browser_catalog()
 
-        # Deleting one file and adding another preserves the two immutable
-        # images, so the existing catalogue remains the sole safe match.
         second = self.new_state()
         self._import_browser_manifest(second, [files[0], files[1], ("folder/new.png", png("white"))])
         second_catalog, _ = second.finalize_browser_catalog()
-        self.assertEqual(second_catalog, first_catalog)
+        self.assertNotEqual(second_catalog, first_catalog)
 
         # Same paths/folder names but different bytes cannot cross-contaminate.
         isolated = self.new_state()
@@ -623,10 +612,7 @@ class MozarieTests(unittest.TestCase):
             native = self.new_state()
             native_ids = native.set_root(str(root))
             native_records = [native.image_for_id(item["id"]) for item in native_ids]
-            native.workspace_store.reconcile_images(
-                native.catalog_id, native_records,
-                {relative_path: hashlib.sha256(raw).hexdigest() for relative_path, raw in files},
-            )
+            native.workspace_store.reconcile_images(native.catalog_id, native_records)
             native_catalog = native.catalog_id
 
             browser = self.new_state()
@@ -634,21 +620,19 @@ class MozarieTests(unittest.TestCase):
             browser_catalog, _ = browser.finalize_browser_catalog()
             self.assertNotEqual(browser_catalog, native_catalog)
 
-    def test_browser_manifest_requires_strict_majority_and_handles_single_or_ambiguous(self):
+    def test_browser_manifest_is_never_content_matched(self):
         buffer = io.BytesIO(); Image.new("RGB", (8, 8), "teal").save(buffer, format="PNG")
         raw = buffer.getvalue()
         many = [(f"root/{index:03}.png", raw) for index in range(100)]
         target = self.new_state()
         self._import_browser_manifest(target, many)
         target_catalog, _ = target.finalize_browser_catalog()
-        hashes = [(relative_path, hashlib.sha256(content).hexdigest()) for relative_path, content in many]
-        self.assertIsNone(target.workspace_store.best_catalog_for_manifest(hashes[:2], "f" * 32))
+        self.assertIsNone(target.workspace_store.best_catalog_for_manifest([], "f" * 32))
 
         one = [("only.png", raw)]
         single = self.new_state(); self._import_browser_manifest(single, one)
         single_catalog, _ = single.finalize_browser_catalog()
-        one_hash = [("only.png", hashlib.sha256(raw).hexdigest())]
-        self.assertEqual(single.workspace_store.best_catalog_for_manifest(one_hash, "e" * 32), single_catalog)
+        self.assertIsNone(single.workspace_store.best_catalog_for_manifest([], "e" * 32))
 
         clone = self.new_state()
         clone_id = clone.workspace_store.ensure_catalog()
@@ -6323,8 +6307,8 @@ class MozarieTests(unittest.TestCase):
         self.assertEqual(Image.open(record.path).text["prompt"], '{"seed": 9}')
         self.assertEqual(state.candidates.get(image_id, []), [])
         with state.workspace_store._connect() as db:
-            stored_hash = db.execute("SELECT source_hash FROM images WHERE image_id=?", (image_id,)).fetchone()["source_hash"]
-        self.assertEqual(stored_hash, state._sha256_file(record.path))
+            stored = db.execute("SELECT size_bytes,mtime_ns FROM images WHERE image_id=?", (image_id,)).fetchone()
+        self.assertEqual(int(stored["size_bytes"]), record.path.stat().st_size)
 
     def test_browser_save_database_failure_restores_source_and_keeps_token_for_retry(self):
         with tempfile.TemporaryDirectory() as directory:
