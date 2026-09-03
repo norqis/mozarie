@@ -703,11 +703,37 @@ class ProjectWorkspaceCoverageTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "dirty region"):
             WorkspaceStore._manual_xor(empty, changed, (0, 0, 6, 1))
 
+        self.assertEqual(WorkspaceStore._candidate_row(Row())["expand_px"], 0)
         self.assertEqual(WorkspaceStore._candidate_row(Row(expand_px=0))["expand_px"], 0)
         self.assertEqual(WorkspaceStore._candidate_row(Row(expand_px=7))["expand_px"], 7)
         for value in (True, -1, "7", 1.5):
             with self.subTest(value=value), self.assertRaisesRegex(ValueError, "expand"):
                 WorkspaceStore._candidate_row(Row(expand_px=value))
+
+    def test_manual_dirty_input_and_stale_candidate_revision_leave_workspace_unchanged(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); store, _, image_id = self.store_image(root)
+            baseline = self.png(size=(4, 4), value=0)
+            store.save_manual(image_id, {
+                "add": "base", "exclusion": "base", "exclusionErase": "base", "removedCandidateIds": [],
+                "hasEffectiveMask": False,
+            }, lambda _value: baseline)
+            invalid_payloads = [
+                {"dirtyLayers": "add"},
+                {"dirtyLayers": ["add"], "dirtyRois": []},
+                {"dirtyLayers": ["add"], "dirtyRois": {"exclusion": {"left": 0, "top": 0, "right": 1, "bottom": 1}}},
+                {"dirtyLayers": ["add"], "dirtyRois": {"add": []}},
+                {"dirtyLayers": ["add"], "dirtyRois": {"add": {"left": True, "top": 0, "right": 1, "bottom": 1}}},
+            ]
+            decoded: list[str | None] = []
+            for payload in invalid_payloads:
+                with self.subTest(payload=payload), self.assertRaisesRegex(ValueError, "dirty"):
+                    store.save_manual(image_id, {"removedCandidateIds": [], "hasEffectiveMask": False, **payload}, lambda value: decoded.append(value) or baseline)
+            self.assertEqual(decoded, [None, None, None, None])
+            self.assertEqual(store.manual(image_id, lambda value: value)["add"], baseline)
+            with self.assertRaisesRegex(ValueError, "revision"):
+                store.commit_candidate_state(image_id, 1, [], False, replace=True, expected_revision=9)
+            self.assertEqual(store.history_state(image_id)["revision"], 0)
 
 
 if __name__ == "__main__":

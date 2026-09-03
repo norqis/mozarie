@@ -121,6 +121,20 @@ self.onmessage({ data: { type: "render", sourceId: "render-failure", mask: badMa
 assert.equal(response.type, "error", "a malformed mask reports the preview failure");
 assert.equal(badMask.closed, true, "a failed render still closes its transferred mask bitmap");
 
+response = undefined;
+self.onmessage({ data: { type: "render", sourceId: "render-failure", mask: null, width: 1, height: 1, blockSize: 1, generation: 14 } });
+assert.equal(response.type, "error", "a missing full-frame mask reports the preview failure");
+response = undefined;
+const outOfBoundsPatch = { close() { this.closed = true; } };
+self.onmessage({ data: { type: "patch", sourceId: "render-failure", mask: outOfBoundsPatch, left: -1, top: 0, width: 1, height: 1, blockSize: 1, generation: 14 } });
+assert.equal(response.type, "error", "an out-of-bounds drag patch reports the preview failure");
+assert.equal(outOfBoundsPatch.closed, true, "an invalid drag patch still closes its transferred mask bitmap");
+response = undefined;
+const wrongSizeMask = { close() { this.closed = true; } };
+self.onmessage({ data: { type: "render", sourceId: "render-failure", mask: wrongSizeMask, width: 2, height: 1, blockSize: 1, generation: 14 } });
+assert.equal(response.type, "error", "a full frame with dimensions different from its source reports the preview failure");
+assert.equal(wrongSizeMask.closed, true, "a wrong-size full-frame mask is released after failure");
+
 contextCalls = 0; contextFailure = 3;
 self.onmessage({ data: { type: "source", sourceId: "missing-output-context", source: { width: 1, height: 1, pixels: new Uint8ClampedArray([1, 2, 3, 255]) }, generation: 15 } });
 self.onmessage({ data: { type: "render", sourceId: "missing-output-context", mask: { width: 1, height: 1, pixels: new Uint8ClampedArray([0, 0, 0, 255]) }, width: 1, height: 1, blockSize: 1, generation: 15 } });
@@ -145,6 +159,10 @@ self.postMessage = (value, transferList) => {
 self.onmessage({ data: { type: "source", sourceId: "post-failure", source: { width: 1, height: 1, pixels: new Uint8ClampedArray([1, 2, 3, 255]) }, generation: 18 } });
 self.onmessage({ data: { type: "render", sourceId: "post-failure", mask: { width: 1, height: 1, pixels: new Uint8ClampedArray([0, 0, 0, 255]), close() { this.closed = true; } }, width: 1, height: 1, blockSize: 1, generation: 18 } });
 assert.equal(response.type, "error", "a rejected frame transfer reports the preview failure");
+self.onmessage({ data: { type: "source", sourceId: "patch-post-failure", source: { width: 1, height: 1, pixels: new Uint8ClampedArray([1, 2, 3, 255]) }, generation: 19 } });
+rejectFrame = true;
+self.onmessage({ data: { type: "patch", sourceId: "patch-post-failure", mask: { width: 1, height: 1, pixels: new Uint8ClampedArray([0, 0, 0, 255]), close() { this.closed = true; } }, left: 0, top: 0, width: 1, height: 1, blockSize: 1, generation: 19 } });
+assert.equal(response.type, "error", "a rejected drag-patch transfer reports the preview failure");
 self.postMessage = postMessage;
 
 console.log("test_masked_mosaic_worker: passed");

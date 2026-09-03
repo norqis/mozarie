@@ -550,6 +550,23 @@ class MozarieTests(unittest.TestCase):
             for item in explicit:
                 item.mask_path.unlink(missing_ok=True)
 
+    def test_detector_discards_before_publish_when_catalogue_changes_after_stat_check(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); Image.new("RGB", (12, 12), "white").save(root / "source.png")
+            state = self.new_state(); image_id = state.set_root(str(root))[0]["id"]; record = state.image_for_id(image_id)
+            pending = state.cache_dir / image_id / ".mozarie-pending-race.tmp"; pending.parent.mkdir(parents=True, exist_ok=True)
+            Image.new("L", (12, 12), 255).save(pending, format="PNG")
+            candidate = Candidate("race", "penis", .9, pending)
+            def remove_record(_record):
+                state.images.pop(image_id); return None
+            with patch.object(state, "_ensure_models", return_value=DetectionModels(target=Mock(), auxiliaries=[])), \
+                    patch.object(state, "_detect_image", return_value=[candidate]), \
+                    patch.object(state, "_job_is_current", return_value=True), \
+                    patch.object(state, "_assert_record_stat_matches", side_effect=remove_record):
+                state._detect_worker([record], .5, 1, catalog_generation=state.catalog_generation)
+            self.assertFalse(pending.exists())
+            self.assertNotIn(image_id, state.candidates)
+
     def test_candidate_mutation_updates_manual_revision_removed_ids_and_effective_together(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory); Image.new("RGB", (16, 16), "white").save(root / "source.png")

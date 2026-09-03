@@ -408,3 +408,40 @@ class ProjectCatalogCoverageTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "expand"):
             replacement.open_project(state.catalog_id)
         self.assertEqual(replacement.candidates, {})
+
+    def test_streamed_project_mask_export_handles_raw_matrix_and_corruption(self) -> None:
+        state = self.state()
+        apply = self.png(pixel=(1, 1)); exclude = self.png(pixel=(2, 2))
+        manual_add = self.png(pixel=(5, 5)); manual_exclude = self.png(pixel=(6, 6)); erase = self.png(pixel=(6, 6))
+        raw = {
+            "image": {"id": "raw", "relativePath": "raw.png", "width": 8, "height": 8},
+            "candidates": [
+                {"id": "apply", "mask": apply, "enabled": True, "role": "apply", "forced": False, "expandPx": 0},
+                {"id": "exclude", "mask": exclude, "enabled": True, "role": "exclude", "forced": True, "expandPx": 0},
+                {"id": "disabled", "mask": self.png(pixel=(3, 3)), "enabled": False, "role": "apply", "forced": False, "expandPx": 0},
+                {"id": "removed", "mask": self.png(pixel=(4, 4)), "enabled": True, "role": "apply", "forced": False, "expandPx": 0},
+            ],
+            "manual": {"add": manual_add, "exclusion": manual_exclude, "erase": erase, "removed": '["removed"]',
+                       "manualEnabled": True, "exclusionEnabled": True, "eraseEnabled": True, "exclusionForced": True},
+        }
+        mosaic = Image.open(io.BytesIO(state._export_workspace_mask_raw(raw, "mosaic"))).convert("L")
+        excluded = Image.open(io.BytesIO(state._export_workspace_mask_raw(raw, "exclude"))).convert("L")
+        self.assertEqual((mosaic.getpixel((1, 1)), mosaic.getpixel((5, 5)), mosaic.getpixel((3, 3))), (255, 255, 0))
+        self.assertEqual((excluded.getpixel((2, 2)), excluded.getpixel((6, 6))), (255, 0))
+        # A manual BLOB is a valid size source even before any candidate exists.
+        manual_only = {"image": {"id": "manual", "relativePath": "manual.png", "width": 1, "height": 1}, "candidates": [], "manual": {"add": manual_add, "removed": "[]"}}
+        self.assertEqual(Image.open(io.BytesIO(state._export_workspace_mask_raw(manual_only, "mosaic"))).size, (8, 8))
+        for bad in (b"not a png", self.png(size=(7, 8))):
+            with self.subTest(bad=bad[:8]), self.assertRaisesRegex(ClientError, "保存済みマスク"):
+                state._raw_workspace_mask(bad, 8, 8)
+        for malformed in (
+            {**raw, "manual": {**raw["manual"], "removed": "not json"}},
+            {**raw, "candidates": [{"id": "missing", "mask": None, "enabled": True, "role": "apply", "forced": False}]},
+            {**raw, "candidates": [], "manual": {"add": b"not a png", "removed": "[]"}},
+        ):
+            with self.subTest(malformed=malformed["manual"].get("removed", "candidate")), self.assertRaisesRegex(ClientError, "保存済みマスク"):
+                state._export_workspace_mask_raw(malformed, "mosaic")
+        with self.assertRaises(ClientError):
+            list(state.iter_project_mask_exports("bad"))
+        with self.assertRaises(ClientError):
+            list(state.iter_project_mask_exports("mosaic"))

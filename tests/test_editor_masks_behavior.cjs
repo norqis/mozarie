@@ -78,7 +78,7 @@ const state = {
   maskStatus: new Map(), images: [{ id: "image", assetVersion: "a", candidateRevision: 4, candidateCount: 0, enabledCandidateCount: 0 }],
   history: [], historyIndex: 0, historyRestoreToken: 0, historyRemovedCandidateIds: new Set(), historyCandidateIds: new Set(["apply", "exclude"]), historyBaseDirty: false,
   boundaryDrafts: [{ id: "draft", type: "rectangle", roi: { left: 1, top: 2, right: 10, bottom: 12 } }], boundaryActiveId: "draft", boundaryPending: false,
-  importing: false, projectReadOnly: false, pendingImageId: null, fillPending: false, tool: "brush", view: { x: 0, y: 0, scale: 1 }, settings: { editing: { fill_color_tolerance: 12 } },
+  importing: false, projectReadOnly: false, projectHistoryBusy: false, project: null, projectHistory: new Map(), drafts: new Map(), pendingImageId: null, fillPending: false, tool: "brush", view: { x: 0, y: 0, scale: 1 }, settings: { editing: { fill_color_tolerance: 12 } },
 };
 
 let latestFillWorker = null;
@@ -124,6 +124,7 @@ const context = {
   releaseCandidateBitmap() {}, releaseCandidateBundles() {}, invalidateCandidateBundles: () => events.push("invalidate"), markImagesUnreviewed: () => events.push("unreview"),
   clearBoundaryInteraction: () => events.push("boundary-clear"), updateBoundaryActions() {}, setStatusKey: () => events.push("status"), showUserError: (error) => events.push(`error:${error}`),
   canDetectBoundary: () => true, compareEventSide: () => "right", compareSideOffset: () => 100,
+  flushWorkspaceDraft: async () => {}, applyProjectSnapshot() {}, selectImage: async () => {},
   boundaryRequests: () => [{ draft: state.boundaryDrafts[0], draftIds: ["draft"] }], pointForRoi: (roi) => ({ x: roi.left + 1, y: roi.top + 1 }),
   api: async () => ({ candidates: [{ id: "boundary", enabled: true }], candidateRevision: 8 }),
 };
@@ -131,7 +132,7 @@ const context = {
 const masksPath = path.join(__dirname, "..", "static", "js", "editor-masks.js");
 const source = fs.readFileSync(masksPath, "utf8");
 vm.runInNewContext(source, context, { filename: masksPath });
-vm.runInNewContext("globalThis.masksTest = { candidateLabel, manualLayerPresence, renderCandidateRows: renderCandidates, candidatePaddingLimit, candidatePaddingValue, validateCandidatePadding, openCandidatePadding, openBatchCandidatePadding, closeCandidatePadding, commitCandidatePadding, commitBatchCandidatePadding, changeCandidatePaddingDraft, candidateDisplayMode, candidateDisplayIdsForRole, syncCandidateDisplayButtons, syncCandidateBlinkTimer, setCandidateDisplayMode, toggleCandidateDisplay, toggleCandidateEffective, candidateDisplayToggle, candidateEffectiveToggle, clearCandidateBlink, clearCandidateMutationState, candidateMutationKey, nextCandidateMutationVersion, enqueueCandidateMutation, waitForCandidateMutations, updateCandidate, deleteCandidate, deleteManualMask, deleteManualExclusion, deleteManualExclusionErase, shouldBlinkNewManual, batchCandidateOperation, escapeHtml, pointFromEvent, clampPoint, boundaryDragStarted, polygonVertexAt, completedPolygonVertexAt, rectangleDraftAt, paintStrokeOnContexts, paintStrokePath, paintFillSpans, applyFillSpans, enableManualLayerForTool, beginManualStroke, appendManualStrokePoint, paintPendingManualStroke, completeManualStroke, cancelManualStroke, replayManualStroke, historyWeight, trimHistory, rebuildManualMaskFromHistory, recordHistoryOperation, resetHistoryToCurrentManualMask, restoreSnapshot, buildCombinedMask, addBoundaryCandidate, cancelBoundary, fillAt };\nrenderCandidates = globalThis.renderCandidates; render = globalThis.render;", context, { filename: "test-editor-masks-exports.js" });
+vm.runInNewContext("globalThis.masksTest = { candidateLabel, manualLayerPresence, renderCandidateRows: renderCandidates, candidatePaddingLimit, candidatePaddingValue, validateCandidatePadding, openCandidatePadding, openBatchCandidatePadding, closeCandidatePadding, commitCandidatePadding, commitBatchCandidatePadding, changeCandidatePaddingDraft, candidateDisplayMode, candidateDisplayIdsForRole, syncCandidateDisplayButtons, syncCandidateBlinkTimer, setCandidateDisplayMode, toggleCandidateDisplay, toggleCandidateEffective, candidateDisplayToggle, candidateEffectiveToggle, clearCandidateBlink, clearCandidateMutationState, candidateMutationKey, nextCandidateMutationVersion, enqueueCandidateMutation, waitForCandidateMutations, updateCandidate, deleteCandidate, deleteManualMask, deleteManualExclusion, deleteManualExclusionErase, shouldBlinkNewManual, batchCandidateOperation, escapeHtml, pointFromEvent, clampPoint, boundaryDragStarted, polygonVertexAt, completedPolygonVertexAt, rectangleDraftAt, paintStrokeOnContexts, paintStrokePath, paintFillSpans, applyFillSpans, enableManualLayerForTool, beginManualStroke, appendManualStrokePoint, paintPendingManualStroke, completeManualStroke, cancelManualStroke, replayManualStroke, historyWeight, trimHistory, rebuildManualMaskFromHistory, recordHistoryOperation, resetHistoryToCurrentManualMask, restoreProjectHistory, restoreSnapshot, buildCombinedMask, addBoundaryCandidate, cancelBoundary, fillAt };\nrenderCandidates = globalThis.renderCandidates; render = globalThis.render;", context, { filename: "test-editor-masks-exports.js" });
 const test = context.masksTest;
 
 const candidateLabelFixtures = [
@@ -894,5 +895,60 @@ assert.equal(state.manualExclusionEraseEnabled, true);
   test.closeCandidatePadding(); state.candidates = [];
   test.openBatchCandidatePadding("apply", batchTrigger);
   assert.equal(element("#candidatePaddingPopover").popoverOpen, false, "an empty role cannot open a batch padding editor");
+
+  // Project history is durable rather than the local canvas history.  Keep
+  // its guards, changed-image reload, no-op result, and error cleanup covered
+  // as separate UI contracts.
+  const historyApiCalls = [];
+  let historyFlushes = 0; let historySelects = 0; let historySnapshots = 0;
+  state.currentId = "image"; state.currentImage = { width: 100, height: 80 };
+  state.images = [{ id: "image", assetVersion: "a", candidateRevision: 4 }];
+  state.project = { id: "project" }; state.projectReadOnly = false; state.projectHistoryBusy = false; state.importing = false;
+  state.projectHistory = new Map([["image", { canUndo: true, canRedo: true }]]); state.drafts = new Map([["image", { local: true }]]);
+  context.flushWorkspaceDraft = async (imageId) => { historyFlushes += 1; assert.equal(imageId, "image", "history flushes the selected project image first"); };
+  context.applyProjectSnapshot = () => { historySnapshots += 1; };
+  context.selectImage = async (imageId, force, options) => { historySelects += 1; assert.deepEqual({ imageId, force, saveCurrentDraft: options.saveCurrentDraft }, { imageId: "image", force: true, saveCurrentDraft: false }, "changed project history reloads the selected image without resaving its draft"); };
+  context.api = async (url, options = {}) => {
+    historyApiCalls.push({ url, method: options.method || "GET" });
+    if (url === "/api/project/history/image/undo") return { changedImageIds: ["image"], current: { candidateRevision: 9 }, canUndo: false, canRedo: true };
+    if (url === "/api/images") return { images: [{ id: "image", candidateRevision: 9 }] };
+    throw new Error(`unexpected history request: ${url}`);
+  };
+  await test.restoreProjectHistory("undo");
+  assert.equal(historyFlushes, 1, "project history flushes its debounced draft before undo");
+  assert.equal(historySnapshots, 1, "project history refreshes catalogue state after a change");
+  assert.equal(historySelects, 1, "project history reloads the changed current image");
+  assert.equal(state.images[0].candidateRevision, 9, "project history retains the server candidate revision");
+  assert.equal(state.drafts.has("image"), false, "project history drops the invalidated local draft");
+  assert.deepEqual({ ...state.projectHistory.get("image") }, { canUndo: false, canRedo: true }, "project history records the returned undo and redo availability");
+
+  historyApiCalls.length = 0; historySnapshots = 0; historySelects = 0;
+  state.projectHistory.set("image", { canUndo: false, canRedo: true });
+  context.api = async (url, options = {}) => {
+    historyApiCalls.push({ url, method: options.method || "GET" });
+    if (url === "/api/project/history/image/redo") return { changedImageIds: [], canUndo: true, canRedo: false };
+    if (url === "/api/images") return { images: [{ id: "image", candidateRevision: 9 }] };
+    throw new Error(`unexpected history request: ${url}`);
+  };
+  await test.restoreProjectHistory("redo");
+  assert.equal(historySnapshots, 1, "a no-op history response still refreshes shared project catalogue state");
+  assert.equal(historySelects, 0, "a no-op history response does not reload the current canvas");
+  assert.deepEqual({ ...state.projectHistory.get("image") }, { canUndo: true, canRedo: false }, "a no-op history response still updates button availability");
+
+  const historyErrorsBefore = events.filter((event) => event.startsWith("error:")).length;
+  state.projectHistory.set("image", { canUndo: true, canRedo: false });
+  context.api = async () => { throw new Error("history offline"); };
+  await test.restoreProjectHistory("undo");
+  assert.equal(state.projectHistoryBusy, false, "a project history error always clears its busy flag");
+  assert.equal(events.filter((event) => event.startsWith("error:")).length, historyErrorsBefore + 1, "a project history error is shown to the user");
+
+  let guardedHistoryRequests = 0;
+  context.api = async () => { guardedHistoryRequests += 1; return {}; };
+  state.projectReadOnly = true; await test.restoreProjectHistory("undo");
+  state.projectReadOnly = false; state.importing = true; await test.restoreProjectHistory("undo");
+  state.importing = false; state.projectHistoryBusy = true; await test.restoreProjectHistory("undo");
+  state.projectHistoryBusy = false; state.projectHistory.set("image", { canUndo: false, canRedo: false }); await test.restoreProjectHistory("undo");
+  assert.equal(guardedHistoryRequests, 0, "readonly, busy, importing, and unavailable history operations never send a request");
+  state.project = null; state.projectHistory = new Map();
   console.log("test_editor_masks_behavior: passed");
 })().catch((error) => { console.error(error); process.exitCode = 1; });
