@@ -108,7 +108,7 @@ class DetectionMixin:
             # Every successfully published result belongs to one undo group.
             # The worker still commits each image as it finishes, so detection
             # progress and cancellation remain responsive.
-            self._detection_history_group = uuid.uuid4().hex
+            self._detection_history_group = self.workspace_store.begin_history_group()
             args: tuple[Any, ...] = (confidence, _read_detection_parallelism(parallelism))
             if targets != TARGET_CLASSES:
                 args = (*args, targets)
@@ -294,14 +294,22 @@ class DetectionMixin:
                 # Python reference before OOM recovery drops state-owned models.
                 if self._is_gpu_out_of_memory(failures[0][1]):
                     models = None
+                group_id = getattr(self, "_detection_history_group", None)
+                if group_id: self.workspace_store.finish_history_group(group_id, failed=True)
                 self._fail_job(failures[0][1], job_generation, catalog_generation)
                 return
             if control is not None and control.cancel_requested.is_set():
+                group_id = getattr(self, "_detection_history_group", None)
+                if group_id: self.workspace_store.finish_history_group(group_id, failed=True)
                 self._cancel_job(job_generation, catalog_generation)
                 return
+            group_id = getattr(self, "_detection_history_group", None)
+            if group_id: self.workspace_store.finish_history_group(group_id)
             self._finish_job(job_generation, catalog_generation)
         except Exception as exc:  # A background job must not kill the HTTP server.
             models = None
+            group_id = getattr(self, "_detection_history_group", None)
+            if group_id: self.workspace_store.finish_history_group(group_id, failed=True)
             self._fail_job(exc, job_generation, catalog_generation)
 
     def _discard_candidates(self, candidates: list[Candidate]) -> None:

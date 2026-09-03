@@ -44,7 +44,7 @@ class _ClosingConnection(sqlite3.Connection):
 class WorkspaceStore:
     # v7 deliberately replaces the old folder catalogue with a project store.
     # There is no migration path: the user chooses whether to recreate v4 data.
-    VERSION = 9
+    VERSION = 10
 
     def __init__(self, data_dir: Path) -> None:
         self.path = data_dir / "workspaces.sqlite3"
@@ -116,6 +116,10 @@ class WorkspaceStore:
                     delta_json TEXT NOT NULL DEFAULT '{}',
                     created_at INTEGER NOT NULL
                 );
+                CREATE TABLE IF NOT EXISTS history_groups (
+                    group_id TEXT PRIMARY KEY, status TEXT NOT NULL CHECK(status IN ('building','committed','failed')),
+                    created_at INTEGER NOT NULL
+                );
                 CREATE INDEX IF NOT EXISTS project_sources_identity ON project_sources(source_identity);
                 CREATE INDEX IF NOT EXISTS history_entries_image_entry ON history_entries(image_id, entry_id);
                 CREATE INDEX IF NOT EXISTS history_entries_group ON history_entries(group_id);
@@ -147,6 +151,10 @@ class WorkspaceStore:
                 CREATE TRIGGER IF NOT EXISTS project_manual_delete AFTER DELETE ON manual_edits BEGIN
                     UPDATE catalogs SET updated_at=CAST(unixepoch('subsec')*1000000000 AS INTEGER)
                     WHERE catalog_id=(SELECT catalog_id FROM images WHERE image_id=OLD.image_id);
+                END;
+                CREATE TRIGGER IF NOT EXISTS history_entry_delete AFTER DELETE ON history_entries BEGIN
+                    DELETE FROM history_groups WHERE group_id=OLD.group_id
+                      AND NOT EXISTS (SELECT 1 FROM history_entries WHERE group_id=OLD.group_id);
                 END;
             """)
             if not existing:
@@ -187,7 +195,7 @@ class WorkspaceStore:
 
     @staticmethod
     def _validate_schema(db: sqlite3.Connection, tables: set[str]) -> None:
-        required = {"meta", "catalogs", "project_sources", "images", "candidates", "candidate_metadata", "manual_edits", "history_entries", "history_candidate_refs", "history_cursors"}
+        required = {"meta", "catalogs", "project_sources", "images", "candidates", "candidate_metadata", "manual_edits", "history_entries", "history_groups", "history_candidate_refs", "history_cursors"}
         if not required.issubset(tables):
             raise WorkspaceOpenError("workspace database must be recreated for Mozarie v0.7")
         if tuple(row[0] for row in db.execute("PRAGMA quick_check(1)")) != ("ok",):
@@ -512,20 +520,28 @@ class WorkspaceStore:
                 db.execute("ROLLBACK")
                 raise
 
-    def clear_image_workspaces(self, revisions: dict[str, int]) -> None:
-        """Clear candidate and manual state for a batch before publishing it."""
+    def clear_image_workspaces(self, revisions: dict[str, int], *, history_group: str | None = None) -> None:
+        """Clear each image atomically; a caller may bind them into one undo group."""
         if not revisions:
             return
+        for image_id, revision in revisions.items():
+            self._clear_image_workspace(image_id, revision, history_group=history_group)
+
+    def _clear_image_workspace(self, image_id: str, revision: int, *, history_group: str | None) -> None:
+        # A very large batch must not hold a write lock for every image.  Each
+        # image is independently durable and the group record makes any
+        # partial batch visible/recoverable rather than silently half-published.
         with self._lock, self._connect() as db:
             db.execute("BEGIN IMMEDIATE")
             try:
-                for image_id, revision in revisions.items():
-                    # Keep immutable candidate PNGs for the undo journal.  A
-                    # clear only makes the generation inactive; explicit image
-                    # deletion still cascades all of it.
-                    db.execute("UPDATE candidates SET deleted=1 WHERE image_id=?", (image_id,))
-                    db.execute("DELETE FROM manual_edits WHERE image_id=?", (image_id,))
-                    db.execute("UPDATE images SET candidate_revision=?,reviewed=0,updated_at=? WHERE image_id=?", (revision, time.time_ns(), image_id))
+                before = self._history_state_db(db, image_id)
+                # Keep immutable candidate PNGs for the undo journal.  A
+                # clear only makes the generation inactive; explicit image
+                # deletion still cascades all of it.
+                db.execute("UPDATE candidates SET deleted=1 WHERE image_id=?", (image_id,))
+                db.execute("DELETE FROM manual_edits WHERE image_id=?", (image_id,))
+                db.execute("UPDATE images SET candidate_revision=?,reviewed=0,updated_at=? WHERE image_id=?", (revision, time.time_ns(), image_id))
+                self._record_history_db(db, image_id, before, self._history_state_db(db, image_id), group_id=history_group)
                 db.execute("COMMIT")
             except Exception:
                 db.execute("ROLLBACK")
@@ -565,7 +581,15 @@ class WorkspaceStore:
         if not updates: return
         values.extend([time.time_ns(), image_id])
         with self._lock, self._connect() as db:
-            db.execute(f"UPDATE images SET {','.join(updates)},updated_at=? WHERE image_id=?", values)
+            db.execute("BEGIN IMMEDIATE")
+            try:
+                before = self._history_state_db(db, image_id)
+                db.execute(f"UPDATE images SET {','.join(updates)},updated_at=? WHERE image_id=?", values)
+                self._record_history_db(db, image_id, before, self._history_state_db(db, image_id))
+                db.execute("COMMIT")
+            except Exception:
+                db.execute("ROLLBACK")
+                raise
 
     def commit_save(self, image_id: str, *, mtime_ns: int | None = None, size_bytes: int | None = None,
                     candidate_revision: int | None = None,
@@ -601,11 +625,13 @@ class WorkspaceStore:
         db.execute("""UPDATE manual_edits SET removed_candidate_ids=?,candidate_revision=?,has_effective_mask=?,updated_at=?
             WHERE image_id=?""", (json.dumps(sorted(set(removed) & candidate_ids)), revision, int(effective), time.time_ns(), image_id))
 
-    def commit_candidate_state(self, image_id: str, revision: int, candidates: list[Any], effective: bool, *, replace: bool) -> None:
+    def commit_candidate_state(self, image_id: str, revision: int, candidates: list[Any], effective: bool, *, replace: bool,
+                               history_group: str | None = None) -> None:
         """Atomically store one complete candidate/manual revision before publication."""
         with self._lock, self._connect() as db:
             db.execute("BEGIN IMMEDIATE")
             try:
+                before = self._history_state_db(db, image_id)
                 db.execute("UPDATE images SET candidate_revision=?, reviewed=0, updated_at=? WHERE image_id=?", (revision, time.time_ns(), image_id))
                 if replace:
                     db.execute("UPDATE candidates SET deleted=1 WHERE image_id=?", (image_id,))
@@ -640,6 +666,7 @@ class WorkspaceStore:
                             ON CONFLICT(image_id,candidate_id) DO UPDATE SET expand_px=excluded.expand_px""",
                                    (image_id, candidate.candidate_id, int(candidate.expand_px)))
                 self._update_manual_candidate_state(db, image_id, revision, {candidate.candidate_id for candidate in candidates}, effective)
+                self._record_history_db(db, image_id, before, self._history_state_db(db, image_id), group_id=history_group)
                 db.execute("COMMIT")
             except Exception:
                 db.execute("ROLLBACK")
@@ -713,9 +740,8 @@ class WorkspaceStore:
         with self._lock, self._connect() as db:
             db.execute("BEGIN IMMEDIATE")
             try:
+                before = self._history_state_db(db, image_id)
                 image = db.execute("SELECT candidate_revision FROM images WHERE image_id=?", (image_id,)).fetchone()
-                if image is None:
-                    raise ValueError("workspace image is missing")
                 revision = int(image["candidate_revision"])
                 valid_ids = {str(row["candidate_id"]) for row in db.execute(
                     "SELECT candidate_id FROM candidates WHERE image_id=? AND deleted=0", (image_id,)
@@ -732,6 +758,7 @@ class WorkspaceStore:
                 manual_enabled=excluded.manual_enabled,exclusion_enabled=excluded.exclusion_enabled,exclusion_erase_enabled=excluded.exclusion_erase_enabled,
                 exclusion_forced=excluded.exclusion_forced,removed_candidate_ids=excluded.removed_candidate_ids,candidate_revision=excluded.candidate_revision,has_effective_mask=excluded.has_effective_mask,history_json=excluded.history_json,updated_at=excluded.updated_at""",
                     (image_id,add,exclusion,erase,int(payload.get("manualEnabled", True)),int(payload.get("manualExclusionEnabled", True)),int(payload.get("manualExclusionEraseEnabled", True)),int(payload.get("manualExclusionForced", True)),json.dumps(removed),revision,int(has_effective_mask),history_json,time.time_ns()))
+                self._record_history_db(db, image_id, before, self._history_state_db(db, image_id))
                 db.execute("COMMIT")
             except Exception:
                 db.execute("ROLLBACK")
@@ -780,14 +807,18 @@ class WorkspaceStore:
         Candidate PNGs remain in ``candidates`` and are referenced by ID.
         """
         with self._connect() as db:
-            image = db.execute("SELECT catalog_id,candidate_revision,hidden,reviewed FROM images WHERE image_id=?", (image_id,)).fetchone()
-            if image is None:
-                raise ValueError("workspace image is missing")
-            candidates = db.execute("""SELECT candidates.candidate_id,label_token,confidence,mask_png,enabled,color,source,origin,
-                refinement,role,forced,deleted,candidate_metadata.expand_px FROM candidates
-                LEFT JOIN candidate_metadata USING(image_id,candidate_id) WHERE candidates.image_id=? AND candidates.deleted=0
-                ORDER BY candidates.candidate_id""", (image_id,)).fetchall()
-            manual = db.execute("SELECT * FROM manual_edits WHERE image_id=?", (image_id,)).fetchone()
+            return self._history_state_db(db, image_id)
+
+    def _history_state_db(self, db: sqlite3.Connection, image_id: str) -> dict[str, Any]:
+        """Capture a history state on the caller's transaction connection."""
+        image = db.execute("SELECT catalog_id,candidate_revision,hidden,reviewed FROM images WHERE image_id=?", (image_id,)).fetchone()
+        if image is None:
+            raise ValueError("workspace image is missing")
+        candidates = db.execute("""SELECT candidates.candidate_id,label_token,confidence,mask_png,enabled,color,source,origin,
+            refinement,role,forced,deleted,candidate_metadata.expand_px FROM candidates
+            LEFT JOIN candidate_metadata USING(image_id,candidate_id) WHERE candidates.image_id=? AND candidates.deleted=0
+            ORDER BY candidates.candidate_id""", (image_id,)).fetchall()
+        manual = db.execute("SELECT * FROM manual_edits WHERE image_id=?", (image_id,)).fetchone()
         packed_candidates = []
         for row in candidates:
             raw = row["mask_png"]
@@ -908,34 +939,60 @@ class WorkspaceStore:
             AND NOT EXISTS (SELECT 1 FROM history_candidate_refs WHERE history_candidate_refs.image_id=candidates.image_id
                             AND history_candidate_refs.candidate_id=candidates.candidate_id)""", (image_id,))
 
-    def record_history(self, image_id: str, before: dict[str, Any], after: dict[str, Any], *, group_id: str | None = None) -> None:
-        """Append one completed operation, dropping only this image's abandoned redo path."""
+    def begin_history_group(self) -> str:
+        """Create a visible multi-image operation before its first image commits."""
+        group_id = uuid.uuid4().hex
+        with self._lock, self._connect() as db:
+            db.execute("INSERT INTO history_groups(group_id,status,created_at) VALUES(?,?,?)", (group_id, "building", time.time_ns()))
+        return group_id
+
+    def finish_history_group(self, group_id: str, *, failed: bool = False) -> None:
+        """Publish a completed batch, or leave its committed subset explicitly failed."""
+        with self._lock, self._connect() as db:
+            db.execute("UPDATE history_groups SET status=? WHERE group_id=? AND status='building'", ("failed" if failed else "committed", group_id))
+            db.execute("DELETE FROM history_groups WHERE group_id=? AND NOT EXISTS (SELECT 1 FROM history_entries WHERE group_id=?)", (group_id, group_id))
+
+    def _record_history_db(self, db: sqlite3.Connection, image_id: str, before: dict[str, Any], after: dict[str, Any], *, group_id: str | None = None) -> None:
+        """Append history in the same transaction as the state mutation."""
         before_json = self._history_json(before); after_json = self._history_json(after)
         if before_json == after_json:
             return
         delta_json = json.dumps({"manual": self._manual_delta(before, after)}, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
+        image = db.execute("SELECT catalog_id FROM images WHERE image_id=?", (image_id,)).fetchone()
+        if image is None:
+            raise ValueError("workspace image is missing")
+        if group_id:
+            # Direct callers historically supplied a group id themselves.  Such
+            # groups are complete immediately; begin_history_group is used for
+            # a genuine multi-image batch.
+            db.execute("INSERT OR IGNORE INTO history_groups(group_id,status,created_at) VALUES(?,?,?)", (group_id, "committed", time.time_ns()))
+        cursor = db.execute("SELECT entry_id FROM history_cursors WHERE image_id=?", (image_id,)).fetchone()
+        last = int(cursor["entry_id"]) if cursor and cursor["entry_id"] is not None else 0
+        redo_groups = [str(row["group_id"]) for row in db.execute(
+            "SELECT DISTINCT group_id FROM history_entries WHERE image_id=? AND entry_id>? AND group_id IS NOT NULL", (image_id, last)
+        )]
+        db.execute("DELETE FROM history_entries WHERE image_id=? AND entry_id>? AND group_id IS NULL", (image_id, last))
+        prune_ids = {image_id}
+        for stale_group in redo_groups:
+            prune_ids.update(str(row["image_id"]) for row in db.execute("SELECT image_id FROM history_entries WHERE group_id=?", (stale_group,)))
+            db.execute("DELETE FROM history_entries WHERE group_id=?", (stale_group,))
+            db.execute("DELETE FROM history_groups WHERE group_id=?", (stale_group,))
+        entry = db.execute("""INSERT INTO history_entries(catalog_id,image_id,group_id,before_json,after_json,delta_json,created_at)
+            VALUES(?,?,?,?,?,?,?)""", (image["catalog_id"], image_id, group_id, before_json, after_json, delta_json, time.time_ns()))
+        candidate_ids = self._history_candidate_ids(before) | self._history_candidate_ids(after)
+        db.executemany("INSERT INTO history_candidate_refs(entry_id,image_id,candidate_id) VALUES(?,?,?)",
+                       ((entry.lastrowid, image_id, candidate_id) for candidate_id in candidate_ids))
+        for stale_image_id in prune_ids:
+            self._prune_unreferenced_candidates(db, stale_image_id)
+        db.execute("""INSERT INTO history_cursors(image_id,entry_id) VALUES(?,?)
+            ON CONFLICT(image_id) DO UPDATE SET entry_id=excluded.entry_id""", (image_id, entry.lastrowid))
+
+    def record_history(self, image_id: str, before: dict[str, Any], after: dict[str, Any], *, group_id: str | None = None) -> None:
+        """Append one completed operation, dropping only this image's abandoned redo path."""
         with self._lock, self._connect() as db:
             db.execute("BEGIN IMMEDIATE")
             try:
-                image = db.execute("SELECT catalog_id FROM images WHERE image_id=?", (image_id,)).fetchone()
-                if image is None:
-                    raise ValueError("workspace image is missing")
-                cursor = db.execute("SELECT entry_id FROM history_cursors WHERE image_id=?", (image_id,)).fetchone()
-                last = int(cursor["entry_id"]) if cursor and cursor["entry_id"] is not None else 0
-                redo_groups = [str(row["group_id"]) for row in db.execute(
-                    "SELECT DISTINCT group_id FROM history_entries WHERE image_id=? AND entry_id>? AND group_id IS NOT NULL", (image_id, last)
-                )]
-                db.execute("DELETE FROM history_entries WHERE image_id=? AND entry_id>? AND group_id IS NULL", (image_id, last))
-                for stale_group in redo_groups:
-                    db.execute("DELETE FROM history_entries WHERE group_id=?", (stale_group,))
-                cursor = db.execute("""INSERT INTO history_entries(catalog_id,image_id,group_id,before_json,after_json,delta_json,created_at)
-                    VALUES(?,?,?,?,?,?,?)""", (image["catalog_id"], image_id, group_id, before_json, after_json, delta_json, time.time_ns()))
-                candidate_ids = self._history_candidate_ids(before) | self._history_candidate_ids(after)
-                db.executemany("INSERT INTO history_candidate_refs(entry_id,image_id,candidate_id) VALUES(?,?,?)",
-                               ((cursor.lastrowid, image_id, candidate_id) for candidate_id in candidate_ids))
-                self._prune_unreferenced_candidates(db, image_id)
-                db.execute("""INSERT INTO history_cursors(image_id,entry_id) VALUES(?,?)
-                    ON CONFLICT(image_id) DO UPDATE SET entry_id=excluded.entry_id""", (image_id, cursor.lastrowid))
+                self._record_history_db(db, image_id, before, after, group_id=group_id)
                 db.execute("COMMIT")
             except Exception:
                 db.execute("ROLLBACK")
@@ -1001,6 +1058,9 @@ class WorkspaceStore:
             redo_entry = db.execute("SELECT * FROM history_entries WHERE image_id=? AND entry_id>? ORDER BY entry_id LIMIT 1", (image_id, current)).fetchone()
             def group_ready(entry: sqlite3.Row | None, direction: str) -> bool:
                 if entry is None or not entry["group_id"]: return entry is not None
+                group = db.execute("SELECT status FROM history_groups WHERE group_id=?", (entry["group_id"],)).fetchone()
+                if group is None or str(group["status"]) == "building":
+                    return False
                 members = db.execute("SELECT image_id,entry_id FROM history_entries WHERE group_id=?", (entry["group_id"],)).fetchall()
                 for member in members:
                     cursor_row = db.execute("SELECT entry_id FROM history_cursors WHERE image_id=?", (member["image_id"],)).fetchone()
@@ -1029,6 +1089,9 @@ class WorkspaceStore:
                     db.execute("COMMIT"); return []
                 entries = db.execute("SELECT * FROM history_entries WHERE group_id=? ORDER BY entry_id", (entry["group_id"],)).fetchall() if entry["group_id"] else [entry]
                 if entry["group_id"]:
+                    group = db.execute("SELECT status FROM history_groups WHERE group_id=?", (entry["group_id"],)).fetchone()
+                    if group is None or str(group["status"]) == "building":
+                        db.execute("COMMIT"); return []
                     for member in entries:
                         cursor_row = db.execute("SELECT entry_id FROM history_cursors WHERE image_id=?", (member["image_id"],)).fetchone()
                         cursor_id = int(cursor_row["entry_id"]) if cursor_row and cursor_row["entry_id"] is not None else 0

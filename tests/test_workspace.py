@@ -495,5 +495,95 @@ class WorkspaceTests(unittest.TestCase):
             accepted = store.reconcile_images(catalog, [changed])["001.png"]
             self.assertFalse(accepted["changed"]); self.assertFalse(accepted["dimensions_changed"])
 
+    def test_atomic_mutations_roll_back_when_the_history_insert_fails(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = WorkspaceStore(Path(directory)); catalog = store.ensure_catalog()
+            image_id = str(store.reconcile_images(catalog, [self._image(Path(directory))])["001.png"]["image_id"])
+            with patch.object(store, "_record_history_db", side_effect=sqlite3.OperationalError("history failed")):
+                with self.assertRaises(sqlite3.OperationalError):
+                    store.set_image_flags(image_id, hidden=True)
+            self.assertEqual(store.image_state(image_id), (False, False))
+            with patch.object(store, "_record_history_db", side_effect=sqlite3.OperationalError("history failed")):
+                with self.assertRaises(sqlite3.OperationalError):
+                    store.save_manual(image_id, {"add": "mask", "hasEffectiveMask": True}, lambda _value: self._png())
+            self.assertIsNone(store.manual(image_id, lambda value: value))
+            self.assertEqual(store.history_status(image_id), {"canUndo": False, "canRedo": False})
+
+    def test_4k_manual_history_stores_only_changed_bbox_delta(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = WorkspaceStore(Path(directory)); catalog = store.ensure_catalog()
+            record = SimpleNamespace(relative_path="4k.png", size_bytes=1, mtime_ns=1, width=3840, height=2160)
+            image_id = str(store.reconcile_images(catalog, [record])["4k.png"]["image_id"])
+            mask = Image.new("L", (3840, 2160), 0)
+            for y in range(100, 132):
+                for x in range(200, 232): mask.putpixel((x, y), 255)
+            payload = io.BytesIO(); mask.save(payload, format="PNG")
+            store.save_manual(image_id, {"add": "draw", "hasEffectiveMask": True}, lambda _value: payload.getvalue())
+            db = sqlite3.connect(store.path)
+            delta_json = db.execute("SELECT delta_json FROM history_entries WHERE image_id=?", (image_id,)).fetchone()[0]
+            stored = db.execute("SELECT add_png FROM manual_edits WHERE image_id=?", (image_id,)).fetchone()[0]
+            db.close()
+            delta = json.loads(delta_json)["manual"]["add"]
+            self.assertEqual(delta["box"], [200, 100, 32, 32])
+            self.assertLess(len(delta["png"]), len(stored) // 8)
+
+    def test_candidate_metadata_history_never_copies_the_detector_png(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); store = WorkspaceStore(root); catalog = store.ensure_catalog()
+            image_id = str(store.reconcile_images(catalog, [self._image(root)])["001.png"]["image_id"])
+            mask_path = root / "candidate.png"; mask_path.write_bytes(self._png())
+            candidate = SimpleNamespace(candidate_id="candidate", label_token="penis", confidence=.9, mask_path=mask_path,
+                                        enabled=True, color="#fff", source="auto", origin="auto", refinement=None,
+                                        role=SimpleNamespace(value="apply"), forced=False, expand_px=0)
+            store.commit_candidate_state(image_id, 1, [candidate], True, replace=True)
+            for revision in range(2, 102):
+                candidate.enabled = not candidate.enabled
+                candidate.expand_px = revision
+                store.commit_candidate_state(image_id, revision, [candidate], True, replace=False)
+            db = sqlite3.connect(store.path)
+            masks = db.execute("SELECT COUNT(*),SUM(length(mask_png)) FROM candidates WHERE image_id=?", (image_id,)).fetchone()
+            history = db.execute("SELECT before_json||after_json FROM history_entries WHERE image_id=?", (image_id,)).fetchall()
+            db.close()
+            self.assertEqual(masks[0], 1)
+            self.assertEqual(masks[1], len(self._png()))
+            self.assertTrue(all("iVBOR" not in row[0] for row in history))
+
+    def test_project_listing_never_selects_mask_blobs(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = WorkspaceStore(Path(directory)); catalog = store.ensure_catalog("a" * 32)
+            store.reconcile_images(catalog, [self._image(Path(directory))])
+            statements: list[str] = []; original_connect = store._connect
+            def traced():
+                db = original_connect(); db.set_trace_callback(statements.append); return db
+            store._connect = traced  # type: ignore[method-assign]
+            store.projects(); store.project(catalog); store.project_images(catalog)
+            select_sql = "\n".join(query for query in statements if query.lstrip().upper().startswith("SELECT")).lower()
+            self.assertNotIn("mask_png", select_sql)
+
+    def test_building_batch_is_not_undoable_until_it_is_finished(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = WorkspaceStore(Path(directory)); catalog = store.ensure_catalog()
+            records = [SimpleNamespace(relative_path=f"{index}.png", size_bytes=1, mtime_ns=1, width=4, height=4) for index in range(2)]
+            ids = [str(item["image_id"]) for item in store.reconcile_images(catalog, records).values()]
+            group = store.begin_history_group()
+            store.clear_image_workspaces({ids[0]: 1, ids[1]: 1}, history_group=group)
+            self.assertFalse(store.history_status(ids[1])["canUndo"])
+            store.finish_history_group(group)
+            self.assertTrue(store.history_status(ids[1])["canUndo"])
+
+    def test_image_delete_cascades_history_and_its_group(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = WorkspaceStore(Path(directory)); catalog = store.ensure_catalog()
+            image_id = str(store.reconcile_images(catalog, [self._image(Path(directory))])["001.png"]["image_id"])
+            group = store.begin_history_group()
+            store.clear_image_workspaces({image_id: 1}, history_group=group)
+            store.finish_history_group(group)
+            store.delete_images([image_id])
+            db = sqlite3.connect(store.path)
+            counts = [db.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+                      for table in ("images", "candidates", "manual_edits", "history_entries", "history_candidate_refs", "history_cursors", "history_groups")]
+            db.close()
+            self.assertEqual(counts, [0] * len(counts))
+
 if __name__ == "__main__":
     unittest.main()

@@ -84,12 +84,10 @@ class CatalogMixin:
         """Durably commit a candidate revision, then publish it while the caller holds ``self.lock``."""
         revision = self._candidate_revision(image_id) + 1
         if self.workspace_store.has_image(image_id):
-            before = self.workspace_store.history_state(image_id)
             self.workspace_store.commit_candidate_state(
                 image_id, revision, candidates,
-                self._effective_mask_for_candidates(image_id, candidates), replace=replace,
+                self._effective_mask_for_candidates(image_id, candidates), replace=replace, history_group=history_group,
             )
-            self.workspace_store.record_history(image_id, before, self.workspace_store.history_state(image_id), group_id=history_group)
         self.candidates[image_id] = candidates
         self.candidate_revisions[image_id] = revision
         return revision
@@ -407,7 +405,13 @@ class CatalogMixin:
             records = [self.images[image_id] for image_id in known if image_id in self.images]
             if clear_masks:
                 revisions = {image_id: self._candidate_revision(image_id) + 1 for image_id in known}
-                self.workspace_store.clear_image_workspaces(revisions)
+                group_id = self.workspace_store.begin_history_group() if len(revisions) > 1 else None
+                try:
+                    self.workspace_store.clear_image_workspaces(revisions, history_group=group_id)
+                except Exception:
+                    if group_id: self.workspace_store.finish_history_group(group_id, failed=True)
+                    raise
+                if group_id: self.workspace_store.finish_history_group(group_id)
                 for image_id in known:
                     self.candidates[image_id] = []; self.candidate_revisions[image_id] = revisions[image_id]
             # The comparison baseline changes only after the user confirms.
@@ -706,15 +710,17 @@ class CatalogMixin:
                     for record in records
                     for candidate in self.candidates.get(record.image_id, [])
                 ]
-                before = {record.image_id: self.workspace_store.history_state(record.image_id) for record in records if self.workspace_store.has_image(record.image_id)}
                 revisions = {record.image_id: self._candidate_revision(record.image_id) + 1 for record in records}
-                self.workspace_store.clear_image_workspaces(revisions)
+                group_id = self.workspace_store.begin_history_group() if len(revisions) > 1 else None
+                try:
+                    self.workspace_store.clear_image_workspaces(revisions, history_group=group_id)
+                except Exception:
+                    if group_id: self.workspace_store.finish_history_group(group_id, failed=True)
+                    raise
+                if group_id: self.workspace_store.finish_history_group(group_id)
                 for record in records:
                     self.candidates[record.image_id] = []
                     self._touch_candidates(record.image_id)
-                group_id = uuid.uuid4().hex if len(before) > 1 else None
-                for image_id, state in before.items():
-                    self.workspace_store.record_history(image_id, state, self.workspace_store.history_state(image_id), group_id=group_id)
             self._delete_mask_files(mask_paths, [self.cache_dir / record.image_id for record in records])
         return len(records)
 
@@ -1090,9 +1096,7 @@ class CatalogMixin:
                 raise ClientError("画像が見つかりません。", "image_not_found")
             catalog_generation = self.catalog_generation
         if self.workspace_store.has_image(image_id):
-            before = self.workspace_store.history_state(image_id)
             self.workspace_store.set_image_flags(image_id, hidden=hidden, reviewed=reviewed)
-            self.workspace_store.record_history(image_id, before, self.workspace_store.history_state(image_id))
         with self.lock:
             if self.images.get(image_id) is not record or self.catalog_generation != catalog_generation:
                 raise ClientError("画像一覧が更新されました。もう一度お試しください。", "operation_in_progress")
@@ -1138,11 +1142,9 @@ class CatalogMixin:
                     image_id, self.candidates.get(image_id, []), committed,
                 )
                 try:
-                    before = self.workspace_store.history_state(image_id)
                     # The manual row, its normalized removal IDs, exact candidate
                     # revision, and gallery scalar are one SQLite transaction.
                     self.workspace_store.save_manual(image_id, committed, self._decode_workspace_mask)
-                    self.workspace_store.record_history(image_id, before, self.workspace_store.history_state(image_id))
                 except ValueError as exc:
                     raise ClientError("手描き状態を保存できません。", "workspace_write_failed") from exc
 
@@ -1408,8 +1410,14 @@ class CatalogMixin:
         unique = list(dict.fromkeys(str(image_id) for image_id in image_ids if str(image_id)))
         if not unique:
             raise ClientError("候補を更新する画像がありません。", "image_not_found")
-        group_id = uuid.uuid4().hex if len(unique) > 1 else None
-        return {image_id: self.batch_update_candidates(image_id, payload, history_group=group_id) for image_id in unique}
+        group_id = self.workspace_store.begin_history_group() if len(unique) > 1 else None
+        try:
+            result = {image_id: self.batch_update_candidates(image_id, payload, history_group=group_id) for image_id in unique}
+        except Exception:
+            if group_id: self.workspace_store.finish_history_group(group_id, failed=True)
+            raise
+        if group_id: self.workspace_store.finish_history_group(group_id)
+        return result
 
     def delete_candidate(self, image_id: str, candidate_id: str) -> bool:
         self.image_for_id(image_id)
