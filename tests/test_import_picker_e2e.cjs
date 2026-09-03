@@ -699,6 +699,9 @@ async function runCandidateBlinkScenario(browser, expanded = false) {
       renderCandidates();
       document.querySelector(".candidate-row-apply .candidate-class").textContent = "Long English candidate label that must stay inside the row";
     });
+    for (const language of ["ja", "en"]) {
+    await page.evaluate((locale) => loadTranslations(locale), language);
+    await page.locator('[data-candidate-blink-id="candidate-blink-apply"] .candidate-class').evaluate((node) => { node.textContent = "Long English candidate label that must stay inside the row"; });
     for (const width of [1024, 1280, 1920]) {
       await page.setViewportSize({ width, height: 900 });
       const rows = await page.evaluate(() => [...document.querySelectorAll(".candidate-row")].map((node) => ({ className: node.className, children: node.children.length, grid: getComputedStyle(node).gridTemplateColumns, overflow: node.scrollWidth > node.clientWidth || node.scrollHeight > node.clientHeight, hit: [...node.querySelectorAll("button")].every((button) => { const rect = button.getBoundingClientRect(); const target = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2); return button === target || button.contains(target); }) })));
@@ -706,9 +709,25 @@ async function runCandidateBlinkScenario(browser, expanded = false) {
       const exclude = rows.find((item) => item.className.includes("candidate-row-manual-exclude") && !item.className.includes("erase"));
       const erase = rows.find((item) => item.className.includes("candidate-row-manual-exclude-erase"));
       const detectedApply = rows.find((item) => item.className.includes("candidate-row-apply") && !item.className.includes("manual"));
-      assert.deepEqual([apply?.children, exclude?.children, erase?.children], [2, 2, 2], `real Chromium candidate rows keep one heading and one action row at ${width}px`);
-      assert.equal([detectedApply, apply, exclude, erase].every((item) => !item.overflow && item.hit), true, `real Chromium candidate rows wrap actions without overflow or lost hits at ${width}px (${JSON.stringify({ detectedApply, apply, exclude, erase })})`);
+      const detectedExclude = rows.find((item) => item.className.includes("candidate-row-exclude") && !item.className.includes("manual"));
+      assert.deepEqual([apply?.children, exclude?.children, erase?.children], [2, 2, 2], `real Chromium candidate rows keep one heading and one action row at ${width}px/${language}`);
+      assert.equal([detectedApply, detectedExclude, apply, exclude, erase].every((item) => !item.overflow), true, `real Chromium candidate rows wrap actions without overflow at ${width}px/${language} (${JSON.stringify({ detectedApply, detectedExclude, apply, exclude, erase })})`);
+      for (const selector of ['[data-candidate-blink-id="candidate-blink-apply"]', '.candidate-row-manual-apply', '.candidate-row-manual-exclude:not(.candidate-row-manual-exclude-erase)', '.candidate-row-manual-exclude-erase']) {
+        await page.locator(selector).scrollIntoViewIfNeeded();
+        assert.equal(await page.locator(selector).evaluate((node) => [...node.querySelectorAll("button")].every((button) => {
+          const rect = button.getBoundingClientRect(); const target = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2); return target === button || button.contains(target);
+        })), true, `candidate row controls retain their hit targets for ${selector} at ${width}px/${language}`);
+      }
+      await page.locator('[data-candidate-blink-id="candidate-blink-exclude"] .candidate-forced').scrollIntoViewIfNeeded();
+      assert.equal(await page.locator('[data-candidate-blink-id="candidate-blink-exclude"] .candidate-forced').evaluate((button) => {
+        const rect = button.getBoundingClientRect(); const row = button.closest(".candidate-row").getBoundingClientRect();
+        const target = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+        return getComputedStyle(button).display !== "none" && rect.width > 0 && rect.height > 0 && rect.left >= row.left && rect.right <= row.right && rect.top >= row.top && rect.bottom <= row.bottom && (target === button || button.contains(target));
+      }), true, `the automatic exclusion force control remains fully visible inside the row at ${width}px/${language}`);
+      assert.deepEqual(await page.locator('[data-candidate-blink-id="candidate-blink-exclude"] .candidate-row-actions > button').evaluateAll((buttons) => buttons.map((button) => button.className)), ["candidate-display-toggle", "candidate-effective-toggle", "candidate-padding-button", "candidate-forced", "candidate-delete"], `the exclusion actions retain display, effective, padding, force, delete order at ${width}px/${language}`);
     }
+    }
+    await page.evaluate(() => loadTranslations("ja"));
 
     await page.locator("#brushTool").click();
     const canvas = await page.locator("#editorCanvas").boundingBox();
@@ -794,6 +813,9 @@ async function runCandidateBlinkScenario(browser, expanded = false) {
     assert.equal(scenario.candidateUpdates.length, beforeInvalid + 3, "reset and confirm commit zero exactly once");
     await page.evaluate(() => { state.projectReadOnly = true; renderCandidates(); });
     assert.equal(await row.locator(".candidate-padding-button").isDisabled(), true, "padding is disabled for a read-only completed project");
+    assert.equal(await excludeRow.locator(".candidate-forced").isDisabled(), true, "the visible automatic exclusion force control is disabled for a read-only completed project");
+    assert.equal(await excludeRow.locator(".candidate-toggle").isDisabled(), true, "automatic exclusion ON/OFF is disabled for a read-only completed project");
+    assert.equal(await excludeRow.locator(".candidate-delete").isDisabled(), true, "automatic exclusion deletion is disabled for a read-only completed project");
     await page.evaluate(() => { state.projectReadOnly = false; state.candidateBatchPending.add(state.currentId); renderCandidates(); });
     assert.equal(await row.locator(".candidate-padding-button").isDisabled(), true, "padding is disabled during a candidate batch mutation");
     await page.evaluate(() => { state.candidateBatchPending.clear(); state.importing = true; renderCandidates(); });
@@ -824,6 +846,9 @@ async function runCandidateBlinkScenario(browser, expanded = false) {
     const manualApply = page.locator('[data-candidate-blink-id="manual:apply"]');
     const manualExclude = page.locator('[data-candidate-blink-id="manual:exclude"]');
     const manualErase = page.locator('[data-candidate-blink-id="manual:excludeErase"]');
+    await page.evaluate(() => { state.projectReadOnly = true; renderCandidates(); });
+    assert.equal(await page.locator('.candidate-row-manual .candidate-toggle, .candidate-row-manual .candidate-forced, .candidate-row-manual .candidate-delete').evaluateAll((buttons) => buttons.length >= 7 && buttons.every((button) => button.disabled)), true, "all visible manual mask mutations are disabled without changing state in a read-only completed project");
+    await page.evaluate(() => { state.projectReadOnly = false; renderCandidates(); });
     for (const manualRowControl of [manualApply, manualExclude, manualErase]) {
       await manualRowControl.locator(".candidate-display-toggle").click();
       await manualRowControl.locator(".candidate-effective-toggle").click();

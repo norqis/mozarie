@@ -23,7 +23,7 @@ class Element {
   matches(value) { return value === ":popover-open" && this.open; }
   showPopover() { this.open = true; }
   hidePopover() { this.open = false; }
-  getBoundingClientRect() { return { left: 10, top: 20, width: 80, height: 40 }; }
+  getBoundingClientRect() { return { left: 10, right: 90, top: 20, bottom: 60, width: 80, height: 40 }; }
   close(value = "") { this.returnValue = value; this.open = false; this.listeners.get("close")?.(); }
 }
 
@@ -127,16 +127,17 @@ const tolerancePanelCss = styleSource.match(/\.bucket-tolerance-panel\s*\{([^}]*
   assert.match(indexSource, /id="bucketTool"[^>]*aria-controls="bucketToleranceControl"[^>]*aria-expanded="false"/, "the mosaic fill control owns its tolerance popover semantically");
   assert.match(indexSource, /id="excludeBucketTool"[^>]*aria-controls="bucketToleranceControl"[^>]*aria-expanded="false"/, "the exclusion fill control owns the shared tolerance popover semantically");
   assert.match(indexSource, /<output id="bucketToleranceValue" for="bucketTolerance">/, "the displayed tolerance is associated with its range input");
-  assert.match(tolerancePanelCss, /left:\s*0;/, "the tolerance panel anchors to the left edge on a narrow viewport");
+  assert.match(indexSource, /id="bucketToleranceControl"[^>]*popover="auto"/, "fill tolerance uses native outside-click and Escape dismissal");
+  assert.match(tolerancePanelCss, /position:\s*fixed;/, "the top-layer tolerance panel is positioned against the viewport");
   assert.doesNotMatch(tolerancePanelCss, /transform:\s*translateX\(-50%\)/, "the tolerance panel does not overflow left by centering itself");
   test.setTool("bucket");
   assert.equal(element("#bucketTool").getAttribute("aria-expanded"), "true", "mosaic fill marks its tolerance control expanded");
   assert.equal(element("#excludeBucketTool").getAttribute("aria-expanded"), "false", "only the active fill control is expanded");
-  assert.equal(element("#bucketToleranceControl").parentElement, element("#bucketToolAnchor"), "mosaic fill places the shared tolerance panel under its anchor");
+  const toleranceParent = element("#bucketToleranceControl").parentElement;
   test.setTool("exclude_bucket");
   assert.equal(element("#bucketTool").getAttribute("aria-expanded"), "false", "changing to exclusion fill collapses mosaic fill semantics");
   assert.equal(element("#excludeBucketTool").getAttribute("aria-expanded"), "true", "exclusion fill marks its tolerance control expanded");
-  assert.equal(element("#bucketToleranceControl").parentElement, element("#excludeBucketToolAnchor"), "exclusion fill moves the shared tolerance panel to its anchor");
+  assert.equal(element("#bucketToleranceControl").parentElement, toleranceParent, "the shared top-layer panel does not move in the DOM when its anchor changes");
   test.setTool("boundary"); test.setTool("brush");
   assert.equal(element("#excludeBucketTool").getAttribute("aria-expanded"), "false", "leaving fill tools collapses the tolerance control");
   element("#boundaryModeMenu").hidden = false; document.activeElement = element("#boundaryModeMenu");

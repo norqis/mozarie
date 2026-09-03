@@ -1,5 +1,8 @@
 function setTool(tool) {
   if (isBusy() || state.importing) return;
+  const previousTool = state.tool;
+  const toggleTolerance = fillToleranceToggleRequest === tool;
+  fillToleranceToggleRequest = null;
   const focusedInBoundaryMenu = closeBoundaryModeMenu();
   const boundaryTools = new Set(["boundary", "polygon", "boundary_brush"]);
   if (!boundaryTools.has(tool)) clearBoundaryInteraction();
@@ -10,21 +13,52 @@ function setTool(tool) {
   }
   $("#boundaryTool").classList.toggle("active", boundaryTools.has(tool));
   $("#boundaryTool").setAttribute("aria-pressed", String(boundaryTools.has(tool)));
-  const tolerancePanel = $("#bucketToleranceControl");
   const toleranceAnchor = tool === "bucket" ? $("#bucketToolAnchor") : (tool === "exclude_bucket" ? $("#excludeBucketToolAnchor") : null);
-  tolerancePanel.style.left = ""; tolerancePanel.style.right = "";
-  if (toleranceAnchor && tolerancePanel.parentElement !== toleranceAnchor) toleranceAnchor.append?.(tolerancePanel);
-  tolerancePanel.hidden = !toleranceAnchor;
-  if (toleranceAnchor) {
-    const anchor = toleranceAnchor.getBoundingClientRect(); const panel = tolerancePanel.getBoundingClientRect();
-    const overflow = anchor.left + panel.width - window.innerWidth + 8;
-    if (overflow > 0) tolerancePanel.style.left = `${-overflow}px`;
-  }
-  $("#bucketTool").setAttribute("aria-expanded", String(tool === "bucket"));
-  $("#excludeBucketTool").setAttribute("aria-expanded", String(tool === "exclude_bucket"));
+  if (toleranceAnchor && previousTool === tool && (toggleTolerance || (fillToleranceSession?.anchor === toleranceAnchor && $("#bucketToleranceControl").matches?.(":popover-open")))) closeFillToleranceControl({ focus: true });
+  else if (toleranceAnchor) openFillToleranceControl(toleranceAnchor);
+  else closeFillToleranceControl();
+  const toleranceOpen = $("#bucketToleranceControl").matches?.(":popover-open") === true;
+  $("#bucketTool").setAttribute("aria-expanded", String(toleranceOpen && tool === "bucket"));
+  $("#excludeBucketTool").setAttribute("aria-expanded", String(toleranceOpen && tool === "exclude_bucket"));
   canvas.style.cursor = "default";
   updateBoundaryActions(); render(); updateBrushCursor();
   if (focusedInBoundaryMenu) focusCanvas();
+}
+
+let fillToleranceSession = null;
+let fillToleranceToggleRequest = null;
+
+function rememberFillToleranceTrigger(tool) {
+  const anchor = tool === "bucket" ? $("#bucketToolAnchor") : $("#excludeBucketToolAnchor");
+  fillToleranceToggleRequest = state.tool === tool && fillToleranceSession?.anchor === anchor && $("#bucketToleranceControl").matches?.(":popover-open") ? tool : null;
+}
+
+function positionFillToleranceControl(anchor) {
+  const panel = $("#bucketToleranceControl");
+  const anchorRect = anchor.getBoundingClientRect(); const panelRect = panel.getBoundingClientRect();
+  const left = Math.max(8, Math.min(window.innerWidth - panelRect.width - 8, anchorRect.left));
+  const below = anchorRect.bottom + 5;
+  const top = below + panelRect.height <= window.innerHeight - 8 ? below : Math.max(8, anchorRect.top - panelRect.height - 5);
+  panel.style.left = `${left}px`; panel.style.top = `${top}px`;
+}
+
+function openFillToleranceControl(anchor) {
+  const panel = $("#bucketToleranceControl");
+  if (panel.matches?.(":popover-open") && fillToleranceSession?.anchor === anchor) return;
+  if (fillToleranceSession) closeFillToleranceControl();
+  fillToleranceSession = { anchor };
+  panel.showPopover(); positionFillToleranceControl(anchor);
+}
+
+function closeFillToleranceControl({ focus = false } = {}) {
+  const session = fillToleranceSession;
+  if (!session) return;
+  fillToleranceSession = null;
+  const panel = $("#bucketToleranceControl");
+  if (panel.matches?.(":popover-open")) panel.hidePopover();
+  $("#bucketTool").setAttribute("aria-expanded", "false");
+  $("#excludeBucketTool").setAttribute("aria-expanded", "false");
+  if (focus && session.anchor?.isConnected) session.anchor.querySelector("button")?.focus();
 }
 
 function setBoundaryModeMenuOpen(open) {

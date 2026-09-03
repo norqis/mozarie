@@ -8,7 +8,7 @@ from PIL import Image, PngImagePlugin
 
 from mozarie.catalog import CatalogMixin
 from mozarie.detection import _save_binary_mask
-from mozarie.domain import Candidate
+from mozarie.domain import Candidate, CandidateRole
 from mozarie.masks import compose_masks, expand_mask
 from mozarie.workspace import WorkspaceStore
 
@@ -64,12 +64,14 @@ class CandidateExpandTests(unittest.TestCase):
             mask_path = root / "candidate.png"
             raw = self._png(3)
             mask_path.write_bytes(raw)
-            candidate = Candidate("candidate", "penis", .9, mask_path, expand_px=3)
+            candidate = Candidate("candidate", "penis", .9, mask_path, role=CandidateRole.EXCLUDE, forced=True, expand_px=3)
             store.commit_candidate_state(image_id, 1, [candidate], True, replace=True)
             reopened = WorkspaceStore(root)
             revision, hydrated = reopened.hydrate_candidates(image_id, root / "cache", CatalogMixin._candidate_from_workspace)
             self.assertEqual(revision, 1)
             self.assertEqual(hydrated[0].expand_px, 3)
+            self.assertEqual(hydrated[0].role, CandidateRole.EXCLUDE)
+            self.assertTrue(hydrated[0].forced)
             self.assertEqual(reopened.candidate_png(image_id, "candidate"), raw)
 
     def test_workspace_defaults_existing_pngs_to_zero_without_modifying_them(self):

@@ -370,6 +370,13 @@ function bindEvents() {
   $("#downloadCurrentExcludeMask").addEventListener("click", () => { if (state.currentId) void downloadProjectArtifact(`/api/project/mask/${encodeURIComponent(state.currentId)}/exclude`, "exclude-mask.png"); });
   $("#bucketTolerance").addEventListener("input", (event) => setFillColorTolerance(event.currentTarget.value));
   $("#bucketTolerance").addEventListener("change", () => { void saveFillColorTolerance(); });
+  $("#bucketToleranceClose").addEventListener("click", () => closeFillToleranceControl({ focus: true }));
+  $("#bucketToleranceControl").addEventListener("toggle", (event) => {
+    if (event.newState === "open") return;
+    fillToleranceSession = null;
+    $("#bucketTool").setAttribute("aria-expanded", "false");
+    $("#excludeBucketTool").setAttribute("aria-expanded", "false");
+  });
   const splitter = $("#compareSplitter");
   let compareDrag = null;
   const setCompareSplit = (clientX) => {
@@ -467,8 +474,11 @@ function bindEvents() {
   $("#boundaryTool").addEventListener("click", () => {
     setBoundaryModeMenuOpen($("#boundaryModeMenu").hidden);
   });
-  $("#bucketTool").addEventListener("click", () => setTool("bucket"));
-  $("#excludeBucketTool").addEventListener("click", () => setTool("exclude_bucket"));
+  for (const [selector, tool] of [["#bucketTool", "bucket"], ["#excludeBucketTool", "exclude_bucket"]]) {
+    $(selector).addEventListener("pointerdown", () => rememberFillToleranceTrigger(tool));
+    $(selector).addEventListener("keydown", (event) => { if (event.key === "Enter" || event.key === " ") rememberFillToleranceTrigger(tool); });
+    $(selector).addEventListener("click", () => setTool(tool));
+  }
   $("#rectangleTool").addEventListener("click", () => setTool("boundary"));
   $("#polygonTool").addEventListener("click", () => setTool("polygon"));
   $("#boundaryBrushTool").addEventListener("click", () => setTool("boundary_brush"));

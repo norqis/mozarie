@@ -3,7 +3,7 @@
 // by the candidate, gallery, overview, model, and context-menu E2E cases.
 const ids = `
 projectButton projectClose projectNew projectName projectOpenList projectSourceSelect projectResume projectComplete projectMosaicZip projectExcludeZip projectDelete projectCloseWorkspace projectListClose projectSort projectNameInput projectNameCancel sourceMismatchClear sourceMismatchCancel sameSourceOpen sameSourceSeparate sameSourceCancel projectDeleteCancel projectDeleteConfirm pickFolder detectAllButton saveAllButton folderPath loadFolderButton pickImages pickFolderFiles settingsButton updateToast batchMoreButton clearAllMasksButton clearCatalogButton galleryFilter overviewButton collapseGalleryButton
-brushTool bucketTool mosaicEraserTool eraserTool excludeBucketTool excludeEraserTool boundaryTool rectangleTool polygonTool boundaryBrushTool singleViewButton compareViewButton fitButton undoButton redoButton mosaicPreviewButton brushSize mosaicHelpButton divisor bucketTolerance
+brushTool bucketTool mosaicEraserTool eraserTool excludeBucketTool excludeEraserTool boundaryTool rectangleTool polygonTool boundaryBrushTool singleViewButton compareViewButton fitButton undoButton redoButton mosaicPreviewButton brushSize mosaicHelpButton divisor bucketTolerance bucketToleranceClose
 previousImageButton nextImageButton removeAndNextButton hideAndNextButton reviewAndNextButton boundaryDetectButton boundaryCancelButton collapseInspectorButton detectCurrentButton saveButton downloadCurrentMosaicMask downloadCurrentExcludeMask clearCurrentMasksButton removeCurrentImageButton detectTargetPenis detectTargetPussy confidence
 candidatePaddingDecrease candidatePaddingInput candidatePaddingIncrease candidatePaddingReset candidatePaddingConfirm
 closeOverviewButton batchModeButton overviewQuery overviewFolder selectionActionsButton selectionClearButton toggleReviewMenuItem copyImagePathMenuItem removeImageMenuItem confirmNeverShow confirmAccept errorDialogClose
@@ -75,6 +75,7 @@ const exemptReasons = {
   candidatePaddingIncrease: "covered by the real-browser candidate padding scenario",
   candidatePaddingReset: "covered by the real-browser candidate padding scenario",
   candidatePaddingConfirm: "covered by the real-browser candidate padding scenario",
+  bucketToleranceClose: "covered by the dedicated real-browser fill-tolerance scenario",
 };
 
 function interactionFor(id) {

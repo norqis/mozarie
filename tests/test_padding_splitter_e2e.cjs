@@ -22,7 +22,60 @@ async function main() {
     });
     await page.goto(fixture.url, { waitUntil: "networkidle" });
     await page.locator(".gallery-item").first().click();
+
+    const tolerancePanel = page.locator("#bucketToleranceControl");
+    const toleranceInput = page.locator("#bucketTolerance");
+    const openTolerance = async () => {
+      await page.locator("#bucketTool").click();
+      assert.equal(await tolerancePanel.evaluate((node) => node.matches(":popover-open")), true, "fill tolerance can be reopened");
+    };
+    const saveTolerance = async (value) => {
+      await toleranceInput.evaluate((input, next) => { input.value = next; input.dispatchEvent(new Event("input", { bubbles: true })); input.dispatchEvent(new Event("change", { bubbles: true })); }, value);
+      await page.waitForFunction((next) => state.settings.editing.fill_color_tolerance === next, Number(value));
+    };
+    await openTolerance(); await page.locator("#bucketToleranceClose").click();
+    assert.equal(await tolerancePanel.evaluate((node) => node.matches(":popover-open")), false, "the X closes fill tolerance");
+    await openTolerance(); await page.locator("#bucketTool").click();
+    assert.equal(await tolerancePanel.evaluate((node) => node.matches(":popover-open")), false, "pressing the active fill tool again closes tolerance");
+    await openTolerance(); await page.keyboard.press("Escape");
+    assert.equal(await tolerancePanel.evaluate((node) => node.matches(":popover-open")), false, "Escape closes fill tolerance");
+    await openTolerance(); await page.locator("#currentFileName").click();
+    assert.equal(await tolerancePanel.evaluate((node) => node.matches(":popover-open")), false, "clicking the background closes fill tolerance");
+    await openTolerance(); await saveTolerance("35"); await page.locator("#excludeBucketTool").click();
+    assert.equal(await tolerancePanel.evaluate((node) => node.matches(":popover-open")), true, "switching fill tools moves and keeps tolerance open");
+    assert.deepEqual(await page.evaluate(() => [$("#bucketTool").getAttribute("aria-expanded"), $("#excludeBucketTool").getAttribute("aria-expanded")]), ["false", "true"], "ARIA follows the open fill tool");
+    await saveTolerance("36");
+    await page.locator("#brushTool").click();
+    assert.equal(await tolerancePanel.evaluate((node) => node.matches(":popover-open")), false, "switching to another tool closes tolerance");
+    await page.reload({ waitUntil: "networkidle" }); await page.locator(".gallery-item").first().click();
+    assert.equal(await toleranceInput.inputValue(), "36", "the shared tolerance changed from exclusion fill survives a reload");
+    await openTolerance(); assert.equal(await toleranceInput.inputValue(), "36", "reopening shows the immediately saved shared tolerance");
+    await page.locator("#bucketToleranceClose").click();
+
+    const canvasBox = await page.locator("#editorCanvas").boundingBox();
+    const fillPoint = { x: canvasBox.x + canvasBox.width / 2, y: canvasBox.y + canvasBox.height / 2 };
+    const maskBeforeExcludeFill = await page.evaluate(() => ({ add: addCanvas.toDataURL(), manualMaskPresent: state.manualMaskPresent, history: state.history.length }));
+    await page.locator("#excludeBucketTool").click();
+    await page.locator("#bucketToleranceClose").click();
+    await page.mouse.move(fillPoint.x, fillPoint.y); await page.mouse.down(); await page.mouse.move(fillPoint.x + 20, fillPoint.y + 10); await page.mouse.up();
+    await page.waitForFunction((count) => state.history.length === count + 1 && canvasHasPixels(exclusionCtx, exclusionCanvas), maskBeforeExcludeFill.history);
+    assert.deepEqual(await page.evaluate(() => ({ add: addCanvas.toDataURL(), manualMaskPresent: state.manualMaskPresent, tool: state.history.at(-1)?.tool })), { add: maskBeforeExcludeFill.add, manualMaskPresent: maskBeforeExcludeFill.manualMaskPresent, tool: "exclude_bucket" }, "exclude fill drag records once and leaves the mosaic layer and its presence flag byte-for-byte unchanged");
+    await page.locator("#undoButton").click();
+    await page.waitForFunction(() => !canvasHasPixels(exclusionCtx, exclusionCanvas));
+    assert.equal(await page.evaluate((before) => addCanvas.toDataURL() === before, maskBeforeExcludeFill.add), true, "undoing exclude fill leaves the mosaic layer unchanged");
+    await page.locator("#redoButton").click();
+    await page.waitForFunction(() => canvasHasPixels(exclusionCtx, exclusionCanvas));
+    assert.equal(await page.evaluate((before) => addCanvas.toDataURL() === before, maskBeforeExcludeFill.add), true, "redoing exclude fill restores only the exclusion layer");
+    await page.locator("#undoButton").click(); await page.waitForFunction(() => !canvasHasPixels(exclusionCtx, exclusionCanvas));
+
     await page.locator("#compareViewButton").click();
+    const compareCanvas = await page.locator("#editorCanvas").boundingBox();
+    for (const fraction of [.25, .75]) {
+      await page.mouse.click(compareCanvas.x + compareCanvas.width * fraction, compareCanvas.y + compareCanvas.height / 2);
+      await page.waitForFunction(() => canvasHasPixels(exclusionCtx, exclusionCanvas));
+      assert.equal(await page.evaluate((before) => addCanvas.toDataURL() === before && !state.manualMaskPresent, maskBeforeExcludeFill.add), true, `exclude fill from either compare pane changes only exclusion (${fraction})`);
+      await page.locator("#undoButton").click(); await page.waitForFunction(() => !canvasHasPixels(exclusionCtx, exclusionCanvas));
+    }
 
     const canvas = await page.locator("#editorCanvas").boundingBox();
     const splitter = page.locator("#compareSplitter");

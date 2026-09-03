@@ -193,11 +193,30 @@ test.paintStrokePath([{ x: 2, y: 2 }], "brush", 4);
 assert.ok(addCtx.calls.some((call) => call === "stroke:source-over"));
 assert.ok(exclusionEraseCtx.calls.some((call) => call === "stroke:destination-out"));
 test.paintFillSpans(addCtx, exclusionCtx, exclusionEraseCtx, [2, 3, 7], "bucket");
+const addCallsBeforeExcludeFill = [...addCtx.calls];
 test.paintFillSpans(addCtx, exclusionCtx, exclusionEraseCtx, [2, 3, 7], "exclude_bucket");
+assert.deepEqual(addCtx.calls, addCallsBeforeExcludeFill, "exclude fill leaves the manual mosaic layer byte path untouched");
+const addCallsBeforeExcludeReplay = [...addCtx.calls];
+test.replayManualStroke({ tool: "exclude_bucket", spans: [3, 4, 8] });
+assert.deepEqual(addCtx.calls, addCallsBeforeExcludeReplay, "exclude fill history replay never writes the manual mosaic layer");
 test.paintFillSpans(addCtx, exclusionCtx, exclusionEraseCtx, [2, 3, 7], "exclude_eraser");
 assert.ok(events.includes("draft:add,exclusion"));
 assert.ok(events.includes("draft:exclusion,exclusionErase"));
 assert.ok(events.includes("draft:exclusionErase"));
+
+const assertFillRouting = (tool, expected) => {
+  for (const context of [addCtx, exclusionCtx, exclusionEraseCtx]) { context.calls = []; context.globalCompositeOperation = "source-over"; }
+  test.paintFillSpans(addCtx, exclusionCtx, exclusionEraseCtx, [2, 3, 7], tool);
+  for (const context of [addCtx, exclusionCtx, exclusionEraseCtx]) {
+    assert.equal(context.calls.filter((call) => call === "save").length, context.calls.filter((call) => call === "restore").length, `${tool} balances the ${context.name} canvas state stack`);
+    assert.deepEqual(context.calls.filter((call) => call.startsWith("fill:")), expected[context.name] || [], `${tool} writes only the intended ${context.name} layer`);
+  }
+};
+state.manualExclusionForced = false;
+assertFillRouting("bucket", { add: ["fill:source-over"], exclude: ["fill:destination-out"] });
+assertFillRouting("exclude_bucket", { exclude: ["fill:source-over"], excludeErase: ["fill:destination-out"] });
+assertFillRouting("eraser", { exclude: ["fill:source-over"], excludeErase: ["fill:destination-out"] });
+assertFillRouting("exclude_eraser", { excludeErase: ["fill:source-over"] });
 
 const savedImage = state.currentImage;
 state.currentImage = null;
