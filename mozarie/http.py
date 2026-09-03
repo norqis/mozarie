@@ -245,12 +245,14 @@ class MosaicHandler(BaseHTTPRequestHandler):
             elif path.startswith("/api/project/mask/"):
                 image_id, kind = _route_ids(path, "/api/project/mask/")
                 image = STATE.workspace_store.project_image(image_id)
-                if image is None: raise ClientError("画像が見つかりません。", "image_not_found")
+                if image is None:
+                    raise ClientError("画像が見つかりません。", "image_not_found")
                 filename = Path(str(image["relativePath"])).name + f".{kind}.png"
                 self._binary(STATE.export_mask_png(image_id, kind), "image/png", headers={"Content-Disposition": f'attachment; filename="{filename}"'})
             elif path.startswith("/api/project/masks/"):
                 kind = path.removeprefix("/api/project/masks/")
-                if kind not in {"mosaic", "exclude"}: raise ClientError("マスク種別が正しくありません。", "input_invalid")
+                if kind not in {"mosaic", "exclude"}:
+                    raise ClientError("マスク種別が正しくありません。", "input_invalid")
                 with tempfile.NamedTemporaryFile(prefix="mozarie-masks-", suffix=".zip", delete=False) as output:
                     archive_path = Path(output.name)
                 try:
@@ -364,7 +366,8 @@ class MosaicHandler(BaseHTTPRequestHandler):
                 self._json({"project": STATE.resume_project(str(payload.get("projectId", "")))})
             elif path == "/api/project/mismatches":
                 ids = payload.get("imageIds", [])
-                if not isinstance(ids, list): raise ClientError("画像IDの一覧が正しくありません。", "input_invalid")
+                if not isinstance(ids, list):
+                    raise ClientError("画像IDの一覧が正しくありません。", "input_invalid")
                 STATE.resolve_source_mismatches(ids, bool(payload.get("clearMasks")))
                 self._json(STATE.catalog_snapshot())
             elif path == "/api/project/source-check":
@@ -415,7 +418,8 @@ class MosaicHandler(BaseHTTPRequestHandler):
                 image_id = str(payload.get("imageId", ""))
                 image_ids = payload.get("imageIds")
                 if image_ids is not None:
-                    if not isinstance(image_ids, list): raise ClientError("画像IDの一覧が正しくありません。", "input_invalid")
+                    if not isinstance(image_ids, list):
+                        raise ClientError("画像IDの一覧が正しくありません。", "input_invalid")
                     revisions = STATE.batch_update_candidates_many(image_ids, payload)
                     self._json({"ok": True, "candidateRevisions": revisions})
                 else:
