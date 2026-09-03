@@ -49,6 +49,7 @@ function element(selector) {
 }
 
 const events = [];
+const dirtyRois = [];
 const batchPresences = [];
 let blinkTick = null;
 let displayButtonQueries = 0;
@@ -112,6 +113,7 @@ const context = {
   CANDIDATE_CLASS_TOKENS: new Set(["penis", "hand"]), CANDIDATE_SOURCE_TOKENS: new Set(["target", "hand_exclusion"]), CANDIDATE_REFINEMENT_TOKENS: new Set(),
   t: (key, values) => values?.label ? `${key}:${values.label}` : key, confirmationRequired: () => false, confirmAction: async () => true,
   markMaskDirty: () => events.push("dirty"), markDraftDirty: (...layers) => events.push(`draft:${layers.join(",")}`),
+  markDraftDirtyRoi: (layer, roi) => dirtyRois.push({ layer, roi: roi && { ...roi } }),
   calculatedBlockSize: () => 8, composeCurrentMask: () => events.push("compose-roi"), flushMaskComposition: () => events.push("flush"), requestMosaicPreview: () => events.push("preview"), scheduleManualWorkspaceSave: () => events.push("save"), saveDraft: () => events.push("draft-save"),
   setReviewed: () => events.push("review"), updateHistoryButtons() {}, updateCandidateStatus() {}, refreshCurrentReviewAndMask() {}, refreshMaskStatus() {},
   renderCandidates: () => events.push("candidates"), render: () => events.push("render"), renderCatalogViews: () => events.push("catalog"), updateActionButtons() {},
@@ -189,7 +191,19 @@ test.clearCandidateBlink();
 test.paintStrokeOnContexts(addCtx, exclusionCtx, exclusionEraseCtx, { x: 1, y: 1 }, { x: 3, y: 3 }, "brush", 4);
 test.paintStrokeOnContexts(addCtx, exclusionCtx, exclusionEraseCtx, { x: 1, y: 1 }, { x: 3, y: 3 }, "eraser", 4);
 test.paintStrokeOnContexts(addCtx, exclusionCtx, exclusionEraseCtx, { x: 1, y: 1 }, { x: 3, y: 3 }, "exclude_eraser", 4);
+dirtyRois.length = 0;
+state.manualExclusionForced = false;
 test.paintStrokePath([{ x: 2, y: 2 }], "brush", 4);
+assert.deepEqual(dirtyRois, [
+  { layer: "add", roi: { left: 0, top: 0, right: 8, bottom: 8 } },
+  { layer: "exclusion", roi: { left: 0, top: 0, right: 8, bottom: 8 } },
+], "an unforced brush stroke records both touched draft layers with its ROI");
+dirtyRois.length = 0;
+state.manualExclusionForced = true;
+test.paintStrokePath([{ x: 2, y: 2 }], "brush", 4);
+assert.deepEqual(dirtyRois, [{ layer: "add", roi: { left: 0, top: 0, right: 8, bottom: 8 } }], "a forced brush stroke records only its add-layer ROI");
+dirtyRois.length = 0;
+state.manualExclusionForced = false;
 assert.ok(addCtx.calls.some((call) => call === "stroke:source-over"));
 assert.ok(exclusionEraseCtx.calls.some((call) => call === "stroke:destination-out"));
 test.paintFillSpans(addCtx, exclusionCtx, exclusionEraseCtx, [2, 3, 7], "bucket");
@@ -200,9 +214,15 @@ const addCallsBeforeExcludeReplay = [...addCtx.calls];
 test.replayManualStroke({ tool: "exclude_bucket", spans: [3, 4, 8] });
 assert.deepEqual(addCtx.calls, addCallsBeforeExcludeReplay, "exclude fill history replay never writes the manual mosaic layer");
 test.paintFillSpans(addCtx, exclusionCtx, exclusionEraseCtx, [2, 3, 7], "exclude_eraser");
-assert.ok(events.includes("draft:add,exclusion"));
-assert.ok(events.includes("draft:exclusion,exclusionErase"));
-assert.ok(events.includes("draft:exclusionErase"));
+assert.deepEqual(dirtyRois, [
+  { layer: "add", roi: { left: 3, top: 2, right: 7, bottom: 3 } },
+  { layer: "exclusion", roi: { left: 3, top: 2, right: 7, bottom: 3 } },
+  { layer: "exclusion", roi: { left: 3, top: 2, right: 7, bottom: 3 } },
+  { layer: "exclusionErase", roi: { left: 3, top: 2, right: 7, bottom: 3 } },
+  { layer: "exclusion", roi: { left: 4, top: 3, right: 8, bottom: 4 } },
+  { layer: "exclusionErase", roi: { left: 4, top: 3, right: 8, bottom: 4 } },
+  { layer: "exclusionErase", roi: { left: 3, top: 2, right: 7, bottom: 3 } },
+], "strokes and fills record only their touched draft layers with their exact ROIs");
 
 const assertFillRouting = (tool, expected) => {
   for (const context of [addCtx, exclusionCtx, exclusionEraseCtx]) { context.calls = []; context.globalCompositeOperation = "source-over"; }

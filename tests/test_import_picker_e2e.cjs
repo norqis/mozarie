@@ -108,7 +108,7 @@ function startFixtureServer() {
     models: { target_segmentation: "", ntd11: "", ntd11_enabled: false, sensitive: "", sensitive_enabled: false, hand_detection: "", hand_detection_enabled: false, sam_checkpoints: { vit_b: "", vit_l: "", vit_h: "" }, sam_model_type: "vit_b", provider: "gpu", gpu_device: 0 },
     display: { apply_color: "#ff3d4d", exclude_color: "#28d3ff", overlay_opacity: 0.78, mosaic_preview: true, tool_position: "left" },
     importing: { parallelism: 3 }, editing: { fill_color_tolerance: 20 }, saving: { parallelism: 2 },
-    detection: { mode: "standard", fluid_exclusion_enabled: true, exclude_forced_default: true, threshold: 0.5, parallelism: 2, targets: ["penis", "pussy"] },
+    detection: { mode: "standard", fluid_exclusion_enabled: true, exclude_forced_default: true, threshold: 0.5, parallelism: 2, default_candidate_padding_px: 3, targets: ["penis", "pussy"] },
     shortcuts: {
       enabled: true,
       bindings: { previous: "ArrowLeft", next: "ArrowRight", previousVisible: "ArrowUp", nextVisible: "ArrowDown", first: "Home", last: "End", reviewAndNext: "Enter", toggleOverview: "G", undo: "Ctrl+Z", redo: "Ctrl+Shift+Z" },
@@ -538,7 +538,10 @@ function startCandidateScenarioServer(expanded = false) {
     if (requestPath === "/api/candidates/batch" && request.method === "POST") {
       let body = ""; for await (const chunk of request) body += chunk;
       const update = JSON.parse(body);
-      candidates.filter((candidate) => candidate.role === update.role).forEach((candidate) => { candidate.enabled = update.operation === "enable"; });
+      candidates.filter((candidate) => candidate.role === update.role).forEach((candidate) => {
+        if (update.operation === "set_padding") candidate.expandPx = update.expandPx;
+        else candidate.enabled = update.operation === "enable";
+      });
       candidateUpdates.push({ batch: update });
       candidateRevision += 1; image.candidateRevision = candidateRevision;
       image.enabledCandidateCount = candidates.filter((item) => item.role === "apply" && item.enabled).length;
@@ -814,6 +817,13 @@ async function runCandidateBlinkScenario(browser, expanded = false) {
     await row.locator(".candidate-padding-button").click(); await page.locator("#candidatePaddingReset").click(); await page.locator("#candidatePaddingConfirm").click();
     await page.waitForFunction(() => state.candidates.find((item) => item.id === "candidate-blink-apply")?.expandPx === 0);
     assert.equal(scenario.candidateUpdates.length, beforeInvalid + 3, "reset and confirm commit zero exactly once");
+    const batchPaddingUpdates = scenario.candidateUpdates.length;
+    await page.locator('[data-candidate-padding-batch="apply"]').click();
+    assert.equal(await paddingPopover.evaluate((node) => node.matches(":popover-open")), true, "the apply batch padding control opens the shared editor");
+    await paddingInput.fill("2"); await page.locator("#candidatePaddingConfirm").click();
+    await page.waitForFunction(() => state.candidates.find((item) => item.id === "candidate-blink-apply")?.expandPx === 2);
+    assert.equal(scenario.candidateUpdates.length, batchPaddingUpdates + 1, "batch padding makes one API request");
+    assert.deepEqual(await page.evaluate(() => state.candidates.map((candidate) => [candidate.id, candidate.expandPx || 0])), [["candidate-blink-apply", 2], ["candidate-blink-exclude", 0]], "batch padding changes only candidates in its selected role");
     await page.evaluate(() => { state.projectReadOnly = true; renderCandidates(); });
     assert.equal(await row.locator(".candidate-padding-button").isDisabled(), true, "padding is disabled for a read-only completed project");
     assert.equal(await excludeRow.locator(".candidate-forced").isDisabled(), true, "the visible automatic exclusion force control is disabled for a read-only completed project");
@@ -1936,6 +1946,14 @@ async function runControlLedger(page, fixtureUrl, contracts, dynamicContracts, f
       else assert.notDeepEqual(after.state.candidateDisplayModes, prior.state.candidateDisplayModes, `${selector} must change candidate display mode`);
     });
   }
+  await page.evaluate(() => {
+    state.candidates = [{ id: "ledger-padding-candidate", role: "apply", enabled: true, forced: false, expandPx: 0, labelToken: "penis", source: "target", refinement: null, confidence: 1, color: "#ff3d4d" }];
+    state.removedCandidateIds.clear(); renderCandidates(); updateCandidateBatchButtons();
+  });
+  const candidatePaddingBatchBefore = await snapshot();
+  await page.locator("[data-candidate-padding-batch]").first().click();
+  await markDynamic("[data-candidate-padding-batch]", candidatePaddingBatchBefore, (prior, after) => assert.equal(after.popovers.candidatePaddingPopover, true, "candidate batch padding opens its editor"));
+  await page.locator("#candidatePaddingPopover").evaluate((popover) => popover.hidePopover());
   await click("brushTool");
   const ledgerCanvas = await page.locator("#editorCanvas").boundingBox();
   await page.mouse.move(ledgerCanvas.x + ledgerCanvas.width / 2, ledgerCanvas.y + ledgerCanvas.height / 2);
@@ -1977,7 +1995,15 @@ async function runControlLedger(page, fixtureUrl, contracts, dynamicContracts, f
   await setupFixture();
   await click("detectAllButton");
   await input("detectParallelism", "1"); await input("dialogTargetPenis", true); await input("dialogTargetPussy", true); await input("detectConfidenceRange", "0.52"); await input("detectConfidenceNumber", "0.53");
-  await click("detectCancelButton"); await click("detectAllButton"); await click("detectStartButton");
+  await click("detectCancelButton"); await click("detectAllButton");
+  await input("detectCandidatePadding", "9");
+  const paddedSettingsRequestStart = await page.evaluate(() => window.__ledgerApi.length);
+  await click("detectStartButton");
+  await page.waitForFunction(() => state.settings?.detection?.default_candidate_padding_px === 9);
+  const paddedSettingsRequests = await page.evaluate((start) => window.__ledgerApi.slice(start)
+    .filter((request) => request.method === "POST" && request.url.includes("/api/settings"))
+    .map((request) => JSON.parse(request.body)), paddedSettingsRequestStart);
+  assert.equal(paddedSettingsRequests.at(-1)?.detection?.default_candidate_padding_px, 9, "starting detection persists the candidate padding through the settings request");
   await click("processingPauseButton");
   await page.waitForFunction(() => state.processing?.state === "paused");
   await click("processingPauseButton");
@@ -1988,6 +2014,10 @@ async function runControlLedger(page, fixtureUrl, contracts, dynamicContracts, f
   await page.evaluate(() => pollJob());
   await page.waitForFunction(() => !document.querySelector("#processingDialog").open && state.processing === null);
   await closeDialogs(); await setupFixture();
+  await page.waitForFunction(() => state.settings?.detection?.default_candidate_padding_px === 9);
+  await click("detectAllButton");
+  assert.equal(await page.locator("#detectCandidatePadding").inputValue(), "9", "a fresh detection dialog seeds the persisted candidate padding");
+  await click("detectCancelButton");
 
   // Navigation and context menu use their actual selected-image handlers.
   const galleryBefore = await snapshot(); await page.locator('.gallery-item[data-id="sample-two"]').click();

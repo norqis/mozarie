@@ -767,6 +767,7 @@ function markStrokeDirty(tool, points = null, size = Number($("#brushSize").valu
   const roi = points?.length ? strokeDirtyRoi(points, tool, size) : null;
   markMaskDirty();
   if (tool === "brush" || tool === "mosaic_eraser") markDraftDirtyRoi("add", roi);
+  if (tool === "brush" && !state.manualExclusionForced) markDraftDirtyRoi("exclusion", roi);
   if (tool === "eraser") { markDraftDirtyRoi("exclusion", roi); markDraftDirtyRoi("exclusionErase", roi); }
   if (tool === "exclude_eraser") markDraftDirtyRoi("exclusionErase", roi);
   if (state.activeStroke) refreshManualStrokeRoi(roi);
