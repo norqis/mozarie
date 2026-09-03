@@ -693,16 +693,38 @@ function paintStrokeOnContexts(addContext, exclusionContext, exclusionEraseConte
   if (!state.manualExclusionForced) strokeLine(exclusionContext, from, to, size, "destination-out");
 }
 
-function paintStroke(from, to, tool, size) {
-  paintStrokeOnContexts(addCtx, exclusionCtx, exclusionEraseCtx, from, to, tool, size);
-  markStrokeDirty(tool);
+function strokeDirtyRoi(points, tool, size) {
+  if (!points?.length || !state.currentImage) return null;
+  const radius = (tool === "mosaic_eraser" ? size + 2 : size) / 2 + 1;
+  let left = points[0].x; let right = points[0].x; let top = points[0].y; let bottom = points[0].y;
+  for (const point of points) { left = Math.min(left, point.x); right = Math.max(right, point.x); top = Math.min(top, point.y); bottom = Math.max(bottom, point.y); }
+  const block = Math.max(1, Number(calculatedBlockSize()));
+  return {
+    left: Math.max(0, Math.floor((left - radius) / block) * block),
+    top: Math.max(0, Math.floor((top - radius) / block) * block),
+    right: Math.min(originalCanvas.width, Math.ceil((right + radius) / block) * block),
+    bottom: Math.min(originalCanvas.height, Math.ceil((bottom + radius) / block) * block),
+  };
 }
 
-function markStrokeDirty(tool) {
+function refreshManualStrokeRoi(points, tool, size) {
+  const roi = strokeDirtyRoi(points, tool, size);
+  if (!roi) return;
+  composeCurrentMask(roi);
+  requestMosaicPreview(roi);
+}
+
+function paintStroke(from, to, tool, size) {
+  paintStrokeOnContexts(addCtx, exclusionCtx, exclusionEraseCtx, from, to, tool, size);
+  markStrokeDirty(tool, [from, to], size);
+}
+
+function markStrokeDirty(tool, points = null, size = Number($("#brushSize").value)) {
   markMaskDirty();
   if (tool === "brush" || tool === "mosaic_eraser") markDraftDirty("add");
   if (tool === "eraser") markDraftDirty("exclusion", "exclusionErase");
   if (tool === "exclude_eraser") markDraftDirty("exclusionErase");
+  if (state.activeStroke && points) refreshManualStrokeRoi(points, tool, size);
 }
 
 function paintStrokePath(points, tool, size) {
@@ -710,7 +732,7 @@ function paintStrokePath(points, tool, size) {
   else if (tool === "exclude_eraser") strokePath(exclusionEraseCtx, points, size);
   else if (tool === "eraser") { strokePath(exclusionCtx, points, size); strokePath(exclusionEraseCtx, points, size, "destination-out"); }
   else { strokePath(addCtx, points, size); if (!state.manualExclusionForced) strokePath(exclusionCtx, points, size, "destination-out"); }
-  markStrokeDirty(tool);
+  markStrokeDirty(tool, points, size);
 }
 
 function fillAt(point, tool = state.tool) {
@@ -857,6 +879,10 @@ function completeManualStroke() {
   trimHistory();
   state.historyIndex = state.history.length;
   state.manualMaskPresent = canvasHasPixels(addCtx, addCanvas);
+  // The live ROI previews are intentionally provisional: after pointerup,
+  // rebuild the whole mask once so every exclusion and candidate is exact
+  // before history/workspace persistence and the final preview.
+  state.maskDirty = true;
   flushMaskComposition();
   scheduleManualWorkspaceSave();
   setReviewed(currentRecord(), false);

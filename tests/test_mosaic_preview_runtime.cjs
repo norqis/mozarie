@@ -17,7 +17,7 @@ class Worker {
       this.source = payload.source; this.sourceId = payload.sourceId;
       counters.workerCanvases += 1; counters.peakWorkerCanvases = Math.max(counters.peakWorkerCanvases, counters.workerCanvases);
     }
-    if (payload.type === "render") {
+    if (payload.type === "render" || payload.type === "patch") {
       this.renderMasks.push(payload.mask);
       if (this.renderWaiters.length) this.renderWaiters.shift()(payload);
       else this.renderJobs.push(payload);
@@ -37,7 +37,7 @@ class Worker {
   frame(job, sourceId = job.sourceId, generation = job.generation) {
     job.mask.close?.();
     const output = bitmap("output");
-    this.onmessage({ data: { type: "frame", sourceId, generation, output } });
+    this.onmessage({ data: { type: "frame", sourceId, generation, output, ...(job.type === "patch" ? { patch: true, left: job.left, top: job.top, width: job.width, height: job.height } : {}) } });
     return output;
   }
 }
@@ -107,12 +107,25 @@ vm.runInNewContext(fs.readFileSync(canvasPath, "utf8"), context, { filename: can
   const replacementAfterCapture = await worker.nextRender();
   worker.frame(replacementAfterCapture);
 
+  // A live hand stroke sends a cropped, block-aligned mask.  It neither
+  // flushes the full composition nor captures a full-size ImageBitmap.
+  context.releaseMosaicPreview(); state.mosaicPreviewEnabled = true; state.currentImage = { width: 3840, height: 2160 }; state.currentId = "roi";
+  state.activeStroke = { id: "roi" }; state.mosaicPreviewRoi = { left: 160, top: 320, right: 224, bottom: 384 };
+  let fullFlushes = 0; context.flushMaskComposition = () => { fullFlushes += 1; };
+  await context.rebuildMosaicPreview();
+  const roiJob = await state.mosaicWorker.nextRender();
+  assert.equal(roiJob.type, "patch", "an active stroke sends a patch job");
+  assert.deepEqual([roiJob.left, roiJob.top, roiJob.width, roiJob.height], [160, 320, 64, 64], "the patch keeps the dirty source rectangle");
+  assert.equal(fullFlushes, 0, "an active stroke never flushes the full mask composition");
+  state.mosaicWorker.frame(roiJob); state.activeStroke = null; context.flushMaskComposition = () => {};
+
   const throwingOutput = bitmap("throwing");
   context.mosaicCtx.drawImage = () => { throw new Error("paint failed"); };
   await context.rebuildMosaicPreview();
-  const throwingJob = await worker.nextRender();
+  const throwingWorker = state.mosaicWorker;
+  const throwingJob = await throwingWorker.nextRender();
   throwingJob.mask.close?.();
-  worker.onmessage({ data: { type: "frame", sourceId: throwingJob.sourceId, generation: throwingJob.generation, output: throwingOutput } });
+  throwingWorker.onmessage({ data: { type: "frame", sourceId: throwingJob.sourceId, generation: throwingJob.generation, output: throwingOutput } });
   assert.equal(throwingOutput.closed, true, "a frame bitmap closes when canvas painting throws");
   assert.equal(state.mosaicPreviewEnabled, false, "a failed canvas paint closes the preview instead of leaking a worker frame");
   context.mosaicCtx.drawImage = (image) => draws.push(image.kind);

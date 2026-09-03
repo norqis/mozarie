@@ -56,6 +56,25 @@ const sparse = render([
 ], [255, 0, 0, 0, 255], 5, 1, 2, 10);
 assert.deepEqual([...sparse], [10, 0, 0, 255, 20, 0, 0, 255, 30, 0, 0, 255, 40, 0, 0, 255, 50, 0, 0, 255], "sparse masks skip empty blocks inside their bounding rectangle");
 
+// Drag previews transfer only an aligned patch.  The worker must use the
+// source coordinates (not patch-local block coordinates) and leave unmasked
+// pixels unchanged.
+self.onmessage({ data: { type: "source", sourceId: "patch", source: { width: 4, height: 2, pixels: new Uint8ClampedArray([
+  10, 0, 0, 255, 30, 0, 0, 255, 50, 0, 0, 255, 70, 0, 0, 255,
+  20, 0, 0, 255, 40, 0, 0, 255, 60, 0, 0, 255, 80, 0, 0, 255,
+]) }, generation: 10 } });
+self.onmessage({ data: { type: "patch", sourceId: "patch", left: 2, top: 0, width: 2, height: 2, blockSize: 2, generation: 11,
+  mask: { width: 2, height: 2, pixels: new Uint8ClampedArray([0, 0, 0, 255, 0, 0, 0, 0, 0, 0, 0, 255, 0, 0, 0, 0]), close() { this.closed = true; } },
+} });
+assert.equal(response.patch, true, "a drag preview returns a patch instead of a full frame");
+assert.deepEqual([...response.output.pixels], [55, 0, 0, 255, 70, 0, 0, 255, 55, 0, 0, 255, 80, 0, 0, 255], "patch mosaic averages only the aligned masked source block");
+
+response = undefined;
+const wrongPatchMask = { close() { this.closed = true; } };
+self.onmessage({ data: { type: "patch", sourceId: "other-patch", left: 0, top: 0, width: 1, height: 1, blockSize: 1, generation: 12, mask: wrongPatchMask } });
+assert.equal(response.type, "error", "a patch for another source reports the preview failure");
+assert.equal(wrongPatchMask.closed, true, "a patch for another source closes its transferred mask");
+
 const releasable = { width: 1, height: 1, pixels: new Uint8ClampedArray([1, 2, 3, 255]), close() { this.closed = true; } };
 self.onmessage({ data: { type: "source", sourceId: "releasable", source: releasable, generation: 10 } });
 self.onmessage({ data: { type: "release" } });

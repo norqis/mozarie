@@ -3551,7 +3551,8 @@ async function main() {
         exclusionEraseCtx.clearRect(0, 0, exclusionEraseCanvas.width, exclusionEraseCanvas.height);
         state.activeStroke = null; state.mosaicPending = false;
       };
-      state.candidates = [candidate]; state.candidateImages = new Map(); state.removedCandidateIds = new Set();
+      const candidateMask = document.createElement("canvas"); candidateMask.width = candidateMask.height = 1;
+      state.candidates = [candidate]; state.candidateImages = new Map([[candidate.id, candidateMask]]); state.removedCandidateIds = new Set();
       state.settings.confirmations.candidateRoleDelete = false; state.tool = "exclude_eraser";
       resetLayers(); exclusionCtx.fillRect(2, 2, 4, 4);
       clearCandidateBlink(); setCandidateDisplayMode([candidate.id, "manual:exclude"], "normal");

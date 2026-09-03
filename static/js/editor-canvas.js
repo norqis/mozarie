@@ -577,6 +577,7 @@ function releaseMosaicPreview() {
   state.mosaicWorker = null;
   state.mosaicWorkerBusy = false;
   state.mosaicPending = null;
+  state.mosaicPreviewRoi = null;
   state.mosaicInFlightSourceId = "";
   state.mosaicInFlightGeneration = 0;
   state.mosaicSourceImage = null;
@@ -623,8 +624,13 @@ function createMosaicWorker() {
       let paintFailed = false;
       try {
         if (state.currentImage && data.sourceId === state.mosaicSourceId && data.generation === state.mosaicPreviewGeneration) {
-          mosaicCtx.clearRect(0, 0, originalCanvas.width, originalCanvas.height);
-          mosaicCtx.drawImage(data.output, 0, 0);
+          if (data.patch) {
+            mosaicCtx.clearRect(data.left, data.top, data.width, data.height);
+            mosaicCtx.drawImage(data.output, data.left, data.top);
+          } else {
+            mosaicCtx.clearRect(0, 0, originalCanvas.width, originalCanvas.height);
+            mosaicCtx.drawImage(data.output, 0, 0);
+          }
           render();
         }
       } catch { paintFailed = true; } finally { data.output?.close?.(); }
@@ -665,6 +671,22 @@ async function ensureMosaicPreviewSource(worker) {
   return sourcePromise;
 }
 
+function mergeMosaicPreviewRoi(current, next) {
+  if (!next) return current;
+  if (!current) return { ...next };
+  return {
+    left: Math.min(current.left, next.left), top: Math.min(current.top, next.top),
+    right: Math.max(current.right, next.right), bottom: Math.max(current.bottom, next.bottom),
+  };
+}
+
+function takeMosaicPreviewRoi() {
+  if (!state.activeStroke) { state.mosaicPreviewRoi = null; return null; }
+  const roi = state.mosaicPreviewRoi;
+  state.mosaicPreviewRoi = null;
+  return roi;
+}
+
 async function rebuildMosaicPreview() {
   if (!state.mosaicPreviewEnabled || !state.currentImage) return;
   if (state.mosaicWorkerBusy) { state.mosaicPending = true; return; }
@@ -673,28 +695,34 @@ async function rebuildMosaicPreview() {
   const sourceId = await ensureMosaicPreviewSource(worker);
   if (!sourceId || !state.mosaicPreviewEnabled || state.mosaicWorker !== worker) { state.mosaicWorkerBusy = false; return; }
   // Requests received while the source bitmap was being prepared are already
-  // represented by the mask below, so one current render is sufficient.
+  // represented by the latest dirty rectangle below, so one current render is
+  // sufficient.
   state.mosaicPending = false;
-  flushMaskComposition();
+  const roi = takeMosaicPreviewRoi();
+  if (!roi) flushMaskComposition();
   const generation = ++state.mosaicPreviewGeneration;
   state.mosaicInFlightSourceId = sourceId;
   state.mosaicInFlightGeneration = generation;
   let mask = null;
   try {
-    mask = await createImageBitmap(combinedCanvas);
+    if (roi) mask = await createImageBitmap(combinedCanvas, roi.left, roi.top, roi.right - roi.left, roi.bottom - roi.top);
+    else mask = await createImageBitmap(combinedCanvas);
     if (state.mosaicWorker !== worker || !state.mosaicPreviewEnabled) { mask.close?.(); state.mosaicWorkerBusy = false; state.mosaicInFlightSourceId = ""; state.mosaicInFlightGeneration = 0; return; }
     if (state.mosaicPending) {
       mask.close?.(); state.mosaicWorkerBusy = false; state.mosaicInFlightSourceId = ""; state.mosaicInFlightGeneration = 0;
       state.mosaicPending = false; void rebuildMosaicPreview();
       return;
     }
-    worker.postMessage({ type: "render", sourceId, mask, width: originalCanvas.width, height: originalCanvas.height, blockSize: calculatedBlockSize(), generation }, [mask]);
+    worker.postMessage(roi
+      ? { type: "patch", sourceId, mask, left: roi.left, top: roi.top, width: roi.right - roi.left, height: roi.bottom - roi.top, blockSize: calculatedBlockSize(), generation }
+      : { type: "render", sourceId, mask, width: originalCanvas.width, height: originalCanvas.height, blockSize: calculatedBlockSize(), generation }, [mask]);
     mask = null;
   } catch { mask?.close?.(); state.mosaicWorkerBusy = false; state.mosaicInFlightSourceId = ""; state.mosaicInFlightGeneration = 0; mosaicPreviewFailed(); }
 }
 
-function requestMosaicPreview() {
+function requestMosaicPreview(roi = null) {
   if (!state.mosaicPreviewEnabled || !state.currentImage) return;
+  state.mosaicPreviewRoi = mergeMosaicPreviewRoi(state.mosaicPreviewRoi, roi);
   if (state.mosaicWorkerBusy) { state.mosaicPending = true; return; }
   if (state.mosaicPreviewRequested) return;
   state.mosaicPreviewRequested = true;
@@ -709,8 +737,16 @@ function drawEffectiveExclusions(target, forcedOnly = false, omittedCandidateId 
   target.drawImage(effectiveExclusionCanvas, 0, 0);
 }
 
-function composeEnabledExclusionMask(forcedOnly = false, omittedCandidateId = "") {
-  effectiveExclusionCtx.clearRect(0, 0, effectiveExclusionCanvas.width, effectiveExclusionCanvas.height);
+function withMaskRoi(context, roi, draw) {
+  if (!roi) return draw();
+  context.save(); context.beginPath(); context.rect(roi.left, roi.top, roi.right - roi.left, roi.bottom - roi.top); context.clip();
+  try { draw(); } finally { context.restore(); }
+}
+
+function composeEnabledExclusionMask(forcedOnly = false, omittedCandidateId = "", roi = null) {
+  withMaskRoi(effectiveExclusionCtx, roi, () => {
+    const target = roi || { left: 0, top: 0, right: effectiveExclusionCanvas.width, bottom: effectiveExclusionCanvas.height };
+    effectiveExclusionCtx.clearRect(target.left, target.top, target.right - target.left, target.bottom - target.top);
   for (const candidate of state.candidates) {
     if (state.removedCandidateIds.has(candidate.id)) continue;
     if (candidate.id !== omittedCandidateId && candidate.enabled && candidate.role === "exclude" && (!forcedOnly || candidate.forced)) effectiveExclusionCtx.drawImage(state.candidateImages.get(candidate.id), 0, 0);
@@ -720,26 +756,37 @@ function composeEnabledExclusionMask(forcedOnly = false, omittedCandidateId = ""
     effectiveExclusionCtx.save(); effectiveExclusionCtx.globalCompositeOperation = "destination-out";
     effectiveExclusionCtx.drawImage(exclusionEraseCanvas, 0, 0); effectiveExclusionCtx.restore();
   }
+  });
   return effectiveExclusionCanvas;
 }
 
-function composeCurrentMask() {
+function composeCurrentMask(roi = null) {
   if (!state.currentImage) return;
-  combinedCtx.clearRect(0, 0, combinedCanvas.width, combinedCanvas.height);
+  const hasNonForcedExclusion = state.candidates.some((candidate) => !state.removedCandidateIds.has(candidate.id) && candidate.enabled && candidate.role === "exclude" && !candidate.forced)
+    || (state.manualExclusionEnabled && !state.manualExclusionForced);
+  // When every active exclusion is forced, the normal and forced unions are
+  // identical.  Reuse the same clipped union during a stroke instead of
+  // redrawing every exclusion layer three times.
+  composeEnabledExclusionMask(false, "", roi);
+  withMaskRoi(combinedCtx, roi, () => {
+  const target = roi || { left: 0, top: 0, right: combinedCanvas.width, bottom: combinedCanvas.height };
+  combinedCtx.clearRect(target.left, target.top, target.right - target.left, target.bottom - target.top);
   for (const candidate of state.candidates) {
     if (state.removedCandidateIds.has(candidate.id)) continue;
     if (candidate.enabled && candidate.role !== "exclude") combinedCtx.drawImage(state.candidateImages.get(candidate.id), 0, 0);
   }
   combinedCtx.globalCompositeOperation = "destination-out";
-  drawEffectiveExclusions(combinedCtx);
+  combinedCtx.drawImage(effectiveExclusionCanvas, 0, 0);
   combinedCtx.globalCompositeOperation = "source-over";
   if (state.manualEnabled) combinedCtx.drawImage(addCanvas, 0, 0);
   combinedCtx.globalCompositeOperation = "destination-out";
-  drawEffectiveExclusions(combinedCtx, true);
+  if (hasNonForcedExclusion) composeEnabledExclusionMask(true, "", roi);
+  combinedCtx.drawImage(effectiveExclusionCanvas, 0, 0);
   combinedCtx.globalCompositeOperation = "source-over";
-  // Keep the full enabled exclusion union available for display.  The forced
-  // pass above is only for final mask composition and must not leak into UI.
-  composeEnabledExclusionMask();
+  });
+  // Restore the regular union for display when a temporary forced union was
+  // required.  The common all-forced path already has the correct display.
+  if (hasNonForcedExclusion) composeEnabledExclusionMask(false, "", roi);
   state.maskDirty = false;
 }
 function markDraftDirty(...layers) {
@@ -747,7 +794,7 @@ function markDraftDirty(...layers) {
   layers.forEach((layer) => state.draftLayerDirty.add(layer));
 }
 function markMaskDirty() { state.maskDirty = true; markDraftDirty(); }
-function flushMaskComposition() { if (state.maskDirty) composeCurrentMask(); }
+function flushMaskComposition() { if (state.maskDirty && !state.activeStroke) composeCurrentMask(); }
 
 function hasEffectiveMask() {
   flushMaskComposition();
