@@ -5571,7 +5571,7 @@ class MozarieTests(unittest.TestCase):
             self.assertEqual(source.read_bytes(), original)
             self.assertEqual(len(state.candidates[image_id]), 1)
 
-    def test_apply_skips_empty_masks_and_keeps_success_output_order(self):
+    def test_apply_keeps_empty_masks_in_the_completed_output_order(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             first = root / "first.png"
@@ -5600,10 +5600,10 @@ class MozarieTests(unittest.TestCase):
             state._apply_worker([first_record, second_record], 100, {})
 
             self.assertEqual(state.job.state, "complete")
-            self.assertEqual(state.job.image_ids, (first_id,))
+            self.assertEqual(state.job.image_ids, (first_id, second_id))
             self.assertEqual(
                 [os.path.normcase(str(Path(output).resolve())) for output in state.job.outputs],
-                [os.path.normcase(str(first.resolve()))],
+                [os.path.normcase(str(first.resolve())), os.path.normcase(str(second.resolve()))],
             )
             self.assertEqual([candidate.candidate_id for candidate in state.candidates[first_id]], ["candidate"])
             self.assertTrue(mask_path.is_file())
@@ -5625,10 +5625,18 @@ class MozarieTests(unittest.TestCase):
             state._apply_worker([record], 100, {})
 
             self.assertEqual(state.job.state, "complete")
-            self.assertEqual(state.job.total, 0)
+            self.assertEqual(state.job.total, 1)
+            self.assertEqual(state.job.outputs, [str(source)])
             self.assertEqual(source.read_bytes(), original)
+            rendered = state.render_browser_save(image_id, state._candidate_revision(image_id), 100, None)
+            self.assertTrue(rendered.no_effect)
+            self.assertEqual(rendered.output, original)
+            self.assertTrue(state.commit_browser_save(image_id, rendered.candidate_revision, rendered.save_token, "keep")["cleared"])
+            self.assertEqual(source.read_bytes(), original)
+            with self.assertRaises(ClientError):
+                state.commit_browser_save(image_id, rendered.candidate_revision, rendered.save_token, "overwrite")
 
-    def test_copy_save_empty_record_does_not_consume_a_later_output_name(self):
+    def test_copy_save_includes_empty_record_with_its_own_output_name(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             Image.new("RGB", (16, 16), "white").save(root / "empty.png")
@@ -5640,18 +5648,17 @@ class MozarieTests(unittest.TestCase):
             output = root / "output.png"
             written: list[Path] = []
 
-            def colliding_destination(_record, _suffix, reserved):
-                return output if output not in reserved else root / "output_2.png"
+            destinations = iter((output, root / "output_2.png"))
 
-            with patch.object(state, "_reserve_output_destination", side_effect=lambda record, suffix, _directory: colliding_destination(record, suffix, state.reserved_output_paths)), \
+            with patch.object(state, "_reserve_output_destination", side_effect=lambda *_args: next(destinations)), \
                  patch.object(saving_module, "write_rendered_copy", side_effect=lambda path, _data: written.append(path)):
                 state._apply_worker(
                     records, 100, {first_id: np.zeros((16, 16), dtype=np.uint8), second_id: self._mask(16, 16)},
                     copy_to_default=True, saving_parallelism=2,
                 )
 
-            self.assertEqual(state.job.outputs, [str(output)])
-            self.assertEqual(written, [output])
+            self.assertEqual(state.job.outputs, [str(output), str(root / "output_2.png")])
+            self.assertEqual(written, [output, root / "output_2.png"])
 
     def test_copy_save_mask_failure_releases_later_destination_reservation(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -5902,7 +5909,9 @@ class MozarieTests(unittest.TestCase):
         connection = None
         try:
             record = ImageRecord(image_id="image", path=Path("image.png"), relative_path="image.png", width=16, height=16, mtime_ns=1)
-            with patch.object(state_module.STATE, "render_browser_save", return_value=(b"png", record, 3, "one-time-token")):
+            with patch.object(state_module.STATE, "render_browser_save", return_value=core_module.BrowserSaveRender(
+                b"png", record, 3, "one-time-token", None,
+            )):
                 connection = http.client.HTTPConnection("127.0.0.1", httpd.server_port, timeout=5)
                 body = json.dumps({"imageId": "image", "candidateRevision": 3, "divisor": 100, "draft": None}).encode("utf-8")
                 connection.request("POST", "/api/save/render", body, {

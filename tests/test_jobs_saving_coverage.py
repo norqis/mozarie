@@ -348,6 +348,7 @@ class JobsSavingCoverageTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as raw:
             directory = Path(raw); record = self.record(directory); state = self.make_saving(directory)
             state.images[record.image_id] = record; state.order = [record.image_id]
+            state._issue_browser_save_token_unchecked = lambda *_args, **_kwargs: "token"
             state._start_job = Mock()
             state._records_for_ids_with_catalog = lambda _ids: ([record], 1)
             state.catalog_generation = 2
@@ -359,7 +360,9 @@ class JobsSavingCoverageTests(unittest.TestCase):
             with self.assertRaises(ClientError): state.prepare_browser_save([record.image_id], 2, "_x", False)
             state.images[record.image_id] = record
             with patch("mozarie.saving.decode_draft_masks", return_value=(None, None, None)):
-                with self.assertRaises(ClientError): state.render_browser_save(record.image_id, 1, 2, {})
+                rendered = state.render_browser_save(record.image_id, 1, 2, {})
+            self.assertTrue(rendered.no_effect)
+            self.assertEqual(rendered.output, record.path.read_bytes())
             state.candidates[record.image_id] = [Candidate("missing", "penis", .9, directory / "missing.png")]
             with patch("mozarie.saving.decode_draft_masks", return_value=(np.ones((2, 3), dtype=np.uint8), None, None)):
                 with self.assertRaises(ClientError): state.render_browser_save(record.image_id, 1, 2, {})
@@ -394,7 +397,7 @@ class JobsSavingCoverageTests(unittest.TestCase):
             zero_apply = directory / "zero.png"; Image.new("L", (3, 2), 0).save(zero_apply)
             state.candidates[record.image_id] = [Candidate("zero", "penis", .9, zero_apply)]
             with patch("mozarie.saving.decode_draft_masks", return_value=(None, None, None)):
-                with self.assertRaises(ClientError): state.render_browser_save(record.image_id, 1, 2, {})
+                self.assertTrue(state.render_browser_save(record.image_id, 1, 2, {}).no_effect)
             state.candidates[record.image_id] = []
             def change_catalog(*_args):
                 state.catalog_generation += 1
@@ -433,7 +436,7 @@ class JobsSavingCoverageTests(unittest.TestCase):
             state._job_is_current = lambda *_args: True; state._finish_job = Mock(); state._fail_job = Mock(); state._cancel_job = Mock()
             state.job = Job(kind="apply", state="running", total=1, image_ids=(record.image_id,))
             state._apply_worker([record], 2, {record.image_id: np.zeros((2, 3), dtype=np.uint8)}, control=JobControl(), job_generation=1, catalog_generation=1)
-            self.assertEqual(state.job.total, 0); state._finish_job.assert_called_once()
+            self.assertEqual(state.job.total, 1); state._finish_job.assert_called_once()
 
     def test_browser_commit_rechecks_and_handles_delete_rollback(self) -> None:
         with tempfile.TemporaryDirectory() as raw:

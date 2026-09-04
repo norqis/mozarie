@@ -522,6 +522,7 @@ class MosaicHandler(BaseHTTPRequestHandler):
                         headers={
                             "X-Mozarie-Revision": str(revision),
                             "X-Mozarie-Save-Token": save_token,
+                            "X-Mozarie-No-Effect": "1" if rendered.no_effect else "0",
                         },
                     )
             elif path == "/api/save/commit":

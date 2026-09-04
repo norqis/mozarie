@@ -828,6 +828,7 @@ class CatalogMixin:
         output_path: Path | None = None,
         output_fingerprint: tuple[int, int] | None = None,
         allow_copy_action: bool = False,
+        no_effect: bool = False,
     ) -> str:
         self._discard_expired_browser_save_tokens_unchecked()
         token = secrets.token_urlsafe(32)
@@ -841,6 +842,7 @@ class CatalogMixin:
             output_path=output_path,
             output_fingerprint=output_fingerprint,
             allow_copy_action=allow_copy_action,
+            no_effect=no_effect,
         )
         return token
 

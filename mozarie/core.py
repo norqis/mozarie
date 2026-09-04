@@ -198,6 +198,7 @@ class BrowserSaveToken:
     output_path: Path | None = None
     output_fingerprint: tuple[int, int] | None = None
     allow_copy_action: bool = False
+    no_effect: bool = False
 
 
 @dataclass(frozen=True)
@@ -209,6 +210,7 @@ class BrowserSaveRender:
     candidate_revision: int
     save_token: str
     output_path: Path | None
+    no_effect: bool = False
 
     def __iter__(self):
         yield self.output

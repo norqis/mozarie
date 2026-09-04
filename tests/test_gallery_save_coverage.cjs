@@ -611,20 +611,21 @@ async function saveCoverageMatrix() {
       },
     },
     {
-      label: "stale masks skip one batch entry and later entries still complete",
+      label: "an empty mask still saves its unchanged image in the batch",
       run: async (runtime) => {
         const { state } = runtime;
         state.images = [{ id: "stale", sourceKind: "filesystem", relativePath: "stale.png" }, { id: "file", sourceKind: "filesystem", relativePath: "file.png" }];
         state.outputDirectoryHandle = { async getFileHandle(_name, options) { if (!options?.create) return missing(); return { async createWritable() { return { async write() {}, async close() {} }; } }; }, async removeEntry() {} };
         runtime.setHandler(async (url, options) => {
           if (url === "/api/save/prepare") return { entries: [{ imageId: "stale", candidateRevision: 1, relativePath: "stale.png" }, { imageId: "file", candidateRevision: 1, relativePath: "file.png" }] };
-          if (url === "/api/save/render") { if (JSON.parse(options.body).imageId === "stale") throw runtime.context.codedError("no_effective_mask"); return response(); }
+          if (url === "/api/save/render") return response();
           if (url === "/api/save/commit") return { cleared: false, stale: false, deleted: false };
           if (url === "/api/images") return { images: state.images };
           return {};
         });
         await runtime.runBrowserSave(["stale", "file"], "_m", false, "copy");
         assert.match(runtime.nodes.get("#applyResult").textContent, /apply\.complete/);
+        assert.equal(runtime.requests.filter((request) => request.url === "/api/save/commit").length, 2);
       },
     },
   ];

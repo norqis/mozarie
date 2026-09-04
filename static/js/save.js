@@ -228,12 +228,13 @@ async function startSingleSave(event) {
     const response = await renderSingleSave({ imageId: save.imageId, candidateRevision: entry.candidateRevision, divisor: save.divisor, draft: save.draft, copyToBrowser: copying, suffix });
     saveToken = response.headers.get("X-Mozarie-Save-Token") || "";
     if (!saveToken) throw Object.assign(new Error("save_state_changed"), { code: "save_state_changed" });
-    let sourceAction = "overwrite";
+    const noEffect = response.headers.get("X-Mozarie-No-Effect") === "1";
+    let sourceAction = noEffect ? "keep" : "overwrite";
     if (copying) {
       output = await writeSingleOutput(state.outputDirectoryHandle, entry.relativePath, suffix, response);
       sourceAction = deleteOriginal ? "deleted" : "keep";
       if (deleteOriginal && access?.fileHandle) { await ensureHandlePermission(access, true); sourceSnapshot = await snapshotSourceHandle(access); await removeSourceHandle(access); sourceChanged = true; }
-    } else if (access?.fileHandle) {
+    } else if (access?.fileHandle && !noEffect) {
       sourceSnapshot = await snapshotSourceHandle(access); await writeSourceHandle(access, response); sourceChanged = true;
     }
     let committed;
@@ -249,7 +250,7 @@ async function startSingleSave(event) {
     // A copy that retains its source does not change the catalogue. Avoid the
     // expensive image reload (and forced editor reload) in that common path.
     // Overwrites and source deletion do need authoritative reconciliation.
-    if (!copying || deleteOriginal) {
+    if ((sourceAction === "overwrite") || deleteOriginal) {
       const latest = await api("/api/images"); state.images = latest.images;
       const savedImage = state.images.find((item) => item.id === save.imageId);
       pruneSourceAccess();
@@ -570,12 +571,15 @@ async function runBrowserSave(imageIds, suffix, deleteOriginal, mode = "copy") {
           } finally { inputs.drafts.delete(entry.imageId); }
           if (!binary.ok) throw responseError(binary, await binary.json().catch(() => ({})));
           const saveToken = binary.headers?.get("X-Mozarie-Save-Token") || "";
+          const noEffect = binary.headers?.get("X-Mozarie-No-Effect") === "1";
           return serializeBrowserHandleMutation(async () => {
             let sourceSnapshot = null;
-            await ensureHandlePermission(access, true);
-            sourceSnapshot = await snapshotSourceHandle(access);
-            await writeSourceHandle(access, binary);
-            sourceAction = "overwrite";
+            if (!noEffect) {
+              await ensureHandlePermission(access, true);
+              sourceSnapshot = await snapshotSourceHandle(access);
+              await writeSourceHandle(access, binary);
+              sourceAction = "overwrite";
+            } else sourceAction = "keep";
             try {
               const committed = await commitBrowserSaveWithRetry({ imageId: entry.imageId, candidateRevision: entry.candidateRevision, deleteOriginal: inputs.deleteOriginal, sourceAction, saveToken, ...sourceCommitMetadata(access) });
               const liveAccess = sourceAccessFor(entry.imageId);
@@ -597,7 +601,7 @@ async function runBrowserSave(imageIds, suffix, deleteOriginal, mode = "copy") {
           } finally { inputs.drafts.delete(entry.imageId); }
           if (!binary.ok) throw responseError(binary, await binary.json().catch(() => ({})));
           const saveToken = binary.headers?.get("X-Mozarie-Save-Token") || "";
-          sourceAction = "overwrite";
+          sourceAction = binary.headers?.get("X-Mozarie-No-Effect") === "1" ? "keep" : "overwrite";
           const committed = await commitBrowserSaveWithRetry({ imageId: entry.imageId, candidateRevision: entry.candidateRevision, deleteOriginal: inputs.deleteOriginal, sourceAction, saveToken });
           return finishBrowserSaveEntry(committed, entry, save, sourceAction);
         } else {
@@ -624,9 +628,6 @@ async function runBrowserSave(imageIds, suffix, deleteOriginal, mode = "copy") {
           if (!entry) return;
           try { await saveEntry(entry); }
           catch (error) {
-            // A stale candidate can become fully excluded after the dialog was
-            // opened. It is not a failed save and must never trigger deletion.
-            if (error?.code === "no_effective_mask") continue;
             save.failed = true; throw error;
           }
         }
