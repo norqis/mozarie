@@ -706,8 +706,14 @@ class DetectionMixin:
             # Keep this gate for the complete boundary pipeline, including SAM
             # refinement and candidate publication, while allowing its small
             # internal critical sections to re-enter it.
-            with self.inference_lock:
-                return self.add_boundary_candidate(image_id, payload, _gate_held=True)
+            try:
+                with self.inference_lock:
+                    return self.add_boundary_candidate(image_id, payload, _gate_held=True)
+            finally:
+                # Interactive boundary inference has the same accelerator
+                # lifetime as a background detection job.  Do not retain its
+                # model, SAM image or CUDA cache until another request.
+                self._release_gpu_job_memory()
         with self.image_io_lock(image_id):
             record = self.image_for_id(image_id)
             self._assert_record_stat_matches(record)
