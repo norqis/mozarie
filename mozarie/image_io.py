@@ -8,6 +8,7 @@ import shutil
 import tempfile
 import uuid
 import zlib
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -450,14 +451,20 @@ def render_with_mask(record: ImageRecord, mask: np.ndarray, block_size: int) -> 
 
 
 class SourceReplaceStage:
-    def __init__(self, record: ImageRecord, backup_path: Path) -> None:
+    def __init__(self, record: ImageRecord, backup_path: Path, original_record: ImageRecord) -> None:
         self.record = record
         self.backup_path = backup_path
+        self.original_record = original_record
 
     def rollback(self) -> None:
         if self.backup_path.exists():
             os.replace(self.backup_path, self.record.path)
             _sync_directory(self.record.path.parent)
+        self.record.mtime_ns = self.original_record.mtime_ns
+        self.record.size_bytes = self.original_record.size_bytes
+        self.record.asset_mtime_ns = self.original_record.asset_mtime_ns
+        self.record.asset_size_bytes = self.original_record.asset_size_bytes
+        self.record.asset_revision = self.original_record.asset_revision
 
     def finalize(self) -> None:
         self.backup_path.unlink(missing_ok=True)
@@ -487,6 +494,7 @@ def _remove_incomplete_backup(backup_path: Path) -> None:
 
 def _stage_record_replacement(record: ImageRecord, rendered_path: Path, expected_source_fingerprint: tuple[int, int]) -> SourceReplaceStage:
     """Replace a source while retaining a same-directory rollback copy."""
+    original_record = replace(record)
     original_stat = record.path.stat()
     temporary_path: Path | None = None
     backup_path = record.path.with_name(f".{record.path.name}.mozarie-backup-{uuid.uuid4().hex}")
@@ -520,7 +528,7 @@ def _stage_record_replacement(record: ImageRecord, rendered_path: Path, expected
         if record.source_kind == "filesystem":
             record.mtime_ns = stat.st_mtime_ns
             record.size_bytes = stat.st_size
-        return SourceReplaceStage(record, backup_path)
+        return SourceReplaceStage(record, backup_path, original_record)
     finally:
         if temporary_path is not None:
             temporary_path.unlink(missing_ok=True)
@@ -554,6 +562,7 @@ def save_with_mask(record: ImageRecord, mask: np.ndarray, block_size: int) -> No
 
 def _stage_save_with_mask(record: ImageRecord, mask: np.ndarray, block_size: int) -> SourceReplaceStage:
     destination = record.path
+    original_record = replace(record)
     original_stat = record.path.stat()
     output = render_with_mask(record, mask, block_size)
     temporary_path: Path | None = None
@@ -585,7 +594,7 @@ def _stage_save_with_mask(record: ImageRecord, mask: np.ndarray, block_size: int
         if record.source_kind == "filesystem":
             record.mtime_ns = stat.st_mtime_ns
             record.size_bytes = stat.st_size
-        return SourceReplaceStage(record, backup_path)
+        return SourceReplaceStage(record, backup_path, original_record)
     finally:
         if temporary_path is not None:
             temporary_path.unlink(missing_ok=True)

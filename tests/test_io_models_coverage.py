@@ -132,7 +132,8 @@ class ImageIoFailureBoundaryTests(unittest.TestCase):
 
     def test_rollback_with_no_backup_is_a_noop(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            stage = image_io.SourceReplaceStage(Mock(), Path(directory) / "not-created.backup")
+            record = Mock()
+            stage = image_io.SourceReplaceStage(record, Path(directory) / "not-created.backup", record)
             stage.rollback()
 
 

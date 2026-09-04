@@ -5631,6 +5631,27 @@ class MozarieTests(unittest.TestCase):
             with self.assertRaises(ClientError):
                 state.commit_browser_save(image_id, rendered.candidate_revision, rendered.save_token, "overwrite")
 
+    def test_apply_rollback_restores_the_live_record_fingerprint(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "source.png"
+            Image.new("RGB", (16, 16), "white").save(source)
+            original_bytes = source.read_bytes()
+            state = self.new_state()
+            image_id = state.set_root(directory)[0]["id"]
+            record = state.image_for_id(image_id)
+            record.asset_revision = 7
+            original = (record.mtime_ns, record.size_bytes, record.asset_mtime_ns, record.asset_size_bytes, record.asset_revision)
+            state.job = core_module.Job(kind="apply", state="running", total=1, image_ids=(image_id,))
+
+            with patch.object(state.workspace_store, "commit_save", side_effect=OSError("database locked")):
+                state._apply_worker([record], 100, {image_id: self._mask(16, 16)})
+
+            self.assertEqual(state.job.state, "error")
+            self.assertEqual(source.read_bytes(), original_bytes)
+            self.assertEqual(
+                (record.mtime_ns, record.size_bytes, record.asset_mtime_ns, record.asset_size_bytes, record.asset_revision), original,
+            )
+
     def test_copy_save_includes_empty_record_with_its_own_output_name(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
