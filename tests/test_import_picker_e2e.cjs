@@ -217,15 +217,6 @@ function startFixtureServer() {
       response.end(JSON.stringify({ images: catalog, root: folderRequests.at(-1).path }));
       return;
     }
-    // Folder selection now begins explicit unnamed project work.  Keep this
-    // browser fixture aligned with the real project contract so the picker
-    // flow does not surface a spurious error dialog.
-    if (requestPath === "/api/projects" && request.method === "POST") {
-      for await (const _chunk of request) { /* consume project payload */ }
-      response.writeHead(200, { "Content-Type": "application/json" });
-      response.end(JSON.stringify({ project: { id: "fixture-project", name: null, status: "working", imageCount: catalog.length } }));
-      return;
-    }
     if (requestPath === "/api/output-directory/pick" && request.method === "POST") {
       for await (const _chunk of request) { /* consume request */ }
       response.writeHead(200, { "Content-Type": "application/json" });
@@ -300,17 +291,6 @@ function startFixtureServer() {
     if (requestPath === "/api/masks/clear" && request.method === "POST") {
       for await (const _chunk of request) { /* consume request */ }
       response.writeHead(200, { "Content-Type": "application/json" }); response.end(JSON.stringify({ ok: true }));
-      return;
-    }
-    if (requestPath === "/api/workspace/catalog" && request.method === "POST") {
-      for await (const _chunk of request) { /* consume request */ }
-      response.writeHead(200, { "Content-Type": "application/json" });
-      response.end(JSON.stringify({ catalogId: "fixture-catalog", provisional: true, workspace: true }));
-      return;
-    }
-    if (requestPath === "/api/workspace/catalog/finalize" && request.method === "POST") {
-      response.writeHead(200, { "Content-Type": "application/json" });
-      response.end(JSON.stringify({ catalogId: "fixture-catalog", imageIds: {}, images: [], workspace: true }));
       return;
     }
     if (requestPath.startsWith("/api/project/history/")) {

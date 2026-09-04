@@ -521,6 +521,7 @@ class HttpCoverageTests(unittest.TestCase):
 class SavingCoverageTests(unittest.TestCase):
     def test_start_apply_and_browser_status_edge_states(self) -> None:
         saving = SavingMixin()
+        saving._assert_catalog_mutable = Mock()
         saving.lock = threading.RLock()
         saving.catalog_generation = 1
         saving.settings = {"saving": {"default_output_directory": tempfile.gettempdir(), "parallelism": 2}}
@@ -545,6 +546,7 @@ class SavingCoverageTests(unittest.TestCase):
 
     def test_prepare_and_start_apply_snapshot_a_filesystem_record(self) -> None:
         saving = SavingMixin()
+        saving._assert_catalog_mutable = Mock()
         saving.lock = threading.RLock(); saving.catalog_generation = 4
         with tempfile.TemporaryDirectory() as directory:
             output = Path(directory)

@@ -134,7 +134,6 @@ class HttpBoundaryCoverageTests(unittest.TestCase):
             def run_upload(*, catalog_id: str | None, requested: str) -> tuple[Mock, list[object]]:
                 state = Mock()
                 state.catalog_id = catalog_id
-                state.browser_catalog_provisional = False
                 state.import_staging_gate = threading.RLock()
                 state.import_lock = threading.RLock()
                 state.import_image_file_for_api.return_value = ([], True)
@@ -154,9 +153,8 @@ class HttpBoundaryCoverageTests(unittest.TestCase):
             conflict.end_import_transfer.assert_called_once()
 
             staged.write_bytes(b"fixture")
-            projectless, emitted = run_upload(catalog_id=None, requested="")
+            _projectless, emitted = run_upload(catalog_id=None, requested="")
             self.assertIsNone(emitted[-1]["catalogId"])
-            self.assertFalse(projectless.browser_catalog_provisional)
 
     def test_post_optional_error_and_response_paths_have_stable_results(self) -> None:
         request = handler(); request._require_json_request = lambda: None

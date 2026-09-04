@@ -58,6 +58,8 @@ class JobsSavingCoverageTests(unittest.TestCase):
 
     def make_saving(self, directory: Path) -> SavingMixin:
         state = SavingMixin()
+        state._assert_catalog_mutable = Mock()
+        state._assert_image_editable = Mock()
         state.lock = threading.RLock(); state.import_lock = threading.RLock()
         state.output_destination_lock = threading.Lock(); state.reserved_output_paths = set()
         state.catalog_generation = 1; state.active_import_count = 0

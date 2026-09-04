@@ -125,6 +125,7 @@ const test = context.projectTest;
     calls.push(["api", url, options.method]);
     if (url === "/api/project/mismatches" && options.method !== "POST") return { images: [{ id: "changed", relativePath: "changed.png", dimensionsChanged: true }] };
     if (url === "/api/project/mismatches") return { project: projects[0], images: [{ id: "changed" }] };
+    if (url === "/api/project/source-check") return { projects: [projects[0], projects[2]] };
     if (url === "/api/projects?sort=updated_desc") return { projects };
     if (url === "/api/project/resume") return { project: { ...projects[1], status: "working" } };
     if (url === "/api/project/complete") return { project: { ...state.project, status: "completed" } };

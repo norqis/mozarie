@@ -40,12 +40,11 @@ class WorkspaceCoverageTests(unittest.TestCase):
         image_id = str(store.reconcile_images(catalog, [image_record()])["image.png"]["image_id"])
         return store, catalog, image_id
 
-    def test_workspace_simple_noops_and_manifest_ties(self) -> None:
+    def test_workspace_simple_noops(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             store, catalog, image_id = self.new_store(root)
             self.assertEqual(store.reconcile_images(catalog, []), {})
-            self.assertIsNone(store.best_catalog_for_manifest([], catalog))
             self.assertEqual(store.image_state("missing"), (False, False))
             store.set_image_flags(image_id)
             store.delete_images([])
@@ -57,7 +56,6 @@ class WorkspaceCoverageTests(unittest.TestCase):
             for target, name in ((first, "one.png"), (second, "two.png")):
                 target_id = str(store.reconcile_images(target, [image_record(name) ])[name]["image_id"])
                 self.assertTrue(store.has_image(target_id))
-            self.assertIsNone(store.best_catalog_for_manifest([("one.png", "same"), ("two.png", "same")], catalog))
 
     def test_workspace_source_change_and_commit_variants(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

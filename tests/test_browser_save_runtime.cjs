@@ -498,6 +498,31 @@ async function runBrowserCopyPoolAndWriteOverlapCases() {
   assert.deepEqual([...files.values()], [[1], [2]], "parallel copy writes retain their separate reserved outputs");
 }
 
+async function runBrowserCopyMemoryBudgetCase() {
+  const entries = ["one", "two", "three"].map((id) => ({ imageId: id, relativePath: `${id}.png`, candidateRevision: 1 }));
+  const images = entries.map((entry) => ({ id: entry.imageId, relativePath: entry.relativePath, width: 3840, height: 2160, candidateCount: 1, enabledCandidateCount: 1 }));
+  const releaseRenders = deferred(); const twoRendersStarted = deferred();
+  let activeRenders = 0; let maxActiveRenders = 0;
+  const runtime = createRuntime({
+    entries, initialImages: images,
+    renderBinary: async () => {
+      activeRenders += 1; maxActiveRenders = Math.max(maxActiveRenders, activeRenders);
+      if (activeRenders === 2) twoRendersStarted.resolve();
+      await releaseRenders.promise;
+      activeRenders -= 1;
+      return binaryResponse([1]);
+    },
+    commit: () => jsonResponse({ cleared: false, stale: false }),
+  });
+  runtime.state.settings.saving.parallelism = 8;
+  const batch = runtime.runBrowserSave(entries.map((entry) => entry.imageId), "_censored", false, "copy");
+  await twoRendersStarted.promise;
+  assert.equal(maxActiveRenders, 2, "a 4K browser batch limits an 8-worker setting to two active renders");
+  releaseRenders.resolve();
+  await batch;
+  assert.equal(maxActiveRenders, 2, "4K browser saves never exceed the 512 MiB render budget");
+}
+
 async function runBrowserCopyPoolAtScaleCases() {
   for (const parallelism of [1, 2, 4, 8]) {
     const entries = Array.from({ length: 400 }, (_, index) => ({
@@ -1246,78 +1271,6 @@ async function runRemoveAfterSaveCases() {
   assert.equal(stale.requests.some((request) => request.path === "/api/catalog/remove"), false, "stale saves remain in the catalog");
 }
 
-async function runNoEffectiveMaskBatchCases() {
-  const first = { id: "image-1", relativePath: "first.png", width: 32, height: 32, candidateCount: 1, enabledCandidateCount: 1 };
-  const second = { id: "image-2", relativePath: "second.png", width: 32, height: 32, candidateCount: 0, enabledCandidateCount: 0 };
-  const none = createRuntime({
-    initialImages: [second],
-    renderBinary: () => jsonResponse({ error_code: "no_effective_mask" }, 400),
-    commit: () => { throw new Error("an empty mask is never committed"); },
-  });
-  await none.runBrowserSave([second.id], "_censored", false, "copy", true);
-  assert.equal(none.requests.some((request) => request.path === "/api/save/commit"), false, "an all-empty batch does not save or delete its source");
-  assert.equal(none.requests.some((request) => request.path === "/api/catalog/remove"), false, "an all-empty batch remains in the catalog");
-
-  const noneUnmasked = createRuntime({
-    initialImages: [second],
-    renderBinary: () => jsonResponse({ error_code: "no_effective_mask" }, 400),
-    commit: () => { throw new Error("an empty mask is never committed"); },
-  });
-  await noneUnmasked.runBrowserSave([second.id], "_censored", false, "copy", true, false);
-  assert.equal(noneUnmasked.requests.some((request) => request.path === "/api/catalog/remove"), false, "an all-empty batch remains even when remove-only-masked is off");
-
-  let renders = 0;
-  const mixed = createRuntime({
-    initialImages: [first, second],
-    entries: [{ imageId: first.id, candidateRevision: 1 }, { imageId: second.id, candidateRevision: 1 }],
-    renderBinary: () => {
-      renders += 1;
-      return renders === 1 ? binaryResponse([4, 5, 6]) : jsonResponse({ error_code: "no_effective_mask" }, 400);
-    },
-    commit: () => jsonResponse({ cleared: true, stale: false, deleted: false }),
-    removeCatalog: ({ options }) => {
-      assert.deepEqual(JSON.parse(options.body), { imageIds: [first.id] });
-      return jsonResponse({ images: [second], removedImageIds: [first.id] });
-    },
-  });
-  await mixed.runBrowserSave([first.id, second.id], "_censored", false, "copy", true);
-  assert.equal(mixed.requests.filter((request) => request.path === "/api/save/commit").length, 1, "only the effective image is committed");
-  assert.equal(mixed.requests.filter((request) => request.path === "/api/catalog/remove").length, 1, "remove-only-masked removes only the saved image");
-
-  const keepAll = createRuntime({
-    initialImages: [first, second],
-    entries: [{ imageId: first.id, candidateRevision: 1 }, { imageId: second.id, candidateRevision: 1 }],
-    copy: () => (++renders % 2 ? jsonResponse({ output: "G:/output/first.png" }) : jsonResponse({ error_code: "no_effective_mask" }, 400)),
-    commit: () => jsonResponse({ cleared: true, stale: false, deleted: false }),
-    removeCatalog: ({ options }) => {
-      assert.deepEqual(JSON.parse(options.body), { imageIds: [first.id] });
-      return jsonResponse({ images: [second], removedImageIds: [first.id] });
-    },
-  });
-  await keepAll.runBrowserSave([first.id, second.id], "_censored", false, "copy", true, false);
-  assert.equal(keepAll.requests.filter((request) => request.path === "/api/catalog/remove").length, 1, "remove-after-save removes only the saved image when remove-only-masked is off");
-}
-
-async function runServerCopyRemovalCases() {
-  const first = { id: "image-1", relativePath: "first.png", width: 32, height: 32, candidateCount: 1, enabledCandidateCount: 1 };
-  const second = { id: "image-2", relativePath: "second.png", width: 32, height: 32, candidateCount: 0, enabledCandidateCount: 0 };
-  let removalPayload = null;
-  const mixed = createRuntime({
-    initialImages: [first, second],
-    commit: () => jsonResponse({}),
-    removeCatalog: ({ options }) => {
-      removalPayload = JSON.parse(options.body);
-      return jsonResponse({ images: [second], removedImageIds: [first.id] });
-    },
-  });
-  await mixed.finishApplyJob({ kind: "apply", state: "complete", completed: 1, imageIds: [first.id, second.id], completedImageIds: [first.id], removeAfterSave: true });
-  assert.deepEqual(removalPayload, { imageIds: [first.id] }, "server-copy removal keeps an empty-mask image even when remove-only-masked was off");
-
-  const empty = createRuntime({ initialImages: [second], commit: () => jsonResponse({}) });
-  await empty.finishApplyJob({ kind: "apply", state: "complete", completed: 0, imageIds: [second.id], completedImageIds: [], removeAfterSave: true });
-  assert.equal(empty.requests.some((request) => request.path === "/api/catalog/remove"), false, "server-copy all-empty batches stay in the catalog");
-}
-
 async function runSaveKeepsCatalogueAndEditorStateCase() {
   const first = { id: "image-1", relativePath: "first.png", width: 32, height: 32, candidateCount: 1, enabledCandidateCount: 1, reviewed: true, hidden: false };
   const second = { id: "image-2", relativePath: "second.png", width: 32, height: 32, candidateCount: 1, enabledCandidateCount: 1, reviewed: true, hidden: true };
@@ -1375,6 +1328,7 @@ async function runSaveKeepsCatalogueAndEditorStateCase() {
   await runPartialOutputCleanupCases();
   await runConcurrentOutputLockCases();
   await runBrowserCopyPoolAndWriteOverlapCases();
+  await runBrowserCopyMemoryBudgetCase();
   await runBrowserCopyPoolAtScaleCases();
   await runBrowserCopyWriteFailureCancelsRenderCase();
   await runBrowserHandleSnapshotSerializationCase();

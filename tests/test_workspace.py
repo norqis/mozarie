@@ -43,6 +43,22 @@ class WorkspaceTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "effective mask"):
                 store.save_manual(image_id, {"add": "x"}, lambda value: b"png" if value else None)
 
+    def test_reconcile_rejects_an_image_identity_owned_by_another_project_without_partial_insert(self):
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as directory:
+            store = WorkspaceStore(Path(directory))
+            first = str(store.create_project("first")["id"])
+            second = str(store.create_project("second")["id"])
+            shared = SimpleNamespace(relative_path="same.png", size_bytes=1, mtime_ns=1, width=4, height=4, image_id="shared")
+            store.reconcile_images(first, [shared])
+            incoming = [
+                SimpleNamespace(relative_path="safe.png", size_bytes=1, mtime_ns=1, width=4, height=4, image_id="safe"),
+                SimpleNamespace(relative_path="conflict.png", size_bytes=1, mtime_ns=1, width=4, height=4, image_id="shared"),
+            ]
+            with self.assertRaisesRegex(ValueError, "identity"):
+                store.reconcile_images(second, incoming)
+            with sqlite3.connect(store.path) as db:
+                self.assertEqual(db.execute("SELECT COUNT(*) FROM images WHERE catalog_id=?", (second,)).fetchone()[0], 0)
+
     def test_hydrate_candidates_reads_metadata_without_decoding_masks(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -369,24 +385,6 @@ class WorkspaceTests(unittest.TestCase):
             selects = [statement for statement in statements if statement.lstrip().upper().startswith("SELECT")]
             self.assertEqual(len(selects), 1)
             self.assertIn("workspace_reconcile_records", selects[0])
-
-    def test_manifest_scoring_joins_the_manifest_once_for_a_large_manifest(self):
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            store = WorkspaceStore(root)
-            catalog = str(store.create_project()["id"])
-            entries = [(f"nested/{index:05}.png", f"hash-{index}") for index in range(5000)]
-            store.reconcile_images(catalog, [SimpleNamespace(relative_path=path, size_bytes=10, mtime_ns=20) for path, _hash in entries])
-            statements: list[str] = []
-            original_connect = store._connect
-
-            def counted_connect():
-                connection = original_connect()
-                connection.set_trace_callback(statements.append)
-                return connection
-
-            store._connect = counted_connect  # type: ignore[method-assign]
-            self.assertIsNone(store.best_catalog_for_manifest(entries, "f" * 32))
 
     def test_schema_type_or_default_tampering_is_rejected_without_mutation(self):
         with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as directory:

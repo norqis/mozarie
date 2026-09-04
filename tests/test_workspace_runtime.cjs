@@ -223,14 +223,15 @@ vm.runInNewContext("globalThis.workspaceTest={queueWorkspaceDraft,flushDraftSave
 
   const directoryEvents = [];
   context.state.project = null;
+  let projectRequests = 0;
   context.api = async (url) => {
-    assert.equal(url, "/api/projects", "a directory creates explicit unnamed project work");
-    return { project: { id: "fresh", name: null, status: "working" } };
+    if (url === "/api/projects") projectRequests += 1;
+    return {};
   };
-  assert.equal(await context.workspaceTest.catalogForDirectoryHandle({}), "fresh", "a remembered directory never silently reopens old work");
+  assert.equal(await context.workspaceTest.catalogForDirectoryHandle({}), null, "a directory remains projectless until the user explicitly saves a project");
+  assert.equal(projectRequests, 0, "selecting a directory never creates a project as an import side effect");
   context.state.project = { id: "fresh" };
-  context.api = async (url) => { assert.equal(url, "/api/workspace/catalog", "an active project activates its existing workspace catalog"); return { catalogId: "active" }; };
-  assert.equal(await context.workspaceTest.catalogForDirectoryHandle({}), "active", "a selected directory activates the current project rather than creating another one");
+  assert.equal(await context.workspaceTest.catalogForDirectoryHandle({}), "fresh", "a selected directory attaches to the active project without a catalog-activation API");
 
   state.currentId = null; state.draftDirty = false; state.draftSaveChains.clear(); state.workspaceDraftChains.clear(); state.workspaceMutationErrors.clear(); state.workspaceDraftTimers.clear();
   assert.equal(JSON.stringify(context.workspaceTest.workspaceDraftPayload({})), JSON.stringify({ add: "", exclusion: "", exclusionErase: "", manualEnabled: true, manualExclusionEnabled: true, manualExclusionEraseEnabled: true, manualExclusionForced: true, hasEffectiveMask: false, removedCandidateIds: [], candidateRevision: 0 }), "a partially initialized manual draft receives the persisted defaults");

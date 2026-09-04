@@ -145,7 +145,6 @@ class ProjectWorkspaceCoverageTests(unittest.TestCase):
             self.assertEqual(store.projects_for_source_root(str(native.resolve()), legacy), [])
             store.delete_project(other["id"])
             self.assertIsNone(store.project(other["id"]))
-            self.assertIsNone(store.best_catalog_for_manifest([("a.png", "x")], legacy))
 
     def test_reconcile_sources_metadata_prune_delete_and_commit_save(self):
         with tempfile.TemporaryDirectory() as directory:

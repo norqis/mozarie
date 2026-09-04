@@ -284,6 +284,7 @@ class ProjectCatalogCoverageTests(unittest.TestCase):
             state._import_images([{"name": "bad.png", "relativePath": "bad.png", "stagedPath": staged, "mtimeNs": -1}])
         with self.assertRaises(ClientError):
             state._import_images([{"name": "bad.png", "relativePath": "bad.png", "stagedPath": staged, "sizeBytes": 1}])
+        staged.write_bytes(self.png())
         images, imported = state._import_images([{"name": "ok.png", "relativePath": "ok.png", "stagedPath": staged,
                                                    "mtimeNs": 123, "sizeBytes": len(self.png()), "clientKey": "ok"}],
                                                  source_identity="directory-id", source_kind="browser-directory")
@@ -336,9 +337,20 @@ class ProjectCatalogCoverageTests(unittest.TestCase):
         }], source_identity="directory-handle", source_kind="browser-directory")
         image_id = imported[0]["imageId"]
         self.assertIsNone(state.catalog_id)
+        candidate = self.candidate(state, image_id, "detected")
+        self.commit_candidates(state, image_id, [candidate])
+        state.set_image_flags(image_id, {"hidden": True, "reviewed": True})
+        manual = "data:image/png;base64," + base64.b64encode(self.png(pixel=(2, 2))).decode("ascii")
+        state.save_manual_workspace(image_id, {
+            "add": manual, "exclusion": "", "exclusionErase": "", "removedCandidateIds": [],
+            "candidateRevision": state._candidate_revision(image_id), "hasEffectiveMask": True,
+        })
         project = state.name_current_project("browser-after-work")
         source = state.workspace_store.project_sources(project["id"])[0]
         self.assertEqual((source["kind"], source["identity"]), ("browser-directory", "browser:directory-handle"))
+        source_id = state.images[image_id].source_id
+        self.assertIsNotNone(source_id)
+        self.assertEqual(state.images[image_id].source_id, source_id)
         state.close_project()
 
         reselected = self.state(); reselected.open_project(project["id"])
@@ -348,6 +360,40 @@ class ProjectCatalogCoverageTests(unittest.TestCase):
             "mtimeNs": 123, "sizeBytes": len(self.png()),
         }], source_identity="directory-handle", source_kind="browser-directory")
         self.assertEqual(reimported[0]["imageId"], image_id)
+        self.assertTrue(reselected.images[image_id].hidden)
+        self.assertTrue(reselected.images[image_id].reviewed)
+        self.assertEqual(reselected.images[image_id].source_id, source_id)
+        self.assertEqual([item.candidate_id for item in reselected.candidates[image_id]], ["detected"])
+        self.assertEqual(reselected.manual_workspace(image_id)["add"], manual)
+
+    def test_completed_browser_project_rehydrates_existing_images_without_accepting_new_paths(self) -> None:
+        first = self.root / "existing.png"; first.write_bytes(self.png())
+        state = self.state()
+        _images, imported = state._import_images([{
+            "clientKey": "existing", "name": "existing.png", "relativePath": "nested/existing.png", "stagedPath": first,
+            "mtimeNs": 123, "sizeBytes": len(self.png()),
+        }], source_identity="directory-handle", source_kind="browser-directory")
+        image_id = imported[0]["imageId"]
+        project = state.name_current_project("completed-browser")
+        state.complete_project(); state.close_project()
+
+        reopened = self.state(); reopened.open_project(project["id"])
+        self.assertTrue(reopened.project_read_only)
+        existing = self.root / "existing-reselected.png"; existing.write_bytes(self.png())
+        _images, restored = reopened._import_images([{
+            "clientKey": "existing-again", "name": "existing.png", "relativePath": "nested/existing.png", "stagedPath": existing,
+            "mtimeNs": 123, "sizeBytes": len(self.png()),
+        }], source_identity="directory-handle", source_kind="browser-directory")
+        self.assertEqual(restored[0]["imageId"], image_id)
+        self.assertEqual([item["id"] for item in reopened.list_images()], [image_id])
+
+        new_path = self.root / "new.png"; new_path.write_bytes(self.png())
+        with self.assertRaises(ClientError):
+            reopened._import_images([{
+                "clientKey": "new", "name": "new.png", "relativePath": "nested/new.png", "stagedPath": new_path,
+                "mtimeNs": 123, "sizeBytes": len(self.png()),
+            }], source_identity="directory-handle", source_kind="browser-directory")
+        self.assertEqual([item["id"] for item in reopened.list_images()], [image_id])
 
     def test_export_error_paths_and_empty_history_status(self) -> None:
         root = self.root / "errors"; self.image(root, "image.png")

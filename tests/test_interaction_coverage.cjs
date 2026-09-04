@@ -54,7 +54,7 @@ const state = {
   settings: { confirmations: { clearMasks: false, clearCatalog: false, removeImage: false }, shortcuts: { bindings: {}, actions: {} } },
   masksClearing: false, catalogMutation: false, imageGeneration: 0, catalogEpoch: 0, candidates: [],
   drafts: new Map(), maskStatus: new Map(), selectedImageIds: new Set(["one"]), sourceAccess: new Map(),
-  reviewedPaths: new Set(), candidateImages: new Map(), batchMode: false, contextMenuImageId: null,
+  reviewedPaths: new Set(), hiddenPaths: new Set(), candidateImages: new Map(), batchMode: false, contextMenuImageId: null,
   contextMenuOrigin: null, importSession: null, navigationShortcutsEnabled: true, viewMode: "edit",
   historyIndex: 1, manualMaskPresent: true, manualEnabled: false, manualExclusionEnabled: false,
   manualExclusionEraseEnabled: false, maskDirty: false,
@@ -89,8 +89,6 @@ const context = {
     if (apiMode === "error") throw new Error("failed");
     if (url === "/api/settings?status=0") return { settings: state.settings };
     if (url === "/api/images") return { images };
-    if (url === "/api/workspace/catalog") return { catalogId: "provisional", provisional: true };
-    if (url === "/api/workspace/catalog/finalize") return { catalogId: "final", imageIds: { pending: "one" }, images };
     if (url.startsWith("/api/catalog/image/")) return { images: images.filter((image) => image.id !== decodeURIComponent(url.split("/").at(-1))) };
     return {};
   },
@@ -99,6 +97,12 @@ const context = {
   markImagesUnreviewed: () => {}, renderCandidates: () => {}, renderCatalogViews: () => calls.push(["catalog"]), preserveCatalogScroll: (renderCatalogs) => renderCatalogs(), updateNavigationControls: () => {}, clearStatus: () => {},
   flushAllWorkspaceMutations: async () => {}, clearStoredCatalogState: () => {}, resetCatalog: (next) => { images = next; state.images = next; },
   reviewPath: (image) => image.id, isReviewed: (image) => state.reviewedPaths.has(image.id), isHidden: (image) => Boolean(image.hidden),
+  publishWorkspaceFlags(imageId, flags) {
+    const image = state.images.find((entry) => entry.id === imageId); if (!image) return false;
+    if (typeof flags.hidden === "boolean") { image.hidden = flags.hidden; if (flags.hidden) state.hiddenPaths.add(imageId); else state.hiddenPaths.delete(imageId); }
+    if (typeof flags.reviewed === "boolean") { image.reviewed = flags.reviewed; if (flags.reviewed) state.reviewedPaths.add(imageId); else state.reviewedPaths.delete(imageId); }
+    return true;
+  },
   selectImage: async (id) => { state.currentId = id; state.currentImage = state.images.find((image) => image.id === id) || null; },
   showUserError: (error) => calls.push(["error", error.code || error.message]), setStatusKey: (key) => calls.push(["status", key]),
   releaseImageCaches: () => {}, clearEditor: () => {}, clearBatchSelection: () => {}, updateSelectionActionBar: () => {}, renderOverview: () => {},
@@ -180,7 +184,15 @@ const tolerancePanelCss = styleSource.match(/\.bucket-tolerance-panel\s*\{([^}]*
 
   images = [{ id: "one" }, { id: "two" }]; state.images = images; state.selectedImageIds = new Set(["one", "two"]);
   const actionRequests = calls.filter(([name]) => name === "api").length;
-  for (const action of ["hide", "show", "reviewed", "unreviewed", "detect", "clear", "remove"]) await test.runSelectionAction(action);
+  await test.runSelectionAction("hide");
+  assert.deepEqual([...state.hiddenPaths].sort(), ["one", "two"], "bulk hide immediately updates the hidden filter state");
+  await test.runSelectionAction("show");
+  assert.deepEqual([...state.hiddenPaths], [], "bulk show immediately updates the hidden filter state");
+  await test.runSelectionAction("reviewed");
+  assert.deepEqual([...state.reviewedPaths].sort(), ["one", "two"], "bulk review immediately updates the review filter state");
+  await test.runSelectionAction("unreviewed");
+  assert.deepEqual([...state.reviewedPaths], [], "bulk unreview immediately updates the review filter state");
+  for (const action of ["detect", "clear", "remove"]) await test.runSelectionAction(action);
   const bulkRequests = calls.filter(([name]) => name === "api").slice(actionRequests);
   assert.equal(bulkRequests.filter(([, url]) => url === "/api/workspace/images").length, 4, "each bulk flag operation makes one request");
   assert.equal(bulkRequests.filter(([, url]) => url === "/api/catalog/remove").length, 1, "bulk removal makes one request");
@@ -265,7 +277,6 @@ const tolerancePanelCss = styleSource.match(/\.bucket-tolerance-panel\s*\{([^}]*
   await test.importFiles([{ name: "name-only.png" }]);
   const originalApi = context.api;
   context.api = async (url) => {
-    if (url === "/api/workspace/catalog") return { catalogId: null, provisional: false };
     if (url === "/api/images") return { images: [] };
     return {};
   };
@@ -318,8 +329,6 @@ const tolerancePanelCss = styleSource.match(/\.bucket-tolerance-panel\s*\{([^}]*
   state.importing = false; state.importSession = null; await test.importFiles([{ getFile: async () => file("skip.gif"), relativePath: "skip.gif" }]);
   const apiFinalFallback = context.api;
   context.api = async (url) => {
-    if (url === "/api/workspace/catalog") return { catalogId: "p", provisional: true };
-    if (url === "/api/workspace/catalog/finalize") return {};
     if (url === "/api/images") return { images: [] };
     return {};
   };
@@ -341,14 +350,14 @@ const tolerancePanelCss = styleSource.match(/\.bucket-tolerance-panel\s*\{([^}]*
   vm.runInNewContext("importSingleFile = async () => ({ catalogId: null, provisional: false });", context);
   state.importing = false; state.importSession = null; await test.importFiles([{ getFile: async () => { state.importSession = {}; return file('mismatch.png'); }, relativePath: "mismatch.png" }]);
   state.importing = false; state.importSession = null; await test.importFiles([{ getFile: async () => file("skip.gif"), relativePath: "skip.png" }]);
-  let provisionalRequests = 0;
+  let projectCreationRequests = 0;
   context.api = async (url) => {
-    if (url === "/api/workspace/catalog" || url === "/api/workspace/catalog/finalize") { provisionalRequests += 1; return { catalogId: "p", provisional: true }; }
+    if (url === "/api/projects") projectCreationRequests += 1;
     if (url === "/api/images") return { images: [] };
     return {};
   };
   state.images = []; images = state.images; state.importing = false; state.importSession = null; await test.importFiles([{ getFile: async () => file("final.png"), relativePath: "final.png" }]);
-  assert.equal(provisionalRequests, 0, `ordinary imports never create a provisional project: ${JSON.stringify(calls.slice(-4))}`);
+  assert.equal(projectCreationRequests, 0, `ordinary imports never create a project: ${JSON.stringify(calls.slice(-4))}`);
   context.fetch = async () => { throw new Error("network"); }; context.api = async () => { throw new Error("refresh"); };
   state.importing = false; state.importSession = null; await test.importFiles([{ getFile: async () => file("failure.png"), relativePath: "failure.png" }]);
   context.fetch = originalFetch; context.api = apiForClear;
