@@ -22,8 +22,8 @@ APP_DIR = Path(__file__).resolve().parent
 
 def _runtime_modules():
     import numpy as np
-    import onnxruntime as ort
     import torch
+    import onnxruntime as ort
     from onnxruntime import datasets
     return np, ort, torch, datasets
 
@@ -45,8 +45,13 @@ def _gpu_is_ready(np, ort, torch, datasets, device: int) -> bool:
         if device < 0 or device >= count:
             return False
         torch.ones((1,), device=f"cuda:{device}").add_(1).cpu()
+        options = ort.SessionOptions()
+        options.add_session_config_entry("session.disable_cpu_ep_fallback", "1")
         session = ort.InferenceSession(
-            datasets.get_example("mul_1.onnx"), providers=["CUDAExecutionProvider"], provider_options=[{"device_id": str(device)}],
+            datasets.get_example("mul_1.onnx"),
+            sess_options=options,
+            providers=["CUDAExecutionProvider"],
+            provider_options=[{"device_id": str(device)}],
         )
         session.disable_fallback()
         if session.get_providers()[0] != "CUDAExecutionProvider":

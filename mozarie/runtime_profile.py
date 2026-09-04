@@ -127,7 +127,7 @@ def _probe_onnx(
 
     providers: list[object] = [expected]
     if profile in {"cuda", "directml"}:
-        providers = [(expected, {"device_id": provider_device}), "CPUExecutionProvider"]
+        providers = [(expected, {"device_id": provider_device})]
 
     helper = onnx.helper
     tensor_proto = onnx.TensorProto
@@ -141,6 +141,8 @@ def _probe_onnx(
     )
     model = helper.make_model(graph, opset_imports=[helper.make_opsetid("", 17)])
     options = ort.SessionOptions()
+    if profile in {"cuda", "directml"}:
+        options.add_session_config_entry("session.disable_cpu_ep_fallback", "1")
     if profile == "directml":
         options.enable_mem_pattern = False
         options.execution_mode = ort.ExecutionMode.ORT_SEQUENTIAL
@@ -171,8 +173,8 @@ def validate(profile: str, gpu_device: int = 0) -> dict[str, object]:
     try:
         import numpy as np
         import onnx
-        import onnxruntime as ort
         import torch
+        import onnxruntime as ort
     except Exception as exc:
         raise ProfileError(f"Runtime packages cannot be imported: {exc}") from exc
 

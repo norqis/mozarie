@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+import inspect
 import json
 import os
 from pathlib import Path
@@ -96,12 +97,45 @@ class RuntimeProfileTests(unittest.TestCase):
         with self.assertRaisesRegex(runtime_profile.ProfileError, "identity is required"):
             runtime_profile._probe_onnx(ort, onnx, np, "directml", 1)
 
-    def test_onnx_probe_allows_cpu_graph_provider_after_cuda(self) -> None:
+    def test_onnx_probe_requires_the_selected_cuda_provider_first(self) -> None:
         ort, onnx, np = self._probe_dependencies(["CUDAExecutionProvider", "CPUExecutionProvider"])
         self.assertEqual(runtime_profile._probe_onnx(ort, onnx, np, "cuda", 0), "CUDAExecutionProvider")
         ort, onnx, np = self._probe_dependencies(["CPUExecutionProvider", "CUDAExecutionProvider"])
         with self.assertRaisesRegex(runtime_profile.ProfileError, "selected"):
             runtime_profile._probe_onnx(ort, onnx, np, "cuda", 0)
+
+    def test_onnx_gpu_probe_passes_only_the_selected_provider_and_strict_option(self) -> None:
+        ort, onnx, np = self._probe_dependencies(["CUDAExecutionProvider"])
+        config = []
+        ort.options.add_session_config_entry = lambda key, value: config.append((key, value))
+        created = []
+        ort.InferenceSession = lambda *_args, **kwargs: (created.append(kwargs) or SimpleNamespace(
+            disable_fallback=lambda: None,
+            get_providers=lambda: ["CUDAExecutionProvider"],
+            run=lambda *_args: [[[1.0]]],
+        ))
+        self.assertEqual(runtime_profile._probe_onnx(ort, onnx, np, "cuda", 2), "CUDAExecutionProvider")
+        self.assertEqual(created[0]["providers"], [("CUDAExecutionProvider", {"device_id": 2})])
+        self.assertEqual(config, [("session.disable_cpu_ep_fallback", "1")])
+
+    def test_onnx_directml_probe_passes_only_directml_and_strict_option(self) -> None:
+        ort, onnx, np = self._probe_dependencies(["DmlExecutionProvider"])
+        config = []
+        ort.options.add_session_config_entry = lambda key, value: config.append((key, value))
+        created = []
+        ort.InferenceSession = lambda *_args, **kwargs: (created.append(kwargs) or SimpleNamespace(
+            disable_fallback=lambda: None,
+            get_providers=lambda: ["DmlExecutionProvider"],
+            run=lambda *_args: [[[1.0]]],
+        ))
+        with patch("mozarie.runtime.directml_onnx_device_id", return_value=5):
+            self.assertEqual(runtime_profile._probe_onnx(ort, onnx, np, "directml", 2, directml_identity=object()), "DmlExecutionProvider")
+        self.assertEqual(created[0]["providers"], [("DmlExecutionProvider", {"device_id": 5})])
+        self.assertEqual(config, [("session.disable_cpu_ep_fallback", "1")])
+
+    def test_validate_imports_torch_before_onnxruntime(self) -> None:
+        source = inspect.getsource(runtime_profile.validate)
+        self.assertLess(source.index("import torch"), source.index("import onnxruntime as ort"))
 
     def test_onnx_probe_supports_cuda_and_cpu_and_rejects_bad_results(self) -> None:
         for profile, provider in (("cuda", "CUDAExecutionProvider"), ("cpu", "CPUExecutionProvider")):
