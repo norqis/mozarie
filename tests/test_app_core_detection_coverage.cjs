@@ -293,7 +293,7 @@ async function testCoreBoundaryAndWorkspaceBehaviour() {
     renderStatus() {}, updateBoundaryActions() {}, updateNavigationControls() {}, updateHistoryButtons() {}, updateSelectionActionBar() {},
     updateCandidateStatus() {}, syncApplyMode() {}, updateProgress() {}, syncDetectionActions() {}, updateCandidateBatchButtons() {},
     refreshMaskStatus: () => false, selectImage() {}, imageAssetVersion: () => 0, canvasHasPixels: () => false,
-    applyRestrictionMessage: () => "", candidateDisplayIdsForRole: () => [], queueWorkspaceFlags: () => Promise.reject(new Error("write failed")),
+    applyRestrictionMessage: () => "", selectedSaveMode: () => "copy", candidateDisplayIdsForRole: () => [], queueWorkspaceFlags: () => Promise.reject(new Error("write failed")),
     showModalFromInvoker() {}, showConnectionFailure() {}, releaseMosaicPreview() {}, requestMosaicPreview() {},
     closeBoundaryModeMenu() {}, closeCatalogContextMenu() {}, releaseImageCaches() {}, clearCandidateBlink() {}, clearEditor() {}, flushAllWorkspaceMutations: async () => {},
     forgetThumbnail() {},
