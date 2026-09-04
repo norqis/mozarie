@@ -1,6 +1,5 @@
-# Local cache and browser-test fixture data
+# Local cache
 .mozarie-cache/
-.ui-fixture/
 
 # User-provided model files and per-machine settings
 models/
@@ -11,17 +10,10 @@ output/
 # Python build artifacts and virtual environments
 __pycache__/
 *.py[cod]
-.pytest_cache/
 .venv/
-.venv-test/
-.test-tmp*/
 
 # Frontend dependencies
 node_modules/
-.playwright-browsers/
-coverage/
-.coverage
-coverage.xml
 
 # Logs and Windows metadata
 *.log
