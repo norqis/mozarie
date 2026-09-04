@@ -67,6 +67,7 @@ async function copyCommand(commandId, resultId) {
 let projectNameMode = "name";
 let sameSourceProjects = [];
 let sameSourcePath = "";
+let sameSourceSelectedProjectId = "";
 let projectDeleteId = "";
 
 function projectTitle(project) { return project?.name || t("project.unnamed"); }
@@ -213,18 +214,21 @@ async function deleteProject(projectId) {
 }
 
 async function openSameSourceDialog(path) {
-  const data = await api("/api/projects?sort=updated_desc");
-  const normalized = String(path || "").replace(/[\\/]+$/, "").toLocaleLowerCase();
-  sameSourceProjects = (data.projects || []).filter((project) => project.id !== state.project?.id
-    && String(project.sourceRoot || "").replace(/[\\/]+$/, "").toLocaleLowerCase() === normalized);
+  const data = await api("/api/project/source-check", { method: "POST", body: JSON.stringify({ path }) });
+  sameSourceProjects = (data.projects || []).filter((project) => project.id !== state.project?.id);
   if (!sameSourceProjects.length) return false;
   sameSourcePath = path;
+  $("#sameSourceSeparate").hidden = false;
   const list = $("#sameSourceList"); list.replaceChildren();
   for (const project of sameSourceProjects) {
     const item = document.createElement("li");
-    item.textContent = `${projectTitle(project)} · ${t(`project.${project.status}`)} · ${t("project.imageCount", { count: project.imageCount || 0 })}`;
+    const choose = document.createElement("button"); choose.type = "button";
+    choose.textContent = `${projectTitle(project)} · ${t(`project.${project.status}`)} · ${t("project.imageCount", { count: project.imageCount || 0 })}`;
+    choose.addEventListener("click", () => { sameSourceSelectedProjectId = project.id; });
+    item.append(choose);
     list.append(item);
   }
+  sameSourceSelectedProjectId = sameSourceProjects[0].id;
   showModalFromInvoker($("#sameSourceDialog"));
   return true;
 }
@@ -242,7 +246,26 @@ function bindEvents() {
   $("#projectResume").addEventListener("click", () => { void resumeCurrentProject(); });
   $("#projectSourceSelect").addEventListener("click", () => { void (async () => {
     if (!state.project?.id) return;
-    try { await importProjectDirectoryHandle(await window.showDirectoryPicker({ mode: "read", id: "mozarie-project-source" }), state.project.id); }
+    try {
+      const handle = await window.showDirectoryPicker({ mode: "read", id: "mozarie-project-source" });
+      const matches = await matchingProjectDirectorySources(handle);
+      const current = matches.find((source) => source.projectId === state.project.id);
+      const others = new Set(matches.filter((source) => source.projectId !== state.project.id).map((source) => source.projectId));
+      if (others.size) {
+        const data = await api("/api/projects?sort=updated_desc");
+        sameSourceProjects = (data.projects || []).filter((project) => others.has(project.id));
+        sameSourceSelectedProjectId = sameSourceProjects[0]?.id || ""; sameSourcePath = "";
+        $("#sameSourceSeparate").hidden = true;
+        const list = $("#sameSourceList"); list.replaceChildren();
+        for (const project of sameSourceProjects) {
+          const item = document.createElement("li"); const choose = document.createElement("button"); choose.type = "button";
+          choose.textContent = `${projectTitle(project)} · ${t(`project.${project.status}`)}`;
+          choose.addEventListener("click", () => { sameSourceSelectedProjectId = project.id; }); item.append(choose); list.append(item);
+        }
+        showModalFromInvoker($("#sameSourceDialog")); return;
+      }
+      await importProjectDirectoryHandle(handle, state.project.id, current?.sourceId || null);
+    }
     catch (error) { if (error?.name !== "AbortError") showUserError(error); }
   })(); });
   $("#projectMosaicZip").addEventListener("click", () => { void downloadProjectArtifact("/api/project/masks/mosaic", "mosaic-masks.zip"); });
@@ -272,7 +295,7 @@ function bindEvents() {
   $("#sourceMismatchCancel").addEventListener("click", () => $("#sourceMismatchDialog").close());
   $("#sourceMismatchForm").addEventListener("submit", (event) => { event.preventDefault(); void (async () => { try { const ids = JSON.parse($("#sourceMismatchDialog").dataset.imageIds || "[]"); const snapshot = await api("/api/project/mismatches", { method: "POST", body: JSON.stringify({ imageIds: ids, clearMasks: $("#sourceMismatchClear").checked }) }); state.images = snapshot.images || state.images; applyProjectSnapshot(snapshot); $("#sourceMismatchDialog").close(); renderCatalogViews(); } catch (error) { showUserError(error); } })(); });
   $("#sameSourceCancel").addEventListener("click", () => $("#sameSourceDialog").close());
-  $("#sameSourceOpen").addEventListener("click", () => { const project = sameSourceProjects[0]; $("#sameSourceDialog").close(); if (project) void openProject(project); });
+  $("#sameSourceOpen").addEventListener("click", () => { const project = sameSourceProjects.find((item) => item.id === sameSourceSelectedProjectId) || sameSourceProjects[0]; $("#sameSourceDialog").close(); if (project) void openProject(project); });
   $("#sameSourceSeparate").addEventListener("click", () => { void (async () => {
     try {
       if (state.candidateUpdateChains?.size) await waitForCandidateMutations();

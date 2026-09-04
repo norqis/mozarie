@@ -80,6 +80,22 @@ async function rememberedProjectDirectorySources(projectId) {
   return rows.filter((row) => row.projectId === projectId && !row.imageId && row.handle?.kind === "directory")
     .map((row) => ({ sourceId: row.sourceId, handle: row.handle }));
 }
+async function matchingProjectDirectorySources(handle) {
+  const db = await directoryCatalogStore(); if (!db || !handle?.isSameEntry) return [];
+  try {
+    const rows = await new Promise((resolve) => {
+      const request = db.transaction("projectSources").objectStore("projectSources").getAll();
+      request.onsuccess = () => resolve(request.result || []); request.onerror = () => resolve([]);
+    });
+    const matches = [];
+    for (const row of rows) {
+      if (!row.imageId && row.handle?.kind === "directory" && await handle.isSameEntry(row.handle).catch(() => false)) {
+        matches.push({ projectId: row.projectId, sourceId: row.sourceId });
+      }
+    }
+    return matches;
+  } finally { db.close(); }
+}
 async function forgetProjectSources(projectId) {
   const db = await directoryCatalogStore(); if (!db || !projectId) return;
   try {
