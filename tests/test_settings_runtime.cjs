@@ -76,7 +76,7 @@ const context = {
   confirmAction: async () => true,
 };
 vm.runInNewContext(source, context, { filename: settingsPath });
-vm.runInNewContext("globalThis.settingsTest={renderModelStatus,renderSamVariantStatuses,selectedSamType,selectSamVariant,selectSettingsTab,moveSettingsTab,setToolRailTabStop,renderSettingsStatus,setSettingsForm,openSettings,saveSettings,resetSettings,chooseSettingsOutputDirectory,chooseSettingsModelFile,handleToolRailKeydown,modelDownloadInput,renderModelDownload,refreshModelDownload,showUnsupportedModelDownload,modelDownloadConfirmation,startModelDownload,beginModelDownload,cancelModelDownload,refreshSettingsStatus,checkForUpdate,startUpdate,samTypeFromPath,shortcutFromEvent,gpuMemoryLabel,modelCardEnabled,setHandSegmentationAvailable,setPrecisionDetectionEnabled,setFluidExclusionEnabled,setFillColorTolerance,saveFillColorTolerance};", context, { filename: "test-settings-exports.js" });
+vm.runInNewContext("globalThis.settingsTest={renderModelStatus,renderSamVariantStatuses,selectedSamType,selectSamVariant,selectSettingsTab,moveSettingsTab,setToolRailTabStop,renderSettingsStatus,setSettingsForm,settingsPayload,openSettings,saveSettings,resetSettings,chooseSettingsOutputDirectory,chooseSettingsModelFile,handleToolRailKeydown,modelDownloadInput,renderModelDownload,refreshModelDownload,showUnsupportedModelDownload,modelDownloadConfirmation,startModelDownload,beginModelDownload,cancelModelDownload,refreshSettingsStatus,checkForUpdate,startUpdate,samTypeFromPath,shortcutFromEvent,gpuMemoryLabel,modelCardEnabled,setHandSegmentationAvailable,setPrecisionDetectionEnabled,setFluidExclusionEnabled,setFillColorTolerance,saveFillColorTolerance};", context, { filename: "test-settings-exports.js" });
 
 (async () => {
   assert.equal(context.settingsTest.shortcutFromEvent({ ctrlKey: true, metaKey: false, shiftKey: true, altKey: true, key: "a" }), "Ctrl+Shift+Alt+A", "shortcut capture normalizes modifiers and single letters");
@@ -230,6 +230,73 @@ vm.runInNewContext("globalThis.settingsTest={renderModelStatus,renderSamVariantS
   assert.equal(element("#settingsImportParallelism").value, "3", "empty import settings use their public default");
   assert.equal(element("#detectParallelism").value, "2", "empty detection settings use their public default");
   assert.equal(element("#bucketTolerance").value, "20", "the fill tolerance reflects the persisted editing setting");
+
+  // Each public detection-model switch must survive the same POST and render
+  // path the settings dialog uses.  This is deliberately a small basis set:
+  // it covers OFF, each independent auxiliary, the dependent hand pair, and
+  // the all-enabled configuration without a combinatorial UI matrix.
+  shortcutBindings.length = 0;
+  shortcutEnabled.length = 0;
+  context.settingsPayload = context.settingsTest.settingsPayload;
+  for (const expected of [
+    { ntd11: false, sensitive: false, hand: false, handSegmentation: false, precision: false, fluid: false },
+    { ntd11: true, sensitive: false, hand: false, handSegmentation: false, precision: false, fluid: true },
+    { ntd11: false, sensitive: true, hand: false, handSegmentation: false, precision: true, fluid: false },
+    { ntd11: false, sensitive: false, hand: true, handSegmentation: false, precision: false, fluid: true },
+    { ntd11: false, sensitive: false, hand: true, handSegmentation: true, precision: true, fluid: false },
+    { ntd11: true, sensitive: true, hand: true, handSegmentation: true, precision: true, fluid: true },
+  ]) {
+    const persisted = {
+      ...defaultSettings,
+      models: {
+        ...defaultSettings.models,
+        ntd11_enabled: expected.ntd11,
+        sensitive_enabled: expected.sensitive,
+        hand_detection_enabled: expected.hand,
+        hand_segmentation_enabled: expected.handSegmentation,
+      },
+      detection: {
+        ...defaultSettings.detection,
+        mode: expected.precision ? "high_precision" : "standard",
+        fluid_exclusion_enabled: expected.fluid,
+      },
+    };
+    context.settingsTest.setSettingsForm(persisted, { models: {}, gpus: [] });
+    const expectedPayload = context.settingsTest.settingsPayload();
+    assert.deepEqual({
+      ntd11: expectedPayload.models.ntd11_enabled,
+      sensitive: expectedPayload.models.sensitive_enabled,
+      hand: expectedPayload.models.hand_detection_enabled,
+      handSegmentation: expectedPayload.models.hand_segmentation_enabled,
+      precision: expectedPayload.detection.mode === "high_precision",
+      fluid: expectedPayload.detection.fluid_exclusion_enabled,
+    }, expected, "all detection toggles are encoded in the settings POST payload");
+    let posted = null;
+    context.api = async (url, options) => {
+      assert.equal(url, "/api/settings?status=0");
+      assert.equal(options.method, "POST");
+      posted = JSON.parse(options.body);
+      return { settings: posted, version: "v-toggle" };
+    };
+    await context.settingsTest.saveSettings({ preventDefault() {} });
+    assert.ok(posted, `settings save must post toggles (${errors.at(-1)?.[0]?.code || errors.at(-1)?.[0]?.message || "no request"})`);
+    assert.ok(posted.models, `settings save must retain its model payload (${JSON.stringify(posted)})`);
+    assert.deepEqual({
+      ntd11: posted.models.ntd11_enabled,
+      sensitive: posted.models.sensitive_enabled,
+      hand: posted.models.hand_detection_enabled,
+      handSegmentation: posted.models.hand_segmentation_enabled,
+      precision: posted.detection.mode === "high_precision",
+      fluid: posted.detection.fluid_exclusion_enabled,
+    }, expected, "settings save posts every rendered detection toggle");
+    assert.equal(element("#settingsNtd11Toggle").checked, expected.ntd11);
+    assert.equal(element("#settingsSensitiveToggle").checked, expected.sensitive);
+    assert.equal(element("#settingsHandToggle").checked, expected.hand);
+    assert.equal(element("#settingsHandSegmentationToggle").checked, expected.handSegmentation);
+    assert.equal(element("#settingsPrecisionToggle").checked, expected.precision);
+    assert.equal(element("#settingsFluidToggle").checked, expected.fluid);
+  }
+  context.settingsPayload = () => ({ status: true });
   let tolerancePayload = null;
   context.api = async (_path, options) => { tolerancePayload = JSON.parse(options.body); return { settings: { ...state.settings, editing: { fill_color_tolerance: 37 } } }; };
   element("#bucketTolerance").value = "37";
