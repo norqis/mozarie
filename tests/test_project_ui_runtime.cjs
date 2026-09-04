@@ -46,7 +46,7 @@ let projects = [
   { id: "separate", name: "Gamma", status: "working", imageCount: 1, sourceRoot: "C:/alpha", updatedAt: 500_000 },
 ];
 let openPayload = null;
-const state = { project: null, projectReadOnly: false, images: [], candidateUpdateChains: new Map(), workspaceDraftChains: new Map(), workspaceDraftTimers: new Map(), workspaceMutationErrors: new Map(), candidateBatchPending: new Set(), settings: { general: { language: "ja" } }, importing: false };
+const state = { project: null, projectReadOnly: false, images: [], drafts: new Map(), sourceAccess: new Map(), candidateUpdateChains: new Map(), workspaceDraftChains: new Map(), workspaceDraftTimers: new Map(), workspaceMutationErrors: new Map(), candidateBatchPending: new Set(), settings: { general: { language: "ja" } }, importing: false };
 const context = {
   console, Promise, Map, Set, WeakMap, Array, Object, Number, String, Boolean, Math, JSON, Error, Intl,
   document, state, window: { addEventListener() {}, showDirectoryPicker: async () => ({ kind: "directory" }) }, URL: { createObjectURL: () => "blob:test", revokeObjectURL: () => {} },
@@ -54,7 +54,7 @@ const context = {
   $: element, t: (key, params = {}) => key === "project.imageCount" ? `${params.count}枚` : key,
   focusElement(value) { document.activeElement = value; }, loadTranslations: async () => {},
   showUserError(error) { calls.push(["error", error.code || error.message]); },
-  waitForCandidateMutations: async () => calls.push(["wait"]), flushAllWorkspaceMutations: async () => calls.push(["flush"]),
+  waitForCandidateMutations: async () => calls.push(["wait"]), flushAllWorkspaceMutations: async () => calls.push(["flush"]), queueWorkspaceDraft: () => calls.push(["queueDraft"]), loadReviewedPaths: () => calls.push(["reviewed"]),
   resetCatalog(images) { state.images = images; calls.push(["reset", images.length]); }, applyProjectSnapshot(snapshot) { state.project = snapshot.project || state.project; state.projectReadOnly = snapshot.readOnly === true || state.project?.status === "completed"; calls.push(["snapshot"]); }, renderCatalogViews() { calls.push(["render"]); },
   updateActionButtons() { calls.push(["actions"]); }, rememberProjectSource: async () => "source", forgetProjectSources: async (id) => calls.push(["forget", id]), loadFolder: async () => calls.push(["loadFolder"]),
   rememberedProjectFileSources: async () => [], rememberedProjectDirectorySources: async () => [], ensureProjectSourcePermission: async () => true,
@@ -158,6 +158,26 @@ const test = context.projectTest;
   assert.ok(calls.some(([kind, id]) => kind === "forget" && id === "working"), "project deletion removes browser source handles");
   assert.equal(calls.slice(callsBeforeDelete).some(([kind]) => kind === "flush"), false, "deletion discards pending work instead of flushing it only to delete it");
   state.project = projects[0]; element("#projectNameInput").value = "Renamed"; await fire("#projectNameForm", "submit"); await fire("#projectNameCancel");
+  calls.length = 0;
+  state.project = null; state.images = [{ id: "browser-image" }]; state.drafts = new Map([["browser-image", { add: "data:image/png;base64,draft" }]]); state.sourceAccess = new Map(); state.candidateUpdateChains = new Map([["browser-image", Promise.resolve()]]);
+  context.api = async (url, options = {}) => {
+    calls.push(["api", url, options.method]);
+    if (url === "/api/project/name") return { project: { id: "promoted", name: "Promoted", status: "working" } };
+    if (url === "/api/images") return { project: { id: "promoted", name: "Promoted", status: "working" }, images: [{ id: "browser-image" }] };
+    return {};
+  };
+  test.openProjectNameDialog("name"); element("#projectNameInput").value = "Promoted"; await fire("#projectNameForm", "submit");
+  assert.deepEqual(calls.slice(0, 4).map(([kind, url]) => kind === "api" ? `${kind}:${url}` : kind), ["wait", "flush", "api:/api/project/name", "api:/api/images"], "projectless promotion waits for candidate and workspace writes before naming the project");
+  assert.equal(calls.filter(([kind]) => kind === "flush").length, 1, "projectless promotion flushes workspace mutations only before naming");
+  assert.equal(calls.some(([kind]) => kind === "queueDraft"), false, "projectless promotion does not replay browser drafts after naming");
+
+  calls.length = 0;
+  state.project = null; state.candidateUpdateChains = new Map();
+  context.flushAllWorkspaceMutations = async () => { throw new Error("workspace write failed"); };
+  test.openProjectNameDialog("name"); await fire("#projectNameForm", "submit");
+  assert.equal(calls.some(([kind, url]) => kind === "api" && url === "/api/project/name"), false, "a failed workspace flush prevents projectless promotion");
+  assert.equal(state.project, null, "a failed workspace flush keeps the session projectless");
+  assert.ok(calls.some(([kind, message]) => kind === "error" && message === "workspace write failed"), "a failed workspace flush is shown to the user");
   element("#sourceMismatchDialog").dataset.imageIds = JSON.stringify(["changed"]); element("#sourceMismatchClear").checked = true; await fire("#sourceMismatchForm", "submit"); await fire("#sourceMismatchCancel");
   await fire("#sameSourceOpen"); await fire("#sameSourceSeparate"); await fire("#sameSourceCancel");
   console.log("test_project_ui_runtime: passed");

@@ -284,7 +284,7 @@ function bindEvents() {
   $("#projectDeleteConfirm").addEventListener("click", () => { const projectId = projectDeleteId; projectDeleteId = ""; void deleteProject(projectId); });
   $("#projectNameForm").addEventListener("submit", (event) => { event.preventDefault(); void (async () => { try {
     const name = $("#projectNameInput").value.trim(); const projectlessSave = projectNameMode === "name" && !state.project?.id;
-    if (projectNameMode === "new") { if (state.candidateUpdateChains?.size) await waitForCandidateMutations(); await flushAllWorkspaceMutations(); }
+    if (projectNameMode === "new" || projectlessSave) { if (state.candidateUpdateChains?.size) await waitForCandidateMutations(); await flushAllWorkspaceMutations(); }
     const data = projectNameMode === "new" ? await api("/api/projects", { method: "POST", body: JSON.stringify({ name }) }) : await api("/api/project/name", { method: "POST", body: JSON.stringify({ name }) });
     state.project = data.project; state.projectReadOnly = false;
     if (projectlessSave) {
@@ -293,8 +293,6 @@ function bindEvents() {
         const access = state.sourceAccess.get(image.id);
         if (access?.fileHandle) void rememberProjectSource(state.project.id, access.fileHandle, image.id, image.sourceId || data.project.sourceIds?.[image.id]);
       }
-      for (const imageId of state.drafts.keys()) queueWorkspaceDraft(imageId, true);
-      await flushAllWorkspaceMutations();
     }
     $("#projectNameDialog").close(); if (projectNameMode === "new") resetCatalog([], ""); renderProjectCurrent();
   } catch (error) { showUserError(error); } })(); });
