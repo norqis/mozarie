@@ -1319,9 +1319,8 @@ class CatalogMixin:
             if any(record is None for record in records):
                 raise ClientError("画像が見つかりません。", "image_not_found")
             catalog_generation = self.catalog_generation
-        persisted_ids = [image_id for image_id in image_ids if self.workspace_store.has_image(image_id)]
-        if persisted_ids:
-            self.workspace_store.set_image_flags_bulk(persisted_ids, hidden=hidden, reviewed=reviewed)
+        if self.catalog_id is not None:
+            self.workspace_store.set_image_flags_bulk(image_ids, hidden=hidden, reviewed=reviewed)
         with self.lock:
             if self.catalog_generation != catalog_generation or any(self.images.get(image_id) is not record for image_id, record in zip(image_ids, records)):
                 raise ClientError("画像一覧が更新されました。もう一度お試しください。", "operation_in_progress")
