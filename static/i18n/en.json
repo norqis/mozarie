@@ -655,7 +655,7 @@
   "project.sortDescending": "Sort descending",
   "project.rowActions": "Actions for {name}",
   "project.mosaicZip": "Mosaic ZIP",
-  "project.excludeZip": "Exclusion ZIP",
+  "project.excludeZip": "Exclude ZIP",
   "project.deleteShort": "Delete",
   "project.exportMosaicFor": "Download all mosaic masks for {name}",
   "project.exportExcludeFor": "Download all exclusion masks for {name}",
