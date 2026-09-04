@@ -898,6 +898,180 @@ class MozarieTests(unittest.TestCase):
         third_catalog = third.catalog_id
         self.assertNotIn(third_catalog, {single_catalog, clone.catalog_id, target_catalog})
 
+    def test_projectless_promotion_rejects_an_identity_remap_before_publishing_project(self):
+        """Promotion must never expose a project whose live IDs were remapped."""
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "source.png"; Image.new("RGB", (12, 12), "white").save(source)
+            state = self.new_state(); image_id = state.set_root(directory)[0]["id"]
+            record = state.images[image_id]
+            original_state = (record.source_id, record.hidden, record.reviewed)
+            original = state.workspace_store.reconcile_images
+
+            def remap(catalog_id, records, **kwargs):
+                saved = original(catalog_id, records, **kwargs)
+                saved[records[0].relative_path] = {**saved[records[0].relative_path], "image_id": "wrong-id"}
+                return saved
+
+            with patch.object(state.workspace_store, "reconcile_images", side_effect=remap):
+                with self.assertRaisesRegex(RuntimeError, "changed an image identity"):
+                    state.save_current_as_project("Identity contract")
+            self.assertIsNone(state.catalog_id)
+            self.assertIn(image_id, state.images)
+            self.assertEqual((record.source_id, record.hidden, record.reviewed), original_state)
+
+    def test_browser_reconcile_failure_maps_to_client_error_and_rolls_back_new_source_and_file(self):
+        """A failed durable browser import leaves no source, session file, or live record behind."""
+        with tempfile.TemporaryDirectory() as directory, tempfile.TemporaryDirectory() as staging_directory:
+            state = self.new_state(); state.create_project("Browser rollback")
+            first = Path(staging_directory) / "first.upload"; Image.new("RGB", (12, 12), "red").save(first, format="PNG")
+            _images, imported = state.import_image_file_for_api(
+                first, name="first.png", relative_path="first.png", client_key="first", include_images=False,
+                source_identity="existing-source", source_kind="browser-files",
+            )
+            live_ids = list(state.order)
+            existing_id = imported[0]["imageId"]
+            upload = Path(staging_directory) / "failing.upload"; Image.new("RGB", (12, 12), "blue").save(upload, format="PNG")
+            original = state.workspace_store.reconcile_images
+
+            def collide(catalog_id, records, **kwargs):
+                if records and records[0].relative_path == "failing.png":
+                    records[0].image_id = existing_id
+                return original(catalog_id, records, **kwargs)
+
+            with patch.object(state.workspace_store, "reconcile_images", side_effect=collide):
+                with self.assertRaises(ClientError) as raised:
+                    state.import_image_file_for_api(
+                        upload, name="failing.png", relative_path="failing.png", client_key="failing", include_images=False,
+                        source_identity="new-source", source_kind="browser-files",
+                    )
+            self.assertEqual(raised.exception.error_code, "project_source_unavailable")
+            self.assertEqual(state.order, live_ids)
+            self.assertFalse((state.session_dir / "failing.png").exists())
+            self.assertNotIn("browser:new-source", {item["identity"] for item in state.workspace_store.project_sources(state.catalog_id)})
+
+    def test_projectless_bulk_flags_do_not_write_a_durable_workspace(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "source.png"; Image.new("RGB", (12, 12), "white").save(source)
+            state = self.new_state(); image_id = state.set_root(directory)[0]["id"]
+            with patch.object(state.workspace_store, "set_image_flags_bulk", side_effect=AssertionError("projectless must not write SQLite")):
+                changed = state.set_image_flags_bulk({"imageIds": [image_id], "hidden": True, "reviewed": True})
+            self.assertEqual(changed, {image_id: {"hidden": True, "reviewed": True}})
+            self.assertTrue(state.images[image_id].hidden)
+            self.assertTrue(state.images[image_id].reviewed)
+
+    def test_durable_bulk_flag_write_rejects_a_stale_catalog_without_publishing_it(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "source.png"; Image.new("RGB", (12, 12), "white").save(source)
+            state = self.new_state(); image_id = self.set_project_root(state, directory)[0]["id"]
+            original = state.workspace_store.set_image_flags_bulk
+
+            def write_then_replace(*args, **kwargs):
+                original(*args, **kwargs)
+                with state.lock:
+                    state.catalog_generation += 1
+
+            with patch.object(state.workspace_store, "set_image_flags_bulk", side_effect=write_then_replace):
+                with self.assertRaises(ClientError) as raised:
+                    state.set_image_flags_bulk({"imageIds": [image_id], "hidden": True})
+            self.assertEqual(raised.exception.error_code, "operation_in_progress")
+            self.assertFalse(state.images[image_id].hidden)
+            self.assertEqual(state.workspace_store.image_state(image_id), (True, False))
+
+    def test_semantic_sam_skips_area_outliers_before_accepting_a_valid_mask(self):
+        source = np.zeros((20, 20), dtype=np.uint8); source[5:15, 5:15] = 1
+        hand = np.zeros_like(source)
+        valid = source.astype(bool)
+        too_small = np.zeros_like(source, dtype=bool); too_small[5:9, 5:9] = True
+        too_large = np.ones_like(source, dtype=bool)
+        points = np.asarray([[7, 7]], dtype=np.float32); labels = np.asarray([1], dtype=np.int32)
+        selected = select_semantic_sam_mask(
+            np.asarray([too_small, too_large, valid]), np.asarray([.99, .98, .50]), source, hand, points, labels,
+        )
+        self.assertIsNotNone(selected)
+        self.assertEqual(selected[1], 2)
+
+    def test_workspace_rollback_import_rolls_back_all_rows_when_source_delete_trigger_fails(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); Image.new("RGB", (8, 8), "white").save(root / "image.png")
+            state = self.new_state(); state.create_project("rollback")
+            catalog_id = state.catalog_id; assert catalog_id is not None
+            source_id = state.workspace_store.ensure_project_source(catalog_id, kind="browser-files", display_name="Browser", identity="browser:rollback")
+            record = ImageRecord("rollback-image", root / "image.png", "image.png", 8, 8, 1, 2, source_kind="session")
+            state.workspace_store.reconcile_images(catalog_id, [record], source_id=source_id)
+            db = sqlite3.connect(state.workspace_store.path)
+            try:
+                db.execute("CREATE TRIGGER reject_source_delete BEFORE DELETE ON project_sources WHEN OLD.source_id='{}' BEGIN SELECT RAISE(ABORT, 'source delete rejected'); END".format(source_id))
+                db.commit()
+            finally:
+                db.close()
+            with self.assertRaisesRegex(sqlite3.DatabaseError, "source delete rejected"):
+                state.workspace_store.rollback_import(catalog_id, source_id, [record.image_id], delete_source=True)
+            self.assertTrue(state.workspace_store.has_image(record.image_id))
+            self.assertIn(source_id, {item["id"] for item in state.workspace_store.project_sources(catalog_id)})
+
+    def test_source_acknowledgement_rejects_unselected_clear_ids_before_any_write(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "source.png"; Image.new("RGB", (8, 8), "white").save(source)
+            state = self.new_state(); image_id = self.set_project_root(state, directory)[0]["id"]
+            record = state.images[image_id]
+            before = state.workspace_store.source_image_metadata(record.source_id)[record.relative_path]
+            with self.assertRaisesRegex(ValueError, "clear selection"):
+                state.workspace_store.acknowledge_source_mismatches([record], {"different-image": 1})
+            self.assertEqual(state.workspace_store.source_image_metadata(record.source_id)[record.relative_path], before)
+
+    def test_bulk_workspace_flags_accept_single_field_and_noop_inputs(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for name in ("one.png", "two.png"):
+                Image.new("RGB", (8, 8), "white").save(root / name)
+            state = self.new_state(); ids = [item["id"] for item in self.set_project_root(state, root)]
+            state.workspace_store.set_image_flags_bulk(ids, hidden=True)
+            self.assertEqual([state.workspace_store.image_state(image_id) for image_id in ids], [(True, False), (True, False)])
+            state.workspace_store.set_image_flags_bulk(ids, reviewed=True)
+            self.assertEqual([state.workspace_store.image_state(image_id) for image_id in ids], [(True, True), (True, True)])
+            with patch.object(state.workspace_store, "_connect", side_effect=AssertionError("no-op must not open SQLite")):
+                state.workspace_store.set_image_flags_bulk(ids, hidden=None, reviewed=None)
+                state.workspace_store.set_image_flags_bulk([], hidden=True)
+
+    def test_second_history_failure_rolls_back_a_multi_image_flag_batch(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for name in ("one.png", "two.png"):
+                Image.new("RGB", (8, 8), "white").save(root / name)
+            state = self.new_state(); ids = [item["id"] for item in self.set_project_root(state, root)]
+            db = sqlite3.connect(state.workspace_store.path)
+            try:
+                db.execute("CREATE TRIGGER reject_second_history BEFORE INSERT ON history_entries WHEN NEW.image_id='{}' BEGIN SELECT RAISE(ABORT, 'second history rejected'); END".format(ids[1]))
+                db.commit()
+            finally:
+                db.close()
+            with self.assertRaisesRegex(sqlite3.DatabaseError, "second history rejected"):
+                state.workspace_store.set_image_flags_bulk(ids, reviewed=True)
+            self.assertEqual([state.workspace_store.image_state(image_id) for image_id in ids], [(False, False), (False, False)])
+            db = sqlite3.connect(state.workspace_store.path)
+            try:
+                self.assertEqual(db.execute("SELECT COUNT(*) FROM history_entries").fetchone()[0], 0)
+                self.assertEqual(db.execute("SELECT COUNT(*) FROM history_groups").fetchone()[0], 0)
+            finally:
+                db.close()
+
+    def test_manual_workspace_rejects_removed_candidate_id_not_live_in_current_revision(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); Image.new("RGB", (8, 8), "white").save(root / "source.png")
+            state = self.new_state(); image_id = self.set_project_root(state, root)[0]["id"]
+            state.save_manual_workspace(image_id, {
+                "add": "", "exclusion": "", "exclusionErase": "", "removedCandidateIds": [],
+                "candidateRevision": 0, "hasEffectiveMask": False,
+            })
+            db = sqlite3.connect(state.workspace_store.path)
+            try:
+                db.execute("UPDATE manual_edits SET removed_candidate_ids='[\"gone\"]' WHERE image_id=?", (image_id,))
+                db.commit()
+            finally:
+                db.close()
+            with self.assertRaisesRegex(ValueError, "removed candidates"):
+                state.workspace_store.manual(image_id, state._encode_workspace_mask)
+
     def test_builtin_output_directory_is_created_for_default_copy(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
