@@ -386,6 +386,11 @@ button { overflow: visible; text-overflow: clip; white-space: nowrap; }
 .project-dialog-section h3 { margin: 0; font-size: 1rem; }
 .project-dialog-section p { margin: 0; }
 .project-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .5rem; align-items: stretch; }
+.native-relink-dialog { width: min(560px, calc(100vw - 2rem)); }
+.native-relink-sources { display: grid; gap: .45rem; max-height: 12rem; overflow-y: auto; }
+.native-relink-sources button { width: 100%; min-width: 0; overflow: hidden; text-align: left; text-overflow: ellipsis; white-space: nowrap; }
+.native-relink-sources button[aria-pressed="true"] { border-color: #57a993; background: #335d55; }
+.native-relink-dialog input { width: 100%; min-width: 0; }
 .project-list-dialog { width: min(1120px, calc(100vw - 2rem)); }
 .project-list-body { max-height: min(80vh, 44rem); overflow-y: auto; overflow-x: hidden; }
 .project-table-wrap { margin-top: .75rem; max-height: min(55vh, 32rem); overflow-x: hidden; overflow-y: auto; }
@@ -420,6 +425,8 @@ button { overflow: visible; text-overflow: clip; white-space: nowrap; }
   .project-list-dialog { width: calc(100vw - 1rem); max-width: none; }
   .project-list-body { max-height: calc(100vh - 1rem); }
   .project-actions { grid-template-columns: minmax(0, 1fr); }
+  .native-relink-dialog { width: calc(100vw - 1rem); max-width: none; }
+  .native-relink-sources button { white-space: normal; overflow-wrap: anywhere; }
   .project-table-wrap { overflow: visible; max-height: none; }
   .project-table, .project-table tbody, .project-table tr, .project-table th, .project-table td { display: block; width: 100%; }
   .project-table thead { display: block; margin-bottom: .75rem; }

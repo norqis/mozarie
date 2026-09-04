@@ -75,7 +75,6 @@ let projectListProjects = new Map();
 let projectExportBusy = new Set();
 let projectListSort = { key: "updated", direction: "desc" };
 let projectListSortPending = false;
-let nativeRelinkDialog = null;
 let nativeRelinkSourceId = "";
 
 function projectTitle(project) { return project?.name || t("project.unnamed"); }
@@ -99,7 +98,9 @@ function renderProjectCurrent() {
   $("#projectResume").hidden = !state.projectReadOnly;
   $("#projectResume").disabled = !project;
   $("#projectReadOnlyNotice").hidden = !state.projectReadOnly;
-  $("#projectSourceSelect").disabled = !project || state.projectReadOnly;
+  $("#projectSourceAdd").disabled = !project || state.projectReadOnly;
+  $("#projectSourceRelink").hidden = !state.missingNativeSources.length;
+  $("#projectSourceRelink").disabled = !project || state.projectReadOnly;
   $("#projectCloseWorkspace").dataset.i18n = project ? "project.close" : "project.closeWork";
   $("#projectCloseWorkspace").textContent = t($("#projectCloseWorkspace").dataset.i18n);
   $("#projectCloseWorkspace").disabled = !project && state.images.length === 0;
@@ -107,55 +108,26 @@ function renderProjectCurrent() {
 function missingNativeSources(sources) {
   return (sources || []).filter((source) => source.kind === "native-folder" && !source.exists);
 }
-function ensureNativeRelinkDialog() {
-  if (nativeRelinkDialog) return nativeRelinkDialog;
-  const dialog = document.createElement("dialog"); dialog.className = "modal-dialog"; dialog.id = "nativeRelinkDialog";
-  const body = document.createElement("form"); body.className = "dialog-body"; body.noValidate = true;
-  const title = document.createElement("h2"); title.textContent = t("project.sourceRelinkTitle");
-  const list = document.createElement("div"); list.className = "native-relink-sources";
-  const oldPath = document.createElement("p"); oldPath.className = "muted";
-  const label = document.createElement("label"); label.htmlFor = "nativeRelinkPath"; label.textContent = t("project.sourceRelinkPath");
-  const input = document.createElement("input"); input.id = "nativeRelinkPath"; input.type = "text"; input.autocomplete = "off"; input.required = true;
-  const actions = document.createElement("div"); actions.className = "dialog-actions";
-  const cancel = document.createElement("button"); cancel.type = "button"; cancel.textContent = t("dialog.cancel");
-  const submit = document.createElement("button"); submit.type = "submit"; submit.className = "primary"; submit.textContent = t("project.sourceRelinkConfirm");
-  actions.append(cancel, submit); body.append(title, list, oldPath, label, input, actions); dialog.append(body); document.body.append(dialog);
-  const selected = () => state.missingNativeSources.find((source) => source.id === nativeRelinkSourceId) || state.missingNativeSources[0] || null;
-  const render = () => {
-    const source = selected(); nativeRelinkSourceId = source?.id || "";
-    list.replaceChildren(...state.missingNativeSources.map((item) => {
-      const button = document.createElement("button"); button.type = "button";
-      button.textContent = `${item.displayName} · ${item.nativePath || t("project.noSource")}`;
-      button.classList.toggle("active", item.id === nativeRelinkSourceId);
-      button.addEventListener("click", () => { nativeRelinkSourceId = item.id; render(); });
-      return button;
-    }));
-    oldPath.textContent = source ? `${t("project.sourceRelinkOldPath")}: ${source.nativePath || t("project.noSource")}` : "";
-    input.value = source?.nativePath || "";
-  };
-  cancel.addEventListener("click", () => dialog.close());
-  dialog.addEventListener("cancel", (event) => { event.preventDefault(); dialog.close(); });
-  body.addEventListener("submit", (event) => { event.preventDefault(); void (async () => {
-    const source = selected(); if (!source || !state.project?.id) return;
-    submit.disabled = true; input.disabled = true;
-    try {
-      const snapshot = await api("/api/project/source/relink", { method: "POST", body: JSON.stringify({ projectId: state.project.id, sourceId: source.id, path: input.value.trim() }) });
-      state.images = snapshot.images || [];
-      applyProjectSnapshot(snapshot);
-      state.missingNativeSources = missingNativeSources(snapshot.sources);
-      renderProjectCurrent(); renderCatalogViews();
-      if (!state.missingNativeSources.length) dialog.close(); else render();
-      await showSourceMismatches();
-    } catch (error) { showUserError(error); }
-    finally { submit.disabled = false; input.disabled = false; }
-  })(); });
-  dialog.renderNativeSources = render;
-  nativeRelinkDialog = dialog; return dialog;
+function selectedNativeRelinkSource() {
+  return state.missingNativeSources.find((source) => source.id === nativeRelinkSourceId) || state.missingNativeSources[0] || null;
+}
+function renderNativeRelinkDialog() {
+  const source = selectedNativeRelinkSource(); nativeRelinkSourceId = source?.id || "";
+  const list = $("#nativeRelinkSources"); list.replaceChildren(...state.missingNativeSources.map((item) => {
+    const wrapper = document.createElement("div"); wrapper.setAttribute("role", "listitem");
+    const button = document.createElement("button"); button.type = "button";
+    button.textContent = `${item.displayName} · ${item.nativePath || t("project.noSource")}`;
+    button.setAttribute("aria-pressed", String(item.id === nativeRelinkSourceId));
+    button.addEventListener("click", () => { nativeRelinkSourceId = item.id; renderNativeRelinkDialog(); });
+    wrapper.append(button); return wrapper;
+  }));
+  $("#nativeRelinkOldPath").textContent = source ? `${t("project.sourceRelinkOldPath")}: ${source.nativePath || t("project.noSource")}` : "";
+  $("#nativeRelinkPath").value = source?.nativePath || "";
 }
 function showNativeRelinkDialog() {
   if (!state.missingNativeSources.length) return;
-  const dialog = ensureNativeRelinkDialog(); nativeRelinkSourceId = state.missingNativeSources[0].id;
-  dialog.renderNativeSources(); showModalFromInvoker(dialog, $("#projectSourceSelect")); focusElement($("#nativeRelinkPath"));
+  nativeRelinkSourceId = state.missingNativeSources[0].id;
+  renderNativeRelinkDialog(); showModalFromInvoker($("#nativeRelinkDialog"), $("#projectSourceRelink")); focusElement($("#nativeRelinkPath"));
 }
 function openProjectNameDialog(mode) {
   projectNameMode = mode; $("#projectNameInput").value = mode === "name" ? (state.project?.name || "") : "";
@@ -476,10 +448,9 @@ function bindEvents() {
     else if (button.dataset.projectAction === "delete") openProjectDeleteDialog(project.id);
   });
   $("#projectResume").addEventListener("click", () => { void resumeCurrentProject(); });
-  $("#projectSourceSelect").addEventListener("click", () => { void (async () => {
+  $("#projectSourceAdd").addEventListener("click", () => { void (async () => {
     if (!state.project?.id) return;
     try {
-      if (state.missingNativeSources.length) return showNativeRelinkDialog();
       const handle = await window.showDirectoryPicker({ mode: "read", id: "mozarie-project-source" });
       const matches = await matchingProjectDirectorySources(handle);
       const current = matches.find((source) => source.projectId === state.project.id);
@@ -496,6 +467,24 @@ function bindEvents() {
       await showSourceMismatches();
     }
     catch (error) { if (error?.name !== "AbortError") showUserError(error); }
+  })(); });
+  $("#projectSourceRelink").addEventListener("click", showNativeRelinkDialog);
+  $("#nativeRelinkCancel").addEventListener("click", () => $("#nativeRelinkDialog").close());
+  $("#nativeRelinkDialog").addEventListener("cancel", (event) => { event.preventDefault(); $("#nativeRelinkDialog").close(); });
+  $("#nativeRelinkForm").addEventListener("submit", (event) => { event.preventDefault(); void (async () => {
+    const source = selectedNativeRelinkSource(); if (!source || !state.project?.id) return;
+    const submit = $("#nativeRelinkConfirm"); const input = $("#nativeRelinkPath");
+    submit.disabled = true; input.disabled = true;
+    try {
+      const snapshot = await api("/api/project/source/relink", { method: "POST", body: JSON.stringify({ projectId: state.project.id, sourceId: source.id, path: input.value.trim() }) });
+      state.images = snapshot.images || [];
+      applyProjectSnapshot(snapshot);
+      state.missingNativeSources = missingNativeSources(snapshot.sources);
+      renderProjectCurrent(); renderCatalogViews();
+      if (!state.missingNativeSources.length) $("#nativeRelinkDialog").close(); else renderNativeRelinkDialog();
+      await showSourceMismatches();
+    } catch (error) { showUserError(error); }
+    finally { submit.disabled = false; input.disabled = false; }
   })(); });
   $("#projectCloseWorkspace").addEventListener("click", () => { void (async () => { try { await flushAllWorkspaceMutations(); await api("/api/project/close", { method: "POST", body: "{}" }); resetCatalog([], ""); state.project = null; state.projectReadOnly = false; state.missingNativeSources = []; $("#projectDialog").close(); } catch (error) { showUserError(error); } })(); });
   $("#projectComplete").addEventListener("click", () => { void (async () => { if (!await confirmAction(t("project.complete"), t("project.completeConfirm"))) return; try { await flushAllWorkspaceMutations(); await api("/api/project/complete", { method: "POST", body: "{}" }); resetCatalog([], ""); state.project = null; state.projectReadOnly = false; state.missingNativeSources = []; $("#projectDialog").close(); } catch (error) { showUserError(error); } })(); });

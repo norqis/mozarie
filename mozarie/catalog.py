@@ -30,7 +30,7 @@ from .domain import Candidate, CandidateRole
 from .image_io import _valid_color, decode_draft_masks, draft_manual_exclusion_forced, inspect_import_image, oriented_image_size, unique_session_import_destination
 from .masks import compose_masks, expand_mask
 from .runtime import patch_directml_sam_prompt_encoder, runtime_backend, torch_device
-from .workspace import ProjectNameAlreadyExistsError, WorkspaceStore
+from .workspace import ProjectNameAlreadyExistsError, ProjectSourcePathConflictError, ProjectSourceUnavailableError, WorkspaceStore
 
 class CatalogMixin:
     def _assert_image_editable(self, image_id: str) -> None:
@@ -268,9 +268,15 @@ class CatalogMixin:
             stored = self.workspace_store.relink_native_source(catalog_id, source_id, root, records) if relink_source_id else (
                 self.workspace_store.reconcile_images(catalog_id, records, source_id=source_id) if catalog_id is not None else {}
             )
-        except ValueError as exc:
+        except ProjectSourcePathConflictError as exc:
             if relink_source_id:
                 raise ClientError("このプロジェクトの別の元フォルダーに同じパスが設定されています。", "project_source_conflict") from exc
+            raise
+        except ProjectSourceUnavailableError as exc:
+            raise ClientError("元フォルダーが見つかりません。", "project_source_unavailable") from exc
+        except ValueError as exc:
+            if relink_source_id:
+                raise ClientError("元フォルダーを読み込めません。", "project_source_unavailable") from exc
             raise
         # A project can have several sources. Missing files remain durable so
         # their masks can still be exported or relinked later.
@@ -326,7 +332,7 @@ class CatalogMixin:
                     raise ClientError("完了したプロジェクトの元フォルダーは再指定できません。", "project_read_only")
             try:
                 self.workspace_store.native_source(project_id, source_id)
-            except ValueError as exc:
+            except ProjectSourceUnavailableError as exc:
                 raise ClientError("元フォルダーが見つかりません。", "project_source_unavailable") from exc
             self._set_root(raw_path, project_id, relink_source_id=source_id)
             snapshot = self.catalog_snapshot()
@@ -347,6 +353,8 @@ class CatalogMixin:
 
     def create_project(self, name: str | None = None) -> dict[str, Any]:
         with self.import_lock:
+            with self.lock:
+                self._assert_catalog_mutable()
             try:
                 project = self.workspace_store.create_project(name)
             except ProjectNameAlreadyExistsError as exc:

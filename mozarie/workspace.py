@@ -36,6 +36,14 @@ class ProjectNameAlreadyExistsError(ValueError):
     """A project name conflicts with the database uniqueness constraint."""
 
 
+class ProjectSourceUnavailableError(ValueError):
+    """A requested project source is missing or is not native."""
+
+
+class ProjectSourcePathConflictError(ValueError):
+    """Another native source in this project already owns the path."""
+
+
 class _ClosingConnection(sqlite3.Connection):
     """sqlite's context manager commits but does not close on Windows."""
     def __exit__(self, *args: Any) -> None:
@@ -425,7 +433,7 @@ class WorkspaceStore:
             row = db.execute("""SELECT source_id,kind,display_name,native_path,source_identity
                 FROM project_sources WHERE catalog_id=? AND source_id=?""", (catalog_id, source_id)).fetchone()
         if row is None or str(row["kind"]) != "native-folder":
-            raise ValueError("native project source is missing")
+            raise ProjectSourceUnavailableError("native project source is missing")
         return {"id": str(row["source_id"]), "kind": str(row["kind"]), "displayName": str(row["display_name"]),
                 "nativePath": row["native_path"], "identity": str(row["source_identity"])}
 
@@ -434,12 +442,12 @@ class WorkspaceStore:
         def update_source(db: sqlite3.Connection) -> None:
             source = db.execute("SELECT kind FROM project_sources WHERE catalog_id=? AND source_id=?", (catalog_id, source_id)).fetchone()
             if source is None or str(source["kind"]) != "native-folder":
-                raise ValueError("native project source is missing")
+                raise ProjectSourceUnavailableError("native project source is missing")
             conflict = db.execute("""SELECT source_id FROM project_sources
                 WHERE catalog_id=? AND kind='native-folder' AND source_identity=? AND source_id<>?""",
                                   (catalog_id, identity, source_id)).fetchone()
             if conflict is not None:
-                raise ValueError("native project source path already belongs to this project")
+                raise ProjectSourcePathConflictError("native project source path already belongs to this project")
             db.execute("""UPDATE project_sources SET display_name=?,native_path=?,source_identity=?
                 WHERE catalog_id=? AND source_id=?""", (root.name or identity, identity, identity, catalog_id, source_id))
         return self.reconcile_images(catalog_id, records, source_id=source_id, before_reconcile=update_source)
