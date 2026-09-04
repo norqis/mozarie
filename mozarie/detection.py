@@ -531,7 +531,10 @@ class DetectionMixin:
             for final_mask in final_masks:
                 if np.any(final_mask):
                     fluid_union = np.maximum(fluid_union, white_fluid_mask(rgb, final_mask))
-        metadata_fluid = self._metadata_fluid_mask(rgb, final_masks, hand_evidence, faces, scene_fluid_tags)
+        metadata_fluid = (
+            self._metadata_fluid_mask(rgb, final_masks, hand_evidence, faces, scene_fluid_tags)
+            if self.settings["detection"]["fluid_exclusion_enabled"] else np.zeros(shape, dtype=np.uint8)
+        )
         if not targets:
             if np.any(metadata_fluid):
                 segments.append({"class_name": "__fluid_exclusion__", "metadata_exclusions": {"fluid": metadata_fluid}})
@@ -632,6 +635,8 @@ class DetectionMixin:
             with Image.open(record.path) as image:
                 scene_fluid_tags = _scene_fluid_tags(dict(image.info))
                 rgb = np.asarray(ImageOps.exif_transpose(image).convert("RGB")).copy()
+        if not self.settings["detection"]["fluid_exclusion_enabled"]:
+            scene_fluid_tags = frozenset()
         segments = self._detect_arbitrated_segments(models, rgb, confidence, target_classes or TARGET_CLASSES, scene_fluid_tags)
         detected, hand_mask, _ = self._hand_refinement_context(models, record, rgb, segments)
         needs_high_precision = mode == "high_precision" and bool(detected)

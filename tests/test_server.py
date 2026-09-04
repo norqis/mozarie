@@ -36,6 +36,7 @@ import mozarie.http as http_module  # noqa: E402
 import mozarie.image_io as image_io_module  # noqa: E402
 import mozarie.state as state_module  # noqa: E402
 import mozarie.catalog as catalog_module  # noqa: E402
+import mozarie.config as config_module  # noqa: E402
 import mozarie.detection as detection_module  # noqa: E402
 import mozarie.jobs as jobs_module  # noqa: E402
 import mozarie.saving as saving_module  # noqa: E402
@@ -3460,6 +3461,33 @@ class MozarieTests(unittest.TestCase):
                     self.assertEqual(hand_constructor.call_count, int(hand_enabled))
                     self.assertIsNone(state.hand_segmentation_predictor)
 
+    def test_hand_toggle_truth_table_rejects_orphan_segmentation(self):
+        state = self.new_state()
+        for hand_detection_enabled, hand_segmentation_enabled in ((False, False), (True, False), (True, True)):
+            with self.subTest(hand_detection_enabled=hand_detection_enabled, hand_segmentation_enabled=hand_segmentation_enabled):
+                update = copy.deepcopy(state.settings)
+                update["models"].update({
+                    "hand_detection_enabled": hand_detection_enabled,
+                    "hand_segmentation_enabled": hand_segmentation_enabled,
+                })
+                self.assertEqual(
+                    state.settings_store.validate_update(update)["models"]["hand_segmentation_enabled"], hand_segmentation_enabled,
+                )
+        invalid = copy.deepcopy(state.settings)
+        invalid["models"].update({"hand_detection_enabled": False, "hand_segmentation_enabled": True})
+        with self.assertRaises(config_module.SettingsError):
+            state.settings_store.validate_update(invalid)
+
+    def test_settings_save_keeps_current_candidates_until_successful_redetection(self):
+        state = self.new_state()
+        automatic = Candidate("auto", "penis", .8, Path("auto.png"))
+        state.candidates = {"image": [automatic]}
+        update = copy.deepcopy(state.settings)
+        update["detection"]["fluid_exclusion_enabled"] = not update["detection"]["fluid_exclusion_enabled"]
+        with patch.object(state, "_require_supported_gpu"), patch.object(state.settings_store, "save", return_value=update):
+            state.update_settings(update)
+        self.assertEqual(state.candidates["image"], [automatic])
+
     def test_disabled_optional_models_skip_status_validation(self):
         state = self.new_state()
         state.settings["models"].update({
@@ -4119,21 +4147,34 @@ class MozarieTests(unittest.TestCase):
             unchanged = state._finalize_exclusions(rgb, [{"class_name": "female_face", "mask": target}], frozenset({"cum_on_breasts"}))
         self.assertEqual(len(unchanged), 1)
 
-    def test_scene_metadata_fluid_is_a_non_forced_exclusion_candidate(self):
+    def test_fluid_toggle_gates_scene_metadata_targets_and_candidates(self):
         with tempfile.TemporaryDirectory() as directory:
             source = Path(directory) / "scene.png"
-            info = PngImagePlugin.PngInfo(); info.add_text("scene_positive", "cum in pussy")
+            info = PngImagePlugin.PngInfo(); info.add_text("scene_positive", "cum_on_breasts")
             Image.new("RGB", (40, 40), "black").save(source, pnginfo=info)
             state = self.new_state(); image_id = state.set_root(directory)[0]["id"]; record = state.images[image_id]
             target = np.zeros((40, 40), dtype=np.uint8); target[15:25, 15:25] = 255
-            segment = {"class_name": "pussy", "mask": target, "confidence": .8, "source": "target"}
+            face = np.zeros((40, 40), dtype=np.uint8); face[4:10, 16:24] = 255
             state.settings["detection"]["fluid_exclusion_enabled"] = False
-            with patch.object(state, "_detect_arbitrated_segments", return_value=[segment]) as detect, \
-                    patch.object(detection_module, "white_fluid_mask", side_effect=lambda _rgb, search: np.asarray(search, dtype=np.uint8) * 255):
-                candidates = state._detect_image(Mock(), record, .5)
-            self.assertEqual(detect.call_args.args[-1], frozenset({"cum in pussy"}))
+            detector = Mock()
+            detector.detect.return_value = [
+                {"class_name": "penis", "mask": target, "confidence": .8, "source": "target"},
+                {"class_name": "female_face", "mask": face, "confidence": .8, "source": "target"},
+            ]
+            models = DetectionModels(target=detector)
+            with patch.object(detection_module, "white_fluid_mask") as fluid_mask:
+                candidates = state._detect_image(models, record, .5)
+            self.assertEqual(set(detector.detect.call_args.args[-1]), {"penis", "pussy", "testicles"})
+            fluid_mask.assert_not_called()
+            self.assertEqual([candidate.source for candidate in candidates], ["target"])
+
+            state.settings["detection"]["fluid_exclusion_enabled"] = True
+            with patch.object(detection_module, "white_fluid_mask", side_effect=lambda _rgb, search: np.asarray(search, dtype=np.uint8) * 255) as fluid_mask:
+                candidates = state._detect_image(models, record, .5)
+            self.assertIn("female_face", detector.detect.call_args.args[-1])
+            self.assertEqual(fluid_mask.call_count, 2)
             fluid = next(candidate for candidate in candidates if candidate.label_token == "fluid")
-            self.assertEqual((fluid.role, fluid.forced), (CandidateRole.EXCLUDE, False))
+            self.assertEqual((fluid.source, fluid.role, fluid.forced), ("fluid_exclusion", CandidateRole.EXCLUDE, False))
 
     def test_boundary_request_requires_a_valid_roi_and_click(self):
         roi, point = read_boundary_request(
