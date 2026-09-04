@@ -740,9 +740,9 @@ function bindEvents() {
   const finishCompareDrag = (event, commit) => {
     if (!compareDrag || compareDrag.pointerId !== event.pointerId) return;
     if (compareDrag.frame) cancelAnimationFrame(compareDrag.frame);
-    const { initial, moved } = compareDrag;
+    const { initial, moved, latestX } = compareDrag;
     compareDrag.frame = 0;
-    if (commit && moved) setCompareSplit(event.clientX);
+    if (commit && moved && latestX !== null) setCompareSplit(latestX);
     else if (!commit && moved) { state.compareSplit = initial; updateCompareSplitter(); render(); updateBrushCursor(); }
     compareDrag = null; splitter.classList.remove("dragging");
     if (splitter.hasPointerCapture(event.pointerId)) splitter.releasePointerCapture(event.pointerId);
