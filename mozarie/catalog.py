@@ -705,44 +705,58 @@ class CatalogMixin:
             with self.lock:
                 self._restore_workspace_candidates([self.images[image_id] for image_id in resized if image_id in self.images])
 
-    def detach_catalog(self) -> str | None:
-        """Clear only the live screen state while retaining durable work."""
+    def _assert_catalog_detachable_unchecked(self) -> None:
+        if self.active_import_count or self.job.state in {"running", "pausing", "paused"} or self._has_active_worker():
+            raise ClientError("処理が終了するまで画像一覧を変更できません。", "operation_in_progress")
+
+    def _detach_catalog_state_unchecked(self) -> tuple[str | None, tuple[Path | None, Any | None]]:
+        catalog_id = self.catalog_id
+        self.images = {}
+        self.order = []
+        self.candidates = {}
+        self.candidate_revisions = {}
+        self.projectless_manual_drafts.clear()
+        self._clear_browser_save_tokens_unchecked()
+        self._invalidate_sam_cache()
+        self.catalog_id = None
+        self.project_read_only = False
+        self.source_mismatches = {}
+        self.source_roots = {}
+        self.catalog_generation += 1
+        session = self._detach_session_unchecked()
+        self._image_io_locks.clear()
+        return catalog_id, session
+
+    def _detach_catalog(self, *, prune_workspace: bool) -> str | None:
         with self.import_lock:
-            # Closing a completed project is always allowed; it does not alter
-            # project data.
-            self.project_read_only = False
             with self.lock:
+                self._assert_catalog_detachable_unchecked()
+                catalog_id = self.catalog_id
+                catalog_generation = self.catalog_generation
                 image_ids = tuple(self.images)
             locks = [(image_id, self.image_io_lock(image_id)) for image_id in image_ids]
             with ExitStack() as stack:
                 for _image_id, image_lock in sorted(locks):
                     stack.enter_context(image_lock)
                 with self.lock:
-                    self._assert_catalog_mutable()
-                    self.images = {}
-                    self.order = []
-                    self.candidates = {}
-                    self.candidate_revisions = {}
-                    self.projectless_manual_drafts.clear()
-                    self._clear_browser_save_tokens_unchecked()
-                    self._invalidate_sam_cache()
-                    catalog_id = self.catalog_id
-                    self.catalog_id = None
-                    self.source_mismatches = {}
-                    self.source_roots = {}
-                    self.catalog_generation += 1
-                    session = self._detach_session_unchecked()
-                    self._image_io_locks.clear()
+                    self._assert_catalog_detachable_unchecked()
+                    if (self.catalog_id, self.catalog_generation, tuple(self.images)) != (catalog_id, catalog_generation, image_ids):
+                        raise ClientError("画像一覧が変更されたため、操作をやり直してください。", "catalog_changed")
+                    if prune_workspace and catalog_id:
+                        self.workspace_store.prune_catalog_images(catalog_id, set())
+                    catalog_id, session = self._detach_catalog_state_unchecked()
                 self._clear_cache()
                 self._release_detached_session(session)
         self.cleanup_expired_browser_save_tokens()
         return catalog_id
 
+    def detach_catalog(self) -> str | None:
+        """Clear only the live screen state while retaining durable work."""
+        return self._detach_catalog(prune_workspace=False)
+
     def clear_catalog(self) -> None:
-        """Explicit user clear: remove durable rows after detaching the view."""
-        catalog_id = self.detach_catalog()
-        if catalog_id:
-            self.workspace_store.prune_catalog_images(catalog_id, set())
+        """Explicit user clear: commit durable removal before detaching the view."""
+        self._detach_catalog(prune_workspace=True)
 
     def remove_image_from_catalog(self, image_id: str) -> list[dict[str, Any]]:
         """Remove one image's working state without deleting its source file."""
