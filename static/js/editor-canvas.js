@@ -140,41 +140,51 @@ function loadImage(source) {
 }
 
 function imageAssetVersion(record) { return typeof record?.assetVersion === "string" ? record.assetVersion : ""; }
-function invalidateStaleAsset(imageId) {
+function invalidateStaleAssets(imageIds) {
+  const ids = new Set(imageIds);
+  if (!ids.size) return;
   abortCatalogLoads();
   const bitmaps = new Set();
-  for (const [key] of [...state.imageCache.items]) if (key.startsWith(`${imageId}:`)) bitmaps.add(state.imageCache.take(key));
+  for (const [key] of [...state.imageCache.items]) {
+    if (ids.has(key.slice(0, key.indexOf(":")))) bitmaps.add(state.imageCache.take(key));
+  }
   for (const [key] of [...state.candidateBundleCache.items]) {
-    if (!key.startsWith(`${imageId}:`)) continue;
+    if (!ids.has(key.slice(0, key.indexOf(":")))) continue;
     for (const bitmap of state.candidateBundleCache.take(key)?.candidateImages?.values() || []) bitmaps.add(bitmap);
   }
-  const gallery = state.galleryNodes.get(imageId)?.querySelector("img");
-  const overview = state.overviewNodes.get(imageId)?.querySelector("img");
-  forgetThumbnail(gallery); forgetThumbnail(overview);
-  if (state.currentId === imageId) {
+  for (const imageId of ids) {
+    forgetThumbnail(state.galleryNodes.get(imageId)?.querySelector("img"));
+    forgetThumbnail(state.overviewNodes.get(imageId)?.querySelector("img"));
+  }
+  if (ids.has(state.currentId)) {
     bitmaps.add(state.currentImage);
     for (const bitmap of state.candidateImages.values()) bitmaps.add(bitmap);
   }
   for (const bitmap of bitmaps) closeBitmap(bitmap);
-  if (state.currentId !== imageId) return;
+  if (!ids.has(state.currentId)) return;
   closeBoundaryModeMenu({ restoreFocus: true });
   state.currentId = null; state.currentImage = null; state.candidates = []; state.candidateImages = new Map();
   clearEditor(); updateGalleryCurrent();
 }
 
+function invalidateStaleAsset(imageId) { invalidateStaleAssets([imageId]); }
+
 async function refreshWorkspaceImages(snapshot, imageIds, { clearWorkspace = false } = {}) {
   ++state.imageGeneration;
   const ids = new Set(imageIds);
   const currentId = ids.has(state.currentId) ? state.currentId : null;
+  invalidateStaleAssets(ids);
   for (const imageId of ids) {
-    invalidateStaleAsset(imageId);
     if (!clearWorkspace) continue;
     state.drafts.delete(imageId);
     state.maskStatus.delete(imageId);
     state.projectHistory.delete(imageId);
     clearCandidateMutationState(imageId);
   }
-  if (clearWorkspace && currentId) state.removedCandidateIds.clear();
+  if (clearWorkspace && currentId) {
+    state.removedCandidateIds.clear();
+    clearCandidateBlink();
+  }
   state.images = snapshot.images || state.images;
   loadReviewedPaths();
   applyProjectSnapshot(snapshot);

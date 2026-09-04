@@ -30,7 +30,7 @@ from .domain import Candidate, CandidateRole
 from .image_io import _valid_color, decode_draft_masks, draft_manual_exclusion_forced, inspect_import_image, oriented_image_size, unique_session_import_destination
 from .masks import compose_masks, expand_mask
 from .runtime import patch_directml_sam_prompt_encoder, runtime_backend, torch_device
-from .workspace import ProjectNameAlreadyExistsError, ProjectSourcePathConflictError, ProjectSourceUnavailableError, WorkspaceStore
+from .workspace import ProjectNameAlreadyExistsError, ProjectSourceNoMatchError, ProjectSourcePathConflictError, ProjectSourceUnavailableError, WorkspaceStore
 
 class CatalogMixin:
     def _assert_image_editable(self, image_id: str) -> None:
@@ -278,6 +278,8 @@ class CatalogMixin:
             if relink_source_id:
                 raise ClientError("このプロジェクトの別の元フォルダーに同じパスが設定されています。", "project_source_conflict") from exc
             raise
+        except ProjectSourceNoMatchError as exc:
+            raise ClientError("指定したフォルダーに、この元フォルダーの画像がありません。", "project_source_no_match") from exc
         except ProjectSourceUnavailableError as exc:
             raise ClientError("元フォルダーが見つかりません。", "project_source_unavailable") from exc
         except ValueError as exc:

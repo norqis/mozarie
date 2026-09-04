@@ -71,6 +71,7 @@ let sameSourcePath = "";
 let sameSourceSelectedProjectId = "";
 let sameSourceDirectoryHandle = null;
 let sameSourceCurrentSourceId = null;
+let sameSourceDirectoryProjectId = null;
 let sameSourceBusy = false;
 let projectDeleteId = "";
 let projectListProjects = new Map();
@@ -435,11 +436,12 @@ async function deleteProject(projectId) {
   }
 }
 
-function showSameSourceDialog(projects, { path = "", directoryHandle = null, currentSourceId = null } = {}) {
+function showSameSourceDialog(projects, { path = "", directoryHandle = null, currentSourceId = null, directoryProjectId = null } = {}) {
   sameSourceProjects = projects;
   sameSourcePath = path;
   sameSourceDirectoryHandle = directoryHandle;
   sameSourceCurrentSourceId = currentSourceId;
+  sameSourceDirectoryProjectId = directoryProjectId;
   $("#sameSourceSeparate").hidden = false;
   $("#sameSourceSeparate").textContent = t(directoryHandle ? "project.sameSourceAddCurrent" : "project.sameSourceSeparate");
   const list = $("#sameSourceList"); list.replaceChildren();
@@ -489,24 +491,28 @@ function bindEvents() {
   });
   $("#projectResume").addEventListener("click", () => { void resumeCurrentProject(); });
   $("#projectSourceAdd").addEventListener("click", () => { void (async () => {
-    if (!state.project?.id) return;
+    const projectId = state.project?.id;
+    if (!projectId || !beginProjectOperation()) return;
+    let held = true;
     try {
       const handle = await window.showDirectoryPicker({ mode: "read", id: "mozarie-project-source" });
       const matches = await matchingProjectDirectorySources(handle);
-      const current = matches.find((source) => source.projectId === state.project.id);
-      const others = new Set(matches.filter((source) => source.projectId !== state.project.id).map((source) => source.projectId));
+      const current = matches.find((source) => source.projectId === projectId);
+      const others = new Set(matches.filter((source) => source.projectId !== projectId).map((source) => source.projectId));
       if (others.size) {
         const data = await api("/api/projects?sort=updated_desc");
         const projects = (data.projects || []).filter((project) => others.has(project.id));
         if (projects.length) {
-          showSameSourceDialog(projects, { directoryHandle: handle, currentSourceId: current?.sourceId || null });
+          endProjectOperation(); held = false;
+          showSameSourceDialog(projects, { directoryHandle: handle, currentSourceId: current?.sourceId || null, directoryProjectId: projectId });
           return;
         }
       }
-      await importProjectDirectoryHandle(handle, state.project.id, current?.sourceId || null);
+      await importProjectDirectoryHandle(handle, projectId, current?.sourceId || null);
       await showSourceMismatches();
     }
     catch (error) { if (error?.name !== "AbortError") showUserError(error); }
+    finally { if (held) endProjectOperation(); }
   })(); });
   $("#projectSourceRelink").addEventListener("click", showNativeRelinkDialog);
   $("#nativeRelinkCancel").addEventListener("click", () => { if (!nativeRelinkBusy) $("#nativeRelinkDialog").close(); });
@@ -576,10 +582,11 @@ function bindEvents() {
       const handle = sameSourceDirectoryHandle;
       const sourceId = sameSourceCurrentSourceId;
       if (handle) {
+        const projectId = sameSourceDirectoryProjectId;
         $("#sameSourceDialog").close();
         await flushAllImageMutations();
         await flushAllWorkspaceMutations();
-        await importProjectDirectoryHandle(handle, state.project.id, sourceId);
+        await importProjectDirectoryHandle(handle, projectId, sourceId);
         await showSourceMismatches();
         return;
       }

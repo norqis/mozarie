@@ -44,6 +44,10 @@ class ProjectSourcePathConflictError(ValueError):
     """Another native source in this project already owns the path."""
 
 
+class ProjectSourceNoMatchError(ValueError):
+    """A replacement native source has no images from the stored source."""
+
+
 class _ClosingConnection(sqlite3.Connection):
     """sqlite's context manager commits but does not close on Windows."""
     def __exit__(self, *args: Any) -> None:
@@ -439,6 +443,7 @@ class WorkspaceStore:
 
     def relink_native_source(self, catalog_id: str, source_id: str, root: Path, records: list[Any], *, allow_new: bool) -> dict[str, dict[str, Any]]:
         identity = str(root.resolve())
+        incoming_paths = {str(record.relative_path) for record in records}
         def update_source(db: sqlite3.Connection, now: int) -> None:
             source = db.execute("SELECT kind FROM project_sources WHERE catalog_id=? AND source_id=?", (catalog_id, source_id)).fetchone()
             if source is None or str(source["kind"]) != "native-folder":
@@ -448,6 +453,11 @@ class WorkspaceStore:
                                   (catalog_id, identity, source_id)).fetchone()
             if conflict is not None:
                 raise ProjectSourcePathConflictError("native project source path already belongs to this project")
+            existing_paths = {str(row["relative_path"]) for row in db.execute(
+                "SELECT relative_path FROM images WHERE catalog_id=? AND source_id=?", (catalog_id, source_id)
+            )}
+            if existing_paths and not existing_paths.intersection(incoming_paths):
+                raise ProjectSourceNoMatchError("replacement native project source has no matching images")
             db.execute("""UPDATE project_sources SET display_name=?,native_path=?,source_identity=?
                 WHERE catalog_id=? AND source_id=?""", (root.name or identity, identity, identity, catalog_id, source_id))
             db.execute("UPDATE catalogs SET source_root=?,updated_at=? WHERE catalog_id=?", (identity, now, catalog_id))
