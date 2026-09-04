@@ -281,7 +281,7 @@ async function runSelectionAction(action) {
     const flags = action === "hide" ? { hidden: true } : action === "show" ? { hidden: false }
       : { reviewed: action === "reviewed" };
     const data = await api("/api/workspace/images", { method: "POST", body: JSON.stringify({ imageIds: ids, ...flags }) });
-    for (const image of images) Object.assign(image, data.flags?.[image.id] || flags);
+    for (const image of images) publishWorkspaceFlags(image.id, data.flags?.[image.id] || flags);
     preserveCatalogScroll(renderCatalogViews); updateSelectionActionBar(); updateNavigationControls(); updateActionButtons();
     return;
   }

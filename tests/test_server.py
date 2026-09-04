@@ -772,7 +772,7 @@ class MozarieTests(unittest.TestCase):
             reopened.open_project(state.catalog_id)
             self.assertIsNone(reopened.manual_workspace(image_id))
 
-    def _import_browser_manifest(self, state, files, catalog_id=None):
+    def _import_browser_manifest(self, state, files, catalog_id=None, source_identity="test-browser-manifest"):
         if catalog_id is None:
             state.create_project()
         else:
@@ -786,6 +786,7 @@ class MozarieTests(unittest.TestCase):
                 _images, items = state.import_image_file_for_api(
                     upload, name=Path(relative_path).name, relative_path=relative_path,
                     client_key=f"manifest-{index}", include_images=False, mtime_ns=20, size_bytes=len(raw),
+                    source_identity=source_identity, source_kind="browser-files",
                 )
                 imported[relative_path] = items[0]["imageId"]
         return imported

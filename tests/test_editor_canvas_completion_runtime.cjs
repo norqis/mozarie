@@ -84,12 +84,13 @@ const context = {
   closeBoundaryModeMenu() {}, cancelFillWork() {}, clearBoundaryInteraction() {}, renderCandidates() {}, updateHistoryButtons() {}, updateNavigationControls() {}, updateActionButtons() {}, updateGalleryCurrent() {},
   currentRecord: () => state.images.find((image) => image.id === state.currentId), calculatedBlockSize: () => 4,
   resetHistoryToCurrentManualMask() {}, rebuildManualMaskFromHistory() {}, renderCatalogViews() {},
+  closeBitmap(image) { image?.close?.(); },
 };
 
 const canvasPath = path.join(__dirname, "..", "static", "js", "editor-canvas.js");
 const source = fs.readFileSync(canvasPath, "utf8");
 vm.runInNewContext(source, context, { filename: canvasPath });
-vm.runInNewContext("globalThis.canvasCompletion = { canvasSizeForImage, ensureHistoryCanvases, releaseHistoryCanvases, clearEditor, canvasHasPixels, syncCandidateRecord, syncStoredMaskStatus, refreshCandidateRecord, updateCandidateStatus, canvasToDataUrl, decodeDraftImages, releaseMosaicPreview, prepareOriginalImage, rebuildMosaicPreview, requestMosaicPreview, drawEffectiveExclusions, composeCurrentMask, markDraftDirty, markMaskDirty, flushMaskComposition, hasEffectiveMask, maskStatusWithoutCandidate, refreshMaskStatus, paintMosaicPreview, updateBrushCursor, drawCandidateBlinkOverlay, renderNow, flushRender };", context, { filename: "test-editor-canvas-completion-exports.js" });
+vm.runInNewContext("globalThis.canvasCompletion = { canvasSizeForImage, ensureHistoryCanvases, releaseHistoryCanvases, clearEditor, canvasHasPixels, syncCandidateRecord, syncStoredMaskStatus, refreshCandidateRecord, updateCandidateStatus, canvasToDataUrl, decodeDraftImages, releaseDraftImages, restoreDraft, releaseMosaicPreview, prepareOriginalImage, rebuildMosaicPreview, requestMosaicPreview, drawEffectiveExclusions, composeCurrentMask, markDraftDirty, markMaskDirty, flushMaskComposition, hasEffectiveMask, maskStatusWithoutCandidate, refreshMaskStatus, paintMosaicPreview, updateBrushCursor, drawCandidateBlinkOverlay, renderNow, flushRender };", context, { filename: "test-editor-canvas-completion-exports.js" });
 const test = context.canvasCompletion;
 
 (async () => {
@@ -148,6 +149,34 @@ const test = context.canvasCompletion;
   const decoded = await test.decodeDraftImages({ add: "add", exclusion: "exclude", historyBase: { exclusionErase: "history" } });
   assert.deepEqual(JSON.parse(JSON.stringify(decoded)), [{ url: "add" }, { url: "exclude" }, null, null, null, { url: "history" }]);
   assert.deepEqual(JSON.parse(JSON.stringify(await test.decodeDraftImages(null))), [null, null, null, null, null, null]);
+
+  const currentBitmap = { close() { this.closed = (this.closed || 0) + 1; } };
+  const decodedBitmaps = Array.from({ length: 6 }, () => ({ close() { this.closed = (this.closed || 0) + 1; } }));
+  state.currentImage = currentBitmap;
+  test.releaseDraftImages(decodedBitmaps);
+  assert.deepEqual(decodedBitmaps.map((image) => image.closed), [1, 1, 1, 1, 1, 1], "released draft layers close exactly once");
+  assert.equal(currentBitmap.closed, undefined, "releasing draft layers never closes the current image");
+  const decodedBeforeFailure = { close() { this.closed = (this.closed || 0) + 1; } };
+  context.loadImage = async (url) => url === "broken" ? Promise.reject(new Error("decode failed")) : decodedBeforeFailure;
+  await assert.rejects(test.decodeDraftImages({ add: "valid", exclusion: "broken" }), /decode failed/);
+  assert.equal(decodedBeforeFailure.closed, 1, "a partially decoded draft releases images when another layer fails");
+  const staleDraftBitmap = { close() { this.closed = (this.closed || 0) + 1; } };
+  context.loadImage = async () => staleDraftBitmap;
+  state.currentId = "other"; state.imageGeneration = 41;
+  assert.equal(await test.restoreDraft("image", 41, { add: "stale" }), false);
+  assert.equal(staleDraftBitmap.closed, 1, "a stale restore releases its decoded draft image");
+  const successfulDraftBitmap = { close() { this.closed = (this.closed || 0) + 1; } };
+  context.loadImage = async () => successfulDraftBitmap;
+  state.currentId = "image"; state.imageGeneration = 42; state.images = [{ id: "image", candidateRevision: 0 }]; state.currentImage = currentBitmap; state.mosaicPreviewEnabled = false;
+  assert.equal(await test.restoreDraft("image", 42, { add: "success", candidateRevision: 0 }), true);
+  assert.equal(successfulDraftBitmap.closed, 1, "a successful restore releases its decoded draft image");
+  const drawFailureBitmap = { close() { this.closed = (this.closed || 0) + 1; } };
+  context.loadImage = async () => drawFailureBitmap;
+  const previousDrawImage = addCanvas.ctx.drawImage; addCanvas.ctx.drawImage = () => { throw new Error("draw failed"); };
+  await assert.rejects(test.restoreDraft("image", 42, { add: "draw failure", candidateRevision: 0 }), /draw failed/);
+  addCanvas.ctx.drawImage = previousDrawImage;
+  assert.equal(drawFailureBitmap.closed, 1, "a drawing failure releases its decoded draft image");
+  state.mosaicPreviewEnabled = true;
 
   state.removedCandidateIds.clear(); state.manualEnabled = true; state.manualExclusionEnabled = true; state.manualExclusionEraseEnabled = true; state.manualExclusionForced = true;
   test.composeCurrentMask();

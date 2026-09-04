@@ -618,7 +618,15 @@ async function runBrowserSave(imageIds, suffix, deleteOriginal, mode = "copy") {
         showBrowserSaveProgress(save, entry);
       };
       let nextEntry = 0;
-      const parallelism = Math.min(save.entries.length, inputs.parallelism);
+      // Browser saves decode pixels, masks and an encoder buffer just like the
+      // server-side path. Keep the same 512 MiB budget so an 8-image setting
+      // cannot turn a 4K batch into a multi-gigabyte allocation spike.
+      const largestRenderBytes = Math.max(1, ...save.entries.map((entry) => {
+        const image = inputs.sources.get(entry.imageId)?.image;
+        return Math.max(1, Number(image?.width) || 1) * Math.max(1, Number(image?.height) || 1) * 32;
+      }));
+      const memoryWorkers = Math.max(1, Math.floor((512 * 1024 * 1024) / largestRenderBytes));
+      const parallelism = Math.min(save.entries.length, inputs.parallelism, memoryWorkers);
       const settled = await Promise.allSettled(Array.from({ length: parallelism }, async () => {
         while (true) {
           // Cancellation is observed only before an entry starts. Once an output or source has

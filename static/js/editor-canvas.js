@@ -81,42 +81,46 @@ async function selectImage(imageId, force = false, { saveCurrentDraft = true } =
     const hasDraft = state.drafts.has(imageId);
     const draft = hasDraft ? state.drafts.get(imageId) : await loadWorkspaceDraft(imageId);
     const draftImages = await decodeDraftImages(draft);
-    if (!isCurrentGeneration(generation)) {
-      if (!state.imageCache.has(imageCacheKey(record))) closeBitmap(image);
-      if (!state.candidateBundleCache.has(candidateCacheKey(imageId, candidateBundle.candidateRevision))) releaseCandidateBitmapBundle(candidateBundle);
-      return;
+    try {
+      if (!isCurrentGeneration(generation)) {
+        if (!state.imageCache.has(imageCacheKey(record))) closeBitmap(image);
+        if (!state.candidateBundleCache.has(candidateCacheKey(imageId, candidateBundle.candidateRevision))) releaseCandidateBitmapBundle(candidateBundle);
+        return;
+      }
+      if (!hasDraft) {
+        if (draft) state.drafts.set(imageId, draft); else state.drafts.delete(imageId);
+      }
+      clearTimeout(state.loadingDelay); state.loadingDelay = null;
+      syncCandidateRecord(imageId, candidateBundle.candidates);
+      releaseStaleImageVersions(imageId, imageCacheKey(record), candidateCacheKey(imageId, candidateBundle.candidateRevision));
+      closeBoundaryModeMenu();
+      clearBoundaryInteraction();
+      cancelFillWork();
+      abortCatalogLoads();
+      const previousImage = state.currentImage;
+      const previousCandidateImages = state.candidateImages;
+      state.currentId = imageId;
+      state.pendingImageId = null; state.pendingImageKey = null; state.pendingCandidateKey = null;
+      state.currentImage = image;
+      state.candidates = candidateBundle.candidates;
+      state.candidateImages = candidateBundle.candidateImages;
+      if (previousImage && previousImage !== image && ![...state.imageCache.items].some(([, entry]) => entry.value === previousImage)) closeBitmap(previousImage);
+      if (previousCandidateImages !== state.candidateImages
+        && ![...state.candidateBundleCache.items].some(([, entry]) => entry.value?.candidateImages === previousCandidateImages)) {
+        releaseCandidateBitmapBundle({ candidateImages: previousCandidateImages });
+      }
+      state.imageCache.trim(); state.candidateBundleCache.trim();
+      canvasSizeForImage(record); await restoreDraft(imageId, generation, draft, draftImages); prepareOriginalImage(); requestMosaicPreview(); fitImage();
+      updateBlockSizeDisplay(); refreshMaskStatus();
+      $("#emptyState").hidden = true;
+      $("#currentFileName").textContent = record.relativePath;
+      updateCandidateStatus();
+      renderCandidates(); updateGalleryCurrent(); updateNavigationControls(); updateActionButtons(); render(); clearStatus();
+      if (state.project?.id) void refreshProjectHistory(imageId);
+      prefetchNeighbors(record);
+    } finally {
+      releaseDraftImages(draftImages);
     }
-    if (!hasDraft) {
-      if (draft) state.drafts.set(imageId, draft); else state.drafts.delete(imageId);
-    }
-    clearTimeout(state.loadingDelay); state.loadingDelay = null;
-    syncCandidateRecord(imageId, candidateBundle.candidates);
-    releaseStaleImageVersions(imageId, imageCacheKey(record), candidateCacheKey(imageId, candidateBundle.candidateRevision));
-    closeBoundaryModeMenu();
-    clearBoundaryInteraction();
-    cancelFillWork();
-    abortCatalogLoads();
-    const previousImage = state.currentImage;
-    const previousCandidateImages = state.candidateImages;
-    state.currentId = imageId;
-    state.pendingImageId = null; state.pendingImageKey = null; state.pendingCandidateKey = null;
-    state.currentImage = image;
-    state.candidates = candidateBundle.candidates;
-    state.candidateImages = candidateBundle.candidateImages;
-    if (previousImage && previousImage !== image && ![...state.imageCache.items].some(([, entry]) => entry.value === previousImage)) closeBitmap(previousImage);
-    if (previousCandidateImages !== state.candidateImages
-      && ![...state.candidateBundleCache.items].some(([, entry]) => entry.value?.candidateImages === previousCandidateImages)) {
-      releaseCandidateBitmapBundle({ candidateImages: previousCandidateImages });
-    }
-    state.imageCache.trim(); state.candidateBundleCache.trim();
-    canvasSizeForImage(record); await restoreDraft(imageId, generation, draft, draftImages); prepareOriginalImage(); requestMosaicPreview(); fitImage();
-    updateBlockSizeDisplay(); refreshMaskStatus();
-    $("#emptyState").hidden = true;
-    $("#currentFileName").textContent = record.relativePath;
-    updateCandidateStatus();
-    renderCandidates(); updateGalleryCurrent(); updateNavigationControls(); updateActionButtons(); render(); clearStatus();
-    if (state.project?.id) void refreshProjectHistory(imageId);
-    prefetchNeighbors(record);
   } catch (error) {
     if (isCurrentGeneration(generation)) {
       clearTimeout(state.loadingDelay); state.loadingDelay = null;
@@ -372,11 +376,21 @@ function canvasToDataUrl(target) {
   }, "image/png"));
 }
 
+function releaseDraftImages(images) {
+  for (const image of images || []) closeBitmap(image);
+}
+
 async function decodeDraftImages(draft) {
   if (!draft) return [null, null, null, null, null, null];
   const historyBase = state.project?.id ? {} : draft.historyBase || {};
-  return Promise.all([draft.add, draft.exclusion, draft.exclusionErase, historyBase.add, historyBase.exclusion, historyBase.exclusionErase]
+  const results = await Promise.allSettled([draft.add, draft.exclusion, draft.exclusionErase, historyBase.add, historyBase.exclusion, historyBase.exclusionErase]
     .map((source) => source ? loadImage(source) : null));
+  const failure = results.find((result) => result.status === "rejected");
+  if (failure) {
+    releaseDraftImages(results.filter((result) => result.status === "fulfilled").map((result) => result.value));
+    throw failure.reason;
+  }
+  return results.map((result) => result.value);
 }
 
 async function saveDraft() {
@@ -474,9 +488,11 @@ async function saveDraft() {
 }
 
 async function restoreDraft(imageId, generation, draft = state.drafts.get(imageId), decodedImages = null) {
+  const ownsImages = decodedImages === null;
   const images = decodedImages || await decodeDraftImages(draft);
-  if (state.currentId !== imageId || state.imageGeneration !== generation) return false;
-  state.history = []; state.historyIndex = 0; state.activeStroke = null;
+  try {
+    if (state.currentId !== imageId || state.imageGeneration !== generation) return false;
+    state.history = []; state.historyIndex = 0; state.activeStroke = null;
   state.manualEnabled = draft?.manualEnabled !== false;
   state.manualExclusionEnabled = draft?.manualExclusionEnabled !== false;
   state.manualExclusionEraseEnabled = draft?.manualExclusionEraseEnabled !== false;
@@ -515,7 +531,10 @@ async function restoreDraft(imageId, generation, draft = state.drafts.get(imageI
     } else resetHistoryToCurrentManualMask();
   state.draftDirty = false; state.draftLayerDirty.clear();
   refreshMaskStatus(true); updateCandidateStatus(); requestMosaicPreview(); renderCandidates(); render();
-  return true;
+    return true;
+  } finally {
+    if (ownsImages) releaseDraftImages(images);
+  }
 }
 
 const COMPARE_SPLIT_STORAGE_KEY = "mozarie.compareSplit";
