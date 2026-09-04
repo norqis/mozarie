@@ -277,14 +277,24 @@ async function runSelectionAction(action) {
   const images = selectedImages(); if (!images.length || isBusy() || state.importing) return;
   closeBatchMoreMenus();
   const ids = images.map((image) => image.id);
-  if (action === "hide" || action === "show") { await Promise.all(images.map((image) => setHidden(image, action === "hide"))); return; }
-  if (action === "reviewed" || action === "unreviewed") { await Promise.all(images.map((image) => setReviewed(image, action === "reviewed"))); return; }
+  if (["hide", "show", "reviewed", "unreviewed"].includes(action)) {
+    const flags = action === "hide" ? { hidden: true } : action === "show" ? { hidden: false }
+      : { reviewed: action === "reviewed" };
+    const data = await api("/api/workspace/images", { method: "POST", body: JSON.stringify({ imageIds: ids, ...flags }) });
+    for (const image of images) Object.assign(image, data.flags?.[image.id] || flags);
+    preserveCatalogScroll(renderCatalogViews); updateSelectionActionBar(); updateNavigationControls(); updateActionButtons();
+    return;
+  }
   if (action === "detect") return openDetectionDialog(ids);
   if (action === "clear") return clearMasks(ids, "confirm.clearAllMasks.title", "confirm.clearAllMasks.message");
   if (action === "remove") {
-    for (const image of [...images]) await removeImageFromCatalog(image.id);
+    const data = await api("/api/catalog/remove", { method: "POST", body: JSON.stringify({ imageIds: ids }) });
+    for (const image of images) {
+      releaseImageCaches(image.id); state.sourceAccess.delete(image.id); state.drafts.delete(image.id); state.maskStatus.delete(image.id); clearReviewForRemovedImage(image);
+    }
+    state.images = data.images || [];
     state.batchMode = false; clearBatchSelection(); updateSelectionActionBar();
-    renderOverview();
+    renderCatalogViews();
   }
 }
 

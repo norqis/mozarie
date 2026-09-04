@@ -408,6 +408,8 @@ class MosaicHandler(BaseHTTPRequestHandler):
                 self._json({"images": []})
             elif path.startswith("/api/workspace/image/"):
                 self._json(STATE.set_image_flags(path.removeprefix("/api/workspace/image/"), payload))
+            elif path == "/api/workspace/images":
+                self._json({"flags": STATE.set_image_flags_bulk(payload)})
             elif path.startswith("/api/workspace/manual/"):
                 STATE.save_manual_workspace(path.removeprefix("/api/workspace/manual/"), payload)
                 self._json({"ok": True})

@@ -586,6 +586,30 @@ class WorkspaceStore:
                 db.execute("ROLLBACK")
                 raise
 
+    def set_image_flags_bulk(self, image_ids: list[str], *, hidden: bool | None = None, reviewed: bool | None = None) -> None:
+        """Apply one catalogue flag change as one durable undo operation."""
+        updates: list[str] = []
+        values: list[Any] = []
+        if hidden is not None:
+            updates.append("hidden=?"); values.append(int(hidden))
+        if reviewed is not None:
+            updates.append("reviewed=?"); values.append(int(reviewed))
+        if not updates or not image_ids:
+            return
+        group_id = uuid.uuid4().hex
+        with self._lock, self._connect() as db:
+            db.execute("BEGIN IMMEDIATE")
+            try:
+                db.execute("INSERT INTO history_groups(group_id,status,created_at) VALUES(?,?,?)", (group_id, "committed", time.time_ns()))
+                for image_id in image_ids:
+                    before = self._history_state_db(db, image_id)
+                    db.execute(f"UPDATE images SET {','.join(updates)},updated_at=? WHERE image_id=?", [*values, time.time_ns(), image_id])
+                    self._record_history_db(db, image_id, before, self._history_state_db(db, image_id), group_id=group_id)
+                db.execute("COMMIT")
+            except Exception:
+                db.execute("ROLLBACK")
+                raise
+
     def commit_save(self, image_id: str, *, mtime_ns: int | None = None, size_bytes: int | None = None,
                     candidate_revision: int | None = None,
                     clear_workspace: bool, delete_image: bool = False) -> None:

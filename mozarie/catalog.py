@@ -1303,6 +1303,35 @@ class CatalogMixin:
             if reviewed is not None: record.reviewed = reviewed
             return {"hidden": record.hidden, "reviewed": record.reviewed}
 
+    def set_image_flags_bulk(self, payload: dict[str, Any]) -> dict[str, dict[str, bool]]:
+        if not isinstance(payload, dict) or not isinstance(payload.get("imageIds"), list):
+            raise ClientError("画像の状態が正しくありません。", "input_invalid")
+        hidden = payload.get("hidden")
+        reviewed = payload.get("reviewed")
+        if hidden is not None and not isinstance(hidden, bool) or reviewed is not None and not isinstance(reviewed, bool):
+            raise ClientError("画像の状態が正しくありません。", "input_invalid")
+        image_ids = list(dict.fromkeys(str(image_id) for image_id in payload["imageIds"] if isinstance(image_id, str) and image_id))
+        if not image_ids:
+            raise ClientError("画像が選択されていません。", "image_not_found")
+        with self.lock:
+            self._assert_catalog_mutable()
+            records = [self.images.get(image_id) for image_id in image_ids]
+            if any(record is None for record in records):
+                raise ClientError("画像が見つかりません。", "image_not_found")
+            catalog_generation = self.catalog_generation
+        persisted_ids = [image_id for image_id in image_ids if self.workspace_store.has_image(image_id)]
+        if persisted_ids:
+            self.workspace_store.set_image_flags_bulk(persisted_ids, hidden=hidden, reviewed=reviewed)
+        with self.lock:
+            if self.catalog_generation != catalog_generation or any(self.images.get(image_id) is not record for image_id, record in zip(image_ids, records)):
+                raise ClientError("画像一覧が更新されました。もう一度お試しください。", "operation_in_progress")
+            result: dict[str, dict[str, bool]] = {}
+            for image_id, record in zip(image_ids, records):
+                if hidden is not None: record.hidden = hidden
+                if reviewed is not None: record.reviewed = reviewed
+                result[image_id] = {"hidden": record.hidden, "reviewed": record.reviewed}
+            return result
+
     @staticmethod
     def _decode_workspace_mask(value: Any) -> bytes | None:
         if value is None or value == "": return None
