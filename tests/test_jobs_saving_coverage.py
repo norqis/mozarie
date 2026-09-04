@@ -438,6 +438,18 @@ class JobsSavingCoverageTests(unittest.TestCase):
             state._apply_worker([record], 2, {record.image_id: np.zeros((2, 3), dtype=np.uint8)}, control=JobControl(), job_generation=1, catalog_generation=1)
             self.assertEqual(state.job.total, 1); state._finish_job.assert_called_once()
 
+    def test_apply_worker_caps_4k_parallelism_by_render_memory_budget(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            directory = Path(raw); record = self.record(directory); record.width = 3840; record.height = 2160
+            state = self.make_saving(directory); state.images[record.image_id] = record; state.order = [record.image_id]
+            workers: list[int] = []
+            state._run_fixed_workers = lambda records, count, action, *_args: workers.append(count) or [action(index, item) for index, item in enumerate(records)] and []
+            state._set_job_current = lambda *_args: None; state._record_job_success = lambda *_args: None
+            state._job_is_current = lambda *_args: True; state._finish_job = Mock(); state._fail_job = Mock(); state._cancel_job = Mock()
+            state._apply_worker([record], 2, {record.image_id: np.zeros((2, 3), dtype=np.uint8)}, saving_parallelism=8,
+                                control=JobControl(), job_generation=1, catalog_generation=1)
+            self.assertEqual(workers, [2])
+
     def test_browser_commit_rechecks_and_handles_delete_rollback(self) -> None:
         with tempfile.TemporaryDirectory() as raw:
             directory = Path(raw); record = self.record(directory); state = self.make_saving(directory)

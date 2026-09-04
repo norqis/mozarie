@@ -24,6 +24,8 @@ from .image_io import (
 )
 from .masks import compose_masks, expand_mask
 
+_SAVE_RENDER_MEMORY_BUDGET = 512 * 1024 * 1024
+
 class SavingMixin:
     # StudioState resolves these to CatalogMixin's guarded implementations.
     # Keeping no-op mixin fallbacks makes the saving primitives independently
@@ -550,8 +552,14 @@ class SavingMixin:
                         self.invalidate_sam_image(record.image_id)
                     self._set_job_current(record.relative_path, job_generation, catalog_generation)
 
+            # Rendering holds decoded pixels, a mask and an encoder buffer at
+            # once.  Bound workers by the largest image instead of letting
+            # eight 4K encodes reserve roughly a gigabyte at the same time.
+            largest_render_bytes = max((record.width * record.height * 32 for record in records), default=1)
+            memory_workers = max(1, _SAVE_RENDER_MEMORY_BUDGET // largest_render_bytes)
+            worker_count = min(8, max(1, saving_parallelism), memory_workers)
             failures = self._run_fixed_workers(
-                records, min(8, max(1, saving_parallelism)), save_record,
+                records, worker_count, save_record,
                 control, job_generation, catalog_generation,
             )
             if failures:
