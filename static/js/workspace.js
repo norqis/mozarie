@@ -141,7 +141,7 @@ async function catalogForDirectoryHandle(handle) {
     return state.project.id;
   }
   // Importing is usable without a project.  Durable project creation is an
-  // explicit "名前を付けて保存" action, never an import side effect.
+  // explicit project-save action, never an import side effect.
   state.pendingDirectorySourceId = null;
   return null;
 }
