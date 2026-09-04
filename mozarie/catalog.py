@@ -574,7 +574,7 @@ class CatalogMixin:
                 continue
             try: raw = base64.b64decode(str(candidate["mask"]), validate=True)
             except (KeyError, ValueError, binascii.Error) as exc: raise ClientError("保存済みマスクが正しくありません。", "workspace_write_failed") from exc
-            with Image.open(io.BytesIO(raw)) as image: mask = expand_mask(np.asarray(image.convert("L"), dtype=np.uint8), int(image.text.get("mozarie_expand_px", "0")))
+            with Image.open(io.BytesIO(raw)) as image: mask = expand_mask(np.asarray(image.convert("L"), dtype=np.uint8), int(candidate.get("expandPx", 0)))
             if candidate.get("role") == CandidateRole.APPLY.value: apply_masks.append(mask)
             else:
                 exclude_masks.append(mask)

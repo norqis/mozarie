@@ -36,6 +36,7 @@
   "mosaicHelp.title": "Mosaic coarseness",
   "mosaicHelp.guideline": "The default mosaic setting uses the following sites' guidelines as a reference: 1/100 of the image's long edge (minimum 4 px).",
   "apply.title": "Save files",
+  "apply.singleTarget": "Target: {name}",
   "batch.actions": "More",
   "candidates.aria": "Mosaic processing",
   "candidates.count": "{count} ranges",

@@ -11,6 +11,8 @@ function canvasSizeForImage(image) {
   state.draftDirtyRois?.clear();
   state.historyBaseDirty = false;
   state.manualMaskPresent = false;
+  state.manualExclusionPresent = false;
+  state.manualExclusionErasePresent = false;
   state.manualEnabled = true;
   state.manualExclusionEnabled = true;
   state.manualExclusionEraseEnabled = true;
@@ -31,7 +33,7 @@ function clearEditor() {
   cancelFillWork();
   releaseMosaicPreview();
   state.history = []; state.historyIndex = 0; state.activeStroke = null; state.hover = null; clearBoundaryInteraction();
-  state.manualMaskPresent = false; state.manualEnabled = true; state.manualExclusionEnabled = true; state.manualExclusionEraseEnabled = true;
+  state.manualMaskPresent = false; state.manualExclusionPresent = false; state.manualExclusionErasePresent = false; state.manualEnabled = true; state.manualExclusionEnabled = true; state.manualExclusionEraseEnabled = true;
   state.maskDirty = false;
   state.draftDirty = false;
   state.draftLayerDirty.clear();
@@ -100,6 +102,7 @@ async function selectImage(imageId, force = false, { saveCurrentDraft = true } =
       abortCatalogLoads();
       const previousImage = state.currentImage;
       const previousCandidateImages = state.candidateImages;
+      if (state.currentId !== imageId) clearCandidateBlink();
       state.currentId = imageId;
       state.pendingImageId = null; state.pendingImageKey = null; state.pendingCandidateKey = null;
       state.currentImage = image;
@@ -453,13 +456,14 @@ async function saveDraft() {
   const layers = {
     add: [addCtx, addCanvas], exclusion: [exclusionCtx, exclusionCanvas], exclusionErase: [exclusionEraseCtx, exclusionEraseCanvas],
   };
+  const layerPresent = { add: state.manualMaskPresent, exclusion: state.manualExclusionPresent, exclusionErase: state.manualExclusionErasePresent };
   const encoded = {};
   const encodedHistoryBase = {};
   const snapshots = [];
   for (const layer of dirtyLayers) {
     const [context, target] = layers[layer] || [];
     if (!target) continue;
-    snapshots.push(Promise.resolve(canvasHasPixels(context, target) ? canvasToDataUrl(target) : "").then((value) => { encoded[layer] = value; }));
+    snapshots.push(Promise.resolve(layerPresent[layer] ? canvasToDataUrl(target) : "").then((value) => { encoded[layer] = value; }));
   }
   if (historyBaseDirty) {
     for (const [layer, context, target] of [["add", historyAddCanvas.getContext("2d"), historyAddCanvas], ["exclusion", historyExclusionCanvas.getContext("2d"), historyExclusionCanvas], ["exclusionErase", historyExclusionEraseCanvas.getContext("2d"), historyExclusionEraseCanvas]]) {
@@ -532,6 +536,8 @@ async function restoreDraft(imageId, generation, draft = state.drafts.get(imageI
   state.manualExclusionEraseEnabled = draft?.manualExclusionEraseEnabled !== false;
   state.manualExclusionForced = draft?.manualExclusionForced ?? (state.settings?.detection?.exclude_forced_default !== false);
   state.manualMaskPresent = false;
+  state.manualExclusionPresent = false;
+  state.manualExclusionErasePresent = false;
   const candidateRevisionMatches = !draft || Number(draft.candidateRevision) === Number(currentRecord()?.candidateRevision || 0);
   const currentCandidateIds = new Set(state.candidates.map((candidate) => candidate.id));
   // A new auto-detection revision replaces candidate IDs.  Keep removals for
@@ -543,7 +549,9 @@ async function restoreDraft(imageId, generation, draft = state.drafts.get(imageI
     if (addImage) addCtx.drawImage(addImage, 0, 0);
     if (exclusionImage) exclusionCtx.drawImage(exclusionImage, 0, 0);
     if (exclusionEraseImage) exclusionEraseCtx.drawImage(exclusionEraseImage, 0, 0);
-    state.manualMaskPresent = draft.manualMaskPresent ?? canvasHasPixels(addCtx, addCanvas);
+    state.manualMaskPresent = draft.manualMaskPresent ?? Boolean(addImage);
+    state.manualExclusionPresent = Boolean(exclusionImage);
+    state.manualExclusionErasePresent = Boolean(exclusionEraseImage);
     if (!state.project?.id && Array.isArray(draft.history) && draft.historyBase && ensureHistoryCanvases()) {
       historyAddCanvas.getContext("2d").clearRect(0, 0, historyAddCanvas.width, historyAddCanvas.height);
       historyExclusionCanvas.getContext("2d").clearRect(0, 0, historyExclusionCanvas.width, historyExclusionCanvas.height);

@@ -322,7 +322,7 @@ function moveCurrentBy(offset) {
 }
 async function reviewAndMoveNext() {
   const current = currentRecord();
-  if (isGestureActive() || !current) return null;
+  if (isGestureActive() || currentImageActionPending() || !current) return null;
   const currentId = current.id;
   const target = state.images.slice(imageIndex(currentId) + 1).find((image) => !isHidden(image)) || null;
   const reviewed = await queueImageMutation(currentId, async () => {
@@ -336,7 +336,7 @@ async function reviewAndMoveNext() {
   return target;
 }
 async function hideAndMoveNext() {
-  if (isGestureActive()) return;
+  if (isGestureActive() || currentImageActionPending()) return;
   const current = currentRecord();
   if (!current) return;
   const currentId = current.id;

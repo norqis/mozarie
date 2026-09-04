@@ -114,13 +114,16 @@ function syncSingleSaveMode() {
 
 async function openSingleSaveDialog(imageId = state.currentId) {
   const invoker = document.activeElement;
-  if (!imageId || isBusy() || state.importing) return;
+  const generation = state.imageGeneration;
+  if (!imageId || isBusy() || state.importing || currentImageActionPending()) return;
   if (state.candidateUpdateChains.size) await waitForCandidateMutations();
   try { await flushDraftSaves([imageId]); }
   catch (error) { showUserError(error, invoker); return; }
   const image = state.images.find((entry) => entry.id === imageId);
-  if (!image || isBusy() || state.importing) return;
-  state.singleSave = { imageId, divisor: Number($("#divisor").value), draft: draftPayload([imageId])[imageId] || null, invoker };
+  if (!image || isBusy() || state.importing || currentImageActionPending() || state.currentId !== imageId || !isCurrentGeneration(generation)
+    || !state.currentImage || state.projectReadOnly || image.sourceDimensionsChanged) return;
+  state.singleSave = { imageId, generation, divisor: Number($("#divisor").value), draft: draftPayload([imageId])[imageId] || null, invoker };
+  $("#singleSaveTarget").textContent = t("apply.singleTarget", { name: image.relativePath });
   $("#singleSaveCopyMode").checked = true;
   $("#singleSaveDeleteOriginal").checked = false;
   setSingleSaveResult("");
@@ -207,7 +210,8 @@ async function startSingleSave(event) {
   event.preventDefault();
   const save = state.singleSave;
   const image = state.images.find((entry) => entry.id === save?.imageId);
-  if (!save || !image || state.saving || state.saveStarting || isBusy() || state.importing) return;
+  if (!save || !image || state.saving || state.saveStarting || isBusy() || state.importing || currentImageActionPending()
+    || state.currentId !== save.imageId || !isCurrentGeneration(save.generation) || !state.currentImage || state.projectReadOnly || image.sourceDimensionsChanged) return;
   const mode = selectedSingleSaveMode(); const copying = mode === "copy";
   const deleteOriginal = copying && $("#singleSaveDeleteOriginal").checked;
   const suffix = $("#singleSaveSuffix").value;

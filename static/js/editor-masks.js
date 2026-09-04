@@ -4,9 +4,17 @@ function candidateLabel({ labelToken }) {
 
 function manualLayerPresence() {
   return {
-    hasManualExclude: canvasHasPixels(exclusionCtx, exclusionCanvas),
-    hasManualExclusionErase: canvasHasPixels(exclusionEraseCtx, exclusionEraseCanvas),
+    hasManualExclude: state.manualExclusionPresent,
+    hasManualExclusionErase: state.manualExclusionErasePresent,
   };
+}
+
+function refreshManualLayerPresence(...layers) {
+  for (const layer of layers) {
+    if (layer === "add") state.manualMaskPresent = canvasHasPixels(addCtx, addCanvas);
+    else if (layer === "exclusion") state.manualExclusionPresent = canvasHasPixels(exclusionCtx, exclusionCanvas);
+    else if (layer === "exclusionErase") state.manualExclusionErasePresent = canvasHasPixels(exclusionEraseCtx, exclusionEraseCanvas);
+  }
 }
 
 let candidatePaddingSession = null;
@@ -82,7 +90,7 @@ async function commitCandidatePadding() {
   if (!session || session.committing) return false;
   const value = validateCandidatePadding();
   if (value === null) { $("#candidatePaddingInput").focus(); return false; }
-  if (session.imageId !== state.currentId || state.projectReadOnly || isBusy() || state.importing || candidateControlLocked(state.currentId) || state.candidateBatchPending.has(state.currentId)) {
+  if (session.imageId !== state.currentId || state.projectReadOnly || isBusy() || state.importing || currentImageActionPending() || candidateControlLocked(state.currentId) || state.candidateBatchPending.has(state.currentId)) {
     closeCandidatePadding({ restoreFocus: true }); return false;
   }
   if (session.mode === "batch") return commitBatchCandidatePadding(session, value);
@@ -183,7 +191,7 @@ function renderCandidates() {
   const excludeList = $("#exclusionList");
   applyList.textContent = ""; excludeList.textContent = "";
   if (!state.currentId) { syncCandidateDisplayButtons(); updateCandidateBatchButtons(false); return; }
-  const candidateLocked = candidateControlLocked(state.currentId);
+  const candidateLocked = candidateControlLocked(state.currentId) || currentImageActionPending();
   const presence = manualLayerPresence();
   if (!state.candidates.length && !state.manualMaskPresent && !presence.hasManualExclude && !presence.hasManualExclusionErase) {
     const empty = document.createElement("p"); empty.className = "candidate-empty"; empty.textContent = t("candidates.none"); applyList.append(empty); syncCandidateDisplayButtons(presence); updateCandidateBatchButtons(undefined, undefined, presence); return;
@@ -227,7 +235,7 @@ function renderCandidates() {
     const isEnabled = isApply ? state.manualEnabled : state.manualExclusionEnabled;
     row.classList.toggle("enabled", isEnabled);
     const enabled = makeToggle(isEnabled, isApply ? t("candidates.manualToggle") : t("candidates.manualExcludeToggle"), () => {
-      if (isBusy() || state.importing) return;
+      if (isBusy() || state.importing || currentImageActionPending()) return;
       if (isApply) state.manualEnabled = !state.manualEnabled; else state.manualExclusionEnabled = !state.manualExclusionEnabled;
       markMaskDirty(); saveDraft();
       setReviewed(currentRecord(), false);
@@ -243,7 +251,7 @@ function renderCandidates() {
     remove.addEventListener("click", isApply ? deleteManualMask : deleteManualExclusion);
     if (!isApply) {
       const forced = makeForceToggle(state.manualExclusionForced, () => {
-        if (isBusy() || state.importing) return;
+        if (isBusy() || state.importing || currentImageActionPending()) return;
         state.manualExclusionForced = !state.manualExclusionForced; markMaskDirty(); saveDraft();
         setReviewed(currentRecord(), false); refreshCurrentReviewAndMask(); requestMosaicPreview(); renderCandidates(); render();
       }, state.projectReadOnly || candidateLocked);
@@ -258,7 +266,7 @@ function renderCandidates() {
     const row = document.createElement("div"); row.className = "candidate-row candidate-row-manual candidate-row-manual-exclude-erase";
     row.classList.toggle("enabled", state.manualExclusionEraseEnabled);
     const enabled = makeToggle(state.manualExclusionEraseEnabled, t("candidates.manualExcludeEraseToggle"), () => {
-      if (isBusy() || state.importing) return;
+      if (isBusy() || state.importing || currentImageActionPending()) return;
       state.manualExclusionEraseEnabled = !state.manualExclusionEraseEnabled; markMaskDirty();
       saveDraft();
       setReviewed(currentRecord(), false); refreshCurrentReviewAndMask(); requestMosaicPreview(); renderCandidates(); render();
@@ -280,7 +288,7 @@ function renderCandidates() {
     row.classList.toggle("enabled", candidate.enabled);
     const labelText = candidateLabel(candidate);
     const enabled = makeToggle(candidate.enabled, t("candidates.toggle", { label: labelText }), async () => {
-      if (isBusy() || state.importing) return;
+      if (isBusy() || state.importing || currentImageActionPending()) return;
       const previousEnabled = candidate.enabled;
       const previousMaskStatus = state.maskStatus.has(state.currentId) ? state.maskStatus.get(state.currentId) : imageHasMask(currentRecord());
       candidate.enabled = !candidate.enabled;
@@ -301,7 +309,7 @@ function renderCandidates() {
     remove.addEventListener("click", () => deleteCandidate(candidate));
     if (role === "exclude") {
       const forced = makeForceToggle(candidate.forced !== false, async () => {
-        if (isBusy() || state.importing) return;
+        if (isBusy() || state.importing || currentImageActionPending()) return;
         const previousForced = candidate.forced !== false;
         const previousMaskStatus = state.maskStatus.has(state.currentId) ? state.maskStatus.get(state.currentId) : imageHasMask(currentRecord());
         candidate.forced = !previousForced; setReviewed(currentRecord(), false);
@@ -324,8 +332,8 @@ function candidateDisplayMode(id) {
 function candidateDisplayIdsForRole(role, presence) {
   const ids = state.candidates.filter((candidate) => candidate.role === role && !state.removedCandidateIds.has(candidate.id)).map((candidate) => candidate.id);
   if (role === "apply" && state.manualMaskPresent) ids.push("manual:apply");
-  if (role === "exclude" && (presence ? presence.hasManualExclude : canvasHasPixels(exclusionCtx, exclusionCanvas))) ids.push("manual:exclude");
-  if (role === "exclude" && (presence ? presence.hasManualExclusionErase : canvasHasPixels(exclusionEraseCtx, exclusionEraseCanvas))) ids.push("manual:excludeErase");
+  if (role === "exclude" && (presence ? presence.hasManualExclude : state.manualExclusionPresent)) ids.push("manual:exclude");
+  if (role === "exclude" && (presence ? presence.hasManualExclusionErase : state.manualExclusionErasePresent)) ids.push("manual:excludeErase");
   return ids;
 }
 
@@ -379,6 +387,7 @@ function setCandidateDisplayMode(ids, mode) {
 }
 
 function toggleCandidateDisplay(role) {
+  if (currentImageActionPending()) return;
   const ids = candidateDisplayIdsForRole(role);
   if (!ids.length) return;
   const active = ids.every((id) => candidateDisplayMode(id) === "normal");
@@ -386,6 +395,7 @@ function toggleCandidateDisplay(role) {
 }
 
 function toggleCandidateEffective(role) {
+  if (currentImageActionPending()) return;
   const ids = candidateDisplayIdsForRole(role);
   if (!ids.length) return;
   const active = ids.every((id) => candidateDisplayMode(id) === "effective");
@@ -395,16 +405,16 @@ function toggleCandidateEffective(role) {
 function candidateDisplayToggle(id) {
   const button = document.createElement("button"); button.type = "button"; button.className = "candidate-display-toggle";
   button.dataset.candidateDisplayId = id;
-  button.textContent = t("candidates.show"); button.title = t("candidates.displayHelp"); button.setAttribute("aria-label", t("candidates.displayHelp")); button.setAttribute("aria-pressed", String(candidateDisplayMode(id) === "normal"));
-  button.addEventListener("click", () => setCandidateDisplayMode([id], candidateDisplayMode(id) === "normal" ? "off" : "normal"));
+  button.textContent = t("candidates.show"); button.title = t("candidates.displayHelp"); button.setAttribute("aria-label", t("candidates.displayHelp")); button.setAttribute("aria-pressed", String(candidateDisplayMode(id) === "normal")); button.disabled = currentImageActionPending();
+  button.addEventListener("click", () => { if (!currentImageActionPending()) setCandidateDisplayMode([id], candidateDisplayMode(id) === "normal" ? "off" : "normal"); });
   return button;
 }
 
 function candidateEffectiveToggle(id) {
   const button = document.createElement("button"); button.type = "button"; button.className = "candidate-effective-toggle";
   button.dataset.candidateEffectiveId = id;
-  button.textContent = t("candidates.applied"); button.title = t("candidates.displayEffective"); button.setAttribute("aria-label", t("candidates.displayEffective")); button.setAttribute("aria-pressed", String(candidateDisplayMode(id) === "effective"));
-  button.addEventListener("click", () => setCandidateDisplayMode([id], candidateDisplayMode(id) === "effective" ? "off" : "effective"));
+  button.textContent = t("candidates.applied"); button.title = t("candidates.displayEffective"); button.setAttribute("aria-label", t("candidates.displayEffective")); button.setAttribute("aria-pressed", String(candidateDisplayMode(id) === "effective")); button.disabled = currentImageActionPending();
+  button.addEventListener("click", () => { if (!currentImageActionPending()) setCandidateDisplayMode([id], candidateDisplayMode(id) === "effective" ? "off" : "effective"); });
   return button;
 }
 
@@ -451,6 +461,7 @@ async function waitForCandidateMutations() {
 async function updateCandidate(candidate, previousEnabled, previousMaskStatus, previousForced = candidate.forced, previousExpandPx = candidate.expandPx || 0) {
   const imageId = state.currentId;
   const generation = state.imageGeneration;
+  if (!imageId || currentImageActionPending()) return;
   const targetCandidates = [...state.candidates];
   const mutationKey = candidateMutationKey(imageId, candidate.id);
   const version = nextCandidateMutationVersion(mutationKey);
@@ -503,8 +514,11 @@ async function updateCandidate(candidate, previousEnabled, previousMaskStatus, p
 }
 
 async function deleteCandidate(candidate) {
-  if (!state.currentId || isBusy() || state.importing) return;
+  const imageId = state.currentId;
+  const generation = state.imageGeneration;
+  if (!imageId || isBusy() || state.importing || currentImageActionPending()) return;
   if (confirmationRequired("candidateDelete") && !await confirmAction(t("confirm.candidateDelete.title"), t("confirm.candidateDelete.message"), "candidateDelete")) return;
+  if (state.currentId !== imageId || !isCurrentGeneration(generation) || currentImageActionPending() || !state.candidates.some((item) => item.id === candidate.id)) return;
   state.removedCandidateIds.add(candidate.id);
   setCandidateDisplayMode([candidate.id], "off");
   recordHistoryOperation({ kind: "removeCandidates", ids: [candidate.id] });
@@ -512,7 +526,7 @@ async function deleteCandidate(candidate) {
 }
 
 function deleteManualMask() {
-  if (!state.manualMaskPresent || isBusy() || state.importing) return;
+  if (!state.manualMaskPresent || isBusy() || state.importing || currentImageActionPending()) return;
   addCtx.clearRect(0, 0, addCanvas.width, addCanvas.height);
   state.manualMaskPresent = false; state.manualEnabled = true;
   setCandidateDisplayMode(["manual:apply"], "off");
@@ -521,8 +535,9 @@ function deleteManualMask() {
 }
 
 function deleteManualExclusion() {
-  if (!canvasHasPixels(exclusionCtx, exclusionCanvas) || isBusy() || state.importing) return;
+  if (!state.manualExclusionPresent || isBusy() || state.importing || currentImageActionPending()) return;
   exclusionCtx.clearRect(0, 0, exclusionCanvas.width, exclusionCanvas.height);
+  state.manualExclusionPresent = false;
   state.manualExclusionEnabled = true;
   setCandidateDisplayMode(["manual:exclude"], "off");
   setReviewed(currentRecord(), false);
@@ -530,8 +545,9 @@ function deleteManualExclusion() {
 }
 
 function deleteManualExclusionErase() {
-  if (!canvasHasPixels(exclusionEraseCtx, exclusionEraseCanvas) || isBusy() || state.importing) return;
+  if (!state.manualExclusionErasePresent || isBusy() || state.importing || currentImageActionPending()) return;
   exclusionEraseCtx.clearRect(0, 0, exclusionEraseCanvas.width, exclusionEraseCanvas.height);
+  state.manualExclusionErasePresent = false;
   state.manualExclusionEraseEnabled = true;
   setCandidateDisplayMode(["manual:excludeErase"], "off");
   setReviewed(currentRecord(), false);
@@ -546,10 +562,10 @@ function shouldBlinkNewManual(role) {
 async function batchCandidateOperation(spec) {
   const imageId = state.currentId;
   const generation = state.imageGeneration;
-  if (!imageId || isBusy() || state.importing || state.candidateBatchPending.has(imageId)) return;
+  if (!imageId || isBusy() || state.importing || currentImageActionPending()) return;
   let [role, operation] = spec.split(":");
-  const manual = role === "apply" ? state.manualMaskPresent : canvasHasPixels(exclusionCtx, exclusionCanvas);
-  const manualErase = role === "exclude" && canvasHasPixels(exclusionEraseCtx, exclusionEraseCanvas);
+  const manual = role === "apply" ? state.manualMaskPresent : state.manualExclusionPresent;
+  const manualErase = role === "exclude" && state.manualExclusionErasePresent;
   if (operation === "toggle") {
     const enabled = state.candidates.filter((item) => item.role === role && !state.removedCandidateIds.has(item.id)).map((item) => item.enabled);
     if (manual) enabled.push(role === "apply" ? state.manualEnabled : state.manualExclusionEnabled);
@@ -557,7 +573,7 @@ async function batchCandidateOperation(spec) {
     operation = enabled.length && enabled.every(Boolean) ? "disable" : "enable";
   }
   if (operation === "delete" && confirmationRequired("candidateRoleDelete") && !await confirmAction(t("confirm.candidateRoleDelete.title"), t("confirm.candidateRoleDelete.message"), "candidateRoleDelete")) return;
-  if (state.currentId !== imageId || !isCurrentGeneration(generation) || state.candidateBatchPending.has(imageId)) return;
+  if (state.currentId !== imageId || !isCurrentGeneration(generation) || currentImageActionPending()) return;
   const changed = state.candidates.filter((item) => item.role === role && !state.removedCandidateIds.has(item.id));
   if (operation === "delete") {
     const ids = changed.map((item) => item.id);
@@ -698,14 +714,15 @@ function copyCanvas(source, target) {
 }
 
 function updateHistoryButtons() {
+  const locked = currentImageActionPending() || isBusy() || state.importing;
   if (state.project?.id) {
     const history = state.projectHistory.get(state.currentId) || {};
-    $("#undoButton").disabled = state.projectReadOnly || state.projectHistoryBusy || history.canUndo !== true;
-    $("#redoButton").disabled = state.projectReadOnly || state.projectHistoryBusy || history.canRedo !== true;
+    $("#undoButton").disabled = locked || state.projectReadOnly || state.projectHistoryBusy || history.canUndo !== true;
+    $("#redoButton").disabled = locked || state.projectReadOnly || state.projectHistoryBusy || history.canRedo !== true;
     return;
   }
-  $("#undoButton").disabled = state.historyIndex <= 0;
-  $("#redoButton").disabled = state.historyIndex >= state.history.length;
+  $("#undoButton").disabled = locked || state.historyIndex <= 0;
+  $("#redoButton").disabled = locked || state.historyIndex >= state.history.length;
 }
 
 function resetHistoryToCurrentManualMask() {
@@ -809,7 +826,10 @@ function fillAt(point, tool = state.tool) {
       state.history.splice(state.historyIndex); state.history.push({ tool, spans }); trimHistory();
       state.historyIndex = state.history.length;
     }
-    if (tool === "bucket") state.manualMaskPresent = canvasHasPixels(addCtx, addCanvas);
+    if (tool === "bucket") refreshManualLayerPresence("add", ...(state.manualExclusionForced ? [] : ["exclusion"]));
+    else if (tool === "mosaic_eraser") refreshManualLayerPresence("add");
+    else if (tool === "eraser" || tool === "exclude_bucket") refreshManualLayerPresence("exclusion", "exclusionErase");
+    else if (tool === "exclude_eraser") refreshManualLayerPresence("exclusionErase");
     state.fillPending = false; scheduleManualWorkspaceSave(); setReviewed(currentRecord(), false); updateHistoryButtons(); refreshCurrentReviewAndMask(); requestMosaicPreview(); renderCandidates(); render();
   };
   if (typeof Worker !== "function") { showUserError("internal_error"); return; }
@@ -934,6 +954,7 @@ function rebuildManualMaskFromHistory() {
   state.removedCandidateIds = new Set(state.historyRemovedCandidateIds || []);
   for (const candidate of state.candidates) if (!(state.historyCandidateIds || new Set()).has(candidate.id)) state.removedCandidateIds.add(candidate.id);
   for (const stroke of state.history.slice(0, state.historyIndex)) replayManualStroke(stroke);
+  refreshManualLayerPresence("add", "exclusion", "exclusionErase");
   markMaskDirty(); markDraftDirty("add", "exclusion", "exclusionErase");
 }
 
@@ -950,7 +971,10 @@ function completeManualStroke() {
     trimHistory();
     state.historyIndex = state.history.length;
   }
-  state.manualMaskPresent = canvasHasPixels(addCtx, addCanvas);
+  if (stroke.tool === "brush") refreshManualLayerPresence("add", ...(state.manualExclusionForced ? [] : ["exclusion"]));
+  else if (stroke.tool === "mosaic_eraser") refreshManualLayerPresence("add");
+  else if (stroke.tool === "eraser" || stroke.tool === "exclude_bucket") refreshManualLayerPresence("exclusion", "exclusionErase");
+  else if (stroke.tool === "exclude_eraser") refreshManualLayerPresence("exclusionErase");
   // The live ROI previews are intentionally provisional: after pointerup,
   // rebuild the whole mask once so every exclusion and candidate is exact
   // before history/workspace persistence and the final preview.
@@ -972,7 +996,8 @@ async function refreshProjectHistory(imageId = state.currentId) {
 
 async function restoreProjectHistory(direction) {
   const imageId = state.currentId;
-  if (!state.project?.id || !imageId || state.projectReadOnly || state.projectHistoryBusy || isBusy() || state.importing) return;
+  const generation = state.imageGeneration;
+  if (!state.project?.id || !imageId || state.projectReadOnly || state.projectHistoryBusy || isBusy() || state.importing || currentImageActionPending()) return;
   const history = state.projectHistory.get(imageId) || {};
   if ((direction === "undo" && !history.canUndo) || (direction === "redo" && !history.canRedo)) return;
   state.projectHistoryBusy = true; updateHistoryButtons();
@@ -989,8 +1014,8 @@ async function restoreProjectHistory(direction) {
       state.projectHistory.set(imageId, { canUndo: result.canUndo === true, canRedo: result.canRedo === true });
       const snapshot = await api("/api/images");
       state.images = snapshot.images || state.images; loadReviewedPaths(); applyProjectSnapshot(snapshot); if (typeof renderCatalogViews === "function") renderCatalogViews();
-      if (changed.has(imageId)) await selectImage(imageId, true, { saveCurrentDraft: false });
-      else updateHistoryButtons();
+      if (changed.has(imageId) && state.currentId === imageId && isCurrentGeneration(generation) && !currentImageActionPending()) await selectImage(imageId, true, { saveCurrentDraft: false });
+      else if (state.currentId === imageId && isCurrentGeneration(generation) && !currentImageActionPending()) updateHistoryButtons();
     }, { lockCandidateControls: true });
   } catch (error) { showUserError(error); }
   finally { state.projectHistoryBusy = false; updateHistoryButtons(); }
@@ -998,8 +1023,10 @@ async function restoreProjectHistory(direction) {
 
 function restoreSnapshot(index) {
   if (state.project?.id) { void restoreProjectHistory(index < state.historyIndex ? "undo" : "redo"); return; }
-  if (isBusy() || state.importing || index < 0 || index > state.history.length) return;
+  if (isBusy() || state.importing || currentImageActionPending() || index < 0 || index > state.history.length) return;
   if (index === state.historyIndex) return;
+  const imageId = state.currentId;
+  const generation = state.imageGeneration;
   const restoreToken = ++state.historyRestoreToken;
   state.historyIndex = index;
   rebuildManualMaskFromHistory();
@@ -1007,8 +1034,7 @@ function restoreSnapshot(index) {
   setReviewed(currentRecord(), false);
   updateHistoryButtons(); renderCandidates(); render();
   requestAnimationFrame(() => {
-    if (restoreToken !== state.historyRestoreToken) return;
-    state.manualMaskPresent = canvasHasPixels(addCtx, addCanvas);
+    if (restoreToken !== state.historyRestoreToken || state.currentId !== imageId || !isCurrentGeneration(generation) || currentImageActionPending()) return;
     updateCandidateStatus(); refreshCurrentReviewAndMask(); requestMosaicPreview();
   });
 }

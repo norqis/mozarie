@@ -339,10 +339,12 @@ async function openProject(project, resume = false) {
   finally { endProjectOperation(); }
 }
 
-async function downloadProjectArtifact(path, filename) {
+async function downloadProjectArtifact(path, filename, expectedImageId = null, expectedGeneration = null) {
   try {
+    if (expectedImageId && currentImageActionPending()) return;
     if (state.candidateUpdateChains?.size) await waitForCandidateMutations();
     await flushAllWorkspaceMutations();
+    if (expectedImageId && (state.currentId !== expectedImageId || !isCurrentGeneration(expectedGeneration) || currentImageActionPending())) return;
     const response = await fetch(path, { headers: { "X-Mozarie-Token": document.querySelector('meta[name="mozarie-token"]')?.content || "" } });
     if (!response.ok) throw responseError(response, await response.json().catch(() => ({})));
     const link = document.createElement("a"); link.href = URL.createObjectURL(await response.blob()); link.download = filename;
@@ -702,10 +704,10 @@ function bindEvents() {
   };
   $("#detectAllButton").addEventListener("click", detectAll);
   document.querySelectorAll("#dialogTargetPenis, #dialogTargetPussy").forEach((input) => input.addEventListener("change", () => validateDetectionTargets(detectionTargets("dialogTarget"), $("#detectTargetValidation"))));
-  $("#detectCurrentButton").addEventListener("click", () => state.currentId && runDetection([state.currentId], detectionConfidence(), 1, detectionTargets()));
+  $("#detectCurrentButton").addEventListener("click", () => { if (!currentImageActionPending() && state.currentId) void runDetection([state.currentId], detectionConfidence(), 1, detectionTargets()); });
   $("#saveAllButton").addEventListener("click", saveAll); $("#saveButton").addEventListener("click", saveCurrent); $("#singleViewButton").addEventListener("click", () => setDisplayMode("single")); $("#compareViewButton").addEventListener("click", () => setDisplayMode("compare")); $("#fitButton").addEventListener("click", () => { if (!isBusy() && !state.importing) fitImage(); });
-  $("#downloadCurrentMosaicMask").addEventListener("click", () => { if (state.currentId) void downloadProjectArtifact(`/api/project/mask/${encodeURIComponent(state.currentId)}/mosaic`, "mosaic-mask.png"); });
-  $("#downloadCurrentExcludeMask").addEventListener("click", () => { if (state.currentId) void downloadProjectArtifact(`/api/project/mask/${encodeURIComponent(state.currentId)}/exclude`, "exclude-mask.png"); });
+  $("#downloadCurrentMosaicMask").addEventListener("click", () => { const imageId = state.currentId; if (!currentImageActionPending() && imageId) void downloadProjectArtifact(`/api/project/mask/${encodeURIComponent(imageId)}/mosaic`, "mosaic-mask.png", imageId, state.imageGeneration); });
+  $("#downloadCurrentExcludeMask").addEventListener("click", () => { const imageId = state.currentId; if (!currentImageActionPending() && imageId) void downloadProjectArtifact(`/api/project/mask/${encodeURIComponent(imageId)}/exclude`, "exclude-mask.png", imageId, state.imageGeneration); });
   $("#bucketTolerance").addEventListener("input", (event) => setFillColorTolerance(event.currentTarget.value));
   $("#bucketTolerance").addEventListener("change", () => { void saveFillColorTolerance(); });
   $("#bucketToleranceClose").addEventListener("click", () => closeFillToleranceControl({ focus: true }));
@@ -774,8 +776,8 @@ function bindEvents() {
     else return;
     event.preventDefault(); updateCompareSplitter(); render(); updateBrushCursor(); persistCompareSplit();
   });
-  $("#removeCurrentImageButton").addEventListener("click", () => { const image = currentRecord(); if (image) void setHidden(image, !isHidden(image)); });
-  $("#clearCurrentMasksButton").addEventListener("click", () => state.currentId && clearMasks([state.currentId], "confirm.clearCurrent.title", "confirm.clearCurrent.message"));
+  $("#removeCurrentImageButton").addEventListener("click", () => { const image = currentRecord(); if (!currentImageActionPending() && image) void setHidden(image, !isHidden(image)); });
+  $("#clearCurrentMasksButton").addEventListener("click", () => { const imageId = state.currentId; if (!currentImageActionPending() && imageId) void clearMasks([imageId], "confirm.clearCurrent.title", "confirm.clearCurrent.message", imageId, state.imageGeneration); });
   $("#clearAllMasksButton").addEventListener("click", () => { closeBatchMoreMenus(); void clearMasks(state.images.map((image) => image.id), "confirm.clearAllMasks.title", "confirm.clearAllMasks.message"); });
   $("#clearCatalogButton").addEventListener("click", () => { closeBatchMoreMenus(); void clearCatalog(); });
   for (const [menuId, buttonId] of [["#batchMoreMenu", "#batchMoreButton"], ["#selectionActionsMenu", "#selectionActionsButton"]]) {

@@ -27,7 +27,7 @@ function validateDetectionCandidatePadding() {
 }
 function syncDetectionActions() {
   const enabled = persistedDetectionTargets().length > 0 && !isBusy() && !state.importing
-    && !state.projectReadOnly && !currentRecord()?.sourceDimensionsChanged;
+    && !state.projectReadOnly && !currentRecord()?.sourceDimensionsChanged && !currentImageActionPending();
   $("#detectAllButton").disabled = !enabled || !state.images.length;
   $("#detectCurrentButton").disabled = !enabled || !state.currentId;
 }
@@ -143,10 +143,12 @@ async function cancelDetection() {
 
 async function saveCurrent() {
   const imageId = state.currentId;
-  if (isBusy() || state.importing || !imageId) return;
+  const generation = state.imageGeneration;
+  if (isBusy() || state.importing || currentImageActionPending() || !imageId) return;
   if (state.candidateUpdateChains.size) await waitForCandidateMutations();
   const record = state.images.find((image) => image.id === imageId);
-  if (isBusy() || state.importing || state.currentId !== imageId || !record || !imageHasMask(record)) return;
+  if (isBusy() || state.importing || currentImageActionPending() || state.currentId !== imageId || !isCurrentGeneration(generation)
+    || !state.currentImage || state.projectReadOnly || record?.sourceDimensionsChanged || !record || !imageHasMask(record)) return;
   await openSingleSaveDialog(imageId);
 }
 

@@ -117,20 +117,22 @@ function resetCurrentDraft() {
   addCtx.clearRect(0, 0, addCanvas.width, addCanvas.height);
   exclusionCtx.clearRect(0, 0, exclusionCanvas.width, exclusionCanvas.height);
   exclusionEraseCtx.clearRect(0, 0, exclusionEraseCanvas.width, exclusionEraseCanvas.height);
-  state.manualMaskPresent = false; state.manualEnabled = true; state.manualExclusionEnabled = true; state.manualExclusionEraseEnabled = true;
+  state.manualMaskPresent = false; state.manualExclusionPresent = false; state.manualExclusionErasePresent = false; state.manualEnabled = true; state.manualExclusionEnabled = true; state.manualExclusionEraseEnabled = true;
   state.maskDirty = true; flushMaskComposition();
   resetHistoryToCurrentManualMask(); refreshMaskStatus(true); render();
 }
 
-async function clearMasks(imageIds, titleKey, messageKey) {
-  if (!imageIds.length || isBusy() || state.importing) return;
+async function clearMasks(imageIds, titleKey, messageKey, expectedImageId = null, expectedGeneration = null) {
+  if (!imageIds.length || isBusy() || state.importing || currentImageActionPending()) return;
   if (!await confirmAction(t(titleKey), t(messageKey), "clearMasks")) return;
+  if (expectedImageId && (state.currentId !== expectedImageId || !isCurrentGeneration(expectedGeneration) || currentImageActionPending())) return;
   state.masksClearing = true;
   let catalogEpoch = null;
   updateActionButtons();
   try {
     await flushAllImageMutations();
     await Promise.all([...new Set(imageIds)].map(flushWorkspaceDraft));
+    if (expectedImageId && (state.currentId !== expectedImageId || !isCurrentGeneration(expectedGeneration) || currentImageActionPending())) return;
     catalogEpoch = beginCatalogEpoch();
     await api("/api/masks/clear", { method: "POST", body: JSON.stringify({ imageIds }) });
     if (!isCurrentCatalogEpoch(catalogEpoch)) return;
@@ -640,7 +642,7 @@ function handleEditorKeydown(event) {
   const binding = shortcutFromEvent(event);
   const shortcuts = state.settings?.shortcuts?.bindings || { undo: "Ctrl+Z", redo: "Ctrl+Shift+Z" };
   const enabled = state.settings?.shortcuts?.actions || {};
-  if (!state.projectReadOnly && !currentRecord()?.sourceDimensionsChanged
+  if (!currentImageActionPending() && !state.projectReadOnly && !currentRecord()?.sourceDimensionsChanged
     && ((binding === shortcuts.undo && enabled.undo !== false) || (binding === shortcuts.redo && enabled.redo !== false))) {
     event.preventDefault();
     void restoreSnapshot(binding === shortcuts.redo ? state.historyIndex + 1 : state.historyIndex - 1);
@@ -655,7 +657,7 @@ function navigationShortcutAction(event) {
   const bindings = state.settings?.shortcuts?.bindings || { previous: "ArrowLeft", next: "ArrowRight", previousVisible: "ArrowUp", nextVisible: "ArrowDown", first: "Home", last: "End", reviewAndNext: "Enter", toggleOverview: "G", undo: "Ctrl+Z", redo: "Ctrl+Shift+Z" };
   const actionForBinding = Object.entries(bindings).find(([, value]) => value === binding)?.[0];
   if (!actionForBinding || state.settings?.shortcuts?.actions?.[actionForBinding] === false) return null;
-  if ((state.projectReadOnly || currentRecord()?.sourceDimensionsChanged) && ["reviewAndNext", "undo", "redo"].includes(actionForBinding)) return null;
+  if ((currentImageActionPending() || state.projectReadOnly || currentRecord()?.sourceDimensionsChanged) && ["reviewAndNext", "undo", "redo"].includes(actionForBinding)) return null;
   if (actionForBinding === "toggleOverview") return "toggleOverview";
   if (state.viewMode !== "edit") return null;
   return actionForBinding;

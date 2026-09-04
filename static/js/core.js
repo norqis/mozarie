@@ -18,7 +18,7 @@ const state = {
   detectionTargetIds: [], pendingDetectionTargetIds: [], detectCancelRequested: false,
   pageLoadedAt: Date.now() / 1000, handledDetectionStartedAt: null, importSession: null,
   candidateUpdateChains: new Map(), candidateUpdateVersions: new Map(), candidateDeleting: new Set(), candidateBatchPending: new Set(), imageMutationChains: new Map(), candidateControlLocks: new Map(),
-  manualMaskPresent: false, manualEnabled: true, manualExclusionEnabled: true, manualExclusionForced: true, manualExclusionEraseEnabled: true,
+  manualMaskPresent: false, manualExclusionPresent: false, manualExclusionErasePresent: false, manualEnabled: true, manualExclusionEnabled: true, manualExclusionForced: true, manualExclusionEraseEnabled: true,
   galleryNodes: new Map(), overviewNodes: new Map(), contextMenuImageId: null, contextMenuOrigin: null, contextMenuScroll: null, browserSave: null, pollInFlight: null, pollFailures: 0,
   // Browser file handles never leave this tab. They make imported images real save targets.
   sourceAccess: new Map(),
@@ -35,6 +35,8 @@ const state = {
   renderFrame: 0,
   maskDirty: false, draftDirty: false, draftLayerDirty: new Set(), draftDirtyRois: new Map(), historyBaseDirty: false, draftSaveChains: new Map(),
 };
+
+function currentImageActionPending() { return Boolean(state.pendingImageId) || state.candidateBatchPending.size > 0; }
 
 const canvas = $("#editorCanvas");
 const stage = $("#canvasStage");
@@ -519,7 +521,7 @@ function updateActionButtons() {
   // Do not let controls mutate the image that is being replaced under the
   // editor.  Gallery selection may still supersede this request; its generation
   // check owns that race.
-  const switchingImages = Boolean(state.pendingImageId) || state.candidateBatchPending.size > 0;
+  const switchingImages = currentImageActionPending();
   const current = currentRecord();
   const hasImage = Boolean(state.currentId && state.currentImage && current);
   const candidateLocked = candidateControlLocked(state.currentId);
@@ -538,18 +540,18 @@ function updateActionButtons() {
   const detectAllButton = $("#detectAllButton");
   detectAllButton.textContent = t("gallery.detectAll");
   detectAllButton.disabled = busyLocked || mutationLocked || state.images.length === 0;
-  $("#detectCurrentButton").disabled = busyLocked || mutationLocked || !hasImage;
-  $("#clearCurrentMasksButton").disabled = busyLocked || mutationLocked || candidateLocked || !hasImage
+  $("#detectCurrentButton").disabled = busyLocked || mutationLocked || switchingImages || !hasImage;
+  $("#clearCurrentMasksButton").disabled = busyLocked || mutationLocked || switchingImages || candidateLocked || !hasImage
     || !(current.candidateCount || state.manualMaskPresent || presence?.hasManualExclude || presence?.hasManualExclusionErase || imageHasMask(current));
   const visibilityButton = $("#removeCurrentImageButton");
-  visibilityButton.disabled = busyLocked || mutationLocked || !hasImage;
+  visibilityButton.disabled = busyLocked || mutationLocked || switchingImages || !hasImage;
   const visibilityLabel = t(current && isHidden(current) ? "editor.show" : "editor.hide");
   visibilityButton.textContent = visibilityLabel; visibilityButton.title = visibilityLabel; visibilityButton.setAttribute("aria-label", visibilityLabel);
   for (const id of ["#clearAllMasksButton", "#clearCatalogButton", "#batchMoreButton"]) $(id).disabled = busyLocked || mutationLocked || state.images.length === 0;
   $("#batchModeButton").disabled = busyLocked || mutationLocked || state.images.length === 0;
   $("#galleryFilter").disabled = busyLocked;
   $("#saveAllButton").disabled = busyLocked || mutationLocked || mutatingCandidates || state.images.length === 0;
-  const currentSaveDisabled = busyLocked || mutationLocked || mutatingCandidates || !hasImage || !imageHasMask(current);
+  const currentSaveDisabled = busyLocked || mutationLocked || switchingImages || mutatingCandidates || !hasImage || !imageHasMask(current);
   $("#saveButton").disabled = currentSaveDisabled;
   $("#applyStartButton").disabled = busyLocked || mutationLocked || mutatingCandidates || state.applyTargetIds.length === 0
     || Boolean(applyRestrictionMessage()) || (selectedSaveMode() === "copy" && !state.outputDirectoryHandle);
@@ -559,8 +561,12 @@ function updateActionButtons() {
   $("#reviewAndNextButton").disabled = busyLocked || mutationLocked || switchingImages || !hasImage;
   $("#removeAndNextButton").disabled = busyLocked || mutationLocked || switchingImages || !hasImage;
   $("#hideAndNextButton").disabled = busyLocked || mutationLocked || switchingImages || !hasImage;
-  $("#downloadCurrentMosaicMask").disabled = !hasImage || !state.project;
-  $("#downloadCurrentExcludeMask").disabled = !hasImage || !state.project;
+  $("#downloadCurrentMosaicMask").disabled = switchingImages || !hasImage || !state.project;
+  $("#downloadCurrentExcludeMask").disabled = switchingImages || !hasImage || !state.project;
+  if (switchingImages) for (const control of document.querySelectorAll("#candidatePane button, #candidatePaddingPopover button, #candidatePaddingPopover input")) {
+    if (!control.disabled) control.dataset.disabledByLock = "true";
+    control.disabled = true;
+  }
   updateCandidateBatchButtons(hasImage, candidateControlsLocked, presence, candidateViewLocked);
   updateHistoryButtons();
   if (busyLocked) {
@@ -610,10 +616,7 @@ function updateCandidateBatchButtons(hasImage = Boolean(state.currentId && state
     const role = button.dataset.candidatePaddingBatch;
     button.disabled = !hasImage || !state.candidates.some((candidate) => candidate.role === role);
   }
-  const manualPresence = presence || {
-    hasManualExclude: canvasHasPixels(exclusionCtx, exclusionCanvas),
-    hasManualExclusionErase: canvasHasPixels(exclusionEraseCtx, exclusionEraseCanvas),
-  };
+  const manualPresence = presence || manualLayerPresence();
   if (!mutationLocked) for (const button of document.querySelectorAll("[data-candidate-batch]")) {
     const [role, operation] = button.dataset.candidateBatch.split(":");
     const hasManual = role === "apply" ? state.manualMaskPresent : manualPresence.hasManualExclude || manualPresence.hasManualExclusionErase;
