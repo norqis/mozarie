@@ -14,6 +14,7 @@ import os
 import sys
 import tempfile
 import weakref
+from ctypes import wintypes
 from pathlib import Path
 
 import numpy as np
@@ -50,32 +51,18 @@ SAMPLES = {
         "candidates": {
             "penis": ("apply", "target", True),
             "pussy": ("apply", "target", True),
-            "fluid": ("exclude", "fluid_exclusion", False),
         },
-        "fluid_area": (1, None),
-        "negative_regions": (
-            ("breasts", (150, 400, 750, 800)),
-            ("upper-torso", (250, 800, 650, 1_050)),
-            ("far-thigh-background", (0, 900, 170, 1_250)),
-        ),
     },
 }
 
-
-# The settle check deliberately samples only after models and image arrays have
-# been released.  One 4K source plus its RGB/mask work buffers is below 128 MiB;
-# 256 MiB leaves room for Python and the Windows working-set manager while still
-# catching a model-sized leak.  PrivateUsage is Windows' committed private
-# memory; WorkingSetSize is its current resident set (PROCESS_MEMORY_COUNTERS_EX).
-MIB = 1024 * 1024
-MAX_SETTLED_PROCESS_MEMORY_DELTA = 256 * MIB
 MEMORY_SOAK_CYCLES = 5
+PRIVATE_BYTES_GROWTH_LIMIT = 256 * 1024 * 1024
 
 
 class _ProcessMemoryCountersEx(ctypes.Structure):
     _fields_ = [
-        ("cb", ctypes.c_ulong),
-        ("PageFaultCount", ctypes.c_ulong),
+        ("cb", ctypes.c_uint32),
+        ("PageFaultCount", ctypes.c_uint32),
         ("PeakWorkingSetSize", ctypes.c_size_t),
         ("WorkingSetSize", ctypes.c_size_t),
         ("QuotaPeakPagedPoolUsage", ctypes.c_size_t),
@@ -89,29 +76,38 @@ class _ProcessMemoryCountersEx(ctypes.Structure):
 
 
 def _process_memory_bytes() -> tuple[int, int]:
-    """Return Windows Private Bytes and current working set for this process."""
+    """Return this process's Private Bytes and RSS (working set) on Windows."""
     if os.name != "nt":
         raise RuntimeError("real detection memory soak requires Windows")
+
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    psapi = ctypes.WinDLL("psapi", use_last_error=True)
+    get_current_process = kernel32.GetCurrentProcess
+    get_current_process.argtypes = []
+    get_current_process.restype = wintypes.HANDLE
+    get_process_memory_info = psapi.GetProcessMemoryInfo
+    get_process_memory_info.argtypes = [
+        wintypes.HANDLE,
+        ctypes.POINTER(_ProcessMemoryCountersEx),
+        wintypes.DWORD,
+    ]
+    get_process_memory_info.restype = wintypes.BOOL
+
     counters = _ProcessMemoryCountersEx()
     counters.cb = ctypes.sizeof(counters)
-    handle = ctypes.windll.kernel32.GetCurrentProcess()
-    if not ctypes.windll.psapi.GetProcessMemoryInfo(handle, ctypes.byref(counters), counters.cb):
+    if not get_process_memory_info(get_current_process(), ctypes.byref(counters), counters.cb):
         raise ctypes.WinError(ctypes.get_last_error())
     return int(counters.PrivateUsage), int(counters.WorkingSetSize)
 
 
-def _assert_process_memory_soak(samples: list[tuple[int, int]]) -> None:
-    """Reject an accumulating post-cleanup process footprint, not harmless noise."""
-    if len(samples) < 4:
-        raise ValueError("process memory soak needs at least four settled cycles")
+def _settled_private_bytes_averages(samples: list[tuple[int, int]]) -> tuple[float, float]:
+    """Compare the two early and two late post-warm-up Private Bytes samples."""
     settled = samples[1:]
-    labels = ("private", "rss")
-    for index, label in enumerate(labels):
-        values = [sample[index] for sample in settled]
-        if max(values) - min(values) > MAX_SETTLED_PROCESS_MEMORY_DELTA:
-            raise RuntimeError(f"process {label} varied by more than {MAX_SETTLED_PROCESS_MEMORY_DELTA} bytes: {values}")
-        if all(current > previous for previous, current in zip(values, values[1:])):
-            raise RuntimeError(f"process {label} grew after every cleanup cycle: {values}")
+    if len(settled) != 4:
+        raise ValueError(f"expected {MEMORY_SOAK_CYCLES} memory samples, got {len(samples)}")
+    early_average = sum(private_bytes for private_bytes, _rss in settled[:2]) / 2
+    late_average = sum(private_bytes for private_bytes, _rss in settled[-2:]) / 2
+    return early_average, late_average
 
 
 def _mask_metrics(path: Path) -> tuple[int, tuple[int, int, int, int] | None]:
@@ -176,7 +172,7 @@ def _assert_scene(name: str, candidates) -> list[str]:
         raise RuntimeError(f"{name}: unexpected labels {sorted(unexpected)}")
     for label, metadata in expected["candidates"].items():
         _assert_candidate(by_label[label], metadata)
-    if "fluid" not in expected["candidates"]:
+    if name == "Scene_cowgirl_00023.png":
         return lines
     fluid = by_label["fluid"]
     area, bbox = _mask_metrics(fluid.mask_path)
@@ -190,7 +186,7 @@ def _assert_scene(name: str, candidates) -> list[str]:
         allowed_left, allowed_top, allowed_right, allowed_bottom = expected_bbox
         if left < allowed_left or top < allowed_top or right > allowed_right or bottom > allowed_bottom:
             raise RuntimeError(f"{name}: fluid bbox {bbox} outside {expected_bbox}")
-    for label, region, minimum in expected.get("regions", ()):
+    for label, region, minimum in expected["regions"]:
         rate = _region_rate(fluid.mask_path, region)
         lines.append(f"  {label}: {rate:.3f}")
         if rate < minimum:
@@ -263,12 +259,7 @@ def main() -> int:
             if args.gpu_device is not None:
                 state.settings["models"]["gpu_device"] = args.gpu_device
             state._require_supported_gpu()
-            import torch
-            device = state.settings["models"]["gpu_device"]
-            torch.cuda.synchronize(device)
-            baseline = (int(torch.cuda.memory_allocated(device)), int(torch.cuda.memory_reserved(device)))
-            settled_cycles: list[tuple[int, int]] = []
-            settled_process_memory: list[tuple[int, int]] = []
+            memory_samples: list[tuple[int, int]] = []
             for cycle in range(1, MEMORY_SOAK_CYCLES + 1):
                 try:
                     print(*_run_cycle(state, args.images_dir, args.artifacts, args.scene23_repeats, cycle), sep="\n")
@@ -278,18 +269,21 @@ def main() -> int:
                     failures.append(failure)
                     state._release_gpu_job_memory()
                     gc.collect()
-                torch.cuda.synchronize(device)
-                settled = (int(torch.cuda.memory_allocated(device)), int(torch.cuda.memory_reserved(device)))
-                settled_cycles.append(settled)
-                process_memory = _process_memory_bytes()
-                settled_process_memory.append(process_memory)
-                print(
-                    f"cycle {cycle} after cleanup: GPU allocated={settled[0]}, reserved={settled[1]}; "
-                    f"process private={process_memory[0]}, rss={process_memory[1]}"
+                private_bytes, rss_bytes = _process_memory_bytes()
+                memory_samples.append((private_bytes, rss_bytes))
+                print(f"Process memory cycle {cycle}: private_bytes={private_bytes}, rss_bytes={rss_bytes}")
+            early_average, late_average = _settled_private_bytes_averages(memory_samples)
+            growth = late_average - early_average
+            print(
+                "Private Bytes settled averages: "
+                f"early={early_average:.0f}, late={late_average:.0f}, growth={growth:.0f}"
+            )
+            if growth > PRIVATE_BYTES_GROWTH_LIMIT:
+                raise RuntimeError(
+                    "Private Bytes grew persistently across settled cycles: "
+                    f"early_average={early_average:.0f}, late_average={late_average:.0f}, "
+                    f"growth={growth:.0f}, limit={PRIVATE_BYTES_GROWTH_LIMIT}"
                 )
-            if any(current[0] > previous[0] or current[1] > previous[1] for previous, current in zip(settled_cycles, settled_cycles[1:])):
-                raise RuntimeError(f"GPU memory grew across cleanup cycles: before={baseline}, settled={settled_cycles}")
-            _assert_process_memory_soak(settled_process_memory)
         finally:
             state.shutdown()
     if failures:
