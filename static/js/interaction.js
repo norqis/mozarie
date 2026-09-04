@@ -156,6 +156,10 @@ async function clearCatalog() {
     if (!isCurrentCatalogEpoch(catalogEpoch)) return;
     clearStoredCatalogState();
     resetCatalog([], "");
+    state.project = null;
+    state.projectReadOnly = false;
+    state.missingNativeSources = [];
+    renderProjectCurrent();
     clearStatus();
   } catch (error) { if (isCurrentCatalogEpoch(catalogEpoch)) showUserError(error); }
   finally { state.catalogMutation = false; updateActionButtons(); }

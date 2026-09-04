@@ -19,6 +19,8 @@ from typing import Any
 from PIL import Image, UnidentifiedImageError
 import numpy as np
 
+from .masks import compose_masks, expand_mask
+
 
 # Keep every IN clause comfortably below SQLite's smallest common bind limit.
 _BULK_CHUNK_SIZE = 900
@@ -747,24 +749,109 @@ class WorkspaceStore:
             for row in rows
         }
 
-    def acknowledge_source_mismatches(self, records: list[Any], revisions: dict[str, int] | None = None) -> None:
-        """Accept selected source metadata, optionally clearing their masks atomically."""
+    @staticmethod
+    def _resize_binary_mask(raw: bytes | None, old_size: tuple[int, int], new_size: tuple[int, int]) -> tuple[bytes | None, np.ndarray | None]:
+        if raw is None:
+            return None, None
+        image = WorkspaceStore._decode_png_mask(raw)
+        assert image is not None
+        if image.size != old_size:
+            raise ValueError("workspace mask dimensions do not match source image")
+        value = np.asarray(image.resize(new_size, Image.Resampling.NEAREST), dtype=np.uint8) > 0
+        output = io.BytesIO()
+        Image.fromarray(value.astype(np.uint8) * 255, "L").save(output, format="PNG")
+        return output.getvalue(), value.astype(np.uint8) * 255
+
+    @staticmethod
+    def _reset_image_history_db(db: sqlite3.Connection, image_id: str) -> None:
+        group_ids = [str(row["group_id"]) for row in db.execute(
+            "SELECT DISTINCT group_id FROM history_entries WHERE image_id=? AND group_id IS NOT NULL", (image_id,)
+        )]
+        for group_id in group_ids:
+            db.execute("UPDATE history_entries SET group_id=NULL WHERE group_id=? AND image_id<>?", (group_id, image_id))
+        db.execute("DELETE FROM history_entries WHERE image_id=?", (image_id,))
+        db.execute("DELETE FROM history_cursors WHERE image_id=?", (image_id,))
+        for group_id in group_ids:
+            db.execute("DELETE FROM history_groups WHERE group_id=?", (group_id,))
+        WorkspaceStore._prune_unreferenced_candidates(db, image_id)
+
+    def _preserve_resized_workspace_db(self, db: sqlite3.Connection, image_id: str, old_size: tuple[int, int], new_size: tuple[int, int]) -> None:
+        candidate_rows = db.execute("""SELECT candidates.candidate_id,candidates.mask_png,candidates.enabled,candidates.role,candidates.forced,
+            COALESCE(candidate_metadata.expand_px,0) AS expand_px FROM candidates
+            LEFT JOIN candidate_metadata USING(image_id,candidate_id) WHERE candidates.image_id=? AND candidates.deleted=0""", (image_id,)).fetchall()
+        manual = db.execute("SELECT * FROM manual_edits WHERE image_id=?", (image_id,)).fetchone()
+        max_expand = int(np.ceil(np.hypot(new_size[0] - 1, new_size[1] - 1)))
+        candidates: list[tuple[sqlite3.Row, np.ndarray, int]] = []
+        for row in candidate_rows:
+            raw, mask = self._resize_binary_mask(row["mask_png"], old_size, new_size)
+            assert raw is not None and mask is not None
+            expand_px = min(int(row["expand_px"]), max_expand)
+            db.execute("UPDATE candidates SET mask_png=? WHERE image_id=? AND candidate_id=?", (raw, image_id, row["candidate_id"]))
+            db.execute("""INSERT INTO candidate_metadata(image_id,candidate_id,expand_px) VALUES(?,?,?)
+                ON CONFLICT(image_id,candidate_id) DO UPDATE SET expand_px=excluded.expand_px""", (image_id, row["candidate_id"], expand_px))
+            candidates.append((row, expand_mask(mask, expand_px), expand_px))
+        if manual is None:
+            self._reset_image_history_db(db, image_id)
+            return
+        add_raw, add = self._resize_binary_mask(manual["add_png"], old_size, new_size)
+        exclusion_raw, exclusion = self._resize_binary_mask(manual["exclusion_png"], old_size, new_size)
+        erase_raw, erase = self._resize_binary_mask(manual["exclusion_erase_png"], old_size, new_size)
+        try:
+            removed = json.loads(str(manual["removed_candidate_ids"]))
+        except (TypeError, ValueError, json.JSONDecodeError) as exc:
+            raise ValueError("workspace removed candidates are invalid") from exc
+        if not isinstance(removed, list) or any(not isinstance(candidate_id, str) for candidate_id in removed):
+            raise ValueError("workspace removed candidates are invalid")
+        removed_ids = set(removed) & {str(row["candidate_id"]) for row, _mask, _expand in candidates}
+        apply_masks = [mask for row, mask, _expand in candidates if row["enabled"] and row["role"] == "apply" and row["candidate_id"] not in removed_ids]
+        exclude_masks = [mask for row, mask, _expand in candidates if row["enabled"] and row["role"] != "apply" and row["candidate_id"] not in removed_ids]
+        forced_exclude_masks = [mask for row, mask, _expand in candidates if row["enabled"] and row["role"] != "apply" and row["forced"] and row["candidate_id"] not in removed_ids]
+        effective = bool(np.any(compose_masks(
+            (new_size[1], new_size[0]), apply_masks, exclude_masks,
+            add if manual["manual_enabled"] else None,
+            exclusion if manual["exclusion_enabled"] else None,
+            forced_exclude_masks, bool(manual["exclusion_forced"]),
+            erase if manual["exclusion_erase_enabled"] else None,
+        )))
+        db.execute("""UPDATE manual_edits SET add_png=?,exclusion_png=?,exclusion_erase_png=?,removed_candidate_ids=?,has_effective_mask=?,updated_at=?
+            WHERE image_id=?""", (add_raw, exclusion_raw, erase_raw, json.dumps(sorted(removed_ids)), int(effective), time.time_ns(), image_id))
+        self._reset_image_history_db(db, image_id)
+
+    def acknowledge_source_mismatches(self, records: list[Any], revisions: dict[str, int] | None = None) -> set[str]:
+        """Accept selected source metadata, clearing or resizing masks in one transaction."""
         selected = {str(record.image_id): record for record in records}
         if not selected:
-            return
+            return set()
         clear_revisions = revisions or {}
         if set(clear_revisions) - set(selected):
             raise ValueError("workspace clear selection does not match source acknowledgement")
         with self._lock, self._connect() as db:
             db.execute("BEGIN IMMEDIATE")
             try:
-                if clear_revisions:
-                    self._clear_image_workspaces_db(db, clear_revisions)
                 now = time.time_ns()
+                resized: set[str] = set()
                 for image_id, record in selected.items():
-                    db.execute("""UPDATE images SET size_bytes=?,mtime_ns=?,width=?,height=?,source_blocked=0,reviewed=0,updated_at=?
-                        WHERE image_id=?""", (record.size_bytes, record.mtime_ns, record.width, record.height, now, image_id))
+                    image = db.execute("SELECT width,height FROM images WHERE image_id=?", (image_id,)).fetchone()
+                    if image is None:
+                        raise ValueError("workspace image is missing")
+                    old_size = (int(image["width"]), int(image["height"]))
+                    new_size = (int(record.width), int(record.height))
+                    if image_id in clear_revisions:
+                        db.execute("DELETE FROM candidates WHERE image_id=?", (image_id,))
+                        db.execute("DELETE FROM candidate_metadata WHERE image_id=?", (image_id,))
+                        db.execute("DELETE FROM manual_edits WHERE image_id=?", (image_id,))
+                        self._reset_image_history_db(db, image_id)
+                    elif old_size != new_size:
+                        self._preserve_resized_workspace_db(db, image_id, old_size, new_size)
+                        resized.add(image_id)
+                    if image_id in clear_revisions:
+                        db.execute("""UPDATE images SET size_bytes=?,mtime_ns=?,width=?,height=?,source_blocked=0,reviewed=0,
+                            candidate_revision=?,updated_at=? WHERE image_id=?""", (record.size_bytes, record.mtime_ns, record.width, record.height, clear_revisions[image_id], now, image_id))
+                    else:
+                        db.execute("""UPDATE images SET size_bytes=?,mtime_ns=?,width=?,height=?,source_blocked=0,reviewed=0,updated_at=?
+                            WHERE image_id=?""", (record.size_bytes, record.mtime_ns, record.width, record.height, now, image_id))
                 db.execute("COMMIT")
+                return resized
             except Exception:
                 db.execute("ROLLBACK")
                 raise

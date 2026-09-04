@@ -297,6 +297,7 @@ async function showSourceMismatches() {
     list.append(item);
   }
   $("#sourceMismatchClear").checked = false;
+  $("#sourceMismatchDimensionsNotice").hidden = !images.some((image) => image.dimensionsChanged);
   const dialog = $("#sourceMismatchDialog");
   dialog.dataset.imageIds = JSON.stringify(images.map((image) => image.id));
   showModalFromInvoker(dialog);
@@ -570,7 +571,7 @@ function bindEvents() {
     $("#projectNameDialog").close(); if (mode === "new") { resetCatalog([], ""); state.missingNativeSources = []; } renderProjectCurrent();
   } catch (error) { showUserError(error); } finally { endProjectOperation(); } })(); });
   $("#sourceMismatchCancel").addEventListener("click", () => $("#sourceMismatchDialog").close());
-  $("#sourceMismatchForm").addEventListener("submit", (event) => { event.preventDefault(); void (async () => { try { const ids = JSON.parse($("#sourceMismatchDialog").dataset.imageIds || "[]"); const clearWorkspace = $("#sourceMismatchClear").checked; await flushAllImageMutations(); await flushAllWorkspaceMutations(); const snapshot = await api("/api/project/mismatches", { method: "POST", body: JSON.stringify({ imageIds: ids, clearMasks: clearWorkspace }) }); await refreshWorkspaceImages(snapshot, ids, { clearWorkspace }); $("#sourceMismatchDialog").close(); } catch (error) { showUserError(error); } })(); });
+  $("#sourceMismatchForm").addEventListener("submit", (event) => { event.preventDefault(); void (async () => { try { const ids = JSON.parse($("#sourceMismatchDialog").dataset.imageIds || "[]"); const clearWorkspace = $("#sourceMismatchClear").checked; await flushAllImageMutations(); await flushAllWorkspaceMutations(); const snapshot = await api("/api/project/mismatches", { method: "POST", body: JSON.stringify({ imageIds: ids, clearMasks: clearWorkspace }) }); await refreshWorkspaceImages(snapshot, ids, { clearWorkspace, resetWorkspace: true }); $("#sourceMismatchDialog").close(); } catch (error) { showUserError(error); } })(); });
   $("#sameSourceCancel").addEventListener("click", () => { if (!sameSourceBusy) $("#sameSourceDialog").close(); });
   $("#sameSourceDialog").addEventListener("cancel", (event) => { if (sameSourceBusy) event.preventDefault(); });
   $("#sameSourceOpen").addEventListener("click", () => { const project = sameSourceProjects.find((item) => item.id === sameSourceSelectedProjectId) || sameSourceProjects[0]; $("#sameSourceDialog").close(); if (project) void openProject(project); });

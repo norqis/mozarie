@@ -216,6 +216,7 @@ async function startSingleSave(event) {
   syncSingleSaveMode();
   try {
     if (copying) await ensureOutputDirectoryPermission();
+    if (copying) await ensureSaveSources([save.imageId], "copy", deleteOriginal);
     if (!copying && !await confirmAction(t("confirm.overwriteSource.title"), t("confirm.overwriteSource.message"), "overwriteSource")) return;
     if (deleteOriginal && !await confirmAction(t("confirm.deleteSourceAfterCopy.title"), t("confirm.deleteSourceAfterCopy.message"), "deleteSourceAfterCopy")) return;
     state.saving = true; updateActionButtons(); syncSingleSaveMode(); setSingleSaveResult("");
@@ -231,19 +232,22 @@ async function startSingleSave(event) {
     if (!saveToken) throw Object.assign(new Error("save_state_changed"), { code: "save_state_changed" });
     const noEffect = response.headers.get("X-Mozarie-No-Effect") === "1";
     let sourceAction = noEffect ? "keep" : "overwrite";
-    if (copying) {
-      output = await writeSingleOutput(state.outputDirectoryHandle, entry.relativePath, suffix, response);
-      sourceAction = deleteOriginal ? "deleted" : "keep";
-      if (deleteOriginal && access?.fileHandle) { await ensureHandlePermission(access, true); sourceSnapshot = await snapshotSourceHandle(access); await removeSourceHandle(access); sourceChanged = true; }
-    } else if (access?.fileHandle && !noEffect) {
-      sourceSnapshot = await snapshotSourceHandle(access); await writeSourceHandle(access, response); sourceChanged = true;
+    let committed; let commitStarted = false;
+    try {
+      if (copying) {
+        output = await writeSingleOutput(state.outputDirectoryHandle, entry.relativePath, suffix, response);
+        sourceAction = deleteOriginal ? "deleted" : "keep";
+        if (deleteOriginal && access?.fileHandle) { sourceSnapshot = await snapshotSourceHandle(access); await removeSourceHandle(access); sourceChanged = true; }
+      } else if (access?.fileHandle && !noEffect) {
+        sourceSnapshot = await snapshotSourceHandle(access); await writeSourceHandle(access, response); sourceChanged = true;
+      }
+      commitStarted = true;
+      committed = await commitBrowserSaveWithRetry({ imageId: save.imageId, candidateRevision: entry.candidateRevision, saveToken, sourceAction, ...(sourceAction === "overwrite" && access?.fileHandle ? sourceCommitMetadata(access) : {}) });
     }
-    let committed;
-    try { committed = await commitBrowserSaveWithRetry({ imageId: save.imageId, candidateRevision: entry.candidateRevision, saveToken, sourceAction, ...(sourceAction === "overwrite" && access?.fileHandle ? sourceCommitMetadata(access) : {}) }); }
     catch (error) {
-      if (error.saveState === "pending") await cancelBrowserSave(entry, saveToken);
-      const reconcile = isDefinitiveCommitRejection(error) || error.saveState === "pending";
+      const reconcile = !commitStarted || isDefinitiveCommitRejection(error) || error.saveState === "pending";
       if (reconcile) {
+        await cancelBrowserSave(entry, saveToken);
         if (sourceChanged) await restoreSourceHandle(access, sourceSnapshot, deleteOriginal);
         if (output) await state.outputDirectoryHandle.removeEntry(output.name).catch(() => {});
       }
@@ -590,19 +594,21 @@ async function runBrowserSave(imageIds, suffix, deleteOriginal, mode = "copy") {
           const commitCopy = async () => {
             let sourceSnapshot = null;
             let sourceChanged = false;
-            if (inputs.deleteOriginal && access?.fileHandle) {
-              await ensureHandlePermission(access, true);
-              sourceSnapshot = await snapshotSourceHandle(access);
-              await removeSourceHandle(access);
-              sourceChanged = true;
-            }
             const sourceAction = inputs.deleteOriginal ? "deleted" : "keep";
-            try { return await commitBrowserSaveWithRetry({
-              imageId: entry.imageId, candidateRevision: entry.candidateRevision, deleteOriginal: inputs.deleteOriginal, sourceAction, saveToken,
-            }); }
+            let commitStarted = false;
+            try {
+              if (inputs.deleteOriginal && access?.fileHandle) {
+                sourceSnapshot = await snapshotSourceHandle(access);
+                await removeSourceHandle(access);
+                sourceChanged = true;
+              }
+              commitStarted = true;
+              return await commitBrowserSaveWithRetry({
+                imageId: entry.imageId, candidateRevision: entry.candidateRevision, deleteOriginal: inputs.deleteOriginal, sourceAction, saveToken,
+              });
+            }
             catch (error) {
-              if (error.saveState === "pending") await cancelBrowserSave(entry, saveToken);
-              const reconcile = isDefinitiveCommitRejection(error) || error.saveState === "pending";
+              const reconcile = !commitStarted || isDefinitiveCommitRejection(error) || error.saveState === "pending";
               if (reconcile && sourceChanged) try {
                 if (sourceSnapshot === null) throw new Error();
                 await restoreSourceHandle(access, sourceSnapshot, true);
@@ -610,6 +616,7 @@ async function runBrowserSave(imageIds, suffix, deleteOriginal, mode = "copy") {
                 if (liveAccess) Object.assign(liveAccess, access);
               } catch { throw codedError("source_restore_failed"); }
               if (reconcile) {
+                await cancelBrowserSave(entry, saveToken);
                 await inputs.outputDirectoryHandle.removeEntry(output.name).catch(() => {});
               }
               throw error;

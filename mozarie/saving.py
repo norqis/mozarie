@@ -18,7 +18,7 @@ from .core import (
 )
 from .config import SettingsError, validate_output_directory_ready
 from .image_io import (
-    _stage_record_replacement, _stage_save_with_mask, calculate_block_size, render_with_mask,
+    _assert_source_stat_matches, _stage_record_replacement, _stage_save_with_mask, calculate_block_size, read_stable_source_bytes, render_with_mask,
     decode_draft_masks, draft_manual_exclusion_forced, save_with_mask,
     unique_session_import_destination, write_rendered_copy,
 )
@@ -188,13 +188,13 @@ class SavingMixin:
                     forced_exclude_masks, manual_exclude_forced, exclusion_erase_mask,
                 )
                 no_effect = mask is None or not np.any(mask)
+                source_fingerprint = record.asset_fingerprint()
                 # Saving every listed image means an image without a mosaic is
                 # copied as-is.  An overwrite deliberately becomes a commit
                 # with ``keep`` instead of touching its source file.
-                output = record.path.read_bytes() if no_effect else render_with_mask(
+                output = read_stable_source_bytes(record, source_fingerprint) if no_effect else render_with_mask(
                     record, mask, calculate_block_size(record.width, record.height, divisor),
                 )
-                source_fingerprint = record.asset_fingerprint()
                 if copy_to_default:
                     if not configured_output_directory.is_dir():
                         raise ClientError("保存先フォルダを使用できません。設定で変更してください。", "output_folder_unavailable")
@@ -223,6 +223,7 @@ class SavingMixin:
                         handle.flush()
 
                 with self.lock:
+                    _assert_source_stat_matches(record, source_fingerprint)
                     if (
                         self.images.get(image_id) is None
                         or self.catalog_generation != catalog_generation
@@ -495,11 +496,12 @@ class SavingMixin:
                     except Exception:
                         raise
                     no_effect = mask is None or not np.any(mask)
+                    source_fingerprint = record.asset_fingerprint()
                     source_stage = None
                     output_path = self._reserve_output_destination(record, suffix, output_directory) if copy_to_default else record.path
                     if copy_to_default:
                         try:
-                            output = record.path.read_bytes() if no_effect else render_with_mask(
+                            output = read_stable_source_bytes(record, source_fingerprint) if no_effect else render_with_mask(
                                 record, mask, calculate_block_size(record.width, record.height, divisor),
                             )
                             write_rendered_copy(output_path, output)
@@ -512,6 +514,8 @@ class SavingMixin:
                     # Files are fully written before the state mutation. Saving
                     # never clears candidates or manual workspace.
                     try:
+                        if no_effect:
+                            _assert_source_stat_matches(record, source_fingerprint)
                         with self.lock:
                             if not self._job_is_current(job_generation, catalog_generation):
                                 if source_stage is not None:

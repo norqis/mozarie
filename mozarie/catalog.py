@@ -681,6 +681,7 @@ class CatalogMixin:
         with ExitStack() as stack:
             for _image_id, image_lock in sorted(locks):
                 stack.enter_context(image_lock)
+            resized: set[str] = set()
             with self.lock:
                 self._assert_catalog_mutable()
                 known = requested & set(self.source_mismatches) & set(self.images)
@@ -690,7 +691,7 @@ class CatalogMixin:
                 # The comparison baseline changes only after the user confirms.
                 # This one durable operation either commits both the source
                 # metadata and an optional mask clear, or leaves both intact.
-                self.workspace_store.acknowledge_source_mismatches(records, revisions)
+                resized = self.workspace_store.acknowledge_source_mismatches(records, revisions)
                 if clear_masks:
                     for image_id, revision in (revisions or {}).items():
                         self.candidates[image_id] = []
@@ -699,6 +700,10 @@ class CatalogMixin:
                     self.source_mismatches.pop(image_id, None)
         if clear_masks:
             self._delete_mask_files([], [self.cache_dir / image_id for image_id in known])
+        elif resized:
+            self._delete_mask_files([], [self.cache_dir / image_id for image_id in resized])
+            with self.lock:
+                self._restore_workspace_candidates([self.images[image_id] for image_id in resized if image_id in self.images])
 
     def detach_catalog(self) -> str | None:
         """Clear only the live screen state while retaining durable work."""

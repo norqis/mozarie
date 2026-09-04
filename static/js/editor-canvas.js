@@ -169,19 +169,19 @@ function invalidateStaleAssets(imageIds) {
 
 function invalidateStaleAsset(imageId) { invalidateStaleAssets([imageId]); }
 
-async function refreshWorkspaceImages(snapshot, imageIds, { clearWorkspace = false } = {}) {
+async function refreshWorkspaceImages(snapshot, imageIds, { clearWorkspace = false, resetWorkspace = clearWorkspace } = {}) {
   ++state.imageGeneration;
   const ids = new Set(imageIds);
   const currentId = ids.has(state.currentId) ? state.currentId : null;
   invalidateStaleAssets(ids);
   for (const imageId of ids) {
-    if (!clearWorkspace) continue;
+    if (!resetWorkspace) continue;
     state.drafts.delete(imageId);
     state.maskStatus.delete(imageId);
     state.projectHistory.delete(imageId);
     clearCandidateMutationState(imageId);
   }
-  if (clearWorkspace && currentId) {
+  if (resetWorkspace && currentId) {
     state.removedCandidateIds.clear();
     clearCandidateBlink();
   }

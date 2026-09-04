@@ -431,10 +431,22 @@ def _assert_source_stat_matches(record: ImageRecord, expected: tuple[int, int] |
         raise ClientError("元画像が外部で変更されました。画像を再読み込みしてください。", "stale_asset")
 
 
+def read_stable_source_bytes(record: ImageRecord, expected: tuple[int, int] | None = None) -> bytes:
+    """Read one source and confirm its catalogued fingerprint without retrying."""
+    fingerprint = expected or record.asset_fingerprint()
+    if _source_stat_fingerprint(record.path) != fingerprint:
+        raise ClientError("元画像が外部で変更されました。画像を再読み込みしてください。", "stale_asset")
+    try:
+        source = record.path.read_bytes()
+    except OSError as exc:
+        raise ClientError("元画像が外部で変更または削除されました。画像を再読み込みしてください。", "stale_asset") from exc
+    _assert_source_stat_matches(record, fingerprint)
+    return source
+
+
 def render_with_mask(record: ImageRecord, mask: np.ndarray, block_size: int) -> bytes:
     """Render one image without changing the source file or its catalogue state."""
-    source = record.path.read_bytes()
-    _assert_source_stat_matches(record)
+    source = read_stable_source_bytes(record)
     suffix = record.path.suffix.lower()
     with Image.open(io.BytesIO(source)) as source_image:
         source_image.load()
