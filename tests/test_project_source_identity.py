@@ -291,8 +291,14 @@ class SourceIdentityRegressionTests(unittest.TestCase):
         state = self.studio()
         state.create_project("rollback cleanup")
         existing_id = self.import_browser(state, name="existing.png", identity="handle")
+        state.candidates[existing_id] = []
+        state.candidate_revisions[existing_id] = 7
+        state.source_mismatches[existing_id] = True
         before_images = dict(state.images)
         before_order = list(state.order)
+        before_candidates = {image_id: list(candidates) for image_id, candidates in state.candidates.items()}
+        before_revisions = dict(state.candidate_revisions)
+        before_mismatches = dict(state.source_mismatches)
 
         staged = self.stage("new.png")
         with patch.object(state.workspace_store, "hydrate_candidates", side_effect=ValueError("corrupt candidate")), \
@@ -305,4 +311,7 @@ class SourceIdentityRegressionTests(unittest.TestCase):
 
         self.assertEqual(state.images, before_images)
         self.assertEqual(state.order, before_order)
+        self.assertEqual(state.candidates, before_candidates)
+        self.assertEqual(state.candidate_revisions, before_revisions)
+        self.assertEqual(state.source_mismatches, before_mismatches)
         self.assertFalse((state.session_dir / "new.png").exists())
