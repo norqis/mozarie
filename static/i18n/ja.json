@@ -175,7 +175,7 @@
   "context.unreview": "未確認に戻す",
   "context.copyPath": "パスをコピー",
   "confirm.removeImage.title": "画像削除",
-  "confirm.removeImage.message": "この画像の未保存のモザイク候補と手描き指定を破棄し、作業一覧から外します。元画像ファイルは削除しません。",
+  "confirm.removeImage.message": "この画像のデータベース上の履歴、モザイク・除外マスク、状態フラグを完全に削除して作業一覧から外します。元画像ファイルは削除しません。",
   "apply.title": "ファイルを保存",
   "apply.target": "対象: {count}件",
   "apply.targetMode": "保存対象",

@@ -485,7 +485,7 @@ function bindEvents() {
   $("#removeAndNextButton").addEventListener("click", () => { void removeImageFromCatalog(state.currentId); });
   $("#hideAndNextButton").addEventListener("click", () => { void hideAndMoveNext(); });
   document.querySelectorAll("[data-selection-action]").forEach((button) => button.addEventListener("click", () => { void runSelectionAction(button.dataset.selectionAction); }));
-  $("#selectionClearButton").addEventListener("click", () => { state.batchMode = false; clearBatchSelection(); renderOverview(); updateSelectionActionBar(); });
+  $("#selectionClearButton").addEventListener("click", () => { closeBatchMoreMenus(); state.batchMode = false; clearBatchSelection(); renderOverview(); updateSelectionActionBar(); });
   $("#batchModeButton").addEventListener("click", () => { state.batchMode = true; clearBatchSelection(); renderOverview(); updateSelectionActionBar(); });
   document.querySelectorAll("[data-candidate-batch]").forEach((button) => button.addEventListener("click", () => { void batchCandidateOperation(button.dataset.candidateBatch); }));
   document.querySelectorAll("[data-candidate-display-toggle]").forEach((button) => button.addEventListener("click", () => toggleCandidateDisplay(button.dataset.candidateDisplayToggle)));

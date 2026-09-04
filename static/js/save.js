@@ -712,6 +712,7 @@ async function startApplyFromDialog(event) {
   const mode = selectedSaveMode();
   const copy = mode === "copy";
   const suffix = $("#applySuffix").value;
+  if (copy && !state.outputDirectoryHandle) { syncApplyMode(); return; }
   state.saveStarting = true;
   syncApplyMode();
   try {

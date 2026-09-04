@@ -526,7 +526,8 @@ function updateActionButtons() {
   $("#saveAllButton").disabled = running || mutatingCandidates || state.images.length === 0;
   const currentSaveDisabled = running || mutatingCandidates || !hasImage || !imageHasMask(current) || Boolean(current?.sourceDimensionsChanged);
   $("#saveButton").disabled = currentSaveDisabled;
-  $("#applyStartButton").disabled = running || mutatingCandidates || state.applyTargetIds.length === 0 || Boolean(applyRestrictionMessage());
+  $("#applyStartButton").disabled = running || mutatingCandidates || state.applyTargetIds.length === 0
+    || Boolean(applyRestrictionMessage()) || (selectedSaveMode() === "copy" && !state.outputDirectoryHandle);
   $("#overviewButton").disabled = running || state.images.length === 0;
   $("#previousImageButton").disabled = running || switchingImages || imageIndex() <= 0;
   $("#nextImageButton").disabled = running || switchingImages || imageIndex() < 0 || imageIndex() >= state.images.length - 1;

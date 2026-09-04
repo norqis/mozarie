@@ -75,7 +75,7 @@
   "confirm.clearCatalog.title": "Clear image list",
   "confirm.clearCurrent.message": "Clear mosaic ranges from this image?",
   "confirm.clearCurrent.title": "Clear mosaic",
-  "confirm.removeImage.message": "Remove this image from the list? The source file is kept.",
+  "confirm.removeImage.message": "Remove this image from the list and permanently delete its database history, mosaic and exclusion masks, and state flags. The source file is kept.",
   "confirm.removeImage.title": "Remove image",
   "context.menu": "Image actions",
   "context.review": "Mark reviewed",
