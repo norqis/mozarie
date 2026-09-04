@@ -163,6 +163,7 @@ function invalidateStaleAsset(imageId) {
 }
 
 async function refreshWorkspaceImages(snapshot, imageIds, { clearWorkspace = false } = {}) {
+  ++state.imageGeneration;
   const ids = new Set(imageIds);
   const currentId = ids.has(state.currentId) ? state.currentId : null;
   for (const imageId of ids) {

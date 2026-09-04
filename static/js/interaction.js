@@ -132,7 +132,6 @@ async function clearMasks(imageIds, titleKey, messageKey) {
     await flushAllImageMutations();
     await Promise.all([...new Set(imageIds)].map(flushWorkspaceDraft));
     catalogEpoch = beginCatalogEpoch();
-    ++state.imageGeneration;
     await api("/api/masks/clear", { method: "POST", body: JSON.stringify({ imageIds }) });
     if (!isCurrentCatalogEpoch(catalogEpoch)) return;
     const refreshed = await api("/api/images");
