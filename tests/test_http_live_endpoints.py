@@ -157,6 +157,8 @@ class LiveHttpEndpointTests(unittest.TestCase):
         self.assertEqual(list(self.state.session_imports_dir.glob("*.upload.tmp")), [], "the upload is renamed in the session volume instead of copied through cache")
 
     def test_job_endpoint_stays_responsive_while_a_flag_write_waits_for_sqlite(self) -> None:
+        status, _headers, _body = self.request("POST", "/api/projects", {"name": "live flags"}, authorized=True)
+        self.assertEqual(status, 200)
         _status, _headers, body = self.request("POST", "/api/folder", {"path": str(self.source_dir)}, authorized=True)
         image_id = json.loads(body)["images"][0]["id"]
         entered = threading.Event(); release = threading.Event(); result: dict[str, object] = {}
@@ -182,6 +184,8 @@ class LiveHttpEndpointTests(unittest.TestCase):
         self.assertTrue(json.loads(body)["hidden"])
 
     def test_failed_flag_write_keeps_the_live_image_state_unchanged(self) -> None:
+        status, _headers, _body = self.request("POST", "/api/projects", {"name": "live flags"}, authorized=True)
+        self.assertEqual(status, 200)
         _status, _headers, body = self.request("POST", "/api/folder", {"path": str(self.source_dir)}, authorized=True)
         image_id = json.loads(body)["images"][0]["id"]
         with patch.object(self.state.workspace_store, "set_image_flags", side_effect=sqlite3.DatabaseError("locked")):
