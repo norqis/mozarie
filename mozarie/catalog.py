@@ -1029,6 +1029,8 @@ class CatalogMixin:
             if self.job.state in {"running", "pausing", "paused"} or self._has_active_worker():
                 raise ClientError("処理中は画像を追加できません。", "operation_in_progress")
             destination_dir = self._ensure_session()
+            browser_identity = source_identity or self.session_dir.name
+            source_import_dir = destination_dir / f"source-{browser_identity}"
             if not transfer_active:
                 self.active_import_count += 1
 
@@ -1075,28 +1077,13 @@ class CatalogMixin:
                 final_paths: list[Path] = []
                 try:
                     imported: list[dict[str, str]] = []
-                    catalog_relative_paths = {
-                        record.relative_path.casefold()
-                        for record in self.images.values()
-                        if record.source_kind != "session"
-                    }
-                    used_relative_paths = set(catalog_relative_paths)
                     for temporary, name, width, height, client_key, client_mtime_ns, client_size in pending:
                         relative = Path(name)
-                        base_stem, suffix = relative.stem, relative.suffix
-                        if relative.as_posix().casefold() in catalog_relative_paths:
-                            index = 1
-                            while relative.as_posix().casefold() in used_relative_paths or (destination_dir / relative).exists():
-                                index += 1
-                                relative = relative.with_name(f"{base_stem} ({index}){suffix}")
-                            destination = destination_dir / relative
-                        else:
-                            # Keep the established _2 naming for collisions
-                            # among session imports while reserving (2) for a
-                            # collision with an existing catalogue image.
-                            destination = unique_session_import_destination(destination_dir / relative)
-                            relative = destination.relative_to(destination_dir)
-                        used_relative_paths.add(relative.as_posix().casefold())
+                        # Browser source identities are durable. Keep their
+                        # physical staging trees separate, but never let a
+                        # filesystem collision rename the source-relative DB/UI
+                        # path that identifies this image within its source.
+                        destination = unique_session_import_destination(source_import_dir / relative)
                         destination.parent.mkdir(parents=True, exist_ok=True)
                         os.replace(temporary, destination)
                         final_paths.append(destination)
@@ -1106,7 +1093,7 @@ class CatalogMixin:
                         added.append(ImageRecord(
                             image_id=uuid.uuid4().hex,
                             path=destination,
-                            relative_path=destination.relative_to(destination_dir).as_posix(),
+                            relative_path=relative.as_posix(),
                             width=width,
                             height=height,
                             # Browser staging changes filesystem timestamps;
@@ -1118,7 +1105,7 @@ class CatalogMixin:
                             asset_size_bytes=stat.st_size,
                             source_kind="session",
                             project_source_kind=source_kind,
-                            project_source_identity=f"browser:{source_identity or self.session_dir.name}",
+                            project_source_identity=f"browser:{browser_identity}",
                             project_source_display=source_kind,
                         ))
                         imported.append({"clientKey": client_key, "imageId": added[-1].image_id})
@@ -1136,7 +1123,6 @@ class CatalogMixin:
                 durable_created_ids: list[str] = []
                 try:
                     if self.catalog_id:
-                        browser_identity = source_identity or self.session_dir.name
                         try:
                             durable_source_id, durable_source_created = self.workspace_store.resolve_browser_source(
                                 self.catalog_id,
