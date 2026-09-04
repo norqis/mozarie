@@ -60,8 +60,9 @@ class _PendingWorkspaceCommit:
 
 
 class WorkspaceStore:
-    # v7 deliberately replaces the old folder catalogue with a project store.
-    # There is no migration path: the user chooses whether to recreate v4 data.
+    # This is one current project-store schema.  Existing data is either this
+    # schema or it must be explicitly recreated; migrations are intentionally
+    # not supported.
     VERSION = 11
 
     def __init__(self, data_dir: Path) -> None:
@@ -69,7 +70,7 @@ class WorkspaceStore:
         self._lock = threading.RLock()
         data_dir.mkdir(parents=True, exist_ok=True)
         # Inspect an existing database before issuing any write-capable pragma,
-        # DDL, or cleanup statement. v0.4 intentionally has no migrations.
+        # DDL, or cleanup statement. This schema has no migrations.
         existing = self.path.exists()
         if existing:
             self._inspect_existing()
@@ -195,18 +196,18 @@ class WorkspaceStore:
                 db.row_factory = sqlite3.Row
                 tables = {row["name"] for row in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
                 if "meta" not in tables:
-                    raise WorkspaceOpenError("workspace database is not a Mozarie v0.4 database")
+                    raise WorkspaceOpenError(f"workspace database is not schema {self.VERSION}")
                 version_row = db.execute("SELECT value FROM meta WHERE key='schema_version'").fetchone()
                 if version_row is None:
-                    raise WorkspaceOpenError("workspace database is not a Mozarie v0.4 database")
+                    raise WorkspaceOpenError(f"workspace database is not schema {self.VERSION}")
                 try:
                     version = int(version_row["value"])
                 except (TypeError, ValueError) as exc:
-                    raise WorkspaceOpenError("workspace database must be recreated for Mozarie v0.4") from exc
+                    raise WorkspaceOpenError(f"workspace database must be recreated for schema {self.VERSION}") from exc
                 if version > self.VERSION:
-                    raise WorkspaceOpenError("workspace database is newer than this Mozarie version")
+                    raise WorkspaceOpenError(f"workspace database is newer than schema {self.VERSION}")
                 if version != self.VERSION:
-                    raise WorkspaceOpenError("workspace database must be recreated for Mozarie v0.7")
+                    raise WorkspaceOpenError(f"workspace database must be recreated for schema {self.VERSION}")
                 self._validate_schema(db, tables)
         except WorkspaceOpenError:
             raise
@@ -217,11 +218,11 @@ class WorkspaceStore:
     def _validate_schema(db: sqlite3.Connection, tables: set[str]) -> None:
         required = {"meta", "catalogs", "project_sources", "images", "candidates", "candidate_metadata", "manual_edits", "history_entries", "history_groups", "history_candidate_refs", "history_cursors"}
         if not required.issubset(tables):
-            raise WorkspaceOpenError("workspace database must be recreated for Mozarie v0.7")
+            raise WorkspaceOpenError(f"workspace database must be recreated for schema {WorkspaceStore.VERSION}")
         if tuple(row[0] for row in db.execute("PRAGMA quick_check(1)")) != ("ok",):
             raise WorkspaceOpenError("workspace database cannot be opened")
         if db.execute("PRAGMA foreign_key_check").fetchone() is not None:
-            raise WorkspaceOpenError("workspace database must be recreated for Mozarie v0.7")
+            raise WorkspaceOpenError(f"workspace database must be recreated for schema {WorkspaceStore.VERSION}")
         meta = {str(row["name"]): row for row in db.execute("PRAGMA table_info(meta)")}
         catalogs = {str(row["name"]): row for row in db.execute("PRAGMA table_info(catalogs)")}
         images = {str(row["name"]): row for row in db.execute("PRAGMA table_info(images)")}
@@ -235,11 +236,12 @@ class WorkspaceStore:
                 or not {"entry_id", "catalog_id", "image_id", "before_json", "after_json", "delta_json", "created_at"}.issubset(history)
                 or not foreign
                 or not any(int(row["unique"]) for row in indexes)):
-            raise WorkspaceOpenError("workspace database must be recreated for Mozarie v0.7")
+            raise WorkspaceOpenError(f"workspace database must be recreated for schema {WorkspaceStore.VERSION}")
 
     def _connect(self) -> sqlite3.Connection:
         db = sqlite3.connect(self.path, timeout=5, isolation_level=None, factory=_ClosingConnection)
         db.row_factory = sqlite3.Row
+        db.execute("PRAGMA synchronous=NORMAL")
         db.execute("PRAGMA foreign_keys=ON")
         db.execute("PRAGMA busy_timeout=5000")
         return db
