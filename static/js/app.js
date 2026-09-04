@@ -175,7 +175,7 @@ async function resumeCurrentProject() {
   if (!state.project?.id) return;
   try {
     const data = await api("/api/project/resume", { method: "POST", body: JSON.stringify({ projectId: state.project.id }) });
-    state.project = data.project; state.projectReadOnly = false; renderProjectCurrent(); updateActionButtons();
+    state.project = data.project; state.projectReadOnly = false; renderProjectCurrent(); renderCandidates(); updateActionButtons();
   } catch (error) { showUserError(error); }
 }
 
