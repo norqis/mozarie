@@ -135,26 +135,10 @@ async function clearMasks(imageIds, titleKey, messageKey) {
     ++state.imageGeneration;
     await api("/api/masks/clear", { method: "POST", body: JSON.stringify({ imageIds }) });
     if (!isCurrentCatalogEpoch(catalogEpoch)) return;
-    for (const imageId of imageIds) state.drafts.delete(imageId);
-    for (const imageId of imageIds) releaseCandidateBundles(imageId);
-    if (imageIds.includes(state.currentId)) {
-      clearCandidateBlink(); state.candidates = []; resetCurrentDraft();
-      $("#candidateStatus").textContent = t("candidates.none"); renderCandidates();
-      flushRender();
-    }
     const refreshed = await api("/api/images");
     if (!isCurrentCatalogEpoch(catalogEpoch)) return;
-    state.images = refreshed.images;
-    loadReviewedPaths();
-    state.images.forEach((image) => {
-      if (imageIds.includes(image.id)) {
-        image.candidateCount = 0;
-        image.enabledCandidateCount = 0;
-      }
-    });
-    imageIds.forEach((imageId) => state.maskStatus.delete(imageId));
-    markImagesUnreviewed(imageIds, false);
-    renderCatalogViews(); updateNavigationControls(); clearStatus();
+    await refreshWorkspaceImages(refreshed, imageIds, { clearWorkspace: true });
+    clearStatus();
   } catch (error) { if (catalogEpoch === null || isCurrentCatalogEpoch(catalogEpoch)) showUserError(error); }
   finally { state.masksClearing = false; updateActionButtons(); }
 }
@@ -292,7 +276,7 @@ async function runSelectionAction(action) {
       : { reviewed: action === "reviewed" };
     const epoch = beginCatalogEpoch(); state.catalogMutation = true; updateActionButtons();
     try {
-      if (action === "reviewed" || action === "unreviewed") await waitForCandidateMutations();
+      await flushAllImageMutations();
       await flushAllWorkspaceMutations();
       const data = await api("/api/workspace/images", { method: "POST", body: JSON.stringify({ imageIds: ids, ...flags }) });
       if (!isCurrentCatalogEpoch(epoch)) return;
@@ -387,6 +371,8 @@ async function importFiles(files) {
     .filter((entry) => isSupportedImageFile(entry.file || { name: entry.name || entry.relativePath }));
   if (!supportedFiles.length) { finishImportSession(session); return; }
   try {
+    await flushAllImageMutations();
+    await flushAllWorkspaceMutations();
     session.total = supportedFiles.length; session.completed = 0; session.paused = false; session.cancelled = false;
     showProcessing({ kind: "import", state: "running", total: session.total, completed: 0, current: "" });
     let nextIndex = 0;
@@ -538,6 +524,7 @@ async function importFileHandles(handles, session = beginImportSession()) {
 
 async function importDirectoryHandle(directoryHandle, session = beginImportSession()) {
   if (!session) return;
+  await flushAllImageMutations();
   await flushAllWorkspaceMutations();
   session.catalogId = await catalogForDirectoryHandle(directoryHandle);
   session.sourceId = await rememberProjectSource(session.catalogId, directoryHandle, null, state.pendingDirectorySourceId || session.sourceId);
@@ -568,6 +555,7 @@ async function importDirectoryHandle(directoryHandle, session = beginImportSessi
 async function importProjectDirectoryHandle(directoryHandle, projectId, sourceId = null, importIntent = "add") {
   const session = beginImportSession(); if (!session) return;
   try {
+    await flushAllImageMutations();
     await flushAllWorkspaceMutations();
     session.catalogId = projectId;
     session.sourceId = await rememberProjectSource(projectId, directoryHandle, null, sourceId);

@@ -518,12 +518,13 @@ function bindEvents() {
     submit.disabled = true; input.disabled = true; cancel.disabled = true;
     $("#nativeRelinkSources").querySelectorAll("button").forEach((button) => { button.disabled = true; });
     try {
+      await flushAllImageMutations();
+      await flushAllWorkspaceMutations();
+      const imageIds = state.images.filter((image) => image.sourceId === source.id).map((image) => image.id);
       const snapshot = await api("/api/project/source/relink", { method: "POST", body: JSON.stringify({ projectId: state.project.id, sourceId: source.id, path: input.value.trim() }) });
-      state.images = snapshot.images || [];
-      applyProjectSnapshot(snapshot);
-      loadReviewedPaths();
+      await refreshWorkspaceImages(snapshot, imageIds);
       state.missingNativeSources = missingNativeSources(snapshot.sources);
-      renderProjectCurrent(); renderCatalogViews();
+      renderProjectCurrent();
       if (!state.missingNativeSources.length) $("#nativeRelinkDialog").close(); else renderNativeRelinkDialog();
       await showSourceMismatches();
     } catch (error) { showUserError(error); }
@@ -557,14 +558,13 @@ function bindEvents() {
     }
     if (projectlessSave && data.project?.id !== projectId) {
       await forgetProjectSources(projectId);
-      throw codedError("response_invalid");
     }
     state.project = data.project; state.projectReadOnly = false;
     if (projectlessSave) state.projectlessDirectorySources.clear();
     $("#projectNameDialog").close(); if (mode === "new") { resetCatalog([], ""); state.missingNativeSources = []; } renderProjectCurrent();
   } catch (error) { showUserError(error); } finally { endProjectOperation(); } })(); });
   $("#sourceMismatchCancel").addEventListener("click", () => $("#sourceMismatchDialog").close());
-  $("#sourceMismatchForm").addEventListener("submit", (event) => { event.preventDefault(); void (async () => { try { const ids = JSON.parse($("#sourceMismatchDialog").dataset.imageIds || "[]"); const snapshot = await api("/api/project/mismatches", { method: "POST", body: JSON.stringify({ imageIds: ids, clearMasks: $("#sourceMismatchClear").checked }) }); state.images = snapshot.images || state.images; loadReviewedPaths(); applyProjectSnapshot(snapshot); $("#sourceMismatchDialog").close(); renderCatalogViews(); } catch (error) { showUserError(error); } })(); });
+  $("#sourceMismatchForm").addEventListener("submit", (event) => { event.preventDefault(); void (async () => { try { const ids = JSON.parse($("#sourceMismatchDialog").dataset.imageIds || "[]"); const clearWorkspace = $("#sourceMismatchClear").checked; await flushAllImageMutations(); await flushAllWorkspaceMutations(); const snapshot = await api("/api/project/mismatches", { method: "POST", body: JSON.stringify({ imageIds: ids, clearMasks: clearWorkspace }) }); await refreshWorkspaceImages(snapshot, ids, { clearWorkspace }); $("#sourceMismatchDialog").close(); } catch (error) { showUserError(error); } })(); });
   $("#sameSourceCancel").addEventListener("click", () => { if (!sameSourceBusy) $("#sameSourceDialog").close(); });
   $("#sameSourceDialog").addEventListener("cancel", (event) => { if (sameSourceBusy) event.preventDefault(); });
   $("#sameSourceOpen").addEventListener("click", () => { const project = sameSourceProjects.find((item) => item.id === sameSourceSelectedProjectId) || sameSourceProjects[0]; $("#sameSourceDialog").close(); if (project) void openProject(project); });
@@ -577,11 +577,13 @@ function bindEvents() {
       const sourceId = sameSourceCurrentSourceId;
       if (handle) {
         $("#sameSourceDialog").close();
+        await flushAllImageMutations();
+        await flushAllWorkspaceMutations();
         await importProjectDirectoryHandle(handle, state.project.id, sourceId);
         await showSourceMismatches();
         return;
       }
-      if (state.candidateUpdateChains?.size) await waitForCandidateMutations();
+      await flushAllImageMutations();
       await flushAllWorkspaceMutations();
       const data = await api("/api/projects", { method: "POST", body: JSON.stringify({}) });
       state.project = data.project; state.projectReadOnly = false; $("#sameSourceDialog").close(); renderProjectCurrent();

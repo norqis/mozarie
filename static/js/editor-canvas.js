@@ -161,6 +161,28 @@ function invalidateStaleAsset(imageId) {
   state.currentId = null; state.currentImage = null; state.candidates = []; state.candidateImages = new Map();
   clearEditor(); updateGalleryCurrent();
 }
+
+async function refreshWorkspaceImages(snapshot, imageIds, { clearWorkspace = false } = {}) {
+  const ids = new Set(imageIds);
+  const currentId = ids.has(state.currentId) ? state.currentId : null;
+  for (const imageId of ids) {
+    invalidateStaleAsset(imageId);
+    if (!clearWorkspace) continue;
+    state.drafts.delete(imageId);
+    state.maskStatus.delete(imageId);
+    state.projectHistory.delete(imageId);
+    clearCandidateMutationState(imageId);
+  }
+  if (clearWorkspace && currentId) state.removedCandidateIds.clear();
+  state.images = snapshot.images || state.images;
+  loadReviewedPaths();
+  applyProjectSnapshot(snapshot);
+  renderCatalogViews();
+  if (currentId && state.images.some((image) => image.id === currentId)) {
+    clearEditor();
+    await selectImage(currentId, true, { saveCurrentDraft: false });
+  } else updateNavigationControls();
+}
 function imageCacheKey(record) { return `${record.id}:${imageAssetVersion(record)}`; }
 function candidateCacheKey(imageId, revision) { return `${imageId}:${revision}`; }
 

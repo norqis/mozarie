@@ -731,6 +731,7 @@ async function loadFolder({ skipSameSourceWarning = false, path: suppliedPath = 
   ++state.imageGeneration;
   setStatusKey("status.loadingImages", {}, "running");
   try {
+    await flushAllImageMutations();
     await flushAllWorkspaceMutations();
     const data = await api("/api/folder", { method: "POST", body: JSON.stringify({ path }) });
     if (!isCurrentCatalogEpoch(catalogEpoch)) return;
