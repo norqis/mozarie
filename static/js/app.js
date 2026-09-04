@@ -202,6 +202,7 @@ async function openProject(project, resume = false) {
     const data = await api("/api/project/open", { method: "POST", body: JSON.stringify({ projectId: project.id }) });
     state.project = data.project; state.projectReadOnly = data.project?.status === "completed";
     modalInvokers.delete($("#projectListDialog"));
+    modalInvokers.delete($("#projectDialog"));
     $("#projectListDialog").close(); $("#projectDialog").close();
     focusElement($("#projectButton"));
     if (data.needsSource) {
