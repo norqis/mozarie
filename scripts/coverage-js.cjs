@@ -33,6 +33,7 @@ const testFiles = [
   "tests/test_flood_fill_worker.cjs",
   "tests/test_masked_mosaic_worker.cjs",
   "tests/test_mosaic_preview_runtime.cjs",
+  "tests/test_project_browser_lifecycle_e2e.cjs",
   "tests/test_project_history_browser_e2e.cjs",
   "tests/test_project_ui_runtime.cjs",
   "tests/test_same_source_project_select_runtime.cjs",
