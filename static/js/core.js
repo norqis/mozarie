@@ -493,7 +493,8 @@ function setNavigationShortcutsEnabled(enabled) {
 function updateActionButtons() {
   const running = isBusy();
   const sourceIncompatible = Boolean(currentRecord()?.sourceDimensionsChanged);
-  const locked = running || state.importing || state.projectReadOnly || sourceIncompatible;
+  const busyLocked = running || state.importing;
+  const mutationLocked = state.projectReadOnly || sourceIncompatible;
   const mutatingCandidates = state.candidateUpdateChains.size > 0;
   // Do not let controls mutate the image that is being replaced under the
   // editor.  Gallery selection may still supersede this request; its generation
@@ -502,61 +503,68 @@ function updateActionButtons() {
   const current = currentRecord();
   const hasImage = Boolean(state.currentId && state.currentImage && current);
   const controls = [...document.querySelectorAll("button, input, select, textarea")];
-  if (!locked) {
-    for (const control of controls) {
-      if (control.dataset.disabledByLock === "true") {
-        control.disabled = false;
-        delete control.dataset.disabledByLock;
-      }
+  for (const control of controls) {
+    if (control.dataset.disabledByLock === "true") {
+      control.disabled = false;
+      delete control.dataset.disabledByLock;
     }
   }
-  $("#pickFolder").disabled = running || state.importing || state.projectReadOnly;
+  $("#pickFolder").disabled = busyLocked || mutationLocked;
   const detectAllButton = $("#detectAllButton");
   detectAllButton.textContent = t("gallery.detectAll");
-  detectAllButton.disabled = running || state.projectReadOnly || state.images.length === 0;
-  $("#detectCurrentButton").disabled = running || !hasImage || state.projectReadOnly || sourceIncompatible;
-  $("#clearCurrentMasksButton").disabled = locked || !hasImage || !(current.candidateCount || state.manualMaskPresent || imageHasMask(current));
+  detectAllButton.disabled = busyLocked || mutationLocked || state.images.length === 0;
+  $("#detectCurrentButton").disabled = busyLocked || mutationLocked || !hasImage;
+  $("#clearCurrentMasksButton").disabled = busyLocked || mutationLocked || !hasImage || !(current.candidateCount || state.manualMaskPresent || imageHasMask(current));
   const visibilityButton = $("#removeCurrentImageButton");
-  visibilityButton.disabled = locked || !hasImage;
+  visibilityButton.disabled = busyLocked || mutationLocked || !hasImage;
   const visibilityLabel = t(current && isHidden(current) ? "editor.show" : "editor.hide");
   visibilityButton.textContent = visibilityLabel; visibilityButton.title = visibilityLabel; visibilityButton.setAttribute("aria-label", visibilityLabel);
-  for (const id of ["#clearAllMasksButton", "#clearCatalogButton", "#batchMoreButton"]) $(id).disabled = running || state.images.length === 0;
-  $("#batchModeButton").disabled = locked || state.images.length === 0;
-  $("#galleryFilter").disabled = running;
-  $("#saveAllButton").disabled = running || mutatingCandidates || state.images.length === 0;
-  const currentSaveDisabled = running || mutatingCandidates || !hasImage || !imageHasMask(current) || Boolean(current?.sourceDimensionsChanged);
+  for (const id of ["#clearAllMasksButton", "#clearCatalogButton", "#batchMoreButton"]) $(id).disabled = busyLocked || mutationLocked || state.images.length === 0;
+  $("#batchModeButton").disabled = busyLocked || mutationLocked || state.images.length === 0;
+  $("#galleryFilter").disabled = busyLocked;
+  $("#saveAllButton").disabled = busyLocked || mutationLocked || mutatingCandidates || state.images.length === 0;
+  const currentSaveDisabled = busyLocked || mutationLocked || mutatingCandidates || !hasImage || !imageHasMask(current);
   $("#saveButton").disabled = currentSaveDisabled;
-  $("#applyStartButton").disabled = running || mutatingCandidates || state.applyTargetIds.length === 0
+  $("#applyStartButton").disabled = busyLocked || mutationLocked || mutatingCandidates || state.applyTargetIds.length === 0
     || Boolean(applyRestrictionMessage()) || (selectedSaveMode() === "copy" && !state.outputDirectoryHandle);
-  $("#overviewButton").disabled = running || state.images.length === 0;
-  $("#previousImageButton").disabled = running || switchingImages || imageIndex() <= 0;
-  $("#nextImageButton").disabled = running || switchingImages || imageIndex() < 0 || imageIndex() >= state.images.length - 1;
-  $("#reviewAndNextButton").disabled = locked || switchingImages || !hasImage;
-  $("#removeAndNextButton").disabled = locked || switchingImages || !hasImage;
-  $("#hideAndNextButton").disabled = locked || switchingImages || !hasImage;
+  $("#overviewButton").disabled = busyLocked || state.images.length === 0;
+  $("#previousImageButton").disabled = busyLocked || switchingImages || imageIndex() <= 0;
+  $("#nextImageButton").disabled = busyLocked || switchingImages || imageIndex() < 0 || imageIndex() >= state.images.length - 1;
+  $("#reviewAndNextButton").disabled = busyLocked || mutationLocked || switchingImages || !hasImage;
+  $("#removeAndNextButton").disabled = busyLocked || mutationLocked || switchingImages || !hasImage;
+  $("#hideAndNextButton").disabled = busyLocked || mutationLocked || switchingImages || !hasImage;
   $("#downloadCurrentMosaicMask").disabled = !hasImage || !state.project;
   $("#downloadCurrentExcludeMask").disabled = !hasImage || !state.project;
-  updateCandidateBatchButtons(hasImage, locked || switchingImages);
+  updateCandidateBatchButtons(hasImage, busyLocked || mutationLocked || switchingImages);
   updateHistoryButtons();
-  if (locked) for (const control of controls) {
+  if (busyLocked) {
+    for (const control of controls) {
+      if ((["applyPauseButton", "applyCancelButton"].includes(control.id) && state.applyRunning)
+        || (["processingPauseButton", "processingCancelButton"].includes(control.id) && state.processing)
+        || control.id === "errorDialogClose") continue;
+      if (!control.disabled) control.dataset.disabledByLock = "true";
+      control.disabled = true;
+    }
+  } else if (mutationLocked) {
     const availableInReadOnly = new Set([
-      "projectButton", "projectClose", "projectOpenList", "projectListClose", "projectSort", "projectResume", "projectDelete",
+      "projectButton", "projectClose", "projectOpenList", "projectListClose", "projectSort", "projectResume",
       "projectMosaicZip", "projectExcludeZip", "downloadCurrentMosaicMask", "downloadCurrentExcludeMask",
-      "singleViewButton", "compareViewButton", "fitButton", "previousImageButton", "nextImageButton",
-      "galleryFilter", "overviewButton", "collapseGalleryButton", "collapseInspectorButton", "settingsButton", "errorDialogClose",
-      "sourceMismatchCancel", "detectCancelButton",
+      "singleViewButton", "compareViewButton", "fitButton", "mosaicPreviewButton", "previousImageButton", "nextImageButton",
+      "galleryFilter", "overviewButton", "collapseGalleryButton", "collapseInspectorButton", "errorDialogClose",
+      "closeOverviewButton", "overviewQuery", "overviewFolder", "sourceMismatchCancel", "detectCancelButton",
     ]);
-    if ((state.projectReadOnly || sourceIncompatible) && availableInReadOnly.has(control.id)) continue;
-    if (control.id === "errorDialogClose") continue;
-    if (["applyPauseButton", "applyCancelButton"].includes(control.id) && state.applyRunning) continue;
-    if (["processingPauseButton", "processingCancelButton"].includes(control.id) && state.processing) continue;
-    if (control.id === "selectionClearButton" && state.batchMode) continue;
-    if (!control.disabled) control.dataset.disabledByLock = "true";
-    control.disabled = true;
+    const availableInReadOnlyControls = new Set([
+      ...document.querySelectorAll(".gallery-item, .overview-item, .overview-filter"),
+    ]);
+    for (const control of controls) {
+      if (availableInReadOnly.has(control.id) || availableInReadOnlyControls.has(control)) continue;
+      if (!control.disabled) control.dataset.disabledByLock = "true";
+      control.disabled = true;
+    }
   }
-  $("#gallery").classList.toggle("locked", running || state.importing);
-  canvas.style.pointerEvents = running || state.importing || switchingImages ? "none" : "";
-  canvas.setAttribute("aria-disabled", String(running || state.importing || switchingImages));
+  $("#gallery").classList.toggle("locked", busyLocked);
+  canvas.style.pointerEvents = busyLocked || switchingImages ? "none" : "";
+  canvas.setAttribute("aria-disabled", String(busyLocked || switchingImages));
   syncDetectionActions();
 }
 

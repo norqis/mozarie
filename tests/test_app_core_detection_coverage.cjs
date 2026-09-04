@@ -393,13 +393,12 @@ async function testCoreBoundaryAndWorkspaceBehaviour() {
   assert.equal(test.processingCurrentPath({ kind: "detect", current: "fallback.png", imageIds: [], completedImageIds: [] }), "fallback.png", "detection with no targets keeps its reported path");
   assert.equal(test.processingCurrentPath({ kind: "detect", current: "ignored.png", imageIds: ["one"], completedImageIds: ["one"] }), "", "completed detection targets clear the current-path label");
   test.updateActionButtons();
-  // A completed project is read-only for editing, but its destructive
-  // lifecycle action must remain reachable so it can be permanently removed.
+  // A completed project remains read-only until its explicit Resume action.
   const projectDelete = element("projectDelete"); const projectName = element("projectName");
   coreState.project = { id: "completed", status: "completed" }; coreState.projectReadOnly = true;
   context.document.querySelectorAll = (selector) => selector === "button, input, select, textarea" ? [projectDelete, projectName] : [];
   test.updateActionButtons();
-  assert.equal(projectDelete.disabled, false, "completed projects keep Delete project available");
+  assert.equal(projectDelete.disabled, true, "completed projects block destructive lifecycle actions");
   assert.equal(projectName.disabled, true, "completed projects still block editing controls");
   coreState.projectReadOnly = false; context.document.querySelectorAll = () => [];
   // The save dialog has a separate restriction and retains its live pause

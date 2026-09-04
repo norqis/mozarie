@@ -78,3 +78,90 @@ test("project Ctrl+Z flushes the durable edit and keeps browser history canvases
     await closeServer(fixture.server);
   }
 });
+
+test("completed projects keep browser navigation available without allowing edits", { timeout: 60000 }, async () => {
+  const fixture = await startFixtureServer();
+  const browser = await chromium.launch();
+  let page;
+  try {
+    page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+    await page.goto(fixture.url, { waitUntil: "networkidle" });
+    await page.locator('.gallery-item[data-id="sample"]').click();
+    await page.waitForFunction(() => state.currentId === "sample" && state.currentImage);
+
+    const controls = await page.evaluate(() => {
+      state.project = { id: "completed-project", status: "completed" };
+      state.projectReadOnly = true;
+      renderProjectCurrent();
+      state.job = { state: "running" };
+      updateActionButtons();
+      const busyGalleryDisabled = document.querySelector('.gallery-item[data-id="sample"]').disabled;
+
+      state.job = null;
+      updateActionButtons();
+      const afterBusy = {
+        gallery: document.querySelector('.gallery-item[data-id="sample"]').disabled,
+        next: document.querySelector("#nextImageButton").disabled,
+        overview: document.querySelector("#overviewButton").disabled,
+        preview: document.querySelector("#mosaicPreviewButton").disabled,
+        download: document.querySelector("#downloadCurrentMosaicMask").disabled,
+        resume: document.querySelector("#projectResume").disabled,
+        review: document.querySelector("#reviewAndNextButton").disabled,
+        detect: document.querySelector("#detectCurrentButton").disabled,
+        remove: document.querySelector("#removeCurrentImageButton").disabled,
+        undo: document.querySelector("#undoButton").disabled,
+        projectReadOnly: state.projectReadOnly,
+      };
+
+      setViewMode("overview");
+      const overview = {
+        card: document.querySelector('.overview-item[data-id="sample"]').disabled,
+        filter: document.querySelector(".overview-filter").disabled,
+        query: document.querySelector("#overviewQuery").disabled,
+        folder: document.querySelector("#overviewFolder").disabled,
+        close: document.querySelector("#closeOverviewButton").disabled,
+      };
+      setViewMode("edit");
+      return { busyGalleryDisabled, afterBusy, overview };
+    });
+    assert.equal(controls.busyGalleryDisabled, true, "busy work disables gallery navigation");
+    assert.deepEqual(controls.afterBusy, {
+      gallery: false, next: false, overview: false, preview: false, download: false, resume: false,
+      review: true, detect: true, remove: true, undo: true, projectReadOnly: true,
+    }, "read-only mode restores browsing controls and keeps mutations disabled after busy work");
+    assert.deepEqual(controls.overview, { card: false, filter: false, query: false, folder: false, close: false }, "read-only mode keeps overview browsing controls available");
+
+    await page.evaluate(() => {
+      window.__readOnlyShortcutRequests = 0;
+      const nativeFetch = window.fetch;
+      window.fetch = (...args) => {
+        window.__readOnlyShortcutRequests += 1;
+        return nativeFetch(...args);
+      };
+    });
+    await page.locator("#editorCanvas").focus();
+    await page.keyboard.press("Enter");
+    await page.waitForTimeout(25);
+    assert.deepEqual(await page.evaluate(() => ({ currentId: state.currentId, reviewed: isReviewed(currentRecord()), requests: window.__readOnlyShortcutRequests })), { currentId: "sample", reviewed: false, requests: 0 }, "read-only review shortcut does not mutate or advance");
+
+    const resumed = await page.evaluate(() => {
+      state.project = { ...state.project, status: "working" };
+      state.projectReadOnly = false;
+      updateActionButtons();
+      const result = {
+        review: document.querySelector("#reviewAndNextButton").disabled,
+        detect: document.querySelector("#detectCurrentButton").disabled,
+        remove: document.querySelector("#removeCurrentImageButton").disabled,
+      };
+      state.project = null;
+      updateActionButtons();
+      return result;
+    });
+    assert.deepEqual(resumed, { review: false, detect: false, remove: false }, "resuming work re-enables editing controls");
+  } finally {
+    await page?.close();
+    await browser.close();
+    fixture.server.closeAllConnections();
+    await closeServer(fixture.server);
+  }
+});

@@ -26,7 +26,8 @@ function validateDetectionCandidatePadding() {
   return valid;
 }
 function syncDetectionActions() {
-  const enabled = persistedDetectionTargets().length > 0 && !isBusy() && !state.importing;
+  const enabled = persistedDetectionTargets().length > 0 && !isBusy() && !state.importing
+    && !state.projectReadOnly && !currentRecord()?.sourceDimensionsChanged;
   $("#detectAllButton").disabled = !enabled || !state.images.length;
   $("#detectCurrentButton").disabled = !enabled || !state.currentId;
 }

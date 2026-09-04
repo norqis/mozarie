@@ -82,7 +82,7 @@ const context = {
   isBusy: () => busy, closeBoundaryModeMenu: undefined,
   clearBoundaryInteraction: () => calls.push(["clearBoundaryInteraction"]), clearBoundaryConstruction: () => calls.push(["clearBoundaryConstruction"]),
   updateBoundaryActions: () => calls.push(["boundaryActions"]), updateBrushCursor: () => {}, render: () => calls.push(["render"]), flushRender: () => calls.push(["flushRender"]), flushMaskComposition: () => calls.push(["flushMaskComposition"]), clearCandidateBlink: () => calls.push(["clearCandidateBlink"]), focusCanvas: () => calls.push(["canvas"]), focusElement: (value) => { document.activeElement = value; },
-  calculatedBlockSize: () => 7, currentRecord: () => images[0], mosaicDivisor: () => 3, normaliseDivisor: (value) => Number(value),
+  calculatedBlockSize: () => 7, currentRecord: () => state.images.find((image) => image.id === state.currentId) || null, mosaicDivisor: () => 3, normaliseDivisor: (value) => Number(value),
   showModalFromInvoker: (dialog) => queueMicrotask(() => dialog.close(dialog.returnValue)),
   api: async (url, options = {}) => {
     calls.push(["api", url, options]);
@@ -340,6 +340,17 @@ const tolerancePanelCss = styleSource.match(/\.bucket-tolerance-panel\s*\{([^}]*
   state.settings = null; state.viewMode = "edit"; test.handleEditorKeydown(event("Ctrl+Z")); test.handleNavigationKeydown(event("unknown")); test.handleNavigationKeydown(event("G")); state.viewMode = "overview"; test.handleNavigationKeydown(event("G"));
   state.settings = savedSettings; state.settings.shortcuts.bindings = { first: "F", last: "L", undo: "U", redo: "R" }; state.settings.shortcuts.actions = {}; state.viewMode = "edit"; state.images = [{ id: "one" }];
   test.handleNavigationKeydown(event("F")); test.handleNavigationKeydown(event("L")); test.handleNavigationKeydown(event("U")); test.handleNavigationKeydown(event("R"));
+  state.settings.shortcuts.bindings = { previous: "P", reviewAndNext: "RN", undo: "U", redo: "R", toggleOverview: "G" };
+  state.projectReadOnly = true;
+  assert.equal(test.navigationShortcutAction(event("RN")), null, "read-only projects reject review-and-next shortcuts");
+  assert.equal(test.navigationShortcutAction(event("U")), null, "read-only projects reject undo shortcuts");
+  assert.equal(test.navigationShortcutAction(event("P")), "previous", "read-only projects retain pure navigation shortcuts");
+  assert.equal(test.navigationShortcutAction(event("G")), "toggleOverview", "read-only projects retain overview shortcuts");
+  assert.equal(test.handleEditorKeydown(event("U")), false, "read-only projects reject editor undo shortcuts");
+  state.projectReadOnly = false; state.images[0].sourceDimensionsChanged = true;
+  assert.equal(test.navigationShortcutAction(event("RN")), null, "source-mismatched images reject review-and-next shortcuts");
+  assert.equal(test.handleEditorKeydown(event("U")), false, "source-mismatched images reject editor undo shortcuts");
+  delete state.images[0].sourceDimensionsChanged;
   state.settings = { confirmations: null }; assert.equal(test.confirmationRequired("legacy"), true); state.settings = savedSettings;
   state.settings = { confirmations: { legacy: false } }; assert.equal(test.confirmationRequired("legacy"), false); state.settings = savedSettings;
   state.images = [{ id: "one" }]; images = state.images; state.settings.confirmations.clearMasks = false;
