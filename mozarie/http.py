@@ -400,6 +400,10 @@ class MosaicHandler(BaseHTTPRequestHandler):
                 self._json(STATE.catalog_snapshot())
             elif path == "/api/project/source-check":
                 self._json({"projects": STATE.projects_for_source_root(str(payload.get("path", "")))})
+            elif path == "/api/project/source/relink":
+                self._json(STATE.relink_project_native_source(
+                    str(payload.get("projectId", "")), str(payload.get("sourceId", "")), str(payload.get("path", "")),
+                ))
             elif path.startswith("/api/project/history/"):
                 image_id, action = _route_ids(path, "/api/project/history/")
                 if action not in {"undo", "redo"}:

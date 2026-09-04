@@ -86,7 +86,10 @@ function projectDate(value) {
 function projectSource(project) { return project?.sourceRoot || t("project.noSource"); }
 function renderProjectCurrent() {
   const project = state.project;
-  $("#projectCurrent").textContent = project ? `${projectTitle(project)} · ${t(`project.${project.status}`)}` : t("project.unnamed");
+  const missingSource = state.missingNativeSource;
+  $("#projectCurrent").textContent = project
+    ? `${projectTitle(project)} · ${t(`project.${project.status}`)}${missingSource ? ` · ${t("project.sourceMissing")}: ${missingSource.displayName}` : ""}`
+    : t("project.unnamed");
   $("#projectName").dataset.i18n = project ? "project.rename" : "project.saveCurrent";
   $("#projectName").textContent = t($("#projectName").dataset.i18n);
   $("#projectName").disabled = state.projectReadOnly || (!project && state.images.length === 0);
@@ -102,6 +105,22 @@ function renderProjectCurrent() {
 function openProjectNameDialog(mode) {
   projectNameMode = mode; $("#projectNameInput").value = mode === "name" ? (state.project?.name || "") : "";
   showModalFromInvoker($("#projectNameDialog")); focusElement($("#projectNameInput"));
+}
+async function finishProjectlessPromotion(promotion) {
+  const project = promotion.project;
+  await promoteProjectlessDirectorySources(project.id, promotion.sourceIds);
+  const snapshot = await api("/api/images");
+  state.images = snapshot.images || state.images;
+  applyProjectSnapshot(snapshot);
+  loadReviewedPaths();
+  for (const image of state.images) {
+    const access = state.sourceAccess.get(image.id);
+    if (access?.fileHandle) await rememberProjectSource(project.id, access.fileHandle, image.id, image.sourceId || promotion.sourceIds?.[image.id]);
+  }
+  state.project = project;
+  state.projectReadOnly = false;
+  state.projectlessDirectorySources.clear();
+  state.projectlessPromotion = null;
 }
 function projectTableRows() { return [...$("#projectListBody").querySelectorAll("tr[data-project-id]")]; }
 
@@ -126,7 +145,7 @@ function renderProjectSortHeaders() {
 }
 
 function renderProjectTableControls() {
-  const blocked = isBusy() || state.importing;
+  const blocked = isBusy() || state.importing || projectListSortPending;
   for (const row of projectTableRows()) {
     const project = projectListProjects.get(row.dataset.projectId);
     const exportDisabled = blocked || !project || !(project.imageCount > 0) || projectExportBusy.has(project.id);
@@ -170,12 +189,14 @@ function renderProjectTable() {
       projectTableCell(projectDate(project.updatedAt), "project.columnUpdated", "project-date-cell"),
     );
     const actions = document.createElement("td"); actions.dataset.label = t("project.columnActions"); actions.className = "project-row-actions";
-    actions.setAttribute("role", "group"); actions.setAttribute("aria-label", t("project.rowActions", { name: projectTitle(project) }));
-    actions.append(
+    const group = document.createElement("div"); group.className = "project-row-action-group";
+    group.setAttribute("role", "group"); group.setAttribute("aria-label", t("project.rowActions", { name: projectTitle(project) }));
+    group.append(
       projectActionButton(project, "mosaic", "project.mosaicZip", "", "project.exportMosaicFor"),
       projectActionButton(project, "exclude", "project.excludeZip", "", "project.exportExcludeFor"),
       projectActionButton(project, "delete", "project.deleteShort", "danger", "project.deleteFor"),
     );
+    actions.append(group);
     row.append(actions); fragment.append(row);
   }
   body.replaceChildren(fragment);
@@ -184,18 +205,19 @@ function renderProjectTable() {
   renderProjectSortHeaders(); renderProjectTableControls();
 }
 
-async function showProjectList({ focusProjectId = "", focusTarget = null, sort = projectListSort } = {}) {
+async function showProjectList({ focusProjectId = "", focusTarget = null, sort = projectListSort, keepClosed = false } = {}) {
   const data = await api(`/api/projects?sort=${encodeURIComponent(`${sort.key}_${sort.direction}`)}`);
   projectListProjects = new Map((data.projects || []).map((project) => [project.id, project]));
   projectListSort = sort;
   renderProjectTable();
-  if (!$("#projectListDialog").open) {
+  if (!$("#projectListDialog").open && !keepClosed) {
     if ($("#projectDialog").open) {
       modalInvokers.delete($("#projectDialog"));
       $("#projectDialog").close();
     }
     showModalFromInvoker($("#projectListDialog"), $("#projectButton"));
   }
+  if (!$("#projectListDialog").open) return;
   const nextFocus = focusTarget?.isConnected ? focusTarget
     : (focusProjectId && $("#projectListBody").querySelector(`tr[data-project-id="${focusProjectId}"] [data-project-action="open"]`))
       || $('#projectListBody [data-project-action="open"]') || $("#projectListClose");
@@ -207,10 +229,10 @@ async function sortProjectList(key, focusTarget) {
   const direction = key === previousSort.key ? (previousSort.direction === "asc" ? "desc" : "asc") : "asc";
   projectListSortPending = true; renderProjectSortHeaders();
   try {
-    await showProjectList({ focusTarget, sort: { key, direction } });
+    await showProjectList({ focusTarget, sort: { key, direction }, keepClosed: true });
   } finally {
     projectListSortPending = false; renderProjectSortHeaders();
-    if (focusTarget?.isConnected) focusElement(focusTarget);
+    if ($("#projectListDialog").open && focusTarget?.isConnected) focusElement(focusTarget);
   }
 }
 async function showSourceMismatches() {
@@ -234,6 +256,7 @@ async function openProject(project, resume = false) {
     if (resume) await api("/api/project/resume", { method: "POST", body: JSON.stringify({ projectId: project.id }) });
     const data = await api("/api/project/open", { method: "POST", body: JSON.stringify({ projectId: project.id }) });
     state.project = data.project; state.projectReadOnly = data.project?.status === "completed";
+    state.missingNativeSource = (data.sources || []).find((source) => source.kind === "native-folder" && (!source.nativePath || !source.exists)) || null;
     modalInvokers.delete($("#projectListDialog"));
     modalInvokers.delete($("#projectDialog"));
     $("#projectListDialog").close(); $("#projectDialog").close();
@@ -307,21 +330,6 @@ function openProjectDeleteDialog(projectId) {
   focusElement($("#projectDeleteCancel"));
 }
 
-async function discardProjectWorkspaceChanges() {
-  // Deletion intentionally discards local, unsaved work. Do not turn this
-  // into a flush: that would create data solely to delete it a moment later.
-  for (const timer of state.workspaceDraftTimers?.values?.() || []) clearTimeout(timer);
-  state.workspaceDraftTimers?.clear?.();
-  state.draftDirty = false;
-  const pending = [
-    ...(state.workspaceDraftChains?.values?.() || []),
-    ...(state.candidateUpdateChains?.values?.() || []),
-  ];
-  await Promise.allSettled(pending);
-  state.workspaceDraftChains?.clear?.(); state.workspaceMutationErrors?.clear?.();
-  state.candidateUpdateChains?.clear?.(); state.candidateBatchPending?.clear?.();
-}
-
 async function deleteProject(projectId) {
   if (!projectId) return;
   try {
@@ -329,7 +337,6 @@ async function deleteProject(projectId) {
     const rows = projectTableRows();
     const deletedIndex = rows.findIndex((row) => row.dataset.projectId === projectId);
     const focusProjectId = rows[deletedIndex + 1]?.dataset.projectId || rows[deletedIndex - 1]?.dataset.projectId || "";
-    if (deletingCurrentProject) await discardProjectWorkspaceChanges();
     await api(`/api/project/${encodeURIComponent(projectId)}`, { method: "DELETE" });
     await forgetProjectSources(projectId);
     if (deletingCurrentProject) {
@@ -396,7 +403,7 @@ function bindEvents() {
   }));
   $("#projectList").addEventListener("click", (event) => {
     const button = event.target.closest("[data-project-action]");
-    if (!button || button.disabled) return;
+    if (!button || button.disabled || projectListSortPending) return;
     const project = projectListProjects.get(button.dataset.projectId);
     if (!project) return;
     if (button.dataset.projectAction === "open") void openProject(project);
@@ -408,6 +415,18 @@ function bindEvents() {
   $("#projectSourceSelect").addEventListener("click", () => { void (async () => {
     if (!state.project?.id) return;
     try {
+      if (state.missingNativeSource) {
+        const source = state.missingNativeSource;
+        const path = window.prompt(t("project.sourceRelinkPrompt"), source.nativePath || "");
+        if (path == null) return;
+        const snapshot = await api("/api/project/source/relink", { method: "POST", body: JSON.stringify({ projectId: state.project.id, sourceId: source.id, path }) });
+        state.images = snapshot.images || [];
+        applyProjectSnapshot(snapshot);
+        state.missingNativeSource = null;
+        renderProjectCurrent(); renderCatalogViews();
+        await showSourceMismatches();
+        return;
+      }
       const handle = await window.showDirectoryPicker({ mode: "read", id: "mozarie-project-source" });
       const matches = await matchingProjectDirectorySources(handle);
       const current = matches.find((source) => source.projectId === state.project.id);
@@ -431,19 +450,15 @@ function bindEvents() {
   $("#projectDeleteCancel").addEventListener("click", () => { projectDeleteId = ""; $("#projectDeleteDialog").close(); });
   $("#projectDeleteConfirm").addEventListener("click", () => { void deleteProject(projectDeleteId); });
   $("#projectNameForm").addEventListener("submit", (event) => { event.preventDefault(); void (async () => { try {
-    const name = $("#projectNameInput").value.trim(); const projectlessSave = projectNameMode === "name" && !state.project?.id;
+    const name = $("#projectNameInput").value.trim(); const pendingPromotion = state.projectlessPromotion;
+    const projectlessSave = projectNameMode === "name" && !state.project?.id && !pendingPromotion;
     if (projectNameMode === "new" || projectlessSave) { if (state.candidateUpdateChains?.size) await waitForCandidateMutations(); await flushAllWorkspaceMutations(); }
-    const data = projectNameMode === "new" ? await api("/api/projects", { method: "POST", body: JSON.stringify({ name }) }) : await api("/api/project/name", { method: "POST", body: JSON.stringify({ name }) });
-    state.project = data.project; state.projectReadOnly = false;
-    if (projectlessSave) {
-      await promoteProjectlessDirectorySources(state.project.id, data.project.sourceIds);
-      const snapshot = await api("/api/images"); state.images = snapshot.images || state.images; applyProjectSnapshot(snapshot); loadReviewedPaths();
-      for (const image of state.images) {
-        const access = state.sourceAccess.get(image.id);
-        if (access?.fileHandle) await rememberProjectSource(state.project.id, access.fileHandle, image.id, image.sourceId || data.project.sourceIds?.[image.id]);
-      }
-      state.projectlessDirectorySources.clear();
-    }
+    const data = pendingPromotion ? null : projectNameMode === "new"
+      ? await api("/api/projects", { method: "POST", body: JSON.stringify({ name }) })
+      : await api("/api/project/name", { method: "POST", body: JSON.stringify({ name }) });
+    if (projectlessSave) state.projectlessPromotion = { project: data.project, sourceIds: data.project.sourceIds || {} };
+    if (state.projectlessPromotion) await finishProjectlessPromotion(state.projectlessPromotion);
+    else { state.project = data.project; state.projectReadOnly = false; }
     $("#projectNameDialog").close(); if (projectNameMode === "new") resetCatalog([], ""); renderProjectCurrent();
   } catch (error) { showUserError(error); } })(); });
   $("#sourceMismatchCancel").addEventListener("click", () => $("#sourceMismatchDialog").close());
@@ -718,7 +733,8 @@ function bindEvents() {
   $("#undoButton").addEventListener("click", () => { if (state.project?.id) void restoreProjectHistory("undo"); else restoreSnapshot(state.historyIndex - 1); }); $("#redoButton").addEventListener("click", () => { if (state.project?.id) void restoreProjectHistory("redo"); else restoreSnapshot(state.historyIndex + 1); });
   const grid = $(".studio-grid");
   const paneStorage = { gallery: "mozarie.galleryWidth", inspector: "mozarie.inspectorWidth" };
-  const paneDefaults = window.innerWidth >= 1600 ? { gallery: 260, inspector: 320 } : window.innerWidth >= 1280 ? { gallery: 216, inspector: 292 } : { gallery: 190, inspector: 270 };
+  const paneDefaultsForWidth = (width) => width >= 1600 ? { gallery: 260, inspector: 320 } : width >= 1280 ? { gallery: 216, inspector: 292 } : { gallery: 190, inspector: 270 };
+  const paneDefaults = paneDefaultsForWidth(window.innerWidth);
   const paneMinimums = { gallery: 144, inspector: 240 };
   const paneValues = { gallery: paneDefaults.gallery, inspector: paneDefaults.inspector };
   const paneStore = globalThis.localStorage;
@@ -779,7 +795,7 @@ function bindEvents() {
     element.addEventListener("pointerup", (event) => commit(event, true));
     element.addEventListener("pointercancel", (event) => commit(event, false));
     element.addEventListener("lostpointercapture", (event) => commit(event, false));
-    element.addEventListener("dblclick", () => updatePaneWidth(side, paneDefaults[side]));
+    element.addEventListener("dblclick", () => updatePaneWidth(side, paneDefaultsForWidth(window.innerWidth)[side]));
     element.addEventListener("keydown", (event) => {
       const direction = side === "gallery" ? 1 : -1;
       const step = event.shiftKey ? 40 : 12;

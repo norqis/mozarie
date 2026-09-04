@@ -671,6 +671,8 @@
   "project.completeConfirm": "このプロジェクトを完了にします。画像一覧は閉じます。",
   "project.readOnly": "完了済みのため閲覧専用です。",
   "project.sourceSelect": "画像フォルダーを再指定",
+  "project.sourceMissing": "元フォルダーが見つかりません",
+  "project.sourceRelinkPrompt": "元フォルダーの絶対パスを入力してください",
   "project.downloadMosaic": "モザイク範囲を保存",
   "project.downloadExclude": "除外範囲を保存",
   "project.downloadMosaicZip": "モザイク範囲をまとめて保存",

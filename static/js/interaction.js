@@ -281,23 +281,35 @@ async function runSelectionAction(action) {
   if (["hide", "show", "reviewed", "unreviewed"].includes(action)) {
     const flags = action === "hide" ? { hidden: true } : action === "show" ? { hidden: false }
       : { reviewed: action === "reviewed" };
-    const data = await api("/api/workspace/images", { method: "POST", body: JSON.stringify({ imageIds: ids, ...flags }) });
-    for (const image of images) publishWorkspaceFlags(image.id, data.flags?.[image.id] || flags);
-    preserveCatalogScroll(renderCatalogViews); updateSelectionActionBar(); updateNavigationControls(); updateActionButtons();
+    const epoch = beginCatalogEpoch(); state.catalogMutation = true; updateActionButtons();
+    try {
+      await flushAllWorkspaceMutations();
+      const data = await api("/api/workspace/images", { method: "POST", body: JSON.stringify({ imageIds: ids, ...flags }) });
+      if (!isCurrentCatalogEpoch(epoch)) return;
+      for (const image of images) publishWorkspaceFlags(image.id, data.flags?.[image.id] || flags);
+      preserveCatalogScroll(renderCatalogViews); updateSelectionActionBar(); updateNavigationControls();
+    } catch (error) { if (isCurrentCatalogEpoch(epoch)) showUserError(error); }
+    finally { if (isCurrentCatalogEpoch(epoch)) state.catalogMutation = false; updateActionButtons(); }
     return;
   }
   if (action === "detect") return openDetectionDialog(ids);
   if (action === "clear") return clearMasks(ids, "confirm.clearAllMasks.title", "confirm.clearAllMasks.message");
   if (action === "remove") {
     if (!await confirmAction(t("confirm.removeImages.title"), t("confirm.removeImages.message", { count: ids.length }), "removeImage")) return;
-    const data = await api("/api/catalog/remove", { method: "POST", body: JSON.stringify({ imageIds: ids }) });
-    for (const image of images) {
-      releaseImageCaches(image.id); state.sourceAccess.delete(image.id); state.drafts.delete(image.id); state.maskStatus.delete(image.id); clearReviewForRemovedImage(image);
-    }
-    state.images = data.images || [];
-    pruneSourceAccess();
-    state.batchMode = false; clearBatchSelection(); updateSelectionActionBar();
-    renderCatalogViews();
+    const epoch = beginCatalogEpoch(); state.catalogMutation = true; updateActionButtons();
+    try {
+      await flushAllWorkspaceMutations();
+      const data = await api("/api/catalog/remove", { method: "POST", body: JSON.stringify({ imageIds: ids }) });
+      if (!isCurrentCatalogEpoch(epoch)) return;
+      for (const image of images) {
+        releaseImageCaches(image.id); state.sourceAccess.delete(image.id); state.drafts.delete(image.id); state.maskStatus.delete(image.id); clearReviewForRemovedImage(image);
+      }
+      state.images = data.images || [];
+      pruneSourceAccess();
+      state.batchMode = false; clearBatchSelection(); updateSelectionActionBar();
+      renderCatalogViews();
+    } catch (error) { if (isCurrentCatalogEpoch(epoch)) showUserError(error); }
+    finally { if (isCurrentCatalogEpoch(epoch)) state.catalogMutation = false; updateActionButtons(); }
   }
 }
 

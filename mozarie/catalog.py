@@ -89,6 +89,11 @@ class CatalogMixin:
                 image_id, revision, candidates,
                 self._effective_mask_for_candidates(image_id, candidates), replace=replace, history_group=history_group,
             )
+        else:
+            draft = self.projectless_manual_drafts.get(image_id)
+            if draft is not None:
+                draft["candidateRevision"] = revision
+                draft["hasEffectiveMask"] = self._effective_mask_for_draft(image_id, candidates, draft)
         self.candidates[image_id] = candidates
         self.candidate_revisions[image_id] = revision
         return revision
@@ -104,6 +109,7 @@ class CatalogMixin:
         """
         revision = expected_revision + 1
         pending = None
+        projectless_draft = None
         if self.workspace_store.has_image(image_id):
             draft = self.workspace_store.manual(image_id, self._encode_workspace_mask) or {}
             effective = self._effective_mask_for_draft(image_id, candidates, draft)
@@ -111,6 +117,9 @@ class CatalogMixin:
                 image_id, revision, candidates, effective, replace=replace, history_group=history_group,
                 expected_revision=expected_revision, preserve_reviewed=True,
             )
+        else:
+            projectless_draft = self.projectless_manual_drafts.get(image_id)
+            effective = self._effective_mask_for_draft(image_id, candidates, projectless_draft or {})
         with self.lock:
             if self.catalog_generation != expected_catalog_generation or self._candidate_revision(image_id) != expected_revision:
                 if pending is not None:
@@ -123,6 +132,9 @@ class CatalogMixin:
                 pending.commit()
             self.candidates[image_id] = candidates
             self.candidate_revisions[image_id] = revision
+            if projectless_draft is not None:
+                projectless_draft["candidateRevision"] = revision
+                projectless_draft["hasEffectiveMask"] = effective
         return revision
 
     def _replace_catalog(self, root: Path, records: list[ImageRecord]) -> list[dict[str, Any]]:
@@ -178,7 +190,8 @@ class CatalogMixin:
         with self.import_lock:
             return self._set_root(raw_path)
 
-    def _set_root(self, raw_path: str, project_id: str | None = None, *, defer_replace: bool = False) -> list[Any]:
+    def _set_root(self, raw_path: str, project_id: str | None = None, *, defer_replace: bool = False,
+                  relink_source_id: str | None = None) -> list[Any]:
         if not raw_path or not isinstance(raw_path, str):
             raise ClientError("Windowsフォルダを入力してください。", "input_invalid")
         root = Path(raw_path).expanduser().resolve()
@@ -194,9 +207,11 @@ class CatalogMixin:
         source_id = None
         stored_metadata: dict[str, tuple[int, int, int, int]] = {}
         if catalog_id is not None:
-            source_id = self.workspace_store.ensure_project_source(
+            source_id = relink_source_id or self.workspace_store.ensure_project_source(
                 catalog_id, kind="native-folder", display_name=root.name or str(root), identity=str(root.resolve()),
             )
+            if relink_source_id:
+                self.workspace_store.native_source(catalog_id, source_id)
             stored_metadata = self.workspace_store.source_image_metadata(source_id)
 
         paths = [path for path in root.rglob("*") if path.is_file() and path.suffix.lower() in IMAGE_SUFFIXES]
@@ -249,6 +264,11 @@ class CatalogMixin:
                 for worker in workers:
                     worker.result()
         records.sort(key=lambda record: (record.relative_path.casefold(), record.relative_path))
+        if catalog_id is not None and relink_source_id:
+            try:
+                self.workspace_store.relink_native_source(catalog_id, source_id, root)
+            except ValueError as exc:
+                raise ClientError("このプロジェクトの別の元フォルダーに同じパスが設定されています。", "project_source_conflict") from exc
         stored = self.workspace_store.reconcile_images(catalog_id, records, source_id=source_id) if catalog_id is not None else {}
         # A project can have several sources. Missing files remain durable so
         # their masks can still be exported or relinked later.
@@ -292,6 +312,22 @@ class CatalogMixin:
         with self.lock:
             self.project_read_only = completed
         return images
+
+    def relink_project_native_source(self, project_id: str, source_id: str, raw_path: str) -> dict[str, Any]:
+        if not isinstance(raw_path, str) or not Path(raw_path).is_absolute() or not Path(raw_path).is_dir():
+            raise ClientError("指定フォルダーが見つかりません。", "folder_not_found")
+        with self.import_lock:
+            with self.lock:
+                if self.catalog_id != project_id:
+                    raise ClientError("開いているプロジェクトの元フォルダーだけ再指定できます。", "project_source_unavailable")
+                if self.project_read_only:
+                    raise ClientError("完了したプロジェクトの元フォルダーは再指定できません。", "project_read_only")
+            try:
+                self.workspace_store.native_source(project_id, source_id)
+            except ValueError as exc:
+                raise ClientError("元フォルダーが見つかりません。", "project_source_unavailable") from exc
+            self._set_root(raw_path, project_id, relink_source_id=source_id)
+            return self.catalog_snapshot()
 
     def projects(self, sort: str = "updated_desc") -> list[dict[str, Any]]:
         return self.workspace_store.projects(sort)
@@ -348,7 +384,7 @@ class CatalogMixin:
                     else:
                         kind = record.project_source_kind or "browser-files"
                         identity = record.project_source_identity or f"browser:{self.session_dir.name if self.session_dir else uuid.uuid4().hex}"
-                        source = (kind, identity, record.project_source_display or "ブラウザから追加")
+                        source = (kind, identity, record.project_source_display or kind)
                     grouped.setdefault(source, []).append(record)
                 effective_masks = {
                     record.image_id: self._effective_mask_for_draft(
@@ -356,6 +392,9 @@ class CatalogMixin:
                     )
                     for record in records
                 }
+                for image_id, draft in manual_drafts.items():
+                    draft["candidateRevision"] = revisions[image_id]
+                    draft["hasEffectiveMask"] = effective_masks[image_id]
                 try:
                     project, source_ids = self.workspace_store.promote_projectless(
                         name, [(kind, identity, display_name, members) for (kind, identity, display_name), members in grouped.items()],
@@ -397,29 +436,28 @@ class CatalogMixin:
 
     def delete_project(self, catalog_id: str) -> None:
         """Delete project-only state while leaving every original image untouched."""
-        project = self.workspace_store.project(catalog_id)
-        if not project:
-            raise ClientError("プロジェクトが見つかりません。", "project_not_found")
-        image_ids = [str(image["id"]) for image in self.workspace_store.project_images(catalog_id)]
         with self.import_lock:
             with self.lock:
                 if self.catalog_id == catalog_id and self._has_active_worker():
                     raise ClientError("処理中のプロジェクトは削除できません。", "operation_in_progress")
                 active = self.catalog_id == catalog_id
-                if active:
-                    # Deletion is permitted for completed projects too; it is
-                    # not an editing operation and intentionally never flushes drafts.
-                    self.project_read_only = False
+            try:
+                image_ids = self.workspace_store.delete_project(catalog_id)
+            except ValueError as exc:
+                raise ClientError("プロジェクトが見つかりません。", "project_not_found") from exc
+            # The durable deletion is the boundary.  Do not detach or mutate
+            # live completed-project state until SQLite has committed it.
             if active:
+                with self.lock:
+                    self.project_read_only = False
                 self.detach_catalog()
-            self.workspace_store.delete_project(catalog_id)
             for image_id in image_ids:
-                shutil.rmtree(self.cache_dir / image_id, ignore_errors=True)
-                for thumbnail_path in (self.cache_dir / "thumbnails").glob(f"{image_id}-*.jpg"):
-                    try:
+                try:
+                    shutil.rmtree(self.cache_dir / image_id, ignore_errors=True)
+                    for thumbnail_path in (self.cache_dir / "thumbnails").glob(f"{image_id}-*.jpg"):
                         thumbnail_path.unlink(missing_ok=True)
-                    except OSError:
-                        LOGGER.warning("Could not remove deleted-project thumbnail %s", thumbnail_path)
+                except OSError:
+                    LOGGER.warning("Could not clean deleted-project cache for %s", image_id)
 
     def resume_project(self, catalog_id: str) -> dict[str, Any]:
         project = self.workspace_store.set_project_status(catalog_id, "working")
@@ -432,7 +470,10 @@ class CatalogMixin:
         project = self.workspace_store.project(catalog_id)
         if not project:
             raise ClientError("プロジェクトが見つかりません。", "project_not_found")
-        sources = self.workspace_store.project_sources(catalog_id)
+        sources = [
+            {**source, "exists": source["kind"] != "native-folder" or bool(source.get("nativePath") and Path(str(source["nativePath"])).is_dir())}
+            for source in self.workspace_store.project_sources(catalog_id)
+        ]
         native_roots = [Path(str(source["nativePath"])) for source in sources
                         if source["kind"] == "native-folder" and source.get("nativePath") and Path(str(source["nativePath"])).is_dir()]
         if native_roots:
@@ -648,6 +689,7 @@ class CatalogMixin:
                     self.order = []
                     self.candidates = {}
                     self.candidate_revisions = {}
+                    self.projectless_manual_drafts.clear()
                     self._clear_browser_save_tokens_unchecked()
                     self._invalidate_sam_cache()
                     catalog_id = self.catalog_id
@@ -1056,7 +1098,7 @@ class CatalogMixin:
                             source_kind="session",
                             project_source_kind=source_kind,
                             project_source_identity=f"browser:{source_identity or self.session_dir.name}",
-                            project_source_display="ブラウザから追加",
+                            project_source_display=source_kind,
                         ))
                         imported.append({"clientKey": client_key, "imageId": added[-1].image_id})
                 except Exception:
@@ -1078,7 +1120,7 @@ class CatalogMixin:
                             durable_source_id, durable_source_created = self.workspace_store.resolve_browser_source(
                                 self.catalog_id,
                                 kind=source_kind,
-                                display_name="ブラウザから追加",
+                                display_name=source_kind,
                                 source_identity=browser_identity,
                                 create=not self.project_read_only,
                             )

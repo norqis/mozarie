@@ -24,6 +24,7 @@ const state = {
   sourceAccess: new Map(),
   // Projectless directory imports retain their root only until the session is named.
   projectlessDirectorySources: new Map(),
+  projectlessPromotion: null,
   processing: null, imageInflight: new Map(), candidateInflight: new Map(), loadingDelay: null, pendingImageKey: null, pendingCandidateKey: null,
   galleryCollapsed: false, inspectorCollapsed: false,
   settings: null, settingsStatus: null, jobPollTimer: null,
@@ -31,6 +32,7 @@ const state = {
   prefetchQueue: [], prefetchActive: 0, prefetchTimer: null,
   fillWorker: null, fillPending: false,
   project: null, projectReadOnly: false, projectHistory: new Map(), projectHistoryBusy: false,
+  missingNativeSource: null,
   renderFrame: 0,
   maskDirty: false, draftDirty: false, draftLayerDirty: new Set(), draftDirtyRois: new Map(), historyBaseDirty: false, draftSaveChains: new Map(),
 };

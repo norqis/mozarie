@@ -671,6 +671,8 @@
   "project.completeConfirm": "Mark this project complete and close its image list.",
   "project.readOnly": "This completed project is read-only.",
   "project.sourceSelect": "Relink image folder",
+  "project.sourceMissing": "Source folder is missing",
+  "project.sourceRelinkPrompt": "Enter the absolute path of the source folder",
   "project.downloadMosaic": "Download mosaic mask",
   "project.downloadExclude": "Download exclusion mask",
   "project.downloadMosaicZip": "Download all mosaic masks",

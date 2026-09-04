@@ -420,6 +420,35 @@ class WorkspaceStore:
         return [{"id": str(row["source_id"]), "kind": str(row["kind"]), "displayName": str(row["display_name"]),
                  "nativePath": row["native_path"], "identity": str(row["source_identity"])} for row in rows]
 
+    def native_source(self, catalog_id: str, source_id: str) -> dict[str, Any]:
+        with self._connect() as db:
+            row = db.execute("""SELECT source_id,kind,display_name,native_path,source_identity
+                FROM project_sources WHERE catalog_id=? AND source_id=?""", (catalog_id, source_id)).fetchone()
+        if row is None or str(row["kind"]) != "native-folder":
+            raise ValueError("native project source is missing")
+        return {"id": str(row["source_id"]), "kind": str(row["kind"]), "displayName": str(row["display_name"]),
+                "nativePath": row["native_path"], "identity": str(row["source_identity"])}
+
+    def relink_native_source(self, catalog_id: str, source_id: str, root: Path) -> None:
+        identity = str(root.resolve())
+        with self._lock, self._connect() as db:
+            db.execute("BEGIN IMMEDIATE")
+            try:
+                source = db.execute("SELECT kind FROM project_sources WHERE catalog_id=? AND source_id=?", (catalog_id, source_id)).fetchone()
+                if source is None or str(source["kind"]) != "native-folder":
+                    raise ValueError("native project source is missing")
+                conflict = db.execute("""SELECT source_id FROM project_sources
+                    WHERE catalog_id=? AND kind='native-folder' AND source_identity=? AND source_id<>?""",
+                                      (catalog_id, identity, source_id)).fetchone()
+                if conflict is not None:
+                    raise ValueError("native project source path already belongs to this project")
+                db.execute("""UPDATE project_sources SET display_name=?,native_path=?,source_identity=?
+                    WHERE catalog_id=? AND source_id=?""", (root.name or identity, identity, identity, catalog_id, source_id))
+                db.execute("COMMIT")
+            except Exception:
+                db.execute("ROLLBACK")
+                raise
+
     def project_images(self, catalog_id: str) -> list[dict[str, Any]]:
         with self._connect() as db:
             rows = db.execute("""SELECT images.image_id,images.relative_path,images.width,images.height,
@@ -576,15 +605,19 @@ class WorkspaceStore:
         with self._lock, self._connect() as db:
             db.execute("UPDATE catalogs SET source_root=?,updated_at=? WHERE catalog_id=?", (source_root, time.time_ns(), catalog_id))
 
-    def delete_project(self, catalog_id: str) -> None:
+    def delete_project(self, catalog_id: str) -> list[str]:
         """Permanently remove one explicit project and all of its workspace rows."""
         with self._lock, self._connect() as db:
             db.execute("BEGIN IMMEDIATE")
             try:
+                image_ids = [str(row["image_id"]) for row in db.execute(
+                    "SELECT image_id FROM images WHERE catalog_id=?", (catalog_id,)
+                )]
                 cursor = db.execute("DELETE FROM catalogs WHERE catalog_id=?", (catalog_id,))
                 if not cursor.rowcount:
                     raise ValueError("project is missing")
                 db.execute("COMMIT")
+                return image_ids
             except Exception:
                 db.execute("ROLLBACK")
                 raise
@@ -610,7 +643,7 @@ class WorkspaceStore:
                     # project.  Avoid an extra read in large folder imports.
                     source_id = f"browser-{catalog_id}"
                     db.execute("""INSERT OR IGNORE INTO project_sources(source_id,catalog_id,kind,display_name,native_path,source_identity,created_at)
-                        VALUES(?,?,?,?,?,?,?)""", (source_id, catalog_id, "browser-files", "ブラウザから追加", None, f"browser:{catalog_id}", now))
+                    VALUES(?,?,?,?,?,?,?)""", (source_id, catalog_id, "browser-files", "browser-files", None, f"browser:{catalog_id}", now))
                 elif db.execute("SELECT 1 FROM project_sources WHERE source_id=? AND catalog_id=?", (source_id, catalog_id)).fetchone() is None:
                     raise ValueError("project source is missing")
                 db.execute("""CREATE TEMP TABLE IF NOT EXISTS workspace_reconcile_records(
