@@ -305,7 +305,8 @@ class HttpBranchTests(unittest.TestCase):
 
     def test_binary_import_reader_streams_real_bytes_and_removes_short_partial_file(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            state = SimpleNamespace(cache_dir=Path(directory))
+            imports = Path(directory) / "session" / "imports"; imports.mkdir(parents=True)
+            state = SimpleNamespace(_ensure_session=lambda: imports)
             payload = b"abc123"
             handler = self.handler(headers={"Content-Length": str(len(payload))}, body=payload)
             with patch.object(http_module, "STATE", state):
@@ -315,7 +316,7 @@ class HttpBranchTests(unittest.TestCase):
                 staged.unlink()
                 with self.assertRaises(ClientError):
                     self.handler(headers={"Content-Length": "7"}, body=payload)._read_binary_body_to_file()
-            self.assertEqual(list((Path(directory) / "import-staging").glob("*")), [])
+            self.assertEqual(list(imports.glob("*.upload.tmp")), [])
 
     def test_client_error_and_static_response_choose_safe_user_codes(self) -> None:
         handler = self.handler()
