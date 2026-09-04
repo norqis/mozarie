@@ -74,7 +74,7 @@ class CandidateExpandTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             store = WorkspaceStore(root)
-            catalog = store.ensure_catalog()
+            catalog = store.create_project()["id"]
             record = type("Record", (), {"relative_path": "one.png", "size_bytes": 1, "mtime_ns": 1})()
             image_id = str(store.reconcile_images(catalog, [record])["one.png"]["image_id"])
             mask_path = root / "candidate.png"
@@ -94,7 +94,7 @@ class CandidateExpandTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             store = WorkspaceStore(root)
-            catalog = store.ensure_catalog()
+            catalog = store.create_project()["id"]
             record = type("Record", (), {"relative_path": "one.png", "size_bytes": 1, "mtime_ns": 1})()
             image_id = str(store.reconcile_images(catalog, [record])["one.png"]["image_id"])
             mask_path = root / "candidate.png"

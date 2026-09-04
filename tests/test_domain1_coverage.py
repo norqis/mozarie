@@ -36,7 +36,7 @@ def image_record(name: str = "image.png", size: int = 10, mtime: int = 20) -> Si
 class WorkspaceCoverageTests(unittest.TestCase):
     def new_store(self, root: Path) -> tuple[WorkspaceStore, str, str]:
         store = WorkspaceStore(root)
-        catalog = store.ensure_catalog()
+        catalog = store.create_project()["id"]
         image_id = str(store.reconcile_images(catalog, [image_record()])["image.png"]["image_id"])
         return store, catalog, image_id
 
@@ -52,8 +52,8 @@ class WorkspaceCoverageTests(unittest.TestCase):
             store.clear_image_workspaces({})
             store.delete_manual([])
 
-            first = store.ensure_catalog()
-            second = store.ensure_catalog()
+            first = store.create_project()["id"]
+            second = store.create_project()["id"]
             for target, name in ((first, "one.png"), (second, "two.png")):
                 target_id = str(store.reconcile_images(target, [image_record(name) ])[name]["image_id"])
                 self.assertTrue(store.has_image(target_id))
