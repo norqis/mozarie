@@ -54,6 +54,9 @@ vm.runInNewContext("globalThis.idbTest={directoryCatalogStore, catalogForDirecto
   assert.equal(await context.idbTest.rememberedProjectSource("fresh", "source"), null, "a failed source lookup behaves as an absent remembered source");
   assert.deepEqual([...await context.idbTest.rememberedProjectFileSources("fresh")], [], "a failed file-source lookup has no implicit import fallback");
   assert.deepEqual([...await context.idbTest.rememberedProjectDirectorySources("fresh")], [], "a failed directory-source lookup has no implicit import fallback");
+  const closesBeforeFailedDirectoryMatch = events.filter((event) => event === "close").length;
+  assert.deepEqual([...await context.idbTest.matchingProjectDirectorySources({ isSameEntry: async () => true })], [], "a failed directory-source match lookup has no implicit project match");
+  assert.equal(events.filter((event) => event === "close").length, closesBeforeFailedDirectoryMatch + 1, "a failed directory-source match lookup closes its IndexedDB connection");
   await context.idbTest.forgetProjectSources("fresh");
   assert.equal(await context.idbTest.rememberedOutputDirectoryHandle(), null, "a failed output-handle lookup leaves output selection explicit");
   console.log("test_workspace_idb_runtime: passed");

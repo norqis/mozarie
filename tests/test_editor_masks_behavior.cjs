@@ -132,7 +132,7 @@ const context = {
 const masksPath = path.join(__dirname, "..", "static", "js", "editor-masks.js");
 const source = fs.readFileSync(masksPath, "utf8");
 vm.runInNewContext(source, context, { filename: masksPath });
-vm.runInNewContext("globalThis.masksTest = { candidateLabel, manualLayerPresence, renderCandidateRows: renderCandidates, candidatePaddingLimit, candidatePaddingValue, validateCandidatePadding, openCandidatePadding, openBatchCandidatePadding, closeCandidatePadding, commitCandidatePadding, commitBatchCandidatePadding, changeCandidatePaddingDraft, candidateDisplayMode, candidateDisplayIdsForRole, syncCandidateDisplayButtons, syncCandidateBlinkTimer, setCandidateDisplayMode, toggleCandidateDisplay, toggleCandidateEffective, candidateDisplayToggle, candidateEffectiveToggle, clearCandidateBlink, clearCandidateMutationState, candidateMutationKey, nextCandidateMutationVersion, enqueueCandidateMutation, waitForCandidateMutations, updateCandidate, deleteCandidate, deleteManualMask, deleteManualExclusion, deleteManualExclusionErase, shouldBlinkNewManual, batchCandidateOperation, escapeHtml, pointFromEvent, clampPoint, boundaryDragStarted, polygonVertexAt, completedPolygonVertexAt, rectangleDraftAt, paintStrokeOnContexts, paintStrokePath, paintFillSpans, applyFillSpans, enableManualLayerForTool, beginManualStroke, appendManualStrokePoint, paintPendingManualStroke, completeManualStroke, cancelManualStroke, replayManualStroke, historyWeight, trimHistory, rebuildManualMaskFromHistory, recordHistoryOperation, resetHistoryToCurrentManualMask, restoreProjectHistory, restoreSnapshot, buildCombinedMask, addBoundaryCandidate, cancelBoundary, fillAt };\nrenderCandidates = globalThis.renderCandidates; render = globalThis.render;", context, { filename: "test-editor-masks-exports.js" });
+vm.runInNewContext("globalThis.masksTest = { candidateLabel, manualLayerPresence, renderCandidateRows: renderCandidates, candidatePaddingLimit, candidatePaddingValue, validateCandidatePadding, openCandidatePadding, openBatchCandidatePadding, closeCandidatePadding, commitCandidatePadding, commitBatchCandidatePadding, changeCandidatePaddingDraft, candidateDisplayMode, candidateDisplayIdsForRole, syncCandidateDisplayButtons, syncCandidateBlinkTimer, setCandidateDisplayMode, toggleCandidateDisplay, toggleCandidateEffective, candidateDisplayToggle, candidateEffectiveToggle, clearCandidateBlink, clearCandidateMutationState, candidateMutationKey, nextCandidateMutationVersion, enqueueCandidateMutation, waitForCandidateMutations, updateCandidate, deleteCandidate, deleteManualMask, deleteManualExclusion, deleteManualExclusionErase, shouldBlinkNewManual, batchCandidateOperation, escapeHtml, pointFromEvent, clampPoint, boundaryDragStarted, polygonVertexAt, completedPolygonVertexAt, rectangleDraftAt, paintStrokeOnContexts, paintStrokePath, paintFillSpans, applyFillSpans, enableManualLayerForTool, beginManualStroke, appendManualStrokePoint, paintPendingManualStroke, completeManualStroke, cancelManualStroke, replayManualStroke, historyWeight, trimHistory, rebuildManualMaskFromHistory, recordHistoryOperation, resetHistoryToCurrentManualMask, refreshProjectHistory, restoreProjectHistory, restoreSnapshot, buildCombinedMask, addBoundaryCandidate, cancelBoundary, fillAt };\nrenderCandidates = globalThis.renderCandidates; render = globalThis.render;", context, { filename: "test-editor-masks-exports.js" });
 const test = context.masksTest;
 
 const candidateLabelFixtures = [
@@ -940,6 +940,27 @@ assert.equal(state.manualExclusionEraseEnabled, true);
   state.images = [{ id: "image", assetVersion: "a", candidateRevision: 4 }];
   state.project = { id: "project" }; state.projectReadOnly = false; state.projectHistoryBusy = false; state.importing = false;
   state.projectHistory = new Map([["image", { canUndo: true, canRedo: true }]]); state.drafts = new Map([["image", { local: true }]]);
+  const historyRefreshId = "history / image";
+  const undoButton = element("#undoButton"); const redoButton = element("#redoButton");
+  let historyButtonUpdates = 0; let undoDisabled = true; let redoDisabled = false;
+  Object.defineProperty(undoButton, "disabled", { configurable: true, get: () => undoDisabled, set: (value) => { historyButtonUpdates += 1; undoDisabled = value; } });
+  Object.defineProperty(redoButton, "disabled", { configurable: true, get: () => redoDisabled, set: (value) => { historyButtonUpdates += 1; redoDisabled = value; } });
+  state.currentId = historyRefreshId;
+  context.api = async (url) => {
+    assert.equal(url, "/api/project/history/history%20%2F%20image", "project history refresh encodes the current image id");
+    return { canUndo: true, canRedo: false };
+  };
+  await test.refreshProjectHistory();
+  assert.deepEqual({ ...state.projectHistory.get(historyRefreshId) }, { canUndo: true, canRedo: false }, "project history refresh records the server undo and redo state");
+  assert.equal(historyButtonUpdates, 2, "refreshing the current image updates both history buttons once");
+  assert.equal(undoButton.disabled, false, "refreshing the current image enables Undo when the server allows it");
+  assert.equal(redoButton.disabled, true, "refreshing the current image disables Redo when the server disallows it");
+  const historyRefreshErrorsBefore = events.filter((event) => event.startsWith("error:")).length;
+  context.api = async () => { throw new Error("history refresh offline"); };
+  await test.refreshProjectHistory(historyRefreshId);
+  assert.equal(events.filter((event) => event.startsWith("error:")).length, historyRefreshErrorsBefore + 1, "a project history refresh error is shown to the user");
+  delete undoButton.disabled; delete redoButton.disabled; undoButton.disabled = false; redoButton.disabled = false;
+  state.currentId = "image";
   context.flushWorkspaceDraft = async (imageId) => { historyFlushes += 1; assert.equal(imageId, "image", "history flushes the selected project image first"); };
   context.applyProjectSnapshot = () => { historySnapshots += 1; };
   context.selectImage = async (imageId, force, options) => { historySelects += 1; assert.deepEqual({ imageId, force, saveCurrentDraft: options.saveCurrentDraft }, { imageId: "image", force: true, saveCurrentDraft: false }, "changed project history reloads the selected image without resaving its draft"); };

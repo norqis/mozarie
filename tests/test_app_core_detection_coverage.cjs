@@ -109,10 +109,16 @@ async function testBoundApplicationEvents() {
   const originalAll = document.querySelectorAll;
   document.querySelectorAll = (selector) => groups.get(selector) || originalAll.call(document, selector);
   const window = { listeners: new Map(), addEventListener(name, callback) { this.listeners.set(name, callback); } };
+  const paneWrites = [];
+  const localStorage = {
+    values: new Map(),
+    getItem(key) { return this.values.get(key) ?? null; },
+    setItem(key, value) { this.values.set(key, value); paneWrites.push([key, value]); },
+  };
   const note = (name) => (...args) => { calls.push([name, ...args]); };
   const context = {
     console, Promise, Map, Set, WeakMap, Array, Object, Number, String, Boolean, Math, JSON, Error,
-    document, window, navigator: { clipboard: { writeText: async () => {} } }, state, canvas: element("#editorCanvas"),
+    document, window, localStorage, navigator: { clipboard: { writeText: async () => {} } }, state, canvas: element("#editorCanvas"),
     stage: element("#canvasStage"), toolRail: element("#canvasToolRail"), $: (selector) => element(selector),
     requestAnimationFrame(callback) { callback(); }, setTimeout(callback) { callback(); return 1; }, clearTimeout() {},
     isBusy: () => Boolean(context.busy), activeDetection: () => Boolean(context.detecting), t: (key) => key,
@@ -133,6 +139,7 @@ async function testBoundApplicationEvents() {
   const source = fs.readFileSync(path.join(jsRoot, "app.js"), "utf8");
   vm.runInNewContext(source, context, { filename: path.join(jsRoot, "app.js") });
   vm.runInNewContext("globalThis.appEvents={ bindEvents };", context, { filename: "test-app-events-exports.js" });
+  element(".studio-grid").getBoundingClientRect = () => ({ left: 10, right: 1210, width: 1200, top: 0, bottom: 600 });
   context.appEvents.bindEvents();
   const event = (extra = {}) => ({ button: 0, pointerId: 1, clientX: 5, clientY: 5, buttons: 1, isPrimary: true, target: null, currentTarget: null, preventDefault() { this.prevented = true; }, ...extra });
   const fire = async (id, name, extra) => { const callback = element(id).listeners.get(name); assert.ok(callback, `${id} ${name} is bound`); await callback(event(extra)); };
@@ -143,6 +150,32 @@ async function testBoundApplicationEvents() {
   await fire("#folderPath", "keydown", { key: "Enter" }); await fire("#galleryFilter", "change", { currentTarget: { value: "masked" } }); await fire("overviewFilter", "click"); await fire("#overviewQuery", "input", { target: { value: "cowgirl" } }); await fire("#overviewFolder", "change", { target: { value: "folder" } });
   await fire("#brushSize", "input"); await fire("#divisor", "input"); await fire("#applyDivisor", "input"); await fire("#confidence", "input"); await fire("#detectConfidenceRange", "input"); await fire("#detectConfidenceNumber", "input"); await fire("dialogTargetPussy", "change"); await fire("targetPenis", "change");
   await fire("#detectForm", "submit"); await fire("#detectCancelButton", "click"); await fire("#applyForm", "submit"); await fire("batchMode", "change"); await fire("#applyTargetMode", "change"); await fire("#singleSaveForm", "submit"); await fire("singleMode", "change"); await fire("#settingsLanguage", "change", { target: { value: "en" } });
+  // Gallery and candidate splitters update on drag, save only when accepted,
+  // and roll back a cancelled drag without changing the persisted width.
+  state.galleryCollapsed = false; state.inspectorCollapsed = false;
+  const gallerySplitter = element("#gallerySplitter"); const candidateSplitter = element("#candidateSplitter");
+  const panePointer = (clientX, pointerId) => event({ clientX, pointerId });
+  gallerySplitter.listeners.get("pointerdown")(panePointer(250, 31));
+  gallerySplitter.listeners.get("pointermove")(panePointer(360, 31));
+  assert.equal(gallerySplitter.getAttribute("aria-valuenow"), "350", "gallery drag updates its accessible width before commit");
+  assert.equal(paneWrites.length, 0, "gallery movement is not persisted before pointerup");
+  gallerySplitter.listeners.get("pointerup")(panePointer(360, 31));
+  assert.equal(gallerySplitter.hasPointerCapture(31), false, "gallery pointerup releases capture");
+  assert.deepEqual(paneWrites.at(-1), ["mozarie.galleryWidth", "350"], "gallery width persists only on pointerup");
+  candidateSplitter.listeners.get("pointerdown")(panePointer(900, 32));
+  candidateSplitter.listeners.get("pointermove")(panePointer(800, 32));
+  assert.equal(candidateSplitter.getAttribute("aria-valuenow"), "410", "candidate drag measures from the right edge");
+  candidateSplitter.listeners.get("pointerup")(panePointer(800, 32));
+  assert.equal(candidateSplitter.hasPointerCapture(32), false, "candidate pointerup releases capture");
+  assert.deepEqual(paneWrites.at(-1), ["mozarie.inspectorWidth", "410"], "candidate width persists only on pointerup");
+  const galleryBeforeCancel = gallerySplitter.getAttribute("aria-valuenow"); const paneWritesBeforeCancel = paneWrites.length;
+  gallerySplitter.listeners.get("pointerdown")(panePointer(460, 33));
+  gallerySplitter.listeners.get("pointermove")(panePointer(500, 33));
+  assert.notEqual(gallerySplitter.getAttribute("aria-valuenow"), galleryBeforeCancel, "cancelled gallery drag has a live preview");
+  gallerySplitter.listeners.get("pointercancel")(panePointer(500, 33));
+  assert.equal(gallerySplitter.getAttribute("aria-valuenow"), galleryBeforeCancel, "pointercancel restores the initial gallery width");
+  assert.equal(gallerySplitter.hasPointerCapture(33), false, "gallery pointercancel releases capture");
+  assert.equal(paneWrites.length, paneWritesBeforeCancel, "pointercancel does not persist a transient width");
   state.processing = { kind: "import", state: "running" }; state.importSession = {}; await fire("#processingPauseButton", "click"); await fire("#processingCancelButton", "click"); state.processing = { kind: "detect", state: "paused" }; element("#processingCancelButton").disabled = false; await fire("#processingPauseButton", "click"); await fire("#processingCancelButton", "click");
   await fire("#gallery", "dragenter", { dataTransfer: { types: ["Files"] } }); await fire("#gallery", "dragover", { dataTransfer: { types: ["Files"] } }); await fire("#gallery", "dragleave", { relatedTarget: null }); await fire("#gallery", "drop", { dataTransfer: { files: [{}] } });
   const canvas = context.canvas; await canvas.listeners.get("contextmenu")(event()); state.tool = "brush"; await canvas.listeners.get("pointerdown")(event()); await canvas.listeners.get("pointermove")(event({ getCoalescedEvents: () => [event()] })); await canvas.listeners.get("pointerup")(event()); await canvas.listeners.get("pointerdown")(event({ button: 1 })); await canvas.listeners.get("pointermove")(event()); await canvas.listeners.get("pointercancel")(event());
