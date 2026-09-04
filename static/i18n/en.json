@@ -654,6 +654,7 @@
   "project.sameSourceMessage": "A project already uses the same folder.",
   "project.sameSourceOpen": "Open existing",
   "project.sameSourceSeparate": "Create separate project",
+  "project.sameSourceAddCurrent": "Add to this project",
   "project.imageCount": "{count} images",
   "project.source": "Source folder",
   "project.updated": "Updated",

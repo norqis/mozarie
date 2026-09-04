@@ -35,6 +35,7 @@ const testFiles = [
   "tests/test_mosaic_preview_runtime.cjs",
   "tests/test_project_history_browser_e2e.cjs",
   "tests/test_project_ui_runtime.cjs",
+  "tests/test_same_source_project_select_runtime.cjs",
   "tests/test_quiet_runner.cjs",
   "tests/test_resources.cjs",
   "tests/test_settings_runtime.cjs",

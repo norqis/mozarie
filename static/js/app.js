@@ -68,6 +68,8 @@ let projectNameMode = "name";
 let sameSourceProjects = [];
 let sameSourcePath = "";
 let sameSourceSelectedProjectId = "";
+let sameSourceDirectoryHandle = null;
+let sameSourceCurrentSourceId = null;
 let projectDeleteId = "";
 
 function projectTitle(project) { return project?.name || t("project.unnamed"); }
@@ -213,12 +215,13 @@ async function deleteProject(projectId) {
   } catch (error) { showUserError(error); }
 }
 
-async function openSameSourceDialog(path) {
-  const data = await api("/api/project/source-check", { method: "POST", body: JSON.stringify({ path }) });
-  sameSourceProjects = (data.projects || []).filter((project) => project.id !== state.project?.id);
-  if (!sameSourceProjects.length) return false;
+function showSameSourceDialog(projects, { path = "", directoryHandle = null, currentSourceId = null } = {}) {
+  sameSourceProjects = projects;
   sameSourcePath = path;
+  sameSourceDirectoryHandle = directoryHandle;
+  sameSourceCurrentSourceId = currentSourceId;
   $("#sameSourceSeparate").hidden = false;
+  $("#sameSourceSeparate").textContent = t(directoryHandle ? "project.sameSourceAddCurrent" : "project.sameSourceSeparate");
   const list = $("#sameSourceList"); list.replaceChildren();
   for (const project of sameSourceProjects) {
     const item = document.createElement("li");
@@ -230,6 +233,13 @@ async function openSameSourceDialog(path) {
   }
   sameSourceSelectedProjectId = sameSourceProjects[0].id;
   showModalFromInvoker($("#sameSourceDialog"));
+}
+
+async function openSameSourceDialog(path) {
+  const data = await api("/api/project/source-check", { method: "POST", body: JSON.stringify({ path }) });
+  const projects = (data.projects || []).filter((project) => project.id !== state.project?.id);
+  if (!projects.length) return false;
+  showSameSourceDialog(projects, { path });
   return true;
 }
 
@@ -253,16 +263,11 @@ function bindEvents() {
       const others = new Set(matches.filter((source) => source.projectId !== state.project.id).map((source) => source.projectId));
       if (others.size) {
         const data = await api("/api/projects?sort=updated_desc");
-        sameSourceProjects = (data.projects || []).filter((project) => others.has(project.id));
-        sameSourceSelectedProjectId = sameSourceProjects[0]?.id || ""; sameSourcePath = "";
-        $("#sameSourceSeparate").hidden = true;
-        const list = $("#sameSourceList"); list.replaceChildren();
-        for (const project of sameSourceProjects) {
-          const item = document.createElement("li"); const choose = document.createElement("button"); choose.type = "button";
-          choose.textContent = `${projectTitle(project)} · ${t(`project.${project.status}`)}`;
-          choose.addEventListener("click", () => { sameSourceSelectedProjectId = project.id; }); item.append(choose); list.append(item);
+        const projects = (data.projects || []).filter((project) => others.has(project.id));
+        if (projects.length) {
+          showSameSourceDialog(projects, { directoryHandle: handle, currentSourceId: current?.sourceId || null });
+          return;
         }
-        showModalFromInvoker($("#sameSourceDialog")); return;
       }
       await importProjectDirectoryHandle(handle, state.project.id, current?.sourceId || null);
       await showSourceMismatches();
@@ -299,6 +304,14 @@ function bindEvents() {
   $("#sameSourceOpen").addEventListener("click", () => { const project = sameSourceProjects.find((item) => item.id === sameSourceSelectedProjectId) || sameSourceProjects[0]; $("#sameSourceDialog").close(); if (project) void openProject(project); });
   $("#sameSourceSeparate").addEventListener("click", () => { void (async () => {
     try {
+      const handle = sameSourceDirectoryHandle;
+      const sourceId = sameSourceCurrentSourceId;
+      if (handle) {
+        $("#sameSourceDialog").close();
+        await importProjectDirectoryHandle(handle, state.project.id, sourceId);
+        await showSourceMismatches();
+        return;
+      }
       if (state.candidateUpdateChains?.size) await waitForCandidateMutations();
       await flushAllWorkspaceMutations();
       const data = await api("/api/projects", { method: "POST", body: JSON.stringify({}) });

@@ -654,6 +654,7 @@
   "project.sameSourceMessage": "同じフォルダーを使うプロジェクトがあります。",
   "project.sameSourceOpen": "既存を開く",
   "project.sameSourceSeparate": "別プロジェクトとして作成",
+  "project.sameSourceAddCurrent": "このプロジェクトへ追加",
   "project.imageCount": "{count}枚",
   "project.source": "元フォルダー",
   "project.updated": "更新",
