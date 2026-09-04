@@ -74,6 +74,10 @@ function setCatalogNode(windowState, image, index, layout, rowNode) {
   cell.setAttribute("aria-selected", String(scope === "gallery" ? current : batchSelected));
   cell.setAttribute("aria-colindex", String(column + 1));
   const preview = item.querySelector("img"); observeThumbnail(preview, image, scope); preview.alt = image.relativePath;
+  // Overview is initially rendered in a hidden panel.  Some Chromium builds
+  // do not deliver that first IntersectionObserver entry after it becomes
+  // visible, so load its small mounted window immediately.
+  if (scope === "overview") loadThumbnail(preview);
   const reviewed = isReviewed(image);
   item.classList.toggle("reviewed", reviewed);
   if (scope === "gallery") {
