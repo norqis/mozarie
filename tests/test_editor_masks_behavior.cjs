@@ -897,7 +897,7 @@ assert.equal(state.manualExclusionEraseEnabled, true);
   context.requestAnimationFrame = (callback) => { queuedFrames.push(callback); return queuedFrames.length; };
   state.currentImage = { width: 100, height: 80 }; state.history = []; state.historyIndex = 0;
   test.restoreSnapshot(0); test.restoreSnapshot(0);
-  queuedFrames.shift()(); queuedFrames.shift()();
+  assert.equal(queuedFrames.length, 0, "restoring the current local-history index does not queue canvas work");
   context.requestAnimationFrame = frame;
 
   resetCandidateState(); state.tool = "brush"; test.setCandidateDisplayMode(["apply"], "normal");
