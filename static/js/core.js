@@ -539,7 +539,7 @@ function updateActionButtons() {
       "projectButton", "projectClose", "projectOpenList", "projectListClose", "projectSort", "projectResume", "projectDelete",
       "projectMosaicZip", "projectExcludeZip", "downloadCurrentMosaicMask", "downloadCurrentExcludeMask",
       "singleViewButton", "compareViewButton", "fitButton", "previousImageButton", "nextImageButton",
-      "settingsButton", "errorDialogClose",
+      "galleryFilter", "overviewButton", "collapseGalleryButton", "collapseInspectorButton", "settingsButton", "errorDialogClose",
     ]);
     if ((state.projectReadOnly || sourceIncompatible) && availableInReadOnly.has(control.id)) continue;
     if (control.id === "errorDialogClose") continue;
@@ -549,7 +549,7 @@ function updateActionButtons() {
     if (!control.disabled) control.dataset.disabledByLock = "true";
     control.disabled = true;
   }
-  $("#gallery").classList.toggle("locked", locked);
+  $("#gallery").classList.toggle("locked", running || state.importing);
   canvas.style.pointerEvents = running || state.importing ? "none" : "";
   canvas.setAttribute("aria-disabled", String(running || state.importing));
   syncDetectionActions();
