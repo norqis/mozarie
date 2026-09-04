@@ -604,20 +604,29 @@ class CatalogMixin:
             self._assert_catalog_mutable()
         requested = set(str(value) for value in image_ids)
         with self.lock:
-            known = requested & set(self.source_mismatches)
-            records = [self.images[image_id] for image_id in known if image_id in self.images]
-            if clear_masks:
-                revisions = {image_id: self._candidate_revision(image_id) + 1 for image_id in known}
-                self.workspace_store.clear_image_workspaces(revisions)
+            known = requested & set(self.source_mismatches) & set(self.images)
+        locks = [(image_id, self.image_io_lock(image_id)) for image_id in known]
+        with ExitStack() as stack:
+            for _image_id, image_lock in sorted(locks):
+                stack.enter_context(image_lock)
+            with self.lock:
+                self._assert_catalog_mutable()
+                known = requested & set(self.source_mismatches) & set(self.images)
+                records = [self.images[image_id] for image_id in known]
+                revisions = ({image_id: self._candidate_revision(image_id) + 1 for image_id in known}
+                             if clear_masks else None)
+                # The comparison baseline changes only after the user confirms.
+                # This one durable operation either commits both the source
+                # metadata and an optional mask clear, or leaves both intact.
+                self.workspace_store.acknowledge_source_mismatches(records, revisions)
+                if clear_masks:
+                    for image_id, revision in (revisions or {}).items():
+                        self.candidates[image_id] = []
+                        self.candidate_revisions[image_id] = revision
                 for image_id in known:
-                    self.candidates[image_id] = []; self.candidate_revisions[image_id] = revisions[image_id]
-            # The comparison baseline changes only after the user confirms.
-            self.workspace_store.accept_source_metadata(records, preserve_mask_dimensions=not clear_masks)
-            for image_id in known:
-                # Same-size changes can be acknowledged while retaining masks.
-                # A dimension mismatch remains blocked until it is explicitly
-                # cleared, because no silent mask scaling is ever performed.
-                if clear_masks or not self.source_mismatches.get(image_id): self.source_mismatches.pop(image_id, None)
+                    self.source_mismatches.pop(image_id, None)
+        if clear_masks:
+            self._delete_mask_files([], [self.cache_dir / image_id for image_id in known])
 
     def detach_catalog(self) -> str | None:
         """Clear only the live screen state while retaining durable work."""

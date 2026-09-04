@@ -582,18 +582,23 @@ class WorkspaceStore:
             for row in rows
         }
 
-    def accept_source_metadata(self, records: list[Any], *, preserve_mask_dimensions: bool = False) -> None:
-        if not records: return
+    def acknowledge_source_mismatches(self, records: list[Any], revisions: dict[str, int] | None = None) -> None:
+        """Accept selected source metadata, optionally clearing their masks atomically."""
+        selected = {str(record.image_id): record for record in records}
+        if not selected:
+            return
+        clear_revisions = revisions or {}
+        if set(clear_revisions) - set(selected):
+            raise ValueError("workspace clear selection does not match source acknowledgement")
         with self._lock, self._connect() as db:
             db.execute("BEGIN IMMEDIATE")
             try:
-                for record in records:
-                    if preserve_mask_dimensions:
-                        db.execute("UPDATE images SET size_bytes=?,mtime_ns=?,source_blocked=1,reviewed=0,updated_at=? WHERE image_id=?",
-                                   (record.size_bytes, record.mtime_ns, time.time_ns(), record.image_id))
-                    else:
-                        db.execute("""UPDATE images SET size_bytes=?,mtime_ns=?,width=?,height=?,source_blocked=0,reviewed=0,updated_at=?
-                            WHERE image_id=?""", (record.size_bytes, record.mtime_ns, record.width, record.height, time.time_ns(), record.image_id))
+                if clear_revisions:
+                    self._clear_image_workspaces_db(db, clear_revisions)
+                now = time.time_ns()
+                for image_id, record in selected.items():
+                    db.execute("""UPDATE images SET size_bytes=?,mtime_ns=?,width=?,height=?,source_blocked=0,reviewed=0,updated_at=?
+                        WHERE image_id=?""", (record.size_bytes, record.mtime_ns, record.width, record.height, now, image_id))
                 db.execute("COMMIT")
             except Exception:
                 db.execute("ROLLBACK")
@@ -620,23 +625,27 @@ class WorkspaceStore:
         with self._lock, self._connect() as db:
             db.execute("BEGIN IMMEDIATE")
             try:
-                group_id = history_group
-                if group_id is None and len(revisions) > 1:
-                    group_id = uuid.uuid4().hex
-                    db.execute("INSERT INTO history_groups(group_id,status,created_at) VALUES(?,?,?)", (group_id, "committed", time.time_ns()))
-                for image_id, revision in revisions.items():
-                    before = self._history_state_db(db, image_id)
-                    # Keep immutable candidate PNGs for the undo journal. A
-                    # clear only makes the generation inactive; explicit
-                    # image deletion still cascades all of it.
-                    db.execute("UPDATE candidates SET deleted=1 WHERE image_id=?", (image_id,))
-                    db.execute("DELETE FROM manual_edits WHERE image_id=?", (image_id,))
-                    db.execute("UPDATE images SET candidate_revision=?,reviewed=0,updated_at=? WHERE image_id=?", (revision, time.time_ns(), image_id))
-                    self._record_history_db(db, image_id, before, self._history_state_db(db, image_id), group_id=group_id)
+                self._clear_image_workspaces_db(db, revisions, history_group=history_group)
                 db.execute("COMMIT")
             except Exception:
                 db.execute("ROLLBACK")
                 raise
+
+    def _clear_image_workspaces_db(self, db: sqlite3.Connection, revisions: dict[str, int], *, history_group: str | None = None) -> None:
+        """Clear active masks using the caller's open transaction."""
+        group_id = history_group
+        if group_id is None and len(revisions) > 1:
+            group_id = uuid.uuid4().hex
+            db.execute("INSERT INTO history_groups(group_id,status,created_at) VALUES(?,?,?)", (group_id, "committed", time.time_ns()))
+        for image_id, revision in revisions.items():
+            before = self._history_state_db(db, image_id)
+            # Keep immutable candidate PNGs for the undo journal. A clear
+            # only makes the generation inactive; explicit image deletion
+            # still cascades all of it.
+            db.execute("UPDATE candidates SET deleted=1 WHERE image_id=?", (image_id,))
+            db.execute("DELETE FROM manual_edits WHERE image_id=?", (image_id,))
+            db.execute("UPDATE images SET candidate_revision=?,reviewed=0,updated_at=? WHERE image_id=?", (revision, time.time_ns(), image_id))
+            self._record_history_db(db, image_id, before, self._history_state_db(db, image_id), group_id=group_id)
 
     def prune_catalog_images(self, catalog_id: str, relative_paths: set[str]) -> None:
         """Drop rows for files absent from a complete folder scan only."""

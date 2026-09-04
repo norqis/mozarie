@@ -181,7 +181,13 @@ class ProjectHttpCoverageTests(unittest.TestCase):
         self.assertEqual(json.loads(body)["error_code"], "image_not_found")
 
     def test_project_history_mismatch_and_malformed_routes(self) -> None:
-        project_id, image_id = self.create_and_load()
+        Image.new("RGB", (12, 8), "gray").save(self.source_dir / "second.png")
+        project_id, _image_id = self.create_and_load()
+        status, _headers, body = self.request("GET", "/api/images")
+        self.assertEqual(status, 200)
+        image_ids = {image["relativePath"]: image["id"] for image in json.loads(body)["images"]}
+        image_id = image_ids["source.png"]
+        second_id = image_ids["second.png"]
         status, _headers, body = self.request("POST", f"/api/workspace/image/{image_id}", {"hidden": True}, authorized=True)
         self.assertEqual(status, 200)
         status, _headers, body = self.request("GET", f"/api/project/history/{image_id}")
@@ -206,19 +212,29 @@ class ProjectHttpCoverageTests(unittest.TestCase):
         self.assertEqual(status, 400)
         self.assertEqual(json.loads(body)["error_code"], "folder_not_found")
 
-        # A changed source is reported first.  Confirming without clearMasks
-        # accepts same-size metadata and keeps the project masks/history.
+        # Only the requested mismatch is acknowledged; its new source
+        # metadata remains accepted across a later project reopen.
         self.source_dir.joinpath("source.png").write_bytes(self.source_dir.joinpath("source.png").read_bytes() + b"changed")
+        self.source_dir.joinpath("second.png").write_bytes(self.source_dir.joinpath("second.png").read_bytes() + b"changed")
         status, _headers, body = self.request("POST", "/api/project/close", {}, authorized=True)
         self.assertEqual(status, 200)
         status, _headers, body = self.request("POST", "/api/project/open", {"projectId": project_id}, authorized=True)
         self.assertEqual(status, 200)
         status, _headers, body = self.request("GET", "/api/project/mismatches")
         self.assertEqual(status, 200)
-        self.assertEqual(json.loads(body)["images"][0]["id"], image_id)
+        self.assertEqual({item["id"] for item in json.loads(body)["images"]}, {image_id, second_id})
         status, _headers, body = self.request("POST", "/api/project/mismatches", {"imageIds": [image_id], "clearMasks": False}, authorized=True)
         self.assertEqual(status, 200)
-        self.assertFalse(json.loads(body)["images"][0]["sourceMismatch"])
+        images = {image["id"]: image for image in json.loads(body)["images"]}
+        self.assertFalse(images[image_id]["sourceMismatch"])
+        self.assertTrue(images[second_id]["sourceMismatch"])
+        status, _headers, body = self.request("POST", "/api/project/close", {}, authorized=True)
+        self.assertEqual(status, 200)
+        status, _headers, body = self.request("POST", "/api/project/open", {"projectId": project_id}, authorized=True)
+        self.assertEqual(status, 200)
+        status, _headers, body = self.request("GET", "/api/project/mismatches")
+        self.assertEqual(status, 200)
+        self.assertEqual([item["id"] for item in json.loads(body)["images"]], [second_id])
 
     def test_workspace_recovery_page_api_and_recreate_route(self) -> None:
         request = MosaicHandler.__new__(MosaicHandler)

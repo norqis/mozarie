@@ -158,9 +158,7 @@ class ProjectWorkspaceCoverageTests(unittest.TestCase):
             changed = self.record("one.png", size=11, mtime=21, width=8, height=4)
             state = store.reconcile_images(catalog, [changed])["one.png"]
             self.assertTrue(state["changed"]); self.assertTrue(state["dimensions_changed"]); self.assertFalse(state["reviewed"])
-            store.accept_source_metadata([self.record("one.png", size=11, mtime=21, width=8, height=4, image_id=first)], preserve_mask_dimensions=True)
-            self.assertTrue(store.reconcile_images(catalog, [changed])["one.png"]["dimensions_changed"])
-            store.accept_source_metadata([self.record("one.png", size=11, mtime=21, width=8, height=4, image_id=first)])
+            store.acknowledge_source_mismatches([self.record("one.png", size=11, mtime=21, width=8, height=4, image_id=first)])
             self.assertFalse(store.reconcile_images(catalog, [changed])["one.png"]["changed"])
             store.set_image_flags(first, hidden=True, reviewed=True)
             self.assertEqual(store.image_state(first), (True, True)); self.assertTrue(store.has_image(first))
@@ -357,7 +355,7 @@ class ProjectWorkspaceCoverageTests(unittest.TestCase):
             root = Path(directory); store, catalog, image_id = self.store_image(root)
             self.assertEqual(store.reconcile_images(catalog, []), {})
             self.assertEqual(store.image_state("missing"), (False, False)); self.assertFalse(store.has_image("missing"))
-            store.accept_source_metadata([]); store.clear_image_workspaces({})
+            store.acknowledge_source_mismatches([]); store.clear_image_workspaces({})
             with self.assertRaisesRegex(ValueError, "source is missing"):
                 store.reconcile_images(catalog, [self.record("bad.png")], "no-source")
             with patch.object(store, "_history_state_db", side_effect=RuntimeError("stop")):
@@ -455,7 +453,7 @@ class ProjectWorkspaceCoverageTests(unittest.TestCase):
             # Every mutation below enters its transaction before the malformed
             # record fails; no partial source/image state is retained.
             with self.assertRaises(AttributeError):
-                store.accept_source_metadata([object()])
+                store.acknowledge_source_mismatches([object()])
             self.assertTrue(store.has_image(image_id))
             with patch("mozarie.workspace._chunks", return_value=[[object()]]):
                 with self.assertRaises(sqlite3.ProgrammingError):

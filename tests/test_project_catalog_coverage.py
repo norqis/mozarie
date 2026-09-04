@@ -110,22 +110,29 @@ class ProjectCatalogCoverageTests(unittest.TestCase):
         state.resolve_source_mismatches([first_id], False)
         self.assertEqual(state.source_mismatch_snapshot(), [])
 
-        # A changed geometry remains blocked until the user selects mask deletion.
+        # A changed geometry is acknowledged with the same keep choice.
         Image.new("RGB", (12, 6), "gray").save(first_path)
         state.set_root(str(first_root))
         self.assertTrue(state.source_mismatch_snapshot()[0]["dimensionsChanged"])
+        for candidate_id in ("apply", "exclude"):
+            state.read_candidate_mask_png(first_id, candidate_id)
+        revision_before_keep = state._candidate_revision(first_id)
         state.resolve_source_mismatches([first_id], False)
-        self.assertTrue(state.source_mismatch_snapshot())
+        self.assertEqual(state.source_mismatch_snapshot(), [])
+        self.assertEqual([candidate.candidate_id for candidate in state.candidates[first_id]], ["apply", "exclude"])
+        self.assertEqual(state._candidate_revision(first_id), revision_before_keep)
+        self.assertTrue(all(candidate.mask_path.exists() for candidate in state.candidates[first_id]))
+        self.assertIsNotNone(state.manual_workspace(first_id))
         second_path = second_root / "nested/b.png"
         Image.new("RGB", (9, 9), "gray").save(second_path)
         state.set_root(str(second_root))
         changed_ids = [entry["id"] for entry in state.source_mismatch_snapshot()]
-        with patch.object(state.workspace_store, "clear_image_workspaces", side_effect=RuntimeError("clear failed")):
+        with patch.object(state.workspace_store, "acknowledge_source_mismatches", side_effect=RuntimeError("clear failed")):
             with self.assertRaisesRegex(RuntimeError, "clear failed"):
                 state.resolve_source_mismatches(changed_ids, True)
         state.resolve_source_mismatches(changed_ids, True)
         self.assertEqual(state.source_mismatch_snapshot(), [])
-        self.assertEqual(state.candidates[first_id], [])
+        self.assertEqual([candidate.candidate_id for candidate in state.candidates[first_id]], ["apply", "exclude"])
 
         completed = state.complete_project()
         self.assertEqual(completed["status"], "completed")
@@ -177,7 +184,7 @@ class ProjectCatalogCoverageTests(unittest.TestCase):
         self.assertEqual(decoded.call_count, 0)
         self.assertLess(elapsed, 25.0, f"20k project reopen took {elapsed:.3f}s")
 
-    def test_multi_source_reopen_reconciles_before_one_replace_and_keeps_dimension_lock(self) -> None:
+    def test_multi_source_reopen_reconciles_before_one_replace_and_accepts_dimension_change(self) -> None:
         first_root = self.root / "one"; second_root = self.root / "two"
         first_path = self.image(first_root, "first.png", (8, 8)); self.image(second_root, "second.png", (8, 8))
         state = self.state(); project = state.create_project("two sources")
@@ -191,9 +198,55 @@ class ProjectCatalogCoverageTests(unittest.TestCase):
         self.assertEqual(hydrated.call_count, 1)
         self.assertEqual(state.source_mismatch_snapshot(), [{"id": first_id, "relativePath": "first.png", "dimensionsChanged": True}])
         state.resolve_source_mismatches([first_id], False)
-        self.assertTrue(state.source_mismatch_snapshot(), "dimension change remains locked until mask deletion is chosen")
-        state.resolve_source_mismatches([first_id], True)
         self.assertEqual(state.source_mismatch_snapshot(), [])
+        state.open_project(project["id"])
+        self.assertEqual(state.source_mismatch_snapshot(), [])
+
+    def test_mismatch_acknowledgement_leaves_unselected_live_images_blocked(self) -> None:
+        first_root = self.root / "one"; second_root = self.root / "two"
+        first_path = self.image(first_root, "first.png", (8, 8))
+        second_path = self.image(second_root, "second.png", (8, 8))
+        state = self.state(); project = state.create_project("partial mismatch")
+        first_id = state.set_root(str(first_root))[0]["id"]
+        second_id = next(image["id"] for image in state.set_root(str(second_root)) if image["relativePath"] == "second.png")
+        Image.new("RGB", (12, 6), "black").save(first_path)
+        Image.new("RGB", (6, 12), "gray").save(second_path)
+        state.set_root(str(first_root)); state.set_root(str(second_root))
+        self.assertEqual({item["id"] for item in state.source_mismatch_snapshot()}, {first_id, second_id})
+        state.resolve_source_mismatches([first_id, "missing"], False)
+        self.assertEqual([item["id"] for item in state.source_mismatch_snapshot()], [second_id])
+        state.open_project(project["id"])
+        self.assertEqual([item["id"] for item in state.source_mismatch_snapshot()], [second_id])
+
+    def test_clear_mismatch_publishes_live_state_and_removes_cache_only_after_commit(self) -> None:
+        root = self.root / "source"; path = self.image(root, "one.png", (8, 8))
+        state = self.state(); state.create_project("clear mismatch")
+        image_id = state.set_root(str(root))[0]["id"]
+        candidate = self.candidate(state, image_id, "candidate")
+        self.commit_candidates(state, image_id, [candidate])
+        state.save_manual_workspace(image_id, {
+            "add": "", "exclusion": "", "exclusionErase": "", "removedCandidateIds": [],
+            "candidateRevision": state._candidate_revision(image_id), "hasEffectiveMask": True,
+        })
+        Image.new("RGB", (12, 6), "black").save(path)
+        state.set_root(str(root))
+        live_candidate = state.candidates[image_id][0]
+        state.read_candidate_mask_png(image_id, "candidate")
+        before_revision = state._candidate_revision(image_id)
+        with patch.object(state.workspace_store, "acknowledge_source_mismatches", side_effect=RuntimeError("write failed")):
+            with self.assertRaisesRegex(RuntimeError, "write failed"):
+                state.resolve_source_mismatches([image_id], True)
+        self.assertEqual([item.candidate_id for item in state.candidates[image_id]], ["candidate"])
+        self.assertEqual(state._candidate_revision(image_id), before_revision)
+        self.assertIn(image_id, state.source_mismatches)
+        self.assertTrue(live_candidate.mask_path.exists())
+        self.assertIsNotNone(state.manual_workspace(image_id))
+        state.resolve_source_mismatches([image_id], True)
+        self.assertEqual(state.candidates[image_id], [])
+        self.assertEqual(state._candidate_revision(image_id), before_revision + 1)
+        self.assertEqual(state.source_mismatch_snapshot(), [])
+        self.assertFalse(live_candidate.mask_path.exists())
+        self.assertIsNone(state.manual_workspace(image_id))
 
     def test_candidate_history_batch_and_failure_guards(self) -> None:
         root = self.root / "images"; self.image(root, "one.png"); self.image(root, "two.png")

@@ -480,19 +480,38 @@ class WorkspaceTests(unittest.TestCase):
             self.assertEqual(store.restore_history(image_id, "undo"), [image_id])
             self.assertEqual(store.image_state(image_id), (False, False))
 
-    def test_dimension_acknowledgement_stays_blocked_until_masks_are_cleared(self):
+    def test_dimension_acknowledgement_updates_the_reopen_baseline_without_clearing_masks(self):
         with tempfile.TemporaryDirectory() as directory:
             store = WorkspaceStore(Path(directory)); catalog = str(store.create_project()["id"])
             initial = SimpleNamespace(relative_path="001.png", size_bytes=10, mtime_ns=20, width=4, height=4)
             image_id = str(store.reconcile_images(catalog, [initial])["001.png"]["image_id"])
             changed = SimpleNamespace(image_id=image_id, relative_path="001.png", size_bytes=11, mtime_ns=21, width=8, height=8)
-            store.accept_source_metadata([changed], preserve_mask_dimensions=True)
-            reopened = store.reconcile_images(catalog, [changed])["001.png"]
-            self.assertTrue(reopened["changed"]); self.assertTrue(reopened["dimensions_changed"])
-            store.clear_image_workspaces({image_id: 1})
-            store.accept_source_metadata([changed])
+            store.acknowledge_source_mismatches([changed])
             accepted = store.reconcile_images(catalog, [changed])["001.png"]
             self.assertFalse(accepted["changed"]); self.assertFalse(accepted["dimensions_changed"])
+
+    def test_source_acknowledgement_clear_rolls_back_metadata_and_masks_together(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = WorkspaceStore(Path(directory)); catalog = str(store.create_project()["id"])
+            initial = SimpleNamespace(relative_path="001.png", size_bytes=10, mtime_ns=20, width=4, height=4)
+            image_id = str(store.reconcile_images(catalog, [initial])["001.png"]["image_id"])
+            with closing(sqlite3.connect(store.path)) as db, db:
+                db.execute("""INSERT INTO candidates(image_id,candidate_id,label_token,confidence,mask_png,enabled,color,source,origin,refinement,role,forced,deleted)
+                    VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)""", (image_id, "candidate", "hand", .8, self._png(), 1, "#112233", "auto", "automatic", None, "apply", 0, 0))
+            store.save_manual(image_id, {"add": "mask", "hasEffectiveMask": True}, lambda _value: self._png())
+            manual_before = store.manual(image_id, lambda value: value)
+            history_before = store.history_status(image_id)
+            changed = SimpleNamespace(image_id=image_id, relative_path="001.png", size_bytes=11, mtime_ns=21, width=8, height=8)
+            with patch.object(store, "_record_history_db", side_effect=sqlite3.OperationalError("history failed")):
+                with self.assertRaisesRegex(sqlite3.OperationalError, "history failed"):
+                    store.acknowledge_source_mismatches([changed], {image_id: 1})
+            with closing(sqlite3.connect(store.path)) as db:
+                row = db.execute("SELECT size_bytes,mtime_ns,width,height,candidate_revision FROM images WHERE image_id=?", (image_id,)).fetchone()
+                deleted = db.execute("SELECT deleted FROM candidates WHERE image_id=?", (image_id,)).fetchone()[0]
+            self.assertEqual(row, (10, 20, 4, 4, 0))
+            self.assertEqual(deleted, 0)
+            self.assertEqual(store.manual(image_id, lambda value: value), manual_before)
+            self.assertEqual(store.history_status(image_id), history_before)
 
     def test_atomic_mutations_roll_back_when_the_history_insert_fails(self):
         with tempfile.TemporaryDirectory() as directory:
