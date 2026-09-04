@@ -697,7 +697,7 @@
   "project.updated": "更新",
   "project.noSource": "元フォルダーなし",
   "project.noDate": "日時なし",
-  "project.dimensionsChanged": "画像サイズが変わっています。削除するまで編集・保存できません",
+  "project.dimensionsChanged": "画像サイズが変わっています。変更を確認するまで編集・保存できません",
   "project.dimensionsChangedNotice": "未チェックなら現在の範囲を新しいサイズに合わせて保持し、この画像のUndo履歴をリセットします。チェックすると範囲と履歴を削除します。",
   "dialog.ok": "OK",
   "workspaceRecovery.title": "作業データを作り直す必要があります",

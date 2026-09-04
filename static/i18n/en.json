@@ -697,7 +697,7 @@
   "project.updated": "Updated",
   "project.noSource": "No source folder",
   "project.noDate": "No date",
-  "project.dimensionsChanged": "The image size changed. Editing and saving stay disabled until masks are cleared.",
+  "project.dimensionsChanged": "The image size changed. Editing and saving stay disabled until the change is confirmed.",
   "project.dimensionsChangedNotice": "Unchecked keeps the current ranges scaled to the new size and resets Undo history for this image. Checked removes its ranges and history.",
   "dialog.ok": "OK",
   "workspaceRecovery.title": "Workspace data needs to be recreated",
