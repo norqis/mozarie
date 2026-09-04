@@ -160,21 +160,21 @@ class WorkspaceStore:
                     entry_id INTEGER REFERENCES history_entries(entry_id) ON DELETE SET NULL
                 );
                 CREATE TRIGGER IF NOT EXISTS project_image_insert AFTER INSERT ON images BEGIN
-                    UPDATE catalogs SET updated_at=CAST(unixepoch('subsec')*1000000000 AS INTEGER) WHERE catalog_id=NEW.catalog_id;
+                    UPDATE catalogs SET updated_at=CAST(strftime('%s','now') AS INTEGER) * 1000000000 + CAST(substr(strftime('%f','now'), 4, 3) AS INTEGER) * 1000000 WHERE catalog_id=NEW.catalog_id;
                 END;
                 CREATE TRIGGER IF NOT EXISTS project_image_update AFTER UPDATE ON images BEGIN
-                    UPDATE catalogs SET updated_at=CAST(unixepoch('subsec')*1000000000 AS INTEGER) WHERE catalog_id=NEW.catalog_id;
+                    UPDATE catalogs SET updated_at=CAST(strftime('%s','now') AS INTEGER) * 1000000000 + CAST(substr(strftime('%f','now'), 4, 3) AS INTEGER) * 1000000 WHERE catalog_id=NEW.catalog_id;
                 END;
                 CREATE TRIGGER IF NOT EXISTS project_manual_insert AFTER INSERT ON manual_edits BEGIN
-                    UPDATE catalogs SET updated_at=CAST(unixepoch('subsec')*1000000000 AS INTEGER)
+                    UPDATE catalogs SET updated_at=CAST(strftime('%s','now') AS INTEGER) * 1000000000 + CAST(substr(strftime('%f','now'), 4, 3) AS INTEGER) * 1000000
                     WHERE catalog_id=(SELECT catalog_id FROM images WHERE image_id=NEW.image_id);
                 END;
                 CREATE TRIGGER IF NOT EXISTS project_manual_update AFTER UPDATE ON manual_edits BEGIN
-                    UPDATE catalogs SET updated_at=CAST(unixepoch('subsec')*1000000000 AS INTEGER)
+                    UPDATE catalogs SET updated_at=CAST(strftime('%s','now') AS INTEGER) * 1000000000 + CAST(substr(strftime('%f','now'), 4, 3) AS INTEGER) * 1000000
                     WHERE catalog_id=(SELECT catalog_id FROM images WHERE image_id=NEW.image_id);
                 END;
                 CREATE TRIGGER IF NOT EXISTS project_manual_delete AFTER DELETE ON manual_edits BEGIN
-                    UPDATE catalogs SET updated_at=CAST(unixepoch('subsec')*1000000000 AS INTEGER)
+                    UPDATE catalogs SET updated_at=CAST(strftime('%s','now') AS INTEGER) * 1000000000 + CAST(substr(strftime('%f','now'), 4, 3) AS INTEGER) * 1000000
                     WHERE catalog_id=(SELECT catalog_id FROM images WHERE image_id=OLD.image_id);
                 END;
                 CREATE TRIGGER IF NOT EXISTS history_entry_delete AFTER DELETE ON history_entries BEGIN

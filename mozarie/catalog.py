@@ -921,10 +921,14 @@ class CatalogMixin:
                     for candidate in self.candidates.get(record.image_id, [])
                 ]
                 revisions = {record.image_id: self._candidate_revision(record.image_id) + 1 for record in records}
-                self.workspace_store.clear_image_workspaces(revisions)
+                if self.catalog_id is None:
+                    for record in records:
+                        self.projectless_manual_drafts.pop(record.image_id, None)
+                else:
+                    self.workspace_store.clear_image_workspaces(revisions)
                 for record in records:
                     self.candidates[record.image_id] = []
-                    self._touch_candidates(record.image_id)
+                    self.candidate_revisions[record.image_id] = revisions[record.image_id]
             self._delete_mask_files(mask_paths, [self.cache_dir / record.image_id for record in records])
         return len(records)
 
@@ -1429,15 +1433,16 @@ class CatalogMixin:
             with self.lock:
                 committed = dict(payload)
                 dirty_layers = committed.get("dirtyLayers")
-                existing = self.workspace_store.manual(image_id, self._encode_workspace_mask) if self.workspace_store.has_image(image_id) else self.projectless_manual_drafts.get(image_id)
+                existing = self.projectless_manual_drafts.get(image_id) if self.catalog_id is None else self.workspace_store.manual(image_id, self._encode_workspace_mask)
                 if dirty_layers is not None:
                     existing = existing or {}
                     for layer in ("add", "exclusion", "exclusionErase"):
                         committed.setdefault(layer, existing.get(layer, ""))
+                committed["candidateRevision"] = self._candidate_revision(image_id)
                 committed["hasEffectiveMask"] = self._effective_mask_for_draft(
                     image_id, self.candidates.get(image_id, []), committed,
                 )
-                if not self.workspace_store.has_image(image_id):
+                if self.catalog_id is None:
                     self.projectless_manual_drafts[image_id] = committed
                     return
                 try:
@@ -1495,21 +1500,28 @@ class CatalogMixin:
         self._assert_image_editable(image_id)
         with self.image_io_lock(image_id):
             with self.lock:
-                if self.workspace_store.has_image(image_id):
+                if self.catalog_id is None:
+                    self.projectless_manual_drafts.pop(image_id, None)
+                else:
                     self.workspace_store.delete_manual([image_id])
 
     def catalog_snapshot(self) -> dict[str, Any]:
         """Capture the complete catalogue payload in one lock epoch."""
         with self.lock:
-            manual_mask_statuses = self.workspace_store.manual_mask_statuses(list(self.order))
+            manual_mask_statuses = {} if self.catalog_id is None else self.workspace_store.manual_mask_statuses(list(self.order))
             output = []
             for image_id in self.order:
                 record = self.images[image_id]
                 candidate_revision = self._candidate_revision(image_id)
-                stored_effective, stored_revision = manual_mask_statuses.get(image_id, (False, -1))
-                has_effective_mask = stored_effective if stored_revision == candidate_revision else any(
+                fallback_effective = any(
                     candidate.enabled and candidate.role == CandidateRole.APPLY for candidate in self.candidates.get(image_id, [])
                 )
+                if self.catalog_id is None:
+                    draft = self.projectless_manual_drafts.get(image_id)
+                    has_effective_mask = bool(draft["hasEffectiveMask"]) if draft and draft.get("candidateRevision") == candidate_revision else fallback_effective
+                else:
+                    stored_effective, stored_revision = manual_mask_statuses.get(image_id, (False, -1))
+                    has_effective_mask = stored_effective if stored_revision == candidate_revision else fallback_effective
                 item = {
                     "id": record.image_id,
                     "relativePath": record.relative_path,
