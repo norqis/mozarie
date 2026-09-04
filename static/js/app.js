@@ -1036,7 +1036,7 @@ function bindEvents() {
 
   canvas.addEventListener("contextmenu", (event) => event.preventDefault());
   canvas.addEventListener("pointerdown", (event) => {
-    if (!state.currentImage || isBusy() || state.importing) return;
+    if (!state.currentImage || isBusy() || state.importing || currentImageActionPending()) return;
     if (event.button === 1) {
       canvas.setPointerCapture(event.pointerId); state.panning = true; state.pointer = { x: event.clientX, y: event.clientY }; canvas.style.cursor = "grabbing"; updateBrushCursor(); return;
     }
