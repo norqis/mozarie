@@ -310,7 +310,7 @@ function renderCandidates() {
     (role === "apply" ? applyList : excludeList).append(row);
   }
   appendEmpty(applyList); appendEmpty(excludeList);
-  syncCandidateDisplayButtons(presence); updateCandidateBatchButtons(undefined, undefined, presence);
+  syncCandidateDisplayButtons(presence); updateCandidateBatchButtons(undefined, undefined, presence, isBusy() || state.importing || state.candidateBatchPending.has(state.currentId));
 }
 
 function candidateDisplayMode(id) {

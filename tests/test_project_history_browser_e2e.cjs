@@ -90,14 +90,18 @@ test("completed projects keep browser navigation available without allowing edit
     await page.waitForFunction(() => state.currentId === "sample" && state.currentImage);
 
     const controls = await page.evaluate(() => {
+      state.manualMaskPresent = true;
+      renderCandidates();
       state.project = { id: "completed-project", status: "completed" };
       state.projectReadOnly = true;
       renderProjectCurrent();
       state.job = { state: "running" };
       updateActionButtons();
       const busyGalleryDisabled = document.querySelector('.gallery-item[data-id="sample"]').disabled;
+      const busyCandidateDisplayDisabled = document.querySelector("[data-candidate-display-toggle='apply']").disabled;
 
       state.job = null;
+      renderCandidates();
       updateActionButtons();
       const afterBusy = {
         gallery: document.querySelector('.gallery-item[data-id="sample"]').disabled,
@@ -111,6 +115,18 @@ test("completed projects keep browser navigation available without allowing edit
         remove: document.querySelector("#removeCurrentImageButton").disabled,
         undo: document.querySelector("#undoButton").disabled,
         projectReadOnly: state.projectReadOnly,
+        projectDelete: document.querySelector("#projectDelete").disabled,
+        projectDeleteConfirm: document.querySelector("#projectDeleteConfirm").disabled,
+        projectCloseWorkspace: document.querySelector("#projectCloseWorkspace").disabled,
+        settings: document.querySelector("#settingsButton").disabled,
+        settingsClose: document.querySelector("#settingsCloseButton").disabled,
+        copyPath: document.querySelector("#copyImagePathMenuItem").disabled,
+        candidateDisplay: document.querySelector("[data-candidate-display-toggle='apply']").disabled,
+        candidateEffective: document.querySelector("[data-candidate-effective-toggle='apply']").disabled,
+        candidateDisplayId: document.querySelector("[data-candidate-display-id]").disabled,
+        candidateEffectiveId: document.querySelector("[data-candidate-effective-id]").disabled,
+        candidateMutation: document.querySelector("[data-candidate-batch='apply:toggle']").disabled,
+        candidatePadding: document.querySelector("[data-candidate-padding-batch='apply']").disabled,
       };
 
       setViewMode("overview");
@@ -122,12 +138,15 @@ test("completed projects keep browser navigation available without allowing edit
         close: document.querySelector("#closeOverviewButton").disabled,
       };
       setViewMode("edit");
-      return { busyGalleryDisabled, afterBusy, overview };
+      return { busyGalleryDisabled, busyCandidateDisplayDisabled, afterBusy, overview };
     });
     assert.equal(controls.busyGalleryDisabled, true, "busy work disables gallery navigation");
+    assert.equal(controls.busyCandidateDisplayDisabled, true, "busy work disables candidate display controls");
     assert.deepEqual(controls.afterBusy, {
       gallery: false, next: false, overview: false, preview: false, download: false, resume: false,
       review: true, detect: true, remove: true, undo: true, projectReadOnly: true,
+      projectDelete: false, projectDeleteConfirm: false, projectCloseWorkspace: false, settings: false, settingsClose: false, copyPath: false,
+      candidateDisplay: false, candidateEffective: false, candidateDisplayId: false, candidateEffectiveId: false, candidateMutation: true, candidatePadding: true,
     }, "read-only mode restores browsing controls and keeps mutations disabled after busy work");
     assert.deepEqual(controls.overview, { card: false, filter: false, query: false, folder: false, close: false }, "read-only mode keeps overview browsing controls available");
 
@@ -158,6 +177,38 @@ test("completed projects keep browser navigation available without allowing edit
       return result;
     });
     assert.deepEqual(resumed, { review: false, detect: false, remove: false }, "resuming work re-enables editing controls");
+
+    await page.evaluate(() => {
+      state.project = { id: "completed-project", status: "completed" };
+      state.projectReadOnly = true;
+      renderProjectCurrent();
+      updateActionButtons();
+    });
+    await page.locator("#settingsButton").click();
+    await page.waitForFunction(() => document.querySelector("#settingsDialog").open);
+    assert.equal(await page.locator("#settingsSaveButton").isDisabled(), false, "read-only projects retain the complete settings form");
+    await page.locator("#settingsCloseButton").click();
+    await page.waitForFunction(() => !document.querySelector("#settingsDialog").open);
+
+    await page.evaluate(() => {
+      window.__readOnlyDeleteRequests = 0;
+      const nativeFetch = window.fetch;
+      window.fetch = async (input, init = {}) => {
+        const url = String(input?.url || input);
+        if (url.includes("/api/project/completed-project") && init.method === "DELETE") {
+          window.__readOnlyDeleteRequests += 1;
+          return new Response(JSON.stringify({ ok: true }), { headers: { "Content-Type": "application/json" } });
+        }
+        return nativeFetch(input, init);
+      };
+    });
+    await page.locator("#projectButton").click();
+    await page.waitForFunction(() => document.querySelector("#projectDialog").open);
+    await page.locator("#projectDelete").click();
+    await page.waitForFunction(() => document.querySelector("#projectDeleteDialog").open && !document.querySelector("#projectDeleteConfirm").disabled);
+    await page.locator("#projectDeleteConfirm").click();
+    await page.waitForTimeout(25);
+    assert.equal(await page.evaluate(() => window.__readOnlyDeleteRequests), 1, "read-only lifecycle delete confirmation remains actionable");
   } finally {
     await page?.close();
     await browser.close();

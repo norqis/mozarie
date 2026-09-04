@@ -535,7 +535,7 @@ function updateActionButtons() {
   $("#hideAndNextButton").disabled = busyLocked || mutationLocked || switchingImages || !hasImage;
   $("#downloadCurrentMosaicMask").disabled = !hasImage || !state.project;
   $("#downloadCurrentExcludeMask").disabled = !hasImage || !state.project;
-  updateCandidateBatchButtons(hasImage, busyLocked || mutationLocked || switchingImages);
+  updateCandidateBatchButtons(hasImage, busyLocked || mutationLocked || switchingImages, undefined, busyLocked || switchingImages);
   updateHistoryButtons();
   if (busyLocked) {
     for (const control of controls) {
@@ -547,17 +547,20 @@ function updateActionButtons() {
     }
   } else if (mutationLocked) {
     const availableInReadOnly = new Set([
-      "projectButton", "projectClose", "projectOpenList", "projectListClose", "projectSort", "projectResume",
+      "projectButton", "projectClose", "projectOpenList", "projectListClose", "projectSort", "projectResume", "projectDelete", "projectCloseWorkspace",
       "projectMosaicZip", "projectExcludeZip", "downloadCurrentMosaicMask", "downloadCurrentExcludeMask",
       "singleViewButton", "compareViewButton", "fitButton", "mosaicPreviewButton", "previousImageButton", "nextImageButton",
-      "galleryFilter", "overviewButton", "collapseGalleryButton", "collapseInspectorButton", "errorDialogClose",
+      "galleryFilter", "overviewButton", "collapseGalleryButton", "collapseInspectorButton", "settingsButton", "settingsCloseButton", "errorDialogClose",
       "closeOverviewButton", "overviewQuery", "overviewFolder", "sourceMismatchCancel", "detectCancelButton",
+      "projectDeleteCancel", "projectDeleteConfirm", "copyImagePathMenuItem",
     ]);
     const availableInReadOnlyControls = new Set([
-      ...document.querySelectorAll(".gallery-item, .overview-item, .overview-filter"),
+      ...document.querySelectorAll(".gallery-item, .overview-item, .overview-filter, .project-list-item button, [data-candidate-display-toggle], [data-candidate-effective-toggle], [data-candidate-display-id], [data-candidate-effective-id]"),
     ]);
+    const availableInReadOnlyDialogs = ["#settingsDialog", "#modelHelpDialog", "#modelDownloadDialog"].map($);
     for (const control of controls) {
-      if (availableInReadOnly.has(control.id) || availableInReadOnlyControls.has(control)) continue;
+      if (availableInReadOnly.has(control.id) || availableInReadOnlyControls.has(control)
+        || availableInReadOnlyDialogs.some((dialog) => dialog.contains(control))) continue;
       if (!control.disabled) control.dataset.disabledByLock = "true";
       control.disabled = true;
     }
@@ -568,14 +571,15 @@ function updateActionButtons() {
   syncDetectionActions();
 }
 
-function updateCandidateBatchButtons(hasImage = Boolean(state.currentId && state.currentImage && currentRecord()), locked = isBusy() || state.importing || state.candidateBatchPending.has(state.currentId), presence) {
-  if (locked) {
+function updateCandidateBatchButtons(hasImage = Boolean(state.currentId && state.currentImage && currentRecord()), mutationLocked = isBusy() || state.importing || state.projectReadOnly || currentRecord()?.sourceDimensionsChanged || state.candidateBatchPending.has(state.currentId), presence, viewLocked = mutationLocked) {
+  if (mutationLocked) {
     for (const button of document.querySelectorAll("[data-candidate-batch]")) button.disabled = true;
     for (const button of document.querySelectorAll("[data-candidate-padding-batch]")) button.disabled = true;
-    for (const button of document.querySelectorAll("[data-candidate-display-toggle], [data-candidate-effective-toggle]")) button.disabled = true;
-    return;
-  }
-  for (const button of document.querySelectorAll("[data-candidate-padding-batch]")) {
+    if (viewLocked) {
+      for (const button of document.querySelectorAll("[data-candidate-display-toggle], [data-candidate-effective-toggle]")) button.disabled = true;
+      return;
+    }
+  } else for (const button of document.querySelectorAll("[data-candidate-padding-batch]")) {
     const role = button.dataset.candidatePaddingBatch;
     button.disabled = !hasImage || !state.candidates.some((candidate) => candidate.role === role);
   }
@@ -583,7 +587,7 @@ function updateCandidateBatchButtons(hasImage = Boolean(state.currentId && state
     hasManualExclude: canvasHasPixels(exclusionCtx, exclusionCanvas),
     hasManualExclusionErase: canvasHasPixels(exclusionEraseCtx, exclusionEraseCanvas),
   };
-  for (const button of document.querySelectorAll("[data-candidate-batch]")) {
+  if (!mutationLocked) for (const button of document.querySelectorAll("[data-candidate-batch]")) {
     const [role, operation] = button.dataset.candidateBatch.split(":");
     const hasManual = role === "apply" ? state.manualMaskPresent : manualPresence.hasManualExclude || manualPresence.hasManualExclusionErase;
     const hasRoleCandidate = hasImage && (state.candidates.some((candidate) => candidate.role === role) || hasManual);
