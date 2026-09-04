@@ -121,11 +121,12 @@ async function forgetProjectImageSources(projectId, imageIds) {
 
 async function rememberProjectlessPromotionSources(projectId) {
   const sources = [...state.projectlessDirectorySources.entries()].map(([sourceId, source]) => ({ handle: source.handle, sourceId }));
+  const directoryImageIds = new Set([...state.projectlessDirectorySources.values()].flatMap((source) => [...source.imageIds]));
   for (const image of state.images) {
+    if (image.sourceKind !== "session" || directoryImageIds.has(image.id)) continue;
     const access = state.sourceAccess.get(image.id);
-    if (access?.fileHandle && access.sourceKind === "browser-files") {
-      sources.push({ handle: access.fileHandle, imageId: image.id, sourceId: access.sourceId, clientKey: access.clientKey, relativePath: access.relativePath });
-    }
+    if (!access?.fileHandle || access.sourceKind !== "browser-files" || !access.sourceId) throw codedError("project_source_unavailable");
+    sources.push({ handle: access.fileHandle, imageId: image.id, sourceId: access.sourceId, clientKey: access.clientKey, relativePath: access.relativePath });
   }
   await rememberProjectSources(projectId, sources);
 }

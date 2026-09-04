@@ -555,6 +555,10 @@ function bindEvents() {
       if (projectlessSave && Number.isInteger(error?.status) && error.status >= 400 && error.status < 500) await forgetProjectSources(projectId);
       throw error;
     }
+    if (projectlessSave && data.project?.id !== projectId) {
+      await forgetProjectSources(projectId);
+      throw codedError("response_invalid");
+    }
     state.project = data.project; state.projectReadOnly = false;
     if (projectlessSave) state.projectlessDirectorySources.clear();
     $("#projectNameDialog").close(); if (mode === "new") { resetCatalog([], ""); state.missingNativeSources = []; } renderProjectCurrent();
