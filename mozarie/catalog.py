@@ -354,7 +354,8 @@ class CatalogMixin:
     def create_project(self, name: str | None = None) -> dict[str, Any]:
         with self.import_lock:
             with self.lock:
-                self._assert_catalog_mutable()
+                if self.active_import_count or self.job.state in {"running", "pausing", "paused"} or self._has_active_worker():
+                    raise ClientError("処理が終了するまで画像一覧を変更できません。", "operation_in_progress")
             try:
                 project = self.workspace_store.create_project(name)
             except ProjectNameAlreadyExistsError as exc:

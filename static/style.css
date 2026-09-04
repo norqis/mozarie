@@ -370,7 +370,6 @@ button { overflow: visible; text-overflow: clip; white-space: nowrap; }
 .workspace-splitter { position: relative; z-index: 6; min-width: 8px; cursor: col-resize; outline: none; touch-action: none; user-select: none; background: #171a1d; }
 .workspace-splitter::after { content: ""; position: absolute; top: 0; right: 3px; bottom: 0; left: 3px; background: #3b424a; }
 .workspace-splitter:hover::after, .workspace-splitter:focus-visible::after, .workspace-splitter.dragging::after { background: #62bca4; }
-.project-row-action-group { display: flex; flex-wrap: wrap; gap: 6px; }
 .studio-grid.gallery-collapsed { grid-template-columns: 40px 8px minmax(320px, 1fr) 8px var(--inspector-width); }
 .studio-grid.inspector-collapsed { grid-template-columns: var(--gallery-width) 8px minmax(320px, 1fr) 8px 40px; }
 .studio-grid.gallery-collapsed.inspector-collapsed { grid-template-columns: 40px 8px minmax(320px, 1fr) 8px 40px; }
