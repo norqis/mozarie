@@ -775,7 +775,7 @@ class WorkspaceStore:
             db.execute("DELETE FROM history_groups WHERE group_id=?", (group_id,))
         WorkspaceStore._prune_unreferenced_candidates(db, image_id)
 
-    def _preserve_resized_workspace_db(self, db: sqlite3.Connection, image_id: str, old_size: tuple[int, int], new_size: tuple[int, int]) -> None:
+    def _preserve_resized_workspace_db(self, db: sqlite3.Connection, image_id: str, old_size: tuple[int, int], new_size: tuple[int, int], revision: int) -> None:
         candidate_rows = db.execute("""SELECT candidates.candidate_id,candidates.mask_png,candidates.enabled,candidates.role,candidates.forced,
             COALESCE(candidate_metadata.expand_px,0) AS expand_px FROM candidates
             LEFT JOIN candidate_metadata USING(image_id,candidate_id) WHERE candidates.image_id=? AND candidates.deleted=0""", (image_id,)).fetchall()
@@ -813,8 +813,8 @@ class WorkspaceStore:
             forced_exclude_masks, bool(manual["exclusion_forced"]),
             erase if manual["exclusion_erase_enabled"] else None,
         )))
-        db.execute("""UPDATE manual_edits SET add_png=?,exclusion_png=?,exclusion_erase_png=?,removed_candidate_ids=?,has_effective_mask=?,updated_at=?
-            WHERE image_id=?""", (add_raw, exclusion_raw, erase_raw, json.dumps(sorted(removed_ids)), int(effective), time.time_ns(), image_id))
+        db.execute("""UPDATE manual_edits SET add_png=?,exclusion_png=?,exclusion_erase_png=?,removed_candidate_ids=?,candidate_revision=?,has_effective_mask=?,updated_at=?
+            WHERE image_id=?""", (add_raw, exclusion_raw, erase_raw, json.dumps(sorted(removed_ids)), revision, int(effective), time.time_ns(), image_id))
         self._reset_image_history_db(db, image_id)
 
     def acknowledge_source_mismatches(self, records: list[Any], revisions: dict[str, int] | None = None) -> set[str]:
@@ -831,7 +831,7 @@ class WorkspaceStore:
                 now = time.time_ns()
                 resized: set[str] = set()
                 for image_id, record in selected.items():
-                    image = db.execute("SELECT width,height FROM images WHERE image_id=?", (image_id,)).fetchone()
+                    image = db.execute("SELECT width,height,candidate_revision FROM images WHERE image_id=?", (image_id,)).fetchone()
                     if image is None:
                         raise ValueError("workspace image is missing")
                     old_size = (int(image["width"]), int(image["height"]))
@@ -842,11 +842,15 @@ class WorkspaceStore:
                         db.execute("DELETE FROM manual_edits WHERE image_id=?", (image_id,))
                         self._reset_image_history_db(db, image_id)
                     elif old_size != new_size:
-                        self._preserve_resized_workspace_db(db, image_id, old_size, new_size)
+                        resized_revision = int(image["candidate_revision"]) + 1
+                        self._preserve_resized_workspace_db(db, image_id, old_size, new_size, resized_revision)
                         resized.add(image_id)
                     if image_id in clear_revisions:
                         db.execute("""UPDATE images SET size_bytes=?,mtime_ns=?,width=?,height=?,source_blocked=0,reviewed=0,
                             candidate_revision=?,updated_at=? WHERE image_id=?""", (record.size_bytes, record.mtime_ns, record.width, record.height, clear_revisions[image_id], now, image_id))
+                    elif old_size != new_size:
+                        db.execute("""UPDATE images SET size_bytes=?,mtime_ns=?,width=?,height=?,source_blocked=0,reviewed=0,
+                            candidate_revision=?,updated_at=? WHERE image_id=?""", (record.size_bytes, record.mtime_ns, record.width, record.height, resized_revision, now, image_id))
                     else:
                         db.execute("""UPDATE images SET size_bytes=?,mtime_ns=?,width=?,height=?,source_blocked=0,reviewed=0,updated_at=?
                             WHERE image_id=?""", (record.size_bytes, record.mtime_ns, record.width, record.height, now, image_id))
