@@ -547,15 +547,15 @@ function updateActionButtons() {
     }
   } else if (mutationLocked) {
     const availableInReadOnly = new Set([
-      "projectButton", "projectClose", "projectOpenList", "projectListClose", "projectSort", "projectResume", "projectDelete", "projectCloseWorkspace",
-      "projectMosaicZip", "projectExcludeZip", "downloadCurrentMosaicMask", "downloadCurrentExcludeMask",
+      "projectButton", "projectClose", "projectOpenList", "projectListClose", "projectSort", "projectResume", "projectCloseWorkspace",
+      "projectListOpen", "projectListMosaicZip", "projectListExcludeZip", "projectListDelete", "downloadCurrentMosaicMask", "downloadCurrentExcludeMask",
       "singleViewButton", "compareViewButton", "fitButton", "mosaicPreviewButton", "previousImageButton", "nextImageButton",
       "galleryFilter", "overviewButton", "collapseGalleryButton", "collapseInspectorButton", "settingsButton", "settingsCloseButton", "errorDialogClose",
       "closeOverviewButton", "overviewQuery", "overviewFolder", "sourceMismatchCancel", "detectCancelButton",
       "projectDeleteCancel", "projectDeleteConfirm", "copyImagePathMenuItem",
     ]);
     const availableInReadOnlyControls = new Set([
-      ...document.querySelectorAll(".gallery-item, .overview-item, .overview-filter, .project-list-item button, [data-candidate-display-toggle], [data-candidate-effective-toggle], [data-candidate-display-id], [data-candidate-effective-id]"),
+      ...document.querySelectorAll(".gallery-item, .overview-item, .overview-filter, .project-list-option, [data-candidate-display-toggle], [data-candidate-effective-toggle], [data-candidate-display-id], [data-candidate-effective-id]"),
     ]);
     const availableInReadOnlyDialogs = ["#settingsDialog", "#modelHelpDialog", "#modelDownloadDialog"].map($);
     for (const control of controls) {
@@ -569,6 +569,7 @@ function updateActionButtons() {
   canvas.style.pointerEvents = busyLocked || switchingImages ? "none" : "";
   canvas.setAttribute("aria-disabled", String(busyLocked || switchingImages));
   syncDetectionActions();
+  if (typeof renderProjectListSelection === "function") renderProjectListSelection();
 }
 
 function updateCandidateBatchButtons(hasImage = Boolean(state.currentId && state.currentImage && currentRecord()), mutationLocked = isBusy() || state.importing || state.projectReadOnly || currentRecord()?.sourceDimensionsChanged || state.candidateBatchPending.has(state.currentId), presence, viewLocked = mutationLocked) {

@@ -271,14 +271,16 @@ class MosaicHandler(BaseHTTPRequestHandler):
                 filename = Path(str(image["relativePath"])).name + f".{kind}.png"
                 self._binary(STATE.export_mask_png(image_id, kind), "image/png", headers={"Content-Disposition": f'attachment; filename="{filename}"'})
             elif path.startswith("/api/project/masks/"):
-                kind = path.removeprefix("/api/project/masks/")
+                project_id, kind = _route_ids(path, "/api/project/masks/")
                 if kind not in {"mosaic", "exclude"}:
                     raise ClientError("マスク種別が正しくありません。", "input_invalid")
+                if STATE.workspace_store.project(project_id) is None:
+                    raise ClientError("プロジェクトが見つかりません。", "project_not_found")
                 with tempfile.NamedTemporaryFile(prefix="mozarie-masks-", suffix=".zip", delete=False) as output:
                     archive_path = Path(output.name)
                 try:
                     with zipfile.ZipFile(archive_path, "w", zipfile.ZIP_DEFLATED) as archive:
-                        for image, png in STATE.iter_project_mask_exports(kind):
+                        for image, png in STATE.iter_project_mask_exports(project_id, kind):
                             # Keep source identity and original extension so
                             # same-named files from different folders cannot
                             # collide in one project archive.

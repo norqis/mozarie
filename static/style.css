@@ -377,10 +377,27 @@ button { overflow: visible; text-overflow: clip; white-space: nowrap; }
 .gallery-item.reviewed .gallery-review-badge { border-color: #3a9780; background: #173e35e8; color: #d8fff3; }
 .canvas-navigation-bar .current-file-name { overflow: hidden; text-overflow: ellipsis; }
 .update-toast { position: fixed; right: 1rem; bottom: 1rem; z-index: 20; }
-/* Project list intentionally uses ordinary buttons: it remains usable at
-   narrow window sizes and does not introduce a second custom widget. */
-.project-list { display: grid; gap: .5rem; margin-top: .75rem; max-height: min(55vh, 34rem); overflow: auto; }
-.project-list-item { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: .35rem .75rem; align-items: center; text-align: left; }
-.project-list-item small { grid-column: 1; color: var(--muted, #777); min-width: 0; overflow-wrap: anywhere; }
-.project-list-details { font-size: .78rem; }
-.project-actions { align-items: stretch; }
+.project-dialog-section { display: grid; gap: .65rem; padding: .9rem; border: 1px solid #3b424a; border-radius: .5rem; }
+.project-dialog-section + .project-dialog-section { margin-top: .8rem; }
+.project-dialog-section h3, .project-selected-details h3 { margin: 0; font-size: 1rem; }
+.project-dialog-section p { margin: 0; }
+.project-actions, .project-list-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .5rem; align-items: stretch; }
+.project-list-dialog { width: min(720px, calc(100vw - 2rem)); }
+.project-list-body { max-height: min(80vh, 44rem); overflow-y: auto; overflow-x: hidden; }
+.project-list { display: grid; gap: .5rem; margin-top: .75rem; max-height: min(45vh, 28rem); overflow-y: auto; overflow-x: hidden; }
+.project-list-option { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: .35rem .75rem; width: 100%; min-width: 0; padding: .7rem; border: 1px solid #3b424a; text-align: left; }
+.project-list-option[aria-selected="true"] { border-color: #3a9780; background: #173e35; }
+.project-option-name, .project-option-status, .project-option-details { min-width: 0; overflow-wrap: anywhere; white-space: normal; }
+.project-option-name { font-weight: 700; }
+.project-option-status { color: #b8dacc; text-align: right; }
+.project-option-details { grid-column: 1 / -1; color: var(--muted, #a5afb9); font-size: .78rem; }
+.project-selected-details { display: grid; gap: .45rem; margin-top: .8rem; padding: .8rem 0; border-top: 1px solid #3b424a; border-bottom: 1px solid #3b424a; }
+.project-selected-details p { margin: 0; overflow-wrap: anywhere; }
+.project-list-actions { margin-top: .8rem; }
+@media (max-width: 600px) {
+  body { overflow-x: hidden; }
+  .project-list-dialog { width: calc(100vw - 1rem); max-width: none; }
+  .project-list-body { max-height: calc(100vh - 1rem); }
+  .project-actions, .project-list-actions, .project-list-option { grid-template-columns: minmax(0, 1fr); }
+  .project-option-status { text-align: left; }
+}

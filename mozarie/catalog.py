@@ -525,13 +525,11 @@ class CatalogMixin:
             raise ClientError("画像が見つかりません。", "image_not_found")
         return self._export_workspace_mask(image_id, kind, int(image["width"]), int(image["height"]))
 
-    def iter_project_mask_exports(self, kind: str):
+    def iter_project_mask_exports(self, project_id: str, kind: str):
         """Compose a project ZIP one image at a time from raw workspace BLOBs."""
         if kind not in {"mosaic", "exclude"}:
             raise ClientError("マスク種別が正しくありません。", "input_invalid")
-        if not self.catalog_id:
-            raise ClientError("プロジェクトを開いていません。", "project_not_found")
-        for state in self.workspace_store.iter_project_export_states(self.catalog_id):
+        for state in self.workspace_store.iter_project_export_states(project_id):
             yield state["image"], self._export_workspace_mask_raw(state, kind)
 
     @staticmethod
