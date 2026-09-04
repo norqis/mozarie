@@ -31,7 +31,7 @@ if TYPE_CHECKING:
     from .inference.yolo_detect import HandDetector
 
 
-_SCENE_FLUID_TAGS = frozenset({"cum_on_breasts", "cum on fingers", "cum on ass", "cum on thighs"})
+_SCENE_FLUID_TAGS = frozenset({"cum_on_breasts", "cum on fingers", "cum on ass", "cum in pussy"})
 
 
 def _scene_fluid_tags(info: dict[str, Any]) -> frozenset[str]:
@@ -456,7 +456,7 @@ class DetectionMixin:
         if not scene_fluid_tags:
             return np.zeros(shape, dtype=np.uint8)
         search = np.zeros(shape, dtype=np.uint8)
-        if {"cum on ass", "cum on thighs"} & scene_fluid_tags:
+        if "cum on ass" in scene_fluid_tags:
             for mask in final_masks:
                 bounds = _mask_bounds(mask)
                 if bounds is None:
@@ -466,6 +466,16 @@ class DetectionMixin:
                 center_x = (left + right) / 2
                 half_width = max(2 * width, 1.4 * height)
                 _fill_metadata_fluid_roi(search, center_x - half_width, top - .2 * height, center_x + half_width, bottom + 2.1 * height)
+        if "cum in pussy" in scene_fluid_tags:
+            for mask in final_masks:
+                bounds = _mask_bounds(mask)
+                if bounds is None:
+                    continue
+                left, top, right, bottom = bounds
+                width, height = right - left, bottom - top
+                center_x = (left + right) / 2
+                half_width = max(1.2 * width, .9 * height)
+                _fill_metadata_fluid_roi(search, center_x - half_width, top - .15 * height, center_x + half_width, bottom + .75 * height)
         if "cum on fingers" in scene_fluid_tags:
             count, _labels, stats, _centroids = cv2.connectedComponentsWithStats(np.asarray(hand_evidence > 0, dtype=np.uint8), connectivity=8)
             scale = min(shape) / 896

@@ -48,7 +48,14 @@ SAMPLES = {
         "candidates": {
             "penis": ("apply", "target", True),
             "pussy": ("apply", "target", True),
+            "fluid": ("exclude", "fluid_exclusion", False),
         },
+        "fluid_area": (1, None),
+        "negative_regions": (
+            ("breasts", (150, 400, 750, 800)),
+            ("upper-torso", (250, 800, 650, 1_050)),
+            ("far-thigh-background", (0, 900, 170, 1_250)),
+        ),
     },
 }
 
@@ -115,7 +122,7 @@ def _assert_scene(name: str, candidates) -> list[str]:
         raise RuntimeError(f"{name}: unexpected labels {sorted(unexpected)}")
     for label, metadata in expected["candidates"].items():
         _assert_candidate(by_label[label], metadata)
-    if name == "Scene_cowgirl_00023.png":
+    if "fluid" not in expected["candidates"]:
         return lines
     fluid = by_label["fluid"]
     area, bbox = _mask_metrics(fluid.mask_path)
@@ -129,7 +136,7 @@ def _assert_scene(name: str, candidates) -> list[str]:
         allowed_left, allowed_top, allowed_right, allowed_bottom = expected_bbox
         if left < allowed_left or top < allowed_top or right > allowed_right or bottom > allowed_bottom:
             raise RuntimeError(f"{name}: fluid bbox {bbox} outside {expected_bbox}")
-    for label, region, minimum in expected["regions"]:
+    for label, region, minimum in expected.get("regions", ()):
         rate = _region_rate(fluid.mask_path, region)
         lines.append(f"  {label}: {rate:.3f}")
         if rate < minimum:

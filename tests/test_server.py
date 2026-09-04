@@ -4033,11 +4033,11 @@ class MozarieTests(unittest.TestCase):
 
     def test_scene_metadata_fluid_search_uses_only_exact_tags_and_local_rois(self):
         self.assertEqual(
-            detection_module._scene_fluid_tags({"scene_positive": " CUM_ON_BREASTS , cum on fingers, cum on thighs"}),
-            {"cum_on_breasts", "cum on fingers", "cum on thighs"},
+            detection_module._scene_fluid_tags({"scene_positive": " CUM_ON_BREASTS , cum on fingers, cum in pussy"}),
+            {"cum_on_breasts", "cum on fingers", "cum in pussy"},
         )
         self.assertEqual(detection_module._scene_fluid_tags({"scene_info": '{"positive":"cum on ass"}'}), {"cum on ass"})
-        for info in ({}, {"scene_info": "bad"}, {"scene_info": "[]"}, {"scene_positive": "cum_on_thighs"}, {"scene_positive": "not_cum_on_breasts"}, {"scene_positive": ["cum_on_breasts"]}):
+        for info in ({}, {"scene_info": "bad"}, {"scene_info": "[]"}, {"scene_positive": "cum on thighs"}, {"scene_positive": "cum_in_pussy"}, {"scene_positive": "not_cum_on_breasts"}, {"scene_positive": ["cum_on_breasts"]}):
             with self.subTest(info=info): self.assertEqual(detection_module._scene_fluid_tags(info), set())
 
         rgb = np.zeros((400, 400, 3), dtype=np.uint8)
@@ -4046,17 +4046,21 @@ class MozarieTests(unittest.TestCase):
         face = np.zeros_like(target); face[20:40, 130:170] = 1
         with patch.object(detection_module, "white_fluid_mask", side_effect=lambda _rgb, search: np.asarray(search, dtype=np.uint8) * 255) as fluid:
             ass = self.new_state()._metadata_fluid_mask(rgb, [np.zeros_like(target), target], np.zeros_like(hand), [], frozenset({"cum on ass"}))
-            thighs = self.new_state()._metadata_fluid_mask(rgb, [target], np.zeros_like(hand), [], frozenset({"cum on thighs"}))
+            pussy = self.new_state()._metadata_fluid_mask(rgb, [target], np.zeros_like(hand), [], frozenset({"cum in pussy"}))
             fingers = self.new_state()._metadata_fluid_mask(rgb, [target], hand, [], frozenset({"cum on fingers"}))
             chest = self.new_state()._metadata_fluid_mask(
                 rgb, [], np.zeros_like(target), [{"mask": np.zeros_like(face)}, {"mask": face}], frozenset({"cum_on_breasts"}),
             )
             absent = self.new_state()._metadata_fluid_mask(rgb, [], np.zeros_like(hand), [], frozenset({"cum on fingers"}))
         self.assertEqual(fluid.call_count, 4)
-        self.assertTrue(np.array_equal(ass, thighs))
+        self.assertFalse(np.array_equal(ass, pussy))
         self.assertEqual(ass[150, 100], 255)
         self.assertEqual(ass[314, 259], 255)
         self.assertEqual(ass[149, 180], 0)
+        self.assertEqual(pussy[152, 132], 255)
+        self.assertEqual(pussy[247, 227], 255)
+        self.assertEqual(pussy[151, 180], 0)
+        self.assertEqual(pussy[250, 180], 0)
         self.assertEqual(fingers[92, 281], 255)
         self.assertEqual(fingers[125, 358], 255)
         self.assertEqual(fingers[242, 321], 255)
@@ -4096,17 +4100,18 @@ class MozarieTests(unittest.TestCase):
     def test_scene_metadata_fluid_is_a_non_forced_exclusion_candidate(self):
         with tempfile.TemporaryDirectory() as directory:
             source = Path(directory) / "scene.png"
-            info = PngImagePlugin.PngInfo(); info.add_text("scene_positive", "cum_on_breasts")
-            Image.new("RGB", (16, 16), "white").save(source, pnginfo=info)
+            info = PngImagePlugin.PngInfo(); info.add_text("scene_positive", "cum in pussy")
+            Image.new("RGB", (40, 40), "black").save(source, pnginfo=info)
             state = self.new_state(); image_id = state.set_root(directory)[0]["id"]; record = state.images[image_id]
-            mask = np.ones((16, 16), dtype=np.uint8) * 255
-            with patch.object(state, "_detect_arbitrated_segments", return_value=[] ) as detect, \
-                    patch.object(state, "_hand_refinement_context", return_value=([], np.zeros_like(mask), [])), \
-                    patch.object(state, "_finalize_exclusions", return_value=[{"class_name": "__fluid_exclusion__", "metadata_exclusions": {"fluid": mask}}]):
+            target = np.zeros((40, 40), dtype=np.uint8); target[15:25, 15:25] = 255
+            segment = {"class_name": "pussy", "mask": target, "confidence": .8, "source": "target"}
+            state.settings["detection"]["fluid_exclusion_enabled"] = False
+            with patch.object(state, "_detect_arbitrated_segments", return_value=[segment]) as detect, \
+                    patch.object(detection_module, "white_fluid_mask", side_effect=lambda _rgb, search: np.asarray(search, dtype=np.uint8) * 255):
                 candidates = state._detect_image(Mock(), record, .5)
-            self.assertEqual(detect.call_args.args[-1], frozenset({"cum_on_breasts"}))
-            self.assertEqual(len(candidates), 1)
-            self.assertEqual((candidates[0].label_token, candidates[0].role, candidates[0].forced), ("fluid", CandidateRole.EXCLUDE, False))
+            self.assertEqual(detect.call_args.args[-1], frozenset({"cum in pussy"}))
+            fluid = next(candidate for candidate in candidates if candidate.label_token == "fluid")
+            self.assertEqual((fluid.role, fluid.forced), (CandidateRole.EXCLUDE, False))
 
     def test_boundary_request_requires_a_valid_roi_and_click(self):
         roi, point = read_boundary_request(
