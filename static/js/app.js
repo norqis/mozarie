@@ -265,6 +265,7 @@ function bindEvents() {
         showModalFromInvoker($("#sameSourceDialog")); return;
       }
       await importProjectDirectoryHandle(handle, state.project.id, current?.sourceId || null);
+      await showSourceMismatches();
     }
     catch (error) { if (error?.name !== "AbortError") showUserError(error); }
   })(); });
