@@ -3743,9 +3743,9 @@ class MozarieTests(unittest.TestCase):
             state._release_gpu_job_memory()
         self.assertIsNone(state.hand_model)
 
-    def test_precise_segments_receive_hand_refinement(self):
+    def test_confirmed_specialist_hand_segments_receive_refinement(self):
         state = self.new_state()
-        state.settings["models"]["hand_segmentation_enabled"] = False
+        state.settings["models"]["hand_segmentation_enabled"] = True
         precise_mask = np.zeros((16, 16), dtype=np.uint8)
         precise_mask[4:12, 4:12] = 255
         record = ImageRecord(image_id="image", path=Path(__file__), relative_path="image.png", width=16, height=16, mtime_ns=0)
@@ -3754,7 +3754,7 @@ class MozarieTests(unittest.TestCase):
         predictor = Mock()
         predictor.predict.return_value = sam_mask, np.asarray([0.95]), None
         with patch.object(state, "_hand_boxes", return_value=[(4, 4, 12, 12)]), patch.object(
-            state, "_sam_predictor_for", return_value=predictor
+            state, "_hand_segmentation_predictor_for", return_value=predictor
         ):
             result = state._refine_detected_segments(
                 Mock(), record, Image.new("RGB", (16, 16), "white"),
@@ -3782,7 +3782,7 @@ class MozarieTests(unittest.TestCase):
         specialist.predict.assert_called_once()
         self.assertTrue(np.any(result[0]["_confirmed_hand"]))
 
-    def test_specialist_handseg_rejection_uses_generic_sam(self):
+    def test_specialist_handseg_rejection_does_not_publish_a_hand_box(self):
         state = self.new_state()
         state.settings["models"]["hand_segmentation_enabled"] = True
         events: list[str] = []
@@ -3801,8 +3801,7 @@ class MozarieTests(unittest.TestCase):
         invalid = np.zeros((1, 16, 16), dtype=bool)
         specialist = Mock()
         specialist.predict.side_effect = lambda **_kwargs: events.append("specialist-predict") or (invalid, np.asarray([0.5]), None)
-        generic_mask = np.zeros((1, 16, 16), dtype=bool); generic_mask[0, 4:8, 4:8] = True
-        generic = Mock(); generic.predict.return_value = generic_mask, np.asarray([0.95]), None
+        generic = Mock()
 
         with patch.object(state, "_hand_boxes", return_value=[(4, 4, 8, 8)]), patch.object(
             state, "_hand_segmentation_predictor_for", return_value=specialist
@@ -3812,8 +3811,8 @@ class MozarieTests(unittest.TestCase):
                 [{"class_name": "penis", "confidence": 0.8, "mask": genital, "source": "target"}],
             )
         self.assertEqual(events, ["specialist-enter", "specialist-predict", "specialist-exit"])
-        generic.predict.assert_called_once()
-        self.assertTrue(np.any(result[0]["_confirmed_hand"]))
+        generic.predict.assert_not_called()
+        self.assertFalse(np.any(result[0]["_confirmed_hand"]))
 
     def test_specialist_client_error_propagates_without_generic_sam(self):
         state = self.new_state()
@@ -3886,8 +3885,9 @@ class MozarieTests(unittest.TestCase):
         finalized = state._finalize_exclusions(np.zeros((12, 12, 3), dtype=np.uint8), [segment])[0]
         self.assertTrue(np.array_equal(finalized["image_exclusions"]["hand"], hand))
 
-    def test_hand_sam_runs_once_per_detected_hand_and_is_reused_by_all_segments(self):
+    def test_specialist_hand_segmentation_runs_once_per_detected_hand_and_is_reused_by_all_segments(self):
         state = self.new_state()
+        state.settings["models"]["hand_segmentation_enabled"] = True
         record = ImageRecord(image_id="image", path=Path(__file__), relative_path="image.png", width=16, height=16, mtime_ns=0)
         base_mask = np.zeros((16, 16), dtype=np.uint8)
         base_mask[4:12, 4:12] = 255
@@ -3907,7 +3907,7 @@ class MozarieTests(unittest.TestCase):
             for source in ("target", "ntd11", "sensitive")
         ]
         with patch.object(state, "_hand_boxes", return_value=[(4, 4, 8, 8), (8, 8, 12, 12), (0, 0, 2, 2)]) as hand_boxes, patch.object(
-            state, "_sam_predictor_for", return_value=predictor
+            state, "_hand_segmentation_predictor_for", return_value=predictor
         ):
             result = state._refine_detected_segments(Mock(), record, Image.new("RGB", (16, 16), "white"), segments)
         hand_boxes.assert_called_once()
@@ -4309,7 +4309,7 @@ class MozarieTests(unittest.TestCase):
         boxes = [(0, 0, 3, 3), (2, 5, 6, 7), (9, 9, 12, 12)]
         self.assertEqual(StudioState._hand_boxes_over_apply(boxes, [mask]), [(4, 5, 6, 7)])
 
-    def test_high_precision_refinement_keeps_detector_mask_when_sam_is_incompatible(self):
+    def test_high_precision_refinement_drops_detector_mask_when_sam_is_incompatible(self):
         class FakePredictor:
             def predict(self, **_kwargs):
                 masks = np.zeros((1, 12, 12), dtype=bool)
@@ -4324,11 +4324,9 @@ class MozarieTests(unittest.TestCase):
             segment = {"class_name": "penis", "mask": mask.copy(), "confidence": 0.8, "source": "target"}
             with patch.object(state, "_sam_predictor_for", return_value=FakePredictor()):
                 refined = state._high_precision_segments(DetectionModels(target=object()), record, np.zeros((12, 12, 3), dtype=np.uint8), [segment])
-            self.assertEqual(len(refined), 1)
-            self.assertEqual(refined[0]["refinement"], "sam_fallback")
-            self.assertTrue(np.array_equal(refined[0]["mask"] > 0, mask > 0))
+            self.assertEqual(refined, [])
 
-    def test_high_precision_refinement_keeps_non_targets_and_failed_detector_masks(self):
+    def test_high_precision_refinement_keeps_non_targets_and_drops_unconfirmed_targets(self):
         state = self.new_state()
         source = np.zeros((12, 12), dtype=np.uint8); source[2:10, 2:10] = 255
         good = source.astype(bool); good[2:4, 2:4] = False
@@ -4345,13 +4343,12 @@ class MozarieTests(unittest.TestCase):
             {"class_name": "pussy", "mask": source.copy(), "confidence": 0.8, "source": "target"},
         ]
         refined = state._high_precision_segments_with_predictor(np.zeros((12, 12, 3), dtype=np.uint8), segments, predictor)
-        self.assertEqual(len(refined), 3)
+        self.assertEqual(len(refined), 2)
         self.assertIs(refined[0], non_target)
         self.assertEqual(refined[1]["class_name"], "penis")
         self.assertEqual(refined[1]["refinement"], "sam_high_precision")
-        self.assertEqual(refined[2]["refinement"], "sam_fallback")
 
-    def test_high_precision_refinement_keeps_target_without_sam_prompt(self):
+    def test_high_precision_refinement_drops_target_without_sam_prompt(self):
         state = self.new_state()
         source = np.zeros((12, 12), dtype=np.uint8); source[3:9, 3:9] = 255
         segment = {"class_name": "penis", "mask": source, "confidence": 0.8, "source": "target"}
@@ -4363,11 +4360,10 @@ class MozarieTests(unittest.TestCase):
             refined = state._high_precision_segments_with_predictor(
                 np.zeros((12, 12, 3), dtype=np.uint8), [segment, non_target], predictor
             )
-        self.assertEqual(refined, [segment, non_target])
-        self.assertEqual(segment["refinement"], "sam_fallback")
+        self.assertEqual(refined, [non_target])
         predictor.predict.assert_not_called()
 
-    def test_high_precision_detection_keeps_candidates_when_all_targets_fail(self):
+    def test_high_precision_detection_drops_candidates_when_all_targets_fail(self):
         class FakePredictor:
             def predict(self, **_kwargs):
                 masks = np.zeros((1, 12, 12), dtype=bool)
@@ -4389,8 +4385,7 @@ class MozarieTests(unittest.TestCase):
                 state, "_sam_predictor_for", return_value=FakePredictor()
             ):
                 candidates = state._detect_image(DetectionModels(target=object()), record, 0.5, mode="high_precision")
-            self.assertEqual([candidate.label_token for candidate in candidates], ["penis", "pussy"])
-            self.assertEqual([candidate.refinement for candidate in candidates], ["sam_fallback", "sam_fallback"])
+            self.assertEqual(candidates, [])
 
     def test_high_precision_refinement_forwards_prompts_and_only_keeps_improved_retry(self):
         state = self.new_state()
@@ -7895,7 +7890,7 @@ image_io._stage_record_replacement(record, rendered, (source.stat().st_mtime_ns,
         self.assertIs(state._high_precision_segments(None, None, rgb, [other])[0], other)
         predictor = Mock()
         result = state._high_precision_segments_with_predictor(rgb, [empty], predictor)
-        self.assertEqual(result[0]["refinement"], "sam_fallback")
+        self.assertIsNone(result[0].get("refinement"))
         segments = state._attach_hand_evidence([other], [], np.ones((6, 6), dtype=np.uint8))
         self.assertEqual(segments[-1]["class_name"], "__hand_exclusion__")
         self.assertEqual(state._finalize_exclusions(rgb, segments), segments)
@@ -7942,7 +7937,6 @@ image_io._stage_record_replacement(record, rendered, (source.stat().st_mtime_ns,
             ]
             with patch.object(state, "_detect_arbitrated_segments", return_value=segments), \
                     patch.object(state, "_hand_refinement_context", return_value=([segments[1]], np.zeros((6, 6), dtype=np.uint8), [])), \
-                    patch.object(state, "_fallback_hand_boxes_mask", return_value=np.zeros((6, 6), dtype=np.uint8)), \
                     patch.object(state, "_attach_hand_evidence", side_effect=lambda items, *_args: items), \
                     patch.object(state, "_finalize_exclusions", side_effect=lambda _rgb, items: items):
                 candidates = state._detect_image(DetectionModels(target=Mock(), auxiliaries=[]), record, .5)
@@ -8048,8 +8042,7 @@ image_io._stage_record_replacement(record, rendered, (source.stat().st_mtime_ns,
                 patch.object(state, "_boundary_hand_boxes", return_value=[(1, 1, 4, 4)]), \
                 patch.object(state, "_hand_boxes_over_apply", return_value=[(1, 1, 4, 4)]), \
                 patch.object(state, "_hand_segmentation_predictor_for", return_value=specialist), \
-                patch.object(detection_module, "accepted_specialist_hand_mask", return_value=None), \
-                patch.object(state, "_fallback_hand_boxes_mask", return_value=np.ones((6, 6), dtype=np.uint8)):
+                patch.object(detection_module, "accepted_specialist_hand_mask", return_value=None):
             self.assertEqual(state.add_boundary_candidate(image_id, payload)["candidates"][0]["source"], "boundary")
 
         state, image_id, predictor = make_state()
@@ -8057,7 +8050,6 @@ image_io._stage_record_replacement(record, rendered, (source.stat().st_mtime_ns,
                 patch.object(detection_module, "select_best_sam_mask", return_value=(np.ones((6, 6), dtype=np.uint8), .5)), \
                 patch.object(state, "_boundary_hand_boxes", return_value=[(1, 1, 4, 4)]), \
                 patch.object(state, "_hand_boxes_over_apply", return_value=[(1, 1, 4, 4)]), \
-                patch.object(state, "_fallback_hand_boxes_mask", return_value=np.zeros((6, 6), dtype=np.uint8)), \
                 patch.object(state, "_finalize_exclusions", side_effect=lambda _rgb, segments: (segments[0].update({"image_exclusions": {"hand": np.zeros((6, 6), dtype=np.uint8)}}), segments)[1]):
             state.add_boundary_candidate(image_id, payload)
 

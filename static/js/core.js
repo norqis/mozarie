@@ -99,7 +99,7 @@ const USER_ERROR_CODES = {
 
 const CANDIDATE_CLASS_TOKENS = new Set(["penis", "pussy", "testicles", "boundary", "boundary_polygon", "hand", "fluid"]);
 const CANDIDATE_SOURCE_TOKENS = new Set(["auto", "target", "ntd11", "sensitive", "boundary", "hand_exclusion", "fluid_exclusion"]);
-const CANDIDATE_REFINEMENT_TOKENS = new Set(["sam_fallback", "sam_high_precision"]);
+const CANDIDATE_REFINEMENT_TOKENS = new Set(["sam_high_precision"]);
 
 function validCandidateTokens(candidate) {
   return CANDIDATE_CLASS_TOKENS.has(candidate?.labelToken)

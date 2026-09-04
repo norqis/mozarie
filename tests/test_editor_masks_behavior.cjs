@@ -137,11 +137,11 @@ const test = context.masksTest;
 
 const candidateLabelFixtures = [
   { labelToken: "penis", source: "target", refinement: "sam_high_precision", role: "apply", origin: "provenance-one" },
-  { labelToken: "pussy", source: "target", refinement: "sam_fallback", role: "apply", origin: "provenance-two" },
+  { labelToken: "pussy", source: "target", refinement: "sam_high_precision", role: "apply", origin: "provenance-two" },
   { labelToken: "testicles", source: "ntd11", refinement: "sam_high_precision", role: "apply", origin: "provenance-three" },
-  { labelToken: "boundary", source: "boundary", refinement: "sam_fallback", role: "apply", origin: "provenance-four" },
+  { labelToken: "boundary", source: "boundary", refinement: "sam_high_precision", role: "apply", origin: "provenance-four" },
   { labelToken: "boundary_polygon", source: "boundary", refinement: "sam_high_precision", role: "apply", origin: "provenance-five" },
-  { labelToken: "hand", source: "hand_exclusion", refinement: "sam_fallback", role: "exclude", origin: "provenance-six" },
+  { labelToken: "hand", source: "hand_exclusion", refinement: "sam_high_precision", role: "exclude", origin: "provenance-six" },
   { labelToken: "fluid", source: "fluid_exclusion", refinement: "sam_high_precision", role: "exclude", origin: "provenance-seven" },
 ];
 for (const candidate of candidateLabelFixtures) {

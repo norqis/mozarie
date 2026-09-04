@@ -9,7 +9,7 @@ from pathlib import Path
 
 CANDIDATE_LABEL_TOKENS = frozenset({"penis", "pussy", "testicles", "boundary", "boundary_polygon", "hand", "fluid"})
 CANDIDATE_SOURCE_TOKENS = frozenset({"auto", "target", "ntd11", "sensitive", "boundary", "hand_exclusion", "fluid_exclusion"})
-CANDIDATE_REFINEMENT_TOKENS = frozenset({"sam_fallback", "sam_high_precision"})
+CANDIDATE_REFINEMENT_TOKENS = frozenset({"sam_high_precision"})
 
 
 class CandidateRole(StrEnum):

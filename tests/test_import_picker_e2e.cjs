@@ -604,11 +604,11 @@ async function runCandidateBlinkScenario(browser, expanded = false) {
       const layers = [addCtx, exclusionCtx, exclusionEraseCtx].map((context) => context.getImageData(0, 0, context.canvas.width, context.canvas.height));
       const metadataCandidates = [
         { id: "metadata-penis", labelToken: "penis", source: "target", refinement: "sam_high_precision", role: "apply", origin: "basic-model-penis" },
-        { id: "metadata-pussy", labelToken: "pussy", source: "auto", refinement: "sam_fallback", role: "apply", origin: "automatic-pussy" },
+        { id: "metadata-pussy", labelToken: "pussy", source: "auto", refinement: "sam_high_precision", role: "apply", origin: "automatic-pussy" },
         { id: "metadata-testicles", labelToken: "testicles", source: "ntd11", refinement: "sam_high_precision", role: "apply", origin: "ntd11-testicles" },
-        { id: "metadata-boundary", labelToken: "boundary", source: "boundary", refinement: "sam_fallback", role: "apply", origin: "boundary-origin" },
+        { id: "metadata-boundary", labelToken: "boundary", source: "boundary", refinement: "sam_high_precision", role: "apply", origin: "boundary-origin" },
         { id: "metadata-polygon", labelToken: "boundary_polygon", source: "boundary", refinement: "sam_high_precision", role: "apply", origin: "polygon-origin" },
-        { id: "metadata-hand", labelToken: "hand", source: "hand_exclusion", refinement: "sam_fallback", role: "exclude", origin: "hand-exclusion-origin" },
+        { id: "metadata-hand", labelToken: "hand", source: "hand_exclusion", refinement: "sam_high_precision", role: "exclude", origin: "hand-exclusion-origin" },
         { id: "metadata-fluid", labelToken: "fluid", source: "fluid_exclusion", refinement: "sam_high_precision", role: "exclude", origin: "fluid-exclusion-origin" },
       ].map((candidate) => ({ ...candidate, enabled: true, forced: candidate.role === "exclude", confidence: .9, color: "#fff" }));
       const snapshot = () => ({
@@ -653,7 +653,7 @@ async function runCandidateBlinkScenario(browser, expanded = false) {
         assert.ok(row.names.every((name) => name.includes(row.label)), `candidate actions retain their localized visible label in ${locale}`);
       }
       const presentedText = candidateLabelPresentation[locale].automatic.flatMap((row) => [row.text, ...row.names]).join("\n");
-      for (const metadata of ["target", "ntd11", "hand_exclusion", "fluid_exclusion", "sam_fallback", "sam_high_precision", "basic-model-penis", "automatic-pussy", "ntd11-testicles", "polygon-origin", "hand-exclusion-origin", "fluid-exclusion-origin", "apply", "exclude"]) {
+      for (const metadata of ["target", "ntd11", "hand_exclusion", "fluid_exclusion", "sam_high_precision", "basic-model-penis", "automatic-pussy", "ntd11-testicles", "polygon-origin", "hand-exclusion-origin", "fluid-exclusion-origin", "apply", "exclude"]) {
         assert.equal(presentedText.includes(metadata), false, `candidate row text and action names do not leak ${metadata} in ${locale}`);
       }
     }
