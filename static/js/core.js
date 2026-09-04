@@ -522,6 +522,11 @@ function updateActionButtons() {
   const switchingImages = Boolean(state.pendingImageId) || state.candidateBatchPending.size > 0;
   const current = currentRecord();
   const hasImage = Boolean(state.currentId && state.currentImage && current);
+  const candidateLocked = candidateControlLocked(state.currentId);
+  const candidateViewLocked = busyLocked || switchingImages || candidateLocked;
+  const candidateControlsLocked = mutationLocked || candidateViewLocked;
+  const presence = hasImage && !candidateViewLocked ? manualLayerPresence()
+    : { hasManualExclude: false, hasManualExclusionErase: false };
   const controls = [...document.querySelectorAll("button, input, select, textarea")];
   for (const control of controls) {
     if (control.dataset.disabledByLock === "true") {
@@ -534,7 +539,8 @@ function updateActionButtons() {
   detectAllButton.textContent = t("gallery.detectAll");
   detectAllButton.disabled = busyLocked || mutationLocked || state.images.length === 0;
   $("#detectCurrentButton").disabled = busyLocked || mutationLocked || !hasImage;
-  $("#clearCurrentMasksButton").disabled = busyLocked || mutationLocked || !hasImage || !(current.candidateCount || state.manualMaskPresent || imageHasMask(current));
+  $("#clearCurrentMasksButton").disabled = busyLocked || mutationLocked || candidateLocked || !hasImage
+    || !(current.candidateCount || state.manualMaskPresent || presence?.hasManualExclude || presence?.hasManualExclusionErase || imageHasMask(current));
   const visibilityButton = $("#removeCurrentImageButton");
   visibilityButton.disabled = busyLocked || mutationLocked || !hasImage;
   const visibilityLabel = t(current && isHidden(current) ? "editor.show" : "editor.hide");
@@ -555,8 +561,7 @@ function updateActionButtons() {
   $("#hideAndNextButton").disabled = busyLocked || mutationLocked || switchingImages || !hasImage;
   $("#downloadCurrentMosaicMask").disabled = !hasImage || !state.project;
   $("#downloadCurrentExcludeMask").disabled = !hasImage || !state.project;
-  const candidateLocked = candidateControlLocked(state.currentId);
-  updateCandidateBatchButtons(hasImage, busyLocked || mutationLocked || switchingImages || candidateLocked, undefined, busyLocked || switchingImages || candidateLocked);
+  updateCandidateBatchButtons(hasImage, candidateControlsLocked, presence, candidateViewLocked);
   updateHistoryButtons();
   if (busyLocked) {
     for (const control of controls) {
