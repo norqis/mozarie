@@ -993,6 +993,7 @@ async function restoreProjectHistory(direction) {
 function restoreSnapshot(index) {
   if (state.project?.id) { void restoreProjectHistory(index < state.historyIndex ? "undo" : "redo"); return; }
   if (isBusy() || state.importing || index < 0 || index > state.history.length) return;
+  if (index === state.historyIndex) return;
   const restoreToken = ++state.historyRestoreToken;
   state.historyIndex = index;
   rebuildManualMaskFromHistory();

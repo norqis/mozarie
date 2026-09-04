@@ -3882,6 +3882,51 @@ async function main() {
           assert.equal(accepts(pixels), true, `4K ${tool} changes its intended pixel layer`);
         }
         await page.waitForFunction(() => !state.activeStroke && !state.mosaicWorkerBusy && !state.mosaicPending, null, { timeout: 15000 });
+        const historyBoundaryNoop = await page.evaluate(() => {
+          const original = {
+            project: state.project,
+            history: state.history,
+            historyIndex: state.historyIndex,
+            historyRestoreToken: state.historyRestoreToken,
+          };
+          state.project = null;
+          state.history = [];
+          state.historyIndex = 0;
+          const imageId = state.currentId;
+          const before = {
+            token: state.historyRestoreToken,
+            saveChain: state.draftSaveChains.get(imageId),
+            add: addCanvas.toDataURL(),
+            exclusion: exclusionCanvas.toDataURL(),
+            exclusionErase: exclusionEraseCanvas.toDataURL(),
+          };
+          const prototype = CanvasRenderingContext2D.prototype;
+          const originalGetImageData = prototype.getImageData;
+          let historyReadbacks = 0;
+          prototype.getImageData = function(...args) {
+            if (this === addCtx || this === exclusionCtx || this === exclusionEraseCtx) historyReadbacks += 1;
+            return originalGetImageData.apply(this, args);
+          };
+          try { restoreSnapshot(0); }
+          finally { prototype.getImageData = originalGetImageData; }
+          const result = {
+            tokenUnchanged: state.historyRestoreToken === before.token,
+            saveChainUnchanged: state.draftSaveChains.get(imageId) === before.saveChain,
+            canvasUnchanged: addCanvas.toDataURL() === before.add
+              && exclusionCanvas.toDataURL() === before.exclusion
+              && exclusionEraseCanvas.toDataURL() === before.exclusionErase,
+            indexUnchanged: state.historyIndex === 0,
+            historyReadbacks,
+          };
+          state.project = original.project;
+          state.history = original.history;
+          state.historyIndex = original.historyIndex;
+          state.historyRestoreToken = original.historyRestoreToken;
+          return result;
+        });
+        assert.deepEqual(historyBoundaryNoop, {
+          tokenUnchanged: true, saveChainUnchanged: true, canvasUnchanged: true, indexUnchanged: true, historyReadbacks: 0,
+        }, "4K undo/redo at an unchanged history index avoids a save, canvas mutation, and full-mask readback");
         const editorPerf = await page.evaluate(() => {
           let undo = 0; for (let index = 0; index < 10; index += 1) { const start = performance.now(); restoreSnapshot(Math.max(0, state.historyIndex - 1)); undo = Math.max(undo, performance.now() - start); }
           let redo = 0; for (let index = 0; index < 10; index += 1) { const start = performance.now(); restoreSnapshot(Math.min(state.history.length, state.historyIndex + 1)); redo = Math.max(redo, performance.now() - start); }
