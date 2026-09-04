@@ -289,7 +289,7 @@ async function runSelectionAction(action) {
       for (const image of images) publishWorkspaceFlags(image.id, data.flags?.[image.id] || flags);
       preserveCatalogScroll(renderCatalogViews); updateSelectionActionBar(); updateNavigationControls();
     } catch (error) { if (isCurrentCatalogEpoch(epoch)) showUserError(error); }
-    finally { if (isCurrentCatalogEpoch(epoch)) state.catalogMutation = false; updateActionButtons(); }
+    finally { state.catalogMutation = false; updateActionButtons(); }
     return;
   }
   if (action === "detect") return openDetectionDialog(ids);
@@ -309,7 +309,7 @@ async function runSelectionAction(action) {
       state.batchMode = false; clearBatchSelection(); updateSelectionActionBar();
       renderCatalogViews();
     } catch (error) { if (isCurrentCatalogEpoch(epoch)) showUserError(error); }
-    finally { if (isCurrentCatalogEpoch(epoch)) state.catalogMutation = false; updateActionButtons(); }
+    finally { state.catalogMutation = false; updateActionButtons(); }
   }
 }
 

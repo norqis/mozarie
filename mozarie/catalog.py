@@ -264,12 +264,14 @@ class CatalogMixin:
                 for worker in workers:
                     worker.result()
         records.sort(key=lambda record: (record.relative_path.casefold(), record.relative_path))
-        if catalog_id is not None and relink_source_id:
-            try:
-                self.workspace_store.relink_native_source(catalog_id, source_id, root)
-            except ValueError as exc:
+        try:
+            stored = self.workspace_store.relink_native_source(catalog_id, source_id, root, records) if relink_source_id else (
+                self.workspace_store.reconcile_images(catalog_id, records, source_id=source_id) if catalog_id is not None else {}
+            )
+        except ValueError as exc:
+            if relink_source_id:
                 raise ClientError("このプロジェクトの別の元フォルダーに同じパスが設定されています。", "project_source_conflict") from exc
-        stored = self.workspace_store.reconcile_images(catalog_id, records, source_id=source_id) if catalog_id is not None else {}
+            raise
         # A project can have several sources. Missing files remain durable so
         # their masks can still be exported or relinked later.
         for record in records:
@@ -327,7 +329,12 @@ class CatalogMixin:
             except ValueError as exc:
                 raise ClientError("元フォルダーが見つかりません。", "project_source_unavailable") from exc
             self._set_root(raw_path, project_id, relink_source_id=source_id)
-            return self.catalog_snapshot()
+            snapshot = self.catalog_snapshot()
+            snapshot["sources"] = [
+                {**source, "exists": source["kind"] != "native-folder" or bool(source.get("nativePath") and Path(str(source["nativePath"])).is_dir())}
+                for source in self.workspace_store.project_sources(project_id)
+            ]
+            return snapshot
 
     def projects(self, sort: str = "updated_desc") -> list[dict[str, Any]]:
         return self.workspace_store.projects(sort)
@@ -339,16 +346,17 @@ class CatalogMixin:
         return self.workspace_store.projects_for_source_root(str(root.resolve()), self.catalog_id)
 
     def create_project(self, name: str | None = None) -> dict[str, Any]:
-        try:
-            project = self.workspace_store.create_project(name)
-        except ProjectNameAlreadyExistsError as exc:
-            raise ClientError("", "project_name_duplicate") from exc
-        except ValueError as exc:
-            raise ClientError("プロジェクト名を確認してください。", "project_name_invalid") from exc
-        self.detach_catalog()
-        with self.lock:
-            self.catalog_id = str(project["id"]); self.project_read_only = False; self.source_mismatches = {}
-        return project
+        with self.import_lock:
+            try:
+                project = self.workspace_store.create_project(name)
+            except ProjectNameAlreadyExistsError as exc:
+                raise ClientError("", "project_name_duplicate") from exc
+            except ValueError as exc:
+                raise ClientError("プロジェクト名を確認してください。", "project_name_invalid") from exc
+            self.detach_catalog()
+            with self.lock:
+                self.catalog_id = str(project["id"]); self.project_read_only = False; self.source_mismatches = {}
+            return project
 
     def save_current_as_project(self, name: str) -> dict[str, Any]:
         """Make the current projectless session durable without replacing it."""
@@ -467,6 +475,10 @@ class CatalogMixin:
         return project
 
     def open_project(self, catalog_id: str) -> dict[str, Any]:
+        with self.import_lock:
+            return self._open_project(catalog_id)
+
+    def _open_project(self, catalog_id: str) -> dict[str, Any]:
         project = self.workspace_store.project(catalog_id)
         if not project:
             raise ClientError("プロジェクトが見つかりません。", "project_not_found")

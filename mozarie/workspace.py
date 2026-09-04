@@ -429,25 +429,20 @@ class WorkspaceStore:
         return {"id": str(row["source_id"]), "kind": str(row["kind"]), "displayName": str(row["display_name"]),
                 "nativePath": row["native_path"], "identity": str(row["source_identity"])}
 
-    def relink_native_source(self, catalog_id: str, source_id: str, root: Path) -> None:
+    def relink_native_source(self, catalog_id: str, source_id: str, root: Path, records: list[Any]) -> dict[str, dict[str, Any]]:
         identity = str(root.resolve())
-        with self._lock, self._connect() as db:
-            db.execute("BEGIN IMMEDIATE")
-            try:
-                source = db.execute("SELECT kind FROM project_sources WHERE catalog_id=? AND source_id=?", (catalog_id, source_id)).fetchone()
-                if source is None or str(source["kind"]) != "native-folder":
-                    raise ValueError("native project source is missing")
-                conflict = db.execute("""SELECT source_id FROM project_sources
-                    WHERE catalog_id=? AND kind='native-folder' AND source_identity=? AND source_id<>?""",
-                                      (catalog_id, identity, source_id)).fetchone()
-                if conflict is not None:
-                    raise ValueError("native project source path already belongs to this project")
-                db.execute("""UPDATE project_sources SET display_name=?,native_path=?,source_identity=?
-                    WHERE catalog_id=? AND source_id=?""", (root.name or identity, identity, identity, catalog_id, source_id))
-                db.execute("COMMIT")
-            except Exception:
-                db.execute("ROLLBACK")
-                raise
+        def update_source(db: sqlite3.Connection) -> None:
+            source = db.execute("SELECT kind FROM project_sources WHERE catalog_id=? AND source_id=?", (catalog_id, source_id)).fetchone()
+            if source is None or str(source["kind"]) != "native-folder":
+                raise ValueError("native project source is missing")
+            conflict = db.execute("""SELECT source_id FROM project_sources
+                WHERE catalog_id=? AND kind='native-folder' AND source_identity=? AND source_id<>?""",
+                                  (catalog_id, identity, source_id)).fetchone()
+            if conflict is not None:
+                raise ValueError("native project source path already belongs to this project")
+            db.execute("""UPDATE project_sources SET display_name=?,native_path=?,source_identity=?
+                WHERE catalog_id=? AND source_id=?""", (root.name or identity, identity, identity, catalog_id, source_id))
+        return self.reconcile_images(catalog_id, records, source_id=source_id, before_reconcile=update_source)
 
     def project_images(self, catalog_id: str) -> list[dict[str, Any]]:
         with self._connect() as db:
@@ -629,15 +624,19 @@ class WorkspaceStore:
         source_id: str | None = None,
         *,
         allow_new: bool = True,
+        before_reconcile: Any | None = None,
     ) -> dict[str, dict[str, Any]]:
         """Return durable state by path without silently discarding edits."""
         now = time.time_ns()
         result: dict[str, dict[str, Any]] = {}
-        if not records:
-            return result
         with self._lock, self._connect() as db:
             db.execute("BEGIN IMMEDIATE")
             try:
+                if before_reconcile is not None:
+                    before_reconcile(db)
+                if not records:
+                    db.execute("COMMIT")
+                    return result
                 if source_id is None:
                     # Browser imports have one deterministic source per
                     # project.  Avoid an extra read in large folder imports.

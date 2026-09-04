@@ -75,6 +75,8 @@ let projectListProjects = new Map();
 let projectExportBusy = new Set();
 let projectListSort = { key: "updated", direction: "desc" };
 let projectListSortPending = false;
+let nativeRelinkDialog = null;
+let nativeRelinkSourceId = "";
 
 function projectTitle(project) { return project?.name || t("project.unnamed"); }
 function projectDate(value) {
@@ -86,7 +88,7 @@ function projectDate(value) {
 function projectSource(project) { return project?.sourceRoot || t("project.noSource"); }
 function renderProjectCurrent() {
   const project = state.project;
-  const missingSource = state.missingNativeSource;
+  const missingSource = state.missingNativeSources[0];
   $("#projectCurrent").textContent = project
     ? `${projectTitle(project)} · ${t(`project.${project.status}`)}${missingSource ? ` · ${t("project.sourceMissing")}: ${missingSource.displayName}` : ""}`
     : t("project.unnamed");
@@ -101,6 +103,59 @@ function renderProjectCurrent() {
   $("#projectCloseWorkspace").dataset.i18n = project ? "project.close" : "project.closeWork";
   $("#projectCloseWorkspace").textContent = t($("#projectCloseWorkspace").dataset.i18n);
   $("#projectCloseWorkspace").disabled = !project && state.images.length === 0;
+}
+function missingNativeSources(sources) {
+  return (sources || []).filter((source) => source.kind === "native-folder" && !source.exists);
+}
+function ensureNativeRelinkDialog() {
+  if (nativeRelinkDialog) return nativeRelinkDialog;
+  const dialog = document.createElement("dialog"); dialog.className = "modal-dialog"; dialog.id = "nativeRelinkDialog";
+  const body = document.createElement("form"); body.className = "dialog-body"; body.noValidate = true;
+  const title = document.createElement("h2"); title.textContent = t("project.sourceRelinkTitle");
+  const list = document.createElement("div"); list.className = "native-relink-sources";
+  const oldPath = document.createElement("p"); oldPath.className = "muted";
+  const label = document.createElement("label"); label.htmlFor = "nativeRelinkPath"; label.textContent = t("project.sourceRelinkPath");
+  const input = document.createElement("input"); input.id = "nativeRelinkPath"; input.type = "text"; input.autocomplete = "off"; input.required = true;
+  const actions = document.createElement("div"); actions.className = "dialog-actions";
+  const cancel = document.createElement("button"); cancel.type = "button"; cancel.textContent = t("dialog.cancel");
+  const submit = document.createElement("button"); submit.type = "submit"; submit.className = "primary"; submit.textContent = t("project.sourceRelinkConfirm");
+  actions.append(cancel, submit); body.append(title, list, oldPath, label, input, actions); dialog.append(body); document.body.append(dialog);
+  const selected = () => state.missingNativeSources.find((source) => source.id === nativeRelinkSourceId) || state.missingNativeSources[0] || null;
+  const render = () => {
+    const source = selected(); nativeRelinkSourceId = source?.id || "";
+    list.replaceChildren(...state.missingNativeSources.map((item) => {
+      const button = document.createElement("button"); button.type = "button";
+      button.textContent = `${item.displayName} · ${item.nativePath || t("project.noSource")}`;
+      button.classList.toggle("active", item.id === nativeRelinkSourceId);
+      button.addEventListener("click", () => { nativeRelinkSourceId = item.id; render(); });
+      return button;
+    }));
+    oldPath.textContent = source ? `${t("project.sourceRelinkOldPath")}: ${source.nativePath || t("project.noSource")}` : "";
+    input.value = source?.nativePath || "";
+  };
+  cancel.addEventListener("click", () => dialog.close());
+  dialog.addEventListener("cancel", (event) => { event.preventDefault(); dialog.close(); });
+  body.addEventListener("submit", (event) => { event.preventDefault(); void (async () => {
+    const source = selected(); if (!source || !state.project?.id) return;
+    submit.disabled = true; input.disabled = true;
+    try {
+      const snapshot = await api("/api/project/source/relink", { method: "POST", body: JSON.stringify({ projectId: state.project.id, sourceId: source.id, path: input.value.trim() }) });
+      state.images = snapshot.images || [];
+      applyProjectSnapshot(snapshot);
+      state.missingNativeSources = missingNativeSources(snapshot.sources);
+      renderProjectCurrent(); renderCatalogViews();
+      if (!state.missingNativeSources.length) dialog.close(); else render();
+      await showSourceMismatches();
+    } catch (error) { showUserError(error); }
+    finally { submit.disabled = false; input.disabled = false; }
+  })(); });
+  dialog.renderNativeSources = render;
+  nativeRelinkDialog = dialog; return dialog;
+}
+function showNativeRelinkDialog() {
+  if (!state.missingNativeSources.length) return;
+  const dialog = ensureNativeRelinkDialog(); nativeRelinkSourceId = state.missingNativeSources[0].id;
+  dialog.renderNativeSources(); showModalFromInvoker(dialog, $("#projectSourceSelect")); focusElement($("#nativeRelinkPath"));
 }
 function openProjectNameDialog(mode) {
   projectNameMode = mode; $("#projectNameInput").value = mode === "name" ? (state.project?.name || "") : "";
@@ -119,6 +174,7 @@ async function finishProjectlessPromotion(promotion) {
   }
   state.project = project;
   state.projectReadOnly = false;
+  state.missingNativeSources = [];
   state.projectlessDirectorySources.clear();
   state.projectlessPromotion = null;
 }
@@ -146,6 +202,7 @@ function renderProjectSortHeaders() {
 
 function renderProjectTableControls() {
   const blocked = isBusy() || state.importing || projectListSortPending;
+  $("#projectListClose").disabled = projectListSortPending;
   for (const row of projectTableRows()) {
     const project = projectListProjects.get(row.dataset.projectId);
     const exportDisabled = blocked || !project || !(project.imageCount > 0) || projectExportBusy.has(project.id);
@@ -227,11 +284,11 @@ async function showProjectList({ focusProjectId = "", focusTarget = null, sort =
 async function sortProjectList(key, focusTarget) {
   const previousSort = projectListSort;
   const direction = key === previousSort.key ? (previousSort.direction === "asc" ? "desc" : "asc") : "asc";
-  projectListSortPending = true; renderProjectSortHeaders();
+  projectListSortPending = true; renderProjectSortHeaders(); renderProjectTableControls();
   try {
     await showProjectList({ focusTarget, sort: { key, direction }, keepClosed: true });
   } finally {
-    projectListSortPending = false; renderProjectSortHeaders();
+    projectListSortPending = false; renderProjectSortHeaders(); renderProjectTableControls();
     if ($("#projectListDialog").open && focusTarget?.isConnected) focusElement(focusTarget);
   }
 }
@@ -256,7 +313,6 @@ async function openProject(project, resume = false) {
     if (resume) await api("/api/project/resume", { method: "POST", body: JSON.stringify({ projectId: project.id }) });
     const data = await api("/api/project/open", { method: "POST", body: JSON.stringify({ projectId: project.id }) });
     state.project = data.project; state.projectReadOnly = data.project?.status === "completed";
-    state.missingNativeSource = (data.sources || []).find((source) => source.kind === "native-folder" && (!source.nativePath || !source.exists)) || null;
     modalInvokers.delete($("#projectListDialog"));
     modalInvokers.delete($("#projectDialog"));
     $("#projectListDialog").close(); $("#projectDialog").close();
@@ -273,12 +329,15 @@ async function openProject(project, resume = false) {
         if (granted[index]) await importProjectDirectoryHandle(directories[index].handle, project.id, directories[index].sourceId);
       }
       if (files.length && granted.slice(directories.length).every(Boolean)) await importProjectFileHandles(files, project.id);
-      if (!handles.length || granted.some((ok) => !ok)) showUserError({ code: "project_source_unavailable" });
+      const requiresBrowserSource = (data.sources || []).some((source) => source.kind !== "native-folder");
+      if (requiresBrowserSource && (!handles.length || granted.some((ok) => !ok))) showUserError({ code: "project_source_unavailable" });
       await showSourceMismatches();
     } else {
       resetCatalog(data.images || [], data.project?.sourceRoot || "");
       applyProjectSnapshot(await api("/api/images")); await showSourceMismatches();
     }
+    state.missingNativeSources = missingNativeSources(data.sources);
+    renderProjectCurrent();
   } catch (error) { showUserError(error); }
 }
 
@@ -337,10 +396,14 @@ async function deleteProject(projectId) {
     const rows = projectTableRows();
     const deletedIndex = rows.findIndex((row) => row.dataset.projectId === projectId);
     const focusProjectId = rows[deletedIndex + 1]?.dataset.projectId || rows[deletedIndex - 1]?.dataset.projectId || "";
+    if (deletingCurrentProject) {
+      if (state.candidateUpdateChains?.size) await waitForCandidateMutations();
+      await flushAllWorkspaceMutations();
+    }
     await api(`/api/project/${encodeURIComponent(projectId)}`, { method: "DELETE" });
     await forgetProjectSources(projectId);
     if (deletingCurrentProject) {
-      resetCatalog([], ""); state.project = null; state.projectReadOnly = false; renderProjectCurrent(); updateActionButtons();
+      resetCatalog([], ""); state.project = null; state.projectReadOnly = false; state.missingNativeSources = []; renderProjectCurrent(); updateActionButtons();
       $("#projectDialog").close();
     }
     projectDeleteId = "";
@@ -398,6 +461,7 @@ function bindEvents() {
   $("#projectName").addEventListener("click", () => openProjectNameDialog("name"));
   $("#projectOpenList").addEventListener("click", () => { void showProjectList().catch(showUserError); });
   $("#projectListClose").addEventListener("click", () => $("#projectListDialog").close());
+  $("#projectListDialog").addEventListener("cancel", (event) => { if (projectListSortPending) event.preventDefault(); });
   document.querySelectorAll("[data-project-sort]").forEach((button) => button.addEventListener("click", () => {
     void sortProjectList(button.dataset.projectSort, button).catch(showUserError);
   }));
@@ -415,18 +479,7 @@ function bindEvents() {
   $("#projectSourceSelect").addEventListener("click", () => { void (async () => {
     if (!state.project?.id) return;
     try {
-      if (state.missingNativeSource) {
-        const source = state.missingNativeSource;
-        const path = window.prompt(t("project.sourceRelinkPrompt"), source.nativePath || "");
-        if (path == null) return;
-        const snapshot = await api("/api/project/source/relink", { method: "POST", body: JSON.stringify({ projectId: state.project.id, sourceId: source.id, path }) });
-        state.images = snapshot.images || [];
-        applyProjectSnapshot(snapshot);
-        state.missingNativeSource = null;
-        renderProjectCurrent(); renderCatalogViews();
-        await showSourceMismatches();
-        return;
-      }
+      if (state.missingNativeSources.length) return showNativeRelinkDialog();
       const handle = await window.showDirectoryPicker({ mode: "read", id: "mozarie-project-source" });
       const matches = await matchingProjectDirectorySources(handle);
       const current = matches.find((source) => source.projectId === state.project.id);
@@ -444,8 +497,8 @@ function bindEvents() {
     }
     catch (error) { if (error?.name !== "AbortError") showUserError(error); }
   })(); });
-  $("#projectCloseWorkspace").addEventListener("click", () => { void (async () => { try { await flushAllWorkspaceMutations(); await api("/api/project/close", { method: "POST", body: "{}" }); resetCatalog([], ""); state.project = null; state.projectReadOnly = false; $("#projectDialog").close(); } catch (error) { showUserError(error); } })(); });
-  $("#projectComplete").addEventListener("click", () => { void (async () => { if (!await confirmAction(t("project.complete"), t("project.completeConfirm"))) return; try { await flushAllWorkspaceMutations(); await api("/api/project/complete", { method: "POST", body: "{}" }); resetCatalog([], ""); state.project = null; state.projectReadOnly = false; $("#projectDialog").close(); } catch (error) { showUserError(error); } })(); });
+  $("#projectCloseWorkspace").addEventListener("click", () => { void (async () => { try { await flushAllWorkspaceMutations(); await api("/api/project/close", { method: "POST", body: "{}" }); resetCatalog([], ""); state.project = null; state.projectReadOnly = false; state.missingNativeSources = []; $("#projectDialog").close(); } catch (error) { showUserError(error); } })(); });
+  $("#projectComplete").addEventListener("click", () => { void (async () => { if (!await confirmAction(t("project.complete"), t("project.completeConfirm"))) return; try { await flushAllWorkspaceMutations(); await api("/api/project/complete", { method: "POST", body: "{}" }); resetCatalog([], ""); state.project = null; state.projectReadOnly = false; state.missingNativeSources = []; $("#projectDialog").close(); } catch (error) { showUserError(error); } })(); });
   $("#projectNameCancel").addEventListener("click", () => $("#projectNameDialog").close());
   $("#projectDeleteCancel").addEventListener("click", () => { projectDeleteId = ""; $("#projectDeleteDialog").close(); });
   $("#projectDeleteConfirm").addEventListener("click", () => { void deleteProject(projectDeleteId); });
@@ -459,7 +512,7 @@ function bindEvents() {
     if (projectlessSave) state.projectlessPromotion = { project: data.project, sourceIds: data.project.sourceIds || {} };
     if (state.projectlessPromotion) await finishProjectlessPromotion(state.projectlessPromotion);
     else { state.project = data.project; state.projectReadOnly = false; }
-    $("#projectNameDialog").close(); if (projectNameMode === "new") resetCatalog([], ""); renderProjectCurrent();
+    $("#projectNameDialog").close(); if (projectNameMode === "new") { resetCatalog([], ""); state.missingNativeSources = []; } renderProjectCurrent();
   } catch (error) { showUserError(error); } })(); });
   $("#sourceMismatchCancel").addEventListener("click", () => $("#sourceMismatchDialog").close());
   $("#sourceMismatchForm").addEventListener("submit", (event) => { event.preventDefault(); void (async () => { try { const ids = JSON.parse($("#sourceMismatchDialog").dataset.imageIds || "[]"); const snapshot = await api("/api/project/mismatches", { method: "POST", body: JSON.stringify({ imageIds: ids, clearMasks: $("#sourceMismatchClear").checked }) }); state.images = snapshot.images || state.images; applyProjectSnapshot(snapshot); $("#sourceMismatchDialog").close(); renderCatalogViews(); } catch (error) { showUserError(error); } })(); });

@@ -32,7 +32,7 @@ const state = {
   prefetchQueue: [], prefetchActive: 0, prefetchTimer: null,
   fillWorker: null, fillPending: false,
   project: null, projectReadOnly: false, projectHistory: new Map(), projectHistoryBusy: false,
-  missingNativeSource: null,
+  missingNativeSources: [],
   renderFrame: 0,
   maskDirty: false, draftDirty: false, draftLayerDirty: new Set(), draftDirtyRois: new Map(), historyBaseDirty: false, draftSaveChains: new Map(),
 };
@@ -664,6 +664,8 @@ function resetCatalog(images, root) {
   state.projectHistory.clear();
   state.sourceAccess.clear();
   state.projectlessDirectorySources.clear();
+  state.projectlessPromotion = null;
+  state.missingNativeSources = [];
   state.reviewRoot = normaliseReviewRoot(root);
   state.overviewFolder = "";
   loadReviewedPaths();
