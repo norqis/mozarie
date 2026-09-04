@@ -328,6 +328,86 @@ class ProjectCatalogCoverageTests(unittest.TestCase):
         self.assertEqual(len(reopened_state.candidates[image_id]), 1)
         self.assertIsNotNone(reopened_state.manual_workspace(image_id))
 
+    def test_projectless_incremental_manual_layers_promote_as_full_snapshot(self) -> None:
+        source = self.root / "incremental-projectless"; self.image(source, "one.png")
+        state = self.state(); image_id = state.set_root(str(source))[0]["id"]
+        candidate = self.candidate(state, image_id, "detected", pixel=(1, 1))
+        self.commit_candidates(state, image_id, [candidate])
+        state.set_image_flags(image_id, {"hidden": True, "reviewed": True})
+
+        def data_uri(pixel: tuple[int, int]) -> str:
+            return "data:image/png;base64," + base64.b64encode(self.png(pixel=pixel)).decode("ascii")
+
+        add = data_uri((1, 2)); exclusion = data_uri((3, 4)); erase = data_uri((5, 6))
+        common = {
+            "removedCandidateIds": ["detected", "stale"],
+            "candidateRevision": state._candidate_revision(image_id),
+            "manualEnabled": True, "manualExclusionEnabled": False,
+            "manualExclusionEraseEnabled": True, "manualExclusionForced": False,
+        }
+        state.save_manual_workspace(image_id, {
+            **common, "add": add, "dirtyLayers": ["add"],
+            "dirtyRois": {"add": {"left": 1, "top": 2, "right": 2, "bottom": 3}},
+        })
+        state.save_manual_workspace(image_id, {
+            **common, "exclusion": exclusion, "dirtyLayers": ["exclusion"],
+            "dirtyRois": {"exclusion": {"left": 3, "top": 4, "right": 4, "bottom": 5}},
+        })
+        state.save_manual_workspace(image_id, {
+            **common, "exclusionErase": erase, "dirtyLayers": ["exclusionErase"],
+            "dirtyRois": {"exclusionErase": {"left": 5, "top": 6, "right": 6, "bottom": 7}},
+        })
+        draft = state.manual_workspace(image_id)
+        self.assertEqual((draft["add"], draft["exclusion"], draft["exclusionErase"]), (add, exclusion, erase))
+        self.assertEqual(draft["dirtyLayers"], ["exclusionErase"])
+
+        with patch.object(state.workspace_store, "save_manual", wraps=state.workspace_store.save_manual) as saved:
+            project = state.name_current_project("incremental promotion")
+        self.assertEqual(saved.call_count, 1)
+        promoted_payload = saved.call_args.args[1]
+        self.assertNotIn("dirtyLayers", promoted_payload)
+        self.assertNotIn("dirtyRois", promoted_payload)
+
+        manual = state.manual_workspace(image_id)
+        self.assertEqual((manual["add"], manual["exclusion"], manual["exclusionErase"]), (add, exclusion, erase))
+        self.assertEqual(manual["removedCandidateIds"], ["detected"])
+        self.assertEqual(manual["candidateRevision"], 1)
+        self.assertTrue(manual["hasEffectiveMask"])
+        self.assertEqual(
+            (manual["manualEnabled"], manual["manualExclusionEnabled"], manual["manualExclusionEraseEnabled"], manual["manualExclusionForced"]),
+            (True, False, True, False),
+        )
+        self.assertTrue(state.images[image_id].hidden)
+        self.assertTrue(state.images[image_id].reviewed)
+        state.close_project()
+
+        reopened = self.state(); reopened.open_project(project["id"])
+        restored = reopened.manual_workspace(image_id)
+        self.assertEqual((restored["add"], restored["exclusion"], restored["exclusionErase"]), (add, exclusion, erase))
+        for layer, pixel in (("add", (1, 2)), ("exclusion", (3, 4)), ("exclusionErase", (5, 6))):
+            raw = base64.b64decode(restored[layer].split(",", 1)[1])
+            self.assertEqual(Image.open(io.BytesIO(raw)).convert("L").getpixel(pixel), 255)
+        self.assertEqual(restored["removedCandidateIds"], ["detected"])
+        self.assertEqual(restored["candidateRevision"], 1)
+        self.assertTrue(restored["hasEffectiveMask"])
+        self.assertEqual(
+            (restored["manualEnabled"], restored["manualExclusionEnabled"], restored["manualExclusionEraseEnabled"], restored["manualExclusionForced"]),
+            (True, False, True, False),
+        )
+        self.assertTrue(reopened.images[image_id].hidden)
+        self.assertTrue(reopened.images[image_id].reviewed)
+        self.assertTrue(reopened.project_history_status(image_id)["canUndo"])
+        reopened.restore_project_history(image_id, "undo")
+        self.assertEqual(
+            tuple(reopened.manual_workspace(image_id)[layer] for layer in ("add", "exclusion", "exclusionErase")),
+            ("", "", ""),
+        )
+        reopened.restore_project_history(image_id, "redo")
+        self.assertEqual(
+            tuple(reopened.manual_workspace(image_id)[layer] for layer in ("add", "exclusion", "exclusionErase")),
+            (add, exclusion, erase),
+        )
+
     def test_projectless_browser_directory_promotion_reselects_the_same_source(self) -> None:
         staged = self.root / "first.png"; staged.write_bytes(self.png())
         state = self.state()

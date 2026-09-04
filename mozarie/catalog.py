@@ -323,8 +323,16 @@ class CatalogMixin:
                 records = [self.images[image_id] for image_id in self.order if image_id in self.images]
                 candidates = {record.image_id: [replace(item) for item in self.candidates.get(record.image_id, [])] for record in records}
                 revisions = {record.image_id: self._candidate_revision(record.image_id) for record in records}
-                manual_drafts = {record.image_id: dict(self.projectless_manual_drafts[record.image_id])
-                                 for record in records if record.image_id in self.projectless_manual_drafts}
+                # Projectless drafts retain their latest incremental-save hints
+                # for the browser.  Promotion writes a complete SQLite row, so
+                # give it a separate full-snapshot copy without those hints.
+                manual_drafts = {
+                    record.image_id: {
+                        key: value for key, value in self.projectless_manual_drafts[record.image_id].items()
+                        if key not in {"dirtyLayers", "dirtyRois"}
+                    }
+                    for record in records if record.image_id in self.projectless_manual_drafts
+                }
                 project = self.workspace_store.create_project(name)
                 catalog_id = str(project["id"])
                 grouped: dict[tuple[str, str, str], list[ImageRecord]] = {}
