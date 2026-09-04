@@ -51,7 +51,14 @@ SAMPLES = {
         "candidates": {
             "penis": ("apply", "target", True),
             "pussy": ("apply", "target", True),
+            "fluid": ("exclude", "fluid_exclusion", False),
         },
+        "fluid_area": (1, None),
+        "negative_regions": (
+            ("breasts", (150, 400, 750, 800)),
+            ("upper-torso", (250, 800, 650, 1_050)),
+            ("far-thigh-background", (0, 900, 170, 1_250)),
+        ),
     },
 }
 
@@ -172,7 +179,7 @@ def _assert_scene(name: str, candidates) -> list[str]:
         raise RuntimeError(f"{name}: unexpected labels {sorted(unexpected)}")
     for label, metadata in expected["candidates"].items():
         _assert_candidate(by_label[label], metadata)
-    if name == "Scene_cowgirl_00023.png":
+    if "fluid" not in expected["candidates"]:
         return lines
     fluid = by_label["fluid"]
     area, bbox = _mask_metrics(fluid.mask_path)
@@ -186,7 +193,7 @@ def _assert_scene(name: str, candidates) -> list[str]:
         allowed_left, allowed_top, allowed_right, allowed_bottom = expected_bbox
         if left < allowed_left or top < allowed_top or right > allowed_right or bottom > allowed_bottom:
             raise RuntimeError(f"{name}: fluid bbox {bbox} outside {expected_bbox}")
-    for label, region, minimum in expected["regions"]:
+    for label, region, minimum in expected.get("regions", ()):
         rate = _region_rate(fluid.mask_path, region)
         lines.append(f"  {label}: {rate:.3f}")
         if rate < minimum:
@@ -259,6 +266,11 @@ def main() -> int:
             if args.gpu_device is not None:
                 state.settings["models"]["gpu_device"] = args.gpu_device
             state._require_supported_gpu()
+            import torch
+            device = state.settings["models"]["gpu_device"]
+            torch.cuda.synchronize(device)
+            baseline = (int(torch.cuda.memory_allocated(device)), int(torch.cuda.memory_reserved(device)))
+            settled_cycles: list[tuple[int, int]] = []
             memory_samples: list[tuple[int, int]] = []
             for cycle in range(1, MEMORY_SOAK_CYCLES + 1):
                 try:
@@ -269,9 +281,17 @@ def main() -> int:
                     failures.append(failure)
                     state._release_gpu_job_memory()
                     gc.collect()
+                torch.cuda.synchronize(device)
+                settled = (int(torch.cuda.memory_allocated(device)), int(torch.cuda.memory_reserved(device)))
+                settled_cycles.append(settled)
                 private_bytes, rss_bytes = _process_memory_bytes()
                 memory_samples.append((private_bytes, rss_bytes))
-                print(f"Process memory cycle {cycle}: private_bytes={private_bytes}, rss_bytes={rss_bytes}")
+                print(
+                    f"cycle {cycle} after cleanup: GPU allocated={settled[0]}, reserved={settled[1]}; "
+                    f"process private={private_bytes}, rss={rss_bytes}"
+                )
+            if any(current[0] > previous[0] or current[1] > previous[1] for previous, current in zip(settled_cycles, settled_cycles[1:])):
+                raise RuntimeError(f"GPU memory grew across cleanup cycles: before={baseline}, settled={settled_cycles}")
             early_average, late_average = _settled_private_bytes_averages(memory_samples)
             growth = late_average - early_average
             print(

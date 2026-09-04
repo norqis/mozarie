@@ -4,6 +4,8 @@ import ctypes
 import importlib.util
 import os
 import sys
+import tempfile
+import types
 import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
@@ -131,6 +133,107 @@ class RealDetectionRegressionTests(unittest.TestCase):
     def test_settled_private_bytes_requires_all_five_samples(self) -> None:
         with self.assertRaisesRegex(ValueError, "expected 5 memory samples"):
             real_detection_regression._settled_private_bytes_averages([])
+
+    def test_cowgirl_fluid_contract_and_generic_nonfluid_guard(self) -> None:
+        cowgirl = real_detection_regression.SAMPLES["Scene_cowgirl_00023.png"]
+        self.assertEqual(cowgirl["candidates"]["fluid"], ("exclude", "fluid_exclusion", False))
+        self.assertEqual(cowgirl["fluid_area"], (1, None))
+        self.assertEqual(
+            cowgirl["negative_regions"],
+            (
+                ("breasts", (150, 400, 750, 800)),
+                ("upper-torso", (250, 800, 650, 1_050)),
+                ("far-thigh-background", (0, 900, 170, 1_250)),
+            ),
+        )
+
+        def candidate(label: str, role: str, source: str, forced: bool):
+            return types.SimpleNamespace(
+                label_token=label,
+                role=types.SimpleNamespace(value=role),
+                source=source,
+                forced=forced,
+                mask_path=Path("unused-mask.png"),
+            )
+
+        cowgirl_candidates = [
+            candidate("penis", "apply", "target", True),
+            candidate("pussy", "apply", "target", True),
+            candidate("fluid", "exclude", "fluid_exclusion", False),
+        ]
+        with patch.object(real_detection_regression, "_mask_metrics", return_value=(1, (200, 500, 300, 600))), \
+                patch.object(real_detection_regression, "_region_rate", return_value=0.0):
+            lines = real_detection_regression._assert_scene("Scene_cowgirl_00023.png", cowgirl_candidates)
+        self.assertIn("  fluid: area=1, bbox=(200, 500, 300, 600)", lines)
+
+        with patch.dict(
+            real_detection_regression.SAMPLES,
+            {"nonfluid": {"candidates": {"penis": ("apply", "target", True)}}},
+        ), patch.object(real_detection_regression, "_mask_metrics", return_value=(1, (0, 0, 1, 1))):
+            real_detection_regression._assert_scene(
+                "nonfluid", [candidate("penis", "apply", "target", True)]
+            )
+
+    def _run_main_with_gpu_samples(self, settled_samples: list[tuple[int, int]]):
+        class FakeCuda:
+            def __init__(self):
+                self._samples = iter([settled_samples[0], *settled_samples])
+                self._pending: tuple[int, int] | None = None
+                self.synchronized: list[int] = []
+
+            def synchronize(self, device: int) -> None:
+                self.synchronized.append(device)
+
+            def memory_allocated(self, _device: int) -> int:
+                self._pending = next(self._samples)
+                return self._pending[0]
+
+            def memory_reserved(self, _device: int) -> int:
+                assert self._pending is not None
+                return self._pending[1]
+
+        instances = []
+
+        class FakeState:
+            def __init__(self, **_kwargs):
+                self.settings_store = types.SimpleNamespace(
+                    validate_update=lambda _settings: {"models": {"gpu_device": 7}, "detection": {}}
+                )
+                self.settings = {}
+                self.required = 0
+                self.shutdowns = 0
+                instances.append(self)
+
+            def _require_supported_gpu(self) -> None:
+                self.required += 1
+
+            def _release_gpu_job_memory(self) -> None:
+                pass
+
+            def shutdown(self) -> None:
+                self.shutdowns += 1
+
+        cuda = FakeCuda()
+        with tempfile.TemporaryDirectory() as temporary:
+            settings_file = Path(temporary) / "settings.json"
+            settings_file.write_text("{}", encoding="utf-8")
+            with patch.object(real_detection_regression, "StudioState", FakeState), \
+                    patch.object(real_detection_regression, "_run_cycle", return_value=[]), \
+                    patch.object(real_detection_regression, "_process_memory_bytes", return_value=(1_000_000, 2_000_000)), \
+                    patch.object(sys, "argv", [str(SOURCE), "--settings-file", str(settings_file)]), \
+                    patch.dict(sys.modules, {"torch": types.SimpleNamespace(cuda=cuda)}):
+                result = real_detection_regression.main()
+        return result, cuda, instances
+
+    def test_gpu_cleanup_samples_all_cycles_and_rejects_growth(self) -> None:
+        result, cuda, states = self._run_main_with_gpu_samples([(10, 20)] * 5)
+        self.assertEqual(result, 0)
+        self.assertEqual(cuda.synchronized, [7] * 6)
+        self.assertEqual(states[0].required, 1)
+        self.assertEqual(states[0].shutdowns, 1)
+
+        with self.assertRaisesRegex(RuntimeError, "GPU memory grew across cleanup cycles"):
+            self._run_main_with_gpu_samples([(10, 20), (10, 20), (11, 20), (11, 20), (11, 20)])
 
     @unittest.skipUnless(os.name == "nt", "requires Windows")
     def test_real_process_memory_probe_returns_positive_private_bytes_and_rss(self) -> None:
