@@ -1059,6 +1059,31 @@ class UpdaterTests(unittest.TestCase):
         self.assertIn('if not exist "%PYTHON%" if defined MOZARIE_PYTHON goto :invalid_mozarie_python', run)
         self.assertNotIn("pip install", run)
 
+    def test_setup_runtime_selector_executes_gpu_and_cim_failure_cases_without_installing(self):
+        setup = (Path(__file__).parents[1] / "setup.bat").read_text(encoding="utf-8")
+        selector_line = next(line for line in setup.splitlines() if "Get-CimInstance Win32_VideoController" in line)
+        selector = selector_line.split('-Command "', 1)[1].rsplit('"`) do', 1)[0]
+
+        def select(devices: list[str], *, cim_failure: bool = False) -> str:
+            device_rows = ",".join("[pscustomobject]@{PNPDeviceID='%s'}" % item for item in devices)
+            script = f"""
+function Get-CimInstance {{ [CmdletBinding()] param([string]$ClassName); if ($script:cimFailure) {{ Write-Error 'CIM unavailable'; return @() }}; return $script:devices }}
+$script:devices=@({device_rows})
+$script:cimFailure=${str(cim_failure).lower()}
+{selector}
+"""
+            completed = subprocess.run(
+                ["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", script],
+                check=True, capture_output=True, text=True,
+            )
+            return completed.stdout.strip()
+
+        self.assertEqual(select([]), "cpu")
+        self.assertEqual(select(["PCI\\VEN_8086&DEV_0001"]), "cpu")
+        self.assertEqual(select([], cim_failure=True), "cpu")
+        self.assertEqual(select(["PCI\\VEN_1002&DEV_0001"]), "directml")
+        self.assertEqual(select(["PCI\\VEN_1002&DEV_0001", "PCI\\VEN_10DE&DEV_0001"]), "cuda")
+
     def test_setup_uses_module_runtime_validation_and_reports_each_failed_stage(self):
         setup = (Path(__file__).parents[1] / "setup.bat").read_text(encoding="utf-8")
         self.assertIn('"%PYTHON%" -m mozarie.runtime_profile preflight', setup)

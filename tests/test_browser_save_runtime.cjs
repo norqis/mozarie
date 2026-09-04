@@ -41,7 +41,7 @@ function binaryResponse(bytes, saveToken = "runtime-render-token", beforePipe = 
   };
 }
 
-function createRuntime({ commit, copy = null, deleteOriginal = false, renderBinary = null, renderToken = "runtime-render-token", entries = null, initialImages = null, removeCatalog = null, saveStatus = null, saveCancel = null }) {
+function createRuntime({ commit, copy = null, deleteOriginal = false, renderBinary = null, renderToken = "runtime-render-token", entries = null, initialImages = null, saveStatus = null, saveCancel = null }) {
   const preparedEntries = entries || [{ imageId: "image-1", relativePath: "nested/source.png", candidateRevision: 7, deleteOriginal }];
   let catalogImages = initialImages || [{ id: "image-1", relativePath: "nested/source.png", width: 32, height: 32, candidateCount: 1, enabledCandidateCount: 1 }];
   const elements = new Map();
@@ -145,7 +145,6 @@ function createRuntime({ commit, copy = null, deleteOriginal = false, renderBina
       }
       if (requestPath === "/api/save/status") return (saveStatus || (() => jsonResponse({ state: "unknown" })))({ options, requests });
       if (requestPath === "/api/save/cancel") return (saveCancel || (() => jsonResponse({ state: "cancelled" })))({ options, requests });
-      if (requestPath === "/api/catalog/remove") return (removeCatalog || (() => jsonResponse({ images: [], removedImageIds: [] })))({ options, requests });
       throw new Error(`Unexpected request: ${requestPath}`);
     },
   };
@@ -795,124 +794,6 @@ async function runStaleCommitCase() {
   assert.equal(runtime.elements.get("#applyResult").textContent, "stale 1/1");
 }
 
-async function runRemoveAfterSaveCase() {
-    const image = { id: "image-1", relativePath: "nested/source.png", width: 32, height: 32, candidateCount: 1, enabledCandidateCount: 1 };
-  const runtime = createRuntime({
-    initialImages: [image],
-    commit: () => jsonResponse({ cleared: true, stale: false, images: [] }),
-    removeCatalog: ({ options }) => {
-      assert.deepEqual(JSON.parse(options.body), { imageIds: [image.id] });
-      return jsonResponse({ images: [], removedImageIds: [image.id] });
-    },
-  });
-  await runtime.runBrowserSave([image.id], "_censored", false, "copy", true);
-  assert.equal(runtime.requests.at(-1).path, "/api/catalog/remove");
-  assert.deepEqual(runtime.state.images, []);
-}
-
-async function runRemoveAfterSaveAlreadyAbsentCase() {
-  const image = { id: "image-1", relativePath: "nested/source.png", width: 32, height: 32, candidateCount: 1, enabledCandidateCount: 1 };
-  const runtime = createRuntime({
-    initialImages: [image],
-    commit: () => jsonResponse({ cleared: true, stale: false, deleted: true, images: [] }),
-    removeCatalog: () => jsonResponse({ images: [], removedImageIds: [] }),
-  });
-  runtime.state.currentId = image.id;
-  runtime.state.drafts.set(image.id, { add: "draft", exclusion: "" });
-
-  await runtime.runBrowserSave([image.id], "_censored", true, "copy", true);
-
-  assert.equal(runtime.state.drafts.has(image.id), false, "already-removed source entries still clear browser drafts");
-  assert.equal(runtime.state.currentId, null, "already-removed current entries leave no stale selection");
-}
-
-async function runRemoveAfterSavePartialAndStaleCase() {
-  const first = { id: "image-1", relativePath: "nested/first.png", width: 32, height: 32, candidateCount: 1, enabledCandidateCount: 1 };
-  const second = { id: "image-2", relativePath: "nested/second.png", width: 32, height: 32, candidateCount: 1, enabledCandidateCount: 1 };
-  let commits = 0;
-  const runtime = createRuntime({
-    initialImages: [first, second],
-    entries: [
-      { imageId: first.id, relativePath: first.relativePath, candidateRevision: 1, deleteOriginal: false },
-      { imageId: second.id, relativePath: second.relativePath, candidateRevision: 1, deleteOriginal: false },
-    ],
-    commit: () => {
-      commits += 1;
-      return commits === 1
-        ? jsonResponse({ cleared: true, stale: false, images: [second] })
-        : jsonResponse({ error: "second commit failed" }, 500);
-    },
-    removeCatalog: ({ options }) => {
-      assert.deepEqual(JSON.parse(options.body), { imageIds: [first.id] });
-      return jsonResponse({ images: [second], removedImageIds: [first.id] });
-    },
-  });
-  await assert.rejects(runtime.runBrowserSave([first.id, second.id], "_censored", false, "copy", true), (error) => error.code === "internal_error");
-  assert.equal(runtime.requests.at(-1).path, "/api/catalog/remove");
-  assert.deepEqual(runtime.state.images, [second]);
-
-  const stale = createRuntime({
-    initialImages: [first],
-    commit: () => jsonResponse({ cleared: false, stale: true, images: [first] }),
-  });
-  await stale.runBrowserSave([first.id], "_censored", false, "copy", true);
-  assert.equal(stale.requests.some((request) => request.path === "/api/catalog/remove"), false, "stale saves must remain in the catalog");
-}
-
-async function runRemoveAfterSaveUiCleanupCase() {
-  const first = { id: "image-1", relativePath: "nested/first.png", width: 32, height: 32, candidateCount: 1, enabledCandidateCount: 1 };
-  const second = { id: "image-2", relativePath: "nested/second.png", width: 32, height: 32, candidateCount: 1, enabledCandidateCount: 1 };
-  const runtime = createRuntime({
-    initialImages: [first, second],
-    entries: [{ imageId: first.id, relativePath: first.relativePath, candidateRevision: 1, deleteOriginal: false }],
-    commit: () => jsonResponse({ cleared: true, stale: false, images: [first, second] }),
-    removeCatalog: () => jsonResponse({ images: [second], removedImageIds: [first.id] }),
-  });
-  runtime.state.selectedImageIds = new Set([first.id]);
-  runtime.state.selectionAnchorId = first.id;
-  runtime.state.contextMenuImageId = first.id;
-  runtime.state.contextMenuOrigin = runtime.element("#removeImageMenuItem");
-  runtime.state.contextMenuScroll = { gallery: 999, overview: 999 };
-  runtime.state.pendingImageId = first.id;
-  runtime.state.pendingImageKey = "image-1:old";
-  runtime.state.pendingCandidateKey = "image-1:old";
-  const generationForDelayedLoad = runtime.state.imageGeneration;
-  const pendingLoad = { aborted: false, abort() { this.aborted = true; } };
-  runtime.state.catalogLoadControllers.add(pendingLoad);
-  runtime.state.imageInflight.set(first.id, Promise.resolve());
-  runtime.state.sourceAccess.set(first.id, {});
-  runtime.state.drafts.set(first.id, { add: "draft" });
-  runtime.state.maskStatus.set(first.id, true);
-  runtime.state.candidateUpdateVersions.set("image-1:candidate", 1);
-  runtime.state.prefetchQueue = [{ record: first }, { record: second }];
-  runtime.element("#gallery").scrollTop = 43;
-  runtime.element("#overviewGrid").scrollTop = 17;
-
-  await runtime.runBrowserSave([first.id], "_censored", false, "copy", true);
-
-  assert.deepEqual(runtime.state.images, [second], "the committed masked entry is removed in one terminal cleanup");
-  assert.equal(runtime.state.selectedImageIds.has(first.id), false, "removed IDs leave batch selection");
-  assert.equal(runtime.state.selectionAnchorId, null, "removed IDs clear the range-selection anchor");
-  assert.equal(runtime.state.contextMenuImageId, null, "removed IDs close the contextual action target");
-  assert.equal(runtime.state.contextMenuOrigin, null, "removed IDs discard the contextual action origin");
-  assert.equal(runtime.state.contextMenuScroll, null, "removed IDs discard stale context scroll state");
-  assert.equal(runtime.state.pendingImageId, null, "removed IDs clear pending image loads");
-  assert.equal(runtime.state.imageGeneration, generationForDelayedLoad + 1, "removing a pending image invalidates its in-flight generation");
-  assert.equal(pendingLoad.aborted, true, "removing a pending image aborts the outstanding catalog load");
-  assert.equal(runtime.state.catalogLoadControllers.size, 0, "aborted pending loads are released");
-  assert.equal(runtime.state.imageInflight.size, 0, "aborted pending image promises cannot publish a removed image");
-  assert.notEqual(generationForDelayedLoad, runtime.state.imageGeneration, "a delayed image load keeps an obsolete generation after removal");
-  assert.equal(runtime.state.pendingImageKey, null, "removed IDs clear pending image cache keys");
-  assert.equal(runtime.state.pendingCandidateKey, null, "removed IDs clear pending candidate cache keys");
-  assert.equal(runtime.state.sourceAccess.has(first.id), false, "removed IDs release source access");
-  assert.equal(runtime.state.drafts.has(first.id), false, "removed IDs release drafts");
-  assert.equal(runtime.state.maskStatus.has(first.id), false, "removed IDs release mask status");
-  assert.equal(runtime.state.candidateUpdateVersions.has("image-1:candidate"), false, "removed IDs release candidate mutation state");
-  assert.equal(runtime.state.prefetchQueue.length, 0, "removing a pending image cancels every stale prefetch request");
-  assert.equal(runtime.element("#gallery").scrollTop, 43, "gallery scroll restores without forcing an invalid center jump");
-  assert.equal(runtime.element("#overviewGrid").scrollTop, 17, "overview scroll restores without forcing an invalid center jump");
-}
-
 async function runCopyFailureCase() {
   let removed = false;
   const runtime = createRuntime({ deleteOriginal: true, renderBinary: () => jsonResponse({ error: "disk full" }, 500), commit: () => jsonResponse({ cleared: true, stale: false, images: [] }) });
@@ -1176,7 +1057,6 @@ async function runCatalogEpochGuardCase() {
   const original = { id: "image-1", relativePath: "nested/source.png", width: 32, height: 32, candidateCount: 1, enabledCandidateCount: 1 };
   const local = { id: "local-change", relativePath: "local.png", width: 32, height: 32, candidateCount: 0, enabledCandidateCount: 0 };
   let runtime;
-  let removals = 0;
   runtime = createRuntime({
     initialImages: [original],
     commit: () => {
@@ -1184,11 +1064,9 @@ async function runCatalogEpochGuardCase() {
       runtime.state.images = [local];
       return jsonResponse({ cleared: true, stale: false, images: [] });
     },
-    removeCatalog: () => { removals += 1; return jsonResponse({ images: [] }); },
   });
-  await runtime.runBrowserSave([original.id], "_censored", false, "copy", true);
+  await runtime.runBrowserSave([original.id], "_censored", false, "copy");
   assert.deepEqual(runtime.state.images, [local], "a newer catalog epoch rejects the final save snapshot");
-  assert.equal(removals, 0, "a superseded save does not remove entries from the newer catalog");
   assert.equal(runtime.imageFetches(), 0, "a keep-source copy has no catalogue snapshot to supersede");
 }
 
@@ -1238,37 +1116,6 @@ async function runPartialCommitFailureReconcileCase() {
   assert.equal(runtime.state.galleryNodes.has(first.id), false);
   assert.equal(runtime.state.galleryNodes.has(second.id), true, "the masked gallery renders the remaining add-only draft");
   assert.equal(runtime.state.galleryNodes.has(exclusionOnly.id), false, "the masked gallery excludes an exclusion-only draft");
-}
-
-async function runRemoveAfterSaveCases() {
-  const saved = { id: "image-1", relativePath: "nested/source.png", width: 32, height: 32, candidateCount: 1, enabledCandidateCount: 1 };
-  const retained = { id: "image-2", relativePath: "nested/retained.png", width: 32, height: 32, candidateCount: 0, enabledCandidateCount: 0 };
-  let removalPayload = null;
-  const enabled = createRuntime({
-    initialImages: [saved, retained],
-    commit: () => jsonResponse({ cleared: true, stale: false, deleted: false, images: [saved, retained] }),
-    removeCatalog: ({ options }) => {
-      removalPayload = JSON.parse(options.body);
-      return jsonResponse({ images: [retained], removedImageIds: [saved.id] });
-    },
-  });
-  await enabled.runBrowserSave([saved.id], "_censored", false, "copy", true);
-  assert.deepEqual(removalPayload, { imageIds: [saved.id] }, "only completed and committed images are removed after save");
-  assert.deepEqual(enabled.state.images.map((image) => image.id), [retained.id]);
-
-  const disabled = createRuntime({
-    initialImages: [saved],
-    commit: () => jsonResponse({ cleared: true, stale: false, deleted: false, images: [saved] }),
-  });
-  await disabled.runBrowserSave([saved.id], "_censored", false, "copy", false);
-  assert.equal(disabled.requests.some((request) => request.path === "/api/catalog/remove"), false, "unchecked removal leaves the catalog unchanged");
-
-  const stale = createRuntime({
-    initialImages: [saved],
-    commit: () => jsonResponse({ cleared: false, stale: true, deleted: false, images: [saved] }),
-  });
-  await stale.runBrowserSave([saved.id], "_censored", false, "copy", true);
-  assert.equal(stale.requests.some((request) => request.path === "/api/catalog/remove"), false, "stale saves remain in the catalog");
 }
 
 async function runSaveKeepsCatalogueAndEditorStateCase() {

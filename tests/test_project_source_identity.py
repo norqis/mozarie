@@ -15,6 +15,7 @@ from PIL import Image
 
 import mozarie.state as state_module
 from mozarie.core import ClientError
+from mozarie.domain import Candidate
 from mozarie.state import StudioState
 from mozarie.workspace import WorkspaceStore
 
@@ -179,6 +180,12 @@ class SourceIdentityRegressionTests(unittest.TestCase):
             store.resolve_browser_source(
                 "missing-project", kind="browser-files", display_name="files", source_identity="new", create=True,
             )
+        with self.assertRaisesRegex(ValueError, "invalid browser source"):
+            store.resolve_browser_source(
+                first["id"], kind="browser-files", display_name="files", source_identity="", create=True,
+            )
+        with self.assertRaisesRegex(ValueError, "kind does not match"):
+            store.ensure_project_source(first["id"], kind="browser-directory", display_name="directory", identity="browser:handle")
         self.assertEqual(store.project_sources(first["id"])[0]["id"], source_id)
         self.assertEqual(store.project_sources(second["id"]), [])
 
@@ -218,6 +225,30 @@ class SourceIdentityRegressionTests(unittest.TestCase):
         state.clear_catalog()
         self.assertEqual(state.images, {})
         self.assertEqual(state.workspace_store.project_images(project["id"]), [])
+
+    def test_manual_write_rejection_and_db_mask_rehydration_keep_the_contract(self) -> None:
+        state = self.studio()
+        state.create_project("manual")
+        image_id = self.import_browser(state, name="one.png", identity="handle")
+        valid = {"add": "", "exclusion": "", "exclusionErase": "", "removedCandidateIds": [], "candidateRevision": 0, "hasEffectiveMask": False}
+        state.save_manual_workspace(image_id, valid)
+        before = state.manual_workspace(image_id)
+        with self.assertRaises(ClientError) as rejected:
+            state.save_manual_workspace(image_id, {**valid, "removedCandidateIds": [1]})
+        self.assertEqual(rejected.exception.error_code, "workspace_write_failed")
+        self.assertEqual(state.manual_workspace(image_id), before)
+
+        mask_path = state.cache_dir / image_id / "candidate.png"
+        mask_path.parent.mkdir(parents=True, exist_ok=True)
+        encoded_mask = io.BytesIO()
+        Image.new("L", (8, 8), 255).save(encoded_mask, format="PNG")
+        mask_path.write_bytes(encoded_mask.getvalue())
+        candidate = Candidate("candidate", "penis", .9, mask_path)
+        state.candidates[image_id] = [candidate]
+        state._commit_candidate_snapshot(image_id, [candidate], replace=True)
+        mask_path.unlink()
+        self.assertTrue(state.read_candidate_mask_png(image_id, "candidate").startswith(b"\x89PNG\r\n\x1a\n"))
+        self.assertTrue(mask_path.exists())
 
     def test_completed_project_rejects_unknown_browser_source_without_db_writes(self) -> None:
         state = self.studio()

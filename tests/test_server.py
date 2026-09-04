@@ -4084,6 +4084,15 @@ class MozarieTests(unittest.TestCase):
         self.assertFalse(np.any(chest[:, :122]))
         self.assertFalse(np.any(absent))
 
+    def test_cum_in_pussy_metadata_ignores_empty_apply_masks(self):
+        state = self.new_state()
+        rgb = np.zeros((32, 32, 3), dtype=np.uint8)
+        empty = np.zeros((32, 32), dtype=np.uint8)
+        with patch.object(detection_module, "white_fluid_mask", side_effect=lambda _rgb, search: search) as fluid:
+            result = state._metadata_fluid_mask(rgb, [empty], empty, [], frozenset({"cum in pussy"}))
+        fluid.assert_called_once()
+        self.assertFalse(np.any(result))
+
     def test_scene_metadata_fluid_only_detects_lower_deposits_in_the_tagged_local_roi(self):
         rgb = np.zeros((400, 400, 3), dtype=np.uint8)
         target = np.zeros((400, 400), dtype=np.uint8); target[160:210, 160:200] = 1

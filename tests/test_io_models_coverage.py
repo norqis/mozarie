@@ -130,6 +130,18 @@ class ImageIoFailureBoundaryTests(unittest.TestCase):
             stage.finalize()
         warning.assert_called_once()
 
+    def test_session_save_updates_asset_fingerprint_without_replacing_source_metadata(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "session.png"
+            source.write_bytes(self.png_bytes("RGB"))
+            stat = source.stat()
+            record = ImageRecord("image", source, "session.png", 2, 2, stat.st_mtime_ns, stat.st_size, source_kind="session")
+            with patch("mozarie.image_io.render_with_mask", return_value=self.png_bytes("RGB")):
+                stage = image_io._stage_save_with_mask(record, np.zeros((2, 2), dtype=np.uint8), 4)
+            stage.finalize()
+        self.assertEqual((record.mtime_ns, record.size_bytes), (stat.st_mtime_ns, stat.st_size))
+        self.assertNotEqual(record.asset_fingerprint(), (0, 0))
+
     def test_rollback_with_no_backup_is_a_noop(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             record = Mock()

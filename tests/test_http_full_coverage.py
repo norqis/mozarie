@@ -35,6 +35,27 @@ def handler(*, headers: dict[str, str] | None = None, body: bytes = b"") -> http
 
 
 class HttpBoundaryCoverageTests(unittest.TestCase):
+    def test_bulk_flag_route_and_save_metadata_rejections_preserve_operation_boundary(self) -> None:
+        state = Mock()
+        state.set_image_flags_bulk.return_value = {"image": {"hidden": True, "reviewed": False}}
+        request = handler(); request.path = "/api/workspace/images"; request._require_json_request = lambda: None
+        request._read_json_body = lambda: {"imageIds": ["image"], "hidden": True}; request._json = Mock()
+        with patch.object(http_module, "STATE", state):
+            request.do_POST()
+        state.set_image_flags_bulk.assert_called_once_with({"imageIds": ["image"], "hidden": True})
+        request._json.assert_called_once_with({"flags": {"image": {"hidden": True, "reviewed": False}}})
+
+        for key, value in (("sourceMtimeMs", True), ("sourceSizeBytes", -1)):
+            with self.subTest(key=key):
+                rejected: list[object] = []
+                request = handler(); request.path = "/api/save/commit"; request._require_json_request = lambda: None
+                request._read_json_body = lambda key=key, value=value: {"imageId": "image", "candidateRevision": 0, "saveToken": "token", "sourceAction": "overwrite", key: value}
+                request._client_error = lambda error, *_args: rejected.append(error)
+                with patch.object(http_module, "STATE", state):
+                    request.do_POST()
+                self.assertEqual(getattr(rejected[0], "error_code", None), "input_invalid")
+        state.commit_browser_save.assert_not_called()
+
     def test_workspace_recovery_page_and_recreate_cover_locale_and_failure_paths(self) -> None:
         # The lightweight page selects its locale from browser storage and
         # never exposes the regular app while the workspace is unavailable.

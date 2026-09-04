@@ -489,6 +489,31 @@ class JobsSavingCoverageTests(unittest.TestCase):
             self.assertEqual(result, {"cleared": True, "stale": False, "deleted": True})
             self.assertFalse(thumb.exists())
 
+    def test_browser_commit_rejects_partial_metadata_and_persists_session_handle_metadata(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            directory = Path(raw); record = self.record(directory); record.source_kind = "session"
+            state = self.make_saving(directory); state.images[record.image_id] = record; state.order = [record.image_id]
+            rendered = directory / "rendered.png"; Image.new("RGB", (3, 2), "black").save(rendered)
+            token = BrowserSaveToken(record.image_id, 1, record.asset_fingerprint(), 1, time.monotonic(), rendered)
+            state.browser_save_tokens["metadata"] = token
+            before = (record.mtime_ns, record.size_bytes, dict(state.browser_save_tokens))
+            with self.assertRaises(ClientError) as rejected:
+                state.commit_browser_save(record.image_id, 1, "metadata", "overwrite", source_mtime_ns=7)
+            self.assertEqual(rejected.exception.error_code, "input_invalid")
+            self.assertEqual((record.mtime_ns, record.size_bytes), before[:2])
+            self.assertEqual(state.browser_save_tokens, before[2])
+            stage = Mock()
+            with patch("mozarie.saving._stage_record_replacement", return_value=stage):
+                committed = state.commit_browser_save(
+                    record.image_id, 1, "metadata", "overwrite", source_mtime_ns=101, source_size_bytes=202,
+                )
+            self.assertEqual(committed, {"cleared": True, "stale": False, "deleted": False})
+            self.assertEqual((record.mtime_ns, record.size_bytes), (101, 202))
+            state.workspace_store.commit_save.assert_called_once_with(
+                record.image_id, mtime_ns=101, size_bytes=202, clear_workspace=False, delete_image=False,
+            )
+            stage.finalize.assert_called_once()
+
     def test_browser_commit_second_lookup_and_catalog_changes(self) -> None:
         with tempfile.TemporaryDirectory() as raw:
             directory = Path(raw); record = self.record(directory); state = self.make_saving(directory)
