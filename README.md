@@ -111,14 +111,9 @@ GPU処理を使う場合は、**設定 > 検出**でGPUを選びます。GPUメ�
 - **GPU、CUDA、DirectMLのエラー:** ほかのGPUアプリを閉じる、別のGPUを選ぶ、またはCPUへ切り替えてください。
 - **解決しない:** エラー文を添えて[Issues](https://github.com/norqis/mozarie/issues)へ報告してください。
 
-## 開発
+## 実機確認
 
-```powershell
-npm ci
-node scripts/test-quiet.cjs all
-```
-
-失敗時だけ詳細を表示します。CI用にカバレッジを残す場合は `node scripts/test-quiet.cjs all --artifacts <保存先>` を使います。
+[実機確認手順](docs/manual-verification.md)に従って確認してください。
 
 ## ライセンス
 

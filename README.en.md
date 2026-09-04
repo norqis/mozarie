@@ -111,14 +111,9 @@ Use **Check for updates** in Settings or run `update.bat`. Close Mozarie before 
 - **GPU, CUDA, or DirectML error:** Close other GPU apps, select another GPU, or switch to CPU.
 - **Still stuck:** Include the error text in a [GitHub issue](https://github.com/norqis/mozarie/issues).
 
-## Development
+## Manual verification
 
-```powershell
-npm ci
-node scripts/test-quiet.cjs all
-```
-
-The command shows details only on failure. To retain coverage for CI, use `node scripts/test-quiet.cjs all --artifacts <directory>`.
+Follow the [manual verification guide](docs/manual-verification.md).
 
 ## License
 

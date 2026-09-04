@@ -100,7 +100,7 @@ def public_error_params(error_code: str, params: dict[str, Any]) -> dict[str, An
 
 
 def torch_module() -> Any:
-    """Load PyTorch only for GPU-backed operations, never during test startup."""
+    """Load PyTorch only when a GPU-backed operation needs it."""
     try:
         import torch
         return torch
@@ -292,7 +292,7 @@ class JobControl:
 
 
 class InferenceGate:
-    """Re-entrant inference gate with the Lock inspection used by tests/UI guards."""
+    """Re-entrant inference gate that serializes model access."""
 
     def __init__(self) -> None:
         self._lock = threading.Lock()

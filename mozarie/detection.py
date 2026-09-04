@@ -221,8 +221,8 @@ class DetectionMixin:
     ) -> None:
         models: DetectionModels | None = None
         try:
-            # Direct workers in tests and integrations do not pass the job
-            # launch epoch. Snapshot it once before any work; publication must
+            # Direct workers without a launch epoch snapshot it once before
+            # any work; publication must
             # compare against that same value, never against ``None`` or a
             # later catalogue generation.
             if catalog_generation is None:
