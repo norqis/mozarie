@@ -70,14 +70,22 @@ async function selectImage(imageId, force = false, { saveCurrentDraft = true } =
       cachedImage(record),
       loadCandidateBundle(imageId, generation),
     ]);
-    if (!isCurrentGeneration(generation)) return;
+    if (!isCurrentGeneration(generation)) {
+      if (!state.imageCache.has(imageCacheKey(record))) closeBitmap(image);
+      if (!state.candidateBundleCache.has(candidateCacheKey(imageId, candidateBundle.candidateRevision))) releaseCandidateBitmapBundle(candidateBundle);
+      return;
+    }
     // A tab-local draft is newer than the compact server copy. Otherwise the
     // workspace request and all draft image decodes must finish before the
     // current editor is touched.
     const hasDraft = state.drafts.has(imageId);
     const draft = hasDraft ? state.drafts.get(imageId) : await loadWorkspaceDraft(imageId);
     const draftImages = await decodeDraftImages(draft);
-    if (!isCurrentGeneration(generation)) return;
+    if (!isCurrentGeneration(generation)) {
+      if (!state.imageCache.has(imageCacheKey(record))) closeBitmap(image);
+      if (!state.candidateBundleCache.has(candidateCacheKey(imageId, candidateBundle.candidateRevision))) releaseCandidateBitmapBundle(candidateBundle);
+      return;
+    }
     if (!hasDraft) {
       if (draft) state.drafts.set(imageId, draft); else state.drafts.delete(imageId);
     }
@@ -88,11 +96,18 @@ async function selectImage(imageId, force = false, { saveCurrentDraft = true } =
     clearBoundaryInteraction();
     cancelFillWork();
     abortCatalogLoads();
+    const previousImage = state.currentImage;
+    const previousCandidateImages = state.candidateImages;
     state.currentId = imageId;
     state.pendingImageId = null; state.pendingImageKey = null; state.pendingCandidateKey = null;
     state.currentImage = image;
     state.candidates = candidateBundle.candidates;
     state.candidateImages = candidateBundle.candidateImages;
+    if (previousImage && previousImage !== image && ![...state.imageCache.items].some(([, entry]) => entry.value === previousImage)) closeBitmap(previousImage);
+    if (previousCandidateImages !== state.candidateImages
+      && ![...state.candidateBundleCache.items].some(([, entry]) => entry.value?.candidateImages === previousCandidateImages)) {
+      releaseCandidateBitmapBundle({ candidateImages: previousCandidateImages });
+    }
     state.imageCache.trim(); state.candidateBundleCache.trim();
     canvasSizeForImage(record); await restoreDraft(imageId, generation, draft, draftImages); prepareOriginalImage(); requestMosaicPreview(); fitImage();
     updateBlockSizeDisplay(); refreshMaskStatus();
