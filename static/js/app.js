@@ -74,6 +74,7 @@ let projectDeleteId = "";
 let projectListProjects = new Map();
 let projectListSelectedId = "";
 let projectExportBusy = false;
+let projectListAppliedSort = $("#projectSort").value;
 
 function projectTitle(project) { return project?.name || t("project.unnamed"); }
 function projectDate(value) {
@@ -143,10 +144,6 @@ function focusProjectListOption(index) {
 
 function buildProjectListFragment(projects) {
   const fragment = document.createDocumentFragment();
-  if (!projects.size) {
-    const empty = document.createElement("p"); empty.className = "project-list-empty"; empty.setAttribute("role", "status"); empty.textContent = t("project.empty");
-    fragment.append(empty);
-  }
   for (const project of projects.values()) {
     const option = document.createElement("button"); option.type = "button"; option.className = "project-list-option";
     option.setAttribute("role", "option"); option.dataset.projectId = project.id;
@@ -162,22 +159,38 @@ function buildProjectListFragment(projects) {
   return fragment;
 }
 
-async function showProjectList({ preserveSelection = false, invoker = $("#projectOpenList"), focusProjectId = "" } = {}) {
-  const sort = $("#projectSort").value;
-  const data = await api(`/api/projects?sort=${encodeURIComponent(sort)}`);
-  const nextProjects = new Map((data.projects || []).map((project) => [project.id, project]));
-  const nextSelectedId = preserveSelection && nextProjects.has(projectListSelectedId) ? projectListSelectedId : "";
-  const fragment = buildProjectListFragment(nextProjects);
-  projectListProjects = nextProjects; projectListSelectedId = nextSelectedId;
-  $("#projectList").replaceChildren(fragment);
-  renderProjectListSelection();
-  const focusOption = focusProjectId && $("#projectList").querySelector(`.project-list-option[data-project-id="${focusProjectId}"]`);
-  if (focusOption) focusProjectListOption(projectListOptionElements().indexOf(focusOption));
-  else if (!nextProjects.size) focusElement($("#projectListClose"));
-  if (!$("#projectListDialog").open) {
-    $("#projectDialog").close();
-    showModalFromInvoker($("#projectListDialog"), invoker);
-    focusElement($("#projectSort"));
+async function showProjectList({ preserveSelection = false, focusProjectId = "" } = {}) {
+  const sort = $("#projectSort");
+  const requestedSort = sort.value;
+  let focusTarget = null;
+  sort.disabled = true;
+  try {
+    const data = await api(`/api/projects?sort=${encodeURIComponent(requestedSort)}`);
+    const nextProjects = new Map((data.projects || []).map((project) => [project.id, project]));
+    const nextSelectedId = preserveSelection && nextProjects.has(projectListSelectedId) ? projectListSelectedId : "";
+    const fragment = buildProjectListFragment(nextProjects);
+    projectListProjects = nextProjects; projectListSelectedId = nextSelectedId; projectListAppliedSort = requestedSort;
+    $("#projectList").replaceChildren(fragment);
+    $("#projectList").hidden = !nextProjects.size;
+    $("#projectListEmpty").hidden = Boolean(nextProjects.size);
+    renderProjectListSelection();
+    const focusOption = focusProjectId && $("#projectList").querySelector(`.project-list-option[data-project-id="${focusProjectId}"]`);
+    if (!$("#projectListDialog").open) {
+      if ($("#projectDialog").open) {
+        modalInvokers.delete($("#projectDialog"));
+        $("#projectDialog").close();
+      }
+      showModalFromInvoker($("#projectListDialog"), $("#projectButton"));
+      focusTarget = $("#projectSort");
+    }
+    if (focusOption) focusTarget = focusOption;
+    else if (!nextProjects.size) focusTarget = $("#projectListClose");
+  } catch (error) {
+    sort.value = projectListAppliedSort;
+    throw error;
+  } finally {
+    sort.disabled = false;
+    if (focusTarget) focusElement(focusTarget);
   }
 }
 async function showSourceMismatches() {
@@ -306,8 +319,20 @@ async function deleteProject(projectId) {
     projectDeleteId = "";
     modalInvokers.delete($("#projectDeleteDialog"));
     $("#projectDeleteDialog").close();
-    if ($("#projectListDialog").open) await showProjectList({ focusProjectId });
-    else projectListSelectedId = "";
+    if ($("#projectListDialog").open) {
+      projectListProjects.delete(projectId);
+      $("#projectList").querySelector(`.project-list-option[data-project-id="${projectId}"]`)?.remove();
+      projectListSelectedId = "";
+      const empty = !projectListProjects.size;
+      $("#projectList").hidden = empty;
+      $("#projectListEmpty").hidden = !empty;
+      renderProjectListSelection();
+      if (empty) $("#projectListDialog").close();
+      else if (focusProjectId) {
+        const nextIndex = projectListOptionElements().findIndex((option) => option.dataset.projectId === focusProjectId);
+        if (nextIndex >= 0) focusProjectListOption(nextIndex);
+      }
+    } else projectListSelectedId = "";
   } catch (error) { showUserError(error); }
 }
 
@@ -346,7 +371,7 @@ function bindEvents() {
   $("#projectClose").addEventListener("click", () => $("#projectDialog").close());
   $("#projectNew").addEventListener("click", () => openProjectNameDialog("new"));
   $("#projectName").addEventListener("click", () => openProjectNameDialog("name"));
-  $("#projectOpenList").addEventListener("click", () => { void showProjectList({ invoker: $("#projectOpenList") }).catch(showUserError); });
+  $("#projectOpenList").addEventListener("click", () => { void showProjectList().catch(showUserError); });
   $("#projectListClose").addEventListener("click", () => $("#projectListDialog").close());
   $("#projectSort").addEventListener("change", () => { void showProjectList({ preserveSelection: true }).catch(showUserError); });
   $("#projectList").addEventListener("keydown", (event) => {
@@ -432,7 +457,7 @@ function bindEvents() {
     modalInvokers.delete(dialog);
     setTimeout(() => {
       if (dialog === $("#projectDialog") && $("#projectListDialog").open) return;
-      const fallback = dialog === $("#projectListDialog") && invoker?.offsetParent === null ? $("#projectButton") : invoker;
+      const fallback = dialog === $("#projectListDialog") ? $("#projectButton") : invoker;
       if (fallback?.isConnected && !fallback.disabled && !dialog.open) focusElement(fallback);
     }, 0);
   }));
