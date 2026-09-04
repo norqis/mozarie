@@ -32,6 +32,10 @@ class WorkspaceOpenError(RuntimeError):
     """The durable workspace cannot be safely opened as the current schema."""
 
 
+class ProjectNameAlreadyExistsError(ValueError):
+    """A project name conflicts with the database uniqueness constraint."""
+
+
 class _ClosingConnection(sqlite3.Connection):
     """sqlite's context manager commits but does not close on Windows."""
     def __exit__(self, *args: Any) -> None:
@@ -428,7 +432,7 @@ class WorkspaceStore:
                 db.execute("INSERT INTO catalogs(catalog_id,name,status,source_root,created_at,updated_at) VALUES(?,?,?,?,?,?)",
                            (catalog_id, clean_name or None, "working", source_root, now, now))
             except sqlite3.IntegrityError as exc:
-                raise ValueError("project name already exists") from exc
+                raise ProjectNameAlreadyExistsError("project name already exists") from exc
         return self.project(catalog_id) or {}
 
     def name_project(self, catalog_id: str, name: str) -> dict[str, Any]:
@@ -439,7 +443,7 @@ class WorkspaceStore:
             try:
                 cursor = db.execute("UPDATE catalogs SET name=?,updated_at=? WHERE catalog_id=?", (clean_name, time.time_ns(), catalog_id))
             except sqlite3.IntegrityError as exc:
-                raise ValueError("project name already exists") from exc
+                raise ProjectNameAlreadyExistsError("project name already exists") from exc
             if not cursor.rowcount:
                 raise ValueError("project is missing")
         return self.project(catalog_id) or {}

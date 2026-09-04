@@ -30,7 +30,7 @@ from .domain import Candidate, CandidateRole
 from .image_io import _valid_color, decode_draft_masks, draft_manual_exclusion_forced, inspect_import_image, oriented_image_size, unique_session_import_destination
 from .masks import compose_masks, expand_mask
 from .runtime import patch_directml_sam_prompt_encoder, runtime_backend, torch_device
-from .workspace import WorkspaceStore
+from .workspace import ProjectNameAlreadyExistsError, WorkspaceStore
 
 class CatalogMixin:
     def _assert_image_editable(self, image_id: str) -> None:
@@ -303,8 +303,13 @@ class CatalogMixin:
         return self.workspace_store.projects_for_source_root(str(root.resolve()), self.catalog_id)
 
     def create_project(self, name: str | None = None) -> dict[str, Any]:
+        try:
+            project = self.workspace_store.create_project(name)
+        except ProjectNameAlreadyExistsError as exc:
+            raise ClientError("", "project_name_duplicate") from exc
+        except ValueError as exc:
+            raise ClientError("プロジェクト名を確認してください。", "project_name_invalid") from exc
         self.detach_catalog()
-        project = self.workspace_store.create_project(name)
         with self.lock:
             self.catalog_id = str(project["id"]); self.project_read_only = False; self.source_mismatches = {}
         return project
@@ -318,6 +323,8 @@ class CatalogMixin:
                     catalog_id = self.catalog_id
                     try:
                         return self.workspace_store.name_project(catalog_id, name)
+                    except ProjectNameAlreadyExistsError as exc:
+                        raise ClientError("", "project_name_duplicate") from exc
                     except ValueError as exc:
                         raise ClientError("プロジェクト名を確認してください。", "project_name_invalid") from exc
                 records = [self.images[image_id] for image_id in self.order if image_id in self.images]
@@ -333,7 +340,12 @@ class CatalogMixin:
                     }
                     for record in records if record.image_id in self.projectless_manual_drafts
                 }
-                project = self.workspace_store.create_project(name)
+                try:
+                    project = self.workspace_store.create_project(name)
+                except ProjectNameAlreadyExistsError as exc:
+                    raise ClientError("", "project_name_duplicate") from exc
+                except ValueError as exc:
+                    raise ClientError("プロジェクト名を確認してください。", "project_name_invalid") from exc
                 catalog_id = str(project["id"])
                 grouped: dict[tuple[str, str, str], list[ImageRecord]] = {}
                 for record in records:
@@ -381,6 +393,7 @@ class CatalogMixin:
         if not catalog_id:
             return self.save_current_as_project(name)
         try: return self.workspace_store.name_project(catalog_id, name)
+        except ProjectNameAlreadyExistsError as exc: raise ClientError("", "project_name_duplicate") from exc
         except ValueError as exc: raise ClientError("プロジェクト名を確認してください。", "project_name_invalid") from exc
 
     def complete_project(self) -> dict[str, Any]:
