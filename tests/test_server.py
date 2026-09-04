@@ -3019,6 +3019,33 @@ class MozarieTests(unittest.TestCase):
         self.assertIsNotNone(selected)
         self.assertEqual(selected[1], 1)
 
+    def test_semantic_sam_requires_a_positive_quorum_but_does_not_veto_negative_points(self):
+        source = np.ones((10, 10), dtype=np.uint8)
+        hand = np.zeros_like(source)
+        two_of_three = source.astype(bool); two_of_three[3, 3] = False
+        one_of_three = two_of_three.copy(); one_of_three[2, 2] = False
+        points = np.asarray([[1, 1], [2, 2], [3, 3], [0, 0]], dtype=np.float32)
+        labels = np.asarray([1, 1, 1, 0], dtype=np.int32)
+        selected = select_semantic_sam_mask(
+            np.asarray([two_of_three, one_of_three]), np.asarray([.9, .8]), source, hand, points, labels,
+        )
+        self.assertIsNotNone(selected)
+        self.assertEqual(selected[1], 0)
+        self.assertIsNone(select_semantic_sam_mask(
+            np.asarray([one_of_three]), np.asarray([.9]), source, hand, points, labels,
+        ))
+        self.assertIsNotNone(select_semantic_sam_mask(
+            np.asarray([one_of_three]), np.asarray([.9]), source, hand, points[:1], labels[:1],
+        ))
+        low_retention = np.zeros_like(source, dtype=bool); low_retention[:6, :6] = True
+        self.assertIsNone(select_semantic_sam_mask(
+            np.asarray([low_retention]), np.asarray([.9]), source, hand, points[:3], labels[:3],
+        ))
+        too_much_hand = np.zeros_like(source); too_much_hand[:4, :4] = 1
+        self.assertIsNone(select_semantic_sam_mask(
+            np.asarray([source > 0]), np.asarray([.9]), source, too_much_hand, points[:3], labels[:3],
+        ))
+
     def test_sam_refinement_points_are_vectorized_and_deterministic(self):
         source = np.zeros((2160, 3840), dtype=np.uint8)
         source[240:1920, 480:3360] = 255
@@ -3036,11 +3063,21 @@ class MozarieTests(unittest.TestCase):
         self.assertEqual(len({tuple(point) for point in points}), 3)
         self.assertTrue(all(source[int(y), int(x)] and not hand[int(y), int(x)] for x, y in points))
 
-    def test_specialist_hand_mask_requires_box_containment(self):
+    def test_specialist_hand_mask_uses_clipped_prompt_box_occupancy(self):
         accepted = np.zeros((1, 12, 12), dtype=bool); accepted[0, 4:8, 4:8] = True
         self.assertIsNotNone(accepted_specialist_hand_mask(accepted, (12, 12), (3, 3, 9, 9)))
         outside = np.zeros((1, 12, 12), dtype=bool); outside[0, :3, :3] = True
         self.assertIsNone(accepted_specialist_hand_mask(outside, (12, 12), (3, 3, 9, 9)))
+        sparse = np.zeros((1, 12, 12), dtype=bool); sparse[0, 3, 3] = True
+        self.assertIsNone(accepted_specialist_hand_mask(sparse, (12, 12), (3, 3, 9, 9)))
+        full = np.zeros((1, 12, 12), dtype=bool); full[0, 3:9, 3:9] = True
+        self.assertTrue(np.array_equal(
+            accepted_specialist_hand_mask(full, (12, 12), (3, 3, 9, 9)), full[0].astype(np.uint8) * 255,
+        ))
+        spill = np.zeros((1, 12, 12), dtype=bool); spill[0, :3, :] = True; spill[0, 4:8, 4:8] = True
+        clipped = accepted_specialist_hand_mask(spill, (12, 12), (3, 3, 9, 9))
+        expected = np.zeros((12, 12), dtype=np.uint8); expected[4:8, 4:8] = 255
+        self.assertTrue(np.array_equal(clipped, expected))
 
     def test_import_rejects_malformed_and_suffix_mismatched_images(self):
         valid = io.BytesIO()
@@ -3920,6 +3957,22 @@ class MozarieTests(unittest.TestCase):
         finalized = state._finalize_exclusions(np.zeros((12, 12, 3), dtype=np.uint8), [segment])[0]
         self.assertTrue(np.array_equal(finalized["image_exclusions"]["hand"], hand))
 
+    def test_finalization_publishes_detector_hand_but_uses_final_mask_for_fluid(self):
+        state = self.new_state()
+        detector = np.zeros((20, 20), dtype=np.uint8); detector[2:18, 2:18] = 255
+        final = np.zeros((20, 20), dtype=np.uint8); final[8:16, 8:16] = 255
+        confirmed_hand = np.zeros((20, 20), dtype=np.uint8); confirmed_hand[2:6, 2:10] = 255
+        fallback_hand = np.zeros((20, 20), dtype=np.uint8); fallback_hand[12:16, 12:16] = 255
+        segment = {
+            "class_name": "penis", "mask": final, "_detector_mask": detector,
+            "_confirmed_hand": confirmed_hand, "image_exclusions": {"hand": fallback_hand},
+        }
+        with patch.object(detection_module, "white_fluid_mask", side_effect=lambda _rgb, mask: mask) as fluid_mask:
+            finalized = state._finalize_exclusions(np.zeros((20, 20, 3), dtype=np.uint8), [segment])[0]
+        self.assertTrue(np.array_equal(fluid_mask.call_args.args[1] > 0, final > 0))
+        self.assertTrue(np.array_equal(finalized["image_exclusions"]["hand"], confirmed_hand))
+        self.assertTrue(np.array_equal(finalized["exclusions"]["fluid"] > 0, final > 0))
+
     def test_specialist_hand_segmentation_runs_once_per_detected_hand_and_is_reused_by_all_segments(self):
         state = self.new_state()
         state.settings["models"]["hand_segmentation_enabled"] = True
@@ -4395,6 +4448,29 @@ class MozarieTests(unittest.TestCase):
             with patch.object(state, "_sam_predictor_for", return_value=FakePredictor()):
                 refined = state._high_precision_segments(DetectionModels(target=object()), record, np.zeros((12, 12, 3), dtype=np.uint8), [segment])
             self.assertEqual(refined, [])
+
+    def test_hand_evidence_rejects_target_shaped_specialist_mask_and_retains_distinct_hand(self):
+        state = self.new_state()
+        detector = np.ones((8, 8), dtype=np.uint8)
+        state.settings["models"].update({"hand_detection_enabled": True, "hand_segmentation_enabled": True})
+        record = Mock(image_id="image")
+        high_overlap = np.zeros((1, 8, 8), dtype=bool); high_overlap[0, :6, :] = True
+        specialist = Mock(); specialist.predict.return_value = high_overlap, np.asarray([.9]), None
+        high_segment = {"class_name": "penis", "mask": detector.copy(), "confidence": .8, "source": "target"}
+        with patch.object(state, "_hand_boxes", return_value=[(0, 0, 8, 8)]), \
+                patch.object(state, "_hand_segmentation_predictor_for", return_value=specialist):
+            detected, high_hand, _ = state._hand_refinement_context(Mock(), record, np.zeros((8, 8, 3), dtype=np.uint8), [high_segment])
+        self.assertIs(detected[0], high_segment)
+        self.assertFalse(np.any(high_hand))
+
+        low_overlap = np.zeros((1, 8, 8), dtype=bool); low_overlap[0, :5, :] = True
+        specialist.predict.return_value = low_overlap, np.asarray([.9]), None
+        low_segment = {"class_name": "penis", "mask": detector.copy(), "confidence": .8, "source": "target"}
+        with patch.object(state, "_hand_boxes", return_value=[(0, 0, 8, 8)]), \
+                patch.object(state, "_hand_segmentation_predictor_for", return_value=specialist):
+            detected, low_hand, _ = state._hand_refinement_context(Mock(), record, np.zeros((8, 8, 3), dtype=np.uint8), [low_segment])
+        self.assertIs(detected[0], low_segment)
+        self.assertTrue(np.array_equal(low_hand, low_overlap[0].astype(np.uint8) * 255))
 
     def test_high_precision_refinement_keeps_non_targets_and_drops_unconfirmed_targets(self):
         state = self.new_state()

@@ -600,13 +600,10 @@ def accepted_specialist_hand_mask(
         mask = np.asarray(raw_mask > 0, dtype=np.uint8)
         if mask.shape != expected_shape or not np.any(mask):
             continue
-        inside = int(np.count_nonzero(mask[top:bottom, left:right]))
-        total = int(np.count_nonzero(mask))
-        if inside / total < 0.85 or not 0.03 <= inside / box_area <= 0.95:
-            continue
         clipped = np.zeros_like(mask, dtype=np.uint8)
         clipped[top:bottom, left:right] = mask[top:bottom, left:right]
-        return clipped * 255
+        if np.count_nonzero(clipped) / box_area >= 0.03:
+            return clipped * 255
     return None
 
 
@@ -727,15 +724,19 @@ def select_semantic_sam_mask(
     if source_area == 0 or len(masks) != len(scores):
         return None
     positive = point_coords[point_labels == 1].astype(int)
-    negative = point_coords[point_labels == 0].astype(int)
+    required_positive = (len(positive) * 2 + 2) // 3
+    if required_positive == 0:
+        return None
     choices: list[tuple[tuple[float, float, float, int], np.ndarray, int]] = []
     for index, raw_mask in enumerate(masks):
         mask = np.asarray(raw_mask > 0, dtype=bool)
         if mask.shape != source.shape:
             continue
-        if any(not (0 <= x < mask.shape[1] and 0 <= y < mask.shape[0]) or not mask[y, x] for x, y in positive):
-            continue
-        if any(0 <= x < mask.shape[1] and 0 <= y < mask.shape[0] and mask[y, x] for x, y in negative):
+        positive_hits = sum(
+            0 <= x < mask.shape[1] and 0 <= y < mask.shape[0] and mask[y, x]
+            for x, y in positive
+        )
+        if positive_hits < required_positive:
             continue
         area = int(np.count_nonzero(mask))
         if not source_area // 4 <= area <= source_area * 3:

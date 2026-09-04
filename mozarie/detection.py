@@ -15,7 +15,7 @@ from .core import (
     DETECTED_TARGET_CLASSES, TARGET_CLASSES, Candidate, CandidateRole,
     ClientError, ImageRecord, JobControl, accepted_hand_sam_mask,
     accepted_specialist_hand_mask, arbitrate_segment_sources, clip_mask_to_roi,
-    confidence_for_source, detection_tiles, materialize_tile_mask,
+    confidence_for_source, detection_tiles, mask_iou, materialize_tile_mask,
     merge_tile_segment, padded_hand_box, read_boundary_request,
     read_polygon_boundary_request, sam_refinement_prompts,
     refine_mask_with_hand,
@@ -397,6 +397,10 @@ class DetectionMixin:
             if overlap[0] < overlap[2] and overlap[1] < overlap[3]: clipped.append(overlap)
         return clipped
 
+    @staticmethod
+    def _hand_evidence_is_distinct_from_targets(hand_mask: np.ndarray, detected: list[dict[str, Any]]) -> bool:
+        return all(mask_iou(hand_mask, np.asarray(segment["mask"])) < 0.75 for segment in detected)
+
     def _hand_refinement_context(
         self, models: DetectionModels, record: ImageRecord, rgb: np.ndarray, segments: list[dict[str, Any]]
     ) -> tuple[list[dict[str, Any]], np.ndarray, list[tuple[int, int, int, int]]]:
@@ -419,7 +423,7 @@ class DetectionMixin:
                         point_coords=None, point_labels=None, box=np.asarray(padded_box, dtype=np.float32), multimask_output=False,
                     )
                     confirmed = accepted_specialist_hand_mask(masks, shape, padded_box)
-                    if confirmed is not None:
+                    if confirmed is not None and self._hand_evidence_is_distinct_from_targets(confirmed, detected):
                         hand_mask = np.maximum(hand_mask, confirmed)
         # A detector box is only a prompt.  It is never published as a hand
         # exclusion unless a segmentation model confirms its pixels.
@@ -510,20 +514,27 @@ class DetectionMixin:
             return segments
 
         final_masks = [np.asarray(segment["mask"] > 0, dtype=np.uint8) for segment in targets]
+        detector_masks = [
+            np.asarray(segment.get("_detector_mask", segment["mask"]) > 0, dtype=np.uint8)
+            for segment in targets
+        ]
         hand_masks = [
-            np.asarray(segment.get("image_exclusions", {}).get("hand", np.zeros(shape)) > 0, dtype=np.uint8)
+            np.asarray(
+                segment.get("_confirmed_hand", segment.get("image_exclusions", {}).get("hand", np.zeros(shape))) > 0,
+                dtype=np.uint8,
+            )
             for segment in targets
         ]
         hand_evidence = np.maximum.reduce(hand_masks) if hand_masks else np.zeros(shape, dtype=np.uint8)
 
         safe_hand = np.zeros(shape, dtype=np.uint8)
         unsafe_targets = np.zeros(shape, dtype=np.uint8)
-        for final_mask in final_masks:
-            _refined, decision = refine_mask_with_hand(final_mask, hand_evidence)
+        for detector_mask in detector_masks:
+            _refined, decision = refine_mask_with_hand(detector_mask, hand_evidence)
             if decision in {"over_cap", "too_small"}:
-                unsafe_targets = np.maximum(unsafe_targets, final_mask)
+                unsafe_targets = np.maximum(unsafe_targets, detector_mask)
             elif decision == "refined":
-                safe_hand = np.maximum(safe_hand, final_mask & hand_evidence)
+                safe_hand = np.maximum(safe_hand, detector_mask & hand_evidence)
         safe_hand = np.where(unsafe_targets > 0, 0, safe_hand).astype(np.uint8) * 255
 
         fluid_union = np.zeros(shape, dtype=np.uint8)
