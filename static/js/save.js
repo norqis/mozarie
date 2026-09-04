@@ -237,7 +237,7 @@ async function startSingleSave(event) {
       sourceSnapshot = await snapshotSourceHandle(access); await writeSourceHandle(access, response); sourceChanged = true;
     }
     let committed;
-    try { committed = await commitBrowserSaveWithRetry({ imageId: save.imageId, candidateRevision: entry.candidateRevision, saveToken, sourceAction }); }
+    try { committed = await commitBrowserSaveWithRetry({ imageId: save.imageId, candidateRevision: entry.candidateRevision, saveToken, sourceAction, ...(sourceAction === "overwrite" && access?.fileHandle ? sourceCommitMetadata(access) : {}) }); }
     catch (error) {
       if (error.saveState === "pending") await cancelBrowserSave(entry, saveToken);
       if (sourceChanged && (isDefinitiveCommitRejection(error) || error.saveState === "pending")) await restoreSourceHandle(access, sourceSnapshot, deleteOriginal);
@@ -445,6 +445,10 @@ async function removeSourceHandle(access) {
   throw codedError("source_action_unavailable");
 }
 
+function sourceCommitMetadata(access) {
+  return { sourceMtimeMs: Math.max(0, Number(access.lastModified || 0)), sourceSizeBytes: Math.max(0, Number(access.size || 0)) };
+}
+
 async function snapshotSourceHandle(access) {
   const file = await access.fileHandle.getFile();
   return typeof file.arrayBuffer === "function" ? new Uint8Array(await file.arrayBuffer()) : null;
@@ -573,7 +577,7 @@ async function runBrowserSave(imageIds, suffix, deleteOriginal, mode = "copy") {
             await writeSourceHandle(access, binary);
             sourceAction = "overwrite";
             try {
-              const committed = await commitBrowserSaveWithRetry({ imageId: entry.imageId, candidateRevision: entry.candidateRevision, deleteOriginal: inputs.deleteOriginal, sourceAction, saveToken });
+              const committed = await commitBrowserSaveWithRetry({ imageId: entry.imageId, candidateRevision: entry.candidateRevision, deleteOriginal: inputs.deleteOriginal, sourceAction, saveToken, ...sourceCommitMetadata(access) });
               const liveAccess = sourceAccessFor(entry.imageId);
               if (liveAccess) Object.assign(liveAccess, access);
               return finishBrowserSaveEntry(committed, entry, save, sourceAction);

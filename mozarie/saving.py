@@ -201,7 +201,7 @@ class SavingMixin:
                 if mask is None or not np.any(mask):
                     raise ClientError("保存するモザイク範囲がありません。", "no_effective_mask")
                 output = render_with_mask(record, mask, calculate_block_size(record.width, record.height, divisor))
-                source_fingerprint = (record.mtime_ns, record.size_bytes)
+                source_fingerprint = record.asset_fingerprint()
                 if copy_to_default:
                     if not configured_output_directory.is_dir():
                         raise ClientError("保存先フォルダを使用できません。設定で変更してください。", "output_folder_unavailable")
@@ -251,12 +251,14 @@ class SavingMixin:
             if output_path is not None and 'save_token' not in locals():
                 output_path.unlink(missing_ok=True)
 
-    def commit_browser_save(self, image_id: str, revision: int, save_token: str, source_action: str) -> dict[str, Any]:
+    def commit_browser_save(self, image_id: str, revision: int, save_token: str, source_action: str, *, source_mtime_ns: int | None = None, source_size_bytes: int | None = None) -> dict[str, Any]:
         self._assert_image_editable(image_id)
         if not isinstance(save_token, str) or not save_token:
             raise ClientError("保存確認トークンがありません。保存をやり直してください。", "save_state_changed")
         if source_action not in {"keep", "overwrite", "deleted"}:
             raise ClientError("元画像の処理は keep、overwrite、deleted のいずれかで指定してください。", "input_invalid")
+        if (source_mtime_ns is None) != (source_size_bytes is None) or (source_mtime_ns is not None and (source_mtime_ns < 0 or source_size_bytes < 0)):
+            raise ClientError("保存後の元画像情報が正しくありません。", "input_invalid")
         rendered_path: Path | None = None
         cleanup_paths: list[tuple[Path, tuple[int, int] | None]] = []
         mask_paths: list[Path] = []
@@ -365,10 +367,15 @@ class SavingMixin:
                         # A save only writes an image. It must retain the
                         # candidate/manual workspace and both image flags.
                         cleared = revision == current_revision
+                        persisted_mtime = record_snapshot.mtime_ns
+                        persisted_size = record_snapshot.size_bytes
+                        if source_action == "overwrite" and record_snapshot.source_kind == "session":
+                            persisted_mtime = source_mtime_ns
+                            persisted_size = source_size_bytes
                         self.workspace_store.commit_save(
                             image_id,
-                            mtime_ns=record_snapshot.mtime_ns if source_action == "overwrite" else None,
-                            size_bytes=record_snapshot.size_bytes if source_action == "overwrite" else None,
+                            mtime_ns=persisted_mtime if source_action == "overwrite" else None,
+                            size_bytes=persisted_size if source_action == "overwrite" else None,
                             clear_workspace=deleted,
                             delete_image=deleted,
                         )
@@ -384,8 +391,13 @@ class SavingMixin:
                     if record is None:
                         raise ClientError("画像一覧が変更されました。保存をやり直してください。", "save_state_changed")
                     if source_action == "overwrite":
-                        record.mtime_ns = record_snapshot.mtime_ns
-                        record.size_bytes = record_snapshot.size_bytes
+                        record.set_asset_fingerprint(*record_snapshot.asset_fingerprint())
+                        if record.source_kind == "filesystem":
+                            record.mtime_ns = record_snapshot.mtime_ns
+                            record.size_bytes = record_snapshot.size_bytes
+                        elif source_mtime_ns is not None and source_size_bytes is not None:
+                            record.mtime_ns = source_mtime_ns
+                            record.size_bytes = source_size_bytes
                         record.asset_revision = record_snapshot.asset_revision + 1
                     if deleted:
                         mask_paths = [candidate.mask_path for candidate in self.candidates.get(image_id, [])]
@@ -400,7 +412,7 @@ class SavingMixin:
                     rendered_path = token_details.rendered_path
                     if deleted:
                         self._discard_browser_save_tokens_for_image_unchecked(image_id)
-                if deleted:
+                if source_action == "overwrite" or deleted:
                     thumbnail_paths = list((self.cache_dir / "thumbnails").glob(f"{image_id}-*.jpg"))
                 if mask_paths:
                     self._delete_mask_files(mask_paths, candidate_dirs)

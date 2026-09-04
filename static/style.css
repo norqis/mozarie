@@ -329,6 +329,7 @@ button { overflow: visible; text-overflow: clip; white-space: nowrap; }
 .studio-grid.gallery-collapsed .gallery-heading-actions > .pane-rail, .studio-grid.inspector-collapsed .candidate-pane > .pane-rail { inset: 0; width: 40px; min-width: 40px; min-height: 0; height: 100%; border: 0; border-radius: 0; background: #20252a; }
 .studio-grid.overview-active { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); }
 .studio-grid.overview-active > .gallery-pane, .studio-grid.overview-active > .editor-pane, .studio-grid.overview-active > .candidate-pane { display: none; }
+.studio-grid.overview-active > .workspace-splitter { display: none; }
 .studio-grid.overview-active > .overview-pane { grid-column: 1; grid-row: 1; }
 @media (min-width: 900px) and (max-width: 1279px) {
   .studio-grid { grid-template-columns: 190px minmax(0, 1fr) 270px; }
@@ -343,6 +344,8 @@ button { overflow: visible; text-overflow: clip; white-space: nowrap; }
   .canvas-navigation-bar .image-position { min-width: 48px; font-size: 12px; }
   .canvas-stage[data-tool-position="bottom"] .canvas-navigation-bar { padding: 5px; }
   .gallery-local-count { display: none; }
+  .canvas-navigation-bar { flex-wrap: wrap; }
+  .canvas-navigation-bar .current-file-name { flex-basis: 72px; }
 }
 @media (min-width: 1280px) { .studio-grid { grid-template-columns: 216px minmax(0, 1fr) 292px; } .studio-grid.gallery-collapsed { grid-template-columns: 40px minmax(0, 1fr) 292px; } .studio-grid.inspector-collapsed { grid-template-columns: 216px minmax(0, 1fr) 40px; } }
 @media (min-width: 1600px) { .studio-grid { grid-template-columns: 260px minmax(0, 1fr) 320px; } .studio-grid.gallery-collapsed { grid-template-columns: 40px minmax(0, 1fr) 320px; } .studio-grid.inspector-collapsed { grid-template-columns: 260px minmax(0, 1fr) 40px; } }
@@ -353,6 +356,26 @@ button { overflow: visible; text-overflow: clip; white-space: nowrap; }
   .candidate-padding-value { grid-template-columns: 40px minmax(60px, 64px) auto 40px; }
   .candidate-padding-value button { width: 40px; min-width: 40px; min-height: 40px; height: 40px; }
 }
+
+/* The outer panes keep independent remembered widths; only their separators
+   resize them, so canvas sizing stays a normal grid layout. */
+.studio-grid { --gallery-width: 216px; --inspector-width: 292px; grid-template-columns: var(--gallery-width) 8px minmax(320px, 1fr) 8px var(--inspector-width); }
+.gallery-pane { grid-column: 1; }
+#gallerySplitter { grid-column: 2; }
+.editor-pane { grid-column: 3; }
+#candidateSplitter { grid-column: 4; }
+.candidate-pane { grid-column: 5; }
+.workspace-splitter { position: relative; z-index: 6; min-width: 8px; cursor: col-resize; outline: none; background: #171a1d; }
+.workspace-splitter::after { content: ""; position: absolute; top: 0; right: 3px; bottom: 0; left: 3px; background: #3b424a; }
+.workspace-splitter:hover::after, .workspace-splitter:focus-visible::after, .workspace-splitter.dragging::after { background: #62bca4; }
+.studio-grid.gallery-collapsed { grid-template-columns: 40px 8px minmax(320px, 1fr) 8px var(--inspector-width); }
+.studio-grid.inspector-collapsed { grid-template-columns: var(--gallery-width) 8px minmax(320px, 1fr) 8px 40px; }
+.studio-grid.gallery-collapsed.inspector-collapsed { grid-template-columns: 40px 8px minmax(320px, 1fr) 8px 40px; }
+.gallery { overflow-y: auto; overflow-x: hidden; }
+.gallery-item { width: 100%; }
+.gallery-review-badge { border-color: #596570; background: #29313aeb; color: #d0d7de; }
+.gallery-item.reviewed .gallery-review-badge { border-color: #3a9780; background: #173e35e8; color: #d8fff3; }
+.canvas-navigation-bar .current-file-name { overflow: hidden; text-overflow: ellipsis; }
 .update-toast { position: fixed; right: 1rem; bottom: 1rem; z-index: 20; }
 /* Project list intentionally uses ordinary buttons: it remains usable at
    narrow window sizes and does not introduce a second custom widget. */

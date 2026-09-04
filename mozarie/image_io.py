@@ -426,7 +426,7 @@ def _source_stat_fingerprint(path: Path) -> tuple[int, int]:
 
 
 def _assert_source_stat_matches(record: ImageRecord, expected: tuple[int, int] | None = None) -> None:
-    if _source_stat_fingerprint(record.path) != (expected or (record.mtime_ns, record.size_bytes)):
+    if _source_stat_fingerprint(record.path) != (expected or record.asset_fingerprint()):
         raise ClientError("元画像が外部で変更されました。画像を再読み込みしてください。", "stale_asset")
 
 
@@ -516,8 +516,10 @@ def _stage_record_replacement(record: ImageRecord, rendered_path: Path, expected
             except OSError:
                 LOGGER.warning("Saved image timestamp could not be restored: %s", record.path)
         stat = record.path.stat()
-        record.mtime_ns = stat.st_mtime_ns
-        record.size_bytes = stat.st_size
+        record.set_asset_fingerprint(stat.st_mtime_ns, stat.st_size)
+        if record.source_kind == "filesystem":
+            record.mtime_ns = stat.st_mtime_ns
+            record.size_bytes = stat.st_size
         return SourceReplaceStage(record, backup_path)
     finally:
         if temporary_path is not None:
@@ -579,8 +581,10 @@ def _stage_save_with_mask(record: ImageRecord, mask: np.ndarray, block_size: int
         except OSError:
             LOGGER.warning("Saved image timestamp could not be restored: %s", destination)
         stat = destination.stat()
-        record.mtime_ns = stat.st_mtime_ns
-        record.size_bytes = stat.st_size
+        record.set_asset_fingerprint(stat.st_mtime_ns, stat.st_size)
+        if record.source_kind == "filesystem":
+            record.mtime_ns = stat.st_mtime_ns
+            record.size_bytes = stat.st_size
         return SourceReplaceStage(record, backup_path)
     finally:
         if temporary_path is not None:

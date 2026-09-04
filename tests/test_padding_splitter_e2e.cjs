@@ -118,7 +118,7 @@ async function main() {
 
     const narrow = await page.evaluate(() => {
       const grid = document.querySelector(".studio-grid");
-      grid.style.gridTemplateColumns = "40px 300px 40px";
+      grid.style.gridTemplateColumns = "40px 8px 300px 8px 40px";
       state.displayMode = "compare"; resizeRenderCanvas(); updateCompareSplitter();
       const separator = document.querySelector("#compareSplitter");
       return { width: stage.clientWidth, disabled: separator.getAttribute("aria-disabled"), value: separator.getAttribute("aria-valuenow") };

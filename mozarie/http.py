@@ -525,11 +525,19 @@ class MosaicHandler(BaseHTTPRequestHandler):
                         },
                     )
             elif path == "/api/save/commit":
+                source_mtime_ms = payload.get("sourceMtimeMs")
+                source_size_bytes = payload.get("sourceSizeBytes")
+                if source_mtime_ms is not None and (not isinstance(source_mtime_ms, int) or isinstance(source_mtime_ms, bool) or source_mtime_ms < 0):
+                    raise ClientError("保存後の元画像情報が正しくありません。", "input_invalid")
+                if source_size_bytes is not None and (not isinstance(source_size_bytes, int) or isinstance(source_size_bytes, bool) or source_size_bytes < 0):
+                    raise ClientError("保存後の元画像情報が正しくありません。", "input_invalid")
                 self._json(STATE.commit_browser_save(
                     str(payload.get("imageId", "")),
                     _read_candidate_revision(payload.get("candidateRevision")),
                     payload.get("saveToken"),
                     payload.get("sourceAction"),
+                    source_mtime_ns=source_mtime_ms * 1_000_000 if source_mtime_ms is not None else None,
+                    source_size_bytes=source_size_bytes,
                 ))
             elif path == "/api/save/status":
                 self._json(STATE.browser_save_status(
@@ -805,7 +813,7 @@ class MosaicHandler(BaseHTTPRequestHandler):
 
     def _stream_file(self, handle: BinaryIO, record: ImageRecord | None, content_type: str, cache_control: str) -> None:
         stat = os.fstat(handle.fileno())
-        if record is not None and (stat.st_mtime_ns != record.mtime_ns or stat.st_size != record.size_bytes):
+        if record is not None and (stat.st_mtime_ns, stat.st_size) != record.asset_fingerprint():
             raise ClientError("元画像が外部で変更されました。画像を再読み込みしてください。", "stale_asset")
         size = stat.st_size
         try:

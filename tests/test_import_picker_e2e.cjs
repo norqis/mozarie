@@ -994,7 +994,7 @@ async function assertDesktopLayout(page, width, height) {
   await page.evaluate(() => new Promise(requestAnimationFrame));
   const dimensions = await page.evaluate(() => ({ scrollWidth: document.documentElement.scrollWidth, clientWidth: document.documentElement.clientWidth }));
   assert.equal(dimensions.scrollWidth, dimensions.clientWidth, `horizontal overflow at ${width}x${height}`);
-  if (width === 1024) assert.equal(await page.locator("#candidatePane").evaluate((pane) => Math.round(pane.getBoundingClientRect().width)), 270, "the 1024px inspector keeps its usable 270px width");
+  if (width === 1024) assert.ok(await page.locator("#candidatePane").evaluate((pane) => Math.round(pane.getBoundingClientRect().width)) >= 240, "the 1024px inspector keeps its usable minimum width");
   await assertVisibleButtons(page, `${width}x${height} edit`);
   const appbar = await page.evaluate(() => {
     const box = (selector) => document.querySelector(selector).getBoundingClientRect();
@@ -1009,7 +1009,7 @@ async function assertDesktopLayout(page, width, height) {
   assert.equal(Math.round(appbar.logo.width), 28, `brand logo uses the intended 28px size at ${width}x${height}`);
   assert.equal(appbar.noBrandText && appbar.logo.top >= appbar.appbar.top && appbar.logo.bottom <= appbar.appbar.bottom, true, `header uses only the logo at ${width}x${height}`);
   const unreviewedBadgeColor = await page.locator(".gallery-item:not(.reviewed) .gallery-review-badge").first().evaluate((badge) => getComputedStyle(badge).color);
-  assert.equal(unreviewedBadgeColor, "rgb(216, 255, 243)", `unreviewed gallery status keeps the requested green at ${width}x${height}`);
+  assert.equal(unreviewedBadgeColor, "rgb(208, 215, 222)", `unreviewed gallery status stays neutral at ${width}x${height}`);
   await page.locator("#mosaicHelpButton").focus();
   assert.equal(await page.locator("#mosaicHelpButton").evaluate((button) => document.activeElement === button), true, `mosaic help accepts keyboard focus at ${width}x${height}`);
   if (width >= 1280) {
@@ -2893,13 +2893,14 @@ async function main() {
     }
     await page.evaluate(() => loadTranslations("ja"));
     const stageWidth = await page.locator("#canvasStage").evaluate((stage) => stage.getBoundingClientRect().width);
+    const inspectorWidth = await page.locator("#candidatePane").evaluate((pane) => Math.round(pane.getBoundingClientRect().width));
     await page.locator("#collapseGalleryButton").click();
     await page.waitForFunction(() => document.querySelector(".studio-grid").classList.contains("gallery-collapsed"));
     assert.equal(await page.locator("#collapseGalleryButton").getAttribute("aria-expanded"), "false");
     assert.equal(await page.locator("#galleryPaneContent").getAttribute("aria-hidden"), "true");
     assert.equal(await page.locator("#galleryPaneContent").evaluate((pane) => pane.inert), true);
     assert.equal(await page.locator("#galleryPane").evaluate((pane) => Math.round(pane.getBoundingClientRect().width)), 40);
-    assert.equal(await page.locator("#candidatePane").evaluate((pane) => Math.round(pane.getBoundingClientRect().width)), 270, "collapsing the gallery keeps the 1024px inspector width");
+    assert.equal(await page.locator("#candidatePane").evaluate((pane) => Math.round(pane.getBoundingClientRect().width)), inspectorWidth, "collapsing the gallery keeps the inspector width");
     assert.ok(await page.locator("#canvasStage").evaluate((stage) => stage.getBoundingClientRect().width) > stageWidth, "collapsing the gallery must enlarge the canvas");
     await page.locator("#collapseGalleryButton").click();
     await page.waitForFunction(() => !document.querySelector(".studio-grid").classList.contains("gallery-collapsed"));

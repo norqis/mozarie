@@ -851,7 +851,7 @@ class CatalogMixin:
             stat = record.path.stat()
         except OSError as exc:
             raise ClientError("元画像が外部で変更または削除されました。画像を再読み込みしてください。", "stale_asset") from exc
-        if stat.st_mtime_ns != record.mtime_ns or stat.st_size != record.size_bytes:
+        if (stat.st_mtime_ns, stat.st_size) != record.asset_fingerprint():
             raise ClientError("元画像が外部で変更されました。画像を再読み込みしてください。", "stale_asset")
 
     def clear_masks(self, image_ids: list[str]) -> int:
@@ -1006,6 +1006,8 @@ class CatalogMixin:
                             # detection instead of this temporary copy's mtime.
                             mtime_ns=client_mtime_ns or stat.st_mtime_ns,
                             size_bytes=client_size or stat.st_size,
+                            asset_mtime_ns=stat.st_mtime_ns,
+                            asset_size_bytes=stat.st_size,
                             source_kind="session",
                         ))
                         imported.append({"clientKey": client_key, "imageId": added[-1].image_id})
@@ -1439,7 +1441,8 @@ class CatalogMixin:
     @staticmethod
     def asset_version(record: ImageRecord) -> str:
         """The inexpensive HTTP version based on the catalogued file stat."""
-        return f"{record.mtime_ns}-{record.size_bytes}-{record.asset_revision}"
+        mtime_ns, size_bytes = record.asset_fingerprint()
+        return f"{mtime_ns}-{size_bytes}-{record.asset_revision}"
 
     def read_candidate_mask_png(self, image_id: str, candidate_id: str, *, expected_revision: int | None = None) -> bytes:
         """Read one stable mask, then encode outside its per-image lock."""

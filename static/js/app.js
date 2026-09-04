@@ -510,6 +510,72 @@ function bindEvents() {
   lightDismiss($("#detectDialog"), () => { $("#detectDialog").close(); state.pendingDetectionTargetIds = []; });
   $("#undoButton").addEventListener("click", () => { if (state.project?.id) void restoreProjectHistory("undo"); else restoreSnapshot(state.historyIndex - 1); }); $("#redoButton").addEventListener("click", () => { if (state.project?.id) void restoreProjectHistory("redo"); else restoreSnapshot(state.historyIndex + 1); });
   const grid = $(".studio-grid");
+  const paneStorage = { gallery: "mozarie.galleryWidth", inspector: "mozarie.inspectorWidth" };
+  const paneDefaults = window.innerWidth < 1280 ? { gallery: 190, inspector: 270 } : { gallery: 216, inspector: 292 };
+  const paneMinimums = { gallery: 144, inspector: 240 };
+  const paneValues = { gallery: paneDefaults.gallery, inspector: paneDefaults.inspector };
+  const paneStore = globalThis.localStorage;
+  for (const side of Object.keys(paneValues)) {
+    const stored = Number(paneStore?.getItem(paneStorage[side]));
+    if (Number.isFinite(stored) && stored >= paneMinimums[side]) paneValues[side] = stored;
+  }
+  const paneWidth = (side) => state[side === "gallery" ? "galleryCollapsed" : "inspectorCollapsed"] ? 40 : paneValues[side];
+  const applyPaneWidths = () => {
+    grid.style.setProperty?.("--gallery-width", `${paneValues.gallery}px`);
+    grid.style.setProperty?.("--inspector-width", `${paneValues.inspector}px`);
+    $("#gallerySplitter").setAttribute("aria-valuenow", String(Math.round(paneValues.gallery)));
+    $("#candidateSplitter").setAttribute("aria-valuenow", String(Math.round(paneValues.inspector)));
+  };
+  const updatePaneWidth = (side, requested, persist = true) => {
+    const rect = grid.getBoundingClientRect();
+    const other = side === "gallery" ? paneWidth("inspector") : paneWidth("gallery");
+    const maximum = Math.max(paneMinimums[side], Math.floor(rect.width - other - 16 - 320));
+    paneValues[side] = Math.min(maximum, Math.max(paneMinimums[side], Math.round(requested)));
+    applyPaneWidths();
+    if (persist) paneStore?.setItem(paneStorage[side], String(paneValues[side]));
+    requestAnimationFrame(() => { resizeRenderCanvas(); renderGallery(); });
+  };
+  applyPaneWidths();
+  const bindPaneSplitter = (element, side) => {
+    let drag = null;
+    const commit = (event, accepted) => {
+      if (!drag || drag.pointerId !== event.pointerId) return;
+      if (drag.frame) cancelAnimationFrame(drag.frame);
+      if (accepted && drag.latest !== null) updatePaneWidth(side, drag.latest);
+      else if (!accepted) updatePaneWidth(side, drag.initial, false);
+      element.classList.remove("dragging");
+      if (element.hasPointerCapture(event.pointerId)) element.releasePointerCapture(event.pointerId);
+      drag = null;
+    };
+    const request = (clientX) => {
+      if (!drag) return;
+      drag.latest = side === "gallery" ? clientX - grid.getBoundingClientRect().left : grid.getBoundingClientRect().right - clientX;
+      if (!drag.frame) drag.frame = requestAnimationFrame(() => { drag.frame = 0; if (drag?.latest !== null) updatePaneWidth(side, drag.latest, false); });
+    };
+    element.addEventListener("pointerdown", (event) => {
+      if (event.button !== 0 || state[side === "gallery" ? "galleryCollapsed" : "inspectorCollapsed"]) return;
+      event.preventDefault(); drag = { pointerId: event.pointerId, initial: paneValues[side], latest: null, frame: 0 };
+      element.setPointerCapture(event.pointerId); element.classList.add("dragging"); request(event.clientX);
+    });
+    element.addEventListener("pointermove", (event) => { if (drag?.pointerId === event.pointerId && element.hasPointerCapture(event.pointerId)) request(event.clientX); });
+    element.addEventListener("pointerup", (event) => commit(event, true));
+    element.addEventListener("pointercancel", (event) => commit(event, false));
+    element.addEventListener("lostpointercapture", (event) => commit(event, false));
+    element.addEventListener("dblclick", () => updatePaneWidth(side, paneDefaults[side]));
+    element.addEventListener("keydown", (event) => {
+      const direction = side === "gallery" ? 1 : -1;
+      const step = event.shiftKey ? 40 : 12;
+      if (event.key === "ArrowLeft") updatePaneWidth(side, paneValues[side] - direction * step);
+      else if (event.key === "ArrowRight") updatePaneWidth(side, paneValues[side] + direction * step);
+      else if (event.key === "Home") updatePaneWidth(side, paneMinimums[side]);
+      else if (event.key === "End") updatePaneWidth(side, Number.MAX_SAFE_INTEGER);
+      else return;
+      event.preventDefault();
+    });
+  };
+  bindPaneSplitter($("#gallerySplitter"), "gallery");
+  bindPaneSplitter($("#candidateSplitter"), "inspector");
+  if (typeof ResizeObserver === "function") new ResizeObserver(() => requestAnimationFrame(() => renderGallery())).observe(grid);
   const setPaneCollapsed = (side, collapsed) => {
     const isGallery = side === "gallery";
     const content = $(isGallery ? "#galleryPaneContent" : "#candidatePaneContent");
@@ -526,6 +592,7 @@ function bindEvents() {
       : (collapsed ? "workspace.expandInspector" : "workspace.collapseInspector");
     button.setAttribute("aria-label", t(labelKey));
     button.title = t(labelKey);
+    $(isGallery ? "#gallerySplitter" : "#candidateSplitter").hidden = collapsed;
     requestAnimationFrame(() => { resizeRenderCanvas(); fitImage(); });
   };
   $("#collapseGalleryButton").addEventListener("click", () => setPaneCollapsed("gallery", !state.galleryCollapsed));

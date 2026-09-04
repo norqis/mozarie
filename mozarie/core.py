@@ -160,6 +160,12 @@ class ImageRecord:
     height: int
     mtime_ns: int
     size_bytes: int = 0
+    # Browser imports are copied to Mozarie's session directory.  Their source
+    # File metadata remains the durable project fingerprint, while this pair
+    # tracks the copied asset actually served and edited in this process.
+    # These values deliberately never enter workspace.sqlite3.
+    asset_mtime_ns: int | None = field(default=None, repr=False)
+    asset_size_bytes: int | None = field(default=None, repr=False)
     source_kind: str = "filesystem"
     asset_revision: int = 0
     hidden: bool = False
@@ -168,6 +174,15 @@ class ImageRecord:
     # opaque source id keeps identical relative paths distinct.
     source_id: str | None = None
     source_root: Path | None = None
+
+    def asset_fingerprint(self) -> tuple[int, int]:
+        if self.asset_mtime_ns is None or self.asset_size_bytes is None:
+            return self.mtime_ns, self.size_bytes
+        return self.asset_mtime_ns, self.asset_size_bytes
+
+    def set_asset_fingerprint(self, mtime_ns: int, size_bytes: int) -> None:
+        self.asset_mtime_ns = mtime_ns
+        self.asset_size_bytes = size_bytes
 
 
 @dataclass(frozen=True)
