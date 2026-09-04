@@ -1455,14 +1455,29 @@ async function runExhaustiveAddedScenarios(page, fixtureUrl, resetScenario, work
   for (const language of ["ja", "en"]) {
     await page.evaluate((locale) => loadTranslations(locale), language);
     for (const code of errorCodes) {
-      await page.evaluate((errorCode) => showUserError({ code: errorCode, message: "fixture server detail" }), code);
       if (code === "connection_lost") {
-        assert.equal(await page.locator("#errorDialog").evaluate((dialog) => dialog.open), false, "connection loss remains outside the modal error dialog");
-        assert.equal(await page.locator("#connectionStatus").isVisible(), true, `connection loss is visible inline in ${language}`);
-        assert.equal(await page.locator("#connectionStatus").evaluate((node) => node.classList.contains("error")), true, `connection loss uses the inline error presentation in ${language}`);
+        const snapshot = await page.evaluate((errorCode) => {
+          showUserError({ code: errorCode, message: "fixture server detail" });
+          const status = document.querySelector("#connectionStatus");
+          return {
+            dialogOpen: document.querySelector("#errorDialog").open,
+            hidden: status.hidden,
+            hasErrorClass: status.classList.contains("error"),
+            text: status.textContent,
+            role: status.getAttribute("role"),
+          };
+        }, code);
+        assert.deepEqual(snapshot, {
+          dialogOpen: false,
+          hidden: false,
+          hasErrorClass: true,
+          text: language === "ja" ? "Mozarieに接続できません" : "Cannot connect to Mozarie.",
+          role: "alert",
+        }, `connection loss has the complete inline error presentation in ${language}`);
         await page.evaluate(() => clearStatus());
         continue;
       }
+      await page.evaluate((errorCode) => showUserError({ code: errorCode, message: "fixture server detail" }), code);
       await page.waitForFunction(() => document.querySelector("#errorDialog").open);
       const presentation = await page.evaluate(() => ["#errorDialogTitle", "#errorDialogCause", "#errorDialogAction"].map((selector) => document.querySelector(selector).textContent.trim()));
       assert.equal(presentation.every(Boolean), true, `${code} has title, cause, and action in ${language}`);
