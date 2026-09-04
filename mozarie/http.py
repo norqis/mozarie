@@ -386,7 +386,7 @@ class MosaicHandler(BaseHTTPRequestHandler):
             elif path == "/api/projects":
                 self._json({"project": STATE.create_project(payload.get("name"))})
             elif path == "/api/project/name":
-                self._json({"project": STATE.name_current_project(str(payload.get("name", "")))})
+                self._json({"project": STATE.name_current_project(str(payload.get("name", "")), str(payload.get("projectId", "")))})
             elif path == "/api/project/complete":
                 self._json({"project": STATE.complete_project()})
             elif path == "/api/project/close":

@@ -373,7 +373,7 @@ class CatalogMixin:
                 self.catalog_id = str(project["id"]); self.project_read_only = False; self.source_mismatches = {}
             return project
 
-    def save_current_as_project(self, name: str) -> dict[str, Any]:
+    def save_current_as_project(self, name: str, project_id: str) -> dict[str, Any]:
         """Make the current projectless session durable without replacing it."""
         with self.import_lock:
             with self.lock:
@@ -421,7 +421,7 @@ class CatalogMixin:
                 try:
                     project, source_ids = self.workspace_store.promote_projectless(
                         name, [(kind, identity, display_name, members) for (kind, identity, display_name), members in grouped.items()],
-                        candidates, revisions, effective_masks, manual_drafts, self._decode_workspace_mask,
+                        candidates, revisions, effective_masks, manual_drafts, self._decode_workspace_mask, project_id,
                     )
                 except ProjectNameAlreadyExistsError as exc:
                     raise ClientError("", "project_name_duplicate") from exc
@@ -435,11 +435,11 @@ class CatalogMixin:
                 project["sourceIds"] = source_ids
                 return project
 
-    def name_current_project(self, name: str) -> dict[str, Any]:
+    def name_current_project(self, name: str, project_id: str = "") -> dict[str, Any]:
         with self.lock:
             catalog_id = self.catalog_id
         if not catalog_id:
-            return self.save_current_as_project(name)
+            return self.save_current_as_project(name, project_id)
         try: return self.workspace_store.name_project(catalog_id, name)
         except ProjectNameAlreadyExistsError as exc: raise ClientError("", "project_name_duplicate") from exc
         except ValueError as exc: raise ClientError("プロジェクト名を確認してください。", "project_name_invalid") from exc

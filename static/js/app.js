@@ -170,24 +170,6 @@ function openProjectNameDialog(mode) {
   updateActionButtons();
   showModalFromInvoker($("#projectNameDialog")); focusElement($("#projectNameInput"));
 }
-async function finishProjectlessPromotion(promotion) {
-  const project = promotion.project;
-  const snapshot = await api("/api/images");
-  state.images = snapshot.images || state.images;
-  applyProjectSnapshot(snapshot);
-  loadReviewedPaths();
-  await promoteProjectlessDirectorySources(project.id, promotion.sourceIds);
-  await rememberProjectSources(project.id, state.images.flatMap((image) => {
-    const access = state.sourceAccess.get(image.id);
-    return access?.fileHandle && access.sourceKind === "browser-files"
-      ? [{ handle: access.fileHandle, imageId: image.id, sourceId: image.sourceId || promotion.sourceIds?.[image.id] }] : [];
-  }));
-  state.project = project;
-  state.projectReadOnly = false;
-  state.missingNativeSources = [];
-  state.projectlessDirectorySources.clear();
-  state.projectlessPromotion = null;
-}
 function projectTableRows() { return [...$("#projectListBody").querySelectorAll("tr[data-project-id]")]; }
 
 function projectSortLabel(key) {
@@ -559,15 +541,22 @@ function bindEvents() {
   $("#projectDeleteDialog").addEventListener("cancel", (event) => { if (projectDeleteBusy) event.preventDefault(); });
   $("#projectDeleteConfirm").addEventListener("click", () => { void deleteProject(projectDeleteId); });
   $("#projectNameForm").addEventListener("submit", (event) => { event.preventDefault(); void (async () => { if (!beginProjectOperation()) return; try {
-    const name = $("#projectNameInput").value.trim(); const mode = projectNameMode; const pendingPromotion = state.projectlessPromotion;
-    const projectlessSave = mode === "name" && !state.project?.id && !pendingPromotion;
+    const name = $("#projectNameInput").value.trim(); const mode = projectNameMode;
+    const projectlessSave = mode === "name" && !state.project?.id;
     if (mode === "new" || projectlessSave) { await flushAllImageMutations(); await flushAllWorkspaceMutations(); }
-    const data = pendingPromotion ? null : mode === "new"
+    const projectId = projectlessSave ? crypto.randomUUID().replaceAll("-", "") : "";
+    if (projectlessSave) await rememberProjectlessPromotionSources(projectId);
+    let data;
+    try {
+      data = mode === "new"
       ? await api("/api/projects", { method: "POST", body: JSON.stringify({ name }) })
-      : await api("/api/project/name", { method: "POST", body: JSON.stringify({ name }) });
-    if (projectlessSave) state.projectlessPromotion = { project: data.project, sourceIds: data.project.sourceIds || {} };
-    if (state.projectlessPromotion) await finishProjectlessPromotion(state.projectlessPromotion);
-    else { state.project = data.project; state.projectReadOnly = false; }
+      : await api("/api/project/name", { method: "POST", body: JSON.stringify({ name, projectId }) });
+    } catch (error) {
+      if (projectlessSave && Number.isInteger(error?.status) && error.status >= 400 && error.status < 500) await forgetProjectSources(projectId);
+      throw error;
+    }
+    state.project = data.project; state.projectReadOnly = false;
+    if (projectlessSave) state.projectlessDirectorySources.clear();
     $("#projectNameDialog").close(); if (mode === "new") { resetCatalog([], ""); state.missingNativeSources = []; } renderProjectCurrent();
   } catch (error) { showUserError(error); } finally { endProjectOperation(); } })(); });
   $("#sourceMismatchCancel").addEventListener("click", () => $("#sourceMismatchDialog").close());
@@ -886,7 +875,6 @@ function bindEvents() {
     let drag = null;
     const commit = (event, accepted) => {
       if (!drag || drag.pointerId !== event.pointerId) return;
-      if (accepted) request(event.clientX);
       if (drag.frame) cancelAnimationFrame(drag.frame);
       if (accepted && drag.moved) {
         updatePaneWidth(side, drag.latest);

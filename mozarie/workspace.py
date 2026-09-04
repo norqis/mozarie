@@ -498,12 +498,15 @@ class WorkspaceStore:
         effective_masks: dict[str, bool],
         manual_drafts: dict[str, dict[str, Any]],
         decoder: Any,
+        project_id: str,
     ) -> tuple[dict[str, Any], dict[str, str]]:
         """Persist a projectless catalogue in one SQLite transaction."""
         clean_name = name.strip()
         if not clean_name:
             raise ValueError("project name is required")
-        catalog_id = uuid.uuid4().hex
+        if len(project_id) != 32 or any(char not in "0123456789abcdef" for char in project_id):
+            raise ValueError("project id is invalid")
+        catalog_id = project_id
         now = time.time_ns()
         source_root = next((identity for kind, identity, _display_name, _members in sources if kind == "native-folder"), None)
         source_ids: dict[str, str] = {}

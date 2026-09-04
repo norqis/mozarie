@@ -24,7 +24,6 @@ const state = {
   sourceAccess: new Map(),
   // Projectless directory imports retain their root only until the session is named.
   projectlessDirectorySources: new Map(),
-  projectlessPromotion: null,
   processing: null, imageInflight: new Map(), candidateInflight: new Map(), loadingDelay: null, pendingImageKey: null, pendingCandidateKey: null,
   galleryCollapsed: false, inspectorCollapsed: false,
   settings: null, settingsStatus: null, jobPollTimer: null,
@@ -683,7 +682,6 @@ function resetCatalog(images, root) {
   state.projectHistory.clear();
   state.sourceAccess.clear();
   state.projectlessDirectorySources.clear();
-  state.projectlessPromotion = null;
   state.missingNativeSources = [];
   state.reviewRoot = normaliseReviewRoot(root);
   state.overviewFolder = "";

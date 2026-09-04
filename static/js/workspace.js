@@ -119,14 +119,13 @@ async function forgetProjectImageSources(projectId, imageIds) {
   finally { db.close(); }
 }
 
-async function promoteProjectlessDirectorySources(projectId, sourceIds) {
-  const sources = [];
-  for (const source of state.projectlessDirectorySources.values()) {
-    const durableSourceId = [...source.imageIds]
-      .map((imageId) => sourceIds?.[imageId])
-      .find(Boolean);
-    if (!durableSourceId) throw codedError("project_source_unavailable");
-    sources.push({ handle: source.handle, sourceId: durableSourceId });
+async function rememberProjectlessPromotionSources(projectId) {
+  const sources = [...state.projectlessDirectorySources.entries()].map(([sourceId, source]) => ({ handle: source.handle, sourceId }));
+  for (const image of state.images) {
+    const access = state.sourceAccess.get(image.id);
+    if (access?.fileHandle && access.sourceKind === "browser-files") {
+      sources.push({ handle: access.fileHandle, imageId: image.id, sourceId: access.sourceId, clientKey: access.clientKey, relativePath: access.relativePath });
+    }
   }
   await rememberProjectSources(projectId, sources);
 }

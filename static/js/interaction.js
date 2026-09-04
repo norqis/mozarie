@@ -366,7 +366,8 @@ async function rememberImportedSource(result, session) {
     if (imported.clientKey !== result.clientKey || !result.entry.fileHandle || !imported.imageId) continue;
     state.sourceAccess.set(imported.imageId, {
       fileHandle: result.entry.fileHandle, parentHandle: result.entry.parentHandle || null,
-      name: result.entry.file.name, size: result.entry.file.size, lastModified: result.entry.file.lastModified, sourceKind: session.sourceKind,
+      name: result.entry.file.name, size: result.entry.file.size, lastModified: result.entry.file.lastModified,
+      sourceId: result.sourceId, clientKey: result.clientKey, relativePath: result.entry.relativePath, sourceKind: session.sourceKind,
     });
     if (session.sourceKind === "browser-directory") {
       const source = state.projectlessDirectorySources.get(result.sourceId);
