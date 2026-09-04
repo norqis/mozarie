@@ -97,6 +97,7 @@ function startFixtureServer() {
   let holdSaveRender = false;
   const pendingSaveRenders = [];
   const catalogRemoveRequests = [];
+  const workspaceFlagRequests = [];
   const folderRequests = [];
   const initialCatalog = [
     { id: "sample", relativePath: "sample.png", sourceKind: "filesystem", sourcePath: "G:\\画像 フォルダー\\sample image.png", width: 100, height: 80, candidateCount: 0, enabledCandidateCount: 0, reviewed: false, hidden: false },
@@ -300,6 +301,21 @@ function startFixtureServer() {
       response.end(JSON.stringify({ canUndo: false, canRedo: false, changedImageIds: [] }));
       return;
     }
+    if (requestPath === "/api/workspace/images" && request.method === "POST") {
+      let body = ""; for await (const chunk of request) body += chunk;
+      const payload = JSON.parse(body);
+      workspaceFlagRequests.push(payload);
+      const selected = new Set(payload.imageIds || []);
+      const flags = {};
+      for (const image of catalog) {
+        if (!selected.has(image.id)) continue;
+        if (typeof payload.hidden === "boolean") image.hidden = payload.hidden;
+        if (typeof payload.reviewed === "boolean") image.reviewed = payload.reviewed;
+        flags[image.id] = { hidden: Boolean(image.hidden), reviewed: Boolean(image.reviewed) };
+      }
+      response.writeHead(200, { "Content-Type": "application/json" }); response.end(JSON.stringify({ flags }));
+      return;
+    }
     if (requestPath.startsWith("/api/workspace/image/") && request.method === "POST") {
       let body = ""; for await (const chunk of request) body += chunk;
       const flags = JSON.parse(body);
@@ -458,7 +474,7 @@ function startFixtureServer() {
     server.listen(0, "127.0.0.1", () => {
       server.off("error", reject);
       const { port } = server.address();
-      resolve({ server, url: `http://127.0.0.1:${port}`, detectRequests, applyRequests, saveRequests, catalogRemoveRequests, folderRequests, settingsRequests, settingsActions, settingsStatusRequests, updateRequests, modelPickerRequests, modelDownloadRequests, modelDownloadJobs: () => modelDownloadJobs, modelDownloadPolls: () => modelDownloadPolls, cancelRequests: () => cancelRequests, holdDetection: (value) => { holdDetection = value; }, holdSaveRender: (value) => { holdSaveRender = value; }, releaseSaveRenders: () => { holdSaveRender = false; pendingSaveRenders.splice(0).forEach((resume) => resume()); }, failCancel: (value) => { cancelShouldFail = value; }, failNextSettingsSave: () => { failNextSettingsSave = true; }, failModelDownloadStatus: (value) => { failModelDownloadStatus = value; }, resetModelDownload: () => { modelDownloadJob = { state: "idle", paths: {} }; }, resetScenario: () => { catalog = structuredClone(initialCatalog); saveTokens.clear(); saveRequests.length = 0; catalogRemoveRequests.length = 0; folderRequests.length = 0; currentJob = { kind: "idle", state: "idle" }; }, setCatalog: (images) => { catalog = structuredClone(images); }, resetJob: () => { currentJob = { kind: "idle", state: "idle" }; }, finishCancel: () => { currentJob = { ...currentJob, state: "cancelled", current: "" }; }, finishApply: () => { currentJob = { ...currentJob, state: "complete", completed: currentJob.total, current: "", completedImageIds: currentJob.imageIds }; }, setUpdateAvailable: (value) => { updateAvailable = value; }, deferFullSettings: () => { deferFullSettings = true; }, releaseNextFullSettings: () => { pendingFullSettings.shift()?.(); }, releaseFullSettings: () => { deferFullSettings = false; pendingFullSettings.splice(0).forEach((reply) => reply()); }, deferUpdateStatus: () => { deferUpdateStatus = true; }, releaseUpdateStatus: () => { deferUpdateStatus = false; pendingUpdateStatus.splice(0).forEach((reply) => reply()); } });
+      resolve({ server, url: `http://127.0.0.1:${port}`, detectRequests, applyRequests, saveRequests, catalogRemoveRequests, workspaceFlagRequests, folderRequests, settingsRequests, settingsActions, settingsStatusRequests, updateRequests, modelPickerRequests, modelDownloadRequests, modelDownloadJobs: () => modelDownloadJobs, modelDownloadPolls: () => modelDownloadPolls, cancelRequests: () => cancelRequests, holdDetection: (value) => { holdDetection = value; }, holdSaveRender: (value) => { holdSaveRender = value; }, releaseSaveRenders: () => { holdSaveRender = false; pendingSaveRenders.splice(0).forEach((resume) => resume()); }, failCancel: (value) => { cancelShouldFail = value; }, failNextSettingsSave: () => { failNextSettingsSave = true; }, failModelDownloadStatus: (value) => { failModelDownloadStatus = value; }, resetModelDownload: () => { modelDownloadJob = { state: "idle", paths: {} }; }, resetScenario: () => { catalog = structuredClone(initialCatalog); saveTokens.clear(); saveRequests.length = 0; catalogRemoveRequests.length = 0; workspaceFlagRequests.length = 0; folderRequests.length = 0; currentJob = { kind: "idle", state: "idle" }; }, catalogSnapshot: () => structuredClone(catalog), setCatalog: (images) => { catalog = structuredClone(images); }, resetJob: () => { currentJob = { kind: "idle", state: "idle" }; }, finishCancel: () => { currentJob = { ...currentJob, state: "cancelled", current: "" }; }, finishApply: () => { currentJob = { ...currentJob, state: "complete", completed: currentJob.total, current: "", completedImageIds: currentJob.imageIds }; }, setUpdateAvailable: (value) => { updateAvailable = value; }, deferFullSettings: () => { deferFullSettings = true; }, releaseNextFullSettings: () => { pendingFullSettings.shift()?.(); }, releaseFullSettings: () => { deferFullSettings = false; pendingFullSettings.splice(0).forEach((reply) => reply()); }, deferUpdateStatus: () => { deferUpdateStatus = true; }, releaseUpdateStatus: () => { deferUpdateStatus = false; pendingUpdateStatus.splice(0).forEach((reply) => reply()); } });
     });
   });
 }
@@ -1421,7 +1437,7 @@ async function selectFixtureImage(page, pageErrors, consoleErrors) {
 // not by page-side events that production code could synthesize.  Every
 // manifest assertion id must be present at the
 // end of the sweep.
-async function runExhaustiveAddedScenarios(page, fixtureUrl, resetScenario) {
+async function runExhaustiveAddedScenarios(page, fixtureUrl, resetScenario, workspaceFlagRequests, catalogSnapshot) {
   const setupFixture = async () => {
     await page.goto(fixtureUrl, { waitUntil: "networkidle" });
     await page.locator('.gallery-item[data-id="sample"]').click();
@@ -1495,7 +1511,36 @@ async function runExhaustiveAddedScenarios(page, fixtureUrl, resetScenario) {
     else if (action === "show") await page.waitForFunction(() => !isHidden(state.images.find((image) => image.id === "sample")));
     else if (action === "clear") await page.waitForFunction(() => !state.maskStatus.has("sample") && state.images.find((image) => image.id === "sample")?.candidateCount === 0);
     else if (action === "reviewed") await page.waitForFunction(() => isReviewed(state.images.find((image) => image.id === "sample")));
-    else await page.waitForFunction(() => !isReviewed(state.images.find((image) => image.id === "sample")));
+    else if (action === "unreviewed") await page.waitForFunction(() => !isReviewed(state.images.find((image) => image.id === "sample")));
+
+    if (["hide", "show", "reviewed", "unreviewed"].includes(action)) {
+      const expectedFlags = action === "hide" ? { hidden: true, reviewed: false }
+        : action === "show" ? { hidden: false, reviewed: false }
+          : action === "reviewed" ? { hidden: false, reviewed: true }
+            : { hidden: false, reviewed: false };
+      const expectedPayload = action === "hide" ? { imageIds: ["sample"], hidden: true }
+        : action === "show" ? { imageIds: ["sample"], hidden: false }
+          : action === "reviewed" ? { imageIds: ["sample"], reviewed: true }
+            : { imageIds: ["sample"], reviewed: false };
+      assert.deepEqual(workspaceFlagRequests, [expectedPayload], `${action} sends its exact bulk workspace flag payload`);
+      const persisted = catalogSnapshot().find((image) => image.id === "sample");
+      assert.deepEqual({ hidden: persisted.hidden, reviewed: persisted.reviewed }, expectedFlags, `${action} updates the persisted fixture catalog flags`);
+      assert.deepEqual(await page.evaluate(() => {
+        const image = state.images.find((item) => item.id === "sample");
+        const path = reviewPath(image);
+        return {
+          hidden: image.hidden,
+          reviewed: image.reviewed,
+          hiddenPath: state.hiddenPaths.has(path),
+          reviewedPath: state.reviewedPaths.has(path),
+        };
+      }), {
+        hidden: expectedFlags.hidden,
+        reviewed: expectedFlags.reviewed,
+        hiddenPath: expectedFlags.hidden,
+        reviewedPath: expectedFlags.reviewed,
+      }, `${action} keeps browser image flags and path indexes synchronized`);
+    }
   }
 
   await setupFixture();
@@ -2167,7 +2212,7 @@ async function main() {
   let server;
   let browser;
   let fixtureUrl;
-  let detectRequests, applyRequests, saveRequests, catalogRemoveRequests, folderRequests, modelPickerRequests, modelDownloadRequests, modelDownloadJobs, modelDownloadPolls, resetScenario, setCatalog, resetJob, finishCancel, finishApply, setUpdateAvailable;
+  let detectRequests, applyRequests, saveRequests, catalogRemoveRequests, workspaceFlagRequests, catalogSnapshot, folderRequests, modelPickerRequests, modelDownloadRequests, modelDownloadJobs, modelDownloadPolls, resetScenario, setCatalog, resetJob, finishCancel, finishApply, setUpdateAvailable;
   let settingsRequests;
   let settingsActions;
   let settingsStatusRequests;
@@ -2177,7 +2222,7 @@ async function main() {
   let releaseNextFullSettings, releaseFullSettings;
   let deferUpdateStatus, releaseUpdateStatus;
   try {
-    ({ server, url: fixtureUrl, detectRequests, applyRequests, saveRequests, catalogRemoveRequests, folderRequests, settingsRequests, settingsActions, settingsStatusRequests, updateRequests, modelPickerRequests, modelDownloadRequests, modelDownloadJobs, modelDownloadPolls, cancelRequests, holdDetection, holdSaveRender, releaseSaveRenders, failCancel, failNextSettingsSave, failModelDownloadStatus, resetModelDownload, resetScenario, setCatalog, resetJob, finishCancel, finishApply, setUpdateAvailable, deferFullSettings, releaseNextFullSettings, releaseFullSettings, deferUpdateStatus, releaseUpdateStatus } = await startFixtureServer());
+    ({ server, url: fixtureUrl, detectRequests, applyRequests, saveRequests, catalogRemoveRequests, workspaceFlagRequests, folderRequests, settingsRequests, settingsActions, settingsStatusRequests, updateRequests, modelPickerRequests, modelDownloadRequests, modelDownloadJobs, modelDownloadPolls, cancelRequests, holdDetection, holdSaveRender, releaseSaveRenders, failCancel, failNextSettingsSave, failModelDownloadStatus, resetModelDownload, resetScenario, catalogSnapshot, setCatalog, resetJob, finishCancel, finishApply, setUpdateAvailable, deferFullSettings, releaseNextFullSettings, releaseFullSettings, deferUpdateStatus, releaseUpdateStatus } = await startFixtureServer());
     browser = await chromium.launch();
     // A real unsupported-browser bootstrap must stop before any API request or
     // editor binding. This covers the user-visible File System Access contract.
@@ -4016,7 +4061,7 @@ async function main() {
       };
     });
     try {
-      await runExhaustiveAddedScenarios(exhaustivePage, fixtureUrl, resetScenario);
+      await runExhaustiveAddedScenarios(exhaustivePage, fixtureUrl, resetScenario, workspaceFlagRequests, catalogSnapshot);
     } finally {
       await stopCoveredPage(exhaustivePage, true);
     }
