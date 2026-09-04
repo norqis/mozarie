@@ -327,7 +327,7 @@ async function deleteProject(projectId) {
       $("#projectList").hidden = empty;
       $("#projectListEmpty").hidden = !empty;
       renderProjectListSelection();
-      if (empty) $("#projectListDialog").close();
+      if (empty) focusElement($("#projectListClose"));
       else if (focusProjectId) {
         const nextIndex = projectListOptionElements().findIndex((option) => option.dataset.projectId === focusProjectId);
         if (nextIndex >= 0) focusProjectListOption(nextIndex);
