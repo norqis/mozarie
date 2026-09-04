@@ -79,6 +79,8 @@
   "editor.none": "画像未選択",
   "editor.currentImage": "モザイク処理",
   "workspace.collapseGallery": "画像一覧を折り畳む",
+  "workspace.gallerySplitter": "画像一覧の幅",
+  "workspace.inspectorSplitter": "検出候補の幅",
   "workspace.expandGallery": "画像一覧を開く",
   "workspace.collapseInspector": "検出候補を折り畳む",
   "workspace.expandInspector": "検出候補を開く",

@@ -558,16 +558,20 @@ function bindEvents() {
     if (Number.isFinite(stored) && stored >= paneMinimums[side]) paneValues[side] = stored;
   }
   const paneWidth = (side) => state[side === "gallery" ? "galleryCollapsed" : "inspectorCollapsed"] ? 40 : paneValues[side];
+  const paneMaximum = (side) => {
+    const other = side === "gallery" ? paneWidth("inspector") : paneWidth("gallery");
+    return Math.max(paneMinimums[side], Math.floor(grid.getBoundingClientRect().width - other - 16 - 320));
+  };
   const applyPaneWidths = () => {
     grid.style.setProperty?.("--gallery-width", `${paneValues.gallery}px`);
     grid.style.setProperty?.("--inspector-width", `${paneValues.inspector}px`);
     $("#gallerySplitter").setAttribute("aria-valuenow", String(Math.round(paneValues.gallery)));
     $("#candidateSplitter").setAttribute("aria-valuenow", String(Math.round(paneValues.inspector)));
+    $("#gallerySplitter").setAttribute("aria-valuemax", String(paneMaximum("gallery")));
+    $("#candidateSplitter").setAttribute("aria-valuemax", String(paneMaximum("inspector")));
   };
   const updatePaneWidth = (side, requested, persist = true) => {
-    const rect = grid.getBoundingClientRect();
-    const other = side === "gallery" ? paneWidth("inspector") : paneWidth("gallery");
-    const maximum = Math.max(paneMinimums[side], Math.floor(rect.width - other - 16 - 320));
+    const maximum = paneMaximum(side);
     paneValues[side] = Math.min(maximum, Math.max(paneMinimums[side], Math.round(requested)));
     applyPaneWidths();
     if (persist) paneStore?.setItem(paneStorage[side], String(paneValues[side]));
@@ -613,7 +617,10 @@ function bindEvents() {
   };
   bindPaneSplitter($("#gallerySplitter"), "gallery");
   bindPaneSplitter($("#candidateSplitter"), "inspector");
-  if (typeof ResizeObserver === "function") new ResizeObserver(() => requestAnimationFrame(() => renderGallery())).observe(grid);
+  if (typeof ResizeObserver === "function") new ResizeObserver(() => {
+    for (const side of Object.keys(paneValues)) paneValues[side] = Math.min(paneValues[side], paneMaximum(side));
+    applyPaneWidths(); requestAnimationFrame(() => { resizeRenderCanvas(); renderGallery(); });
+  }).observe(grid);
   const setPaneCollapsed = (side, collapsed) => {
     const isGallery = side === "gallery";
     const content = $(isGallery ? "#galleryPaneContent" : "#candidatePaneContent");

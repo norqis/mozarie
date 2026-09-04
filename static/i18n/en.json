@@ -234,6 +234,8 @@
   "status.saved": "Saved.",
   "status.saving": "Saving...",
   "workspace.collapseGallery": "Collapse image list",
+  "workspace.gallerySplitter": "Image list width",
+  "workspace.inspectorSplitter": "Detected candidates width",
   "workspace.collapseInspector": "Collapse mosaic processing",
   "workspace.expandGallery": "Expand image list",
   "workspace.expandInspector": "Expand mosaic processing",
