@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import io
+import sqlite3
 import shutil
 import tempfile
 import unittest
@@ -149,3 +150,101 @@ class SourceIdentityRegressionTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "image identity already belongs"):
             store.reconcile_images(second["id"], [foreign], source_id=second_source)
         self.assertEqual(store.project_images(second["id"]), [])
+
+    def test_browser_source_rejections_never_create_or_rebind_a_source(self) -> None:
+        store = WorkspaceStore(self.root / "store")
+        first = store.create_project("first")
+        second = store.create_project("second")
+        source_id = store.resolve_browser_source(
+            first["id"], kind="browser-files", display_name="files", source_identity="handle", create=True,
+        )
+        with self.assertRaisesRegex(ValueError, "kind does not match"):
+            store.resolve_browser_source(
+                first["id"], kind="browser-directory", display_name="directory", source_identity="handle", create=True,
+            )
+        with self.assertRaisesRegex(ValueError, "does not belong"):
+            store.resolve_browser_source(
+                second["id"], kind="browser-files", display_name="files", source_identity=source_id, create=True,
+            )
+        with self.assertRaisesRegex(ValueError, "missing"):
+            store.resolve_browser_source(
+                second["id"], kind="browser-files", display_name="files", source_identity="missing", create=False,
+            )
+        with self.assertRaisesRegex(ValueError, "project is missing"):
+            store.resolve_browser_source(
+                "missing-project", kind="browser-files", display_name="files", source_identity="new", create=True,
+            )
+        self.assertEqual(store.project_sources(first["id"])[0]["id"], source_id)
+        self.assertEqual(store.project_sources(second["id"]), [])
+
+    def test_bulk_flags_are_atomic_durable_and_undo_as_one_operation(self) -> None:
+        state = self.studio()
+        project = state.create_project("flags")
+        first = self.import_browser(state, name="first.png", identity="handle")
+        second = self.import_browser(state, name="second.png", identity="handle")
+        for payload in ({}, {"imageIds": "not-a-list"}, {"imageIds": [], "hidden": True}, {"imageIds": [first], "hidden": 1}, {"imageIds": ["missing"], "reviewed": True}):
+            with self.subTest(payload=payload), self.assertRaises(ClientError):
+                state.set_image_flags_bulk(payload)
+        self.assertEqual(
+            state.set_image_flags_bulk({"imageIds": [first, first, second], "hidden": True, "reviewed": True}),
+            {first: {"hidden": True, "reviewed": True}, second: {"hidden": True, "reviewed": True}},
+        )
+        self.assertTrue(all(record.hidden and record.reviewed for record in state.images.values()))
+        self.assertEqual(state.workspace_store.image_state(first), (True, True))
+        self.assertEqual(state.workspace_store.image_state(second), (True, True))
+        restored = state.restore_project_history(first, "undo")
+        self.assertEqual(set(restored["changedImageIds"]), {first, second})
+        self.assertTrue(all(not record.hidden and not record.reviewed for record in state.images.values()))
+        self.assertEqual(state.workspace_store.image_state(first), (False, False))
+        self.assertEqual(state.workspace_store.image_state(second), (False, False))
+
+    def test_durable_manual_delete_clear_and_invalid_rename_leave_no_hidden_state(self) -> None:
+        state = self.studio()
+        project = state.create_project("working")
+        image_id = self.import_browser(state, name="one.png", identity="handle")
+        with self.assertRaises(ClientError) as invalid_name:
+            state.save_current_as_project("   ")
+        self.assertEqual(invalid_name.exception.error_code, "project_name_invalid")
+        payload = {"add": "", "exclusion": "", "exclusionErase": "", "removedCandidateIds": [], "candidateRevision": 0, "hasEffectiveMask": False}
+        state.save_manual_workspace(image_id, payload)
+        self.assertIsNotNone(state.manual_workspace(image_id))
+        state.delete_manual_workspace(image_id)
+        self.assertIsNone(state.manual_workspace(image_id))
+        state.clear_catalog()
+        self.assertEqual(state.images, {})
+        self.assertEqual(state.workspace_store.project_images(project["id"]), [])
+
+    def test_completed_project_rejects_unknown_browser_source_without_db_writes(self) -> None:
+        state = self.studio()
+        project = state.create_project("completed")
+        image_id = self.import_browser(state, name="known.png", identity="known")
+        state.complete_project()
+        state.open_project(project["id"])
+        with self.assertRaises(ClientError) as rejected:
+            self.import_browser(state, name="new.png", identity="unknown")
+        self.assertEqual(rejected.exception.error_code, "project_read_only")
+        self.assertEqual([item["id"] for item in state.workspace_store.project_images(project["id"])], [image_id])
+        self.assertEqual(state.workspace_store.project_sources(project["id"])[0]["identity"], "browser:known")
+
+    def test_durable_import_hydration_failure_rolls_back_db_memory_and_staging(self) -> None:
+        state = self.studio()
+        project = state.create_project("rollback")
+        staged = self.stage("failure.png")
+        with patch.object(state.workspace_store, "hydrate_candidates", side_effect=ValueError("corrupt candidate")):
+            with self.assertRaisesRegex(ValueError, "corrupt candidate"):
+                state._import_images([{
+                    "clientKey": "failure", "name": "failure.png", "relativePath": "failure.png", "stagedPath": staged,
+                    "mtimeNs": 10, "sizeBytes": len(self.png()),
+                }], source_identity="new-handle", source_kind="browser-files")
+        self.assertEqual(state.images, {})
+        self.assertEqual(state.order, [])
+        self.assertEqual(state.candidates, {})
+        self.assertEqual(state.candidate_revisions, {})
+        self.assertEqual(state.workspace_store.project_images(project["id"]), [])
+        self.assertEqual(state.workspace_store.project_sources(project["id"]), [])
+        self.assertTrue(state.session_dir is not None)
+        self.assertFalse((state.session_dir / "failure.png").exists())
+        with sqlite3.connect(state.workspace_store.path) as db:
+            self.assertEqual(db.execute("SELECT COUNT(*) FROM candidates").fetchone()[0], 0)
+            self.assertEqual(db.execute("SELECT COUNT(*) FROM manual_edits").fetchone()[0], 0)
+            self.assertEqual(db.execute("SELECT COUNT(*) FROM history_entries").fetchone()[0], 0)

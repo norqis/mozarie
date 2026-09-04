@@ -1815,6 +1815,10 @@ async function runControlLedger(page, fixtureUrl, contracts, dynamicContracts, f
   await click("pickFolder");
   await input("folderPath", "G:\\fixture");
   await click("pickImages"); await click("pickFolder"); await click("pickFolderFiles");
+  // The browser-directory import is asynchronous.  Waiting for it makes the
+  // following native-folder submit verify the real POST instead of racing the
+  // import guard.
+  await page.waitForFunction(() => !state.importing);
   await click("pickFolder"); await click("loadFolderButton"); await page.waitForFunction(() => state.images.some((image) => image.id === "sample")); await closeDialogs();
   // Folder loading replaces the thumbnail-backed bitmap; re-enter the same
   // normal-size editor fixture before pointer-only controls continue.
