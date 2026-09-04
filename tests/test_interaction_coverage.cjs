@@ -96,7 +96,7 @@ const context = {
   },
   beginCatalogEpoch: () => ++state.catalogEpoch, isCurrentCatalogEpoch: (epoch) => epoch === state.catalogEpoch,
   updateActionButtons: () => calls.push(["actions"]), releaseCandidateBundles: () => {}, resetHistoryToCurrentManualMask: () => {}, refreshMaskStatus: () => {},
-  markImagesUnreviewed: () => {}, renderCandidates: () => {}, renderCatalogViews: () => calls.push(["catalog"]), updateNavigationControls: () => {}, clearStatus: () => {},
+  markImagesUnreviewed: () => {}, renderCandidates: () => {}, renderCatalogViews: () => calls.push(["catalog"]), preserveCatalogScroll: (renderCatalogs) => renderCatalogs(), updateNavigationControls: () => {}, clearStatus: () => {},
   flushAllWorkspaceMutations: async () => {}, clearStoredCatalogState: () => {}, resetCatalog: (next) => { images = next; state.images = next; },
   reviewPath: (image) => image.id, isReviewed: (image) => state.reviewedPaths.has(image.id), isHidden: (image) => Boolean(image.hidden),
   selectImage: async (id) => { state.currentId = id; state.currentImage = state.images.find((image) => image.id === id) || null; },
@@ -179,7 +179,11 @@ const tolerancePanelCss = styleSource.match(/\.bucket-tolerance-panel\s*\{([^}]*
   state.reviewedPaths.add("one"); test.clearReviewForRemovedImage(images[0]); await test.removeImageFromCatalog("one");
 
   images = [{ id: "one" }, { id: "two" }]; state.images = images; state.selectedImageIds = new Set(["one", "two"]);
+  const actionRequests = calls.filter(([name]) => name === "api").length;
   for (const action of ["hide", "show", "reviewed", "unreviewed", "detect", "clear", "remove"]) await test.runSelectionAction(action);
+  const bulkRequests = calls.filter(([name]) => name === "api").slice(actionRequests);
+  assert.equal(bulkRequests.filter(([, url]) => url === "/api/workspace/images").length, 4, "each bulk flag operation makes one request");
+  assert.equal(bulkRequests.filter(([, url]) => url === "/api/catalog/remove").length, 1, "bulk removal makes one request");
   assert.deepEqual(test.droppedFile(file("a.png")).relativePath, "a.png");
   const directory = { name: "folder", kind: "directory", async *values() { yield { name: "a.png", kind: "file" }; } };
   assert.equal((await test.directFilesFromDrop({ items: [{ kind: "file", getAsFileSystemHandle: async () => directory }, { kind: "text" }] })).handleEntries.length, 1);
