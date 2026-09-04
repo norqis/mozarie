@@ -274,38 +274,11 @@ class WorkspaceStore:
     @staticmethod
     def _candidate_row(row: sqlite3.Row) -> dict[str, Any]:
         """Hydrate candidate metadata without reading the mask BLOB."""
-        value = row["expand_px"] if "expand_px" in row.keys() else None
-        if value is None and "mask_png" in row.keys():
-            # Direct callers may inspect a pre-v11 row, but normal catalogue
-            # hydration selects only the metadata column above.
-            raw = row["mask_png"]
-            if not isinstance(raw, bytes):
-                raise ValueError("workspace candidate mask is not a PNG")
-            try:
-                with Image.open(io.BytesIO(raw)) as image:
-                    text = image.text.get("mozarie_expand_px", "0")
-                value = int(text)
-                if str(value) != text:
-                    raise ValueError("noncanonical padding")
-            except (OSError, ValueError, TypeError) as exc:
-                raise ValueError("workspace candidate expand pixels are invalid") from exc
-        if value is None:
-            value = 0
+        value = row["expand_px"]
         if isinstance(value, bool) or not isinstance(value, int) or value < 0:
             raise ValueError("workspace candidate expand pixels are invalid")
         hydrated = dict(row); hydrated["expand_px"] = value
         return hydrated
-
-    def catalog_for_root(self, root: Path) -> str:
-        # A root is a project hint only. Several projects may deliberately use
-        # the same source folder, so it is never used as a unique identity.
-        identity = str(root.resolve())
-        now = time.time_ns()
-        with self._lock, self._connect() as db:
-            catalog_id = uuid.uuid4().hex
-            db.execute("INSERT INTO catalogs(catalog_id,source_root,created_at,updated_at) VALUES(?,?,?,?)", (catalog_id, identity, now, now))
-            self._ensure_project_source_db(db, catalog_id, "native-folder", root.name or str(root), identity)
-            return catalog_id
 
     @staticmethod
     def _ensure_project_source_db(db: sqlite3.Connection, catalog_id: str, kind: str, display_name: str, identity: str) -> str:
@@ -324,27 +297,6 @@ class WorkspaceStore:
             if db.execute("SELECT 1 FROM catalogs WHERE catalog_id=?", (catalog_id,)).fetchone() is None:
                 raise ValueError("project is missing")
             return self._ensure_project_source_db(db, catalog_id, kind, display_name, identity)
-
-    def ensure_catalog(self, catalog_id: str | None = None) -> str:
-        """Create (or validate) an opaque browser catalogue identity."""
-        if catalog_id is not None and (len(catalog_id) != 32 or any(char not in "0123456789abcdef" for char in catalog_id)):
-            raise ValueError("invalid catalog id")
-        catalog_id = catalog_id or uuid.uuid4().hex
-        now = time.time_ns()
-        with self._lock, self._connect() as db:
-            db.execute("INSERT OR IGNORE INTO catalogs(catalog_id,created_at,updated_at) VALUES(?,?,?)", (catalog_id, now, now))
-            return catalog_id
-
-    def ensure_provisional_catalog(self) -> str:
-        catalog_id = uuid.uuid4().hex
-        now = time.time_ns()
-        with self._lock, self._connect() as db:
-            db.execute("INSERT INTO catalogs(catalog_id,created_at,updated_at) VALUES(?,?,?)", (catalog_id, now, now))
-        return catalog_id
-
-    def finalize_catalog(self, catalog_id: str) -> None:
-        with self._lock, self._connect() as db:
-            db.execute("UPDATE catalogs SET updated_at=? WHERE catalog_id=?", (time.time_ns(), catalog_id))
 
     def catalog_exists(self, catalog_id: str) -> bool:
         with self._connect() as db:
@@ -450,17 +402,6 @@ class WorkspaceStore:
     def set_project_source_root(self, catalog_id: str, source_root: str | None) -> None:
         with self._lock, self._connect() as db:
             db.execute("UPDATE catalogs SET source_root=?,updated_at=? WHERE catalog_id=?", (source_root, time.time_ns(), catalog_id))
-
-    def delete_catalog(self, catalog_id: str) -> None:
-        """Remove an unused provisional browser catalogue and its cascaded rows."""
-        with self._lock, self._connect() as db:
-            db.execute("BEGIN IMMEDIATE")
-            try:
-                db.execute("DELETE FROM catalogs WHERE catalog_id=?", (catalog_id,))
-                db.execute("COMMIT")
-            except Exception:
-                db.execute("ROLLBACK")
-                raise
 
     def delete_project(self, catalog_id: str) -> None:
         """Permanently remove one explicit project and all of its workspace rows."""
@@ -1310,9 +1251,8 @@ class WorkspaceStore:
         if not isinstance(removed, list) or any(not isinstance(item, str) for item in removed):
             raise ValueError("workspace removed candidates are invalid")
         current_revision = int(image["candidate_revision"]) if image else int(row["candidate_revision"])
-        # Old rows from interrupted/browser tabs are read safely too.  The next
-        # save writes this normalized representation back in one transaction.
-        removed = sorted(set(removed) & valid_ids)
+        if set(removed) - valid_ids:
+            raise ValueError("workspace removed candidates are invalid")
         try:
             history = json.loads(str(row["history_json"]))
         except (TypeError, ValueError, json.JSONDecodeError) as exc:

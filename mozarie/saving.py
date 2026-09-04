@@ -27,16 +27,6 @@ from .masks import compose_masks, expand_mask
 _SAVE_RENDER_MEMORY_BUDGET = 512 * 1024 * 1024
 
 class SavingMixin:
-    # StudioState resolves these to CatalogMixin's guarded implementations.
-    # Keeping no-op mixin fallbacks makes the saving primitives independently
-    # reusable in focused tests and command-line integrations.
-    def _assert_catalog_mutable(self) -> None:
-        return None
-
-    def _assert_image_editable(self, image_id: str) -> None:
-        del image_id
-        return None
-
     def start_apply(
         self,
         image_ids: list[str],

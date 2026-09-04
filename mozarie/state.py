@@ -89,7 +89,6 @@ class StudioState(CatalogMixin, SavingMixin, DetectionMixin, JobsMixin):
         self.catalog_id: str | None = None
         self.project_read_only = False
         self.source_mismatches: dict[str, bool] = {}
-        self.browser_catalog_provisional = False
         self.settings = self.settings_store.load()
         self._active_detection_default_padding = int(self.settings["detection"]["default_candidate_padding_px"])
         self.lock = threading.RLock()

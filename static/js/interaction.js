@@ -355,7 +355,6 @@ async function importFiles(files) {
         showProcessing({ kind: "import", state: "running", total: session.total, completed: session.completed, current: entry.relativePath });
         const data = await importSingleFile(entry, clientKey, session.catalogId, session.sourceId, session.sourceKind);
         if (!session.catalogId && data.catalogId) session.catalogId = data.catalogId;
-        session.provisional ||= data.provisional === true;
         const result = { entry, clientKey, data, sourceId: session.sourceId };
         // Keep source access for each committed upload, including a later
         // cancellation or an unrelated upload failure.
@@ -417,7 +416,7 @@ async function importSingleFile(entry, clientKey, catalogId = null, sourceId = n
 
 function beginImportSession() {
   if (isBusy() || state.importing) return null;
-  const session = { id: newClientKey(), epoch: beginCatalogEpoch(), paused: false, cancelled: false, completed: 0, total: 0, catalogId: null, provisional: false, sourceId: null, sourceKind: "browser-files" };
+  const session = { id: newClientKey(), epoch: beginCatalogEpoch(), paused: false, cancelled: false, completed: 0, total: 0, catalogId: null, sourceId: null, sourceKind: "browser-files" };
   state.importing = true; state.importSession = session;
   updateActionButtons();
   return session;

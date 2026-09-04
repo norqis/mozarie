@@ -178,38 +178,6 @@ class CatalogMixin:
         with self.import_lock:
             return self._set_root(raw_path)
 
-    def activate_browser_catalog(self, catalog_id: str | None = None) -> str:
-        with self.import_lock:
-            if catalog_id and not self.workspace_store.catalog_exists(catalog_id):
-                raise ClientError("保存済みのフォルダ状態が見つかりません。", "folder_not_found")
-            # A directory selection is a full reimport. Even when its handle
-            # maps to the active ID, discard current session files first so
-            # each uploaded relative path reconciles its durable record.
-            self.detach_catalog()
-            try:
-                self.catalog_id = self.workspace_store.ensure_catalog(catalog_id)
-                self.browser_catalog_provisional = False
-            except ValueError as exc: raise ClientError("カタログIDが正しくありません。", "input_invalid") from exc
-            return self.catalog_id
-
-    def finalize_browser_catalog(self) -> tuple[str | None, dict[str, str]]:
-        """Mark an explicit browser import as complete.
-
-        Browser projects are never matched from uploaded content.  A user
-        opens an existing project explicitly, so no source hash or manifest
-        fingerprint is needed here.
-        """
-        with self.import_lock:
-            with self.lock:
-                if not self.catalog_id or not self.browser_catalog_provisional:
-                    return self.catalog_id, {}
-                self._assert_catalog_mutable()
-                source_catalog = self.catalog_id
-            self.workspace_store.finalize_catalog(source_catalog)
-            with self.lock:
-                self.browser_catalog_provisional = False
-            return source_catalog, {}
-
     def _set_root(self, raw_path: str, project_id: str | None = None, *, defer_replace: bool = False) -> list[Any]:
         if not raw_path or not isinstance(raw_path, str):
             raise ClientError("Windowsフォルダを入力してください。", "input_invalid")
@@ -311,7 +279,6 @@ class CatalogMixin:
         completed = bool(catalog_id and (self.workspace_store.project(catalog_id) or {}).get("status") == "completed")
         if catalog_id is not None:
             self.workspace_store.set_project_source_root(catalog_id, str(root))
-        self.browser_catalog_provisional = False
         if defer_replace:
             return records
         # Adding another folder to an open project is additive.  Replace only
@@ -383,7 +350,6 @@ class CatalogMixin:
                         record.source_id = source_id
                         source_ids[record.image_id] = source_id
                 self.catalog_id = catalog_id
-                self.browser_catalog_provisional = False
                 for record in records:
                     revision = revisions[record.image_id]
                     snapshot = candidates[record.image_id]
@@ -672,20 +638,16 @@ class CatalogMixin:
                     self._clear_browser_save_tokens_unchecked()
                     self._invalidate_sam_cache()
                     catalog_id = self.catalog_id
-                    provisional_catalog = catalog_id if self.browser_catalog_provisional else None
                     self.catalog_id = None
                     self.source_mismatches = {}
                     self.source_roots = {}
-                    self.browser_catalog_provisional = False
                     self.catalog_generation += 1
                     session = self._detach_session_unchecked()
                     self._image_io_locks.clear()
                 self._clear_cache()
                 self._release_detached_session(session)
-                if provisional_catalog:
-                    self.workspace_store.delete_catalog(provisional_catalog)
         self.cleanup_expired_browser_save_tokens()
-        return None if provisional_catalog else catalog_id
+        return catalog_id
 
     def clear_catalog(self) -> None:
         """Explicit user clear: remove durable rows after detaching the view."""

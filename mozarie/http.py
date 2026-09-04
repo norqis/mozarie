@@ -368,7 +368,7 @@ class MosaicHandler(BaseHTTPRequestHandler):
                             _images, imported = STATE.import_image_file_for_api(staged_path, **import_args)
                         finally:
                             staged_path.unlink(missing_ok=True)
-                    self._json({"imported": imported, "catalogId": STATE.catalog_id, "provisional": STATE.browser_catalog_provisional})
+                    self._json({"imported": imported, "catalogId": STATE.catalog_id})
                 finally:
                     STATE.end_import_transfer()
                 return
@@ -402,20 +402,6 @@ class MosaicHandler(BaseHTTPRequestHandler):
                 if action not in {"undo", "redo"}:
                     raise ClientError("履歴の操作が正しくありません。", "input_invalid")
                 self._json(STATE.restore_project_history(image_id, action))
-            elif path == "/api/workspace/catalog":
-                if payload.get("provisional") is True:
-                    if payload.get("catalogId"):
-                        raise ClientError("仮カタログにIDは指定できません。", "input_invalid")
-                    STATE.detach_catalog()
-                    catalog_id = STATE.workspace_store.ensure_provisional_catalog()
-                    STATE.catalog_id = catalog_id
-                    STATE.browser_catalog_provisional = True
-                    self._json({"catalogId": catalog_id, "provisional": True})
-                else:
-                    self._json({"catalogId": STATE.activate_browser_catalog(payload.get("catalogId")), "provisional": False})
-            elif path == "/api/workspace/catalog/finalize":
-                catalog_id, image_ids = STATE.finalize_browser_catalog()
-                self._json({"catalogId": catalog_id, "imageIds": image_ids, "images": STATE.list_images(), "workspace": bool(catalog_id)})
             elif path == "/api/catalog/clear":
                 STATE.clear_catalog()
                 self._json({"images": []})

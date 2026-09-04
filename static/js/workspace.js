@@ -121,9 +121,8 @@ async function rememberOutputDirectoryHandle(handle) {
 }
 async function catalogForDirectoryHandle(handle) {
   if (state.project?.id) {
-    const activated = await api("/api/workspace/catalog", { method: "POST", body: JSON.stringify({ catalogId: state.project.id }) });
     state.pendingDirectorySourceId = await rememberProjectSource(state.project.id, handle);
-    return activated.catalogId || state.project.id;
+    return state.project.id;
   }
   // Importing is usable without a project.  Durable project creation is an
   // explicit "名前を付けて保存" action, never an import side effect.
