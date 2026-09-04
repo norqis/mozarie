@@ -95,6 +95,9 @@ function renderProjectCurrent() {
   $("#projectResume").disabled = !project;
   $("#projectReadOnlyNotice").hidden = !state.projectReadOnly;
   $("#projectSourceSelect").disabled = !project || state.projectReadOnly;
+  $("#projectCloseWorkspace").dataset.i18n = project ? "project.close" : "project.closeWork";
+  $("#projectCloseWorkspace").textContent = t($("#projectCloseWorkspace").dataset.i18n);
+  $("#projectCloseWorkspace").disabled = !project && state.images.length === 0;
 }
 function openProjectNameDialog(mode) {
   projectNameMode = mode; $("#projectNameInput").value = mode === "name" ? (state.project?.name || "") : "";

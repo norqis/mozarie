@@ -639,6 +639,7 @@
   "project.exportExclude": "除外範囲をまとめて保存",
   "project.complete": "プロジェクトを完了",
   "project.close": "プロジェクトを閉じる",
+  "project.closeWork": "作業を閉じる",
   "project.nameLabel": "プロジェクト名",
   "project.sort": "並び順",
   "project.sortUpdatedDesc": "更新日時: 新しい順",

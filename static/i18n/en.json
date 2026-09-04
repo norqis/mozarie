@@ -639,6 +639,7 @@
   "project.exportExclude": "Download all exclusion masks",
   "project.complete": "Complete project",
   "project.close": "Close project",
+  "project.closeWork": "Close work",
   "project.nameLabel": "Project name",
   "project.sort": "Sort",
   "project.sortUpdatedDesc": "Updated: newest first",
