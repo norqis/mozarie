@@ -582,27 +582,25 @@ class WorkspaceStore:
                 raise
 
     def clear_image_workspaces(self, revisions: dict[str, int], *, history_group: str | None = None) -> None:
-        """Clear each image atomically; a caller may bind them into one undo group."""
+        """Clear a selection in one durable transaction and one undo group."""
         if not revisions:
             return
-        for image_id, revision in revisions.items():
-            self._clear_image_workspace(image_id, revision, history_group=history_group)
-
-    def _clear_image_workspace(self, image_id: str, revision: int, *, history_group: str | None) -> None:
-        # A very large batch must not hold a write lock for every image.  Each
-        # image is independently durable and the group record makes any
-        # partial batch visible/recoverable rather than silently half-published.
         with self._lock, self._connect() as db:
             db.execute("BEGIN IMMEDIATE")
             try:
-                before = self._history_state_db(db, image_id)
-                # Keep immutable candidate PNGs for the undo journal.  A
-                # clear only makes the generation inactive; explicit image
-                # deletion still cascades all of it.
-                db.execute("UPDATE candidates SET deleted=1 WHERE image_id=?", (image_id,))
-                db.execute("DELETE FROM manual_edits WHERE image_id=?", (image_id,))
-                db.execute("UPDATE images SET candidate_revision=?,reviewed=0,updated_at=? WHERE image_id=?", (revision, time.time_ns(), image_id))
-                self._record_history_db(db, image_id, before, self._history_state_db(db, image_id), group_id=history_group)
+                group_id = history_group
+                if group_id is None and len(revisions) > 1:
+                    group_id = uuid.uuid4().hex
+                    db.execute("INSERT INTO history_groups(group_id,status,created_at) VALUES(?,?,?)", (group_id, "committed", time.time_ns()))
+                for image_id, revision in revisions.items():
+                    before = self._history_state_db(db, image_id)
+                    # Keep immutable candidate PNGs for the undo journal. A
+                    # clear only makes the generation inactive; explicit
+                    # image deletion still cascades all of it.
+                    db.execute("UPDATE candidates SET deleted=1 WHERE image_id=?", (image_id,))
+                    db.execute("DELETE FROM manual_edits WHERE image_id=?", (image_id,))
+                    db.execute("UPDATE images SET candidate_revision=?,reviewed=0,updated_at=? WHERE image_id=?", (revision, time.time_ns(), image_id))
+                    self._record_history_db(db, image_id, before, self._history_state_db(db, image_id), group_id=group_id)
                 db.execute("COMMIT")
             except Exception:
                 db.execute("ROLLBACK")
@@ -680,6 +678,8 @@ class WorkspaceStore:
                     candidate_revision: int | None = None,
                     clear_workspace: bool, delete_image: bool = False) -> None:
         """Commit one completed save before its in-memory review state is published."""
+        if not delete_image and mtime_ns is None and size_bytes is None and candidate_revision is None and not clear_workspace:
+            return
         with self._lock, self._connect() as db:
             db.execute("BEGIN IMMEDIATE")
             try:

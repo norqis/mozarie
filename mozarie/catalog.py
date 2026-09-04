@@ -600,13 +600,7 @@ class CatalogMixin:
             records = [self.images[image_id] for image_id in known if image_id in self.images]
             if clear_masks:
                 revisions = {image_id: self._candidate_revision(image_id) + 1 for image_id in known}
-                group_id = self.workspace_store.begin_history_group() if len(revisions) > 1 else None
-                try:
-                    self.workspace_store.clear_image_workspaces(revisions, history_group=group_id)
-                except Exception:
-                    if group_id: self.workspace_store.finish_history_group(group_id, failed=True)
-                    raise
-                if group_id: self.workspace_store.finish_history_group(group_id)
+                self.workspace_store.clear_image_workspaces(revisions)
                 for image_id in known:
                     self.candidates[image_id] = []; self.candidate_revisions[image_id] = revisions[image_id]
             # The comparison baseline changes only after the user confirms.
@@ -697,10 +691,13 @@ class CatalogMixin:
                         self.catalog_generation += 1
                     self._clear_browser_save_tokens_unchecked()
                 self._delete_mask_files(mask_paths, [self.cache_dir / record.image_id for record in records])
+                thumbnail_dir = self.cache_dir / "thumbnails"
+                removed_set = set(removed_ids)
+                thumbnail_paths = [path for path in thumbnail_dir.glob("*.jpg") if path.name.split("-", 1)[0] in removed_set]
                 for record in records:
                     shutil.rmtree(self.cache_dir / record.image_id, ignore_errors=True)
-                    for thumbnail_path in (self.cache_dir / "thumbnails").glob(f"{record.image_id}-*.jpg"):
-                        thumbnail_path.unlink(missing_ok=True)
+                for thumbnail_path in thumbnail_paths:
+                    thumbnail_path.unlink(missing_ok=True)
                 for path in session_paths:
                     path.unlink(missing_ok=True)
                     if session_imports_dir is not None:
@@ -905,13 +902,7 @@ class CatalogMixin:
                     for candidate in self.candidates.get(record.image_id, [])
                 ]
                 revisions = {record.image_id: self._candidate_revision(record.image_id) + 1 for record in records}
-                group_id = self.workspace_store.begin_history_group() if len(revisions) > 1 else None
-                try:
-                    self.workspace_store.clear_image_workspaces(revisions, history_group=group_id)
-                except Exception:
-                    if group_id: self.workspace_store.finish_history_group(group_id, failed=True)
-                    raise
-                if group_id: self.workspace_store.finish_history_group(group_id)
+                self.workspace_store.clear_image_workspaces(revisions)
                 for record in records:
                     self.candidates[record.image_id] = []
                     self._touch_candidates(record.image_id)
