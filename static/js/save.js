@@ -856,7 +856,6 @@ async function finishDetectionJob(job) {
   // cached bundle (including the currently pinned one) to survive that
   // revision boundary.
   for (const imageId of targetIds) releaseCandidateBundles(imageId);
-  markImagesUnreviewed(targetIds, false);
   state.handledDetectionStartedAt = job.startedAt;
   state.detectionTargetIds = [];
   state.detectCancelRequested = false;

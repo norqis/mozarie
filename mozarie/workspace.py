@@ -763,7 +763,8 @@ class WorkspaceStore:
         ).commit()
 
     def prepare_candidate_state(self, image_id: str, revision: int, candidates: list[Any], effective: bool, *, replace: bool,
-                                history_group: str | None = None, expected_revision: int | None = None) -> _PendingWorkspaceCommit:
+                                history_group: str | None = None, expected_revision: int | None = None,
+                                preserve_reviewed: bool = False) -> _PendingWorkspaceCommit:
         """Write a candidate revision but leave COMMIT to the state publisher."""
         with self._lock:
             db = self._connect()
@@ -774,7 +775,10 @@ class WorkspaceStore:
                     if current is None or int(current["candidate_revision"]) != expected_revision:
                         raise ValueError("workspace candidate revision changed")
                 before = self._history_state_db(db, image_id)
-                db.execute("UPDATE images SET candidate_revision=?, reviewed=0, updated_at=? WHERE image_id=?", (revision, time.time_ns(), image_id))
+                if preserve_reviewed:
+                    db.execute("UPDATE images SET candidate_revision=?, updated_at=? WHERE image_id=?", (revision, time.time_ns(), image_id))
+                else:
+                    db.execute("UPDATE images SET candidate_revision=?, reviewed=0, updated_at=? WHERE image_id=?", (revision, time.time_ns(), image_id))
                 if replace:
                     db.execute("UPDATE candidates SET deleted=1 WHERE image_id=?", (image_id,))
                     for candidate in candidates:

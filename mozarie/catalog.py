@@ -109,7 +109,7 @@ class CatalogMixin:
             effective = self._effective_mask_for_draft(image_id, candidates, draft)
             pending = self.workspace_store.prepare_candidate_state(
                 image_id, revision, candidates, effective, replace=replace, history_group=history_group,
-                expected_revision=expected_revision,
+                expected_revision=expected_revision, preserve_reviewed=True,
             )
         with self.lock:
             if self.catalog_generation != expected_catalog_generation or self._candidate_revision(image_id) != expected_revision:
