@@ -632,8 +632,10 @@ class MosaicHandler(BaseHTTPRequestHandler):
         content_length = int(raw_length)
         if content_length <= 0 or content_length > MAX_BODY_BYTES:
             raise ClientError("リクエストサイズが正しくありません。", "input_invalid")
-        staging_dir = STATE.cache_dir / "import-staging"
-        staging_dir.mkdir(parents=True, exist_ok=True)
+        # Browser bytes belong with their final session import, not the
+        # disposable render-cache volume.  This also keeps the upload and its
+        # inspected image on one filesystem.
+        staging_dir = STATE._ensure_session()
         temporary_path: Path | None = None
         remaining = content_length
         try:

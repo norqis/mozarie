@@ -6143,6 +6143,7 @@ class MozarieTests(unittest.TestCase):
             staged = handler._read_binary_body_to_file()
         try:
             self.assertEqual(staged.read_bytes(), body)
+            self.assertTrue(staged.is_relative_to(state.session_imports_dir))
             self.assertTrue(all(0 < size <= core_module.IO_CHUNK_BYTES for size in reader.requests))
         finally:
             staged.unlink(missing_ok=True)
@@ -6151,7 +6152,7 @@ class MozarieTests(unittest.TestCase):
         handler.rfile = RecordingReader(b"short")
         with patch.object(http_module, "STATE", state), self.assertRaisesRegex(ClientError, "最後まで"):
             handler._read_binary_body_to_file()
-        self.assertEqual(list((state.cache_dir / "import-staging").glob("*")), [])
+        self.assertEqual(list(state.session_imports_dir.glob("*.upload.tmp")), [])
 
     def test_response_disconnect_errors_are_swallowed(self):
         for error in http_module.CLIENT_DISCONNECT_ERRORS:
