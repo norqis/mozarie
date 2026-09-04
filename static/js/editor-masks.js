@@ -1018,7 +1018,7 @@ async function restoreProjectHistory(direction) {
       else if (state.currentId === imageId && isCurrentGeneration(generation) && !currentImageActionPending()) updateHistoryButtons();
     }, { lockCandidateControls: true });
   } catch (error) { showUserError(error); }
-  finally { state.projectHistoryBusy = false; updateHistoryButtons(); }
+  finally { state.projectHistoryBusy = false; updateActionButtons(); }
 }
 
 function restoreSnapshot(index) {

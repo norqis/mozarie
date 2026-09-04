@@ -343,7 +343,7 @@ function isBusy() {
   return ["running", "pausing", "paused"].includes(state.job?.state)
     || state.saving || state.saveStarting || state.detectionStarting || state.masksClearing
     || state.processing?.kind === "detect"
-    || state.catalogMutation || state.boundaryPending || state.fillPending;
+    || state.catalogMutation || state.boundaryPending || state.fillPending || state.projectHistoryBusy;
 }
 function beginCatalogEpoch() { state.catalogEpoch += 1; return state.catalogEpoch; }
 function isCurrentCatalogEpoch(epoch) { return state.catalogEpoch === epoch; }
