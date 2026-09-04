@@ -1099,20 +1099,22 @@ class CatalogMixin:
                     images = self.list_images() if include_images else []
                     return images, imported
                 except Exception:
-                    if self.catalog_id and durable_source_id:
-                        self.workspace_store.rollback_import(
-                            self.catalog_id,
-                            durable_source_id,
-                            durable_created_ids,
-                            delete_source=durable_source_created,
-                        )
-                    for destination in final_paths:
-                        destination.unlink(missing_ok=True)
-                    self.images = live_images
-                    self.order = live_order
-                    self.candidates = live_candidates
-                    self.candidate_revisions = live_revisions
-                    self.source_mismatches = live_mismatches
+                    try:
+                        if self.catalog_id and durable_source_id:
+                            self.workspace_store.rollback_import(
+                                self.catalog_id,
+                                durable_source_id,
+                                durable_created_ids,
+                                delete_source=durable_source_created,
+                            )
+                    finally:
+                        for destination in final_paths:
+                            destination.unlink(missing_ok=True)
+                        self.images = live_images
+                        self.order = live_order
+                        self.candidates = live_candidates
+                        self.candidate_revisions = live_revisions
+                        self.source_mismatches = live_mismatches
                     raise
         finally:
             for temporary, _name, _width, _height, _client_key, _mtime, _size in pending:

@@ -141,10 +141,14 @@ class SourceIdentityRegressionTests(unittest.TestCase):
         first_source = store.ensure_project_source(first["id"], kind="browser-files", display_name="first", identity="browser:first")
         second_source = store.ensure_project_source(second["id"], kind="browser-files", display_name="second", identity="browser:second")
         first_record = SimpleNamespace(relative_path="one.png", image_id="session-image", size_bytes=1, mtime_ns=1, width=8, height=8)
-        self.assertEqual(store.reconcile_images(first["id"], [first_record], source_id=first_source)["one.png"]["image_id"], "session-image")
+        created = store.reconcile_images(first["id"], [first_record], source_id=first_source)["one.png"]
+        self.assertEqual(created["image_id"], "session-image")
+        self.assertTrue(created["created"])
 
         same_path = SimpleNamespace(relative_path="one.png", image_id="new-client-id", size_bytes=1, mtime_ns=1, width=8, height=8)
-        self.assertEqual(store.reconcile_images(first["id"], [same_path], source_id=first_source)["one.png"]["image_id"], "session-image")
+        existing = store.reconcile_images(first["id"], [same_path], source_id=first_source)["one.png"]
+        self.assertEqual(existing["image_id"], "session-image")
+        self.assertFalse(existing["created"])
 
         foreign = SimpleNamespace(relative_path="two.png", image_id="session-image", size_bytes=1, mtime_ns=1, width=8, height=8)
         with self.assertRaisesRegex(ValueError, "image identity already belongs"):
@@ -155,9 +159,10 @@ class SourceIdentityRegressionTests(unittest.TestCase):
         store = WorkspaceStore(self.root / "store")
         first = store.create_project("first")
         second = store.create_project("second")
-        source_id = store.resolve_browser_source(
+        source_id, created = store.resolve_browser_source(
             first["id"], kind="browser-files", display_name="files", source_identity="handle", create=True,
         )
+        self.assertTrue(created)
         with self.assertRaisesRegex(ValueError, "kind does not match"):
             store.resolve_browser_source(
                 first["id"], kind="browser-directory", display_name="directory", source_identity="handle", create=True,
@@ -244,7 +249,60 @@ class SourceIdentityRegressionTests(unittest.TestCase):
         self.assertEqual(state.workspace_store.project_sources(project["id"]), [])
         self.assertTrue(state.session_dir is not None)
         self.assertFalse((state.session_dir / "failure.png").exists())
-        with sqlite3.connect(state.workspace_store.path) as db:
+        db = sqlite3.connect(state.workspace_store.path)
+        try:
             self.assertEqual(db.execute("SELECT COUNT(*) FROM candidates").fetchone()[0], 0)
             self.assertEqual(db.execute("SELECT COUNT(*) FROM manual_edits").fetchone()[0], 0)
             self.assertEqual(db.execute("SELECT COUNT(*) FROM history_entries").fetchone()[0], 0)
+        finally:
+            db.close()
+
+    def test_hydration_failure_keeps_existing_source_and_live_catalog_state(self) -> None:
+        state = self.studio()
+        project = state.create_project("existing source")
+        existing_id = self.import_browser(state, name="existing.png", identity="handle")
+        state.candidates[existing_id] = []
+        state.candidate_revisions[existing_id] = 7
+        state.source_mismatches[existing_id] = True
+        before_images = dict(state.images)
+        before_order = list(state.order)
+        before_candidates = {image_id: list(candidates) for image_id, candidates in state.candidates.items()}
+        before_revisions = dict(state.candidate_revisions)
+        before_mismatches = dict(state.source_mismatches)
+
+        staged = self.stage("new.png")
+        with patch.object(state.workspace_store, "hydrate_candidates", side_effect=ValueError("corrupt candidate")):
+            with self.assertRaisesRegex(ValueError, "corrupt candidate"):
+                state._import_images([{
+                    "clientKey": "new", "name": "new.png", "relativePath": "new.png", "stagedPath": staged,
+                    "mtimeNs": 10, "sizeBytes": len(self.png()),
+                }], source_identity="handle", source_kind="browser-files")
+
+        self.assertEqual(state.images, before_images)
+        self.assertEqual(state.order, before_order)
+        self.assertEqual(state.candidates, before_candidates)
+        self.assertEqual(state.candidate_revisions, before_revisions)
+        self.assertEqual(state.source_mismatches, before_mismatches)
+        self.assertEqual([item["id"] for item in state.workspace_store.project_images(project["id"])], [existing_id])
+        self.assertEqual(len(state.workspace_store.project_sources(project["id"])), 1)
+        self.assertFalse((state.session_dir / "new.png").exists())
+
+    def test_rollback_failure_still_restores_live_catalog_and_staging(self) -> None:
+        state = self.studio()
+        state.create_project("rollback cleanup")
+        existing_id = self.import_browser(state, name="existing.png", identity="handle")
+        before_images = dict(state.images)
+        before_order = list(state.order)
+
+        staged = self.stage("new.png")
+        with patch.object(state.workspace_store, "hydrate_candidates", side_effect=ValueError("corrupt candidate")), \
+             patch.object(state.workspace_store, "rollback_import", side_effect=RuntimeError("rollback failed")):
+            with self.assertRaisesRegex(RuntimeError, "rollback failed"):
+                state._import_images([{
+                    "clientKey": "new", "name": "new.png", "relativePath": "new.png", "stagedPath": staged,
+                    "mtimeNs": 10, "sizeBytes": len(self.png()),
+                }], source_identity="handle", source_kind="browser-files")
+
+        self.assertEqual(state.images, before_images)
+        self.assertEqual(state.order, before_order)
+        self.assertFalse((state.session_dir / "new.png").exists())
