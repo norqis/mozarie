@@ -1049,26 +1049,62 @@ class CatalogMixin:
                     for destination in final_paths:
                         destination.unlink(missing_ok=True)
                     raise
-                durable_source_id: str | None = None
-                if self.catalog_id and source_identity:
-                    durable_source_id = self.workspace_store.ensure_project_source(
-                        self.catalog_id, kind=source_kind, display_name="ブラウザから追加", identity=f"browser:{source_identity}",
-                    )
-                for index, record in enumerate(added):
+                try:
+                    durable_source_id: str | None = None
                     if self.catalog_id:
-                        stored = self.workspace_store.reconcile_images(self.catalog_id, [record], source_id=durable_source_id)[record.relative_path]
-                        record.image_id = str(stored["image_id"]); record.hidden = bool(stored["hidden"]); record.reviewed = bool(stored["reviewed"])
-                        record.source_id = durable_source_id
-                        _revision, restored = self.workspace_store.hydrate_candidates(record.image_id, self.cache_dir / record.image_id, self._candidate_from_workspace)
-                        if restored or _revision:
-                            self.candidates[record.image_id] = restored
-                            self.candidate_revisions[record.image_id] = _revision
-                    imported[index]["imageId"] = record.image_id
-                    self.images[record.image_id] = record
-                    self.order.append(record.image_id)
-                self.order.sort(key=lambda image_id: self.images[image_id].relative_path.lower())
-                images = self.list_images() if include_images else []
-                return images, imported
+                        browser_identity = source_identity or self.session_dir.name
+                        try:
+                            durable_source_id = self.workspace_store.resolve_browser_source(
+                                self.catalog_id,
+                                kind=source_kind,
+                                display_name="ブラウザから追加",
+                                source_identity=browser_identity,
+                                create=not self.project_read_only,
+                            )
+                        except ValueError as exc:
+                            if self.project_read_only:
+                                raise ClientError("完了したプロジェクトには新しい画像を追加できません。", "project_read_only") from exc
+                            raise ClientError("選択した画像ソースをこのプロジェクトに復元できません。", "project_source_unavailable") from exc
+                    stored_images: dict[str, dict[str, Any]] = {}
+                    if self.catalog_id:
+                        try:
+                            stored_images = self.workspace_store.reconcile_images(
+                                self.catalog_id,
+                                added,
+                                source_id=durable_source_id,
+                                allow_new=not self.project_read_only,
+                            )
+                        except ValueError as exc:
+                            if self.project_read_only:
+                                raise ClientError("完了したプロジェクトには新しい画像を追加できません。", "project_read_only") from exc
+                            raise ClientError("選択した画像ソースをこのプロジェクトに復元できません。", "project_source_unavailable") from exc
+                    for index, record in enumerate(added):
+                        if self.catalog_id:
+                            stored = stored_images[record.relative_path]
+                            record.image_id = str(stored["image_id"]); record.hidden = bool(stored["hidden"]); record.reviewed = bool(stored["reviewed"])
+                            record.source_id = durable_source_id
+                            if stored.get("changed"):
+                                self.source_mismatches[record.image_id] = bool(stored.get("dimensions_changed"))
+                            _revision, restored = self.workspace_store.hydrate_candidates(record.image_id, self.cache_dir / record.image_id, self._candidate_from_workspace)
+                            if restored or _revision:
+                                self.candidates[record.image_id] = restored
+                                self.candidate_revisions[record.image_id] = _revision
+                        imported[index]["imageId"] = record.image_id
+                        self.images[record.image_id] = record
+                        self.order.append(record.image_id)
+                    self.order.sort(key=lambda image_id: self.images[image_id].relative_path.lower())
+                    images = self.list_images() if include_images else []
+                    return images, imported
+                except Exception:
+                    for destination in final_paths:
+                        destination.unlink(missing_ok=True)
+                    for record in added:
+                        if self.images.get(record.image_id) is record:
+                            self.images.pop(record.image_id, None)
+                            self.candidates.pop(record.image_id, None)
+                            self.candidate_revisions.pop(record.image_id, None)
+                    self.order = [image_id for image_id in self.order if image_id in self.images]
+                    raise
         finally:
             for temporary, _name, _width, _height, _client_key, _mtime, _size in pending:
                 temporary.unlink(missing_ok=True)

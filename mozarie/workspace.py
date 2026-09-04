@@ -282,8 +282,10 @@ class WorkspaceStore:
 
     @staticmethod
     def _ensure_project_source_db(db: sqlite3.Connection, catalog_id: str, kind: str, display_name: str, identity: str) -> str:
-        row = db.execute("SELECT source_id FROM project_sources WHERE catalog_id=? AND source_identity=?", (catalog_id, identity)).fetchone()
+        row = db.execute("SELECT source_id,kind FROM project_sources WHERE catalog_id=? AND source_identity=?", (catalog_id, identity)).fetchone()
         if row:
+            if str(row["kind"]) != kind:
+                raise ValueError("project source kind does not match")
             return str(row["source_id"])
         source_id = uuid.uuid4().hex
         db.execute("""INSERT INTO project_sources(source_id,catalog_id,kind,display_name,native_path,source_identity,created_at)
@@ -294,6 +296,48 @@ class WorkspaceStore:
         if kind not in {"native-folder", "browser-directory", "browser-files"} or not identity:
             raise ValueError("invalid project source")
         with self._lock, self._connect() as db:
+            if db.execute("SELECT 1 FROM catalogs WHERE catalog_id=?", (catalog_id,)).fetchone() is None:
+                raise ValueError("project is missing")
+            return self._ensure_project_source_db(db, catalog_id, kind, display_name, identity)
+
+    def resolve_browser_source(
+        self,
+        catalog_id: str,
+        *,
+        kind: str,
+        display_name: str,
+        source_identity: str,
+        create: bool,
+    ) -> str:
+        """Resolve one browser selection to its durable source.
+
+        A browser can send back a source ID it already received for this
+        project.  That ID is authoritative and must never be rebound to a
+        different project or source kind.  New browser handles are stored
+        under their explicit ``browser:`` identity.
+        """
+        if kind not in {"browser-files", "browser-directory"} or not source_identity:
+            raise ValueError("invalid browser source")
+        identity = f"browser:{source_identity}"
+        with self._lock, self._connect() as db:
+            direct = db.execute(
+                "SELECT source_id,catalog_id,kind FROM project_sources WHERE source_id=?",
+                (source_identity,),
+            ).fetchone()
+            if direct is not None:
+                if str(direct["catalog_id"]) != catalog_id or str(direct["kind"]) != kind:
+                    raise ValueError("browser source does not belong to this project")
+                return str(direct["source_id"])
+            matched = db.execute(
+                "SELECT source_id,kind FROM project_sources WHERE catalog_id=? AND source_identity=?",
+                (catalog_id, identity),
+            ).fetchone()
+            if matched is not None:
+                if str(matched["kind"]) != kind:
+                    raise ValueError("project source kind does not match")
+                return str(matched["source_id"])
+            if not create:
+                raise ValueError("browser source is missing")
             if db.execute("SELECT 1 FROM catalogs WHERE catalog_id=?", (catalog_id,)).fetchone() is None:
                 raise ValueError("project is missing")
             return self._ensure_project_source_db(db, catalog_id, kind, display_name, identity)
@@ -416,7 +460,14 @@ class WorkspaceStore:
                 db.execute("ROLLBACK")
                 raise
 
-    def reconcile_images(self, catalog_id: str, records: list[Any], source_id: str | None = None) -> dict[str, dict[str, Any]]:
+    def reconcile_images(
+        self,
+        catalog_id: str,
+        records: list[Any],
+        source_id: str | None = None,
+        *,
+        allow_new: bool = True,
+    ) -> dict[str, dict[str, Any]]:
         """Return durable state by path without silently discarding edits."""
         now = time.time_ns()
         result: dict[str, dict[str, Any]] = {}
@@ -445,14 +496,34 @@ class WorkspaceStore:
                         JOIN workspace_reconcile_records AS incoming ON incoming.relative_path=images.relative_path
                         WHERE images.source_id=?""", (source_id,))
                 }
+                requested_ids = {
+                    str(getattr(record, "image_id", ""))
+                    for record in records
+                    if str(getattr(record, "image_id", ""))
+                }
+                used_ids = {}
+                if requested_ids:
+                    placeholders = ",".join("?" for _ in requested_ids)
+                    used_ids = {
+                        str(row["image_id"]): row
+                        for row in db.execute(
+                            f"SELECT image_id,catalog_id,source_id,relative_path FROM images WHERE image_id IN ({placeholders})",
+                            list(requested_ids),
+                        )
+                    }
                 for record in records:
                     row = existing.get(record.relative_path)
                     if row is None:
+                        if not allow_new:
+                            raise ValueError("project source cannot add images")
                         # A projectless session owns a real, opaque image ID
                         # already.  Promoting it to a project must preserve
                         # that identity so its current editor state can be
                         # written without a client-side remap.
                         image_id = str(getattr(record, "image_id", "")) or uuid.uuid4().hex
+                        owner = used_ids.get(image_id)
+                        if owner is not None:
+                            raise ValueError("image identity already belongs to another source")
                         db.execute("INSERT INTO images(catalog_id,source_id,relative_path,image_id,size_bytes,mtime_ns,width,height,updated_at) VALUES(?,?,?,?,?,?,?,?,?)",
                                    (catalog_id, source_id, record.relative_path, image_id, record.size_bytes, record.mtime_ns, int(getattr(record, "width", 0)), int(getattr(record, "height", 0)), now))
                         result[record.relative_path] = {"image_id": image_id, "hidden": False, "reviewed": False, "revision": 0, "changed": False}
