@@ -804,7 +804,7 @@ class WorkspaceStore:
         # journal.  The SQLite operation delta below is the single source of
         # truth for undo/redo after reopening a project.
         history_json = "{}"
-        request_keys = {"add": "add", "exclusion": "exclusion", "erase": "exclusionErase"}
+        request_keys = {"add": "add", "exclusion": "exclusion", "exclusionErase": "exclusionErase"}
         dirty_layers = payload.get("dirtyLayers")
         if dirty_layers is None:
             dirty = set(request_keys)
@@ -829,7 +829,11 @@ class WorkspaceStore:
             try:
                 before = self._history_state_db(db, image_id)
                 previous_layers = before.get("_manual_raw") or {}
-                layers = {layer: decoded[layer] if layer in dirty else previous_layers.get(layer) for layer in request_keys}
+                layers = {
+                    "add": decoded["add"] if "add" in dirty else previous_layers.get("add"),
+                    "exclusion": decoded["exclusion"] if "exclusion" in dirty else previous_layers.get("exclusion"),
+                    "erase": decoded["exclusionErase"] if "exclusionErase" in dirty else previous_layers.get("erase"),
+                }
                 # Browser saves include all three layers, but a normal stroke
                 # changes one. Validate only newly inserted bytes; immutable
                 # old layers were validated at their own insertion.
@@ -853,7 +857,9 @@ class WorkspaceStore:
                 manual_enabled=excluded.manual_enabled,exclusion_enabled=excluded.exclusion_enabled,exclusion_erase_enabled=excluded.exclusion_erase_enabled,
                 exclusion_forced=excluded.exclusion_forced,removed_candidate_ids=excluded.removed_candidate_ids,candidate_revision=excluded.candidate_revision,has_effective_mask=excluded.has_effective_mask,history_json=excluded.history_json,updated_at=excluded.updated_at""",
                     (image_id,layers["add"],layers["exclusion"],layers["erase"],int(payload.get("manualEnabled", True)),int(payload.get("manualExclusionEnabled", True)),int(payload.get("manualExclusionEraseEnabled", True)),int(payload.get("manualExclusionForced", True)),json.dumps(removed),revision,int(has_effective_mask),history_json,time.time_ns()))
-                self._record_history_db(db, image_id, before, self._history_state_db(db, image_id), manual_rois=rois)
+                self._record_history_db(db, image_id, before, self._history_state_db(db, image_id), manual_rois={
+                    "add": rois.get("add"), "exclusion": rois.get("exclusion"), "erase": rois.get("exclusionErase"),
+                })
                 db.execute("COMMIT")
             except Exception:
                 db.execute("ROLLBACK")

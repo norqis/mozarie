@@ -675,6 +675,32 @@ class MozarieTests(unittest.TestCase):
             with patch.object(reopened.workspace_store, "manual", side_effect=AssertionError("manual draft read")):
                 self.assertEqual({item["id"]: item["hasEffectiveMask"] for item in reopened.catalog_snapshot()["images"]}, expected)
 
+    def test_incremental_exclusion_erase_keeps_the_other_manual_layers(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            Image.new("RGB", (12, 12), "white").save(root / "source.png")
+            state = self.new_state()
+            image_id = state.set_root(str(root))[0]["id"]
+            mask_path = state.cache_dir / image_id / "candidate.png"
+            mask_path.parent.mkdir(parents=True, exist_ok=True)
+            Image.fromarray(self._mask(12, 12)).save(mask_path)
+            state.candidates[image_id] = [Candidate("candidate", "penis", .9, mask_path)]
+            revision = self.commit_candidates(state, image_id)
+            raw = io.BytesIO(); Image.fromarray(self._mask(12, 12)).save(raw, format="PNG")
+            mask = "data:image/png;base64," + base64.b64encode(raw.getvalue()).decode("ascii")
+            state.save_manual_workspace(image_id, {
+                "add": "", "exclusion": mask, "exclusionErase": "", "removedCandidateIds": [],
+                "candidateRevision": revision, "hasEffectiveMask": False,
+            })
+            state.save_manual_workspace(image_id, {
+                "dirtyLayers": ["exclusionErase"], "exclusionErase": mask, "removedCandidateIds": [],
+                "candidateRevision": revision, "hasEffectiveMask": False,
+            })
+            restored = state.manual_workspace(image_id)
+            self.assertEqual(restored["exclusion"], mask)
+            self.assertEqual(restored["exclusionErase"], mask)
+            self.assertTrue(restored["hasEffectiveMask"])
+
     def test_effective_mask_status_tracks_candidate_apply_and_full_exclude(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory); Image.new("RGB", (12, 12), "white").save(root / "source.png")

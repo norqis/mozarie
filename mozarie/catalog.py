@@ -1302,6 +1302,11 @@ class CatalogMixin:
                 if not self.workspace_store.has_image(image_id):
                     return
                 committed = dict(payload)
+                dirty_layers = committed.get("dirtyLayers")
+                if dirty_layers is not None:
+                    existing = self.workspace_store.manual(image_id, self._encode_workspace_mask) or {}
+                    for layer in ("add", "exclusion", "exclusionErase"):
+                        committed.setdefault(layer, existing.get(layer, ""))
                 committed["hasEffectiveMask"] = self._effective_mask_for_draft(
                     image_id, self.candidates.get(image_id, []), committed,
                 )
