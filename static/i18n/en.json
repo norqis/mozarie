@@ -77,6 +77,8 @@
   "confirm.clearCurrent.title": "Clear mosaic",
   "confirm.removeImage.message": "Remove this image from the list and permanently delete its database history, mosaic and exclusion masks, and state flags. The source file is kept.",
   "confirm.removeImage.title": "Remove image",
+  "confirm.removeImages.title": "Remove selected images",
+  "confirm.removeImages.message": "Remove the selected images ({count}) from the work list and permanently delete their database history, mosaic and exclusion masks, and state flags. Source image files are not deleted.",
   "context.menu": "Image actions",
   "context.review": "Mark reviewed",
   "context.unreview": "Mark unreviewed",

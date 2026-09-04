@@ -176,6 +176,8 @@
   "context.copyPath": "パスをコピー",
   "confirm.removeImage.title": "画像削除",
   "confirm.removeImage.message": "この画像のデータベース上の履歴、モザイク・除外マスク、状態フラグを完全に削除して作業一覧から外します。元画像ファイルは削除しません。",
+  "confirm.removeImages.title": "選択画像の削除",
+  "confirm.removeImages.message": "選択した{count}件の画像を作業一覧から外し、データベース上の履歴、モザイク・除外マスク、状態フラグを完全に削除します。元画像ファイルは削除しません。",
   "apply.title": "ファイルを保存",
   "apply.target": "対象: {count}件",
   "apply.targetMode": "保存対象",

@@ -288,7 +288,7 @@ async function runSelectionAction(action) {
   if (action === "detect") return openDetectionDialog(ids);
   if (action === "clear") return clearMasks(ids, "confirm.clearAllMasks.title", "confirm.clearAllMasks.message");
   if (action === "remove") {
-    if (!await confirmAction(t("confirm.removeImage.title"), t("confirm.removeImage.message"), "removeImage")) return;
+    if (!await confirmAction(t("confirm.removeImages.title"), t("confirm.removeImages.message", { count: ids.length }), "removeImage")) return;
     const data = await api("/api/catalog/remove", { method: "POST", body: JSON.stringify({ imageIds: ids }) });
     for (const image of images) {
       releaseImageCaches(image.id); state.sourceAccess.delete(image.id); state.drafts.delete(image.id); state.maskStatus.delete(image.id); clearReviewForRemovedImage(image);
