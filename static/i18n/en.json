@@ -633,6 +633,7 @@
   "project.selectProject": "Select a project",
   "project.selectedProject": "Selected project",
   "project.actions": "Project actions",
+  "project.empty": "No projects yet. Create a new project or save the current work.",
   "project.openSelected": "Open",
   "project.exportMosaic": "Download all mosaic masks",
   "project.exportExclude": "Download all exclusion masks",

@@ -109,7 +109,13 @@ function renderProjectListSelection() {
     $("#projectSelectedSummary").textContent = `${projectTitle(project)} · ${t(`project.${project.status}`)} · ${t("project.imageCount", { count: project.imageCount || 0 })}`;
     $("#projectSelectedDetailsText").textContent = `${t("project.source")}: ${projectSource(project)} · ${t("project.updated")}: ${projectDate(project.updatedAt)}`;
   }
-  for (const option of $("#projectList").querySelectorAll(".project-list-option")) option.setAttribute("aria-selected", String(option.dataset.projectId === projectListSelectedId));
+  const options = projectListOptionElements();
+  const focused = document.activeElement?.closest?.(".project-list-option");
+  const rovingId = focused?.dataset.projectId || project?.id || options[0]?.dataset.projectId || "";
+  for (const option of options) {
+    option.setAttribute("aria-selected", String(option.dataset.projectId === projectListSelectedId));
+    option.tabIndex = option.dataset.projectId === rovingId ? 0 : -1;
+  }
   const blocked = isBusy() || state.importing;
   $("#projectListOpen").disabled = !project || blocked;
   $("#projectListDelete").disabled = !project || blocked;
@@ -131,18 +137,17 @@ function focusProjectListOption(index) {
   const options = projectListOptionElements();
   if (!options.length) return;
   const target = options[Math.max(0, Math.min(index, options.length - 1))];
+  for (const option of options) option.tabIndex = option === target ? 0 : -1;
   focusElement(target);
 }
 
-async function showProjectList({ preserveSelection = false } = {}) {
-  $("#projectDialog").close();
-  if (!preserveSelection) projectListSelectedId = "";
-  const sort = $("#projectSort").value;
-  const data = await api(`/api/projects?sort=${encodeURIComponent(sort)}`);
-  projectListProjects = new Map((data.projects || []).map((project) => [project.id, project]));
-  if (!projectListProjects.has(projectListSelectedId)) projectListSelectedId = "";
-  const list = $("#projectList"); list.replaceChildren();
-  for (const project of data.projects || []) {
+function buildProjectListFragment(projects) {
+  const fragment = document.createDocumentFragment();
+  if (!projects.size) {
+    const empty = document.createElement("p"); empty.className = "project-list-empty"; empty.setAttribute("role", "status"); empty.textContent = t("project.empty");
+    fragment.append(empty);
+  }
+  for (const project of projects.values()) {
     const option = document.createElement("button"); option.type = "button"; option.className = "project-list-option";
     option.setAttribute("role", "option"); option.dataset.projectId = project.id;
     const name = document.createElement("span"); name.className = "project-option-name"; name.textContent = projectTitle(project);
@@ -152,10 +157,28 @@ async function showProjectList({ preserveSelection = false } = {}) {
     details.textContent = `${t("project.source")}: ${projectSource(project)} · ${t("project.updated")}: ${projectDate(project.updatedAt)}`;
     option.append(name, status, details);
     option.addEventListener("click", () => selectProject(project.id));
-    list.append(option);
+    fragment.append(option);
   }
+  return fragment;
+}
+
+async function showProjectList({ preserveSelection = false, invoker = $("#projectOpenList"), focusProjectId = "" } = {}) {
+  const sort = $("#projectSort").value;
+  const data = await api(`/api/projects?sort=${encodeURIComponent(sort)}`);
+  const nextProjects = new Map((data.projects || []).map((project) => [project.id, project]));
+  const nextSelectedId = preserveSelection && nextProjects.has(projectListSelectedId) ? projectListSelectedId : "";
+  const fragment = buildProjectListFragment(nextProjects);
+  projectListProjects = nextProjects; projectListSelectedId = nextSelectedId;
+  $("#projectList").replaceChildren(fragment);
   renderProjectListSelection();
-  showModalFromInvoker($("#projectListDialog"));
+  const focusOption = focusProjectId && $("#projectList").querySelector(`.project-list-option[data-project-id="${focusProjectId}"]`);
+  if (focusOption) focusProjectListOption(projectListOptionElements().indexOf(focusOption));
+  else if (!nextProjects.size) focusElement($("#projectListClose"));
+  if (!$("#projectListDialog").open) {
+    $("#projectDialog").close();
+    showModalFromInvoker($("#projectListDialog"), invoker);
+    focusElement($("#projectSort"));
+  }
 }
 async function showSourceMismatches() {
   const data = await api("/api/project/mismatches"); const images = data.images || [];
@@ -178,7 +201,9 @@ async function openProject(project, resume = false) {
     if (resume) await api("/api/project/resume", { method: "POST", body: JSON.stringify({ projectId: project.id }) });
     const data = await api("/api/project/open", { method: "POST", body: JSON.stringify({ projectId: project.id }) });
     state.project = data.project; state.projectReadOnly = data.project?.status === "completed";
+    modalInvokers.delete($("#projectListDialog"));
     $("#projectListDialog").close(); $("#projectDialog").close();
+    focusElement($("#projectButton"));
     if (data.needsSource) {
       const files = await rememberedProjectFileSources(project.id);
       const directories = await rememberedProjectDirectorySources(project.id);
@@ -222,7 +247,9 @@ async function downloadProjectMasks(project, kind) {
     const path = `/api/project/masks/${encodeURIComponent(project.id)}/${kind}`;
     const response = await fetch(path, { headers: { "X-Mozarie-Token": document.querySelector('meta[name="mozarie-token"]')?.content || "" } });
     if (!response.ok) throw responseError(response, await response.json().catch(() => ({})));
-    const link = document.createElement("a"); link.href = URL.createObjectURL(await response.blob()); link.download = `${project.id}-${kind}-masks.zip`;
+    const name = String(project.name || "").replace(/[\\/:*?"<>|]/g, "_").replace(/[ .]+$/g, "");
+    const prefix = name || `${projectTitle(project).replace(/[\\/:*?"<>|]/g, "_").replace(/[ .]+$/g, "") || "project"}-${project.id.slice(0, 8)}`;
+    const link = document.createElement("a"); link.href = URL.createObjectURL(await response.blob()); link.download = `${prefix}-${kind}-masks.zip`;
     document.body.append(link); link.click(); link.remove(); setTimeout(() => URL.revokeObjectURL(link.href), 0);
   } catch (error) { showUserError(error); }
   finally { projectExportBusy = false; renderProjectListSelection(); }
@@ -237,11 +264,13 @@ async function resumeCurrentProject() {
 }
 
 function openProjectDeleteDialog(projectId) {
-  if (!projectId) return;
   const project = projectListProjects.get(projectId) || (state.project?.id === projectId ? state.project : null);
+  if (!project) return;
   projectDeleteId = projectId;
-  $("#projectDeleteTarget").textContent = project ? `${t("project.deleteSelected")} ${projectTitle(project)}` : "";
+  $("#projectDeleteTarget").textContent = `${t("project.deleteSelected")} ${projectTitle(project)}`;
+  $("#projectDeleteDetails").textContent = `${t(`project.${project.status}`)} · ${t("project.imageCount", { count: project.imageCount || 0 })} · ${t("project.source")}: ${projectSource(project)}`;
   showModalFromInvoker($("#projectDeleteDialog"));
+  focusElement($("#projectDeleteCancel"));
 }
 
 async function discardProjectWorkspaceChanges() {
@@ -263,6 +292,9 @@ async function deleteProject(projectId) {
   if (!projectId) return;
   try {
     const deletingCurrentProject = state.project?.id === projectId;
+    const options = projectListOptionElements();
+    const deletedIndex = options.findIndex((option) => option.dataset.projectId === projectId);
+    const focusProjectId = options[deletedIndex + 1]?.dataset.projectId || options[deletedIndex - 1]?.dataset.projectId || "";
     if (deletingCurrentProject) await discardProjectWorkspaceChanges();
     await api(`/api/project/${encodeURIComponent(projectId)}`, { method: "DELETE" });
     await forgetProjectSources(projectId);
@@ -270,8 +302,11 @@ async function deleteProject(projectId) {
       resetCatalog([], ""); state.project = null; state.projectReadOnly = false; renderProjectCurrent(); updateActionButtons();
       $("#projectDialog").close();
     }
+    projectDeleteId = "";
+    modalInvokers.delete($("#projectDeleteDialog"));
     $("#projectDeleteDialog").close();
-    if ($("#projectListDialog").open) await showProjectList({ preserveSelection: true });
+    if ($("#projectListDialog").open) await showProjectList({ focusProjectId });
+    else projectListSelectedId = "";
   } catch (error) { showUserError(error); }
 }
 
@@ -310,9 +345,9 @@ function bindEvents() {
   $("#projectClose").addEventListener("click", () => $("#projectDialog").close());
   $("#projectNew").addEventListener("click", () => openProjectNameDialog("new"));
   $("#projectName").addEventListener("click", () => openProjectNameDialog("name"));
-  $("#projectOpenList").addEventListener("click", () => { void showProjectList(); });
+  $("#projectOpenList").addEventListener("click", () => { void showProjectList({ invoker: $("#projectOpenList") }).catch(showUserError); });
   $("#projectListClose").addEventListener("click", () => $("#projectListDialog").close());
-  $("#projectSort").addEventListener("change", () => { void showProjectList({ preserveSelection: true }); });
+  $("#projectSort").addEventListener("change", () => { void showProjectList({ preserveSelection: true }).catch(showUserError); });
   $("#projectList").addEventListener("keydown", (event) => {
     const options = projectListOptionElements();
     const index = options.indexOf(document.activeElement);
@@ -355,7 +390,7 @@ function bindEvents() {
   $("#projectComplete").addEventListener("click", () => { void (async () => { if (!await confirmAction(t("project.complete"), t("project.completeConfirm"))) return; try { await flushAllWorkspaceMutations(); await api("/api/project/complete", { method: "POST", body: "{}" }); resetCatalog([], ""); state.project = null; state.projectReadOnly = false; $("#projectDialog").close(); } catch (error) { showUserError(error); } })(); });
   $("#projectNameCancel").addEventListener("click", () => $("#projectNameDialog").close());
   $("#projectDeleteCancel").addEventListener("click", () => { projectDeleteId = ""; $("#projectDeleteDialog").close(); });
-  $("#projectDeleteConfirm").addEventListener("click", () => { const projectId = projectDeleteId; projectDeleteId = ""; void deleteProject(projectId); });
+  $("#projectDeleteConfirm").addEventListener("click", () => { void deleteProject(projectDeleteId); });
   $("#projectNameForm").addEventListener("submit", (event) => { event.preventDefault(); void (async () => { try {
     const name = $("#projectNameInput").value.trim(); const projectlessSave = projectNameMode === "name" && !state.project?.id;
     if (projectNameMode === "new" || projectlessSave) { if (state.candidateUpdateChains?.size) await waitForCandidateMutations(); await flushAllWorkspaceMutations(); }
@@ -395,7 +430,9 @@ function bindEvents() {
     const invoker = modalInvokers.get(dialog);
     modalInvokers.delete(dialog);
     setTimeout(() => {
-      if (invoker?.isConnected && !invoker.disabled && !dialog.open) focusElement(invoker);
+      if (dialog === $("#projectDialog") && $("#projectListDialog").open) return;
+      const fallback = dialog === $("#projectListDialog") && invoker?.offsetParent === null ? $("#projectButton") : invoker;
+      if (fallback?.isConnected && !fallback.disabled && !dialog.open) focusElement(fallback);
     }, 0);
   }));
   const lightDismiss = (dialog, close) => {
