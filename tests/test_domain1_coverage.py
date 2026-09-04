@@ -129,7 +129,7 @@ class WorkspaceCoverageTests(unittest.TestCase):
             finally:
                 db.close()
             with self.assertRaises(sqlite3.DatabaseError):
-                store.delete_catalog(catalog)
+                store.delete_project(catalog)
             self.assertTrue(store.catalog_exists(catalog))
 
             db = sqlite3.connect(store.path)

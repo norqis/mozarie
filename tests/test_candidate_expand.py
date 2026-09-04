@@ -106,18 +106,12 @@ class CandidateExpandTests(unittest.TestCase):
             self.assertEqual(hydrated[0].expand_px, 0)
             self.assertEqual(WorkspaceStore(root).candidate_png(image_id, "candidate"), raw)
 
-    def test_png_padding_metadata_rejects_non_integer_or_noncanonical_values(self):
-        for value in ("bad", "-1", "01"):
-            with self.subTest(value=value):
-                raw = self._png()
-                with Image.open(io.BytesIO(raw)) as source:
-                    output = io.BytesIO(); metadata = PngImagePlugin.PngInfo()
-                    metadata.add_text("mozarie_expand_px", value)
-                    source.save(output, format="PNG", pnginfo=metadata)
-                with self.assertRaises(ValueError):
-                    WorkspaceStore._candidate_row({"mask_png": output.getvalue()})
-        with self.assertRaises(ValueError):
-            WorkspaceStore._candidate_row({"mask_png": "not-bytes"})
+    def test_candidate_padding_comes_only_from_current_metadata_column(self):
+        with self.assertRaises(KeyError):
+            WorkspaceStore._candidate_row({"mask_png": self._png()})
+        for value in (True, 1.5, -1):
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                WorkspaceStore._candidate_row({"expand_px": value})
 
     def test_candidate_rejects_non_integer_padding(self):
         for value in (True, 1.5, -1):
