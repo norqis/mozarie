@@ -256,7 +256,8 @@ class ProjectCatalogCoverageTests(unittest.TestCase):
         with self.assertRaises(ClientError): state.set_root("")
         with self.assertRaises(ClientError): state.projects_for_source_root("relative")
         with self.assertRaises(ClientError): state.open_project("missing")
-        with self.assertRaises(ClientError): state.name_current_project("name")
+        self.assertEqual(state.name_current_project("name")["name"], "name")
+        state.close_project()
         with self.assertRaises(ClientError): state.complete_project()
         with self.assertRaises(ClientError): state.project_mask_images()
         with self.assertRaises(ClientError): state.activate_browser_catalog("missing")
@@ -299,6 +300,56 @@ class ProjectCatalogCoverageTests(unittest.TestCase):
         self.assertTrue(original.is_file())
         with self.assertRaises(ClientError): state.remove_images_from_catalog([])
         with self.assertRaises(ClientError): state.remove_images_from_catalog("not a list")
+
+    def test_projectless_work_promotes_without_source_or_image_id_loss(self) -> None:
+        source = self.root / "projectless"; self.image(source, "nested/日本語の長い名前.png")
+        state = self.state()
+        images = state.set_root(str(source)); image_id = images[0]["id"]
+        self.assertIsNone(state.catalog_id)
+        self.assertEqual(state.projects(), [])
+        candidate = self.candidate(state, image_id, "apply", pixel=(2, 2))
+        self.commit_candidates(state, image_id, [candidate])
+        state.set_image_flags(image_id, {"reviewed": True})
+        manual = "data:image/png;base64," + base64.b64encode(self.png(pixel=(3, 3))).decode("ascii")
+        state.save_manual_workspace(image_id, {
+            "add": manual, "exclusion": "", "exclusionErase": "", "removedCandidateIds": [],
+            "candidateRevision": state._candidate_revision(image_id), "manualEnabled": True,
+            "manualExclusionEnabled": True, "manualExclusionEraseEnabled": True,
+        })
+        project = state.name_current_project("after-work")
+        self.assertEqual(project["imageCount"], 1)
+        self.assertEqual(state.images[image_id].source_id, project["sourceIds"][image_id])
+        self.assertEqual(state.workspace_store.project_sources(project["id"])[0]["kind"], "native-folder")
+        self.assertIsNotNone(state.workspace_store.manual(image_id, state._encode_workspace_mask))
+        state.close_project()
+
+        reopened_state = self.state(); reopened = reopened_state.open_project(project["id"])
+        self.assertEqual([image["id"] for image in reopened["images"]], [image_id])
+        self.assertTrue(reopened_state.images[image_id].reviewed)
+        self.assertEqual(len(reopened_state.candidates[image_id]), 1)
+        self.assertIsNotNone(reopened_state.manual_workspace(image_id))
+
+    def test_projectless_browser_directory_promotion_reselects_the_same_source(self) -> None:
+        staged = self.root / "first.png"; staged.write_bytes(self.png())
+        state = self.state()
+        _images, imported = state._import_images([{
+            "clientKey": "first", "name": "first.png", "relativePath": "nested/first.png", "stagedPath": staged,
+            "mtimeNs": 123, "sizeBytes": len(self.png()),
+        }], source_identity="directory-handle", source_kind="browser-directory")
+        image_id = imported[0]["imageId"]
+        self.assertIsNone(state.catalog_id)
+        project = state.name_current_project("browser-after-work")
+        source = state.workspace_store.project_sources(project["id"])[0]
+        self.assertEqual((source["kind"], source["identity"]), ("browser-directory", "browser:directory-handle"))
+        state.close_project()
+
+        reselected = self.state(); reselected.activate_browser_catalog(project["id"])
+        replacement = self.root / "replacement.png"; replacement.write_bytes(self.png())
+        _images, reimported = reselected._import_images([{
+            "clientKey": "again", "name": "first.png", "relativePath": "nested/first.png", "stagedPath": replacement,
+            "mtimeNs": 123, "sizeBytes": len(self.png()),
+        }], source_identity="directory-handle", source_kind="browser-directory")
+        self.assertEqual(reimported[0]["imageId"], image_id)
 
     def test_export_error_paths_and_empty_history_status(self) -> None:
         root = self.root / "errors"; self.image(root, "image.png")

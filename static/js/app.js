@@ -80,7 +80,7 @@ function projectSource(project) { return project?.sourceRoot || t("project.noSou
 function renderProjectCurrent() {
   const project = state.project;
   $("#projectCurrent").textContent = project ? `${projectTitle(project)} · ${t(`project.${project.status}`)}` : t("project.unnamed");
-  $("#projectName").disabled = !project || state.projectReadOnly;
+  $("#projectName").disabled = state.projectReadOnly || (!project && state.images.length === 0);
   $("#projectComplete").disabled = !project || state.projectReadOnly;
   $("#projectResume").hidden = !state.projectReadOnly;
   $("#projectResume").disabled = !project;
@@ -253,7 +253,22 @@ function bindEvents() {
   $("#projectNameCancel").addEventListener("click", () => $("#projectNameDialog").close());
   $("#projectDeleteCancel").addEventListener("click", () => { projectDeleteId = ""; $("#projectDeleteDialog").close(); });
   $("#projectDeleteConfirm").addEventListener("click", () => { const projectId = projectDeleteId; projectDeleteId = ""; void deleteProject(projectId); });
-  $("#projectNameForm").addEventListener("submit", (event) => { event.preventDefault(); void (async () => { try { const name = $("#projectNameInput").value.trim(); if (projectNameMode === "new") { if (state.candidateUpdateChains?.size) await waitForCandidateMutations(); await flushAllWorkspaceMutations(); } const data = projectNameMode === "new" ? await api("/api/projects", { method: "POST", body: JSON.stringify({ name }) }) : await api("/api/project/name", { method: "POST", body: JSON.stringify({ name }) }); state.project = data.project; state.projectReadOnly = false; $("#projectNameDialog").close(); if (projectNameMode === "new") resetCatalog([], ""); renderProjectCurrent(); } catch (error) { showUserError(error); } })(); });
+  $("#projectNameForm").addEventListener("submit", (event) => { event.preventDefault(); void (async () => { try {
+    const name = $("#projectNameInput").value.trim(); const projectlessSave = projectNameMode === "name" && !state.project?.id;
+    if (projectNameMode === "new") { if (state.candidateUpdateChains?.size) await waitForCandidateMutations(); await flushAllWorkspaceMutations(); }
+    const data = projectNameMode === "new" ? await api("/api/projects", { method: "POST", body: JSON.stringify({ name }) }) : await api("/api/project/name", { method: "POST", body: JSON.stringify({ name }) });
+    state.project = data.project; state.projectReadOnly = false;
+    if (projectlessSave) {
+      const snapshot = await api("/api/images"); state.images = snapshot.images || state.images; applyProjectSnapshot(snapshot); loadReviewedPaths();
+      for (const image of state.images) {
+        const access = state.sourceAccess.get(image.id);
+        if (access?.fileHandle) void rememberProjectSource(state.project.id, access.fileHandle, image.id, image.sourceId || data.project.sourceIds?.[image.id]);
+      }
+      for (const imageId of state.drafts.keys()) queueWorkspaceDraft(imageId, true);
+      await flushAllWorkspaceMutations();
+    }
+    $("#projectNameDialog").close(); if (projectNameMode === "new") resetCatalog([], ""); renderProjectCurrent();
+  } catch (error) { showUserError(error); } })(); });
   $("#sourceMismatchCancel").addEventListener("click", () => $("#sourceMismatchDialog").close());
   $("#sourceMismatchForm").addEventListener("submit", (event) => { event.preventDefault(); void (async () => { try { const ids = JSON.parse($("#sourceMismatchDialog").dataset.imageIds || "[]"); const snapshot = await api("/api/project/mismatches", { method: "POST", body: JSON.stringify({ imageIds: ids, clearMasks: $("#sourceMismatchClear").checked }) }); state.images = snapshot.images || state.images; applyProjectSnapshot(snapshot); $("#sourceMismatchDialog").close(); renderCatalogViews(); } catch (error) { showUserError(error); } })(); });
   $("#sameSourceCancel").addEventListener("click", () => $("#sameSourceDialog").close());

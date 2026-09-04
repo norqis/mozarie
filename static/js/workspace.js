@@ -125,14 +125,10 @@ async function catalogForDirectoryHandle(handle) {
     state.pendingDirectorySourceId = await rememberProjectSource(state.project.id, handle);
     return activated.catalogId || state.project.id;
   }
-  // A folder is never silently matched to a prior project.  Project history
-  // remains explicit; opening an older project is done from its own list.
-  const created = await api("/api/projects", { method: "POST", body: JSON.stringify({}) });
-  state.project = created.project || null;
-  state.projectReadOnly = false;
-  if (!state.project?.id) return null;
-  state.pendingDirectorySourceId = await rememberProjectSource(state.project.id, handle);
-  return state.project.id;
+  // Importing is usable without a project.  Durable project creation is an
+  // explicit "名前を付けて保存" action, never an import side effect.
+  state.pendingDirectorySourceId = null;
+  return null;
 }
 
 function workspaceDraftPayload(draft) {

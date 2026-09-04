@@ -357,10 +357,6 @@ class MosaicHandler(BaseHTTPRequestHandler):
                                     if STATE.catalog_id is not None:
                                         raise ClientError("画像追加中にフォルダを切り替えることはできません。", "operation_in_progress")
                                     STATE.activate_browser_catalog(requested_catalog)
-                                elif not STATE.catalog_id:
-                                    # Imports create explicit unnamed work.
-                                    STATE.catalog_id = STATE.workspace_store.ensure_provisional_catalog()
-                                    STATE.browser_catalog_provisional = True
                             import_args = {
                                 "name": name, "relative_path": relative_path, "client_key": client_key,
                                 "include_images": False, "transfer_active": True,

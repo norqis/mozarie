@@ -338,12 +338,6 @@ async function importFiles(files) {
     .filter((entry) => isSupportedImageFile(entry.file || { name: entry.name || entry.relativePath }));
   if (!supportedFiles.length) { finishImportSession(session); return; }
   try {
-    if (!session.catalogId && !session.provisional && !state.images.length) {
-      await flushAllWorkspaceMutations();
-      const prepared = await api("/api/workspace/catalog", { method: "POST", body: JSON.stringify({ provisional: true }) });
-      session.catalogId = prepared.catalogId || null;
-      session.provisional = prepared.provisional === true;
-    }
     session.total = supportedFiles.length; session.completed = 0; session.paused = false; session.cancelled = false;
     showProcessing({ kind: "import", state: "running", total: session.total, completed: 0, current: "" });
     let nextIndex = 0;
@@ -383,13 +377,6 @@ async function importFiles(files) {
     }
     if (!isCurrentCatalogEpoch(session.epoch) || state.importSession !== session) return;
     if (session.cancelled) { setStatusKey("status.importCancelled", { completed: session.completed }); return; }
-    if (session.provisional) {
-      const finalized = await api("/api/workspace/catalog/finalize", { method: "POST", body: JSON.stringify({}) });
-      session.catalogId = finalized.catalogId || session.catalogId;
-      remapImportedImageIds(finalized.imageIds || {});
-      state.images = finalized.images || [];
-      session.provisional = false;
-    }
     const latest = await api("/api/images");
     state.images = latest.images;
     applyProjectSnapshot(latest);

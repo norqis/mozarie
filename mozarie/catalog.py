@@ -138,6 +138,7 @@ class CatalogMixin:
                 self.order = [record.image_id for record in records]
                 self.candidates = {}
                 self.candidate_revisions = {record.image_id: 0 for record in records}
+                self.projectless_manual_drafts.clear()
                 self._clear_browser_save_tokens_unchecked()
                 self.root = root
                 self.source_roots = {str(record.source_id): record.source_root for record in records if record.source_id and record.source_root}
@@ -219,13 +220,16 @@ class CatalogMixin:
             self._assert_catalog_mutable()
 
         previous_catalog_id = self.catalog_id
-        catalog_id = project_id or previous_catalog_id or self.workspace_store.catalog_for_root(root)
-        if not self.workspace_store.catalog_exists(catalog_id):
+        catalog_id = project_id or previous_catalog_id
+        if catalog_id is not None and not self.workspace_store.catalog_exists(catalog_id):
             raise ClientError("プロジェクトが見つかりません。", "project_not_found")
-        source_id = self.workspace_store.ensure_project_source(
-            catalog_id, kind="native-folder", display_name=root.name or str(root), identity=str(root.resolve()),
-        )
-        stored_metadata = self.workspace_store.source_image_metadata(source_id)
+        source_id = None
+        stored_metadata: dict[str, tuple[int, int, int, int]] = {}
+        if catalog_id is not None:
+            source_id = self.workspace_store.ensure_project_source(
+                catalog_id, kind="native-folder", display_name=root.name or str(root), identity=str(root.resolve()),
+            )
+            stored_metadata = self.workspace_store.source_image_metadata(source_id)
 
         paths = [path for path in root.rglob("*") if path.is_file() and path.suffix.lower() in IMAGE_SUFFIXES]
         records: list[ImageRecord] = []
@@ -277,14 +281,15 @@ class CatalogMixin:
                 for worker in workers:
                     worker.result()
         records.sort(key=lambda record: (record.relative_path.casefold(), record.relative_path))
-        stored = self.workspace_store.reconcile_images(catalog_id, records, source_id=source_id)
+        stored = self.workspace_store.reconcile_images(catalog_id, records, source_id=source_id) if catalog_id is not None else {}
         # A project can have several sources. Missing files remain durable so
         # their masks can still be exported or relinked later.
         for record in records:
-            saved = stored[record.relative_path]
-            record.image_id = str(saved["image_id"])
-            record.hidden = bool(saved["hidden"])
-            record.reviewed = bool(saved["reviewed"])
+            saved = stored.get(record.relative_path)
+            if saved is not None:
+                record.image_id = str(saved["image_id"])
+                record.hidden = bool(saved["hidden"])
+                record.reviewed = bool(saved["reviewed"])
             record.source_id = source_id
             record.source_root = root
         source_image_ids = {record.image_id for record in records}
@@ -303,14 +308,15 @@ class CatalogMixin:
             retained_mismatches.update(source_mismatches)
             self.source_mismatches = retained_mismatches
         self.catalog_id = catalog_id
-        completed = (self.workspace_store.project(catalog_id) or {}).get("status") == "completed"
-        self.workspace_store.set_project_source_root(catalog_id, str(root))
+        completed = bool(catalog_id and (self.workspace_store.project(catalog_id) or {}).get("status") == "completed")
+        if catalog_id is not None:
+            self.workspace_store.set_project_source_root(catalog_id, str(root))
         self.browser_catalog_provisional = False
         if defer_replace:
             return records
         # Adding another folder to an open project is additive.  Replace only
         # this source's live records so same relative names stay independent.
-        if previous_catalog_id == catalog_id:
+        if catalog_id is not None and previous_catalog_id == catalog_id:
             with self.lock:
                 retained = [record for record in self.images.values() if record.source_id != source_id]
             records = retained + records
@@ -336,11 +342,70 @@ class CatalogMixin:
             self.catalog_id = str(project["id"]); self.project_read_only = False; self.source_mismatches = {}
         return project
 
+    def save_current_as_project(self, name: str) -> dict[str, Any]:
+        """Make the current projectless session durable without replacing it."""
+        with self.import_lock:
+            with self.lock:
+                self._assert_catalog_mutable()
+                if self.catalog_id:
+                    catalog_id = self.catalog_id
+                    try:
+                        return self.workspace_store.name_project(catalog_id, name)
+                    except ValueError as exc:
+                        raise ClientError("プロジェクト名を確認してください。", "project_name_invalid") from exc
+                records = [self.images[image_id] for image_id in self.order if image_id in self.images]
+                candidates = {record.image_id: [replace(item) for item in self.candidates.get(record.image_id, [])] for record in records}
+                revisions = {record.image_id: self._candidate_revision(record.image_id) for record in records}
+                manual_drafts = {record.image_id: dict(self.projectless_manual_drafts[record.image_id])
+                                 for record in records if record.image_id in self.projectless_manual_drafts}
+                project = self.workspace_store.create_project(name)
+                catalog_id = str(project["id"])
+                grouped: dict[tuple[str, str, str], list[ImageRecord]] = {}
+                for record in records:
+                    if record.source_kind == "filesystem":
+                        root = (record.source_root or self.root or record.path.parent).resolve()
+                        source = ("native-folder", str(root), root.name or str(root))
+                    else:
+                        kind = record.project_source_kind or "browser-files"
+                        identity = record.project_source_identity or f"browser:{self.session_dir.name if self.session_dir else uuid.uuid4().hex}"
+                        source = (kind, identity, record.project_source_display or "ブラウザから追加")
+                    grouped.setdefault(source, []).append(record)
+                source_ids: dict[str, str] = {}
+                for (kind, identity, display_name), members in grouped.items():
+                    source_id = self.workspace_store.ensure_project_source(
+                        catalog_id, kind=kind, display_name=display_name, identity=identity,
+                    )
+                    stored = self.workspace_store.reconcile_images(catalog_id, members, source_id=source_id)
+                    for record in members:
+                        saved = stored[record.relative_path]
+                        if str(saved["image_id"]) != record.image_id:
+                            raise RuntimeError("project promotion changed an image identity")
+                        record.source_id = source_id
+                        source_ids[record.image_id] = source_id
+                self.catalog_id = catalog_id
+                self.browser_catalog_provisional = False
+                for record in records:
+                    revision = revisions[record.image_id]
+                    snapshot = candidates[record.image_id]
+                    if snapshot or revision:
+                        self.workspace_store.commit_candidate_state(
+                            record.image_id, revision, snapshot,
+                            self._effective_mask_for_candidates(record.image_id, snapshot), replace=True,
+                        )
+                    if record.hidden or record.reviewed:
+                        self.workspace_store.set_image_flags(record.image_id, hidden=record.hidden, reviewed=record.reviewed)
+                    if record.image_id in manual_drafts:
+                        self.workspace_store.save_manual(record.image_id, manual_drafts[record.image_id], self._decode_workspace_mask)
+                self.projectless_manual_drafts.clear()
+                project = self.workspace_store.project(catalog_id) or project
+                project["sourceIds"] = source_ids
+                return project
+
     def name_current_project(self, name: str) -> dict[str, Any]:
         with self.lock:
-            if not self.catalog_id:
-                raise ClientError("プロジェクトを開いていません。", "project_not_found")
             catalog_id = self.catalog_id
+        if not catalog_id:
+            return self.save_current_as_project(name)
         try: return self.workspace_store.name_project(catalog_id, name)
         except ValueError as exc: raise ClientError("プロジェクト名を確認してください。", "project_name_invalid") from exc
 
@@ -662,6 +727,7 @@ class CatalogMixin:
                         self.images.pop(record.image_id, None)
                         self.candidates.pop(record.image_id, None)
                         self.candidate_revisions.pop(record.image_id, None)
+                        self.projectless_manual_drafts.pop(record.image_id, None)
                         self._image_io_locks.pop(record.image_id, None)
                     if removed_ids:
                         removed_set = set(removed_ids)
@@ -1011,6 +1077,9 @@ class CatalogMixin:
                             asset_mtime_ns=stat.st_mtime_ns,
                             asset_size_bytes=stat.st_size,
                             source_kind="session",
+                            project_source_kind=source_kind,
+                            project_source_identity=f"browser:{source_identity or self.session_dir.name}",
+                            project_source_display="ブラウザから追加",
                         ))
                         imported.append({"clientKey": client_key, "imageId": added[-1].image_id})
                 except Exception:
@@ -1301,17 +1370,19 @@ class CatalogMixin:
         self._assert_image_editable(image_id)
         with self.image_io_lock(image_id):
             with self.lock:
-                if not self.workspace_store.has_image(image_id):
-                    return
                 committed = dict(payload)
                 dirty_layers = committed.get("dirtyLayers")
+                existing = self.workspace_store.manual(image_id, self._encode_workspace_mask) if self.workspace_store.has_image(image_id) else self.projectless_manual_drafts.get(image_id)
                 if dirty_layers is not None:
-                    existing = self.workspace_store.manual(image_id, self._encode_workspace_mask) or {}
+                    existing = existing or {}
                     for layer in ("add", "exclusion", "exclusionErase"):
                         committed.setdefault(layer, existing.get(layer, ""))
                 committed["hasEffectiveMask"] = self._effective_mask_for_draft(
                     image_id, self.candidates.get(image_id, []), committed,
                 )
+                if not self.workspace_store.has_image(image_id):
+                    self.projectless_manual_drafts[image_id] = committed
+                    return
                 try:
                     # The manual row, its normalized removal IDs, exact candidate
                     # revision, and gallery scalar are one SQLite transaction.
@@ -1320,8 +1391,8 @@ class CatalogMixin:
                     raise ClientError("手描き状態を保存できません。", "workspace_write_failed") from exc
 
     def manual_workspace(self, image_id: str) -> dict[str, Any] | None:
-        record = self.image_for_id(image_id)
-        if not self.workspace_store.has_image(image_id): return None
+        self.image_for_id(image_id)
+        if not self.workspace_store.has_image(image_id): return self.projectless_manual_drafts.get(image_id)
         return self.workspace_store.manual(image_id, self._encode_workspace_mask)
 
     def project_history_status(self, image_id: str) -> dict[str, bool]:
@@ -1393,6 +1464,7 @@ class CatalogMixin:
                     "candidateRevision": candidate_revision,
                     "hidden": record.hidden,
                     "reviewed": record.reviewed,
+                    "sourceId": record.source_id,
                     "sourceMismatch": record.image_id in self.source_mismatches,
                     "sourceDimensionsChanged": bool(self.source_mismatches.get(record.image_id)),
                 }

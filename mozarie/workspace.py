@@ -512,7 +512,11 @@ class WorkspaceStore:
                 for record in records:
                     row = existing.get(record.relative_path)
                     if row is None:
-                        image_id = uuid.uuid4().hex
+                        # A projectless session owns a real, opaque image ID
+                        # already.  Promoting it to a project must preserve
+                        # that identity so its current editor state can be
+                        # written without a client-side remap.
+                        image_id = str(getattr(record, "image_id", "")) or uuid.uuid4().hex
                         db.execute("INSERT INTO images(catalog_id,source_id,relative_path,image_id,size_bytes,mtime_ns,width,height,updated_at) VALUES(?,?,?,?,?,?,?,?,?)",
                                    (catalog_id, source_id, record.relative_path, image_id, record.size_bytes, record.mtime_ns, int(getattr(record, "width", 0)), int(getattr(record, "height", 0)), now))
                         result[record.relative_path] = {"image_id": image_id, "hidden": False, "reviewed": False, "revision": 0, "changed": False}

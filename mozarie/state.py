@@ -114,6 +114,9 @@ class StudioState(CatalogMixin, SavingMixin, DetectionMixin, JobsMixin):
         self.order: list[str] = []
         self.candidates: dict[str, list[Candidate]] = {}
         self.candidate_revisions: dict[str, int] = {}
+        # A projectless session is intentionally not in SQLite, but its live
+        # manual layers must become durable if the user later names a project.
+        self.projectless_manual_drafts: dict[str, dict[str, Any]] = {}
         # These locks only serialize work for the same catalogue record.  State
         # mutation still uses ``lock``; never acquire an image lock while that
         # global lock is held.

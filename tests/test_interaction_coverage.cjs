@@ -78,6 +78,7 @@ const context = {
   canvas: { style: {} }, addCanvas: { width: 4, height: 4 }, exclusionCanvas: { width: 4, height: 4 }, exclusionEraseCanvas: { width: 4, height: 4 },
   addCtx: { clearRect() {} }, exclusionCtx: { clearRect() {} }, exclusionEraseCtx: { clearRect() {} },
   t: (key, data = {}) => `${key}${data.value ?? data.count ?? ""}`,
+  applyProjectSnapshot() {},
   isBusy: () => busy, closeBoundaryModeMenu: undefined,
   clearBoundaryInteraction: () => calls.push(["clearBoundaryInteraction"]), clearBoundaryConstruction: () => calls.push(["clearBoundaryConstruction"]),
   updateBoundaryActions: () => calls.push(["boundaryActions"]), updateBrushCursor: () => {}, render: () => calls.push(["render"]), flushRender: () => calls.push(["flushRender"]), flushMaskComposition: () => calls.push(["flushMaskComposition"]), clearCandidateBlink: () => calls.push(["clearCandidateBlink"]), focusCanvas: () => calls.push(["canvas"]), focusElement: (value) => { document.activeElement = value; },
@@ -336,15 +337,14 @@ const tolerancePanelCss = styleSource.match(/\.bucket-tolerance-panel\s*\{([^}]*
   vm.runInNewContext("importSingleFile = async () => ({ catalogId: null, provisional: false });", context);
   state.importing = false; state.importSession = null; await test.importFiles([{ getFile: async () => { state.importSession = {}; return file('mismatch.png'); }, relativePath: "mismatch.png" }]);
   state.importing = false; state.importSession = null; await test.importFiles([{ getFile: async () => file("skip.gif"), relativePath: "skip.png" }]);
-  let finalizedHits = 0;
+  let provisionalRequests = 0;
   context.api = async (url) => {
-    if (url === "/api/workspace/catalog") return { catalogId: "p", provisional: true };
-    if (url === "/api/workspace/catalog/finalize") { finalizedHits += 1; return {}; }
+    if (url === "/api/workspace/catalog" || url === "/api/workspace/catalog/finalize") { provisionalRequests += 1; return { catalogId: "p", provisional: true }; }
     if (url === "/api/images") return { images: [] };
     return {};
   };
   state.images = []; images = state.images; state.importing = false; state.importSession = null; await test.importFiles([{ getFile: async () => file("final.png"), relativePath: "final.png" }]);
-  assert.equal(finalizedHits, 1, `the provisional catalog is finalized before its final image reconciliation: ${JSON.stringify(calls.slice(-4))}`);
+  assert.equal(provisionalRequests, 0, `ordinary imports never create a provisional project: ${JSON.stringify(calls.slice(-4))}`);
   context.fetch = async () => { throw new Error("network"); }; context.api = async () => { throw new Error("refresh"); };
   state.importing = false; state.importSession = null; await test.importFiles([{ getFile: async () => file("failure.png"), relativePath: "failure.png" }]);
   context.fetch = originalFetch; context.api = apiForClear;

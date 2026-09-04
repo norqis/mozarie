@@ -174,6 +174,11 @@ class ImageRecord:
     # opaque source id keeps identical relative paths distinct.
     source_id: str | None = None
     source_root: Path | None = None
+    # Projectless imports remember their actual source contract in memory.
+    # Promotion writes it as-is; it never guesses from a path or file content.
+    project_source_kind: str | None = field(default=None, repr=False)
+    project_source_identity: str | None = field(default=None, repr=False)
+    project_source_display: str | None = field(default=None, repr=False)
 
     def asset_fingerprint(self) -> tuple[int, int]:
         if self.asset_mtime_ns is None or self.asset_size_bytes is None:

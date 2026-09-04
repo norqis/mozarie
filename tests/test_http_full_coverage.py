@@ -126,7 +126,7 @@ class HttpBoundaryCoverageTests(unittest.TestCase):
             missing.do_DELETE()
         self.assertEqual(getattr(errors[0][0], "error_code", None), "project_not_found")
 
-    def test_upload_catalog_conflicts_and_provisional_fallback_are_explicit(self) -> None:
+    def test_upload_catalog_conflicts_and_projectless_import_are_explicit(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             staged = Path(directory) / "upload.png"
             staged.write_bytes(b"fixture")
@@ -137,7 +137,6 @@ class HttpBoundaryCoverageTests(unittest.TestCase):
                 state.browser_catalog_provisional = False
                 state.import_staging_gate = threading.RLock()
                 state.import_lock = threading.RLock()
-                state.workspace_store.ensure_provisional_catalog.return_value = "provisional"
                 state.import_image_file_for_api.return_value = ([], True)
                 emitted: list[object] = []
                 request = handler(headers={"X-Mozarie-Catalog-Id": requested})
@@ -155,9 +154,9 @@ class HttpBoundaryCoverageTests(unittest.TestCase):
             conflict.end_import_transfer.assert_called_once()
 
             staged.write_bytes(b"fixture")
-            fallback, emitted = run_upload(catalog_id=None, requested="")
-            self.assertEqual(emitted[-1]["catalogId"], "provisional")
-            self.assertTrue(fallback.browser_catalog_provisional)
+            projectless, emitted = run_upload(catalog_id=None, requested="")
+            self.assertIsNone(emitted[-1]["catalogId"])
+            self.assertFalse(projectless.browser_catalog_provisional)
 
     def test_post_optional_error_and_response_paths_have_stable_results(self) -> None:
         request = handler(); request._require_json_request = lambda: None
