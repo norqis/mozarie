@@ -27,7 +27,7 @@ from .core import (
     safe_import_relative_path, torch_module,
 )
 from .domain import Candidate, CandidateRole
-from .image_io import _valid_color, decode_draft_masks, draft_manual_exclusion_forced, inspect_import_image, oriented_image_size
+from .image_io import _valid_color, decode_draft_masks, draft_manual_exclusion_forced, inspect_import_image, oriented_image_size, unique_session_import_destination
 from .masks import compose_masks, expand_mask
 from .runtime import patch_directml_sam_prompt_encoder, runtime_backend, torch_device
 from .workspace import ProjectNameAlreadyExistsError, ProjectSourcePathConflictError, ProjectSourceUnavailableError, WorkspaceStore
@@ -1088,7 +1088,9 @@ class CatalogMixin:
                         # path that identifies this image within its source.
                         destination = source_import_dir / relative
                         if destination.exists():
-                            raise ClientError("同じソース内に同じ相対パスの画像があります。", "input_invalid")
+                            if source_kind != "browser-directory":
+                                raise ClientError("同じソース内に同じ相対パスの画像があります。", "input_invalid")
+                            destination = unique_session_import_destination(destination)
                         destination.parent.mkdir(parents=True, exist_ok=True)
                         os.replace(temporary, destination)
                         final_paths.append(destination)
@@ -1159,6 +1161,7 @@ class CatalogMixin:
                                 raise ClientError("完了したプロジェクトには新しい画像を追加できません。", "project_read_only") from exc
                             raise ClientError("選択した画像ソースをこのプロジェクトに復元できません。", "project_source_unavailable") from exc
                     published_imported: list[dict[str, str]] = []
+                    replaced_session_paths: list[Path] = []
                     for index, record in enumerate(added):
                         if self.catalog_id:
                             stored = stored_images.get(record.relative_path)
@@ -1173,12 +1176,28 @@ class CatalogMixin:
                             if restored or _revision:
                                 self.candidates[record.image_id] = restored
                                 self.candidate_revisions[record.image_id] = _revision
+                        previous = self.images.get(record.image_id)
+                        if (
+                            previous is not None
+                            and previous.source_kind == "session"
+                            and previous.project_source_identity == record.project_source_identity
+                            and previous.path != record.path
+                            and self.session_imports_dir is not None
+                            and previous.path.is_relative_to(self.session_imports_dir)
+                        ):
+                            replaced_session_paths.append(previous.path)
                         imported[index]["imageId"] = record.image_id
                         published_imported.append(imported[index])
                         self.images[record.image_id] = record
-                        self.order.append(record.image_id)
+                        if previous is None:
+                            self.order.append(record.image_id)
                     self.order.sort(key=lambda image_id: self.images[image_id].relative_path.lower())
                     images = self.list_images() if include_images else []
+                    for path in set(replaced_session_paths):
+                        try:
+                            path.unlink(missing_ok=True)
+                        except OSError as exc:
+                            LOGGER.warning("Could not remove replaced session import %s: %s", path, exc)
                     return images, published_imported
                 except Exception:
                     try:
