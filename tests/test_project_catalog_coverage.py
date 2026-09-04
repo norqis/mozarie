@@ -341,7 +341,7 @@ class ProjectCatalogCoverageTests(unittest.TestCase):
         self.assertEqual((source["kind"], source["identity"]), ("browser-directory", "browser:directory-handle"))
         state.close_project()
 
-        reselected = self.state(); reselected.activate_browser_catalog(project["id"])
+        reselected = self.state(); reselected.open_project(project["id"])
         replacement = self.root / "replacement.png"; replacement.write_bytes(self.png())
         _images, reimported = reselected._import_images([{
             "clientKey": "again", "name": "first.png", "relativePath": "nested/first.png", "stagedPath": replacement,
