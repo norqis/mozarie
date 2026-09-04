@@ -31,7 +31,7 @@ if TYPE_CHECKING:
     from .inference.yolo_detect import HandDetector
 
 
-_SCENE_FLUID_TAGS = frozenset({"cum_on_breasts", "cum on fingers", "cum on ass"})
+_SCENE_FLUID_TAGS = frozenset({"cum_on_breasts", "cum on fingers", "cum on ass", "cum on thighs"})
 
 
 def _scene_fluid_tags(info: dict[str, Any]) -> frozenset[str]:
@@ -334,6 +334,10 @@ class DetectionMixin:
             group_id = getattr(self, "_detection_history_group", None)
             if group_id: self.workspace_store.finish_history_group(group_id, failed=True)
             self._fail_job(exc, job_generation, catalog_generation)
+        finally:
+            # ``claim_and_run`` closes over this value. Drop it before the
+            # background runner clears state-owned models and the GPU cache.
+            models = None
 
     def _discard_candidates(self, candidates: list[Candidate]) -> None:
         for candidate in candidates:
@@ -452,7 +456,7 @@ class DetectionMixin:
         if not scene_fluid_tags:
             return np.zeros(shape, dtype=np.uint8)
         search = np.zeros(shape, dtype=np.uint8)
-        if "cum on ass" in scene_fluid_tags:
+        if {"cum on ass", "cum on thighs"} & scene_fluid_tags:
             for mask in final_masks:
                 bounds = _mask_bounds(mask)
                 if bounds is None:
@@ -476,9 +480,13 @@ class DetectionMixin:
                 left, top, right, bottom = bounds
                 width, height = right - left, bottom - top
                 center = (left + right) // 2
-                chest_left, chest_right = max(0, round(center - width * .38)), min(shape[1], round(center + width * .38))
-                chest_top, chest_bottom = min(shape[0], round(bottom + height * .64)), min(shape[0], round(bottom + height * 1.63))
-                search[chest_top:chest_bottom, chest_left:chest_right] = 1
+                _fill_metadata_fluid_roi(
+                    search,
+                    center - width * .70,
+                    bottom + height * .45,
+                    center + width * .70,
+                    bottom + height * 1.75,
+                )
         return white_fluid_mask(rgb, search) if np.any(search) else np.zeros(shape, dtype=np.uint8)
 
     def _finalize_exclusions(

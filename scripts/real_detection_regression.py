@@ -204,6 +204,7 @@ def main() -> int:
             state._require_supported_gpu()
             import torch
             device = state.settings["models"]["gpu_device"]
+            torch.cuda.synchronize(device)
             baseline = (int(torch.cuda.memory_allocated(device)), int(torch.cuda.memory_reserved(device)))
             settled_cycles: list[tuple[int, int]] = []
             for cycle in range(1, 3):
@@ -215,9 +216,10 @@ def main() -> int:
                     failures.append(failure)
                     state._release_gpu_job_memory()
                     gc.collect()
+                torch.cuda.synchronize(device)
                 settled = (int(torch.cuda.memory_allocated(device)), int(torch.cuda.memory_reserved(device)))
                 settled_cycles.append(settled)
-                print(f"VRAM cycle {cycle}: settled={settled}")
+                print(f"VRAM cycle {cycle} after cleanup: allocated={settled[0]}, reserved={settled[1]}")
             if any(current[0] > previous[0] or current[1] > previous[1] for previous, current in zip(settled_cycles, settled_cycles[1:])):
                 raise RuntimeError(f"GPU memory grew across cleanup cycles: before={baseline}, settled={settled_cycles}")
         finally:

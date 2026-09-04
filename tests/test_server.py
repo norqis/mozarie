@@ -4032,9 +4032,12 @@ class MozarieTests(unittest.TestCase):
         self.assertEqual(result[0]["exclusions"], {})
 
     def test_scene_metadata_fluid_search_uses_only_exact_tags_and_local_rois(self):
-        self.assertEqual(detection_module._scene_fluid_tags({"scene_positive": " CUM_ON_BREASTS , cum on fingers"}), {"cum_on_breasts", "cum on fingers"})
+        self.assertEqual(
+            detection_module._scene_fluid_tags({"scene_positive": " CUM_ON_BREASTS , cum on fingers, cum on thighs"}),
+            {"cum_on_breasts", "cum on fingers", "cum on thighs"},
+        )
         self.assertEqual(detection_module._scene_fluid_tags({"scene_info": '{"positive":"cum on ass"}'}), {"cum on ass"})
-        for info in ({}, {"scene_info": "bad"}, {"scene_info": "[]"}, {"scene_positive": "not_cum_on_breasts"}, {"scene_positive": ["cum_on_breasts"]}):
+        for info in ({}, {"scene_info": "bad"}, {"scene_info": "[]"}, {"scene_positive": "cum_on_thighs"}, {"scene_positive": "not_cum_on_breasts"}, {"scene_positive": ["cum_on_breasts"]}):
             with self.subTest(info=info): self.assertEqual(detection_module._scene_fluid_tags(info), set())
 
         rgb = np.zeros((400, 400, 3), dtype=np.uint8)
@@ -4043,12 +4046,14 @@ class MozarieTests(unittest.TestCase):
         face = np.zeros_like(target); face[20:40, 130:170] = 1
         with patch.object(detection_module, "white_fluid_mask", side_effect=lambda _rgb, search: np.asarray(search, dtype=np.uint8) * 255) as fluid:
             ass = self.new_state()._metadata_fluid_mask(rgb, [np.zeros_like(target), target], np.zeros_like(hand), [], frozenset({"cum on ass"}))
+            thighs = self.new_state()._metadata_fluid_mask(rgb, [target], np.zeros_like(hand), [], frozenset({"cum on thighs"}))
             fingers = self.new_state()._metadata_fluid_mask(rgb, [target], hand, [], frozenset({"cum on fingers"}))
             chest = self.new_state()._metadata_fluid_mask(
                 rgb, [], np.zeros_like(target), [{"mask": np.zeros_like(face)}, {"mask": face}], frozenset({"cum_on_breasts"}),
             )
             absent = self.new_state()._metadata_fluid_mask(rgb, [], np.zeros_like(hand), [], frozenset({"cum on fingers"}))
-        self.assertEqual(fluid.call_count, 3)
+        self.assertEqual(fluid.call_count, 4)
+        self.assertTrue(np.array_equal(ass, thighs))
         self.assertEqual(ass[150, 100], 255)
         self.assertEqual(ass[314, 259], 255)
         self.assertEqual(ass[149, 180], 0)
@@ -4057,8 +4062,9 @@ class MozarieTests(unittest.TestCase):
         self.assertEqual(fingers[242, 321], 255)
         self.assertEqual(fingers[275, 388], 255)
         self.assertEqual(fingers[150, 180], 0)
-        self.assertTrue(np.any(chest[53:73, 135:165]))
-        self.assertFalse(np.any(chest[:40]))
+        self.assertTrue(np.all(chest[49:75, 122:178] == 255))
+        self.assertFalse(np.any(chest[:49]))
+        self.assertFalse(np.any(chest[:, :122]))
         self.assertFalse(np.any(absent))
 
     def test_scene_metadata_fluid_only_detects_lower_deposits_in_the_tagged_local_roi(self):
@@ -7935,6 +7941,42 @@ image_io._stage_record_replacement(record, rendered, (source.stat().st_mtime_ns,
         with patch.object(state, "_wait_while_paused", side_effect=RuntimeError("idle")), patch.object(state, "_fail_job") as failed:
             state._detect_worker([], .5)
         self.assertIsInstance(failed.call_args.args[0], RuntimeError)
+
+    def test_detection_runner_releases_models_after_complete_cancel_and_failure(self):
+        for terminal_state in ("complete", "cancelled", "error"):
+            with self.subTest(terminal_state=terminal_state):
+                state = self.new_state()
+                state.settings["models"]["provider"] = "gpu"
+                state.models = object()
+                state.hand_model = object()
+                state.sam_predictor = Mock()
+                state.hand_segmentation_predictor = Mock()
+                replacement = object()
+
+                def ensure_models():
+                    state.models = replacement
+                    if terminal_state == "cancelled":
+                        assert state.job_control is not None
+                        state.job_control.cancel_requested.set()
+                    if terminal_state == "error":
+                        raise RuntimeError("model setup failed")
+                    return replacement
+
+                with patch.object(detection_module, "runtime_backend", return_value="cpu"), \
+                        patch.object(detection_module, "torch_module", return_value=Mock()), \
+                        patch.object(state, "_ensure_models", side_effect=ensure_models), \
+                        patch.object(state, "_release_gpu_cache") as release_cache:
+                    state._start_job("detect", [], state._detect_worker, .5, 1)
+                    assert state.worker_thread is not None
+                    state.worker_thread.join(2)
+
+                self.assertFalse(state.worker_thread.is_alive())
+                self.assertEqual(state.job.state, terminal_state)
+                self.assertIsNone(state.models)
+                self.assertIsNone(state.hand_model)
+                self.assertIsNone(state.sam_predictor)
+                self.assertIsNone(state.hand_segmentation_predictor)
+                release_cache.assert_called_once_with(provider="gpu", gpu_device=0)
 
     def test_detect_image_skips_empty_exclusions_and_non_targets(self):
         with tempfile.TemporaryDirectory() as directory:

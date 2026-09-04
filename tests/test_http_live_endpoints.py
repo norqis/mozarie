@@ -152,8 +152,9 @@ class LiveHttpEndpointTests(unittest.TestCase):
         )
         self.assertEqual(status, 200)
         response = json.loads(body)
-        self.assertTrue(response["provisional"])
+        self.assertIsNone(response["catalogId"], "browser imports remain projectless until explicitly saved")
         self.assertEqual(len(response["imported"]), 1)
+        self.assertEqual(list(self.state.session_imports_dir.glob("*.upload.tmp")), [], "the upload is renamed in the session volume instead of copied through cache")
 
     def test_job_endpoint_stays_responsive_while_a_flag_write_waits_for_sqlite(self) -> None:
         _status, _headers, body = self.request("POST", "/api/folder", {"path": str(self.source_dir)}, authorized=True)

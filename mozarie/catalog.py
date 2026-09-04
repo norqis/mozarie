@@ -970,19 +970,20 @@ class CatalogMixin:
                     raise ClientError("画像の更新情報が正しくありません。", "input_invalid")
                 if relative_path.suffix.lower() not in IMAGE_SUFFIXES:
                     continue
-                temporary = destination_dir / f".mozarie-import-{uuid.uuid4().hex}.tmp"
+                temporary: Path | None = None
                 try:
                     staged_path = file_data.get("stagedPath")
                     if not isinstance(staged_path, Path):
                         raise ClientError("追加画像を読み込めません。", "image_read_failed")
-                    with staged_path.open("rb") as source, temporary.open("xb") as destination:
-                        while chunk := source.read(IO_CHUNK_BYTES):
-                            destination.write(chunk)
-                        destination.flush()
+                    # HTTP already wrote this upload directly into this
+                    # session volume.  Inspect and rename that one file;
+                    # copying it again doubles I/O and peak disk use.
+                    temporary = staged_path
                     width, height = inspect_import_image(temporary, relative_path.suffix)
                     pending.append((temporary, relative_path.as_posix(), width, height, client_key, client_mtime_ns, client_size))
                 except Exception:
-                    temporary.unlink(missing_ok=True)
+                    if temporary is not None:
+                        temporary.unlink(missing_ok=True)
                     raise
 
             with self.import_lock, self.lock:
