@@ -496,11 +496,8 @@ class WorkspaceStore:
                         before = self._history_state_db(db, image_id)
                         db.execute("UPDATE images SET candidate_revision=?,reviewed=0,updated_at=? WHERE image_id=?", (revision, time.time_ns(), image_id))
                         for candidate in snapshot:
-                            try:
-                                with candidate.mask_path.open("rb") as handle:
-                                    mask = handle.read()
-                            except OSError:
-                                continue
+                            with candidate.mask_path.open("rb") as handle:
+                                mask = handle.read()
                             self._require_png_mask(mask)
                             db.execute(
                                 """INSERT INTO candidates(image_id,candidate_id,label_token,confidence,mask_png,enabled,color,source,origin,refinement,role,forced,deleted)
