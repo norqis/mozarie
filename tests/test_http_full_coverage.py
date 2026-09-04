@@ -284,18 +284,21 @@ class HttpBoundaryCoverageTests(unittest.TestCase):
             request.do_DELETE()
         self.assertEqual([status for _error, status in emitted], [http_module.HTTPStatus.INTERNAL_SERVER_ERROR, http_module.HTTPStatus.BAD_REQUEST, http_module.HTTPStatus.BAD_REQUEST, http_module.HTTPStatus.FORBIDDEN, http_module.HTTPStatus.BAD_REQUEST])
 
-    def test_upload_activates_requested_catalog_and_rejects_invalid_provisional_id(self) -> None:
+    def test_upload_requires_the_requested_project_to_already_be_open(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             staged = Path(directory) / "upload.png"; staged.write_bytes(b"fixture")
             state = Mock()
-            state.catalog_id = None; state.browser_catalog_provisional = False
+            state.catalog_id = None
             state.import_staging_gate = threading.RLock(); state.import_lock = threading.RLock()
             state.import_image_file_for_api.return_value = ([], True)
+            rejected: list[object] = []
             request = handler(headers={"X-Mozarie-Catalog-Id": "catalog"}); request.path = "/api/import/file"
-            request._require_binary_import_request = lambda: None; request._read_binary_body_to_file = lambda: staged; request._json = Mock()
+            request._require_binary_import_request = lambda: None; request._read_binary_body_to_file = lambda: staged
+            request._client_error = lambda error, *_args, **_kwargs: rejected.append(error)
             with patch.object(http_module, "STATE", state):
                 request.do_POST()
-            state.activate_browser_catalog.assert_called_once_with("catalog")
+            self.assertEqual(getattr(rejected[0], "error_code", None), "operation_in_progress")
+            state.import_image_file_for_api.assert_not_called()
 
             staged.write_bytes(b"fixture")
             state.catalog_id = "catalog"
@@ -303,14 +306,7 @@ class HttpBoundaryCoverageTests(unittest.TestCase):
             request._require_binary_import_request = lambda: None; request._read_binary_body_to_file = lambda: staged; request._json = Mock()
             with patch.object(http_module, "STATE", state):
                 request.do_POST()
-            state.workspace_store.ensure_provisional_catalog.assert_not_called()
-
-        state = Mock(); request = handler(); request.path = "/api/workspace/catalog"
-        request._require_json_request = lambda: None; request._read_json_body = lambda: {"provisional": True, "catalogId": "not-allowed"}
-        errors: list[object] = []; request._client_error = lambda error, *_args, **_kwargs: errors.append(error)
-        with patch.object(http_module, "STATE", state):
-            request.do_POST()
-        self.assertEqual(getattr(errors[0], "error_code", None), "input_invalid")
+            self.assertEqual(request._json.call_args.args[0]["catalogId"], "catalog")
 
     def test_thumbnail_initial_stale_missing_file_and_stream_disconnects_are_safe(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

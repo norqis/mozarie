@@ -350,13 +350,14 @@ class MosaicHandler(BaseHTTPRequestHandler):
                         try:
                             # Keep implicit API callers from splitting a
                             # parallel empty-catalog upload across IDs. This
-                            # lock covers identity selection only; decoding
-                            # and file copy below retain their parallelism.
+                            # lock only verifies that the browser is still
+                            # importing into its already-open project;
+                            # decoding and file copy below retain their
+                            # parallelism.  A request header never opens or
+                            # changes a project.
                             with STATE.import_lock:
                                 if requested_catalog and STATE.catalog_id != requested_catalog:
-                                    if STATE.catalog_id is not None:
-                                        raise ClientError("画像追加中にフォルダを切り替えることはできません。", "operation_in_progress")
-                                    STATE.activate_browser_catalog(requested_catalog)
+                                    raise ClientError("画像追加中にフォルダを切り替えることはできません。", "operation_in_progress")
                             import_args = {
                                 "name": name, "relative_path": relative_path, "client_key": client_key,
                                 "include_images": False, "transfer_active": True,

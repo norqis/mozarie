@@ -381,14 +381,11 @@ class HttpBranchTests(unittest.TestCase):
         state.resume_job.return_value = SimpleNamespace(as_dict=lambda: {})
         state.request_cancel.return_value = SimpleNamespace(as_dict=lambda: {})
         state.model_downloads = Mock()
-        state.finalize_browser_catalog.return_value = ("catalog", [])
         state.list_images.return_value = []
         state.diagnose_gpu_runtime.return_value = []
         state.recover_gpu_oom_for_request.return_value = None
         routes = (
             ("/api/folder", {"path": "C:/images"}),
-            ("/api/workspace/catalog", {"catalogId": "catalog"}),
-            ("/api/workspace/catalog/finalize", {}),
             ("/api/catalog/clear", {}),
             ("/api/workspace/image/image", {}),
             ("/api/workspace/manual/image", {}),
@@ -426,14 +423,12 @@ class HttpBranchTests(unittest.TestCase):
         handler._json = lambda *_args, **_kwargs: None
         handler._client_error = lambda error, *_args, **_kwargs: (_ for _ in ()).throw(error)
         state = Mock()
-        state.workspace_store.ensure_provisional_catalog.return_value = "provisional"
         state.settings = {"detection": {"threshold": 0.5, "parallelism": 1}}
         state.update_settings.return_value = {}
         state.reset_settings.return_value = {}
         state.settings_status.return_value = {}
         state.recover_gpu_oom_for_request.return_value = None
         routes = (
-            ("/api/workspace/catalog", {"provisional": True}),
             ("/api/detect", {"imageIds": [], "confidence": .5, "parallelism": 1, "targetClasses": ["penis"]}),
             ("/api/settings", {}),
             ("/api/settings/reset", {}),
