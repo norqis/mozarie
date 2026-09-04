@@ -852,6 +852,7 @@ function bindEvents() {
   const grid = $(".studio-grid");
   const paneStorage = { gallery: "mozarie.galleryWidth", inspector: "mozarie.inspectorWidth" };
   const paneDefaultsForWidth = (width) => width >= 1600 ? { gallery: 260, inspector: 320 } : width >= 1280 ? { gallery: 216, inspector: 292 } : { gallery: 190, inspector: 270 };
+  const paneDragThreshold = 3;
   const paneDefaults = paneDefaultsForWidth(window.innerWidth);
   const paneMinimums = { gallery: 144, inspector: 240 };
   const paneValues = { gallery: paneDefaults.gallery, inspector: paneDefaults.inspector };
@@ -885,9 +886,9 @@ function bindEvents() {
     let drag = null;
     const commit = (event, accepted) => {
       if (!drag || drag.pointerId !== event.pointerId) return;
+      if (accepted) request(event.clientX);
       if (drag.frame) cancelAnimationFrame(drag.frame);
       if (accepted && drag.moved) {
-        drag.latest = side === "gallery" ? event.clientX - grid.getBoundingClientRect().left : grid.getBoundingClientRect().right - event.clientX;
         updatePaneWidth(side, drag.latest);
       } else if (!accepted && drag.moved) updatePaneWidth(side, drag.initial, false);
       element.classList.remove("dragging");
@@ -897,7 +898,7 @@ function bindEvents() {
     const request = (clientX) => {
       if (!drag) return;
       if (!drag.moved) {
-        if (Math.abs(clientX - drag.startX) <= 3) return;
+        if (Math.abs(clientX - drag.startX) <= paneDragThreshold) return;
         drag.moved = true;
         element.classList.add("dragging");
       }
