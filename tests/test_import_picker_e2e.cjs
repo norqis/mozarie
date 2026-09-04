@@ -198,9 +198,10 @@ function startFixtureServer() {
     }
     // Folder imports preflight existing project sources before posting the
     // selected path.  This fixture has no persisted projects, so it must
-    // explicitly answer the read route rather than turning a normal import
+    // explicitly answer that preflight rather than turning the normal import
     // into a spurious project-list error.
-    if (requestPath === "/api/projects" && request.method === "GET") {
+    if (requestPath === "/api/project/source-check" && request.method === "POST") {
+      for await (const _chunk of request) { /* consume request */ }
       response.writeHead(200, { "Content-Type": "application/json" });
       response.end(JSON.stringify({ projects: [] }));
       return;
@@ -1818,8 +1819,13 @@ async function runControlLedger(page, fixtureUrl, contracts, dynamicContracts, f
   // The browser-directory import is asynchronous.  Waiting for it makes the
   // following native-folder submit verify the real POST instead of racing the
   // import guard.
-  await page.waitForFunction(() => !state.importing);
-  await click("pickFolder"); await click("loadFolderButton"); await page.waitForFunction(() => state.images.some((image) => image.id === "sample")); await closeDialogs();
+  await page.waitForFunction(() => !state.importing && !isBusy());
+  await click("pickFolder");
+  // Directory import owns and resets the picker session.  Re-enter the
+  // explicit native-folder value after it completes so this is a real folder
+  // submission rather than a stale field surviving a race.
+  await page.locator("#folderPath").fill("G:\\fixture");
+  await click("loadFolderButton"); await page.waitForFunction(() => state.images.some((image) => image.id === "sample")); await closeDialogs();
   // Folder loading replaces the thumbnail-backed bitmap; re-enter the same
   // normal-size editor fixture before pointer-only controls continue.
   await setupFixture();
