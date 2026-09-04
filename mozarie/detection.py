@@ -496,9 +496,9 @@ class DetectionMixin:
                 center = (left + right) // 2
                 _fill_metadata_fluid_roi(
                     search,
-                    center - width * .70,
+                    center - width * .50,
                     bottom + height * .45,
-                    center + width * .70,
+                    center + width * .50,
                     bottom + height * 1.75,
                 )
         return white_fluid_mask(rgb, search) if np.any(search) else np.zeros(shape, dtype=np.uint8)

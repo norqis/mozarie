@@ -4160,10 +4160,23 @@ class MozarieTests(unittest.TestCase):
         self.assertEqual(fingers[242, 321], 255)
         self.assertEqual(fingers[275, 388], 255)
         self.assertEqual(fingers[150, 180], 0)
-        self.assertTrue(np.all(chest[49:75, 122:178] == 255))
-        self.assertFalse(np.any(chest[:49]))
-        self.assertFalse(np.any(chest[:, :122]))
+        expected_chest = np.zeros_like(chest)
+        expected_chest[49:75, 130:170] = 255
+        self.assertTrue(np.array_equal(chest, expected_chest))
         self.assertFalse(np.any(absent))
+
+    def test_scene_metadata_chest_fluid_ignores_white_clothing_outside_narrow_roi(self):
+        rgb = np.zeros((400, 400, 3), dtype=np.uint8)
+        face = np.zeros((400, 400), dtype=np.uint8); face[20:40, 130:170] = 1
+        rgb[50:70, 122:130] = 255
+        rgb[50:54, 145:150] = 255
+
+        detected = self.new_state()._metadata_fluid_mask(
+            rgb, [], np.zeros_like(face), [{"mask": face}], frozenset({"cum_on_breasts"}),
+        )
+
+        self.assertFalse(np.any(detected[50:70, 122:130]))
+        self.assertTrue(np.any(detected[50:54, 145:150]))
 
     def test_cum_in_pussy_metadata_ignores_empty_apply_masks(self):
         state = self.new_state()
