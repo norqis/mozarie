@@ -265,9 +265,15 @@ class CatalogMixin:
                     worker.result()
         records.sort(key=lambda record: (record.relative_path.casefold(), record.relative_path))
         try:
-            stored = self.workspace_store.relink_native_source(catalog_id, source_id, root, records) if relink_source_id else (
-                self.workspace_store.reconcile_images(catalog_id, records, source_id=source_id, allow_new=allow_new) if catalog_id is not None else {}
-            )
+            if relink_source_id:
+                stored = self.workspace_store.relink_native_source(catalog_id, source_id, root, records)
+            elif catalog_id is not None:
+                stored = (
+                    self.workspace_store.reconcile_native_source(catalog_id, source_id, root, records)
+                    if allow_new else self.workspace_store.reconcile_images(catalog_id, records, source_id=source_id, allow_new=False)
+                )
+            else:
+                stored = {}
         except ProjectSourcePathConflictError as exc:
             if relink_source_id:
                 raise ClientError("このプロジェクトの別の元フォルダーに同じパスが設定されています。", "project_source_conflict") from exc
@@ -307,8 +313,6 @@ class CatalogMixin:
             self.source_mismatches = retained_mismatches
         self.catalog_id = catalog_id
         completed = bool(catalog_id and (self.workspace_store.project(catalog_id) or {}).get("status") == "completed")
-        if catalog_id is not None and allow_new:
-            self.workspace_store.set_project_source_root(catalog_id, str(root))
         if defer_replace:
             return records
         # Adding another folder to an open project is additive.  Replace only

@@ -439,7 +439,7 @@ class WorkspaceStore:
 
     def relink_native_source(self, catalog_id: str, source_id: str, root: Path, records: list[Any]) -> dict[str, dict[str, Any]]:
         identity = str(root.resolve())
-        def update_source(db: sqlite3.Connection) -> None:
+        def update_source(db: sqlite3.Connection, now: int) -> None:
             source = db.execute("SELECT kind FROM project_sources WHERE catalog_id=? AND source_id=?", (catalog_id, source_id)).fetchone()
             if source is None or str(source["kind"]) != "native-folder":
                 raise ProjectSourceUnavailableError("native project source is missing")
@@ -450,7 +450,16 @@ class WorkspaceStore:
                 raise ProjectSourcePathConflictError("native project source path already belongs to this project")
             db.execute("""UPDATE project_sources SET display_name=?,native_path=?,source_identity=?
                 WHERE catalog_id=? AND source_id=?""", (root.name or identity, identity, identity, catalog_id, source_id))
+            db.execute("UPDATE catalogs SET source_root=?,updated_at=? WHERE catalog_id=?", (identity, now, catalog_id))
         return self.reconcile_images(catalog_id, records, source_id=source_id, before_reconcile=update_source)
+
+    def reconcile_native_source(self, catalog_id: str, source_id: str, root: Path, records: list[Any]) -> dict[str, dict[str, Any]]:
+        identity = str(root.resolve())
+
+        def update_root(db: sqlite3.Connection, now: int) -> None:
+            db.execute("UPDATE catalogs SET source_root=?,updated_at=? WHERE catalog_id=?", (identity, now, catalog_id))
+
+        return self.reconcile_images(catalog_id, records, source_id=source_id, before_reconcile=update_root)
 
     def project_images(self, catalog_id: str) -> list[dict[str, Any]]:
         with self._connect() as db:
@@ -604,10 +613,6 @@ class WorkspaceStore:
             rows = db.execute(sql, values).fetchall()
         return [self._project_row(row) for row in rows]
 
-    def set_project_source_root(self, catalog_id: str, source_root: str | None) -> None:
-        with self._lock, self._connect() as db:
-            db.execute("UPDATE catalogs SET source_root=?,updated_at=? WHERE catalog_id=?", (source_root, time.time_ns(), catalog_id))
-
     def delete_project(self, catalog_id: str) -> list[str]:
         """Permanently remove one explicit project and all of its workspace rows."""
         with self._lock, self._connect() as db:
@@ -641,7 +646,7 @@ class WorkspaceStore:
             db.execute("BEGIN IMMEDIATE")
             try:
                 if before_reconcile is not None:
-                    before_reconcile(db)
+                    before_reconcile(db, now)
                 if not records:
                     db.execute("COMMIT")
                     return result
