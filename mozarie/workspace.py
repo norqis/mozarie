@@ -308,7 +308,7 @@ class WorkspaceStore:
         display_name: str,
         source_identity: str,
         create: bool,
-    ) -> str:
+    ) -> tuple[str, bool]:
         """Resolve one browser selection to its durable source.
 
         A browser can send back a source ID it already received for this
@@ -327,7 +327,7 @@ class WorkspaceStore:
             if direct is not None:
                 if str(direct["catalog_id"]) != catalog_id or str(direct["kind"]) != kind:
                     raise ValueError("browser source does not belong to this project")
-                return str(direct["source_id"])
+                return str(direct["source_id"]), False
             matched = db.execute(
                 "SELECT source_id,kind FROM project_sources WHERE catalog_id=? AND source_identity=?",
                 (catalog_id, identity),
@@ -335,12 +335,34 @@ class WorkspaceStore:
             if matched is not None:
                 if str(matched["kind"]) != kind:
                     raise ValueError("project source kind does not match")
-                return str(matched["source_id"])
+                return str(matched["source_id"]), False
             if not create:
                 raise ValueError("browser source is missing")
             if db.execute("SELECT 1 FROM catalogs WHERE catalog_id=?", (catalog_id,)).fetchone() is None:
                 raise ValueError("project is missing")
-            return self._ensure_project_source_db(db, catalog_id, kind, display_name, identity)
+            return self._ensure_project_source_db(db, catalog_id, kind, display_name, identity), True
+
+    def rollback_import(self, catalog_id: str, source_id: str, created_ids: list[str], *, delete_source: bool) -> None:
+        """Undo only database rows created by one failed browser import."""
+        unique_ids = list(dict.fromkeys(created_ids))
+        with self._lock, self._connect() as db:
+            db.execute("BEGIN IMMEDIATE")
+            try:
+                if unique_ids:
+                    placeholders = ",".join("?" for _ in unique_ids)
+                    db.execute(
+                        f"DELETE FROM images WHERE catalog_id=? AND source_id=? AND image_id IN ({placeholders})",
+                        [catalog_id, source_id, *unique_ids],
+                    )
+                if delete_source:
+                    db.execute("""DELETE FROM project_sources
+                        WHERE source_id=? AND catalog_id=?
+                          AND NOT EXISTS (SELECT 1 FROM images WHERE source_id=?)""",
+                               (source_id, catalog_id, source_id))
+                db.execute("COMMIT")
+            except Exception:
+                db.execute("ROLLBACK")
+                raise
 
     def catalog_exists(self, catalog_id: str) -> bool:
         with self._connect() as db:
@@ -526,7 +548,10 @@ class WorkspaceStore:
                             raise ValueError("image identity already belongs to another source")
                         db.execute("INSERT INTO images(catalog_id,source_id,relative_path,image_id,size_bytes,mtime_ns,width,height,updated_at) VALUES(?,?,?,?,?,?,?,?,?)",
                                    (catalog_id, source_id, record.relative_path, image_id, record.size_bytes, record.mtime_ns, int(getattr(record, "width", 0)), int(getattr(record, "height", 0)), now))
-                        result[record.relative_path] = {"image_id": image_id, "hidden": False, "reviewed": False, "revision": 0, "changed": False}
+                        result[record.relative_path] = {
+                            "image_id": image_id, "hidden": False, "reviewed": False,
+                            "revision": 0, "changed": False, "created": True,
+                        }
                         continue
                     width, height = int(getattr(record, "width", 0)), int(getattr(record, "height", 0))
                     changed = int(row["size_bytes"]) != record.size_bytes or int(row["mtime_ns"]) != record.mtime_ns or int(row["width"]) != width or int(row["height"]) != height
@@ -534,7 +559,14 @@ class WorkspaceStore:
                     # Keep the old baseline until the user accepts the source
                     # change in the warning dialog. This makes a reopened
                     # project warn again instead of silently normalising it.
-                    result[record.relative_path] = {"image_id": row["image_id"], "hidden": bool(row["hidden"]), "reviewed": False if changed else bool(row["reviewed"]), "revision": int(row["candidate_revision"]), "changed": changed or bool(row["source_blocked"]), "dimensions_changed": dimensions_changed or bool(row["source_blocked"])}
+                    result[record.relative_path] = {
+                        "image_id": row["image_id"], "hidden": bool(row["hidden"]),
+                        "reviewed": False if changed else bool(row["reviewed"]),
+                        "revision": int(row["candidate_revision"]),
+                        "changed": changed or bool(row["source_blocked"]),
+                        "dimensions_changed": dimensions_changed or bool(row["source_blocked"]),
+                        "created": False,
+                    }
                 db.execute("COMMIT")
             except Exception:
                 db.execute("ROLLBACK")

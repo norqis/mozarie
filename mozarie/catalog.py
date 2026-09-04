@@ -1040,12 +1040,19 @@ class CatalogMixin:
                     for destination in final_paths:
                         destination.unlink(missing_ok=True)
                     raise
+                live_images = dict(self.images)
+                live_order = list(self.order)
+                live_candidates = {image_id: list(candidates) for image_id, candidates in self.candidates.items()}
+                live_revisions = dict(self.candidate_revisions)
+                live_mismatches = dict(self.source_mismatches)
+                durable_source_id: str | None = None
+                durable_source_created = False
+                durable_created_ids: list[str] = []
                 try:
-                    durable_source_id: str | None = None
                     if self.catalog_id:
                         browser_identity = source_identity or self.session_dir.name
                         try:
-                            durable_source_id = self.workspace_store.resolve_browser_source(
+                            durable_source_id, durable_source_created = self.workspace_store.resolve_browser_source(
                                 self.catalog_id,
                                 kind=source_kind,
                                 display_name="ブラウザから追加",
@@ -1065,6 +1072,11 @@ class CatalogMixin:
                                 source_id=durable_source_id,
                                 allow_new=not self.project_read_only,
                             )
+                            durable_created_ids = [
+                                str(stored["image_id"])
+                                for stored in stored_images.values()
+                                if stored["created"]
+                            ]
                         except ValueError as exc:
                             if self.project_read_only:
                                 raise ClientError("完了したプロジェクトには新しい画像を追加できません。", "project_read_only") from exc
@@ -1087,14 +1099,20 @@ class CatalogMixin:
                     images = self.list_images() if include_images else []
                     return images, imported
                 except Exception:
+                    if self.catalog_id and durable_source_id:
+                        self.workspace_store.rollback_import(
+                            self.catalog_id,
+                            durable_source_id,
+                            durable_created_ids,
+                            delete_source=durable_source_created,
+                        )
                     for destination in final_paths:
                         destination.unlink(missing_ok=True)
-                    for record in added:
-                        if self.images.get(record.image_id) is record:
-                            self.images.pop(record.image_id, None)
-                            self.candidates.pop(record.image_id, None)
-                            self.candidate_revisions.pop(record.image_id, None)
-                    self.order = [image_id for image_id in self.order if image_id in self.images]
+                    self.images = live_images
+                    self.order = live_order
+                    self.candidates = live_candidates
+                    self.candidate_revisions = live_revisions
+                    self.source_mismatches = live_mismatches
                     raise
         finally:
             for temporary, _name, _width, _height, _client_key, _mtime, _size in pending:

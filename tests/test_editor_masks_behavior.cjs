@@ -478,6 +478,41 @@ assert.equal(state.manualExclusionEraseEnabled, true);
   await test.batchCandidateOperation("apply:enable");
   assert.equal(state.candidateBatchPending.size, 0, "a failed batch mutation always clears its pending state");
 
+  // A large candidate list must stay one mutation from the editor's point of
+  // view: one request and one final composition/render, never one per row.
+  resetCandidateState();
+  state.manualMaskPresent = false; addCtx.pixels = false; exclusionCtx.pixels = false; exclusionEraseCtx.pixels = false;
+  state.candidates = ["apply", "exclude"].flatMap((role) => Array.from({ length: 100 }, (_unused, index) => ({
+    id: `${role}-${index}`, role, enabled: true, forced: role === "exclude", expandPx: 0,
+    confidence: .9, labelToken: role === "apply" ? "penis" : "hand", source: role === "apply" ? "target" : "hand_exclusion", refinement: null, color: "#fff",
+  })));
+  const bulkCalls = [];
+  context.api = async (path, options) => { bulkCalls.push({ path, body: JSON.parse(options.body) }); return { candidateRevision: 20 + bulkCalls.length }; };
+  const assertBulkUi = async (spec, role, enabled) => {
+    events.length = 0; bulkCalls.length = 0;
+    await test.batchCandidateOperation(spec);
+    assert.equal(bulkCalls.length, 1, `${spec} sends exactly one batch HTTP request for 100 rows`);
+    assert.deepEqual(bulkCalls[0], { path: "/api/candidates/batch", body: { imageId: "image", role, operation: enabled ? "enable" : "disable" } });
+    assert.equal(events.filter((event) => event === "preview").length, 1, `${spec} schedules one composed mosaic preview`);
+    assert.equal(events.filter((event) => event === "render").length, 1, `${spec} issues one final canvas render`);
+    assert.equal(state.candidates.filter((candidate) => candidate.role === role && candidate.enabled === enabled).length, 100, `${spec} keeps all 100 ${role} rows consistent`);
+  };
+  await assertBulkUi("apply:disable", "apply", false);
+  await assertBulkUi("apply:enable", "apply", true);
+  await assertBulkUi("exclude:disable", "exclude", false);
+  await assertBulkUi("exclude:enable", "exclude", true);
+  events.length = 0; bulkCalls.length = 0;
+  context.reconcileCurrentCandidates = async () => {
+    state.candidates.filter((candidate) => candidate.role === "apply").forEach((candidate) => { candidate.expandPx = 4; });
+    return true;
+  };
+  await test.commitBatchCandidatePadding({ mode: "batch", imageId: "image", role: "apply", original: 0, trigger: element("#candidatePaddingInput"), committing: false }, 4);
+  assert.deepEqual(bulkCalls, [{ path: "/api/candidates/batch", body: { imageId: "image", role: "apply", operation: "set_padding", expandPx: 4 } }], "one padding confirmation sends one request for all 100 rows");
+  assert.equal(events.filter((event) => event === "preview").length, 1, "bulk padding schedules one composed mosaic preview");
+  assert.equal(events.filter((event) => event === "render").length, 1, "bulk padding issues one final canvas render");
+  assert.equal(state.candidates.filter((candidate) => candidate.role === "apply" && candidate.expandPx === 4).length, 100, "bulk padding changes every selected candidate together");
+  assert.equal(state.candidates.filter((candidate) => candidate.role === "exclude" && candidate.expandPx === 0).length, 100, "bulk padding leaves the other role unchanged");
+
   // A new manual exclusion-erase joins the range animation only when every
   // already-visible exclusion layer is in its ordinary display mode.  Check
   // before painting, because the new erase layer is not yet a member of that

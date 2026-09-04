@@ -24,6 +24,7 @@ import mozarie.http as http_module
 import mozarie.state as state_module
 from mozarie.http import MosaicHandler
 from mozarie.state import StudioState
+from mozarie.core import Candidate, CandidateRole
 
 
 class LiveHttpEndpointTests(unittest.TestCase):
@@ -193,6 +194,77 @@ class LiveHttpEndpointTests(unittest.TestCase):
         self.assertEqual(status, 500)
         self.assertEqual(json.loads(body)["error_code"], "workspace_database_error")
         self.assertFalse(self.state.images[image_id].hidden)
+
+    def test_hundred_candidate_bulk_controls_are_one_http_transaction_and_one_undo(self) -> None:
+        """Exercise the browser route against SQLite, not a handler mock."""
+        status, _headers, _body = self.request("POST", "/api/projects", {"name": "bulk candidates"}, authorized=True)
+        self.assertEqual(status, 200)
+        status, _headers, body = self.request("POST", "/api/folder", {"path": str(self.source_dir)}, authorized=True)
+        self.assertEqual(status, 200)
+        image_id = json.loads(body)["images"][0]["id"]
+        candidates = []
+        for role, label in ((CandidateRole.APPLY, "penis"), (CandidateRole.EXCLUDE, "hand")):
+            for index in range(100):
+                candidate_id = f"{role.value}-{index}"
+                mask_path = self.state.cache_dir / image_id / f"{candidate_id}.png"
+                mask_path.parent.mkdir(parents=True, exist_ok=True)
+                Image.new("L", (12, 8), 255).save(mask_path)
+                candidates.append(Candidate(candidate_id, label, .9, mask_path, role=role, forced=role == CandidateRole.EXCLUDE))
+        self.state.candidates[image_id] = candidates
+        with self.state.image_io_lock(image_id):
+            with self.state.lock:
+                self.state._commit_candidate_snapshot(image_id, candidates, replace=True)
+
+        def durable_counts() -> tuple[int, int]:
+            with self.state.workspace_store._connect() as db:
+                return (
+                    int(db.execute("SELECT COUNT(*) FROM history_entries WHERE image_id=?", (image_id,)).fetchone()[0]),
+                    int(db.execute("SELECT candidate_revision FROM images WHERE image_id=?", (image_id,)).fetchone()[0]),
+                )
+
+        def assert_one_bulk_request(payload: dict[str, object]) -> None:
+            statements: list[str] = []
+            original_connect = self.state.workspace_store._connect
+
+            def traced_connect():
+                db = original_connect()
+                db.set_trace_callback(statements.append)
+                return db
+
+            before_history, before_revision = durable_counts()
+            replacing_redo = self.state.workspace_store.history_status(image_id)["canRedo"]
+            with patch.object(self.state.workspace_store, "_connect", side_effect=traced_connect):
+                status, _headers, body = self.request("POST", "/api/candidates/batch", {"imageId": image_id, **payload}, authorized=True)
+            self.assertEqual(status, 200)
+            response = json.loads(body)
+            self.assertEqual(response["candidateRevision"], before_revision + 1)
+            self.assertEqual(sum(statement == "BEGIN IMMEDIATE" for statement in statements), 1)
+            self.assertEqual(durable_counts(), (before_history if replacing_redo else before_history + 1, before_revision + 1))
+
+        assert_one_bulk_request({"role": "apply", "operation": "disable"})
+        self.assertTrue(all(not item.enabled for item in self.state.candidates[image_id] if item.role == CandidateRole.APPLY))
+        self.assertTrue(all(item.enabled for item in self.state.candidates[image_id] if item.role == CandidateRole.EXCLUDE))
+        status, _headers, body = self.request("POST", f"/api/project/history/{image_id}/undo", {}, authorized=True)
+        self.assertEqual(status, 200)
+        self.assertEqual(json.loads(body)["changedImageIds"], [image_id])
+        self.assertTrue(all(item.enabled for item in self.state.candidates[image_id]))
+
+        for payload, role, expected_enabled in (
+            ({"role": "apply", "operation": "disable"}, CandidateRole.APPLY, False),
+            ({"role": "apply", "operation": "enable"}, CandidateRole.APPLY, True),
+            ({"role": "exclude", "operation": "disable"}, CandidateRole.EXCLUDE, False),
+            ({"role": "exclude", "operation": "enable"}, CandidateRole.EXCLUDE, True),
+        ):
+            assert_one_bulk_request(payload)
+            self.assertTrue(all(item.enabled is expected_enabled for item in self.state.candidates[image_id] if item.role == role))
+
+        assert_one_bulk_request({"role": "apply", "operation": "set_padding", "expandPx": 4})
+        self.assertTrue(all(item.expand_px == 4 for item in self.state.candidates[image_id] if item.role == CandidateRole.APPLY))
+        self.assertTrue(all(item.expand_px == 0 for item in self.state.candidates[image_id] if item.role == CandidateRole.EXCLUDE))
+        status, _headers, body = self.request("POST", f"/api/project/history/{image_id}/undo", {}, authorized=True)
+        self.assertEqual(status, 200)
+        self.assertEqual(json.loads(body)["changedImageIds"], [image_id])
+        self.assertTrue(all(item.expand_px == 0 for item in self.state.candidates[image_id]))
 
 
 if __name__ == "__main__":

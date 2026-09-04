@@ -7,8 +7,10 @@ settings, or requires the external images in CI.
 from __future__ import annotations
 
 import argparse
+import ctypes
 import gc
 import json
+import os
 import sys
 import tempfile
 import weakref
@@ -58,6 +60,58 @@ SAMPLES = {
         ),
     },
 }
+
+
+# The settle check deliberately samples only after models and image arrays have
+# been released.  One 4K source plus its RGB/mask work buffers is below 128 MiB;
+# 256 MiB leaves room for Python and the Windows working-set manager while still
+# catching a model-sized leak.  PrivateUsage is Windows' committed private
+# memory; WorkingSetSize is its current resident set (PROCESS_MEMORY_COUNTERS_EX).
+MIB = 1024 * 1024
+MAX_SETTLED_PROCESS_MEMORY_DELTA = 256 * MIB
+MEMORY_SOAK_CYCLES = 5
+
+
+class _ProcessMemoryCountersEx(ctypes.Structure):
+    _fields_ = [
+        ("cb", ctypes.c_ulong),
+        ("PageFaultCount", ctypes.c_ulong),
+        ("PeakWorkingSetSize", ctypes.c_size_t),
+        ("WorkingSetSize", ctypes.c_size_t),
+        ("QuotaPeakPagedPoolUsage", ctypes.c_size_t),
+        ("QuotaPagedPoolUsage", ctypes.c_size_t),
+        ("QuotaPeakNonPagedPoolUsage", ctypes.c_size_t),
+        ("QuotaNonPagedPoolUsage", ctypes.c_size_t),
+        ("PagefileUsage", ctypes.c_size_t),
+        ("PeakPagefileUsage", ctypes.c_size_t),
+        ("PrivateUsage", ctypes.c_size_t),
+    ]
+
+
+def _process_memory_bytes() -> tuple[int, int]:
+    """Return Windows Private Bytes and current working set for this process."""
+    if os.name != "nt":
+        raise RuntimeError("real detection memory soak requires Windows")
+    counters = _ProcessMemoryCountersEx()
+    counters.cb = ctypes.sizeof(counters)
+    handle = ctypes.windll.kernel32.GetCurrentProcess()
+    if not ctypes.windll.psapi.GetProcessMemoryInfo(handle, ctypes.byref(counters), counters.cb):
+        raise ctypes.WinError(ctypes.get_last_error())
+    return int(counters.PrivateUsage), int(counters.WorkingSetSize)
+
+
+def _assert_process_memory_soak(samples: list[tuple[int, int]]) -> None:
+    """Reject an accumulating post-cleanup process footprint, not harmless noise."""
+    if len(samples) < 4:
+        raise ValueError("process memory soak needs at least four settled cycles")
+    settled = samples[1:]
+    labels = ("private", "rss")
+    for index, label in enumerate(labels):
+        values = [sample[index] for sample in settled]
+        if max(values) - min(values) > MAX_SETTLED_PROCESS_MEMORY_DELTA:
+            raise RuntimeError(f"process {label} varied by more than {MAX_SETTLED_PROCESS_MEMORY_DELTA} bytes: {values}")
+        if all(current > previous for previous, current in zip(values, values[1:])):
+            raise RuntimeError(f"process {label} grew after every cleanup cycle: {values}")
 
 
 def _mask_metrics(path: Path) -> tuple[int, tuple[int, int, int, int] | None]:
@@ -214,7 +268,8 @@ def main() -> int:
             torch.cuda.synchronize(device)
             baseline = (int(torch.cuda.memory_allocated(device)), int(torch.cuda.memory_reserved(device)))
             settled_cycles: list[tuple[int, int]] = []
-            for cycle in range(1, 3):
+            settled_process_memory: list[tuple[int, int]] = []
+            for cycle in range(1, MEMORY_SOAK_CYCLES + 1):
                 try:
                     print(*_run_cycle(state, args.images_dir, args.artifacts, args.scene23_repeats, cycle), sep="\n")
                 except RuntimeError as exc:
@@ -226,9 +281,15 @@ def main() -> int:
                 torch.cuda.synchronize(device)
                 settled = (int(torch.cuda.memory_allocated(device)), int(torch.cuda.memory_reserved(device)))
                 settled_cycles.append(settled)
-                print(f"VRAM cycle {cycle} after cleanup: allocated={settled[0]}, reserved={settled[1]}")
+                process_memory = _process_memory_bytes()
+                settled_process_memory.append(process_memory)
+                print(
+                    f"cycle {cycle} after cleanup: GPU allocated={settled[0]}, reserved={settled[1]}; "
+                    f"process private={process_memory[0]}, rss={process_memory[1]}"
+                )
             if any(current[0] > previous[0] or current[1] > previous[1] for previous, current in zip(settled_cycles, settled_cycles[1:])):
                 raise RuntimeError(f"GPU memory grew across cleanup cycles: before={baseline}, settled={settled_cycles}")
+            _assert_process_memory_soak(settled_process_memory)
         finally:
             state.shutdown()
     if failures:
