@@ -241,8 +241,10 @@ async function startSingleSave(event) {
     try { committed = await commitBrowserSaveWithRetry({ imageId: save.imageId, candidateRevision: entry.candidateRevision, saveToken, sourceAction, ...(sourceAction === "overwrite" && access?.fileHandle ? sourceCommitMetadata(access) : {}) }); }
     catch (error) {
       if (error.saveState === "pending") await cancelBrowserSave(entry, saveToken);
-      if (sourceChanged && (isDefinitiveCommitRejection(error) || error.saveState === "pending")) await restoreSourceHandle(access, sourceSnapshot, deleteOriginal);
-      if (output) await state.outputDirectoryHandle.removeEntry(output.name).catch(() => {});
+      if (sourceChanged && (isDefinitiveCommitRejection(error) || error.saveState === "pending")) {
+        await restoreSourceHandle(access, sourceSnapshot, deleteOriginal);
+        if (output) await state.outputDirectoryHandle.removeEntry(output.name).catch(() => {});
+      }
       throw error;
     } finally {
       sourceSnapshot = null;
@@ -551,8 +553,15 @@ async function runBrowserSave(imageIds, suffix, deleteOriginal, mode = "copy") {
             }); }
             catch (error) {
               if (error.saveState === "pending") await cancelBrowserSave(entry, saveToken);
-              if (sourceChanged && (isDefinitiveCommitRejection(error) || error.saveState === "pending")) try { if (sourceSnapshot === null) throw new Error(); await restoreSourceHandle(access, sourceSnapshot, true); } catch { throw codedError("source_restore_failed"); }
-              await inputs.outputDirectoryHandle.removeEntry(output.name).catch(() => {});
+              if (sourceChanged && (isDefinitiveCommitRejection(error) || error.saveState === "pending")) try {
+                if (sourceSnapshot === null) throw new Error();
+                await restoreSourceHandle(access, sourceSnapshot, true);
+                const liveAccess = sourceAccessFor(entry.imageId);
+                if (liveAccess) Object.assign(liveAccess, access);
+              } catch { throw codedError("source_restore_failed"); }
+              if (sourceChanged && (isDefinitiveCommitRejection(error) || error.saveState === "pending")) {
+                await inputs.outputDirectoryHandle.removeEntry(output.name).catch(() => {});
+              }
               throw error;
             } finally { sourceSnapshot = null; }
           };
@@ -587,7 +596,7 @@ async function runBrowserSave(imageIds, suffix, deleteOriginal, mode = "copy") {
               return finishBrowserSaveEntry(committed, entry, save, sourceAction);
             } catch (error) {
               if (error.saveState === "pending") await cancelBrowserSave(entry, saveToken);
-              if (isDefinitiveCommitRejection(error) || error.saveState === "pending") try { if (sourceSnapshot === null) throw new Error(); await restoreSourceHandle(access, sourceSnapshot, false); } catch { throw codedError("source_restore_failed"); }
+              if (sourceSnapshot !== null && (isDefinitiveCommitRejection(error) || error.saveState === "pending")) try { await restoreSourceHandle(access, sourceSnapshot, false); } catch { throw codedError("source_restore_failed"); }
               throw error;
             } finally { sourceSnapshot = null; }
           });

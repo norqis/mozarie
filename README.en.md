@@ -113,7 +113,7 @@ Use **Check for updates** in Settings or run `update.bat`. Close Mozarie before 
 
 ## Manual verification
 
-Follow the [manual verification guide](docs/manual-verification.md).
+Follow the [manual verification guide](https://github.com/norqis/mozarie/blob/main/docs/manual-verification.md).
 
 ## License
 

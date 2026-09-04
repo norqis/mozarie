@@ -340,13 +340,6 @@ class CatalogMixin:
                     }
                     for record in records if record.image_id in self.projectless_manual_drafts
                 }
-                try:
-                    project = self.workspace_store.create_project(name)
-                except ProjectNameAlreadyExistsError as exc:
-                    raise ClientError("", "project_name_duplicate") from exc
-                except ValueError as exc:
-                    raise ClientError("プロジェクト名を確認してください。", "project_name_invalid") from exc
-                catalog_id = str(project["id"])
                 grouped: dict[tuple[str, str, str], list[ImageRecord]] = {}
                 for record in records:
                     if record.source_kind == "filesystem":
@@ -357,33 +350,26 @@ class CatalogMixin:
                         identity = record.project_source_identity or f"browser:{self.session_dir.name if self.session_dir else uuid.uuid4().hex}"
                         source = (kind, identity, record.project_source_display or "ブラウザから追加")
                     grouped.setdefault(source, []).append(record)
-                source_ids: dict[str, str] = {}
-                for (kind, identity, display_name), members in grouped.items():
-                    source_id = self.workspace_store.ensure_project_source(
-                        catalog_id, kind=kind, display_name=display_name, identity=identity,
+                effective_masks = {
+                    record.image_id: self._effective_mask_for_draft(
+                        record.image_id, candidates[record.image_id], manual_drafts.get(record.image_id, {}),
                     )
-                    stored = self.workspace_store.reconcile_images(catalog_id, members, source_id=source_id)
-                    for record in members:
-                        saved = stored[record.relative_path]
-                        if str(saved["image_id"]) != record.image_id:
-                            raise RuntimeError("project promotion changed an image identity")
-                        record.source_id = source_id
-                        source_ids[record.image_id] = source_id
-                self.catalog_id = catalog_id
+                    for record in records
+                }
+                try:
+                    project, source_ids = self.workspace_store.promote_projectless(
+                        name, [(kind, identity, display_name, members) for (kind, identity, display_name), members in grouped.items()],
+                        candidates, revisions, effective_masks, manual_drafts, self._decode_workspace_mask,
+                    )
+                except ProjectNameAlreadyExistsError as exc:
+                    raise ClientError("", "project_name_duplicate") from exc
+                except ValueError as exc:
+                    raise ClientError("プロジェクト名を確認してください。", "project_name_invalid") from exc
+                catalog_id = str(project["id"])
                 for record in records:
-                    revision = revisions[record.image_id]
-                    snapshot = candidates[record.image_id]
-                    if snapshot or revision:
-                        self.workspace_store.commit_candidate_state(
-                            record.image_id, revision, snapshot,
-                            self._effective_mask_for_candidates(record.image_id, snapshot), replace=True,
-                        )
-                    if record.hidden or record.reviewed:
-                        self.workspace_store.set_image_flags(record.image_id, hidden=record.hidden, reviewed=record.reviewed)
-                    if record.image_id in manual_drafts:
-                        self.workspace_store.save_manual(record.image_id, manual_drafts[record.image_id], self._decode_workspace_mask)
+                    record.source_id = source_ids[record.image_id]
+                self.catalog_id = catalog_id
                 self.projectless_manual_drafts.clear()
-                project = self.workspace_store.project(catalog_id) or project
                 project["sourceIds"] = source_ids
                 return project
 
@@ -463,7 +449,12 @@ class CatalogMixin:
             self.project_read_only = project["status"] == "completed"
             # Browser sources may still need a user-granted handle.  Native
             # images are shown immediately and the UI can add the rest.
-            needs_source = any(source["kind"] != "native-folder" for source in sources)
+            needs_source = any(
+                source["kind"] != "native-folder"
+                or not source.get("nativePath")
+                or not Path(str(source["nativePath"])).is_dir()
+                for source in sources
+            )
             return {"project": project, "images": images, "needsSource": needs_source, "sources": sources}
         self.detach_catalog()
         with self.lock:

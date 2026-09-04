@@ -113,7 +113,7 @@ GPU処理を使う場合は、**設定 > 検出**でGPUを選びます。GPUメ�
 
 ## 実機確認
 
-[実機確認手順](docs/manual-verification.md)に従って確認してください。
+[実機確認手順](https://github.com/norqis/mozarie/blob/main/docs/manual-verification.md)に従って確認してください。
 
 ## ライセンス
 
