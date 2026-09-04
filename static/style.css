@@ -389,28 +389,30 @@ button { overflow: visible; text-overflow: clip; white-space: nowrap; }
 .project-list-body { max-height: min(80vh, 44rem); overflow-y: auto; overflow-x: hidden; }
 .project-table-wrap { margin-top: .75rem; max-height: min(55vh, 32rem); overflow-x: hidden; overflow-y: auto; }
 .project-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
-.project-table th, .project-table td { min-width: 0; padding: .6rem; border-bottom: 1px solid #3b424a; vertical-align: top; overflow-wrap: anywhere; }
-.project-table th { color: var(--muted, #a5afb9); font-size: .78rem; font-weight: 600; text-align: left; }
-.project-table th:nth-child(1) { width: 17%; }
-.project-table th:nth-child(2) { width: 10%; }
-.project-table th:nth-child(3) { width: 8%; }
-.project-table th:nth-child(4) { width: 21%; }
-.project-table th:nth-child(5), .project-table th:nth-child(6) { width: 13%; }
-.project-table th:nth-child(7) { width: 18%; }
+.project-table th, .project-table td { min-width: 0; padding: 6px 8px; border-bottom: 1px solid #3b424a; vertical-align: middle; overflow-wrap: anywhere; }
+.project-table thead th { position: sticky; top: 0; z-index: 2; background: #21262b; box-shadow: 0 1px #3b424a; color: var(--muted, #a5afb9); font-size: .78rem; font-weight: 600; text-align: left; }
+.project-table th:nth-child(1), .project-table th:nth-child(4) { width: calc((100% - 594px) / 2); }
+.project-table th:nth-child(2) { width: 72px; }
+.project-table th:nth-child(3) { width: 56px; }
+.project-table th:nth-child(5), .project-table th:nth-child(6) { width: 118px; }
+.project-table th:nth-child(7) { width: 230px; }
 .project-sort-button { display: inline-flex; align-items: center; gap: .3rem; min-width: 0; padding: 0; border: 0; color: inherit; background: transparent; font: inherit; text-align: inherit; }
 .project-sort-button:hover, .project-sort-button:focus-visible { color: #d8fff3; }
 .project-sort-indicator { display: inline-block; min-width: .8rem; }
 .project-sort-indicator.inactive { color: #76828d; font-size: .68rem; font-weight: 400; letter-spacing: -.12em; }
-.project-name-button { width: 100%; min-width: 0; overflow-wrap: anywhere; text-align: left; }
-.project-name-button, .project-cell-value { display: -webkit-box; overflow: hidden; white-space: normal; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.project-name-button { display: block; width: 100%; min-width: 0; min-height: 0; padding: 0; overflow: hidden; border: 0; border-radius: 0; background: transparent; color: #72cdb3; text-align: left; text-decoration: underline; text-underline-offset: 3px; text-overflow: ellipsis; white-space: nowrap; }
+.project-name-button:hover { background: transparent; color: #d8fff3; }
+.project-name-button:focus-visible { outline-offset: 1px; }
+.project-cell-value { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.project-source-cell .project-cell-value { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .project-date-cell .project-cell-value { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.project-row-actions { display: grid; grid-template-columns: 1fr; gap: .35rem; }
-.project-row-actions button { width: 100%; min-width: 0; overflow-wrap: anywhere; }
+.project-row-actions { display: flex; flex-wrap: nowrap; align-items: center; gap: 4px; white-space: nowrap; }
+.project-row-actions button { flex: 1 1 0; min-width: 0; min-height: 30px; padding: 4px 6px; font-size: 12px; overflow: hidden; text-overflow: ellipsis; }
 .project-table[hidden] { display: none; }
 .project-list-empty { margin: 0; padding: .9rem; color: var(--muted, #a5afb9); text-align: center; }
 .project-delete-target { display: grid; gap: .3rem; margin: .8rem 0; padding: .75rem; border: 1px solid #a65d57; border-radius: .4rem; background: #3b2928; overflow-wrap: anywhere; }
 .project-delete-target small { color: #e8c5bf; overflow-wrap: anywhere; }
-@media (max-width: 600px) {
+@media (max-width: 720px) {
   .project-list-dialog { width: calc(100vw - 1rem); max-width: none; }
   .project-list-body { max-height: calc(100vh - 1rem); }
   .project-actions { grid-template-columns: minmax(0, 1fr); }
@@ -419,14 +421,15 @@ button { overflow: visible; text-overflow: clip; white-space: nowrap; }
   .project-table thead { display: block; margin-bottom: .75rem; }
   .project-table thead tr { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .4rem; }
   .project-table thead th:not(.project-sort-column) { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
-  .project-table thead th.project-sort-column { display: block; width: auto; padding: 0; border: 0; }
+  .project-table thead th.project-sort-column { position: static; display: block; width: auto; padding: 0; border: 0; }
   .project-table thead .project-sort-button { width: 100%; justify-content: space-between; padding: .45rem; border: 1px solid #3b424a; border-radius: .35rem; }
   .project-table tbody { display: grid; gap: .75rem; }
   .project-table tr { padding: .75rem; border: 1px solid #3b424a; border-radius: .5rem; }
   .project-table tbody th, .project-table td { display: grid; grid-template-columns: minmax(7.5rem, 42%) minmax(0, 1fr); gap: .5rem; padding: .4rem 0; border: 0; }
   .project-table tbody th::before, .project-table td::before { content: attr(data-label); color: var(--muted, #a5afb9); font-size: .78rem; font-weight: 600; overflow-wrap: anywhere; }
-  .project-table tbody th .project-name-button { grid-column: 2; }
-  .project-row-actions { grid-template-columns: minmax(7.5rem, 42%) minmax(0, 1fr); }
+  .project-table tbody th .project-name-button { grid-column: 2; overflow: visible; text-overflow: clip; white-space: normal; }
+  .project-table .project-cell-value { overflow: visible; text-overflow: clip; white-space: normal; }
+  .project-row-actions { display: grid; grid-template-columns: minmax(7.5rem, 42%) minmax(0, 1fr); }
   .project-row-actions::before { content: attr(data-label); color: var(--muted, #a5afb9); font-size: .78rem; font-weight: 600; overflow-wrap: anywhere; }
   .project-row-actions button { grid-column: 2; }
 }

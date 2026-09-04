@@ -157,7 +157,7 @@ function renderProjectTable() {
   for (const project of projectListProjects.values()) {
     const row = document.createElement("tr"); row.dataset.projectId = project.id;
     const nameCell = document.createElement("th"); nameCell.scope = "row"; nameCell.dataset.label = t("project.columnName");
-    const openButton = projectActionButton(project, "open", "project.openSelected", "project-name-button primary");
+    const openButton = projectActionButton(project, "open", "project.openSelected", "project-name-button");
     openButton.textContent = projectTitle(project); openButton.title = projectTitle(project);
     openButton.setAttribute("aria-label", t("project.openFor", { name: projectTitle(project) }));
     nameCell.append(openButton);
