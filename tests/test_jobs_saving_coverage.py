@@ -207,18 +207,18 @@ class JobsSavingCoverageTests(unittest.TestCase):
                 if terminal == "oom":
                     self.assertEqual(retained_tracebacks, [None])
 
-    def test_terminal_release_keeps_cpu_model_cache(self) -> None:
+    def test_terminal_release_discards_cpu_model_cache_without_cuda(self) -> None:
         state = self.make_jobs()
         state.settings["models"]["provider"] = "cpu"
         state.models = object(); state.hand_model = object()
         state.sam_predictor = Mock(); state.hand_segmentation_predictor = Mock()
         with patch.object(jobs_module.gc, "collect") as collect, \
-             patch.object(state, "_release_gpu_cache") as release:
+             patch.object(state, "_empty_selected_gpu_cache") as empty:
             state._release_gpu_job_memory()
-        self.assertIsNotNone(state.models); self.assertIsNotNone(state.hand_model)
-        self.assertIsNotNone(state.sam_predictor); self.assertIsNotNone(state.hand_segmentation_predictor)
-        collect.assert_not_called()
-        release.assert_not_called()
+        self.assertIsNone(state.models); self.assertIsNone(state.hand_model)
+        self.assertIsNone(state.sam_predictor); self.assertIsNone(state.hand_segmentation_predictor)
+        collect.assert_called_once_with()
+        empty.assert_not_called()
 
     def test_cpu_cache_release_collects_without_calling_cuda(self) -> None:
         state = self.make_jobs()
