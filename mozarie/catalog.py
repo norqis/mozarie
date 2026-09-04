@@ -693,7 +693,7 @@ class CatalogMixin:
                 self._delete_mask_files(mask_paths, [self.cache_dir / record.image_id for record in records])
                 thumbnail_dir = self.cache_dir / "thumbnails"
                 removed_set = set(removed_ids)
-                thumbnail_paths = [path for path in thumbnail_dir.glob("*.jpg") if path.name.split("-", 1)[0] in removed_set]
+                thumbnail_paths = [path for path in thumbnail_dir.glob("*.jpg") if path.stem.rsplit("-", 3)[0] in removed_set]
                 for record in records:
                     shutil.rmtree(self.cache_dir / record.image_id, ignore_errors=True)
                 for thumbnail_path in thumbnail_paths:

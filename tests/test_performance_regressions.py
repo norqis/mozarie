@@ -134,11 +134,26 @@ class CatalogPerformanceRegressionTests(unittest.TestCase):
             try:
                 state.create_project("bulk remove")
                 image_ids = [image["id"] for image in state.set_root(str(source))]
+                original_id = image_ids[0]
+                hyphenated_id = "image-with-hyphen"
+                record = state.images.pop(original_id)
+                record.image_id = hyphenated_id
+                state.images[hyphenated_id] = record
+                state.order[state.order.index(original_id)] = hyphenated_id
+                state.candidates[hyphenated_id] = state.candidates.pop(original_id, [])
+                state.candidate_revisions[hyphenated_id] = state.candidate_revisions.pop(original_id, 0)
+                db = sqlite3.connect(state.workspace_store.path)
+                try:
+                    db.execute("UPDATE images SET image_id=? WHERE image_id=?", (hyphenated_id, original_id))
+                    db.commit()
+                finally:
+                    db.close()
+                image_ids[0] = hyphenated_id
                 thumbnail_dir = state.cache_dir / "thumbnails"
                 thumbnail_dir.mkdir(parents=True)
                 for image_id in image_ids:
-                    (thumbnail_dir / f"{image_id}-v.jpg").write_bytes(b"thumbnail")
-                (thumbnail_dir / "unrelated-v.jpg").write_bytes(b"thumbnail")
+                    (thumbnail_dir / f"{image_id}-1-2-3.jpg").write_bytes(b"thumbnail")
+                (thumbnail_dir / "unrelated-1-2-3.jpg").write_bytes(b"thumbnail")
                 original_glob = Path.glob
                 scans = 0
 
@@ -151,8 +166,8 @@ class CatalogPerformanceRegressionTests(unittest.TestCase):
                 with patch("pathlib.Path.glob", new=counted_glob):
                     state.remove_images_from_catalog(image_ids)
                 self.assertEqual(scans, 1)
-                self.assertFalse(any((thumbnail_dir / f"{image_id}-v.jpg").exists() for image_id in image_ids))
-                self.assertTrue((thumbnail_dir / "unrelated-v.jpg").exists())
+                self.assertFalse(any((thumbnail_dir / f"{image_id}-1-2-3.jpg").exists() for image_id in image_ids))
+                self.assertTrue((thumbnail_dir / "unrelated-1-2-3.jpg").exists())
             finally:
                 state.shutdown()
 
