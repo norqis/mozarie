@@ -637,6 +637,7 @@
   "project.rename": "Rename",
   "project.empty": "No projects yet. Create a new project or save the current work.",
   "project.openSelected": "Open",
+  "project.openFor": "Open {name}",
   "project.exportMosaic": "Download all mosaic masks",
   "project.exportExclude": "Download all exclusion masks",
   "project.complete": "Complete project",

@@ -637,6 +637,7 @@
   "project.rename": "名前を変更",
   "project.empty": "プロジェクトはありません。新規プロジェクトを作成するか、現在の作業を保存してください。",
   "project.openSelected": "開く",
+  "project.openFor": "{name}を開く",
   "project.exportMosaic": "モザイク範囲をまとめて保存",
   "project.exportExclude": "除外範囲をまとめて保存",
   "project.complete": "プロジェクトを完了",
