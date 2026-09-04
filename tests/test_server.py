@@ -769,11 +769,9 @@ class MozarieTests(unittest.TestCase):
 
     def _import_browser_manifest(self, state, files, catalog_id=None):
         if catalog_id is None:
-            state.clear_catalog()
-            state.catalog_id = state.workspace_store.ensure_provisional_catalog()
-            state.browser_catalog_provisional = True
+            state.create_project()
         else:
-            state.activate_browser_catalog(catalog_id)
+            state.open_project(catalog_id)
         imported = {}
         with tempfile.TemporaryDirectory() as directory:
             staging = Path(directory)
@@ -794,12 +792,11 @@ class MozarieTests(unittest.TestCase):
         initial = [("a.png", png("red")), ("b.png", png("green")), ("nested/c.png", png("blue"))]
         first = self.new_state()
         self._import_browser_manifest(first, initial)
-        first_catalog, _ = first.finalize_browser_catalog()
+        first_catalog = first.catalog_id
         second = self.new_state()
         self._import_browser_manifest(second, [("a.png", png("yellow")), *initial[1:]])
-        second_catalog, remapped = second.finalize_browser_catalog()
+        second_catalog = second.catalog_id
         self.assertNotEqual(second_catalog, first_catalog)
-        self.assertEqual(remapped, {})
 
     def test_browser_manifest_add_delete_and_same_name_content_are_isolated(self):
         def png(color):
@@ -808,17 +805,17 @@ class MozarieTests(unittest.TestCase):
         first = self.new_state()
         files = [("folder/001.png", png("red")), ("folder/002.png", png("green")), ("folder/003.png", png("blue"))]
         self._import_browser_manifest(first, files)
-        first_catalog, _ = first.finalize_browser_catalog()
+        first_catalog = first.catalog_id
 
         second = self.new_state()
         self._import_browser_manifest(second, [files[0], files[1], ("folder/new.png", png("white"))])
-        second_catalog, _ = second.finalize_browser_catalog()
+        second_catalog = second.catalog_id
         self.assertNotEqual(second_catalog, first_catalog)
 
         # Same paths/folder names but different bytes cannot cross-contaminate.
         isolated = self.new_state()
         self._import_browser_manifest(isolated, [("folder/001.png", png("black")), ("folder/002.png", png("gray"))])
-        isolated_catalog, _ = isolated.finalize_browser_catalog()
+        isolated_catalog = isolated.catalog_id
         self.assertNotEqual(isolated_catalog, first_catalog)
 
     def test_explicit_browser_catalog_never_reassigns_and_restores_state(self):
@@ -826,7 +823,7 @@ class MozarieTests(unittest.TestCase):
         files = [("same/001.png", buffer.getvalue()), ("same/002.png", buffer.getvalue())]
         first = self.new_state()
         ids = self._import_browser_manifest(first, files)
-        catalog_id, _ = first.finalize_browser_catalog()
+        catalog_id = first.catalog_id
         assert catalog_id is not None
         first.set_image_flags(ids["same/001.png"], {"hidden": True, "reviewed": True})
 
@@ -840,9 +837,7 @@ class MozarieTests(unittest.TestCase):
 
         reopened = self.new_state()
         reopened_ids = self._import_browser_manifest(reopened, files, catalog_id)
-        finalized, remapped = reopened.finalize_browser_catalog()
-        self.assertEqual(finalized, catalog_id)
-        self.assertEqual(remapped, {})
+        self.assertEqual(reopened.catalog_id, catalog_id)
         restored = {item["id"]: item for item in reopened.list_images()}
         self.assertTrue(restored[reopened_ids["same/001.png"]]["hidden"])
         self.assertTrue(restored[reopened_ids["same/001.png"]]["reviewed"])
@@ -859,6 +854,7 @@ class MozarieTests(unittest.TestCase):
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_bytes(raw)
             native = self.new_state()
+            native.create_project()
             native_ids = native.set_root(str(root))
             native_records = [native.image_for_id(item["id"]) for item in native_ids]
             native.workspace_store.reconcile_images(native.catalog_id, native_records)
@@ -866,7 +862,7 @@ class MozarieTests(unittest.TestCase):
 
             browser = self.new_state()
             self._import_browser_manifest(browser, files)
-            browser_catalog, _ = browser.finalize_browser_catalog()
+            browser_catalog = browser.catalog_id
             self.assertNotEqual(browser_catalog, native_catalog)
 
     def test_browser_manifest_is_never_content_matched(self):
@@ -875,19 +871,19 @@ class MozarieTests(unittest.TestCase):
         many = [(f"root/{index:03}.png", raw) for index in range(100)]
         target = self.new_state()
         self._import_browser_manifest(target, many)
-        target_catalog, _ = target.finalize_browser_catalog()
+        target_catalog = target.catalog_id
         self.assertIsNone(target.workspace_store.best_catalog_for_manifest([], "f" * 32))
 
         one = [("only.png", raw)]
         single = self.new_state(); self._import_browser_manifest(single, one)
-        single_catalog, _ = single.finalize_browser_catalog()
+        single_catalog = single.catalog_id
         self.assertIsNone(single.workspace_store.best_catalog_for_manifest([], "e" * 32))
 
         clone = self.new_state()
-        clone_id = clone.workspace_store.ensure_catalog()
+        clone_id = str(clone.create_project()["id"])
         self._import_browser_manifest(clone, one, clone_id)  # A separate finalized but equal folder.
         third = self.new_state(); self._import_browser_manifest(third, one)
-        third_catalog, _ = third.finalize_browser_catalog()
+        third_catalog = third.catalog_id
         self.assertNotIn(third_catalog, {single_catalog, clone.catalog_id, target_catalog})
 
     def test_builtin_output_directory_is_created_for_default_copy(self):
@@ -4741,20 +4737,16 @@ class MozarieTests(unittest.TestCase):
             httpd.shutdown()
             httpd.server_close()
 
-    def test_provisional_browser_catalog_detaches_without_durable_clear(self):
+    def test_project_close_detaches_without_deleting_durable_state(self):
         from http.server import ThreadingHTTPServer
 
         httpd = ThreadingHTTPServer(("127.0.0.1", 0), MosaicHandler)
         thread = threading.Thread(target=httpd.serve_forever, daemon=True)
         thread.start()
         connection = http.client.HTTPConnection("127.0.0.1", httpd.server_port, timeout=5)
-        original_catalog_id = http_module.STATE.catalog_id
-        original_provisional = http_module.STATE.browser_catalog_provisional
         try:
-            with patch.object(http_module.STATE, "detach_catalog") as detach_catalog, \
-                    patch.object(http_module.STATE, "clear_catalog") as clear_catalog, \
-                    patch.object(http_module.STATE.workspace_store, "ensure_provisional_catalog", return_value="a" * 32):
-                connection.request("POST", "/api/workspace/catalog", json.dumps({"provisional": True}).encode("utf-8"), {
+            with patch.object(http_module.STATE, "close_project") as close_project:
+                connection.request("POST", "/api/project/close", b"{}", {
                     "Content-Type": "application/json",
                     "X-Mozarie-Token": http_module.STATE.session_token,
                     "Origin": f"http://127.0.0.1:{httpd.server_port}",
@@ -4762,12 +4754,9 @@ class MozarieTests(unittest.TestCase):
                 response = connection.getresponse()
                 payload = json.loads(response.read().decode("utf-8"))
             self.assertEqual(response.status, 200)
-            self.assertEqual(payload, {"catalogId": "a" * 32, "provisional": True})
-            detach_catalog.assert_called_once_with()
-            clear_catalog.assert_not_called()
+            self.assertEqual(payload, {"closed": True})
+            close_project.assert_called_once_with()
         finally:
-            http_module.STATE.catalog_id = original_catalog_id
-            http_module.STATE.browser_catalog_provisional = original_provisional
             connection.close()
             httpd.shutdown()
             httpd.server_close()
@@ -6570,8 +6559,7 @@ class MozarieTests(unittest.TestCase):
         metadata.add_text("prompt", '{"seed": 9}')
         Image.new("RGB", (16, 16), "white").save(raw, format="PNG", pnginfo=metadata)
         state = self.new_state()
-        state.catalog_id = state.workspace_store.ensure_provisional_catalog()
-        state.browser_catalog_provisional = True
+        state.create_project()
         images, _imported = import_images_for_test(state, [
             {"clientKey": "session", "name": "source.png", "data": base64.b64encode(raw.getvalue()).decode("ascii")},
         ])

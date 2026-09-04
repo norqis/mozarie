@@ -251,7 +251,7 @@ class ProjectCatalogCoverageTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "second failed"):
                 state.batch_update_candidates_many(image_ids, {"role": "apply", "operation": "enable"})
 
-    def test_catalog_input_validation_provisional_and_removed_sources(self) -> None:
+    def test_catalog_input_validation_and_removed_sources(self) -> None:
         state = self.state()
         with self.assertRaises(ClientError): state.set_root("")
         with self.assertRaises(ClientError): state.projects_for_source_root("relative")
@@ -260,11 +260,9 @@ class ProjectCatalogCoverageTests(unittest.TestCase):
         state.close_project()
         with self.assertRaises(ClientError): state.complete_project()
         with self.assertRaises(ClientError): state.project_mask_images()
-        with self.assertRaises(ClientError): state.activate_browser_catalog("missing")
+        with self.assertRaises(ClientError): state.open_project("missing")
 
-        catalog_id = state.activate_browser_catalog()
-        self.assertEqual(state.finalize_browser_catalog(), (catalog_id, {}))
-        self.assertEqual(state.finalize_browser_catalog(), (catalog_id, {}))
+        catalog_id = str(state.create_project()["id"])
         state.detach_catalog()
         with self.assertRaises(ClientError): state._set_root(str(self.root), "missing")
 

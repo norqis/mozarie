@@ -53,7 +53,7 @@ class ProjectWorkspaceCoverageTests(unittest.TestCase):
 
     def store_image(self, root: Path, *, catalog: str | None = None, record=None):
         store = WorkspaceStore(root)
-        catalog = catalog or store.ensure_catalog()
+        catalog = catalog or str(store.create_project()["id"])
         item = record or self.record()
         image_id = str(store.reconcile_images(catalog, [item])[item.relative_path]["image_id"])
         return store, catalog, image_id
@@ -105,7 +105,8 @@ class ProjectWorkspaceCoverageTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory); store = WorkspaceStore(root)
             native = root / "native"; native.mkdir()
-            legacy = store.catalog_for_root(native)
+            legacy = str(store.create_project()["id"])
+            store.ensure_project_source(legacy, kind="native-folder", display_name="native", identity=str(native.resolve()))
             self.assertTrue(store.catalog_exists(legacy))
             source = store.project_sources(legacy)[0]
             self.assertEqual(source["nativePath"], str(native.resolve()))
@@ -142,13 +143,9 @@ class ProjectWorkspaceCoverageTests(unittest.TestCase):
             self.assertIsNone(store.project(named["id"])["sourceRoot"])
             self.assertEqual(store.projects_for_source_root(str(native.resolve())), [store.project(legacy)])
             self.assertEqual(store.projects_for_source_root(str(native.resolve()), legacy), [])
-            store.delete_catalog(other["id"])
+            store.delete_project(other["id"])
             self.assertIsNone(store.project(other["id"]))
-            provisional = store.ensure_provisional_catalog(); store.finalize_catalog(provisional)
-            self.assertTrue(store.catalog_exists(provisional))
             self.assertIsNone(store.best_catalog_for_manifest([("a.png", "x")], legacy))
-            with self.assertRaisesRegex(ValueError, "catalog"):
-                store.ensure_catalog("not-a-catalog")
 
     def test_reconcile_sources_metadata_prune_delete_and_commit_save(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -214,7 +211,7 @@ class ProjectWorkspaceCoverageTests(unittest.TestCase):
     def test_project_export_streams_three_ordered_queries_and_one_image_payload(self):
         """Export keeps raw blobs binary and advances one ordered image at a time."""
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory); store = WorkspaceStore(root); catalog = store.ensure_catalog()
+            root = Path(directory); store = WorkspaceStore(root); catalog = str(store.create_project()["id"])
             count = 400
             records = [self.record(f"4k/{index:04}.png", size=index + 1, mtime=index + 100,
                                    width=3840, height=2160) for index in range(count)]
@@ -370,7 +367,7 @@ class ProjectWorkspaceCoverageTests(unittest.TestCase):
             self.assertTrue(store.has_image(image_id))
             with patch.object(store, "_connect", side_effect=sqlite3.OperationalError("down")):
                 with self.assertRaises(sqlite3.OperationalError):
-                    store.delete_catalog(catalog)
+                    store.delete_project(catalog)
             # Candidate failures roll back the revision and do not keep half rows.
             missing = self.candidate(root, "missing", path_exists=False)
             store.commit_candidate_state(image_id, 1, [missing], False, replace=True)
@@ -548,7 +545,7 @@ class ProjectWorkspaceCoverageTests(unittest.TestCase):
                     return self.connection.execute(sql, *args)
             store._connect = lambda: DeleteFailure(original_connect())  # type: ignore[method-assign]
             with self.assertRaisesRegex(sqlite3.OperationalError, "delete failed"):
-                store.delete_catalog(catalog)
+                store.delete_project(catalog)
             store._connect = original_connect  # type: ignore[method-assign]
             self.assertTrue(store.catalog_exists(catalog))
             # An invalid stored removal list is rejected before it can alter a

@@ -34,7 +34,7 @@ def png(mode: str = "L") -> bytes:
 class WorkspaceExtraCoverageTests(unittest.TestCase):
     def make_store(self, root: Path) -> tuple[WorkspaceStore, str, str]:
         store = WorkspaceStore(root)
-        catalog_id = store.ensure_catalog()
+        catalog_id = str(store.create_project()["id"])
         item = SimpleNamespace(relative_path="one.png", size_bytes=10, mtime_ns=20)
         return store, catalog_id, str(store.reconcile_images(catalog_id, [item])["one.png"]["image_id"])
 
@@ -626,25 +626,8 @@ class StateCatalogExtraCoverageTests(unittest.TestCase):
             if old_safe is None: sys.modules.pop("safetensors.torch", None)
             else: sys.modules["safetensors.torch"] = old_safe
 
-    def test_catalogue_finalization_and_import_failure_paths(self) -> None:
-        image_id = self.add_image(); item = self.state.images[image_id]
-        source = self.state.workspace_store.ensure_provisional_catalog()
-        target = self.state.workspace_store.ensure_catalog()
-        self.state.catalog_id = source
-        self.state.browser_catalog_provisional = True
-        self.state.browser_import_hashes = {item.relative_path: "hash"}
-        with patch.object(self.state.workspace_store, "best_catalog_for_manifest", return_value=target), patch.object(self.state.workspace_store, "reconcile_images", return_value={}):
-            self.state.finalize_browser_catalog()
-        source = self.state.workspace_store.ensure_provisional_catalog()
-        self.state.images = {item.image_id: item}
-        self.state.order = [item.image_id]
-        self.state.catalog_id = source
-        self.state.browser_catalog_provisional = True
-        self.state.browser_import_hashes = {item.relative_path: "hash"}
-        candidate = Candidate("restored", "penis", .5, self.root / "restored.png")
-        stored = {item.relative_path: {"image_id": item.image_id, "hidden": False, "reviewed": False}}
-        with patch.object(self.state.workspace_store, "best_catalog_for_manifest", return_value=target), patch.object(self.state.workspace_store, "reconcile_images", return_value=stored), patch.object(self.state.workspace_store, "hydrate_candidates", return_value=(1, [candidate])):
-            self.state.finalize_browser_catalog()
+    def test_project_import_failure_paths(self) -> None:
+        self.state.create_project()
         scan = self.root / "scan"; scan.mkdir(); image = scan / "race.png"; Image.new("RGB", (4, 4), "white").save(image)
         def modify_after_read(path, suffix):
             path.write_bytes(path.read_bytes() + b"x")
@@ -669,7 +652,7 @@ class StateCatalogExtraCoverageTests(unittest.TestCase):
 
     def test_import_hydrates_durable_candidates(self) -> None:
         staged = self.root / "staged.png"; Image.new("RGB", (4, 4), "white").save(staged)
-        self.state.activate_browser_catalog()
+        self.state.create_project()
         candidate = Candidate("restored", "penis", .5, self.root / "restored.png")
         with patch.object(self.state.workspace_store, "hydrate_candidates", return_value=(1, [candidate])):
             _images, imported = self.state.import_image_file_for_api(staged, name="restored.png", relative_path="restored.png", client_key="restored")
@@ -740,7 +723,7 @@ class StateCatalogExtraCoverageTests(unittest.TestCase):
     def test_browser_import_and_detach_lifecycle(self) -> None:
         staged = self.root / "staged.png"
         Image.new("RGB", (4, 4), "white").save(staged)
-        catalog_id = self.state.activate_browser_catalog()
+        catalog_id = str(self.state.create_project()["id"])
         images, imported = self.state.import_image_file_for_api(
             staged, name="nested/photo.png", relative_path="nested/photo.png", client_key="client-1",
         )
@@ -749,16 +732,13 @@ class StateCatalogExtraCoverageTests(unittest.TestCase):
         self.assertEqual(self.state.detach_catalog(), catalog_id)
         self.assertFalse(self.state.images)
 
-    def test_provisional_detach_and_catalog_identifier_failure(self) -> None:
-        provisional = self.state.workspace_store.ensure_provisional_catalog()
-        self.state.catalog_id = provisional
-        self.state.browser_catalog_provisional = True
-        self.assertIsNone(self.state.detach_catalog())
-        self.assertFalse(self.state.workspace_store.catalog_exists(provisional))
-        with patch.object(self.state.workspace_store, "catalog_exists", return_value=True), patch.object(self.state.workspace_store, "ensure_catalog", side_effect=ValueError("bad")):
-            with self.assertRaises(ClientError) as context:
-                self.state.activate_browser_catalog("a" * 32)
-            self.assertEqual(context.exception.error_code, "input_invalid")
+    def test_project_detach_and_missing_project_failure(self) -> None:
+        project_id = str(self.state.create_project()["id"])
+        self.assertEqual(self.state.detach_catalog(), project_id)
+        self.assertTrue(self.state.workspace_store.catalog_exists(project_id))
+        with self.assertRaises(ClientError) as context:
+            self.state.open_project("a" * 32)
+        self.assertEqual(context.exception.error_code, "project_not_found")
 
     def test_sam_and_handseg_provider_initialisation_paths(self) -> None:
         class Model:
@@ -894,7 +874,7 @@ class FinalCatalogCoverageTests(unittest.TestCase):
         image_id = self.add_image()
         record = self.state.images[image_id]
         with self.assertRaises(ClientError):
-            self.state.activate_browser_catalog("a" * 32)
+            self.state.open_project("a" * 32)
         with self.assertRaises(ClientError):
             self.state.remove_images_from_catalog([])
         with self.assertRaises(ClientError):
@@ -1042,6 +1022,6 @@ class FinalCatalogCoverageTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             store = WorkspaceStore(Path(directory))
             with self.assertRaises(ValueError):
-                store.ensure_catalog("not-a-valid-catalog-id")
+                store.create_project("   ")
             with self.assertRaises(ValueError):
                 store._decode_png_mask(b"\x89PNG\r\n\x1a\ntruncated")
