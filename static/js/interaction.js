@@ -257,6 +257,7 @@ async function removeImageFromCatalog(imageId = state.contextMenuImageId) {
     state.sourceAccess.delete(imageId);
     state.drafts.delete(imageId);
     state.maskStatus.delete(imageId);
+    pruneSourceAccess();
     clearReviewForRemovedImage(image);
     if (removingCurrent) {
       state.currentId = null; state.currentImage = null; state.pendingImageId = null; state.pendingImageKey = null; state.pendingCandidateKey = null;
@@ -294,6 +295,7 @@ async function runSelectionAction(action) {
       releaseImageCaches(image.id); state.sourceAccess.delete(image.id); state.drafts.delete(image.id); state.maskStatus.delete(image.id); clearReviewForRemovedImage(image);
     }
     state.images = data.images || [];
+    pruneSourceAccess();
     state.batchMode = false; clearBatchSelection(); updateSelectionActionBar();
     renderCatalogViews();
   }
@@ -328,11 +330,20 @@ function newClientKey() {
 function pruneSourceAccess() {
   const imageIds = new Set(state.images.map((image) => image.id));
   for (const imageId of state.sourceAccess.keys()) if (!imageIds.has(imageId)) state.sourceAccess.delete(imageId);
+  for (const [sourceId, source] of state.projectlessDirectorySources) {
+    source.imageIds = new Set([...source.imageIds].filter((imageId) => imageIds.has(imageId)));
+    if (!source.imageIds.size) state.projectlessDirectorySources.delete(sourceId);
+  }
 }
 
-function rememberImportedSource(result) {
+function rememberImportedSource(result, session) {
   for (const imported of result.data.imported || []) {
     if (imported.clientKey !== result.clientKey || !result.entry.fileHandle || !imported.imageId) continue;
+    if (session.sourceKind === "browser-directory") {
+      const source = state.projectlessDirectorySources.get(result.sourceId);
+      if (source) source.imageIds.add(imported.imageId);
+      continue;
+    }
     state.sourceAccess.set(imported.imageId, {
       fileHandle: result.entry.fileHandle, parentHandle: result.entry.parentHandle || null,
       name: result.entry.file.name, size: result.entry.file.size, lastModified: result.entry.file.lastModified,
@@ -369,7 +380,7 @@ async function importFiles(files) {
         const result = { entry, clientKey, data, sourceId: session.sourceId };
         // Keep source access for each committed upload, including a later
         // cancellation or an unrelated upload failure.
-        rememberImportedSource(result);
+        rememberImportedSource(result, session);
         session.completed += 1;
         showProcessing({ kind: "import", state: "running", total: session.total, completed: session.completed, current: entry.relativePath });
       }
@@ -440,6 +451,10 @@ function remapImportedImageIds(imageIds) {
   state.sourceAccess = remapMap(state.sourceAccess);
   state.drafts = remapMap(state.drafts);
   state.maskStatus = remapMap(state.maskStatus);
+  for (const [sourceId, source] of state.projectlessDirectorySources) {
+    source.imageIds = new Set([...source.imageIds].map((id) => map.get(id) || id));
+    if (!source.imageIds.size) state.projectlessDirectorySources.delete(sourceId);
+  }
   state.selectedImageIds = new Set([...state.selectedImageIds].map((id) => map.get(id) || id));
   if (state.currentId) state.currentId = map.get(state.currentId) || state.currentId;
   if (state.pendingImageId) state.pendingImageId = map.get(state.pendingImageId) || state.pendingImageId;
@@ -477,17 +492,26 @@ async function importDirectoryHandle(directoryHandle, session = beginImportSessi
   session.sourceId = await rememberProjectSource(session.catalogId, directoryHandle, null, state.pendingDirectorySourceId || session.sourceId);
   session.sourceKind = "browser-directory";
   state.pendingDirectorySourceId = null;
+  const projectlessSource = !session.catalogId
+    ? { handle: directoryHandle, imageIds: new Set() }
+    : null;
+  if (projectlessSource) state.projectlessDirectorySources.set(session.sourceId, projectlessSource);
   const entries = [];
-  showProcessing({ kind: "import", state: "running", total: 1, completed: 0, current: directoryHandle.name || "" });
-  async function collect(handle, relativePath = "", parentHandle = null) {
-    if (!await waitForImportSession(session)) return;
-    const path = relativePath ? `${relativePath}/${handle.name}` : handle.name;
-    if (handle.kind === "file") entries.push({ handle, relativePath: path, parentHandle });
-    else for await (const child of handle.values()) await collect(child, path, handle);
+  try {
+    showProcessing({ kind: "import", state: "running", total: 1, completed: 0, current: directoryHandle.name || "" });
+    async function collect(handle, relativePath = "", parentHandle = null) {
+      if (!await waitForImportSession(session)) return;
+      const path = relativePath ? `${relativePath}/${handle.name}` : handle.name;
+      if (handle.kind === "file") entries.push({ handle, relativePath: path, parentHandle });
+      else for await (const child of handle.values()) await collect(child, path, handle);
+    }
+    for await (const handle of directoryHandle.values()) await collect(handle, "", directoryHandle);
+    if (!await waitForImportSession(session)) return finishImportSession(session);
+    await importHandleEntries(entries, session);
   }
-  for await (const handle of directoryHandle.values()) await collect(handle, "", directoryHandle);
-  if (!await waitForImportSession(session)) return finishImportSession(session);
-  await importHandleEntries(entries, session);
+  finally {
+    if (projectlessSource && !projectlessSource.imageIds.size) state.projectlessDirectorySources.delete(session.sourceId);
+  }
 }
 
 async function importProjectDirectoryHandle(directoryHandle, projectId, sourceId = null) {

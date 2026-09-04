@@ -22,6 +22,8 @@ const state = {
   galleryNodes: new Map(), overviewNodes: new Map(), contextMenuImageId: null, contextMenuOrigin: null, contextMenuScroll: null, browserSave: null, pollInFlight: null, pollFailures: 0,
   // Browser file handles never leave this tab. They make imported images real save targets.
   sourceAccess: new Map(),
+  // Projectless directory imports retain their root only until the session is named.
+  projectlessDirectorySources: new Map(),
   processing: null, imageInflight: new Map(), candidateInflight: new Map(), loadingDelay: null, pendingImageKey: null, pendingCandidateKey: null,
   galleryCollapsed: false, inspectorCollapsed: false,
   settings: null, settingsStatus: null, jobPollTimer: null,
@@ -659,6 +661,7 @@ function resetCatalog(images, root) {
   state.images = images;
   state.projectHistory.clear();
   state.sourceAccess.clear();
+  state.projectlessDirectorySources.clear();
   state.reviewRoot = normaliseReviewRoot(root);
   state.overviewFolder = "";
   loadReviewedPaths();

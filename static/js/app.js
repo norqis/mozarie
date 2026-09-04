@@ -436,11 +436,13 @@ function bindEvents() {
     const data = projectNameMode === "new" ? await api("/api/projects", { method: "POST", body: JSON.stringify({ name }) }) : await api("/api/project/name", { method: "POST", body: JSON.stringify({ name }) });
     state.project = data.project; state.projectReadOnly = false;
     if (projectlessSave) {
+      await promoteProjectlessDirectorySources(state.project.id, data.project.sourceIds);
       const snapshot = await api("/api/images"); state.images = snapshot.images || state.images; applyProjectSnapshot(snapshot); loadReviewedPaths();
       for (const image of state.images) {
         const access = state.sourceAccess.get(image.id);
-        if (access?.fileHandle) void rememberProjectSource(state.project.id, access.fileHandle, image.id, image.sourceId || data.project.sourceIds?.[image.id]);
+        if (access?.fileHandle) await rememberProjectSource(state.project.id, access.fileHandle, image.id, image.sourceId || data.project.sourceIds?.[image.id]);
       }
+      state.projectlessDirectorySources.clear();
     }
     $("#projectNameDialog").close(); if (projectNameMode === "new") resetCatalog([], ""); renderProjectCurrent();
   } catch (error) { showUserError(error); } })(); });

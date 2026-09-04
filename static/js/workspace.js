@@ -43,14 +43,39 @@ async function directoryCatalogStore() {
 }
 
 async function rememberProjectSource(projectId, handle, imageId = null, sourceId = null) {
-  const db = await directoryCatalogStore(); if (!db || !projectId || !handle) return sourceId || projectSourceId();
+  const stableId = sourceId || projectSourceId();
+  if (!projectId) return stableId;
+  if (!handle) throw new Error("画像ソースを保存できません。");
+  const db = await directoryCatalogStore();
+  if (!db) throw new Error("画像ソースを保存できません。");
   try {
-    const store = db.transaction("projectSources", "readwrite").objectStore("projectSources");
-    const stableId = sourceId || projectSourceId();
-    store.put({ key: `${projectId}:${stableId}:${imageId || "root"}`, projectId, imageId, sourceId: stableId, handle });
+    await new Promise((resolve, reject) => {
+      let transaction;
+      try {
+        transaction = db.transaction("projectSources", "readwrite");
+        transaction.objectStore("projectSources").put({
+          key: `${projectId}:${stableId}:${imageId || "root"}`,
+          projectId, imageId, sourceId: stableId, handle,
+        });
+      } catch (error) {
+        reject(error); return;
+      }
+      transaction.oncomplete = () => resolve();
+      transaction.onerror = () => reject(transaction.error || new Error("画像ソースを保存できません。"));
+      transaction.onabort = () => reject(transaction.error || new Error("画像ソースを保存できません。"));
+    });
     return stableId;
-  } catch { return sourceId || projectSourceId(); }
-  finally { db.close(); }
+  } finally { db.close(); }
+}
+
+async function promoteProjectlessDirectorySources(projectId, sourceIds) {
+  for (const source of state.projectlessDirectorySources.values()) {
+    const durableSourceId = [...source.imageIds]
+      .map((imageId) => sourceIds?.[imageId])
+      .find(Boolean);
+    if (!durableSourceId) throw new Error("画像ソースを保存できません。");
+    await rememberProjectSource(projectId, source.handle, null, durableSourceId);
+  }
 }
 async function rememberedProjectSource(projectId, sourceId = null, imageId = null) {
   const db = await directoryCatalogStore(); if (!db || !projectId) return null;
