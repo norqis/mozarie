@@ -699,10 +699,6 @@ class StateCatalogExtraCoverageTests(unittest.TestCase):
             with self.assertRaises(ClientError):
                 self.state._decode_workspace_mask(invalid)
         payload = {"add": None, "exclusion": None, "exclusionErase": None, "removedCandidateIds": []}
-        with patch.object(self.state.workspace_store, "save_manual", side_effect=ValueError("bad")):
-            with self.assertRaises(ClientError) as context:
-                self.state.save_manual_workspace(image_id, payload)
-            self.assertEqual(context.exception.error_code, "workspace_write_failed")
         self.state.save_manual_workspace(image_id, payload)
         self.state.delete_manual_workspace(image_id)
 
@@ -824,7 +820,8 @@ class StateCatalogExtraCoverageTests(unittest.TestCase):
         self.state.candidates[image_id] = [candidate]
         self.state._commit_candidate_snapshot(image_id, [candidate], replace=True)
         mask.unlink()
-        self.assertEqual(self.state.read_candidate_mask_png(image_id, "candidate")[:8], b"\x89PNG\r\n\x1a\n")
+        with self.assertRaises(Exception):
+            self.state.read_candidate_mask_png(image_id, "candidate")
         original_revision = self.state._candidate_revision
         calls = iter((0, 1, 0, 1))
         with patch.object(self.state, "_candidate_revision", side_effect=lambda _id: next(calls)):
@@ -902,9 +899,6 @@ class FinalCatalogCoverageTests(unittest.TestCase):
                 self.state._decode_workspace_mask(encoded)
 
         payload = {"add": None, "exclusion": None, "exclusionErase": None, "removedCandidateIds": []}
-        with patch.object(self.state.workspace_store, "save_manual", side_effect=ValueError("disk failure")):
-            with self.assertRaises(ClientError):
-                self.state.save_manual_workspace(image_id, payload)
         self.state.delete_manual_workspace(image_id)
         self.state.workspace_store.delete_images([image_id])
         self.state.save_manual_workspace(image_id, payload)

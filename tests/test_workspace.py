@@ -234,7 +234,7 @@ class WorkspaceTests(unittest.TestCase):
                         db.execute("UPDATE meta SET value=? WHERE key='schema_version'", (version,))
                 connection.close()
                 before = store.path.read_bytes()
-                with self.assertRaisesRegex(WorkspaceOpenError, "recreated|not a Mozarie"):
+                with self.assertRaisesRegex(WorkspaceOpenError, "schema 11"):
                     WorkspaceStore(root)
                 self.assertEqual(store.path.read_bytes(), before)
 

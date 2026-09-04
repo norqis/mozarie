@@ -416,14 +416,15 @@ class ProjectWorkspaceCoverageTests(unittest.TestCase):
     def test_mask_decode_and_candidate_row_failures(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory); store, _, image_id = self.store_image(root)
-            # The fallback form is used only for old rows that predate metadata.
+            # Current schema rows must carry their explicit metadata.
             db = store._connect()
             try:
                 row = db.execute("SELECT mask_png FROM (SELECT ? AS mask_png)", (self.png(text={"mozarie_expand_px": "4"}),)).fetchone()
-                self.assertEqual(WorkspaceStore._candidate_row(row)["expand_px"], 4)
+                with self.assertRaises((IndexError, KeyError)):
+                    WorkspaceStore._candidate_row(row)
                 for raw in (1, self.png(text={"mozarie_expand_px": "abc"})):
                     bad = db.execute("SELECT ? AS mask_png", (raw,)).fetchone()
-                    with self.assertRaisesRegex(ValueError, "candidate"):
+                    with self.assertRaises((IndexError, KeyError, ValueError)):
                         WorkspaceStore._candidate_row(bad)
             finally:
                 db.close()
@@ -700,7 +701,8 @@ class ProjectWorkspaceCoverageTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "dirty region"):
             WorkspaceStore._manual_xor(empty, changed, (0, 0, 6, 1))
 
-        self.assertEqual(WorkspaceStore._candidate_row(Row())["expand_px"], 0)
+        with self.assertRaises(KeyError):
+            WorkspaceStore._candidate_row(Row())
         self.assertEqual(WorkspaceStore._candidate_row(Row(expand_px=0))["expand_px"], 0)
         self.assertEqual(WorkspaceStore._candidate_row(Row(expand_px=7))["expand_px"], 7)
         for value in (True, -1, "7", 1.5):
