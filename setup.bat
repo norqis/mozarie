@@ -21,7 +21,7 @@ exit /b 1
 set "PYTHON=%APP_DIR%.venv\Scripts\python.exe"
 set "RUNTIME=%MOZARIE_RUNTIME%"
 if not defined RUNTIME if exist "%APP_DIR%.venv\.mozarie-runtime.json" for /f "usebackq delims=" %%R in (`powershell.exe -NoProfile -Command "try { (Get-Content -Raw -LiteralPath '%APP_DIR%.venv\.mozarie-runtime.json' | ConvertFrom-Json).profile } catch { exit 1 }"`) do set "RUNTIME=%%R"
-if not defined RUNTIME for /f "usebackq delims=" %%R in (`powershell.exe -NoProfile -Command "$gpu=@(Get-CimInstance Win32_VideoController -ErrorAction SilentlyContinue | Where-Object { $_.PNPDeviceID -like 'PCI*' }); if ($gpu.PNPDeviceID -match 'VEN_10DE') { 'cuda' } elseif ($gpu.PNPDeviceID -match 'VEN_1002') { 'directml' } else { 'cuda' }"`) do set "RUNTIME=%%R"
+if not defined RUNTIME for /f "usebackq delims=" %%R in (`powershell.exe -NoProfile -Command "$gpu=@(Get-CimInstance Win32_VideoController -ErrorAction SilentlyContinue | Where-Object { $_.PNPDeviceID -like 'PCI*' }); if ($gpu.PNPDeviceID -match 'VEN_10DE') { 'cuda' } elseif ($gpu.PNPDeviceID -match 'VEN_1002') { 'directml' } else { 'cpu' }"`) do set "RUNTIME=%%R"
 if /i "%RUNTIME%"=="cuda" goto :runtime_ready
 if /i "%RUNTIME%"=="directml" goto :runtime_ready
 if /i "%RUNTIME%"=="cpu" goto :runtime_ready

@@ -114,13 +114,16 @@ function syncSingleSaveMode() {
 
 async function openSingleSaveDialog(imageId = state.currentId) {
   const invoker = document.activeElement;
-  if (!imageId || isBusy() || state.importing) return;
+  const generation = state.imageGeneration;
+  if (!imageId || isBusy() || state.importing || currentImageActionPending()) return;
   if (state.candidateUpdateChains.size) await waitForCandidateMutations();
   try { await flushDraftSaves([imageId]); }
   catch (error) { showUserError(error, invoker); return; }
   const image = state.images.find((entry) => entry.id === imageId);
-  if (!image || isBusy() || state.importing) return;
-  state.singleSave = { imageId, divisor: Number($("#divisor").value), draft: draftPayload([imageId])[imageId] || null, invoker };
+  if (!image || isBusy() || state.importing || currentImageActionPending() || state.currentId !== imageId || !isCurrentGeneration(generation)
+    || !state.currentImage || state.projectReadOnly || image.sourceDimensionsChanged) return;
+  state.singleSave = { imageId, generation, divisor: Number($("#divisor").value), draft: draftPayload([imageId])[imageId] || null, invoker };
+  $("#singleSaveTarget").textContent = t("apply.singleTarget", { name: image.relativePath });
   $("#singleSaveCopyMode").checked = true;
   $("#singleSaveDeleteOriginal").checked = false;
   setSingleSaveResult("");
@@ -207,7 +210,8 @@ async function startSingleSave(event) {
   event.preventDefault();
   const save = state.singleSave;
   const image = state.images.find((entry) => entry.id === save?.imageId);
-  if (!save || !image || state.saving || state.saveStarting || isBusy() || state.importing) return;
+  if (!save || !image || state.saving || state.saveStarting || isBusy() || state.importing || currentImageActionPending()
+    || state.currentId !== save.imageId || !isCurrentGeneration(save.generation) || !state.currentImage || state.projectReadOnly || image.sourceDimensionsChanged) return;
   const mode = selectedSingleSaveMode(); const copying = mode === "copy";
   const deleteOriginal = copying && $("#singleSaveDeleteOriginal").checked;
   const suffix = $("#singleSaveSuffix").value;
@@ -216,11 +220,13 @@ async function startSingleSave(event) {
   syncSingleSaveMode();
   try {
     if (copying) await ensureOutputDirectoryPermission();
+    if (copying) await ensureSaveSources([save.imageId], "copy", deleteOriginal);
     if (!copying && !await confirmAction(t("confirm.overwriteSource.title"), t("confirm.overwriteSource.message"), "overwriteSource")) return;
     if (deleteOriginal && !await confirmAction(t("confirm.deleteSourceAfterCopy.title"), t("confirm.deleteSourceAfterCopy.message"), "deleteSourceAfterCopy")) return;
     state.saving = true; updateActionButtons(); syncSingleSaveMode(); setSingleSaveResult("");
-    let entry; let saveToken = ""; let output = null; let sourceSnapshot = null; let sourceChanged = false;
+    let entry; let saveToken = ""; let output = null; let sourceSnapshot = null;
     try {
+    await flushWorkspaceDraft(save.imageId);
     const prepared = await api("/api/save/prepare", { method: "POST", body: JSON.stringify({ imageIds: [save.imageId], divisor: save.divisor, suffix, deleteOriginal: false }) });
     entry = prepared.entries?.[0]; if (!entry) throw Object.assign(new Error("save_state_changed"), { code: "save_state_changed" });
     const access = sourceAccessFor(save.imageId);
@@ -228,20 +234,36 @@ async function startSingleSave(event) {
     const response = await renderSingleSave({ imageId: save.imageId, candidateRevision: entry.candidateRevision, divisor: save.divisor, draft: save.draft, copyToBrowser: copying, suffix });
     saveToken = response.headers.get("X-Mozarie-Save-Token") || "";
     if (!saveToken) throw Object.assign(new Error("save_state_changed"), { code: "save_state_changed" });
-    let sourceAction = "overwrite";
-    if (copying) {
-      output = await writeSingleOutput(state.outputDirectoryHandle, entry.relativePath, suffix, response);
-      sourceAction = deleteOriginal ? "deleted" : "keep";
-      if (deleteOriginal && access?.fileHandle) { await ensureHandlePermission(access, true); sourceSnapshot = await snapshotSourceHandle(access); await removeSourceHandle(access); sourceChanged = true; }
-    } else if (access?.fileHandle) {
-      sourceSnapshot = await snapshotSourceHandle(access); await writeSourceHandle(access, response); sourceChanged = true;
+    const noEffect = response.headers.get("X-Mozarie-No-Effect") === "1";
+    let sourceAction = noEffect ? "keep" : "overwrite";
+    let committed; let commitStarted = false;
+    try {
+      if (copying) {
+        output = await writeSingleOutput(state.outputDirectoryHandle, entry.relativePath, suffix, response);
+        sourceAction = deleteOriginal ? "deleted" : "keep";
+        if (access?.fileHandle) {
+          await ensureHandlePermission(access, deleteOriginal);
+          if (deleteOriginal) { sourceSnapshot = await snapshotSourceHandle(access); await removeSourceHandle(access); }
+        }
+      } else if (access?.fileHandle) {
+        if (noEffect) await ensureHandlePermission(access, false);
+        else {
+          await ensureHandlePermission(access, true);
+          sourceSnapshot = await snapshotSourceHandle(access);
+          await writeSourceHandle(access, response);
+          await ensureHandlePermission(access, false);
+        }
+      }
+      commitStarted = true;
+      committed = await commitBrowserSaveWithRetry({ imageId: save.imageId, candidateRevision: entry.candidateRevision, saveToken, sourceAction, ...(sourceAction === "overwrite" && access?.fileHandle ? sourceCommitMetadata(access) : {}) });
     }
-    let committed;
-    try { committed = await commitBrowserSaveWithRetry({ imageId: save.imageId, candidateRevision: entry.candidateRevision, saveToken, sourceAction }); }
     catch (error) {
-      if (error.saveState === "pending") await cancelBrowserSave(entry, saveToken);
-      if (sourceChanged && (isDefinitiveCommitRejection(error) || error.saveState === "pending")) await restoreSourceHandle(access, sourceSnapshot, deleteOriginal);
-      if (output) await state.outputDirectoryHandle.removeEntry(output.name).catch(() => {});
+      const reconcile = !commitStarted || isDefinitiveCommitRejection(error) || error.saveState === "pending";
+      if (reconcile) {
+        await cancelBrowserSave(entry, saveToken);
+        if (sourceSnapshot !== null) await restoreSourceHandle(access, sourceSnapshot, deleteOriginal);
+        if (output) await state.outputDirectoryHandle.removeEntry(output.name).catch(() => {});
+      }
       throw error;
     } finally {
       sourceSnapshot = null;
@@ -249,14 +271,21 @@ async function startSingleSave(event) {
     // A copy that retains its source does not change the catalogue. Avoid the
     // expensive image reload (and forced editor reload) in that common path.
     // Overwrites and source deletion do need authoritative reconciliation.
-    if (!copying || deleteOriginal) {
+    if ((sourceAction === "overwrite") || deleteOriginal) {
+      const previousImageIds = new Set(state.images.map((item) => item.id));
       const latest = await api("/api/images"); state.images = latest.images;
+      loadReviewedPaths();
       const savedImage = state.images.find((item) => item.id === save.imageId);
+      if (deleteOriginal && state.project?.id) {
+        await forgetProjectImageSources(state.project.id, [...previousImageIds]
+          .filter((imageId) => !state.images.some((item) => item.id === imageId)));
+      }
       pruneSourceAccess();
       if (deleteOriginal) reconcileBrowserSaveState();
       else if (savedImage && state.currentId === save.imageId) await selectImage(save.imageId, true, { saveCurrentDraft: false });
       renderCatalogViews();
     }
+    state.singleSave = null;
     setSingleSaveResult(copying ? `${t("apply.complete", { completed: 1 })} ${state.outputDirectoryHandle.name}/${output.name}` : t("apply.complete", { completed: 1 }));
     } catch (error) {
       if (saveToken && entry) await cancelBrowserSave(entry, saveToken);
@@ -376,7 +405,47 @@ function reconcileStoredMaskStatuses() {
   }
 }
 
+function discardRemovedBrowserSaveState() {
+  const remainingImageIds = new Set(state.images.map((image) => image.id));
+  const removedImageIds = new Set();
+  const collectRemoved = (ids) => {
+    for (const imageId of ids) if (!remainingImageIds.has(imageId)) removedImageIds.add(imageId);
+  };
+  collectRemoved(state.drafts.keys());
+  collectRemoved(state.projectHistory.keys());
+  collectRemoved(state.maskStatus.keys());
+  collectRemoved(state.sourceAccess.keys());
+  collectRemoved(state.draftSaveChains.keys());
+  collectRemoved(state.workspaceDraftChains.keys());
+  collectRemoved(state.workspaceDraftTimers.keys());
+  collectRemoved(state.workspaceMutationErrors.keys());
+  collectRemoved(state.selectedImageIds);
+  collectRemoved(state.applyCatalogSnapshot?.order || []);
+  if (state.singleSave?.imageId && !remainingImageIds.has(state.singleSave.imageId)) removedImageIds.add(state.singleSave.imageId);
+  for (const [imageId, timer] of state.workspaceDraftTimers) {
+    if (!remainingImageIds.has(imageId)) { clearTimeout(timer); state.workspaceDraftTimers.delete(imageId); }
+  }
+  for (const imageId of removedImageIds) {
+    state.drafts.delete(imageId);
+    state.projectHistory.delete(imageId);
+    state.maskStatus.delete(imageId);
+    state.draftSaveChains.delete(imageId);
+    state.workspaceDraftChains.delete(imageId);
+    state.workspaceMutationErrors.delete(imageId);
+    releaseImageCaches(imageId);
+    releaseCandidateBundles(imageId);
+  }
+  for (const [imageId] of state.sourceAccess) if (!remainingImageIds.has(imageId)) state.sourceAccess.delete(imageId);
+  for (const [imageId] of state.draftSaveChains) if (!remainingImageIds.has(imageId)) state.draftSaveChains.delete(imageId);
+  for (const [imageId] of state.workspaceDraftChains) if (!remainingImageIds.has(imageId)) state.workspaceDraftChains.delete(imageId);
+  for (const [imageId] of state.workspaceMutationErrors) if (!remainingImageIds.has(imageId)) state.workspaceMutationErrors.delete(imageId);
+  for (const key of state.workspaceFlagPending.keys()) if (!remainingImageIds.has(key.split(":", 1)[0])) state.workspaceFlagPending.delete(key);
+  state.selectedImageIds = new Set([...state.selectedImageIds].filter((imageId) => remainingImageIds.has(imageId)));
+  pruneSourceAccess();
+}
+
 function reconcileBrowserSaveState() {
+  discardRemovedBrowserSaveState();
   reconcileStoredMaskStatuses();
   if (state.currentId && !state.images.some((image) => image.id === state.currentId)) {
     const removedCurrentId = state.currentId;
@@ -443,6 +512,10 @@ async function removeSourceHandle(access) {
     return;
   }
   throw codedError("source_action_unavailable");
+}
+
+function sourceCommitMetadata(access) {
+  return { sourceMtimeMs: Math.max(0, Number(access.lastModified || 0)), sourceSizeBytes: Math.max(0, Number(access.size || 0)) };
 }
 
 async function snapshotSourceHandle(access) {
@@ -533,21 +606,33 @@ async function runBrowserSave(imageIds, suffix, deleteOriginal, mode = "copy") {
           }
           const commitCopy = async () => {
             let sourceSnapshot = null;
-            let sourceChanged = false;
-            if (inputs.deleteOriginal && access?.fileHandle) {
-              await ensureHandlePermission(access, true);
-              sourceSnapshot = await snapshotSourceHandle(access);
-              await removeSourceHandle(access);
-              sourceChanged = true;
-            }
             const sourceAction = inputs.deleteOriginal ? "deleted" : "keep";
-            try { return await commitBrowserSaveWithRetry({
-              imageId: entry.imageId, candidateRevision: entry.candidateRevision, deleteOriginal: inputs.deleteOriginal, sourceAction, saveToken,
-            }); }
+            let commitStarted = false;
+            try {
+              if (access?.fileHandle) {
+                await ensureHandlePermission(access, inputs.deleteOriginal);
+                if (inputs.deleteOriginal) {
+                  sourceSnapshot = await snapshotSourceHandle(access);
+                  await removeSourceHandle(access);
+                }
+              }
+              commitStarted = true;
+              return await commitBrowserSaveWithRetry({
+                imageId: entry.imageId, candidateRevision: entry.candidateRevision, deleteOriginal: inputs.deleteOriginal, sourceAction, saveToken,
+              });
+            }
             catch (error) {
-              if (error.saveState === "pending") await cancelBrowserSave(entry, saveToken);
-              if (sourceChanged && (isDefinitiveCommitRejection(error) || error.saveState === "pending")) try { if (sourceSnapshot === null) throw new Error(); await restoreSourceHandle(access, sourceSnapshot, true); } catch { throw codedError("source_restore_failed"); }
-              await inputs.outputDirectoryHandle.removeEntry(output.name).catch(() => {});
+              const reconcile = !commitStarted || isDefinitiveCommitRejection(error) || error.saveState === "pending";
+              if (reconcile && sourceSnapshot !== null) try {
+                if (sourceSnapshot === null) throw new Error();
+                await restoreSourceHandle(access, sourceSnapshot, true);
+                const liveAccess = sourceAccessFor(entry.imageId);
+                if (liveAccess) Object.assign(liveAccess, access);
+              } catch { throw codedError("source_restore_failed"); }
+              if (reconcile) {
+                await cancelBrowserSave(entry, saveToken);
+                await inputs.outputDirectoryHandle.removeEntry(output.name).catch(() => {});
+              }
               throw error;
             } finally { sourceSnapshot = null; }
           };
@@ -566,20 +651,29 @@ async function runBrowserSave(imageIds, suffix, deleteOriginal, mode = "copy") {
           } finally { inputs.drafts.delete(entry.imageId); }
           if (!binary.ok) throw responseError(binary, await binary.json().catch(() => ({})));
           const saveToken = binary.headers?.get("X-Mozarie-Save-Token") || "";
+          const noEffect = binary.headers?.get("X-Mozarie-No-Effect") === "1";
           return serializeBrowserHandleMutation(async () => {
             let sourceSnapshot = null;
-            await ensureHandlePermission(access, true);
-            sourceSnapshot = await snapshotSourceHandle(access);
-            await writeSourceHandle(access, binary);
-            sourceAction = "overwrite";
+            let commitStarted = false;
             try {
-              const committed = await commitBrowserSaveWithRetry({ imageId: entry.imageId, candidateRevision: entry.candidateRevision, deleteOriginal: inputs.deleteOriginal, sourceAction, saveToken });
+              if (!noEffect) {
+                await ensureHandlePermission(access, true);
+                sourceSnapshot = await snapshotSourceHandle(access);
+                await writeSourceHandle(access, binary);
+                sourceAction = "overwrite";
+              } else {
+                await ensureHandlePermission(access, false);
+                sourceAction = "keep";
+              }
+              commitStarted = true;
+              const committed = await commitBrowserSaveWithRetry({ imageId: entry.imageId, candidateRevision: entry.candidateRevision, deleteOriginal: inputs.deleteOriginal, sourceAction, saveToken, ...sourceCommitMetadata(access) });
               const liveAccess = sourceAccessFor(entry.imageId);
               if (liveAccess) Object.assign(liveAccess, access);
               return finishBrowserSaveEntry(committed, entry, save, sourceAction);
             } catch (error) {
-              if (error.saveState === "pending") await cancelBrowserSave(entry, saveToken);
-              if (isDefinitiveCommitRejection(error) || error.saveState === "pending") try { if (sourceSnapshot === null) throw new Error(); await restoreSourceHandle(access, sourceSnapshot, false); } catch { throw codedError("source_restore_failed"); }
+              const reconcile = !commitStarted || isDefinitiveCommitRejection(error) || error.saveState === "pending";
+              if (reconcile) await cancelBrowserSave(entry, saveToken);
+              if (sourceSnapshot !== null && reconcile) try { await restoreSourceHandle(access, sourceSnapshot, false); } catch { throw codedError("source_restore_failed"); }
               throw error;
             } finally { sourceSnapshot = null; }
           });
@@ -593,7 +687,7 @@ async function runBrowserSave(imageIds, suffix, deleteOriginal, mode = "copy") {
           } finally { inputs.drafts.delete(entry.imageId); }
           if (!binary.ok) throw responseError(binary, await binary.json().catch(() => ({})));
           const saveToken = binary.headers?.get("X-Mozarie-Save-Token") || "";
-          sourceAction = "overwrite";
+          sourceAction = binary.headers?.get("X-Mozarie-No-Effect") === "1" ? "keep" : "overwrite";
           const committed = await commitBrowserSaveWithRetry({ imageId: entry.imageId, candidateRevision: entry.candidateRevision, deleteOriginal: inputs.deleteOriginal, sourceAction, saveToken });
           return finishBrowserSaveEntry(committed, entry, save, sourceAction);
         } else {
@@ -610,7 +704,15 @@ async function runBrowserSave(imageIds, suffix, deleteOriginal, mode = "copy") {
         showBrowserSaveProgress(save, entry);
       };
       let nextEntry = 0;
-      const parallelism = Math.min(save.entries.length, inputs.parallelism);
+      // Browser saves decode pixels, masks and an encoder buffer just like the
+      // server-side path. Keep the same 512 MiB budget so an 8-image setting
+      // cannot turn a 4K batch into a multi-gigabyte allocation spike.
+      const largestRenderBytes = Math.max(1, ...save.entries.map((entry) => {
+        const image = inputs.sources.get(entry.imageId)?.image;
+        return Math.max(1, Number(image?.width) || 1) * Math.max(1, Number(image?.height) || 1) * 32;
+      }));
+      const memoryWorkers = Math.max(1, Math.floor((512 * 1024 * 1024) / largestRenderBytes));
+      const parallelism = Math.min(save.entries.length, inputs.parallelism, memoryWorkers);
       const settled = await Promise.allSettled(Array.from({ length: parallelism }, async () => {
         while (true) {
           // Cancellation is observed only before an entry starts. Once an output or source has
@@ -620,9 +722,6 @@ async function runBrowserSave(imageIds, suffix, deleteOriginal, mode = "copy") {
           if (!entry) return;
           try { await saveEntry(entry); }
           catch (error) {
-            // A stale candidate can become fully excluded after the dialog was
-            // opened. It is not a failed save and must never trigger deletion.
-            if (error?.code === "no_effective_mask") continue;
             save.failed = true; throw error;
           }
         }
@@ -645,7 +744,14 @@ async function runBrowserSave(imageIds, suffix, deleteOriginal, mode = "copy") {
           // snapshot only after every started entry has settled.
           const latest = await api("/api/images");
           catalogCurrent = isCurrentCatalogEpoch(save.catalogEpoch);
-          if (catalogCurrent) state.images = latest.images;
+          if (catalogCurrent) {
+            state.images = latest.images; loadReviewedPaths();
+            if (state.project?.id) {
+              const previousImageIds = state.applyCatalogSnapshot?.order || [];
+              await forgetProjectImageSources(state.project.id, previousImageIds
+                .filter((imageId) => !state.images.some((item) => item.id === imageId)));
+            }
+          }
         } catch (error) {
           showApplyError(error);
         }
@@ -707,6 +813,7 @@ async function startApplyFromDialog(event) {
   const mode = selectedSaveMode();
   const copy = mode === "copy";
   const suffix = $("#applySuffix").value;
+  if (copy && !state.outputDirectoryHandle) { syncApplyMode(); return; }
   state.saveStarting = true;
   syncApplyMode();
   try {
@@ -720,7 +827,7 @@ async function startApplyFromDialog(event) {
     await ensureSaveSources(imageIds, mode, copy && $("#deleteOriginal").checked);
     if (state.candidateUpdateChains.size) await waitForCandidateMutations();
     if (state.importing) return;
-    await flushDraftSaves(imageIds);
+    await Promise.all(imageIds.map((imageId) => flushWorkspaceDraft(imageId)));
     state.saveStarting = false;
     await runBrowserSave(imageIds, suffix, copy && $("#deleteOriginal").checked, mode);
   } catch (error) {
@@ -788,6 +895,7 @@ async function finishApplyJob(job) {
     const data = await api("/api/images");
     if (!isCurrentGeneration(generation) || !isCurrentCatalogEpoch(catalogEpoch)) return;
     state.images = data.images;
+    loadReviewedPaths();
     pruneSourceAccess();
     state.applyTargetIds = requestedImageIds;
     const reloadedCurrent = reloadCurrent && state.images.some((image) => image.id === keepCurrent);
@@ -836,13 +944,13 @@ async function finishDetectionJob(job) {
   const data = await api("/api/images");
   if (!isCurrentGeneration(generation) || !isCurrentCatalogEpoch(catalogEpoch)) return;
   state.images = data.images;
+  loadReviewedPaths();
   pruneSourceAccess();
   state.maskStatus.clear();
   // Auto-detection replaces candidate IDs and mask bitmaps. Never allow a
   // cached bundle (including the currently pinned one) to survive that
   // revision boundary.
   for (const imageId of targetIds) releaseCandidateBundles(imageId);
-  markImagesUnreviewed(targetIds, false);
   state.handledDetectionStartedAt = job.startedAt;
   state.detectionTargetIds = [];
   state.detectCancelRequested = false;

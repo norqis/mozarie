@@ -22,8 +22,8 @@ APP_DIR = Path(__file__).resolve().parent
 
 def _runtime_modules():
     import numpy as np
-    import onnxruntime as ort
     import torch
+    import onnxruntime as ort
     from onnxruntime import datasets
     return np, ort, torch, datasets
 
@@ -46,10 +46,14 @@ def _gpu_is_ready(np, ort, torch, datasets, device: int) -> bool:
             return False
         torch.ones((1,), device=f"cuda:{device}").add_(1).cpu()
         session = ort.InferenceSession(
-            datasets.get_example("mul_1.onnx"), providers=["CUDAExecutionProvider"], provider_options=[{"device_id": str(device)}],
+            datasets.get_example("mul_1.onnx"),
+            providers=["CUDAExecutionProvider", "CPUExecutionProvider"],
+            provider_options=[{"device_id": str(device)}, {}],
+            enable_fallback=False,
         )
         session.disable_fallback()
-        if session.get_providers()[0] != "CUDAExecutionProvider":
+        active_providers = session.get_providers()
+        if tuple(active_providers) != ("CUDAExecutionProvider", "CPUExecutionProvider"):
             return False
         session.run(None, {"X": np.ones((3, 2), dtype=np.float32)})
         return True
@@ -57,9 +61,9 @@ def _gpu_is_ready(np, ort, torch, datasets, device: int) -> bool:
 
 def _cpu_is_ready(np, ort, _torch, datasets) -> bool:
     try:
-        session = ort.InferenceSession(datasets.get_example("mul_1.onnx"), providers=["CPUExecutionProvider"])
+        session = ort.InferenceSession(datasets.get_example("mul_1.onnx"), providers=["CPUExecutionProvider"], enable_fallback=False)
         session.disable_fallback()
-        if session.get_providers()[0] != "CPUExecutionProvider":
+        if tuple(session.get_providers()) != ("CPUExecutionProvider",):
             return False
         session.run(None, {"X": np.ones((3, 2), dtype=np.float32)})
         return True

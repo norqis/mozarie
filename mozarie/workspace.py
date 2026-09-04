@@ -19,6 +19,8 @@ from typing import Any
 from PIL import Image, UnidentifiedImageError
 import numpy as np
 
+from .masks import compose_masks, expand_mask
+
 
 # Keep every IN clause comfortably below SQLite's smallest common bind limit.
 _BULK_CHUNK_SIZE = 900
@@ -30,6 +32,22 @@ def _chunks(values: list[str]) -> list[list[str]]:
 
 class WorkspaceOpenError(RuntimeError):
     """The durable workspace cannot be safely opened as the current schema."""
+
+
+class ProjectNameAlreadyExistsError(ValueError):
+    """A project name conflicts with the database uniqueness constraint."""
+
+
+class ProjectSourceUnavailableError(ValueError):
+    """A requested project source is missing or is not native."""
+
+
+class ProjectSourcePathConflictError(ValueError):
+    """Another native source in this project already owns the path."""
+
+
+class ProjectSourceNoMatchError(ValueError):
+    """A replacement native source has no images from the stored source."""
 
 
 class _ClosingConnection(sqlite3.Connection):
@@ -60,8 +78,9 @@ class _PendingWorkspaceCommit:
 
 
 class WorkspaceStore:
-    # v7 deliberately replaces the old folder catalogue with a project store.
-    # There is no migration path: the user chooses whether to recreate v4 data.
+    # This is one current project-store schema.  Existing data is either this
+    # schema or it must be explicitly recreated; migrations are intentionally
+    # not supported.
     VERSION = 11
 
     def __init__(self, data_dir: Path) -> None:
@@ -69,7 +88,7 @@ class WorkspaceStore:
         self._lock = threading.RLock()
         data_dir.mkdir(parents=True, exist_ok=True)
         # Inspect an existing database before issuing any write-capable pragma,
-        # DDL, or cleanup statement. v0.4 intentionally has no migrations.
+        # DDL, or cleanup statement. This schema has no migrations.
         existing = self.path.exists()
         if existing:
             self._inspect_existing()
@@ -155,21 +174,21 @@ class WorkspaceStore:
                     entry_id INTEGER REFERENCES history_entries(entry_id) ON DELETE SET NULL
                 );
                 CREATE TRIGGER IF NOT EXISTS project_image_insert AFTER INSERT ON images BEGIN
-                    UPDATE catalogs SET updated_at=CAST(unixepoch('subsec')*1000000000 AS INTEGER) WHERE catalog_id=NEW.catalog_id;
+                    UPDATE catalogs SET updated_at=CAST(strftime('%s','now') AS INTEGER) * 1000000000 + CAST(substr(strftime('%f','now'), 4, 3) AS INTEGER) * 1000000 WHERE catalog_id=NEW.catalog_id;
                 END;
                 CREATE TRIGGER IF NOT EXISTS project_image_update AFTER UPDATE ON images BEGIN
-                    UPDATE catalogs SET updated_at=CAST(unixepoch('subsec')*1000000000 AS INTEGER) WHERE catalog_id=NEW.catalog_id;
+                    UPDATE catalogs SET updated_at=CAST(strftime('%s','now') AS INTEGER) * 1000000000 + CAST(substr(strftime('%f','now'), 4, 3) AS INTEGER) * 1000000 WHERE catalog_id=NEW.catalog_id;
                 END;
                 CREATE TRIGGER IF NOT EXISTS project_manual_insert AFTER INSERT ON manual_edits BEGIN
-                    UPDATE catalogs SET updated_at=CAST(unixepoch('subsec')*1000000000 AS INTEGER)
+                    UPDATE catalogs SET updated_at=CAST(strftime('%s','now') AS INTEGER) * 1000000000 + CAST(substr(strftime('%f','now'), 4, 3) AS INTEGER) * 1000000
                     WHERE catalog_id=(SELECT catalog_id FROM images WHERE image_id=NEW.image_id);
                 END;
                 CREATE TRIGGER IF NOT EXISTS project_manual_update AFTER UPDATE ON manual_edits BEGIN
-                    UPDATE catalogs SET updated_at=CAST(unixepoch('subsec')*1000000000 AS INTEGER)
+                    UPDATE catalogs SET updated_at=CAST(strftime('%s','now') AS INTEGER) * 1000000000 + CAST(substr(strftime('%f','now'), 4, 3) AS INTEGER) * 1000000
                     WHERE catalog_id=(SELECT catalog_id FROM images WHERE image_id=NEW.image_id);
                 END;
                 CREATE TRIGGER IF NOT EXISTS project_manual_delete AFTER DELETE ON manual_edits BEGIN
-                    UPDATE catalogs SET updated_at=CAST(unixepoch('subsec')*1000000000 AS INTEGER)
+                    UPDATE catalogs SET updated_at=CAST(strftime('%s','now') AS INTEGER) * 1000000000 + CAST(substr(strftime('%f','now'), 4, 3) AS INTEGER) * 1000000
                     WHERE catalog_id=(SELECT catalog_id FROM images WHERE image_id=OLD.image_id);
                 END;
                 CREATE TRIGGER IF NOT EXISTS history_entry_delete AFTER DELETE ON history_entries BEGIN
@@ -195,18 +214,18 @@ class WorkspaceStore:
                 db.row_factory = sqlite3.Row
                 tables = {row["name"] for row in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
                 if "meta" not in tables:
-                    raise WorkspaceOpenError("workspace database is not a Mozarie v0.4 database")
+                    raise WorkspaceOpenError(f"workspace database is not schema {self.VERSION}")
                 version_row = db.execute("SELECT value FROM meta WHERE key='schema_version'").fetchone()
                 if version_row is None:
-                    raise WorkspaceOpenError("workspace database is not a Mozarie v0.4 database")
+                    raise WorkspaceOpenError(f"workspace database is not schema {self.VERSION}")
                 try:
                     version = int(version_row["value"])
                 except (TypeError, ValueError) as exc:
-                    raise WorkspaceOpenError("workspace database must be recreated for Mozarie v0.4") from exc
+                    raise WorkspaceOpenError(f"workspace database must be recreated for schema {self.VERSION}") from exc
                 if version > self.VERSION:
-                    raise WorkspaceOpenError("workspace database is newer than this Mozarie version")
+                    raise WorkspaceOpenError(f"workspace database is newer than schema {self.VERSION}")
                 if version != self.VERSION:
-                    raise WorkspaceOpenError("workspace database must be recreated for Mozarie v0.7")
+                    raise WorkspaceOpenError(f"workspace database must be recreated for schema {self.VERSION}")
                 self._validate_schema(db, tables)
         except WorkspaceOpenError:
             raise
@@ -217,29 +236,43 @@ class WorkspaceStore:
     def _validate_schema(db: sqlite3.Connection, tables: set[str]) -> None:
         required = {"meta", "catalogs", "project_sources", "images", "candidates", "candidate_metadata", "manual_edits", "history_entries", "history_groups", "history_candidate_refs", "history_cursors"}
         if not required.issubset(tables):
-            raise WorkspaceOpenError("workspace database must be recreated for Mozarie v0.7")
+            raise WorkspaceOpenError(f"workspace database must be recreated for schema {WorkspaceStore.VERSION}")
         if tuple(row[0] for row in db.execute("PRAGMA quick_check(1)")) != ("ok",):
             raise WorkspaceOpenError("workspace database cannot be opened")
         if db.execute("PRAGMA foreign_key_check").fetchone() is not None:
-            raise WorkspaceOpenError("workspace database must be recreated for Mozarie v0.7")
+            raise WorkspaceOpenError(f"workspace database must be recreated for schema {WorkspaceStore.VERSION}")
         meta = {str(row["name"]): row for row in db.execute("PRAGMA table_info(meta)")}
         catalogs = {str(row["name"]): row for row in db.execute("PRAGMA table_info(catalogs)")}
         images = {str(row["name"]): row for row in db.execute("PRAGMA table_info(images)")}
         history = {str(row["name"]): row for row in db.execute("PRAGMA table_info(history_entries)")}
         foreign = list(db.execute("PRAGMA foreign_key_list(images)"))
         indexes = list(db.execute("PRAGMA index_list(catalogs)"))
+        name_unique_nocase = False
+        for index in indexes:
+            if not int(index["unique"]):
+                continue
+            index_name = str(index["name"]).replace('"', '""')
+            columns = [
+                (str(row["name"]), str(row["coll"]).upper())
+                for row in db.execute(f'PRAGMA index_xinfo("{index_name}")')
+                if int(row["key"])
+            ]
+            if columns == [("name", "NOCASE")]:
+                name_unique_nocase = True
+                break
         if (set(meta) != {"key", "value"} or str(meta["key"]["type"]).upper() != "TEXT" or not int(meta["key"]["pk"])
                 or str(meta["value"]["type"]).upper() != "TEXT" or not int(meta["value"]["notnull"])
                 or "catalog_id" not in catalogs or not int(catalogs["catalog_id"]["pk"])
                 or not {"catalog_id", "source_id", "relative_path", "image_id", "size_bytes", "mtime_ns", "width", "height", "source_blocked"}.issubset(images)
                 or not {"entry_id", "catalog_id", "image_id", "before_json", "after_json", "delta_json", "created_at"}.issubset(history)
                 or not foreign
-                or not any(int(row["unique"]) for row in indexes)):
-            raise WorkspaceOpenError("workspace database must be recreated for Mozarie v0.7")
+                or not name_unique_nocase):
+            raise WorkspaceOpenError(f"workspace database must be recreated for schema {WorkspaceStore.VERSION}")
 
     def _connect(self) -> sqlite3.Connection:
         db = sqlite3.connect(self.path, timeout=5, isolation_level=None, factory=_ClosingConnection)
         db.row_factory = sqlite3.Row
+        db.execute("PRAGMA synchronous=NORMAL")
         db.execute("PRAGMA foreign_keys=ON")
         db.execute("PRAGMA busy_timeout=5000")
         return db
@@ -272,43 +305,18 @@ class WorkspaceStore:
     @staticmethod
     def _candidate_row(row: sqlite3.Row) -> dict[str, Any]:
         """Hydrate candidate metadata without reading the mask BLOB."""
-        value = row["expand_px"] if "expand_px" in row.keys() else None
-        if value is None and "mask_png" in row.keys():
-            # Direct callers may inspect a pre-v11 row, but normal catalogue
-            # hydration selects only the metadata column above.
-            raw = row["mask_png"]
-            if not isinstance(raw, bytes):
-                raise ValueError("workspace candidate mask is not a PNG")
-            try:
-                with Image.open(io.BytesIO(raw)) as image:
-                    text = image.text.get("mozarie_expand_px", "0")
-                value = int(text)
-                if str(value) != text:
-                    raise ValueError("noncanonical padding")
-            except (OSError, ValueError, TypeError) as exc:
-                raise ValueError("workspace candidate expand pixels are invalid") from exc
-        if value is None:
-            value = 0
+        value = row["expand_px"]
         if isinstance(value, bool) or not isinstance(value, int) or value < 0:
             raise ValueError("workspace candidate expand pixels are invalid")
         hydrated = dict(row); hydrated["expand_px"] = value
         return hydrated
 
-    def catalog_for_root(self, root: Path) -> str:
-        # A root is a project hint only. Several projects may deliberately use
-        # the same source folder, so it is never used as a unique identity.
-        identity = str(root.resolve())
-        now = time.time_ns()
-        with self._lock, self._connect() as db:
-            catalog_id = uuid.uuid4().hex
-            db.execute("INSERT INTO catalogs(catalog_id,source_root,created_at,updated_at) VALUES(?,?,?,?)", (catalog_id, identity, now, now))
-            self._ensure_project_source_db(db, catalog_id, "native-folder", root.name or str(root), identity)
-            return catalog_id
-
     @staticmethod
     def _ensure_project_source_db(db: sqlite3.Connection, catalog_id: str, kind: str, display_name: str, identity: str) -> str:
-        row = db.execute("SELECT source_id FROM project_sources WHERE catalog_id=? AND source_identity=?", (catalog_id, identity)).fetchone()
+        row = db.execute("SELECT source_id,kind FROM project_sources WHERE catalog_id=? AND source_identity=?", (catalog_id, identity)).fetchone()
         if row:
+            if str(row["kind"]) != kind:
+                raise ValueError("project source kind does not match")
             return str(row["source_id"])
         source_id = uuid.uuid4().hex
         db.execute("""INSERT INTO project_sources(source_id,catalog_id,kind,display_name,native_path,source_identity,created_at)
@@ -323,26 +331,69 @@ class WorkspaceStore:
                 raise ValueError("project is missing")
             return self._ensure_project_source_db(db, catalog_id, kind, display_name, identity)
 
-    def ensure_catalog(self, catalog_id: str | None = None) -> str:
-        """Create (or validate) an opaque browser catalogue identity."""
-        if catalog_id is not None and (len(catalog_id) != 32 or any(char not in "0123456789abcdef" for char in catalog_id)):
-            raise ValueError("invalid catalog id")
-        catalog_id = catalog_id or uuid.uuid4().hex
-        now = time.time_ns()
-        with self._lock, self._connect() as db:
-            db.execute("INSERT OR IGNORE INTO catalogs(catalog_id,created_at,updated_at) VALUES(?,?,?)", (catalog_id, now, now))
-            return catalog_id
+    def resolve_browser_source(
+        self,
+        catalog_id: str,
+        *,
+        kind: str,
+        display_name: str,
+        source_identity: str,
+        create: bool,
+    ) -> tuple[str, bool]:
+        """Resolve one browser selection to its durable source.
 
-    def ensure_provisional_catalog(self) -> str:
-        catalog_id = uuid.uuid4().hex
-        now = time.time_ns()
+        A browser can send back a source ID it already received for this
+        project.  That ID is authoritative and must never be rebound to a
+        different project or source kind.  New browser handles are stored
+        under their explicit ``browser:`` identity.
+        """
+        if kind not in {"browser-files", "browser-directory"} or not source_identity:
+            raise ValueError("invalid browser source")
+        identity = f"browser:{source_identity}"
         with self._lock, self._connect() as db:
-            db.execute("INSERT INTO catalogs(catalog_id,created_at,updated_at) VALUES(?,?,?)", (catalog_id, now, now))
-        return catalog_id
+            direct = db.execute(
+                "SELECT source_id,catalog_id,kind FROM project_sources WHERE source_id=?",
+                (source_identity,),
+            ).fetchone()
+            if direct is not None:
+                if str(direct["catalog_id"]) != catalog_id or str(direct["kind"]) != kind:
+                    raise ValueError("browser source does not belong to this project")
+                return str(direct["source_id"]), False
+            matched = db.execute(
+                "SELECT source_id,kind FROM project_sources WHERE catalog_id=? AND source_identity=?",
+                (catalog_id, identity),
+            ).fetchone()
+            if matched is not None:
+                if str(matched["kind"]) != kind:
+                    raise ValueError("project source kind does not match")
+                return str(matched["source_id"]), False
+            if not create:
+                raise ValueError("browser source is missing")
+            if db.execute("SELECT 1 FROM catalogs WHERE catalog_id=?", (catalog_id,)).fetchone() is None:
+                raise ValueError("project is missing")
+            return self._ensure_project_source_db(db, catalog_id, kind, display_name, identity), True
 
-    def finalize_catalog(self, catalog_id: str) -> None:
+    def rollback_import(self, catalog_id: str, source_id: str, created_ids: list[str], *, delete_source: bool) -> None:
+        """Undo only database rows created by one failed browser import."""
+        unique_ids = list(dict.fromkeys(created_ids))
         with self._lock, self._connect() as db:
-            db.execute("UPDATE catalogs SET updated_at=? WHERE catalog_id=?", (time.time_ns(), catalog_id))
+            db.execute("BEGIN IMMEDIATE")
+            try:
+                if unique_ids:
+                    placeholders = ",".join("?" for _ in unique_ids)
+                    db.execute(
+                        f"DELETE FROM images WHERE catalog_id=? AND source_id=? AND image_id IN ({placeholders})",
+                        [catalog_id, source_id, *unique_ids],
+                    )
+                if delete_source:
+                    db.execute("""DELETE FROM project_sources
+                        WHERE source_id=? AND catalog_id=?
+                          AND NOT EXISTS (SELECT 1 FROM images WHERE source_id=?)""",
+                               (source_id, catalog_id, source_id))
+                db.execute("COMMIT")
+            except Exception:
+                db.execute("ROLLBACK")
+                raise
 
     def catalog_exists(self, catalog_id: str) -> bool:
         with self._connect() as db:
@@ -383,6 +434,45 @@ class WorkspaceStore:
         return [{"id": str(row["source_id"]), "kind": str(row["kind"]), "displayName": str(row["display_name"]),
                  "nativePath": row["native_path"], "identity": str(row["source_identity"])} for row in rows]
 
+    def native_source(self, catalog_id: str, source_id: str) -> dict[str, Any]:
+        with self._connect() as db:
+            row = db.execute("""SELECT source_id,kind,display_name,native_path,source_identity
+                FROM project_sources WHERE catalog_id=? AND source_id=?""", (catalog_id, source_id)).fetchone()
+        if row is None or str(row["kind"]) != "native-folder":
+            raise ProjectSourceUnavailableError("native project source is missing")
+        return {"id": str(row["source_id"]), "kind": str(row["kind"]), "displayName": str(row["display_name"]),
+                "nativePath": row["native_path"], "identity": str(row["source_identity"])}
+
+    def relink_native_source(self, catalog_id: str, source_id: str, root: Path, records: list[Any], *, allow_new: bool) -> dict[str, dict[str, Any]]:
+        identity = str(root.resolve())
+        incoming_paths = {str(record.relative_path) for record in records}
+        def update_source(db: sqlite3.Connection, now: int) -> None:
+            source = db.execute("SELECT kind FROM project_sources WHERE catalog_id=? AND source_id=?", (catalog_id, source_id)).fetchone()
+            if source is None or str(source["kind"]) != "native-folder":
+                raise ProjectSourceUnavailableError("native project source is missing")
+            conflict = db.execute("""SELECT source_id FROM project_sources
+                WHERE catalog_id=? AND kind='native-folder' AND source_identity=? AND source_id<>?""",
+                                  (catalog_id, identity, source_id)).fetchone()
+            if conflict is not None:
+                raise ProjectSourcePathConflictError("native project source path already belongs to this project")
+            existing_paths = {str(row["relative_path"]) for row in db.execute(
+                "SELECT relative_path FROM images WHERE catalog_id=? AND source_id=?", (catalog_id, source_id)
+            )}
+            if existing_paths and not existing_paths.intersection(incoming_paths):
+                raise ProjectSourceNoMatchError("replacement native project source has no matching images")
+            db.execute("""UPDATE project_sources SET display_name=?,native_path=?,source_identity=?
+                WHERE catalog_id=? AND source_id=?""", (root.name or identity, identity, identity, catalog_id, source_id))
+            db.execute("UPDATE catalogs SET source_root=?,updated_at=? WHERE catalog_id=?", (identity, now, catalog_id))
+        return self.reconcile_images(catalog_id, records, source_id=source_id, allow_new=allow_new, before_reconcile=update_source)
+
+    def reconcile_native_source(self, catalog_id: str, source_id: str, root: Path, records: list[Any]) -> dict[str, dict[str, Any]]:
+        identity = str(root.resolve())
+
+        def update_root(db: sqlite3.Connection, now: int) -> None:
+            db.execute("UPDATE catalogs SET source_root=?,updated_at=? WHERE catalog_id=?", (identity, now, catalog_id))
+
+        return self.reconcile_images(catalog_id, records, source_id=source_id, before_reconcile=update_root)
+
     def project_images(self, catalog_id: str) -> list[dict[str, Any]]:
         with self._connect() as db:
             rows = db.execute("""SELECT images.image_id,images.relative_path,images.width,images.height,
@@ -408,8 +498,101 @@ class WorkspaceStore:
                 db.execute("INSERT INTO catalogs(catalog_id,name,status,source_root,created_at,updated_at) VALUES(?,?,?,?,?,?)",
                            (catalog_id, clean_name or None, "working", source_root, now, now))
             except sqlite3.IntegrityError as exc:
-                raise ValueError("project name already exists") from exc
+                raise ProjectNameAlreadyExistsError("project name already exists") from exc
         return self.project(catalog_id) or {}
+
+    def promote_projectless(
+        self,
+        name: str,
+        sources: list[tuple[str, str, str, list[Any]]],
+        candidates: dict[str, list[Any]],
+        revisions: dict[str, int],
+        effective_masks: dict[str, bool],
+        manual_drafts: dict[str, dict[str, Any]],
+        decoder: Any,
+        project_id: str,
+    ) -> tuple[dict[str, Any], dict[str, str]]:
+        """Persist a projectless catalogue in one SQLite transaction."""
+        clean_name = name.strip()
+        if not clean_name:
+            raise ValueError("project name is required")
+        if len(project_id) != 32 or any(char not in "0123456789abcdef" for char in project_id):
+            raise ValueError("project id is invalid")
+        catalog_id = project_id
+        now = time.time_ns()
+        source_root = next((identity for kind, identity, _display_name, _members in sources if kind == "native-folder"), None)
+        source_ids: dict[str, str] = {}
+        records: list[Any] = []
+        project: dict[str, Any] | None = None
+        with self._lock, self._connect() as db:
+            db.execute("BEGIN IMMEDIATE")
+            try:
+                try:
+                    db.execute(
+                        "INSERT INTO catalogs(catalog_id,name,status,source_root,created_at,updated_at) VALUES(?,?,?,?,?,?)",
+                        (catalog_id, clean_name, "working", source_root, now, now),
+                    )
+                except sqlite3.IntegrityError as exc:
+                    raise ProjectNameAlreadyExistsError("project name already exists") from exc
+                for kind, identity, display_name, members in sources:
+                    source_id = self._ensure_project_source_db(db, catalog_id, kind, display_name, identity)
+                    for record in members:
+                        db.execute(
+                            "INSERT INTO images(catalog_id,source_id,relative_path,image_id,size_bytes,mtime_ns,width,height,updated_at) VALUES(?,?,?,?,?,?,?,?,?)",
+                            (catalog_id, source_id, record.relative_path, record.image_id, record.size_bytes,
+                             record.mtime_ns, record.width, record.height, now),
+                        )
+                        source_ids[record.image_id] = source_id
+                        records.append(record)
+                for record in records:
+                    image_id = record.image_id
+                    snapshot = candidates.get(image_id, [])
+                    revision = revisions.get(image_id, 0)
+                    if snapshot or revision:
+                        before = self._history_state_db(db, image_id)
+                        db.execute("UPDATE images SET candidate_revision=?,reviewed=0,updated_at=? WHERE image_id=?", (revision, time.time_ns(), image_id))
+                        for candidate in snapshot:
+                            with candidate.mask_path.open("rb") as handle:
+                                mask = handle.read()
+                            self._require_png_mask(mask)
+                            db.execute(
+                                """INSERT INTO candidates(image_id,candidate_id,label_token,confidence,mask_png,enabled,color,source,origin,refinement,role,forced,deleted)
+                                VALUES(?,?,?,?,?,?,?,?,?,?,?,?,0)""",
+                                (image_id, candidate.candidate_id, candidate.label_token, candidate.confidence, mask,
+                                 int(candidate.enabled), candidate.color, candidate.source, candidate.origin,
+                                 candidate.refinement, candidate.role.value, int(candidate.forced)),
+                            )
+                            db.execute(
+                                "INSERT INTO candidate_metadata(image_id,candidate_id,expand_px) VALUES(?,?,?)",
+                                (image_id, candidate.candidate_id, int(candidate.expand_px)),
+                            )
+                        self._update_manual_candidate_state(
+                            db, image_id, revision,
+                            {candidate.candidate_id for candidate in snapshot},
+                            bool(effective_masks.get(image_id, False)),
+                        )
+                        self._record_history_db(db, image_id, before, self._history_state_db(db, image_id))
+                    if record.hidden or record.reviewed:
+                        before = self._history_state_db(db, image_id)
+                        db.execute(
+                            "UPDATE images SET hidden=?,reviewed=?,updated_at=? WHERE image_id=?",
+                            (int(record.hidden), int(record.reviewed), time.time_ns(), image_id),
+                        )
+                        self._record_history_db(db, image_id, before, self._history_state_db(db, image_id))
+                    draft = manual_drafts.get(image_id)
+                    if draft is not None:
+                        self._save_manual_db(db, image_id, draft, decoder)
+                row = db.execute("""SELECT catalogs.*,COUNT(images.image_id) AS image_count FROM catalogs
+                    LEFT JOIN images ON images.catalog_id=catalogs.catalog_id WHERE catalogs.catalog_id=?
+                    GROUP BY catalogs.catalog_id""", (catalog_id,)).fetchone()
+                project = self._project_row(row)
+                db.execute("COMMIT")
+            except Exception:
+                db.execute("ROLLBACK")
+                raise
+        if project is None:
+            raise RuntimeError("project promotion failed")
+        return project, source_ids
 
     def name_project(self, catalog_id: str, name: str) -> dict[str, Any]:
         clean_name = name.strip()
@@ -419,7 +602,7 @@ class WorkspaceStore:
             try:
                 cursor = db.execute("UPDATE catalogs SET name=?,updated_at=? WHERE catalog_id=?", (clean_name, time.time_ns(), catalog_id))
             except sqlite3.IntegrityError as exc:
-                raise ValueError("project name already exists") from exc
+                raise ProjectNameAlreadyExistsError("project name already exists") from exc
             if not cursor.rowcount:
                 raise ValueError("project is missing")
         return self.project(catalog_id) or {}
@@ -445,54 +628,49 @@ class WorkspaceStore:
             rows = db.execute(sql, values).fetchall()
         return [self._project_row(row) for row in rows]
 
-    def set_project_source_root(self, catalog_id: str, source_root: str | None) -> None:
-        with self._lock, self._connect() as db:
-            db.execute("UPDATE catalogs SET source_root=?,updated_at=? WHERE catalog_id=?", (source_root, time.time_ns(), catalog_id))
-
-    def delete_catalog(self, catalog_id: str) -> None:
-        """Remove an unused provisional browser catalogue and its cascaded rows."""
-        with self._lock, self._connect() as db:
-            db.execute("BEGIN IMMEDIATE")
-            try:
-                db.execute("DELETE FROM catalogs WHERE catalog_id=?", (catalog_id,))
-                db.execute("COMMIT")
-            except Exception:
-                db.execute("ROLLBACK")
-                raise
-
-    def delete_project(self, catalog_id: str) -> None:
+    def delete_project(self, catalog_id: str) -> list[str]:
         """Permanently remove one explicit project and all of its workspace rows."""
         with self._lock, self._connect() as db:
             db.execute("BEGIN IMMEDIATE")
             try:
+                image_ids = [str(row["image_id"]) for row in db.execute(
+                    "SELECT image_id FROM images WHERE catalog_id=?", (catalog_id,)
+                )]
                 cursor = db.execute("DELETE FROM catalogs WHERE catalog_id=?", (catalog_id,))
                 if not cursor.rowcount:
                     raise ValueError("project is missing")
                 db.execute("COMMIT")
+                return image_ids
             except Exception:
                 db.execute("ROLLBACK")
                 raise
 
-    def best_catalog_for_manifest(self, entries: list[tuple[str, str]], exclude_catalog: str) -> str | None:
-        # Projects are explicit.  Never infer a project from file content or
-        # silently merge browser imports into a similarly shaped project.
-        return None
-
-    def reconcile_images(self, catalog_id: str, records: list[Any], source_id: str | None = None) -> dict[str, dict[str, Any]]:
+    def reconcile_images(
+        self,
+        catalog_id: str,
+        records: list[Any],
+        source_id: str | None = None,
+        *,
+        allow_new: bool = True,
+        before_reconcile: Any | None = None,
+    ) -> dict[str, dict[str, Any]]:
         """Return durable state by path without silently discarding edits."""
         now = time.time_ns()
         result: dict[str, dict[str, Any]] = {}
-        if not records:
-            return result
         with self._lock, self._connect() as db:
             db.execute("BEGIN IMMEDIATE")
             try:
+                if before_reconcile is not None:
+                    before_reconcile(db, now)
+                if not records:
+                    db.execute("COMMIT")
+                    return result
                 if source_id is None:
                     # Browser imports have one deterministic source per
                     # project.  Avoid an extra read in large folder imports.
                     source_id = f"browser-{catalog_id}"
                     db.execute("""INSERT OR IGNORE INTO project_sources(source_id,catalog_id,kind,display_name,native_path,source_identity,created_at)
-                        VALUES(?,?,?,?,?,?,?)""", (source_id, catalog_id, "browser-files", "ブラウザから追加", None, f"browser:{catalog_id}", now))
+                    VALUES(?,?,?,?,?,?,?)""", (source_id, catalog_id, "browser-files", "browser-files", None, f"browser:{catalog_id}", now))
                 elif db.execute("SELECT 1 FROM project_sources WHERE source_id=? AND catalog_id=?", (source_id, catalog_id)).fetchone() is None:
                     raise ValueError("project source is missing")
                 db.execute("""CREATE TEMP TABLE IF NOT EXISTS workspace_reconcile_records(
@@ -507,13 +685,40 @@ class WorkspaceStore:
                         JOIN workspace_reconcile_records AS incoming ON incoming.relative_path=images.relative_path
                         WHERE images.source_id=?""", (source_id,))
                 }
+                requested_ids = {
+                    str(getattr(record, "image_id", ""))
+                    for record in records
+                    if str(getattr(record, "image_id", ""))
+                }
+                used_ids = {}
+                if requested_ids:
+                    placeholders = ",".join("?" for _ in requested_ids)
+                    used_ids = {
+                        str(row["image_id"]): row
+                        for row in db.execute(
+                            f"SELECT image_id,catalog_id,source_id,relative_path FROM images WHERE image_id IN ({placeholders})",
+                            list(requested_ids),
+                        )
+                    }
                 for record in records:
                     row = existing.get(record.relative_path)
                     if row is None:
-                        image_id = uuid.uuid4().hex
+                        if not allow_new:
+                            continue
+                        # A projectless session owns a real, opaque image ID
+                        # already.  Promoting it to a project must preserve
+                        # that identity so its current editor state can be
+                        # written without a client-side remap.
+                        image_id = str(getattr(record, "image_id", "")) or uuid.uuid4().hex
+                        owner = used_ids.get(image_id)
+                        if owner is not None:
+                            raise ValueError("image identity already belongs to another source")
                         db.execute("INSERT INTO images(catalog_id,source_id,relative_path,image_id,size_bytes,mtime_ns,width,height,updated_at) VALUES(?,?,?,?,?,?,?,?,?)",
                                    (catalog_id, source_id, record.relative_path, image_id, record.size_bytes, record.mtime_ns, int(getattr(record, "width", 0)), int(getattr(record, "height", 0)), now))
-                        result[record.relative_path] = {"image_id": image_id, "hidden": False, "reviewed": False, "revision": 0, "changed": False}
+                        result[record.relative_path] = {
+                            "image_id": image_id, "hidden": False, "reviewed": False,
+                            "revision": 0, "changed": False, "created": True,
+                        }
                         continue
                     width, height = int(getattr(record, "width", 0)), int(getattr(record, "height", 0))
                     changed = int(row["size_bytes"]) != record.size_bytes or int(row["mtime_ns"]) != record.mtime_ns or int(row["width"]) != width or int(row["height"]) != height
@@ -521,7 +726,14 @@ class WorkspaceStore:
                     # Keep the old baseline until the user accepts the source
                     # change in the warning dialog. This makes a reopened
                     # project warn again instead of silently normalising it.
-                    result[record.relative_path] = {"image_id": row["image_id"], "hidden": bool(row["hidden"]), "reviewed": False if changed else bool(row["reviewed"]), "revision": int(row["candidate_revision"]), "changed": changed or bool(row["source_blocked"]), "dimensions_changed": dimensions_changed or bool(row["source_blocked"])}
+                    result[record.relative_path] = {
+                        "image_id": row["image_id"], "hidden": bool(row["hidden"]),
+                        "reviewed": False if changed else bool(row["reviewed"]),
+                        "revision": int(row["candidate_revision"]),
+                        "changed": changed or bool(row["source_blocked"]),
+                        "dimensions_changed": dimensions_changed or bool(row["source_blocked"]),
+                        "created": False,
+                    }
                 db.execute("COMMIT")
             except Exception:
                 db.execute("ROLLBACK")
@@ -537,19 +749,113 @@ class WorkspaceStore:
             for row in rows
         }
 
-    def accept_source_metadata(self, records: list[Any], *, preserve_mask_dimensions: bool = False) -> None:
-        if not records: return
+    @staticmethod
+    def _resize_binary_mask(raw: bytes | None, old_size: tuple[int, int], new_size: tuple[int, int]) -> tuple[bytes | None, np.ndarray | None]:
+        if raw is None:
+            return None, None
+        image = WorkspaceStore._decode_png_mask(raw)
+        assert image is not None
+        if image.size != old_size:
+            raise ValueError("workspace mask dimensions do not match source image")
+        value = np.asarray(image.resize(new_size, Image.Resampling.NEAREST), dtype=np.uint8) > 0
+        output = io.BytesIO()
+        Image.fromarray(value.astype(np.uint8) * 255, "L").save(output, format="PNG")
+        return output.getvalue(), value.astype(np.uint8) * 255
+
+    @staticmethod
+    def _reset_image_history_db(db: sqlite3.Connection, image_id: str) -> None:
+        group_ids = [str(row["group_id"]) for row in db.execute(
+            "SELECT DISTINCT group_id FROM history_entries WHERE image_id=? AND group_id IS NOT NULL", (image_id,)
+        )]
+        for group_id in group_ids:
+            db.execute("UPDATE history_entries SET group_id=NULL WHERE group_id=? AND image_id<>?", (group_id, image_id))
+        db.execute("DELETE FROM history_entries WHERE image_id=?", (image_id,))
+        db.execute("DELETE FROM history_cursors WHERE image_id=?", (image_id,))
+        for group_id in group_ids:
+            db.execute("DELETE FROM history_groups WHERE group_id=?", (group_id,))
+        WorkspaceStore._prune_unreferenced_candidates(db, image_id)
+
+    def _preserve_resized_workspace_db(self, db: sqlite3.Connection, image_id: str, old_size: tuple[int, int], new_size: tuple[int, int], revision: int) -> None:
+        candidate_rows = db.execute("""SELECT candidates.candidate_id,candidates.mask_png,candidates.enabled,candidates.role,candidates.forced,
+            COALESCE(candidate_metadata.expand_px,0) AS expand_px FROM candidates
+            LEFT JOIN candidate_metadata USING(image_id,candidate_id) WHERE candidates.image_id=? AND candidates.deleted=0""", (image_id,)).fetchall()
+        manual = db.execute("SELECT * FROM manual_edits WHERE image_id=?", (image_id,)).fetchone()
+        max_expand = int(np.ceil(np.hypot(new_size[0] - 1, new_size[1] - 1)))
+        candidates: list[tuple[sqlite3.Row, np.ndarray, int]] = []
+        for row in candidate_rows:
+            raw, mask = self._resize_binary_mask(row["mask_png"], old_size, new_size)
+            assert raw is not None and mask is not None
+            expand_px = min(int(row["expand_px"]), max_expand)
+            db.execute("UPDATE candidates SET mask_png=? WHERE image_id=? AND candidate_id=?", (raw, image_id, row["candidate_id"]))
+            db.execute("""INSERT INTO candidate_metadata(image_id,candidate_id,expand_px) VALUES(?,?,?)
+                ON CONFLICT(image_id,candidate_id) DO UPDATE SET expand_px=excluded.expand_px""", (image_id, row["candidate_id"], expand_px))
+            candidates.append((row, expand_mask(mask, expand_px), expand_px))
+        if manual is None:
+            self._reset_image_history_db(db, image_id)
+            return
+        add_raw, add = self._resize_binary_mask(manual["add_png"], old_size, new_size)
+        exclusion_raw, exclusion = self._resize_binary_mask(manual["exclusion_png"], old_size, new_size)
+        erase_raw, erase = self._resize_binary_mask(manual["exclusion_erase_png"], old_size, new_size)
+        try:
+            removed = json.loads(str(manual["removed_candidate_ids"]))
+        except (TypeError, ValueError, json.JSONDecodeError) as exc:
+            raise ValueError("workspace removed candidates are invalid") from exc
+        if not isinstance(removed, list) or any(not isinstance(candidate_id, str) for candidate_id in removed):
+            raise ValueError("workspace removed candidates are invalid")
+        removed_ids = set(removed) & {str(row["candidate_id"]) for row, _mask, _expand in candidates}
+        apply_masks = [mask for row, mask, _expand in candidates if row["enabled"] and row["role"] == "apply" and row["candidate_id"] not in removed_ids]
+        exclude_masks = [mask for row, mask, _expand in candidates if row["enabled"] and row["role"] != "apply" and row["candidate_id"] not in removed_ids]
+        forced_exclude_masks = [mask for row, mask, _expand in candidates if row["enabled"] and row["role"] != "apply" and row["forced"] and row["candidate_id"] not in removed_ids]
+        effective = bool(np.any(compose_masks(
+            (new_size[1], new_size[0]), apply_masks, exclude_masks,
+            add if manual["manual_enabled"] else None,
+            exclusion if manual["exclusion_enabled"] else None,
+            forced_exclude_masks, bool(manual["exclusion_forced"]),
+            erase if manual["exclusion_erase_enabled"] else None,
+        )))
+        db.execute("""UPDATE manual_edits SET add_png=?,exclusion_png=?,exclusion_erase_png=?,removed_candidate_ids=?,candidate_revision=?,has_effective_mask=?,updated_at=?
+            WHERE image_id=?""", (add_raw, exclusion_raw, erase_raw, json.dumps(sorted(removed_ids)), revision, int(effective), time.time_ns(), image_id))
+        self._reset_image_history_db(db, image_id)
+
+    def acknowledge_source_mismatches(self, records: list[Any], revisions: dict[str, int] | None = None) -> set[str]:
+        """Accept selected source metadata, clearing or resizing masks in one transaction."""
+        selected = {str(record.image_id): record for record in records}
+        if not selected:
+            return set()
+        clear_revisions = revisions or {}
+        if set(clear_revisions) - set(selected):
+            raise ValueError("workspace clear selection does not match source acknowledgement")
         with self._lock, self._connect() as db:
             db.execute("BEGIN IMMEDIATE")
             try:
-                for record in records:
-                    if preserve_mask_dimensions:
-                        db.execute("UPDATE images SET size_bytes=?,mtime_ns=?,source_blocked=1,reviewed=0,updated_at=? WHERE image_id=?",
-                                   (record.size_bytes, record.mtime_ns, time.time_ns(), record.image_id))
+                now = time.time_ns()
+                resized: set[str] = set()
+                for image_id, record in selected.items():
+                    image = db.execute("SELECT width,height,candidate_revision FROM images WHERE image_id=?", (image_id,)).fetchone()
+                    if image is None:
+                        raise ValueError("workspace image is missing")
+                    old_size = (int(image["width"]), int(image["height"]))
+                    new_size = (int(record.width), int(record.height))
+                    if image_id in clear_revisions:
+                        db.execute("DELETE FROM candidates WHERE image_id=?", (image_id,))
+                        db.execute("DELETE FROM candidate_metadata WHERE image_id=?", (image_id,))
+                        db.execute("DELETE FROM manual_edits WHERE image_id=?", (image_id,))
+                        self._reset_image_history_db(db, image_id)
+                    elif old_size != new_size:
+                        resized_revision = int(image["candidate_revision"]) + 1
+                        self._preserve_resized_workspace_db(db, image_id, old_size, new_size, resized_revision)
+                        resized.add(image_id)
+                    if image_id in clear_revisions:
+                        db.execute("""UPDATE images SET size_bytes=?,mtime_ns=?,width=?,height=?,source_blocked=0,reviewed=0,
+                            candidate_revision=?,updated_at=? WHERE image_id=?""", (record.size_bytes, record.mtime_ns, record.width, record.height, clear_revisions[image_id], now, image_id))
+                    elif old_size != new_size:
+                        db.execute("""UPDATE images SET size_bytes=?,mtime_ns=?,width=?,height=?,source_blocked=0,reviewed=0,
+                            candidate_revision=?,updated_at=? WHERE image_id=?""", (record.size_bytes, record.mtime_ns, record.width, record.height, resized_revision, now, image_id))
                     else:
                         db.execute("""UPDATE images SET size_bytes=?,mtime_ns=?,width=?,height=?,source_blocked=0,reviewed=0,updated_at=?
-                            WHERE image_id=?""", (record.size_bytes, record.mtime_ns, record.width, record.height, time.time_ns(), record.image_id))
+                            WHERE image_id=?""", (record.size_bytes, record.mtime_ns, record.width, record.height, now, image_id))
                 db.execute("COMMIT")
+                return resized
             except Exception:
                 db.execute("ROLLBACK")
                 raise
@@ -569,31 +875,33 @@ class WorkspaceStore:
                 raise
 
     def clear_image_workspaces(self, revisions: dict[str, int], *, history_group: str | None = None) -> None:
-        """Clear each image atomically; a caller may bind them into one undo group."""
+        """Clear a selection in one durable transaction and one undo group."""
         if not revisions:
             return
-        for image_id, revision in revisions.items():
-            self._clear_image_workspace(image_id, revision, history_group=history_group)
-
-    def _clear_image_workspace(self, image_id: str, revision: int, *, history_group: str | None) -> None:
-        # A very large batch must not hold a write lock for every image.  Each
-        # image is independently durable and the group record makes any
-        # partial batch visible/recoverable rather than silently half-published.
         with self._lock, self._connect() as db:
             db.execute("BEGIN IMMEDIATE")
             try:
-                before = self._history_state_db(db, image_id)
-                # Keep immutable candidate PNGs for the undo journal.  A
-                # clear only makes the generation inactive; explicit image
-                # deletion still cascades all of it.
-                db.execute("UPDATE candidates SET deleted=1 WHERE image_id=?", (image_id,))
-                db.execute("DELETE FROM manual_edits WHERE image_id=?", (image_id,))
-                db.execute("UPDATE images SET candidate_revision=?,reviewed=0,updated_at=? WHERE image_id=?", (revision, time.time_ns(), image_id))
-                self._record_history_db(db, image_id, before, self._history_state_db(db, image_id), group_id=history_group)
+                self._clear_image_workspaces_db(db, revisions, history_group=history_group)
                 db.execute("COMMIT")
             except Exception:
                 db.execute("ROLLBACK")
                 raise
+
+    def _clear_image_workspaces_db(self, db: sqlite3.Connection, revisions: dict[str, int], *, history_group: str | None = None) -> None:
+        """Clear active masks using the caller's open transaction."""
+        group_id = history_group
+        if group_id is None and len(revisions) > 1:
+            group_id = uuid.uuid4().hex
+            db.execute("INSERT INTO history_groups(group_id,status,created_at) VALUES(?,?,?)", (group_id, "committed", time.time_ns()))
+        for image_id, revision in revisions.items():
+            before = self._history_state_db(db, image_id)
+            # Keep immutable candidate PNGs for the undo journal. A clear
+            # only makes the generation inactive; explicit image deletion
+            # still cascades all of it.
+            db.execute("UPDATE candidates SET deleted=1 WHERE image_id=?", (image_id,))
+            db.execute("DELETE FROM manual_edits WHERE image_id=?", (image_id,))
+            db.execute("UPDATE images SET candidate_revision=?,reviewed=0,updated_at=? WHERE image_id=?", (revision, time.time_ns(), image_id))
+            self._record_history_db(db, image_id, before, self._history_state_db(db, image_id), group_id=group_id)
 
     def prune_catalog_images(self, catalog_id: str, relative_paths: set[str]) -> None:
         """Drop rows for files absent from a complete folder scan only."""
@@ -639,10 +947,47 @@ class WorkspaceStore:
                 db.execute("ROLLBACK")
                 raise
 
+    def set_image_flags_bulk(self, image_ids: list[str], *, hidden: bool | None = None, reviewed: bool | None = None) -> None:
+        """Apply one catalogue flag change as one durable undo operation."""
+        updates: list[str] = []
+        values: list[Any] = []
+        if hidden is not None:
+            updates.append("hidden=?"); values.append(int(hidden))
+        if reviewed is not None:
+            updates.append("reviewed=?"); values.append(int(reviewed))
+        if not updates or not image_ids:
+            return
+        with self._lock, self._connect() as db:
+            db.execute("BEGIN IMMEDIATE")
+            try:
+                changed_ids: list[str] = []
+                for image_id in image_ids:
+                    row = db.execute("SELECT hidden,reviewed FROM images WHERE image_id=?", (image_id,)).fetchone()
+                    if row is None:
+                        continue
+                    if ((hidden is not None and bool(row["hidden"]) != hidden)
+                            or (reviewed is not None and bool(row["reviewed"]) != reviewed)):
+                        changed_ids.append(image_id)
+                if not changed_ids:
+                    db.execute("COMMIT")
+                    return
+                group_id = uuid.uuid4().hex
+                db.execute("INSERT INTO history_groups(group_id,status,created_at) VALUES(?,?,?)", (group_id, "committed", time.time_ns()))
+                for image_id in changed_ids:
+                    before = self._history_state_db(db, image_id)
+                    db.execute(f"UPDATE images SET {','.join(updates)},updated_at=? WHERE image_id=?", [*values, time.time_ns(), image_id])
+                    self._record_history_db(db, image_id, before, self._history_state_db(db, image_id), group_id=group_id)
+                db.execute("COMMIT")
+            except Exception:
+                db.execute("ROLLBACK")
+                raise
+
     def commit_save(self, image_id: str, *, mtime_ns: int | None = None, size_bytes: int | None = None,
                     candidate_revision: int | None = None,
                     clear_workspace: bool, delete_image: bool = False) -> None:
         """Commit one completed save before its in-memory review state is published."""
+        if not delete_image and mtime_ns is None and size_bytes is None and candidate_revision is None and not clear_workspace:
+            return
         with self._lock, self._connect() as db:
             db.execute("BEGIN IMMEDIATE")
             try:
@@ -685,7 +1030,8 @@ class WorkspaceStore:
         ).commit()
 
     def prepare_candidate_state(self, image_id: str, revision: int, candidates: list[Any], effective: bool, *, replace: bool,
-                                history_group: str | None = None, expected_revision: int | None = None) -> _PendingWorkspaceCommit:
+                                history_group: str | None = None, expected_revision: int | None = None,
+                                preserve_reviewed: bool = False) -> _PendingWorkspaceCommit:
         """Write a candidate revision but leave COMMIT to the state publisher."""
         with self._lock:
             db = self._connect()
@@ -696,7 +1042,10 @@ class WorkspaceStore:
                     if current is None or int(current["candidate_revision"]) != expected_revision:
                         raise ValueError("workspace candidate revision changed")
                 before = self._history_state_db(db, image_id)
-                db.execute("UPDATE images SET candidate_revision=?, reviewed=0, updated_at=? WHERE image_id=?", (revision, time.time_ns(), image_id))
+                if preserve_reviewed:
+                    db.execute("UPDATE images SET candidate_revision=?, updated_at=? WHERE image_id=?", (revision, time.time_ns(), image_id))
+                else:
+                    db.execute("UPDATE images SET candidate_revision=?, reviewed=0, updated_at=? WHERE image_id=?", (revision, time.time_ns(), image_id))
                 if replace:
                     db.execute("UPDATE candidates SET deleted=1 WHERE image_id=?", (image_id,))
                     for candidate in candidates:
@@ -793,7 +1142,7 @@ class WorkspaceStore:
                 or int.from_bytes(header[20:24], "big") <= 0):
             raise ValueError("workspace candidate PNG is invalid")
 
-    def save_manual(self, image_id: str, payload: dict[str, Any], decoder: Any) -> None:
+    def _save_manual_db(self, db: sqlite3.Connection, image_id: str, payload: dict[str, Any], decoder: Any) -> None:
         removed = payload.get("removedCandidateIds", [])
         if not isinstance(removed, list) or any(not isinstance(item, str) for item in removed):
             raise ValueError("invalid removed candidates")
@@ -804,7 +1153,7 @@ class WorkspaceStore:
         # journal.  The SQLite operation delta below is the single source of
         # truth for undo/redo after reopening a project.
         history_json = "{}"
-        request_keys = {"add": "add", "exclusion": "exclusion", "erase": "exclusionErase"}
+        request_keys = {"add": "add", "exclusion": "exclusion", "exclusionErase": "exclusionErase"}
         dirty_layers = payload.get("dirtyLayers")
         if dirty_layers is None:
             dirty = set(request_keys)
@@ -824,27 +1173,27 @@ class WorkspaceStore:
             if any(isinstance(value, bool) or not isinstance(value, int) for value in values) or values[0] < 0 or values[1] < 0 or values[2] <= values[0] or values[3] <= values[1]:
                 raise ValueError("invalid manual dirty regions")
             rois[layer] = values
-        with self._lock, self._connect() as db:
-            db.execute("BEGIN IMMEDIATE")
-            try:
-                before = self._history_state_db(db, image_id)
-                previous_layers = before.get("_manual_raw") or {}
-                layers = {layer: decoded[layer] if layer in dirty else previous_layers.get(layer) for layer in request_keys}
-                # Browser saves include all three layers, but a normal stroke
-                # changes one. Validate only newly inserted bytes; immutable
-                # old layers were validated at their own insertion.
-                for key, mask in layers.items():
-                    if mask != previous_layers.get(key):
-                        self._require_png_mask(mask)
-                image = db.execute("SELECT candidate_revision FROM images WHERE image_id=?", (image_id,)).fetchone()
-                revision = int(image["candidate_revision"])
-                valid_ids = {str(row["candidate_id"]) for row in db.execute(
-                    "SELECT candidate_id FROM candidates WHERE image_id=? AND deleted=0", (image_id,)
-                )}
-                # Candidate IDs are revision-local.  Persisting only current IDs
-                # prevents an old editor tab from suppressing a newly detected mask.
-                removed = sorted(set(removed) & valid_ids)
-                db.execute("""INSERT INTO manual_edits(
+        before = self._history_state_db(db, image_id)
+        previous_layers = before.get("_manual_raw") or {}
+        layers = {
+            "add": decoded["add"] if "add" in dirty else previous_layers.get("add"),
+            "exclusion": decoded["exclusion"] if "exclusion" in dirty else previous_layers.get("exclusion"),
+            "erase": decoded["exclusionErase"] if "exclusionErase" in dirty else previous_layers.get("erase"),
+        }
+        # Browser saves include all three layers, but a normal stroke changes
+        # one. Validate only newly inserted bytes.
+        for key, mask in layers.items():
+            if mask != previous_layers.get(key):
+                self._require_png_mask(mask)
+        image = db.execute("SELECT candidate_revision FROM images WHERE image_id=?", (image_id,)).fetchone()
+        revision = int(image["candidate_revision"])
+        valid_ids = {str(row["candidate_id"]) for row in db.execute(
+            "SELECT candidate_id FROM candidates WHERE image_id=? AND deleted=0", (image_id,)
+        )}
+        # Candidate IDs are revision-local. Persisting only current IDs keeps
+        # an old editor tab from suppressing a newly detected mask.
+        removed = sorted(set(removed) & valid_ids)
+        db.execute("""INSERT INTO manual_edits(
                 image_id,add_png,exclusion_png,exclusion_erase_png,manual_enabled,exclusion_enabled,
                 exclusion_erase_enabled,exclusion_forced,removed_candidate_ids,candidate_revision,
                 has_effective_mask,history_json,updated_at
@@ -852,8 +1201,16 @@ class WorkspaceStore:
                 add_png=excluded.add_png,exclusion_png=excluded.exclusion_png,exclusion_erase_png=excluded.exclusion_erase_png,
                 manual_enabled=excluded.manual_enabled,exclusion_enabled=excluded.exclusion_enabled,exclusion_erase_enabled=excluded.exclusion_erase_enabled,
                 exclusion_forced=excluded.exclusion_forced,removed_candidate_ids=excluded.removed_candidate_ids,candidate_revision=excluded.candidate_revision,has_effective_mask=excluded.has_effective_mask,history_json=excluded.history_json,updated_at=excluded.updated_at""",
-                    (image_id,layers["add"],layers["exclusion"],layers["erase"],int(payload.get("manualEnabled", True)),int(payload.get("manualExclusionEnabled", True)),int(payload.get("manualExclusionEraseEnabled", True)),int(payload.get("manualExclusionForced", True)),json.dumps(removed),revision,int(has_effective_mask),history_json,time.time_ns()))
-                self._record_history_db(db, image_id, before, self._history_state_db(db, image_id), manual_rois=rois)
+            (image_id,layers["add"],layers["exclusion"],layers["erase"],int(payload.get("manualEnabled", True)),int(payload.get("manualExclusionEnabled", True)),int(payload.get("manualExclusionEraseEnabled", True)),int(payload.get("manualExclusionForced", True)),json.dumps(removed),revision,int(has_effective_mask),history_json,time.time_ns()))
+        self._record_history_db(db, image_id, before, self._history_state_db(db, image_id), manual_rois={
+            "add": rois.get("add"), "exclusion": rois.get("exclusion"), "erase": rois.get("exclusionErase"),
+        })
+
+    def save_manual(self, image_id: str, payload: dict[str, Any], decoder: Any) -> None:
+        with self._lock, self._connect() as db:
+            db.execute("BEGIN IMMEDIATE")
+            try:
+                self._save_manual_db(db, image_id, payload, decoder)
                 db.execute("COMMIT")
             except Exception:
                 db.execute("ROLLBACK")
@@ -1298,9 +1655,8 @@ class WorkspaceStore:
         if not isinstance(removed, list) or any(not isinstance(item, str) for item in removed):
             raise ValueError("workspace removed candidates are invalid")
         current_revision = int(image["candidate_revision"]) if image else int(row["candidate_revision"])
-        # Old rows from interrupted/browser tabs are read safely too.  The next
-        # save writes this normalized representation back in one transaction.
-        removed = sorted(set(removed) & valid_ids)
+        if set(removed) - valid_ids:
+            raise ValueError("workspace removed candidates are invalid")
         try:
             history = json.loads(str(row["history_json"]))
         except (TypeError, ValueError, json.JSONDecodeError) as exc:

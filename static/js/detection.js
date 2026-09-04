@@ -26,7 +26,8 @@ function validateDetectionCandidatePadding() {
   return valid;
 }
 function syncDetectionActions() {
-  const enabled = persistedDetectionTargets().length > 0 && !isBusy() && !state.importing;
+  const enabled = persistedDetectionTargets().length > 0 && !isBusy() && !state.importing
+    && !state.projectReadOnly && !currentRecord()?.sourceDimensionsChanged && !currentImageActionPending();
   $("#detectAllButton").disabled = !enabled || !state.images.length;
   $("#detectCurrentButton").disabled = !enabled || !state.currentId;
 }
@@ -73,10 +74,9 @@ async function runDetection(imageIds, confidence = detectionConfidence(), parall
   if (!state.detectionStarting) beginDetectionStart(imageIds);
   updateActionButtons();
   try {
-    // Freeze the current manual layers before the server replaces automatic
-    // candidates. The completion refresh must not save the old candidate set
-    // against the new candidate revision.
+    await flushAllImageMutations();
     await saveDraft();
+    await flushAllWorkspaceMutations();
     await api("/api/detect", { method: "POST", body: JSON.stringify({ imageIds, confidence, parallelism: Math.min(4, Math.max(1, Math.round(parallelism))), targetClasses }) });
     state.detectionTargetIds = [...imageIds];
     state.detectCancelRequested = false;
@@ -143,10 +143,12 @@ async function cancelDetection() {
 
 async function saveCurrent() {
   const imageId = state.currentId;
-  if (isBusy() || state.importing || !imageId) return;
+  const generation = state.imageGeneration;
+  if (isBusy() || state.importing || currentImageActionPending() || !imageId) return;
   if (state.candidateUpdateChains.size) await waitForCandidateMutations();
   const record = state.images.find((image) => image.id === imageId);
-  if (isBusy() || state.importing || state.currentId !== imageId || !record || !imageHasMask(record)) return;
+  if (isBusy() || state.importing || currentImageActionPending() || state.currentId !== imageId || !isCurrentGeneration(generation)
+    || !state.currentImage || state.projectReadOnly || record?.sourceDimensionsChanged || !record || !imageHasMask(record)) return;
   await openSingleSaveDialog(imageId);
 }
 

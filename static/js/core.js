@@ -2,7 +2,7 @@ const $ = (selector) => document.querySelector(selector);
 
 const state = {
   images: [], currentId: null, currentImage: null, pendingImageId: null, galleryFilter: "all", maskStatus: new Map(),
-  viewMode: "edit", displayMode: "single", compareSplit: .5, overviewFilter: "all", overviewQuery: "", overviewFolder: "", reviewedPaths: new Set(), hiddenPaths: new Set(), reviewRoot: "",
+  viewMode: "edit", displayMode: "single", compareSplit: .5, overviewFilter: "all", overviewQuery: "", overviewFolder: "", reviewedImageIds: new Set(), hiddenImageIds: new Set(), reviewRoot: "",
   selectedImageIds: new Set(), selectionAnchorId: null, batchMode: false,
   navigationShortcutsEnabled: true,
   candidates: [], candidateImages: new Map(), drafts: new Map(),
@@ -17,21 +17,26 @@ const state = {
   outputDirectoryPicking: false, outputDirectoryHandle: null, singleSave: null,
   detectionTargetIds: [], pendingDetectionTargetIds: [], detectCancelRequested: false,
   pageLoadedAt: Date.now() / 1000, handledDetectionStartedAt: null, importSession: null,
-  candidateUpdateChains: new Map(), candidateUpdateVersions: new Map(), candidateDeleting: new Set(), candidateBatchPending: new Set(),
-  manualMaskPresent: false, manualEnabled: true, manualExclusionEnabled: true, manualExclusionForced: true, manualExclusionEraseEnabled: true,
+  candidateUpdateChains: new Map(), candidateUpdateVersions: new Map(), candidateDeleting: new Set(), candidateBatchPending: new Set(), imageMutationChains: new Map(), candidateControlLocks: new Map(),
+  manualMaskPresent: false, manualExclusionPresent: false, manualExclusionErasePresent: false, manualEnabled: true, manualExclusionEnabled: true, manualExclusionForced: true, manualExclusionEraseEnabled: true,
   galleryNodes: new Map(), overviewNodes: new Map(), contextMenuImageId: null, contextMenuOrigin: null, contextMenuScroll: null, browserSave: null, pollInFlight: null, pollFailures: 0,
   // Browser file handles never leave this tab. They make imported images real save targets.
   sourceAccess: new Map(),
+  // Projectless directory imports retain their root only until the session is named.
+  projectlessDirectorySources: new Map(),
   processing: null, imageInflight: new Map(), candidateInflight: new Map(), loadingDelay: null, pendingImageKey: null, pendingCandidateKey: null,
   galleryCollapsed: false, inspectorCollapsed: false,
   settings: null, settingsStatus: null, jobPollTimer: null,
   imageCache: null, candidateBundleCache: null, catalogLoadControllers: new Set(),
   prefetchQueue: [], prefetchActive: 0, prefetchTimer: null,
   fillWorker: null, fillPending: false,
-  project: null, projectReadOnly: false, projectHistory: new Map(), projectHistoryBusy: false,
+  project: null, projectReadOnly: false, projectHistory: new Map(), projectHistoryBusy: false, projectOperationPending: false,
+  missingNativeSources: [],
   renderFrame: 0,
   maskDirty: false, draftDirty: false, draftLayerDirty: new Set(), draftDirtyRois: new Map(), historyBaseDirty: false, draftSaveChains: new Map(),
 };
+
+function currentImageActionPending() { return Boolean(state.pendingImageId) || state.candidateBatchPending.size > 0; }
 
 const canvas = $("#editorCanvas");
 const stage = $("#canvasStage");
@@ -81,7 +86,7 @@ const USER_ERROR_CODES = {
   api_not_found: "response_invalid", connection_lost: "connection_lost", output_folder_unavailable: "output_folder_unavailable", output_permission_denied: "output_permission_denied", request_failed: "internal_error",
   image_not_found: "image_not_found", image_read_failed: "image_read_failed", image_format_unsupported: "image_format_unsupported",
   save_write_failed: "save_write_failed", save_state_changed: "save_state_changed", folder_not_found: "folder_not_found",
-  source_restore_failed: "project_source_unavailable", project_source_unavailable: "project_source_unavailable", project_name_invalid: "project_name_invalid", project_read_only: "project_read_only",
+  source_restore_failed: "project_source_unavailable", project_source_unavailable: "project_source_unavailable", project_source_conflict: "project_source_conflict", project_source_no_match: "project_source_no_match", project_name_invalid: "project_name_invalid", project_name_duplicate: "project_name_duplicate", project_read_only: "project_read_only",
   project_not_found: "folder_not_found", workspace_recreate_required: "workspace_corrupt", source_mismatch: "image_changed",
   source_permission_denied: "source_permission_denied", source_action_unavailable: "source_action_unavailable",
   source_busy: "source_busy", source_write_unsupported: "source_write_unsupported", output_write_unsupported: "output_write_unsupported", output_cleanup_failed: "output_cleanup_failed",
@@ -99,7 +104,7 @@ const USER_ERROR_CODES = {
 
 const CANDIDATE_CLASS_TOKENS = new Set(["penis", "pussy", "testicles", "boundary", "boundary_polygon", "hand", "fluid"]);
 const CANDIDATE_SOURCE_TOKENS = new Set(["auto", "target", "ntd11", "sensitive", "boundary", "hand_exclusion", "fluid_exclusion"]);
-const CANDIDATE_REFINEMENT_TOKENS = new Set(["sam_fallback", "sam_high_precision"]);
+const CANDIDATE_REFINEMENT_TOKENS = new Set(["sam_high_precision"]);
 
 function validCandidateTokens(candidate) {
   return CANDIDATE_CLASS_TOKENS.has(candidate?.labelToken)
@@ -314,6 +319,7 @@ function renderLocalizedDynamicState() {
   syncApplyMode();
   updateProgress(state.job);
   renderStatus();
+  if (typeof renderProjectTable === "function") renderProjectTable();
 }
 
 function currentRecord() { return state.images.find((image) => image.id === state.currentId) || null; }
@@ -337,7 +343,7 @@ function isBusy() {
   return ["running", "pausing", "paused"].includes(state.job?.state)
     || state.saving || state.saveStarting || state.detectionStarting || state.masksClearing
     || state.processing?.kind === "detect"
-    || state.catalogMutation || state.boundaryPending || state.fillPending;
+    || state.catalogMutation || state.boundaryPending || state.fillPending || state.projectHistoryBusy;
 }
 function beginCatalogEpoch() { state.catalogEpoch += 1; return state.catalogEpoch; }
 function isCurrentCatalogEpoch(epoch) { return state.catalogEpoch === epoch; }
@@ -364,28 +370,51 @@ function saveTargets(mode = "all") {
   return state.images.map((image) => image.id);
 }
 function normaliseReviewRoot(value) { return String(value || "").trim().replaceAll("/", "\\").replace(/\\+$/, "").toLowerCase(); }
-function reviewPath(image) { return String(image?.relativePath || "").replaceAll("\\", "/").toLowerCase(); }
-function isReviewed(image) { return state.reviewedPaths.has(reviewPath(image)); }
-function isHidden(image) { return state.hiddenPaths.has(reviewPath(image)); }
+function isReviewed(image) { return state.reviewedImageIds.has(image.id); }
+function isHidden(image) { return state.hiddenImageIds.has(image.id); }
 function loadReviewedPaths() {
-  state.reviewedPaths = new Set(state.images.filter((image) => image.reviewed).map(reviewPath));
-  state.hiddenPaths = new Set(state.images.filter((image) => image.hidden).map(reviewPath));
+  state.reviewedImageIds = new Set(state.images.filter((image) => image.reviewed).map((image) => image.id));
+  state.hiddenImageIds = new Set(state.images.filter((image) => image.hidden).map((image) => image.id));
 }
 function publishWorkspaceFlags(imageId, flags) {
   const image = state.images.find((item) => item.id === imageId);
   if (!image) return false;
-  const path = reviewPath(image);
   if (typeof flags.hidden === "boolean") {
     image.hidden = flags.hidden;
-    if (flags.hidden) state.hiddenPaths.add(path); else state.hiddenPaths.delete(path);
+    if (flags.hidden) state.hiddenImageIds.add(imageId); else state.hiddenImageIds.delete(imageId);
   }
   if (typeof flags.reviewed === "boolean") {
     image.reviewed = flags.reviewed;
-    if (flags.reviewed) state.reviewedPaths.add(path); else state.reviewedPaths.delete(path);
+    if (flags.reviewed) state.reviewedImageIds.add(imageId); else state.reviewedImageIds.delete(imageId);
   }
   return true;
 }
-function saveWorkspaceFlag(image, field, desired, onSaved) {
+function candidateControlLocked(imageId) { return (state.candidateControlLocks.get(imageId) || 0) > 0; }
+function queueImageMutation(imageId, send, { lockCandidateControls = false } = {}) {
+  if (!imageId) return Promise.resolve(false);
+  if (lockCandidateControls) {
+    state.candidateControlLocks.set(imageId, (state.candidateControlLocks.get(imageId) || 0) + 1);
+    updateActionButtons();
+    if (imageId === state.currentId && typeof renderCandidates === "function") renderCandidates();
+  }
+  const previous = state.imageMutationChains.get(imageId) || Promise.resolve();
+  const queued = previous.catch(() => {}).then(send);
+  const tracked = queued.finally(() => {
+    if (state.imageMutationChains.get(imageId) === tracked) state.imageMutationChains.delete(imageId);
+    if (lockCandidateControls) {
+      const count = (state.candidateControlLocks.get(imageId) || 1) - 1;
+      if (count > 0) state.candidateControlLocks.set(imageId, count); else state.candidateControlLocks.delete(imageId);
+    }
+    updateActionButtons();
+    if (lockCandidateControls && imageId === state.currentId && typeof renderCandidates === "function") renderCandidates();
+  });
+  state.imageMutationChains.set(imageId, tracked);
+  return tracked;
+}
+async function flushAllImageMutations() {
+  while (state.imageMutationChains.size) await Promise.allSettled([...state.imageMutationChains.values()]);
+}
+function saveWorkspaceFlagNow(image, field, desired, onSaved) {
   if (!image) return Promise.resolve(false);
   const key = `${image.id}:${field}`;
   const pending = state.workspaceFlagPending.get(key);
@@ -405,6 +434,10 @@ function saveWorkspaceFlag(image, field, desired, onSaved) {
   state.workspaceFlagPending.set(key, { desired, promise });
   return promise;
 }
+function saveWorkspaceFlag(image, field, desired, onSaved) {
+  if (!image) return Promise.resolve(false);
+  return queueImageMutation(image.id, () => saveWorkspaceFlagNow(image, field, desired, onSaved), { lockCandidateControls: true });
+}
 function preserveCatalogScroll(renderCatalogs, positions = null) {
   const gallery = $("#gallery"); const overview = $("#overviewGrid");
   const galleryTop = positions?.gallery ?? gallery.scrollTop; const overviewTop = positions?.overview ?? overview.scrollTop;
@@ -418,7 +451,7 @@ function setHidden(image, hidden) {
     preserveCatalogScroll(renderCatalogViews, scroll); updateSelectionActionBar(); updateNavigationControls(); updateActionButtons();
   });
 }
-function clearStoredCatalogState() { state.reviewedPaths.clear(); state.hiddenPaths.clear(); }
+function clearStoredCatalogState() { state.reviewedImageIds.clear(); state.hiddenImageIds.clear(); }
 function selectedImages() { return state.images.filter((image) => state.selectedImageIds.has(image.id)); }
 function clearBatchSelection() { state.selectedImageIds.clear(); state.selectionAnchorId = null; }
 function updateSelectionActionBar() {
@@ -444,17 +477,6 @@ function setReviewed(image, reviewed) {
   return saveWorkspaceFlag(image, "reviewed", reviewed, () => {
     if (state.images.some((item) => item.id === image.id)) refreshReviewViews(scroll);
   });
-}
-async function moveReviewedPathAfterApply(previousImage, reloadedImage) {
-  const previousPath = reviewPath(previousImage);
-  const reloadedPath = reviewPath(reloadedImage);
-  if (!previousPath || !reloadedPath || previousPath === reloadedPath) return false;
-
-  const wasReviewed = state.reviewedPaths.has(previousPath) || state.reviewedPaths.has(reloadedPath);
-  if (!await setReviewed(reloadedImage, wasReviewed)) return false;
-  state.reviewedPaths.delete(previousPath);
-  refreshReviewViews();
-  return true;
 }
 function markImagesUnreviewed(imageIds, renderAfter = true) {
   let changed = false;
@@ -493,84 +515,109 @@ function setNavigationShortcutsEnabled(enabled) {
 function updateActionButtons() {
   const running = isBusy();
   const sourceIncompatible = Boolean(currentRecord()?.sourceDimensionsChanged);
-  const locked = running || state.importing || state.projectReadOnly || sourceIncompatible;
+  const busyLocked = running || state.importing;
+  const mutationLocked = state.projectReadOnly || sourceIncompatible || state.projectOperationPending;
   const mutatingCandidates = state.candidateUpdateChains.size > 0;
-  const switchingImages = state.candidateBatchPending.size > 0;
+  // Do not let controls mutate the image that is being replaced under the
+  // editor.  Gallery selection may still supersede this request; its generation
+  // check owns that race.
+  const switchingImages = currentImageActionPending();
   const current = currentRecord();
   const hasImage = Boolean(state.currentId && state.currentImage && current);
+  const candidateLocked = candidateControlLocked(state.currentId);
+  const candidateViewLocked = busyLocked || switchingImages || candidateLocked;
+  const candidateControlsLocked = mutationLocked || candidateViewLocked;
+  const presence = hasImage && !candidateViewLocked ? manualLayerPresence()
+    : { hasManualExclude: false, hasManualExclusionErase: false };
   const controls = [...document.querySelectorAll("button, input, select, textarea")];
-  if (!locked) {
-    for (const control of controls) {
-      if (control.dataset.disabledByLock === "true") {
-        control.disabled = false;
-        delete control.dataset.disabledByLock;
-      }
+  for (const control of controls) {
+    if (control.dataset.disabledByLock === "true") {
+      control.disabled = false;
+      delete control.dataset.disabledByLock;
     }
   }
-  $("#pickFolder").disabled = running || state.importing || state.projectReadOnly;
+  $("#pickFolder").disabled = busyLocked || mutationLocked;
   const detectAllButton = $("#detectAllButton");
   detectAllButton.textContent = t("gallery.detectAll");
-  detectAllButton.disabled = running || state.images.length === 0;
-  $("#detectCurrentButton").disabled = running || !hasImage || state.projectReadOnly || sourceIncompatible;
-  $("#clearCurrentMasksButton").disabled = running || !hasImage || !(current.candidateCount || state.manualMaskPresent || imageHasMask(current));
+  detectAllButton.disabled = busyLocked || mutationLocked || state.images.length === 0;
+  $("#detectCurrentButton").disabled = busyLocked || mutationLocked || switchingImages || !hasImage;
+  $("#clearCurrentMasksButton").disabled = busyLocked || mutationLocked || switchingImages || candidateLocked || !hasImage
+    || !(current.candidateCount || state.manualMaskPresent || presence?.hasManualExclude || presence?.hasManualExclusionErase || imageHasMask(current));
   const visibilityButton = $("#removeCurrentImageButton");
-  visibilityButton.disabled = running || !hasImage;
+  visibilityButton.disabled = busyLocked || mutationLocked || switchingImages || !hasImage;
   const visibilityLabel = t(current && isHidden(current) ? "editor.show" : "editor.hide");
   visibilityButton.textContent = visibilityLabel; visibilityButton.title = visibilityLabel; visibilityButton.setAttribute("aria-label", visibilityLabel);
-  for (const id of ["#clearAllMasksButton", "#clearCatalogButton", "#batchMoreButton"]) $(id).disabled = running || state.images.length === 0;
-  $("#batchModeButton").disabled = locked || state.images.length === 0;
-  $("#galleryFilter").disabled = running;
-  $("#saveAllButton").disabled = running || mutatingCandidates || state.images.length === 0;
-  const currentSaveDisabled = running || mutatingCandidates || !hasImage || !imageHasMask(current) || Boolean(current?.sourceDimensionsChanged);
+  for (const id of ["#clearAllMasksButton", "#clearCatalogButton", "#batchMoreButton"]) $(id).disabled = busyLocked || mutationLocked || state.images.length === 0;
+  $("#batchModeButton").disabled = busyLocked || mutationLocked || state.images.length === 0;
+  $("#galleryFilter").disabled = busyLocked;
+  $("#saveAllButton").disabled = busyLocked || mutationLocked || mutatingCandidates || state.images.length === 0;
+  const currentSaveDisabled = busyLocked || mutationLocked || switchingImages || mutatingCandidates || !hasImage || !imageHasMask(current);
   $("#saveButton").disabled = currentSaveDisabled;
-  $("#applyStartButton").disabled = running || mutatingCandidates || state.applyTargetIds.length === 0 || Boolean(applyRestrictionMessage());
-  $("#overviewButton").disabled = running || state.images.length === 0;
-  $("#previousImageButton").disabled = running || switchingImages || imageIndex() <= 0;
-  $("#nextImageButton").disabled = running || switchingImages || imageIndex() < 0 || imageIndex() >= state.images.length - 1;
-  $("#reviewAndNextButton").disabled = running || switchingImages || !hasImage;
-  $("#removeAndNextButton").disabled = running || switchingImages || !hasImage;
-  $("#hideAndNextButton").disabled = running || switchingImages || !hasImage;
-  $("#downloadCurrentMosaicMask").disabled = !hasImage || !state.project;
-  $("#downloadCurrentExcludeMask").disabled = !hasImage || !state.project;
-  updateCandidateBatchButtons(hasImage, locked);
-  updateHistoryButtons();
-  if (locked) for (const control of controls) {
-    const availableInReadOnly = new Set([
-      "projectButton", "projectClose", "projectOpenList", "projectListClose", "projectSort", "projectResume", "projectDelete",
-      "projectMosaicZip", "projectExcludeZip", "downloadCurrentMosaicMask", "downloadCurrentExcludeMask",
-      "singleViewButton", "compareViewButton", "fitButton", "previousImageButton", "nextImageButton",
-      "settingsButton", "errorDialogClose",
-    ]);
-    if ((state.projectReadOnly || sourceIncompatible) && availableInReadOnly.has(control.id)) continue;
-    if (control.id === "errorDialogClose") continue;
-    if (["applyPauseButton", "applyCancelButton"].includes(control.id) && state.applyRunning) continue;
-    if (["processingPauseButton", "processingCancelButton"].includes(control.id) && state.processing) continue;
-    if (control.id === "selectionClearButton" && state.batchMode) continue;
+  $("#applyStartButton").disabled = busyLocked || mutationLocked || mutatingCandidates || state.applyTargetIds.length === 0
+    || Boolean(applyRestrictionMessage()) || (selectedSaveMode() === "copy" && !state.outputDirectoryHandle);
+  $("#overviewButton").disabled = busyLocked || state.images.length === 0;
+  $("#previousImageButton").disabled = busyLocked || switchingImages || imageIndex() <= 0;
+  $("#nextImageButton").disabled = busyLocked || switchingImages || imageIndex() < 0 || imageIndex() >= state.images.length - 1;
+  $("#reviewAndNextButton").disabled = busyLocked || mutationLocked || switchingImages || !hasImage;
+  $("#removeAndNextButton").disabled = busyLocked || mutationLocked || switchingImages || !hasImage;
+  $("#hideAndNextButton").disabled = busyLocked || mutationLocked || switchingImages || !hasImage;
+  $("#downloadCurrentMosaicMask").disabled = switchingImages || !hasImage || !state.project;
+  $("#downloadCurrentExcludeMask").disabled = switchingImages || !hasImage || !state.project;
+  if (switchingImages) for (const control of document.querySelectorAll("#candidatePane button, #candidatePaddingPopover button, #candidatePaddingPopover input")) {
     if (!control.disabled) control.dataset.disabledByLock = "true";
     control.disabled = true;
   }
-  $("#gallery").classList.toggle("locked", locked);
-  canvas.style.pointerEvents = running || state.importing ? "none" : "";
-  canvas.setAttribute("aria-disabled", String(running || state.importing));
+  updateCandidateBatchButtons(hasImage, candidateControlsLocked, presence, candidateViewLocked);
+  updateHistoryButtons();
+  if (busyLocked) {
+    for (const control of controls) {
+      if ((["applyPauseButton", "applyCancelButton"].includes(control.id) && state.applyRunning)
+        || (["processingPauseButton", "processingCancelButton"].includes(control.id) && state.processing)
+        || control.id === "errorDialogClose") continue;
+      if (!control.disabled) control.dataset.disabledByLock = "true";
+      control.disabled = true;
+    }
+  } else if (mutationLocked) {
+    const availableInReadOnly = new Set([
+      "projectButton", "projectClose", "projectOpenList", "projectListClose", "projectResume", "projectCloseWorkspace", "projectNew",
+      "downloadCurrentMosaicMask", "downloadCurrentExcludeMask",
+      "singleViewButton", "compareViewButton", "fitButton", "mosaicPreviewButton", "previousImageButton", "nextImageButton",
+      "galleryFilter", "overviewButton", "collapseGalleryButton", "collapseInspectorButton", "settingsButton", "settingsCloseButton", "errorDialogClose",
+      "closeOverviewButton", "overviewQuery", "overviewFolder", "sourceMismatchCancel", "detectCancelButton",
+      "projectDeleteCancel", "projectDeleteConfirm", "copyImagePathMenuItem",
+    ]);
+    const availableInReadOnlyControls = new Set([
+      ...document.querySelectorAll(".gallery-item, .overview-item, .overview-filter, .project-table [data-project-action], .project-sort-button, [data-candidate-display-toggle], [data-candidate-effective-toggle], [data-candidate-display-id], [data-candidate-effective-id]"),
+    ]);
+    const availableInReadOnlyDialogs = ["#settingsDialog", "#modelHelpDialog", "#modelDownloadDialog", ...(projectNameMode === "new" ? ["#projectNameDialog"] : []), ...(sourceIncompatible ? ["#sourceMismatchDialog"] : [])].map($);
+    for (const control of controls) {
+      if (availableInReadOnly.has(control.id) || availableInReadOnlyControls.has(control)
+        || availableInReadOnlyDialogs.some((dialog) => dialog.contains(control))) continue;
+      if (!control.disabled) control.dataset.disabledByLock = "true";
+      control.disabled = true;
+    }
+  }
+  $("#gallery").classList.toggle("locked", busyLocked);
+  canvas.style.pointerEvents = busyLocked || mutationLocked || switchingImages ? "none" : "";
+  canvas.setAttribute("aria-disabled", String(busyLocked || mutationLocked || switchingImages));
   syncDetectionActions();
+  if (typeof renderProjectTableControls === "function") renderProjectTableControls();
 }
 
-function updateCandidateBatchButtons(hasImage = Boolean(state.currentId && state.currentImage && currentRecord()), locked = isBusy() || state.importing || state.candidateBatchPending.has(state.currentId), presence) {
-  if (locked) {
+function updateCandidateBatchButtons(hasImage = Boolean(state.currentId && state.currentImage && currentRecord()), mutationLocked = isBusy() || state.importing || state.projectReadOnly || currentRecord()?.sourceDimensionsChanged || state.candidateBatchPending.has(state.currentId), presence, viewLocked = mutationLocked) {
+  if (mutationLocked) {
     for (const button of document.querySelectorAll("[data-candidate-batch]")) button.disabled = true;
     for (const button of document.querySelectorAll("[data-candidate-padding-batch]")) button.disabled = true;
-    for (const button of document.querySelectorAll("[data-candidate-display-toggle], [data-candidate-effective-toggle]")) button.disabled = true;
-    return;
-  }
-  for (const button of document.querySelectorAll("[data-candidate-padding-batch]")) {
+    if (viewLocked) {
+      for (const button of document.querySelectorAll("[data-candidate-display-toggle], [data-candidate-effective-toggle]")) button.disabled = true;
+      return;
+    }
+  } else for (const button of document.querySelectorAll("[data-candidate-padding-batch]")) {
     const role = button.dataset.candidatePaddingBatch;
     button.disabled = !hasImage || !state.candidates.some((candidate) => candidate.role === role);
   }
-  const manualPresence = presence || {
-    hasManualExclude: canvasHasPixels(exclusionCtx, exclusionCanvas),
-    hasManualExclusionErase: canvasHasPixels(exclusionEraseCtx, exclusionEraseCanvas),
-  };
-  for (const button of document.querySelectorAll("[data-candidate-batch]")) {
+  const manualPresence = presence || manualLayerPresence();
+  if (!mutationLocked) for (const button of document.querySelectorAll("[data-candidate-batch]")) {
     const [role, operation] = button.dataset.candidateBatch.split(":");
     const hasManual = role === "apply" ? state.manualMaskPresent : manualPresence.hasManualExclude || manualPresence.hasManualExclusionErase;
     const hasRoleCandidate = hasImage && (state.candidates.some((candidate) => candidate.role === role) || hasManual);
@@ -632,20 +679,24 @@ function setMosaicPreviewEnabled(enabled) {
 }
 
 function resetCatalog(images, root) {
+  ++state.imageGeneration;
   closeBoundaryModeMenu({ restoreFocus: true });
   closeCatalogContextMenu();
   abortCatalogLoads();
   cancelFillWork();
   releaseImageCaches();
   state.images = images;
+  state.singleSave = null;
   state.projectHistory.clear();
   state.sourceAccess.clear();
+  state.projectlessDirectorySources.clear();
+  state.missingNativeSources = [];
   state.reviewRoot = normaliseReviewRoot(root);
   state.overviewFolder = "";
   loadReviewedPaths();
   state.currentId = null; state.currentImage = null; state.pendingImageId = null; state.pendingImageKey = null; state.pendingCandidateKey = null; state.maskStatus.clear();
   state.candidates = []; state.candidateImages = new Map(); state.drafts.clear(); state.selectedImageIds.clear(); state.selectionAnchorId = null; state.batchMode = false; clearCandidateBlink(); state.contextMenuImageId = null; state.contextMenuOrigin = null; clearBoundaryInteraction();
-  state.candidateUpdateChains.clear(); state.candidateUpdateVersions.clear(); state.candidateDeleting.clear(); state.candidateBatchPending.clear();
+  state.candidateUpdateChains.clear(); state.candidateUpdateVersions.clear(); state.candidateDeleting.clear(); state.candidateBatchPending.clear(); state.imageMutationChains.clear(); state.candidateControlLocks.clear();
   discardCatalogNodes(state.galleryNodes, $("#gallery"));
   discardCatalogNodes(state.overviewNodes, $("#overviewGrid"));
   resetCatalogWindows();
@@ -688,6 +739,7 @@ async function loadFolder({ skipSameSourceWarning = false, path: suppliedPath = 
   ++state.imageGeneration;
   setStatusKey("status.loadingImages", {}, "running");
   try {
+    await flushAllImageMutations();
     await flushAllWorkspaceMutations();
     const data = await api("/api/folder", { method: "POST", body: JSON.stringify({ path }) });
     if (!isCurrentCatalogEpoch(catalogEpoch)) return;

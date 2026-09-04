@@ -100,7 +100,7 @@ def public_error_params(error_code: str, params: dict[str, Any]) -> dict[str, An
 
 
 def torch_module() -> Any:
-    """Load PyTorch only for GPU-backed operations, never during test startup."""
+    """Load PyTorch only when a GPU-backed operation needs it."""
     try:
         import torch
         return torch
@@ -160,6 +160,12 @@ class ImageRecord:
     height: int
     mtime_ns: int
     size_bytes: int = 0
+    # Browser imports are copied to Mozarie's session directory.  Their source
+    # File metadata remains the durable project fingerprint, while this pair
+    # tracks the copied asset actually served and edited in this process.
+    # These values deliberately never enter workspace.sqlite3.
+    asset_mtime_ns: int | None = field(default=None, repr=False)
+    asset_size_bytes: int | None = field(default=None, repr=False)
     source_kind: str = "filesystem"
     asset_revision: int = 0
     hidden: bool = False
@@ -168,6 +174,20 @@ class ImageRecord:
     # opaque source id keeps identical relative paths distinct.
     source_id: str | None = None
     source_root: Path | None = None
+    # Projectless imports remember their actual source contract in memory.
+    # Promotion writes it as-is; it never guesses from a path or file content.
+    project_source_kind: str | None = field(default=None, repr=False)
+    project_source_identity: str | None = field(default=None, repr=False)
+    project_source_display: str | None = field(default=None, repr=False)
+
+    def asset_fingerprint(self) -> tuple[int, int]:
+        if self.asset_mtime_ns is None or self.asset_size_bytes is None:
+            return self.mtime_ns, self.size_bytes
+        return self.asset_mtime_ns, self.asset_size_bytes
+
+    def set_asset_fingerprint(self, mtime_ns: int, size_bytes: int) -> None:
+        self.asset_mtime_ns = mtime_ns
+        self.asset_size_bytes = size_bytes
 
 
 @dataclass(frozen=True)
@@ -183,6 +203,7 @@ class BrowserSaveToken:
     output_path: Path | None = None
     output_fingerprint: tuple[int, int] | None = None
     allow_copy_action: bool = False
+    no_effect: bool = False
 
 
 @dataclass(frozen=True)
@@ -194,6 +215,7 @@ class BrowserSaveRender:
     candidate_revision: int
     save_token: str
     output_path: Path | None
+    no_effect: bool = False
 
     def __iter__(self):
         yield self.output
@@ -270,7 +292,7 @@ class JobControl:
 
 
 class InferenceGate:
-    """Re-entrant inference gate with the Lock inspection used by tests/UI guards."""
+    """Re-entrant inference gate that serializes model access."""
 
     def __init__(self) -> None:
         self._lock = threading.Lock()
@@ -578,13 +600,10 @@ def accepted_specialist_hand_mask(
         mask = np.asarray(raw_mask > 0, dtype=np.uint8)
         if mask.shape != expected_shape or not np.any(mask):
             continue
-        inside = int(np.count_nonzero(mask[top:bottom, left:right]))
-        total = int(np.count_nonzero(mask))
-        if inside / total < 0.85 or not 0.03 <= inside / box_area <= 0.95:
-            continue
         clipped = np.zeros_like(mask, dtype=np.uint8)
         clipped[top:bottom, left:right] = mask[top:bottom, left:right]
-        return clipped * 255
+        if np.count_nonzero(clipped) / box_area >= 0.03:
+            return clipped * 255
     return None
 
 
@@ -705,15 +724,19 @@ def select_semantic_sam_mask(
     if source_area == 0 or len(masks) != len(scores):
         return None
     positive = point_coords[point_labels == 1].astype(int)
-    negative = point_coords[point_labels == 0].astype(int)
+    required_positive = (len(positive) * 2 + 2) // 3
+    if required_positive == 0:
+        return None
     choices: list[tuple[tuple[float, float, float, int], np.ndarray, int]] = []
     for index, raw_mask in enumerate(masks):
         mask = np.asarray(raw_mask > 0, dtype=bool)
         if mask.shape != source.shape:
             continue
-        if any(not (0 <= x < mask.shape[1] and 0 <= y < mask.shape[0]) or not mask[y, x] for x, y in positive):
-            continue
-        if any(0 <= x < mask.shape[1] and 0 <= y < mask.shape[0] and mask[y, x] for x, y in negative):
+        positive_hits = sum(
+            0 <= x < mask.shape[1] and 0 <= y < mask.shape[0] and mask[y, x]
+            for x, y in positive
+        )
+        if positive_hits < required_positive:
             continue
         area = int(np.count_nonzero(mask))
         if not source_area // 4 <= area <= source_area * 3:

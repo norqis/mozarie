@@ -11,6 +11,8 @@ function canvasSizeForImage(image) {
   state.draftDirtyRois?.clear();
   state.historyBaseDirty = false;
   state.manualMaskPresent = false;
+  state.manualExclusionPresent = false;
+  state.manualExclusionErasePresent = false;
   state.manualEnabled = true;
   state.manualExclusionEnabled = true;
   state.manualExclusionEraseEnabled = true;
@@ -31,7 +33,7 @@ function clearEditor() {
   cancelFillWork();
   releaseMosaicPreview();
   state.history = []; state.historyIndex = 0; state.activeStroke = null; state.hover = null; clearBoundaryInteraction();
-  state.manualMaskPresent = false; state.manualEnabled = true; state.manualExclusionEnabled = true; state.manualExclusionEraseEnabled = true;
+  state.manualMaskPresent = false; state.manualExclusionPresent = false; state.manualExclusionErasePresent = false; state.manualEnabled = true; state.manualExclusionEnabled = true; state.manualExclusionEraseEnabled = true;
   state.maskDirty = false;
   state.draftDirty = false;
   state.draftLayerDirty.clear();
@@ -47,15 +49,18 @@ function clearEditor() {
 }
 
 async function selectImage(imageId, force = false, { saveCurrentDraft = true } = {}) {
-  if ((isBusy() || state.importing || isGestureActive() || state.candidateBatchPending.size) && !force) return;
+  if (state.projectOperationPending || isGestureActive()) return;
+  if ((isBusy() || state.importing || state.candidateBatchPending.size) && !force) return;
   if (state.currentId === imageId && !force && state.pendingImageId !== imageId) return;
   if (saveCurrentDraft) void saveDraft();
   state.hover = null; updateBrushCursor();
   const generation = ++state.imageGeneration;
   state.pendingImageId = imageId;
+  updateActionButtons();
   const record = state.images.find((image) => image.id === imageId);
   if (!record) {
     state.pendingImageId = null; state.pendingImageKey = null; state.pendingCandidateKey = null;
+    updateActionButtons();
     return;
   }
   state.pendingImageKey = imageCacheKey(record);
@@ -68,44 +73,65 @@ async function selectImage(imageId, force = false, { saveCurrentDraft = true } =
       cachedImage(record),
       loadCandidateBundle(imageId, generation),
     ]);
-    if (!isCurrentGeneration(generation)) return;
+    if (!isCurrentGeneration(generation)) {
+      if (!state.imageCache.has(imageCacheKey(record))) closeBitmap(image);
+      if (!state.candidateBundleCache.has(candidateCacheKey(imageId, candidateBundle.candidateRevision))) releaseCandidateBitmapBundle(candidateBundle);
+      return;
+    }
     // A tab-local draft is newer than the compact server copy. Otherwise the
     // workspace request and all draft image decodes must finish before the
     // current editor is touched.
     const hasDraft = state.drafts.has(imageId);
     const draft = hasDraft ? state.drafts.get(imageId) : await loadWorkspaceDraft(imageId);
     const draftImages = await decodeDraftImages(draft);
-    if (!isCurrentGeneration(generation)) return;
-    if (!hasDraft) {
-      if (draft) state.drafts.set(imageId, draft); else state.drafts.delete(imageId);
+    try {
+      if (!isCurrentGeneration(generation)) {
+        if (!state.imageCache.has(imageCacheKey(record))) closeBitmap(image);
+        if (!state.candidateBundleCache.has(candidateCacheKey(imageId, candidateBundle.candidateRevision))) releaseCandidateBitmapBundle(candidateBundle);
+        return;
+      }
+      if (!hasDraft) {
+        if (draft) state.drafts.set(imageId, draft); else state.drafts.delete(imageId);
+      }
+      clearTimeout(state.loadingDelay); state.loadingDelay = null;
+      syncCandidateRecord(imageId, candidateBundle.candidates);
+      releaseStaleImageVersions(imageId, imageCacheKey(record), candidateCacheKey(imageId, candidateBundle.candidateRevision));
+      closeBoundaryModeMenu();
+      clearBoundaryInteraction();
+      cancelFillWork();
+      abortCatalogLoads();
+      const previousImage = state.currentImage;
+      const previousCandidateImages = state.candidateImages;
+      if (state.currentId !== imageId) clearCandidateBlink();
+      state.currentId = imageId;
+      state.pendingImageId = null; state.pendingImageKey = null; state.pendingCandidateKey = null;
+      state.currentImage = image;
+      state.candidates = candidateBundle.candidates;
+      state.candidateImages = candidateBundle.candidateImages;
+      if (previousImage && previousImage !== image && ![...state.imageCache.items].some(([, entry]) => entry.value === previousImage)) closeBitmap(previousImage);
+      if (previousCandidateImages !== state.candidateImages
+        && ![...state.candidateBundleCache.items].some(([, entry]) => entry.value?.candidateImages === previousCandidateImages)) {
+        releaseCandidateBitmapBundle({ candidateImages: previousCandidateImages });
+      }
+      state.imageCache.trim(); state.candidateBundleCache.trim();
+      canvasSizeForImage(record); await restoreDraft(imageId, generation, draft, draftImages); prepareOriginalImage(); requestMosaicPreview(); fitImage();
+      updateBlockSizeDisplay(); refreshMaskStatus();
+      $("#emptyState").hidden = true;
+      $("#currentFileName").textContent = record.relativePath;
+      updateCandidateStatus();
+      renderCandidates(); updateGalleryCurrent(); updateNavigationControls(); updateActionButtons(); render(); clearStatus();
+      if (state.project?.id) void refreshProjectHistory(imageId);
+      prefetchNeighbors(record);
+    } finally {
+      releaseDraftImages(draftImages);
     }
-    clearTimeout(state.loadingDelay); state.loadingDelay = null;
-    syncCandidateRecord(imageId, candidateBundle.candidates);
-    releaseStaleImageVersions(imageId, imageCacheKey(record), candidateCacheKey(imageId, candidateBundle.candidateRevision));
-    closeBoundaryModeMenu();
-    clearBoundaryInteraction();
-    cancelFillWork();
-    abortCatalogLoads();
-    state.currentId = imageId;
-    state.pendingImageId = null; state.pendingImageKey = null; state.pendingCandidateKey = null;
-    state.currentImage = image;
-    state.candidates = candidateBundle.candidates;
-    state.candidateImages = candidateBundle.candidateImages;
-    state.imageCache.trim(); state.candidateBundleCache.trim();
-    canvasSizeForImage(record); await restoreDraft(imageId, generation, draft, draftImages); prepareOriginalImage(); requestMosaicPreview(); fitImage();
-    updateBlockSizeDisplay(); refreshMaskStatus();
-    $("#emptyState").hidden = true;
-    $("#currentFileName").textContent = record.relativePath;
-    updateCandidateStatus();
-    renderCandidates(); updateGalleryCurrent(); updateNavigationControls(); updateActionButtons(); render(); clearStatus();
-    if (state.project?.id) void refreshProjectHistory(imageId);
-    prefetchNeighbors(record);
   } catch (error) {
     if (isCurrentGeneration(generation)) {
       clearTimeout(state.loadingDelay); state.loadingDelay = null;
       state.pendingImageId = null; state.pendingImageKey = null; state.pendingCandidateKey = null;
       if (error.code === "stale_asset") invalidateStaleAsset(imageId);
       showUserError(error);
+      updateActionButtons();
     }
   }
 }
@@ -117,26 +143,59 @@ function loadImage(source) {
 }
 
 function imageAssetVersion(record) { return typeof record?.assetVersion === "string" ? record.assetVersion : ""; }
-function invalidateStaleAsset(imageId) {
+function invalidateStaleAssets(imageIds) {
+  const ids = new Set(imageIds);
+  if (!ids.size) return;
   abortCatalogLoads();
   const bitmaps = new Set();
-  for (const [key] of [...state.imageCache.items]) if (key.startsWith(`${imageId}:`)) bitmaps.add(state.imageCache.take(key));
+  for (const [key] of [...state.imageCache.items]) {
+    if (ids.has(key.slice(0, key.indexOf(":")))) bitmaps.add(state.imageCache.take(key));
+  }
   for (const [key] of [...state.candidateBundleCache.items]) {
-    if (!key.startsWith(`${imageId}:`)) continue;
+    if (!ids.has(key.slice(0, key.indexOf(":")))) continue;
     for (const bitmap of state.candidateBundleCache.take(key)?.candidateImages?.values() || []) bitmaps.add(bitmap);
   }
-  const gallery = state.galleryNodes.get(imageId)?.querySelector("img");
-  const overview = state.overviewNodes.get(imageId)?.querySelector("img");
-  forgetThumbnail(gallery); forgetThumbnail(overview);
-  if (state.currentId === imageId) {
+  for (const imageId of ids) {
+    forgetThumbnail(state.galleryNodes.get(imageId)?.querySelector("img"));
+    forgetThumbnail(state.overviewNodes.get(imageId)?.querySelector("img"));
+  }
+  if (ids.has(state.currentId)) {
     bitmaps.add(state.currentImage);
     for (const bitmap of state.candidateImages.values()) bitmaps.add(bitmap);
   }
   for (const bitmap of bitmaps) closeBitmap(bitmap);
-  if (state.currentId !== imageId) return;
+  if (!ids.has(state.currentId)) return;
   closeBoundaryModeMenu({ restoreFocus: true });
   state.currentId = null; state.currentImage = null; state.candidates = []; state.candidateImages = new Map();
   clearEditor(); updateGalleryCurrent();
+}
+
+function invalidateStaleAsset(imageId) { invalidateStaleAssets([imageId]); }
+
+async function refreshWorkspaceImages(snapshot, imageIds, { clearWorkspace = false, resetWorkspace = clearWorkspace } = {}) {
+  ++state.imageGeneration;
+  const ids = new Set(imageIds);
+  const currentId = ids.has(state.currentId) ? state.currentId : null;
+  invalidateStaleAssets(ids);
+  for (const imageId of ids) {
+    if (!resetWorkspace) continue;
+    state.drafts.delete(imageId);
+    state.maskStatus.delete(imageId);
+    state.projectHistory.delete(imageId);
+    clearCandidateMutationState(imageId);
+  }
+  if (resetWorkspace && currentId) {
+    state.removedCandidateIds.clear();
+    clearCandidateBlink();
+  }
+  state.images = snapshot.images || state.images;
+  loadReviewedPaths();
+  applyProjectSnapshot(snapshot);
+  renderCatalogViews();
+  if (currentId && state.images.some((image) => image.id === currentId)) {
+    clearEditor();
+    await selectImage(currentId, true, { saveCurrentDraft: false });
+  } else updateNavigationControls();
 }
 function imageCacheKey(record) { return `${record.id}:${imageAssetVersion(record)}`; }
 function candidateCacheKey(imageId, revision) { return `${imageId}:${revision}`; }
@@ -354,11 +413,21 @@ function canvasToDataUrl(target) {
   }, "image/png"));
 }
 
+function releaseDraftImages(images) {
+  for (const image of images || []) closeBitmap(image);
+}
+
 async function decodeDraftImages(draft) {
   if (!draft) return [null, null, null, null, null, null];
   const historyBase = state.project?.id ? {} : draft.historyBase || {};
-  return Promise.all([draft.add, draft.exclusion, draft.exclusionErase, historyBase.add, historyBase.exclusion, historyBase.exclusionErase]
+  const results = await Promise.allSettled([draft.add, draft.exclusion, draft.exclusionErase, historyBase.add, historyBase.exclusion, historyBase.exclusionErase]
     .map((source) => source ? loadImage(source) : null));
+  const failure = results.find((result) => result.status === "rejected");
+  if (failure) {
+    releaseDraftImages(results.filter((result) => result.status === "fulfilled").map((result) => result.value));
+    throw failure.reason;
+  }
+  return results.map((result) => result.value);
 }
 
 async function saveDraft() {
@@ -387,13 +456,14 @@ async function saveDraft() {
   const layers = {
     add: [addCtx, addCanvas], exclusion: [exclusionCtx, exclusionCanvas], exclusionErase: [exclusionEraseCtx, exclusionEraseCanvas],
   };
+  const layerPresent = { add: state.manualMaskPresent, exclusion: state.manualExclusionPresent, exclusionErase: state.manualExclusionErasePresent };
   const encoded = {};
   const encodedHistoryBase = {};
   const snapshots = [];
   for (const layer of dirtyLayers) {
     const [context, target] = layers[layer] || [];
     if (!target) continue;
-    snapshots.push(Promise.resolve(canvasHasPixels(context, target) ? canvasToDataUrl(target) : "").then((value) => { encoded[layer] = value; }));
+    snapshots.push(Promise.resolve(layerPresent[layer] ? canvasToDataUrl(target) : "").then((value) => { encoded[layer] = value; }));
   }
   if (historyBaseDirty) {
     for (const [layer, context, target] of [["add", historyAddCanvas.getContext("2d"), historyAddCanvas], ["exclusion", historyExclusionCanvas.getContext("2d"), historyExclusionCanvas], ["exclusionErase", historyExclusionEraseCanvas.getContext("2d"), historyExclusionEraseCanvas]]) {
@@ -456,14 +526,18 @@ async function saveDraft() {
 }
 
 async function restoreDraft(imageId, generation, draft = state.drafts.get(imageId), decodedImages = null) {
+  const ownsImages = decodedImages === null;
   const images = decodedImages || await decodeDraftImages(draft);
-  if (state.currentId !== imageId || state.imageGeneration !== generation) return false;
-  state.history = []; state.historyIndex = 0; state.activeStroke = null;
+  try {
+    if (state.currentId !== imageId || state.imageGeneration !== generation) return false;
+    state.history = []; state.historyIndex = 0; state.activeStroke = null;
   state.manualEnabled = draft?.manualEnabled !== false;
   state.manualExclusionEnabled = draft?.manualExclusionEnabled !== false;
   state.manualExclusionEraseEnabled = draft?.manualExclusionEraseEnabled !== false;
   state.manualExclusionForced = draft?.manualExclusionForced ?? (state.settings?.detection?.exclude_forced_default !== false);
   state.manualMaskPresent = false;
+  state.manualExclusionPresent = false;
+  state.manualExclusionErasePresent = false;
   const candidateRevisionMatches = !draft || Number(draft.candidateRevision) === Number(currentRecord()?.candidateRevision || 0);
   const currentCandidateIds = new Set(state.candidates.map((candidate) => candidate.id));
   // A new auto-detection revision replaces candidate IDs.  Keep removals for
@@ -475,7 +549,9 @@ async function restoreDraft(imageId, generation, draft = state.drafts.get(imageI
     if (addImage) addCtx.drawImage(addImage, 0, 0);
     if (exclusionImage) exclusionCtx.drawImage(exclusionImage, 0, 0);
     if (exclusionEraseImage) exclusionEraseCtx.drawImage(exclusionEraseImage, 0, 0);
-    state.manualMaskPresent = draft.manualMaskPresent ?? canvasHasPixels(addCtx, addCanvas);
+    state.manualMaskPresent = draft.manualMaskPresent ?? Boolean(addImage);
+    state.manualExclusionPresent = Boolean(exclusionImage);
+    state.manualExclusionErasePresent = Boolean(exclusionEraseImage);
     if (!state.project?.id && Array.isArray(draft.history) && draft.historyBase && ensureHistoryCanvases()) {
       historyAddCanvas.getContext("2d").clearRect(0, 0, historyAddCanvas.width, historyAddCanvas.height);
       historyExclusionCanvas.getContext("2d").clearRect(0, 0, historyExclusionCanvas.width, historyExclusionCanvas.height);
@@ -497,7 +573,10 @@ async function restoreDraft(imageId, generation, draft = state.drafts.get(imageI
     } else resetHistoryToCurrentManualMask();
   state.draftDirty = false; state.draftLayerDirty.clear();
   refreshMaskStatus(true); updateCandidateStatus(); requestMosaicPreview(); renderCandidates(); render();
-  return true;
+    return true;
+  } finally {
+    if (ownsImages) releaseDraftImages(images);
+  }
 }
 
 const COMPARE_SPLIT_STORAGE_KEY = "mozarie.compareSplit";

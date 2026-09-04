@@ -99,7 +99,7 @@ Choose one to four workers for automatic detection on either GPU or CPU. A job t
 3. Review the candidates at right and correct them with brushes, erasers, or the boundary tool when needed.
 4. Choose a save target, then save a copy or overwrite the source.
 
-To use GPU processing, select a GPU in **Settings > Detection**. If GPU memory runs out, close other GPU apps or switch to CPU.
+To use GPU processing, select a GPU in **Settings > Detection**. CPU may assist only operators unsupported by the GPU, but Mozarie never rebuilds a CPU-only session to retry a GPU initialization or execution failure. If GPU memory runs out, close other GPU apps or switch to CPU.
 
 ## Updates
 
@@ -111,14 +111,9 @@ Use **Check for updates** in Settings or run `update.bat`. Close Mozarie before 
 - **GPU, CUDA, or DirectML error:** Close other GPU apps, select another GPU, or switch to CPU.
 - **Still stuck:** Include the error text in a [GitHub issue](https://github.com/norqis/mozarie/issues).
 
-## Development
+## Manual verification
 
-```powershell
-npm ci
-node scripts/test-quiet.cjs all
-```
-
-The command shows details only on failure. To retain coverage for CI, use `node scripts/test-quiet.cjs all --artifacts <directory>`.
+Follow the [manual verification guide](https://github.com/norqis/mozarie/blob/main/docs/manual-verification.md).
 
 ## License
 

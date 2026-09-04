@@ -145,10 +145,11 @@ def _probe_onnx(
         options.enable_mem_pattern = False
         options.execution_mode = ort.ExecutionMode.ORT_SEQUENTIAL
     try:
-        session = ort.InferenceSession(model.SerializeToString(), sess_options=options, providers=providers)
+        session = ort.InferenceSession(model.SerializeToString(), sess_options=options, providers=providers, enable_fallback=False)
         session.disable_fallback()
         active = list(session.get_providers())
-        if not active or active[0] != expected:
+        expected_providers = (expected, "CPUExecutionProvider") if profile != "cpu" else ("CPUExecutionProvider",)
+        if tuple(active) != expected_providers:
             raise RuntimeError(f"ONNX Runtime selected {active[0] if active else 'no provider'}")
         outputs = session.run(None, {"input": np.ones((1, 1), dtype=np.float32)})
         if not outputs or float(outputs[0][0][0]) != 1.0:
@@ -171,8 +172,8 @@ def validate(profile: str, gpu_device: int = 0) -> dict[str, object]:
     try:
         import numpy as np
         import onnx
-        import onnxruntime as ort
         import torch
+        import onnxruntime as ort
     except Exception as exc:
         raise ProfileError(f"Runtime packages cannot be imported: {exc}") from exc
 

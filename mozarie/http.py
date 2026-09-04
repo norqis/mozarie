@@ -214,9 +214,9 @@ class MosaicHandler(BaseHTTPRequestHandler):
                 models = STATE.settings.get("models", {})
                 provider = str(models.get("provider", "cpu"))
                 status = STATE.settings_status()
-                # The state contract always includes gpuDeviceValid.  Keeping
-                # absent values neutral also lets a narrow test/status adapter
-                # report model readiness without pretending its GPU is invalid.
+                # The state contract always includes gpuDeviceValid. Keeping
+                # absent values neutral lets a minimal status adapter report
+                # model readiness without pretending its GPU is invalid.
                 configured = bool(status.get("gpuDeviceValid", True)) and all(model["valid"] for model in status["models"].values() if model["required"] or model["enabled"])
                 payload: dict[str, Any] = {
                     "ok": True,
@@ -271,14 +271,16 @@ class MosaicHandler(BaseHTTPRequestHandler):
                 filename = Path(str(image["relativePath"])).name + f".{kind}.png"
                 self._binary(STATE.export_mask_png(image_id, kind), "image/png", headers={"Content-Disposition": f'attachment; filename="{filename}"'})
             elif path.startswith("/api/project/masks/"):
-                kind = path.removeprefix("/api/project/masks/")
+                project_id, kind = _route_ids(path, "/api/project/masks/")
                 if kind not in {"mosaic", "exclude"}:
                     raise ClientError("マスク種別が正しくありません。", "input_invalid")
+                if STATE.workspace_store.project(project_id) is None:
+                    raise ClientError("プロジェクトが見つかりません。", "project_not_found")
                 with tempfile.NamedTemporaryFile(prefix="mozarie-masks-", suffix=".zip", delete=False) as output:
                     archive_path = Path(output.name)
                 try:
                     with zipfile.ZipFile(archive_path, "w", zipfile.ZIP_DEFLATED) as archive:
-                        for image, png in STATE.iter_project_mask_exports(kind):
+                        for image, png in STATE.iter_project_mask_exports(project_id, kind):
                             # Keep source identity and original extension so
                             # same-named files from different folders cannot
                             # collide in one project archive.
@@ -333,10 +335,12 @@ class MosaicHandler(BaseHTTPRequestHandler):
                 client_key = unquote(self.headers.get("X-Mozarie-Client-Key", ""))
                 source_identity = unquote(self.headers.get("X-Mozarie-Source-Id", ""))
                 source_kind = self.headers.get("X-Mozarie-Source-Kind", "browser-files")
+                import_intent = self.headers.get("X-Mozarie-Import-Intent", "")
                 raw_mtime = self.headers.get("X-Mozarie-File-Mtime", "0")
                 raw_size = self.headers.get("X-Mozarie-File-Size", "0")
                 if (source_identity and (len(source_identity) > 128 or not source_identity.replace("-", "").isalnum())
                         or source_kind not in {"browser-files", "browser-directory"}
+                        or import_intent not in {"add", "restore"}
                         or not raw_mtime.isdigit() or not raw_size.isdigit()):
                     raise ClientError("画像の更新情報が正しくありません。", "input_invalid")
                 try:
@@ -350,29 +354,27 @@ class MosaicHandler(BaseHTTPRequestHandler):
                         try:
                             # Keep implicit API callers from splitting a
                             # parallel empty-catalog upload across IDs. This
-                            # lock covers identity selection only; decoding
-                            # and file copy below retain their parallelism.
+                            # lock only verifies that the browser is still
+                            # importing into its already-open project;
+                            # decoding and file copy below retain their
+                            # parallelism.  A request header never opens or
+                            # changes a project.
                             with STATE.import_lock:
                                 if requested_catalog and STATE.catalog_id != requested_catalog:
-                                    if STATE.catalog_id is not None:
-                                        raise ClientError("画像追加中にフォルダを切り替えることはできません。", "operation_in_progress")
-                                    STATE.activate_browser_catalog(requested_catalog)
-                                elif not STATE.catalog_id:
-                                    # Imports create explicit unnamed work.
-                                    STATE.catalog_id = STATE.workspace_store.ensure_provisional_catalog()
-                                    STATE.browser_catalog_provisional = True
+                                    raise ClientError("画像追加中にフォルダを切り替えることはできません。", "operation_in_progress")
                             import_args = {
                                 "name": name, "relative_path": relative_path, "client_key": client_key,
                                 "include_images": False, "transfer_active": True,
                                 "source_identity": source_identity or None,
                                 "source_kind": source_kind,
+                                "intent": import_intent,
                                 "mtime_ns": int(raw_mtime) * 1_000_000,
                                 "size_bytes": int(raw_size),
                             }
                             _images, imported = STATE.import_image_file_for_api(staged_path, **import_args)
                         finally:
                             staged_path.unlink(missing_ok=True)
-                    self._json({"imported": imported, "catalogId": STATE.catalog_id, "provisional": STATE.browser_catalog_provisional})
+                    self._json({"imported": imported, "catalogId": STATE.catalog_id})
                 finally:
                     STATE.end_import_transfer()
                 return
@@ -384,7 +386,7 @@ class MosaicHandler(BaseHTTPRequestHandler):
             elif path == "/api/projects":
                 self._json({"project": STATE.create_project(payload.get("name"))})
             elif path == "/api/project/name":
-                self._json({"project": STATE.name_current_project(str(payload.get("name", "")))})
+                self._json({"project": STATE.name_current_project(str(payload.get("name", "")), str(payload.get("projectId", "")))})
             elif path == "/api/project/complete":
                 self._json({"project": STATE.complete_project()})
             elif path == "/api/project/close":
@@ -401,30 +403,22 @@ class MosaicHandler(BaseHTTPRequestHandler):
                 self._json(STATE.catalog_snapshot())
             elif path == "/api/project/source-check":
                 self._json({"projects": STATE.projects_for_source_root(str(payload.get("path", "")))})
+            elif path == "/api/project/source/relink":
+                self._json(STATE.relink_project_native_source(
+                    str(payload.get("projectId", "")), str(payload.get("sourceId", "")), str(payload.get("path", "")),
+                ))
             elif path.startswith("/api/project/history/"):
                 image_id, action = _route_ids(path, "/api/project/history/")
                 if action not in {"undo", "redo"}:
                     raise ClientError("履歴の操作が正しくありません。", "input_invalid")
                 self._json(STATE.restore_project_history(image_id, action))
-            elif path == "/api/workspace/catalog":
-                if payload.get("provisional") is True:
-                    if payload.get("catalogId"):
-                        raise ClientError("仮カタログにIDは指定できません。", "input_invalid")
-                    STATE.detach_catalog()
-                    catalog_id = STATE.workspace_store.ensure_provisional_catalog()
-                    STATE.catalog_id = catalog_id
-                    STATE.browser_catalog_provisional = True
-                    self._json({"catalogId": catalog_id, "provisional": True})
-                else:
-                    self._json({"catalogId": STATE.activate_browser_catalog(payload.get("catalogId")), "provisional": False})
-            elif path == "/api/workspace/catalog/finalize":
-                catalog_id, image_ids = STATE.finalize_browser_catalog()
-                self._json({"catalogId": catalog_id, "imageIds": image_ids, "images": STATE.list_images(), "workspace": bool(catalog_id)})
             elif path == "/api/catalog/clear":
                 STATE.clear_catalog()
                 self._json({"images": []})
             elif path.startswith("/api/workspace/image/"):
                 self._json(STATE.set_image_flags(path.removeprefix("/api/workspace/image/"), payload))
+            elif path == "/api/workspace/images":
+                self._json({"flags": STATE.set_image_flags_bulk(payload)})
             elif path.startswith("/api/workspace/manual/"):
                 STATE.save_manual_workspace(path.removeprefix("/api/workspace/manual/"), payload)
                 self._json({"ok": True})
@@ -522,14 +516,23 @@ class MosaicHandler(BaseHTTPRequestHandler):
                         headers={
                             "X-Mozarie-Revision": str(revision),
                             "X-Mozarie-Save-Token": save_token,
+                            "X-Mozarie-No-Effect": "1" if rendered.no_effect else "0",
                         },
                     )
             elif path == "/api/save/commit":
+                source_mtime_ms = payload.get("sourceMtimeMs")
+                source_size_bytes = payload.get("sourceSizeBytes")
+                if source_mtime_ms is not None and (not isinstance(source_mtime_ms, int) or isinstance(source_mtime_ms, bool) or source_mtime_ms < 0):
+                    raise ClientError("保存後の元画像情報が正しくありません。", "input_invalid")
+                if source_size_bytes is not None and (not isinstance(source_size_bytes, int) or isinstance(source_size_bytes, bool) or source_size_bytes < 0):
+                    raise ClientError("保存後の元画像情報が正しくありません。", "input_invalid")
                 self._json(STATE.commit_browser_save(
                     str(payload.get("imageId", "")),
                     _read_candidate_revision(payload.get("candidateRevision")),
                     payload.get("saveToken"),
                     payload.get("sourceAction"),
+                    source_mtime_ns=source_mtime_ms * 1_000_000 if source_mtime_ms is not None else None,
+                    source_size_bytes=source_size_bytes,
                 ))
             elif path == "/api/save/status":
                 self._json(STATE.browser_save_status(
@@ -638,8 +641,10 @@ class MosaicHandler(BaseHTTPRequestHandler):
         content_length = int(raw_length)
         if content_length <= 0 or content_length > MAX_BODY_BYTES:
             raise ClientError("リクエストサイズが正しくありません。", "input_invalid")
-        staging_dir = STATE.cache_dir / "import-staging"
-        staging_dir.mkdir(parents=True, exist_ok=True)
+        # Browser bytes belong with their final session import, not the
+        # disposable render-cache volume.  This also keeps the upload and its
+        # inspected image on one filesystem.
+        staging_dir = STATE._ensure_session()
         temporary_path: Path | None = None
         remaining = content_length
         try:
@@ -805,7 +810,7 @@ class MosaicHandler(BaseHTTPRequestHandler):
 
     def _stream_file(self, handle: BinaryIO, record: ImageRecord | None, content_type: str, cache_control: str) -> None:
         stat = os.fstat(handle.fileno())
-        if record is not None and (stat.st_mtime_ns != record.mtime_ns or stat.st_size != record.size_bytes):
+        if record is not None and (stat.st_mtime_ns, stat.st_size) != record.asset_fingerprint():
             raise ClientError("元画像が外部で変更されました。画像を再読み込みしてください。", "stale_asset")
         size = stat.st_size
         try:

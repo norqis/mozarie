@@ -18,23 +18,15 @@ from .core import (
 )
 from .config import SettingsError, validate_output_directory_ready
 from .image_io import (
-    _stage_record_replacement, _stage_save_with_mask, calculate_block_size, render_with_mask,
+    _assert_source_stat_matches, _stage_record_replacement, _stage_save_with_mask, calculate_block_size, read_stable_source_bytes, render_with_mask,
     decode_draft_masks, draft_manual_exclusion_forced, save_with_mask,
     unique_session_import_destination, write_rendered_copy,
 )
 from .masks import compose_masks, expand_mask
 
+_SAVE_RENDER_MEMORY_BUDGET = 512 * 1024 * 1024
+
 class SavingMixin:
-    # StudioState resolves these to CatalogMixin's guarded implementations.
-    # Keeping no-op mixin fallbacks makes the saving primitives independently
-    # reusable in focused tests and command-line integrations.
-    def _assert_catalog_mutable(self) -> None:
-        return None
-
-    def _assert_image_editable(self, image_id: str) -> None:
-        del image_id
-        return None
-
     def start_apply(
         self,
         image_ids: list[str],
@@ -169,9 +161,6 @@ class SavingMixin:
                 exclude_masks: list[np.ndarray] = []
                 forced_exclude_masks: list[np.ndarray] = []
                 add_mask, exclusion_mask, exclusion_erase_mask = draft_masks
-                enabled_apply_candidates = [candidate for candidate in candidates if candidate.role == CandidateRole.APPLY]
-                if not enabled_apply_candidates and add_mask is None:
-                    raise ClientError("保存するモザイク範囲がありません。", "no_effective_mask")
                 for candidate in candidates:
                     try:
                         self.materialize_candidate_mask(candidate, image_id)
@@ -198,10 +187,14 @@ class SavingMixin:
                     (record.height, record.width), apply_masks, exclude_masks, add_mask, exclusion_mask,
                     forced_exclude_masks, manual_exclude_forced, exclusion_erase_mask,
                 )
-                if mask is None or not np.any(mask):
-                    raise ClientError("保存するモザイク範囲がありません。", "no_effective_mask")
-                output = render_with_mask(record, mask, calculate_block_size(record.width, record.height, divisor))
-                source_fingerprint = (record.mtime_ns, record.size_bytes)
+                no_effect = mask is None or not np.any(mask)
+                source_fingerprint = record.asset_fingerprint()
+                # Saving every listed image means an image without a mosaic is
+                # copied as-is.  An overwrite deliberately becomes a commit
+                # with ``keep`` instead of touching its source file.
+                output = read_stable_source_bytes(record, source_fingerprint) if no_effect else render_with_mask(
+                    record, mask, calculate_block_size(record.width, record.height, divisor),
+                )
                 if copy_to_default:
                     if not configured_output_directory.is_dir():
                         raise ClientError("保存先フォルダを使用できません。設定で変更してください。", "output_folder_unavailable")
@@ -216,7 +209,7 @@ class SavingMixin:
                         raise ClientError("保存先フォルダへ保存できませんでした。設定で変更してください。", "save_write_failed") from exc
                     finally:
                         self._release_output_destination(output_path)
-                elif not copy_to_browser:
+                elif not copy_to_browser and not no_effect:
                     # Browser copies stream the render straight to the chosen
                     # File System Access destination.  Keeping a second cache
                     # file until the browser acknowledges the commit made large
@@ -230,6 +223,7 @@ class SavingMixin:
                         handle.flush()
 
                 with self.lock:
+                    _assert_source_stat_matches(record, source_fingerprint)
                     if (
                         self.images.get(image_id) is None
                         or self.catalog_generation != catalog_generation
@@ -241,22 +235,25 @@ class SavingMixin:
                         raise ClientError("バックグラウンド処理中は保存できません。完了後にもう一度実行してください。", "operation_in_progress")
                     save_token = self._issue_browser_save_token_unchecked(
                         record, current_revision, source_fingerprint, catalog_generation, rendered_path, output_path, output_fingerprint,
-                        allow_copy_action=copy_to_browser,
+                        allow_copy_action=copy_to_browser or no_effect,
+                        no_effect=no_effect,
                     )
                     rendered_path = None
-            return BrowserSaveRender(output, record, current_revision, save_token, output_path)
+            return BrowserSaveRender(output, record, current_revision, save_token, output_path, no_effect)
         finally:
             if rendered_path is not None:
                 rendered_path.unlink(missing_ok=True)
             if output_path is not None and 'save_token' not in locals():
                 output_path.unlink(missing_ok=True)
 
-    def commit_browser_save(self, image_id: str, revision: int, save_token: str, source_action: str) -> dict[str, Any]:
+    def commit_browser_save(self, image_id: str, revision: int, save_token: str, source_action: str, *, source_mtime_ns: int | None = None, source_size_bytes: int | None = None) -> dict[str, Any]:
         self._assert_image_editable(image_id)
         if not isinstance(save_token, str) or not save_token:
             raise ClientError("保存確認トークンがありません。保存をやり直してください。", "save_state_changed")
         if source_action not in {"keep", "overwrite", "deleted"}:
             raise ClientError("元画像の処理は keep、overwrite、deleted のいずれかで指定してください。", "input_invalid")
+        if (source_mtime_ns is None) != (source_size_bytes is None) or (source_mtime_ns is not None and (source_mtime_ns < 0 or source_size_bytes < 0)):
+            raise ClientError("保存後の元画像情報が正しくありません。", "input_invalid")
         rendered_path: Path | None = None
         cleanup_paths: list[tuple[Path, tuple[int, int] | None]] = []
         mask_paths: list[Path] = []
@@ -267,6 +264,8 @@ class SavingMixin:
         expired_token = False
 
         def token_allows_action(details: BrowserSaveToken) -> bool:
+            if details.no_effect:
+                return source_action in {"keep", "deleted"}
             # A copy token is issued only after the server has written the copy;
             # it may keep or remove the source. A streamed render token owns a
             # temporary replacement and may only overwrite the source.
@@ -365,10 +364,15 @@ class SavingMixin:
                         # A save only writes an image. It must retain the
                         # candidate/manual workspace and both image flags.
                         cleared = revision == current_revision
+                        persisted_mtime = record_snapshot.mtime_ns
+                        persisted_size = record_snapshot.size_bytes
+                        if source_action == "overwrite" and record_snapshot.source_kind == "session":
+                            persisted_mtime = source_mtime_ns
+                            persisted_size = source_size_bytes
                         self.workspace_store.commit_save(
                             image_id,
-                            mtime_ns=record_snapshot.mtime_ns if source_action == "overwrite" else None,
-                            size_bytes=record_snapshot.size_bytes if source_action == "overwrite" else None,
+                            mtime_ns=persisted_mtime if source_action == "overwrite" else None,
+                            size_bytes=persisted_size if source_action == "overwrite" else None,
                             clear_workspace=deleted,
                             delete_image=deleted,
                         )
@@ -384,8 +388,13 @@ class SavingMixin:
                     if record is None:
                         raise ClientError("画像一覧が変更されました。保存をやり直してください。", "save_state_changed")
                     if source_action == "overwrite":
-                        record.mtime_ns = record_snapshot.mtime_ns
-                        record.size_bytes = record_snapshot.size_bytes
+                        record.set_asset_fingerprint(*record_snapshot.asset_fingerprint())
+                        if record.source_kind == "filesystem":
+                            record.mtime_ns = record_snapshot.mtime_ns
+                            record.size_bytes = record_snapshot.size_bytes
+                        elif source_mtime_ns is not None and source_size_bytes is not None:
+                            record.mtime_ns = source_mtime_ns
+                            record.size_bytes = source_size_bytes
                         record.asset_revision = record_snapshot.asset_revision + 1
                     if deleted:
                         mask_paths = [candidate.mask_path for candidate in self.candidates.get(image_id, [])]
@@ -394,13 +403,14 @@ class SavingMixin:
                         self.order = [current_id for current_id in self.order if current_id != image_id]
                         self.candidate_revisions.pop(image_id, None)
                         self.candidates.pop(image_id, None)
+                        self.projectless_manual_drafts.pop(image_id, None)
                         self._image_io_locks.pop(image_id, None)
                     self.browser_save_tokens.pop(save_token, None)
                     self.browser_save_receipts[save_token] = BrowserSaveReceipt(image_id, revision, source_action, cleared, not cleared, deleted, time.monotonic())
                     rendered_path = token_details.rendered_path
                     if deleted:
                         self._discard_browser_save_tokens_for_image_unchecked(image_id)
-                if deleted:
+                if source_action == "overwrite" or deleted:
                     thumbnail_paths = list((self.cache_dir / "thumbnails").glob(f"{image_id}-*.jpg"))
                 if mask_paths:
                     self._delete_mask_files(mask_paths, candidate_dirs)
@@ -414,7 +424,8 @@ class SavingMixin:
                     source_stage.finalize()
                 if quarantine_path is not None:
                     quarantine_path.unlink(missing_ok=True)
-                self.invalidate_sam_image(image_id)
+                if source_action != "keep":
+                    self.invalidate_sam_image(image_id)
                 return {"cleared": cleared, "stale": not cleared, "deleted": deleted}
 
     def browser_save_status(self, image_id: str, revision: int, save_token: str, source_action: str) -> dict[str, Any]:
@@ -460,7 +471,6 @@ class SavingMixin:
         catalog_generation: int | None = None,
     ) -> None:
         try:
-            empty_indices: set[int] = set()
             output_directory = output_directory or Path(self.settings["saving"]["default_output_directory"])
 
             def save_record(index: int, record: ImageRecord) -> None:
@@ -485,24 +495,27 @@ class SavingMixin:
                             )
                     except Exception:
                         raise
-                    if mask is None or not np.any(mask):
-                        with self.lock:
-                            empty_indices.add(index)
-                        return
+                    no_effect = mask is None or not np.any(mask)
+                    source_fingerprint = record.asset_fingerprint()
                     source_stage = None
                     output_path = self._reserve_output_destination(record, suffix, output_directory) if copy_to_default else record.path
                     if copy_to_default:
                         try:
-                            output = render_with_mask(record, mask, calculate_block_size(record.width, record.height, divisor))
+                            output = read_stable_source_bytes(record, source_fingerprint) if no_effect else render_with_mask(
+                                record, mask, calculate_block_size(record.width, record.height, divisor),
+                            )
                             write_rendered_copy(output_path, output)
                         finally:
                             self._release_output_destination(output_path)
                     else:
-                        source_stage = _stage_save_with_mask(record, mask, calculate_block_size(record.width, record.height, divisor))
-                        output_stat = record.path.stat()
+                        if not no_effect:
+                            source_stage = _stage_save_with_mask(record, mask, calculate_block_size(record.width, record.height, divisor))
+                            output_stat = record.path.stat()
                     # Files are fully written before the state mutation. Saving
                     # never clears candidates or manual workspace.
                     try:
+                        if no_effect:
+                            _assert_source_stat_matches(record, source_fingerprint)
                         with self.lock:
                             if not self._job_is_current(job_generation, catalog_generation):
                                 if source_stage is not None:
@@ -510,11 +523,11 @@ class SavingMixin:
                                 return
                             self.workspace_store.commit_save(
                                 record.image_id,
-                                mtime_ns=None if copy_to_default else output_stat.st_mtime_ns,
-                                size_bytes=None if copy_to_default else output_stat.st_size,
+                                mtime_ns=None if copy_to_default or no_effect else output_stat.st_mtime_ns,
+                                size_bytes=None if copy_to_default or no_effect else output_stat.st_size,
                                 clear_workspace=False,
                             )
-                            if not copy_to_default:
+                            if not copy_to_default and not no_effect:
                                 live_record = self.images[record.image_id]
                                 live_record.mtime_ns = output_stat.st_mtime_ns
                                 live_record.size_bytes = output_stat.st_size
@@ -528,13 +541,20 @@ class SavingMixin:
                         if copy_to_default:
                             output_path.unlink(missing_ok=True)
                         raise
-                    if not copy_to_default:
+                    if source_stage is not None:
                         source_stage.finalize()
-                    self.invalidate_sam_image(record.image_id)
+                    if not no_effect:
+                        self.invalidate_sam_image(record.image_id)
                     self._set_job_current(record.relative_path, job_generation, catalog_generation)
 
+            # Rendering holds decoded pixels, a mask and an encoder buffer at
+            # once.  Bound workers by the largest image instead of letting
+            # eight 4K encodes reserve roughly a gigabyte at the same time.
+            largest_render_bytes = max((record.width * record.height * 32 for record in records), default=1)
+            memory_workers = max(1, _SAVE_RENDER_MEMORY_BUDGET // largest_render_bytes)
+            worker_count = min(8, max(1, saving_parallelism), memory_workers)
             failures = self._run_fixed_workers(
-                records, min(8, max(1, saving_parallelism)), save_record,
+                records, worker_count, save_record,
                 control, job_generation, catalog_generation,
             )
             if failures:
@@ -542,17 +562,6 @@ class SavingMixin:
             elif control is not None and control.cancel_requested.is_set():
                 self._cancel_job(job_generation, catalog_generation)
             else:
-                if empty_indices:
-                    with self.lock:
-                        if self._job_is_current(job_generation, catalog_generation):
-                            kept_indices = [index for index in range(len(records)) if index not in empty_indices]
-                            slots = getattr(self, "_job_output_slots", {})
-                            completed = set(self.job.completed_image_ids)
-                            self.job.image_ids = tuple(records[index].image_id for index in kept_indices)
-                            self.job.total = len(kept_indices)
-                            self.job.completed_image_ids = tuple(image_id for image_id in self.job.image_ids if image_id in completed)
-                            self.job.completed = len(self.job.completed_image_ids)
-                            self.job.outputs = [slots[index] for index in kept_indices if index in slots]
                 self._finish_job(job_generation, catalog_generation)
         except Exception as exc:
             self._fail_job(exc, job_generation, catalog_generation)

@@ -1,0 +1,32 @@
+name: Checks
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    name: backend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - run: python -m compileall -q server.py updater.py setup_gpu_check.py mozarie
+      - run: python -c "import json; [json.load(open(path, encoding='utf-8')) for path in ('config/defaults.json', 'static/i18n/ja.json', 'static/i18n/en.json')]"
+
+  frontend:
+    name: frontend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+      - run: find static/js -type f -name '*.js' -print0 | xargs -0 -n1 node --check

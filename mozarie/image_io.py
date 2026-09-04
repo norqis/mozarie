@@ -8,6 +8,7 @@ import shutil
 import tempfile
 import uuid
 import zlib
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -426,14 +427,26 @@ def _source_stat_fingerprint(path: Path) -> tuple[int, int]:
 
 
 def _assert_source_stat_matches(record: ImageRecord, expected: tuple[int, int] | None = None) -> None:
-    if _source_stat_fingerprint(record.path) != (expected or (record.mtime_ns, record.size_bytes)):
+    if _source_stat_fingerprint(record.path) != (expected or record.asset_fingerprint()):
         raise ClientError("元画像が外部で変更されました。画像を再読み込みしてください。", "stale_asset")
+
+
+def read_stable_source_bytes(record: ImageRecord, expected: tuple[int, int] | None = None) -> bytes:
+    """Read one source and confirm its catalogued fingerprint without retrying."""
+    fingerprint = expected or record.asset_fingerprint()
+    if _source_stat_fingerprint(record.path) != fingerprint:
+        raise ClientError("元画像が外部で変更されました。画像を再読み込みしてください。", "stale_asset")
+    try:
+        source = record.path.read_bytes()
+    except OSError as exc:
+        raise ClientError("元画像が外部で変更または削除されました。画像を再読み込みしてください。", "stale_asset") from exc
+    _assert_source_stat_matches(record, fingerprint)
+    return source
 
 
 def render_with_mask(record: ImageRecord, mask: np.ndarray, block_size: int) -> bytes:
     """Render one image without changing the source file or its catalogue state."""
-    source = record.path.read_bytes()
-    _assert_source_stat_matches(record)
+    source = read_stable_source_bytes(record)
     suffix = record.path.suffix.lower()
     with Image.open(io.BytesIO(source)) as source_image:
         source_image.load()
@@ -450,14 +463,20 @@ def render_with_mask(record: ImageRecord, mask: np.ndarray, block_size: int) -> 
 
 
 class SourceReplaceStage:
-    def __init__(self, record: ImageRecord, backup_path: Path) -> None:
+    def __init__(self, record: ImageRecord, backup_path: Path, original_record: ImageRecord) -> None:
         self.record = record
         self.backup_path = backup_path
+        self.original_record = original_record
 
     def rollback(self) -> None:
         if self.backup_path.exists():
             os.replace(self.backup_path, self.record.path)
             _sync_directory(self.record.path.parent)
+        self.record.mtime_ns = self.original_record.mtime_ns
+        self.record.size_bytes = self.original_record.size_bytes
+        self.record.asset_mtime_ns = self.original_record.asset_mtime_ns
+        self.record.asset_size_bytes = self.original_record.asset_size_bytes
+        self.record.asset_revision = self.original_record.asset_revision
 
     def finalize(self) -> None:
         self.backup_path.unlink(missing_ok=True)
@@ -487,6 +506,7 @@ def _remove_incomplete_backup(backup_path: Path) -> None:
 
 def _stage_record_replacement(record: ImageRecord, rendered_path: Path, expected_source_fingerprint: tuple[int, int]) -> SourceReplaceStage:
     """Replace a source while retaining a same-directory rollback copy."""
+    original_record = replace(record)
     original_stat = record.path.stat()
     temporary_path: Path | None = None
     backup_path = record.path.with_name(f".{record.path.name}.mozarie-backup-{uuid.uuid4().hex}")
@@ -516,9 +536,11 @@ def _stage_record_replacement(record: ImageRecord, rendered_path: Path, expected
             except OSError:
                 LOGGER.warning("Saved image timestamp could not be restored: %s", record.path)
         stat = record.path.stat()
-        record.mtime_ns = stat.st_mtime_ns
-        record.size_bytes = stat.st_size
-        return SourceReplaceStage(record, backup_path)
+        record.set_asset_fingerprint(stat.st_mtime_ns, stat.st_size)
+        if record.source_kind == "filesystem":
+            record.mtime_ns = stat.st_mtime_ns
+            record.size_bytes = stat.st_size
+        return SourceReplaceStage(record, backup_path, original_record)
     finally:
         if temporary_path is not None:
             temporary_path.unlink(missing_ok=True)
@@ -552,6 +574,7 @@ def save_with_mask(record: ImageRecord, mask: np.ndarray, block_size: int) -> No
 
 def _stage_save_with_mask(record: ImageRecord, mask: np.ndarray, block_size: int) -> SourceReplaceStage:
     destination = record.path
+    original_record = replace(record)
     original_stat = record.path.stat()
     output = render_with_mask(record, mask, block_size)
     temporary_path: Path | None = None
@@ -579,9 +602,11 @@ def _stage_save_with_mask(record: ImageRecord, mask: np.ndarray, block_size: int
         except OSError:
             LOGGER.warning("Saved image timestamp could not be restored: %s", destination)
         stat = destination.stat()
-        record.mtime_ns = stat.st_mtime_ns
-        record.size_bytes = stat.st_size
-        return SourceReplaceStage(record, backup_path)
+        record.set_asset_fingerprint(stat.st_mtime_ns, stat.st_size)
+        if record.source_kind == "filesystem":
+            record.mtime_ns = stat.st_mtime_ns
+            record.size_bytes = stat.st_size
+        return SourceReplaceStage(record, backup_path, original_record)
     finally:
         if temporary_path is not None:
             temporary_path.unlink(missing_ok=True)

@@ -3,27 +3,19 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-import ctypes
-import importlib.util
-import os
 from pathlib import Path
-import sys
 import threading
-from typing import Any
 
 import cv2
 import numpy as np
 
+from ..core import torch_module
 from ..runtime import (
     _dxgi_adapter_names,
     directml_module,
     directml_onnx_device_id,
     runtime_backend,
 )
-
-
-_dll_directory_handles: list[object] = []
-_cuda_runtime_handles: list[object] = []
 
 
 def _gpu_unavailable_error() -> Exception:
@@ -36,40 +28,8 @@ def _model_load_error() -> Exception:
     return ClientError("検出モデルを読み込めません。モデルファイルを確認して、もう一度実行してください。", "model_load_failed")
 
 
-def _register_torch_dll_directory() -> None:
-    """Keep PyTorch's CUDA runtime DLLs visible to ONNX Runtime on Windows."""
-    if os.name != "nt":
-        return
-    torch_spec = importlib.util.find_spec("torch")
-    if torch_spec is None or torch_spec.origin is None:
-        return
-    directory = Path(torch_spec.origin).parent / "lib"
-    if directory.is_dir():
-        _dll_directory_handles.append(os.add_dll_directory(str(directory)))
-        nvrtc = next((path for path in directory.glob("nvrtc64_*_0.dll") if not path.name.endswith(".alt.dll")), None)
-        if nvrtc is not None:
-            try:
-                _cuda_runtime_handles.append(ctypes.WinDLL(str(nvrtc)))
-            except OSError:
-                pass
-
-
-_register_torch_dll_directory()
-
 import onnxruntime as ort
 from onnxruntime.capi import _pybind_state as ort_state
-
-
-def _preload_onnxruntime_dlls(runtime: Any, modules: dict[str, object] | None = None) -> None:
-    """Let ONNX Runtime load CUDA DLLs itself when PyTorch is not loaded."""
-    preload_dlls = getattr(runtime, "preload_dlls", None)
-    loaded_modules = sys.modules if modules is None else modules
-    if preload_dlls is None or "torch" in loaded_modules:
-        return
-    preload_dlls()
-
-
-_preload_onnxruntime_dlls(ort)
 
 
 @dataclass(frozen=True)
@@ -126,14 +86,19 @@ def _create_session(model: str | bytes, device: str, gpu_device: int) -> ort.Inf
         options.enable_mem_pattern = False
         options.execution_mode = ort.ExecutionMode.ORT_SEQUENTIAL
     try:
-        session = ort.InferenceSession(model, sess_options=options, providers=available_providers(device, gpu_device))
+        providers = available_providers(device, gpu_device)
+        if backend == "cuda":
+            torch_module()
+        session = ort.InferenceSession(model, sess_options=options, providers=providers, enable_fallback=False)
     except Exception as exc:
         if getattr(exc, "error_code", None):
             raise
         raise _model_load_error() from exc
     session.disable_fallback()
     expected = {"cuda": "CUDAExecutionProvider", "directml": "DmlExecutionProvider"}.get(backend)
-    if expected is not None and session.get_providers()[0] != expected:
+    active_providers = session.get_providers()
+    expected_providers = (expected, "CPUExecutionProvider") if expected is not None else ("CPUExecutionProvider",)
+    if tuple(active_providers) != expected_providers:
         raise _gpu_unavailable_error()
     return session
 

@@ -99,7 +99,7 @@ Sensitiveの変換:
 3. 右側の候補を確認し、必要に応じてブラシ、消しゴム、境界ツールで修正します。
 4. 保存対象を選び、コピー保存または元画像への上書きを行います。
 
-GPU処理を使う場合は、**設定 > 検出**でGPUを選びます。GPUメモリが不足した場合は、ほかのGPUアプリを閉じるかCPUへ切り替えてください。
+GPU処理を使う場合は、**設定 > 検出**でGPUを選びます。GPUで未対応の演算だけはCPUが補助しますが、GPUの初期化・実行失敗時にCPU専用sessionへ切り替えて再試行はしません。GPUメモリが不足した場合は、ほかのGPUアプリを閉じるかCPUへ切り替えてください。
 
 ## 更新
 
@@ -111,14 +111,9 @@ GPU処理を使う場合は、**設定 > 検出**でGPUを選びます。GPUメ�
 - **GPU、CUDA、DirectMLのエラー:** ほかのGPUアプリを閉じる、別のGPUを選ぶ、またはCPUへ切り替えてください。
 - **解決しない:** エラー文を添えて[Issues](https://github.com/norqis/mozarie/issues)へ報告してください。
 
-## 開発
+## 実機確認
 
-```powershell
-npm ci
-node scripts/test-quiet.cjs all
-```
-
-失敗時だけ詳細を表示します。CI用にカバレッジを残す場合は `node scripts/test-quiet.cjs all --artifacts <保存先>` を使います。
+[実機確認手順](https://github.com/norqis/mozarie/blob/main/docs/manual-verification.md)に従って確認してください。
 
 ## ライセンス
 

@@ -70,9 +70,12 @@ class JobsMixin:
             self._empty_selected_gpu_cache(torch, int(gpu_device if gpu_device is not None else self.settings["models"].get("gpu_device", 0)))
 
     def _release_gpu_job_memory(self) -> None:
-        """Release accelerator-backed models after a background job has returned."""
+        """Release inference objects after a background job has returned."""
         with self.inference_lock:
             provider = str(self.settings["models"].get("provider", "gpu"))
+            # CPU jobs keep their loaded models for the next image.  GPU jobs
+            # retain the existing release path so normal completion and OOM
+            # recovery still return accelerator memory promptly.
             if provider != "gpu":
                 return
             gpu_device = int(self.settings["models"].get("gpu_device", 0))

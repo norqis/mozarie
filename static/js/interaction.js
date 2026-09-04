@@ -117,41 +117,30 @@ function resetCurrentDraft() {
   addCtx.clearRect(0, 0, addCanvas.width, addCanvas.height);
   exclusionCtx.clearRect(0, 0, exclusionCanvas.width, exclusionCanvas.height);
   exclusionEraseCtx.clearRect(0, 0, exclusionEraseCanvas.width, exclusionEraseCanvas.height);
-  state.manualMaskPresent = false; state.manualEnabled = true; state.manualExclusionEnabled = true; state.manualExclusionEraseEnabled = true;
+  state.manualMaskPresent = false; state.manualExclusionPresent = false; state.manualExclusionErasePresent = false; state.manualEnabled = true; state.manualExclusionEnabled = true; state.manualExclusionEraseEnabled = true;
   state.maskDirty = true; flushMaskComposition();
   resetHistoryToCurrentManualMask(); refreshMaskStatus(true); render();
 }
 
-async function clearMasks(imageIds, titleKey, messageKey) {
-  if (!imageIds.length || isBusy() || state.importing) return;
+async function clearMasks(imageIds, titleKey, messageKey, expectedImageId = null, expectedGeneration = null) {
+  if (!imageIds.length || isBusy() || state.importing || currentImageActionPending()) return;
   if (!await confirmAction(t(titleKey), t(messageKey), "clearMasks")) return;
+  if (expectedImageId && (state.currentId !== expectedImageId || !isCurrentGeneration(expectedGeneration) || currentImageActionPending())) return;
   state.masksClearing = true;
-  const catalogEpoch = beginCatalogEpoch();
-  ++state.imageGeneration;
+  let catalogEpoch = null;
   updateActionButtons();
   try {
+    await flushAllImageMutations();
+    await Promise.all([...new Set(imageIds)].map(flushWorkspaceDraft));
+    if (expectedImageId && (state.currentId !== expectedImageId || !isCurrentGeneration(expectedGeneration) || currentImageActionPending())) return;
+    catalogEpoch = beginCatalogEpoch();
     await api("/api/masks/clear", { method: "POST", body: JSON.stringify({ imageIds }) });
     if (!isCurrentCatalogEpoch(catalogEpoch)) return;
-    for (const imageId of imageIds) state.drafts.delete(imageId);
-    for (const imageId of imageIds) releaseCandidateBundles(imageId);
-    if (imageIds.includes(state.currentId)) {
-      clearCandidateBlink(); state.candidates = []; resetCurrentDraft();
-      $("#candidateStatus").textContent = t("candidates.none"); renderCandidates();
-      flushRender();
-    }
     const refreshed = await api("/api/images");
     if (!isCurrentCatalogEpoch(catalogEpoch)) return;
-    state.images = refreshed.images;
-    state.images.forEach((image) => {
-      if (imageIds.includes(image.id)) {
-        image.candidateCount = 0;
-        image.enabledCandidateCount = 0;
-      }
-    });
-    imageIds.forEach((imageId) => state.maskStatus.delete(imageId));
-    markImagesUnreviewed(imageIds, false);
-    renderCatalogViews(); updateNavigationControls(); clearStatus();
-  } catch (error) { if (isCurrentCatalogEpoch(catalogEpoch)) showUserError(error); }
+    await refreshWorkspaceImages(refreshed, imageIds, { clearWorkspace: true });
+    clearStatus();
+  } catch (error) { if (catalogEpoch === null || isCurrentCatalogEpoch(catalogEpoch)) showUserError(error); }
   finally { state.masksClearing = false; updateActionButtons(); }
 }
 
@@ -163,11 +152,16 @@ async function clearCatalog() {
   ++state.imageGeneration;
   updateActionButtons();
   try {
+    await flushAllImageMutations();
     await flushAllWorkspaceMutations();
     await api("/api/catalog/clear", { method: "POST", body: JSON.stringify({}) });
     if (!isCurrentCatalogEpoch(catalogEpoch)) return;
     clearStoredCatalogState();
     resetCatalog([], "");
+    state.project = null;
+    state.projectReadOnly = false;
+    state.missingNativeSources = [];
+    renderProjectCurrent();
     clearStatus();
   } catch (error) { if (isCurrentCatalogEpoch(catalogEpoch)) showUserError(error); }
   finally { state.catalogMutation = false; updateActionButtons(); }
@@ -229,8 +223,8 @@ async function copyContextMenuImagePath() {
 }
 
 function clearReviewForRemovedImage(image) {
-  const path = reviewPath(image);
-  state.reviewedPaths.delete(path);
+  state.reviewedImageIds.delete(image.id);
+  state.hiddenImageIds.delete(image.id);
 }
 
 async function removeImageFromCatalog(imageId = state.contextMenuImageId) {
@@ -248,15 +242,20 @@ async function removeImageFromCatalog(imageId = state.contextMenuImageId) {
   ++state.imageGeneration;
   updateActionButtons();
   try {
+    await flushAllImageMutations();
+    await flushWorkspaceDraft(imageId);
     const data = await api(`/api/catalog/image/${encodeURIComponent(imageId)}`, { method: "DELETE" });
     if (!isCurrentCatalogEpoch(catalogEpoch)) return;
     state.images = data.images;
+    if (state.project?.id) await forgetProjectImageSources(state.project.id, [imageId]);
+    loadReviewedPaths();
     state.selectedImageIds.delete(imageId);
     if (!state.images.length) { state.batchMode = false; clearBatchSelection(); }
     releaseImageCaches(imageId);
     state.sourceAccess.delete(imageId);
     state.drafts.delete(imageId);
     state.maskStatus.delete(imageId);
+    pruneSourceAccess();
     clearReviewForRemovedImage(image);
     if (removingCurrent) {
       state.currentId = null; state.currentImage = null; state.pendingImageId = null; state.pendingImageKey = null; state.pendingCandidateKey = null;
@@ -277,14 +276,42 @@ async function runSelectionAction(action) {
   const images = selectedImages(); if (!images.length || isBusy() || state.importing) return;
   closeBatchMoreMenus();
   const ids = images.map((image) => image.id);
-  if (action === "hide" || action === "show") { await Promise.all(images.map((image) => setHidden(image, action === "hide"))); return; }
-  if (action === "reviewed" || action === "unreviewed") { await Promise.all(images.map((image) => setReviewed(image, action === "reviewed"))); return; }
+  if (["hide", "show", "reviewed", "unreviewed"].includes(action)) {
+    const flags = action === "hide" ? { hidden: true } : action === "show" ? { hidden: false }
+      : { reviewed: action === "reviewed" };
+    const epoch = beginCatalogEpoch(); state.catalogMutation = true; updateActionButtons();
+    try {
+      await flushAllImageMutations();
+      await flushAllWorkspaceMutations();
+      const data = await api("/api/workspace/images", { method: "POST", body: JSON.stringify({ imageIds: ids, ...flags }) });
+      if (!isCurrentCatalogEpoch(epoch)) return;
+      for (const image of images) publishWorkspaceFlags(image.id, data.flags?.[image.id] || flags);
+      preserveCatalogScroll(renderCatalogViews); updateSelectionActionBar(); updateNavigationControls();
+    } catch (error) { if (isCurrentCatalogEpoch(epoch)) showUserError(error); }
+    finally { state.catalogMutation = false; updateActionButtons(); }
+    return;
+  }
   if (action === "detect") return openDetectionDialog(ids);
   if (action === "clear") return clearMasks(ids, "confirm.clearAllMasks.title", "confirm.clearAllMasks.message");
   if (action === "remove") {
-    for (const image of [...images]) await removeImageFromCatalog(image.id);
-    state.batchMode = false; clearBatchSelection(); updateSelectionActionBar();
-    renderOverview();
+    if (!await confirmAction(t("confirm.removeImages.title"), t("confirm.removeImages.message", { count: ids.length }), "removeImage")) return;
+    const epoch = beginCatalogEpoch(); state.catalogMutation = true; updateActionButtons();
+    try {
+      await flushAllImageMutations();
+      await flushAllWorkspaceMutations();
+      const data = await api("/api/catalog/remove", { method: "POST", body: JSON.stringify({ imageIds: ids }) });
+      if (!isCurrentCatalogEpoch(epoch)) return;
+      for (const image of images) {
+        releaseImageCaches(image.id); state.sourceAccess.delete(image.id); state.drafts.delete(image.id); state.maskStatus.delete(image.id); clearReviewForRemovedImage(image);
+      }
+      state.images = data.images || [];
+      if (state.project?.id) await forgetProjectImageSources(state.project.id, ids.filter((imageId) => !state.images.some((image) => image.id === imageId)));
+      loadReviewedPaths();
+      pruneSourceAccess();
+      state.batchMode = false; clearBatchSelection(); updateSelectionActionBar();
+      renderCatalogViews();
+    } catch (error) { if (isCurrentCatalogEpoch(epoch)) showUserError(error); }
+    finally { state.catalogMutation = false; updateActionButtons(); }
   }
 }
 
@@ -317,33 +344,40 @@ function newClientKey() {
 function pruneSourceAccess() {
   const imageIds = new Set(state.images.map((image) => image.id));
   for (const imageId of state.sourceAccess.keys()) if (!imageIds.has(imageId)) state.sourceAccess.delete(imageId);
+  for (const [sourceId, source] of state.projectlessDirectorySources) {
+    source.imageIds = new Set([...source.imageIds].filter((imageId) => imageIds.has(imageId)));
+    if (!source.imageIds.size) state.projectlessDirectorySources.delete(sourceId);
+  }
 }
 
-function rememberImportedSource(result) {
+async function rememberImportedSource(result, session) {
   for (const imported of result.data.imported || []) {
     if (imported.clientKey !== result.clientKey || !result.entry.fileHandle || !imported.imageId) continue;
     state.sourceAccess.set(imported.imageId, {
       fileHandle: result.entry.fileHandle, parentHandle: result.entry.parentHandle || null,
       name: result.entry.file.name, size: result.entry.file.size, lastModified: result.entry.file.lastModified,
+      sourceId: result.sourceId, clientKey: result.clientKey, relativePath: result.entry.relativePath, sourceKind: session.sourceKind,
     });
-    if (state.project?.id) void rememberProjectSource(state.project.id, result.entry.fileHandle, imported.imageId, result.sourceId);
+    if (session.sourceKind === "browser-directory") {
+      const source = state.projectlessDirectorySources.get(result.sourceId);
+      if (source) source.imageIds.add(imported.imageId);
+      continue;
+    }
+    if (state.project?.id) await rememberProjectSource(state.project.id, result.entry.fileHandle, imported.imageId, result.sourceId, result.clientKey, result.entry.relativePath);
   }
 }
 
 async function importFiles(files) {
   const session = arguments.length > 1 ? arguments[1] : beginImportSession();
   if (!session || state.importSession !== session) return;
+  if (session.sourceKind === "browser-files") session.sourceId ||= crypto.randomUUID();
   const supportedFiles = [...files]
     .map((entry) => entry.file || entry.getFile ? entry : { file: entry, relativePath: entry.name, fileHandle: null, parentHandle: null })
     .filter((entry) => isSupportedImageFile(entry.file || { name: entry.name || entry.relativePath }));
   if (!supportedFiles.length) { finishImportSession(session); return; }
   try {
-    if (!session.catalogId && !session.provisional && !state.images.length) {
-      await flushAllWorkspaceMutations();
-      const prepared = await api("/api/workspace/catalog", { method: "POST", body: JSON.stringify({ provisional: true }) });
-      session.catalogId = prepared.catalogId || null;
-      session.provisional = prepared.provisional === true;
-    }
+    await flushAllImageMutations();
+    await flushAllWorkspaceMutations();
     session.total = supportedFiles.length; session.completed = 0; session.paused = false; session.cancelled = false;
     showProcessing({ kind: "import", state: "running", total: session.total, completed: 0, current: "" });
     let nextIndex = 0;
@@ -353,19 +387,37 @@ async function importFiles(files) {
         if (session.cancelled) return;
         const index = nextIndex; nextIndex += 1;
         if (index >= supportedFiles.length) return;
-        const descriptor = supportedFiles[index]; const clientKey = newClientKey();
-        const file = descriptor.file || await descriptor.getFile();
+        const descriptor = supportedFiles[index]; const clientKey = descriptor.clientKey || newClientKey();
+        let file;
+        try { file = descriptor.file || await descriptor.getFile(); }
+        catch (error) {
+          if (session.catalogId && descriptor.fileHandle && error?.name === "NotFoundError") {
+            session.missingFileHandles = true;
+            session.completed += 1;
+            showProcessing({ kind: "import", state: "running", total: session.total, completed: session.completed, current: descriptor.relativePath || descriptor.fileHandle.name });
+            continue;
+          }
+          throw error;
+        }
         if (session.cancelled || state.importSession !== session) return;
         if (!isSupportedImageFile(file)) continue;
         const entry = { ...descriptor, file, relativePath: descriptor.relativePath || file.name };
         showProcessing({ kind: "import", state: "running", total: session.total, completed: session.completed, current: entry.relativePath });
-        const data = await importSingleFile(entry, clientKey, session.catalogId, session.sourceId, session.sourceKind);
+        const stagedSource = Boolean(session.catalogId && session.sourceKind === "browser-files" && entry.fileHandle);
+        if (stagedSource) await rememberProjectSource(session.catalogId, entry.fileHandle, null, session.sourceId, clientKey, entry.relativePath);
+        let data;
+        try { data = await importSingleFile(entry, clientKey, session.catalogId, session.sourceId, session.sourceKind, session.importIntent); }
+        catch (error) {
+          if (stagedSource && Number.isInteger(error?.status) && error.status >= 400 && error.status < 500) {
+            await forgetPendingProjectSource(session.catalogId, session.sourceId, clientKey);
+          }
+          throw error;
+        }
         if (!session.catalogId && data.catalogId) session.catalogId = data.catalogId;
-        session.provisional ||= data.provisional === true;
         const result = { entry, clientKey, data, sourceId: session.sourceId };
         // Keep source access for each committed upload, including a later
         // cancellation or an unrelated upload failure.
-        rememberImportedSource(result);
+        await rememberImportedSource(result, session);
         session.completed += 1;
         showProcessing({ kind: "import", state: "running", total: session.total, completed: session.completed, current: entry.relativePath });
       }
@@ -383,17 +435,11 @@ async function importFiles(files) {
     }
     if (!isCurrentCatalogEpoch(session.epoch) || state.importSession !== session) return;
     if (session.cancelled) { setStatusKey("status.importCancelled", { completed: session.completed }); return; }
-    if (session.provisional) {
-      const finalized = await api("/api/workspace/catalog/finalize", { method: "POST", body: JSON.stringify({}) });
-      session.catalogId = finalized.catalogId || session.catalogId;
-      remapImportedImageIds(finalized.imageIds || {});
-      state.images = finalized.images || [];
-      session.provisional = false;
-    }
     const latest = await api("/api/images");
     state.images = latest.images;
     applyProjectSnapshot(latest);
     loadReviewedPaths();
+    if (session.missingFileHandles) showUserError({ code: "project_source_unavailable" });
     pruneSourceAccess(); renderCatalogViews(); setStatusKey("gallery.imported", { count: supportedFiles.length });
   } catch (error) {
     try {
@@ -405,7 +451,7 @@ async function importFiles(files) {
   finally { finishImportSession(session); }
 }
 
-async function importSingleFile(entry, clientKey, catalogId = null, sourceId = null, sourceKind = null) {
+async function importSingleFile(entry, clientKey, catalogId = null, sourceId = null, sourceKind = null, importIntent = "add") {
   const token = document.querySelector('meta[name="mozarie-token"]')?.content || "";
   const response = await fetch("/api/import/file", {
     method: "POST",
@@ -419,6 +465,7 @@ async function importSingleFile(entry, clientKey, catalogId = null, sourceId = n
       "X-Mozarie-File-Size": String(Math.max(0, Number(entry.file.size || 0))),
       ...(sourceId ? { "X-Mozarie-Source-Id": encodeURIComponent(sourceId) } : {}),
       ...(sourceKind ? { "X-Mozarie-Source-Kind": sourceKind } : {}),
+      "X-Mozarie-Import-Intent": importIntent,
       ...(catalogId ? { "X-Mozarie-Catalog-Id": encodeURIComponent(catalogId) } : {}),
     },
     body: entry.file,
@@ -430,7 +477,7 @@ async function importSingleFile(entry, clientKey, catalogId = null, sourceId = n
 
 function beginImportSession() {
   if (isBusy() || state.importing) return null;
-  const session = { id: newClientKey(), epoch: beginCatalogEpoch(), paused: false, cancelled: false, completed: 0, total: 0, catalogId: null, provisional: false, sourceId: null, sourceKind: "browser-files" };
+  const session = { id: newClientKey(), epoch: beginCatalogEpoch(), paused: false, cancelled: false, completed: 0, total: 0, catalogId: null, sourceId: null, sourceKind: "browser-files", importIntent: "add" };
   state.importing = true; state.importSession = session;
   updateActionButtons();
   return session;
@@ -443,6 +490,10 @@ function remapImportedImageIds(imageIds) {
   state.sourceAccess = remapMap(state.sourceAccess);
   state.drafts = remapMap(state.drafts);
   state.maskStatus = remapMap(state.maskStatus);
+  for (const [sourceId, source] of state.projectlessDirectorySources) {
+    source.imageIds = new Set([...source.imageIds].map((id) => map.get(id) || id));
+    if (!source.imageIds.size) state.projectlessDirectorySources.delete(sourceId);
+  }
   state.selectedImageIds = new Set([...state.selectedImageIds].map((id) => map.get(id) || id));
   if (state.currentId) state.currentId = map.get(state.currentId) || state.currentId;
   if (state.pendingImageId) state.pendingImageId = map.get(state.pendingImageId) || state.pendingImageId;
@@ -470,36 +521,51 @@ async function importFileHandles(handles, session = beginImportSession()) {
   if (!session) return;
   session.sourceId ||= crypto.randomUUID();
   session.sourceKind = "browser-files";
-  await importHandleEntries(handles.map((handle) => ({ handle, relativePath: handle.name, parentHandle: null })), session);
+  await importHandleEntries(handles.map((item) => {
+    const handle = item?.handle || item;
+    return { handle, clientKey: item?.clientKey || null, relativePath: item?.relativePath || handle.name, parentHandle: null };
+  }), session);
 }
 
 async function importDirectoryHandle(directoryHandle, session = beginImportSession()) {
   if (!session) return;
+  await flushAllImageMutations();
   await flushAllWorkspaceMutations();
   session.catalogId = await catalogForDirectoryHandle(directoryHandle);
   session.sourceId = await rememberProjectSource(session.catalogId, directoryHandle, null, state.pendingDirectorySourceId || session.sourceId);
   session.sourceKind = "browser-directory";
   state.pendingDirectorySourceId = null;
+  const projectlessSource = !session.catalogId
+    ? { handle: directoryHandle, imageIds: new Set() }
+    : null;
+  if (projectlessSource) state.projectlessDirectorySources.set(session.sourceId, projectlessSource);
   const entries = [];
-  showProcessing({ kind: "import", state: "running", total: 1, completed: 0, current: directoryHandle.name || "" });
-  async function collect(handle, relativePath = "", parentHandle = null) {
-    if (!await waitForImportSession(session)) return;
-    const path = relativePath ? `${relativePath}/${handle.name}` : handle.name;
-    if (handle.kind === "file") entries.push({ handle, relativePath: path, parentHandle });
-    else for await (const child of handle.values()) await collect(child, path, handle);
+  try {
+    showProcessing({ kind: "import", state: "running", total: 1, completed: 0, current: directoryHandle.name || "" });
+    async function collect(handle, relativePath = "", parentHandle = null) {
+      if (!await waitForImportSession(session)) return;
+      const path = relativePath ? `${relativePath}/${handle.name}` : handle.name;
+      if (handle.kind === "file") entries.push({ handle, relativePath: path, parentHandle });
+      else for await (const child of handle.values()) await collect(child, path, handle);
+    }
+    for await (const handle of directoryHandle.values()) await collect(handle, "", directoryHandle);
+    if (!await waitForImportSession(session)) return finishImportSession(session);
+    await importHandleEntries(entries, session);
   }
-  for await (const handle of directoryHandle.values()) await collect(handle, "", directoryHandle);
-  if (!await waitForImportSession(session)) return finishImportSession(session);
-  await importHandleEntries(entries, session);
+  finally {
+    if (projectlessSource && !projectlessSource.imageIds.size) state.projectlessDirectorySources.delete(session.sourceId);
+  }
 }
 
-async function importProjectDirectoryHandle(directoryHandle, projectId, sourceId = null) {
+async function importProjectDirectoryHandle(directoryHandle, projectId, sourceId = null, importIntent = "add") {
   const session = beginImportSession(); if (!session) return;
   try {
+    await flushAllImageMutations();
     await flushAllWorkspaceMutations();
     session.catalogId = projectId;
     session.sourceId = await rememberProjectSource(projectId, directoryHandle, null, sourceId);
     session.sourceKind = "browser-directory";
+    session.importIntent = importIntent;
     const entries = [];
     showProcessing({ kind: "import", state: "running", total: 1, completed: 0, current: directoryHandle.name || "" });
     async function collect(handle, relativePath = "", parentHandle = null) {
@@ -523,7 +589,7 @@ async function importProjectFileHandles(sources, projectId) {
     if (!handle) continue;
     const sourceId = source?.sourceId || crypto.randomUUID();
     const handles = groups.get(sourceId) || [];
-    handles.push(handle); groups.set(sourceId, handles);
+    handles.push({ handle, clientKey: source?.clientKey || null, relativePath: source?.relativePath || handle.name }); groups.set(sourceId, handles);
   }
   for (const [sourceId, handles] of groups) {
     const session = beginImportSession(); if (!session) return;
@@ -532,6 +598,7 @@ async function importProjectFileHandles(sources, projectId) {
       session.catalogId = projectId;
       session.sourceId = sourceId;
       session.sourceKind = "browser-files";
+      session.importIntent = "restore";
       await importFileHandles(handles, session);
     } finally { finishImportSession(session); }
   }
@@ -570,12 +637,13 @@ function setGalleryDropOverlay(visible) {
 }
 
 function handleEditorKeydown(event) {
-  if (isBusy() || state.importing || isEditableTarget(document.activeElement) || hasOpenDialog()) return false;
+  if (isBusy() || state.importing || isGestureActive() || isEditableTarget(document.activeElement) || hasOpenDialog()) return false;
   if (state.viewMode !== "edit") return false;
   const binding = shortcutFromEvent(event);
   const shortcuts = state.settings?.shortcuts?.bindings || { undo: "Ctrl+Z", redo: "Ctrl+Shift+Z" };
   const enabled = state.settings?.shortcuts?.actions || {};
-  if ((binding === shortcuts.undo && enabled.undo !== false) || (binding === shortcuts.redo && enabled.redo !== false)) {
+  if (!currentImageActionPending() && !state.projectReadOnly && !currentRecord()?.sourceDimensionsChanged
+    && ((binding === shortcuts.undo && enabled.undo !== false) || (binding === shortcuts.redo && enabled.redo !== false))) {
     event.preventDefault();
     void restoreSnapshot(binding === shortcuts.redo ? state.historyIndex + 1 : state.historyIndex - 1);
     return true;
@@ -589,6 +657,7 @@ function navigationShortcutAction(event) {
   const bindings = state.settings?.shortcuts?.bindings || { previous: "ArrowLeft", next: "ArrowRight", previousVisible: "ArrowUp", nextVisible: "ArrowDown", first: "Home", last: "End", reviewAndNext: "Enter", toggleOverview: "G", undo: "Ctrl+Z", redo: "Ctrl+Shift+Z" };
   const actionForBinding = Object.entries(bindings).find(([, value]) => value === binding)?.[0];
   if (!actionForBinding || state.settings?.shortcuts?.actions?.[actionForBinding] === false) return null;
+  if ((currentImageActionPending() || state.projectReadOnly || currentRecord()?.sourceDimensionsChanged) && ["reviewAndNext", "undo", "redo"].includes(actionForBinding)) return null;
   if (actionForBinding === "toggleOverview") return "toggleOverview";
   if (state.viewMode !== "edit") return null;
   return actionForBinding;

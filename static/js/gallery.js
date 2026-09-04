@@ -74,6 +74,10 @@ function setCatalogNode(windowState, image, index, layout, rowNode) {
   cell.setAttribute("aria-selected", String(scope === "gallery" ? current : batchSelected));
   cell.setAttribute("aria-colindex", String(column + 1));
   const preview = item.querySelector("img"); observeThumbnail(preview, image, scope); preview.alt = image.relativePath;
+  // Overview is initially rendered in a hidden panel.  Some Chromium builds
+  // do not deliver that first IntersectionObserver entry after it becomes
+  // visible, so load its small mounted window immediately.
+  if (scope === "overview") loadThumbnail(preview);
   const reviewed = isReviewed(image);
   item.classList.toggle("reviewed", reviewed);
   if (scope === "gallery") {
@@ -317,21 +321,28 @@ function moveCurrentBy(offset) {
   if (target) void selectImage(target.id);
 }
 async function reviewAndMoveNext() {
-  if (isGestureActive()) return null;
   const current = currentRecord();
-  if (!current) return null;
-  const target = state.images.slice(imageIndex(current.id) + 1).find((image) => !isHidden(image)) || null;
-  if (!await setReviewed(current, true)) return null;
-  if (target) void selectImage(target.id);
+  if (isGestureActive() || currentImageActionPending() || !current) return null;
+  const currentId = current.id;
+  const target = state.images.slice(imageIndex(currentId) + 1).find((image) => !isHidden(image)) || null;
+  const reviewed = await queueImageMutation(currentId, async () => {
+    const scroll = state.contextMenuScroll;
+    return saveWorkspaceFlagNow(current, "reviewed", true, () => {
+      if (state.images.some((image) => image.id === current.id)) refreshReviewViews(scroll);
+    });
+  }, { lockCandidateControls: true });
+  if (!reviewed) return null;
+  if (target && state.currentId === currentId) void selectImage(target.id);
   return target;
 }
 async function hideAndMoveNext() {
-  if (isGestureActive()) return;
+  if (isGestureActive() || currentImageActionPending()) return;
   const current = currentRecord();
   if (!current) return;
-  const target = state.images.slice(imageIndex(current.id) + 1).find((image) => !isHidden(image)) || null;
+  const currentId = current.id;
+  const target = state.images.slice(imageIndex(currentId) + 1).find((image) => !isHidden(image)) || null;
   if (!await setHidden(current, true)) return;
-  if (target) await selectImage(target.id);
+  if (target && state.currentId === currentId) await selectImage(target.id);
 }
 async function runNavigationAction(action) {
   await action();
@@ -343,7 +354,7 @@ function updateNavigationControls() {
   $("#imagePosition").textContent = position;
   const status = $("#reviewStatus");
   const record = currentRecord();
-  const reviewed = isReviewed(record);
+  const reviewed = record ? isReviewed(record) : false;
   status.textContent = record ? t(reviewed ? "review.reviewed" : "review.unreviewed") : "-";
   status.classList.toggle("reviewed", Boolean(record) && reviewed);
 }
