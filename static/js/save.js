@@ -241,8 +241,9 @@ async function startSingleSave(event) {
     try { committed = await commitBrowserSaveWithRetry({ imageId: save.imageId, candidateRevision: entry.candidateRevision, saveToken, sourceAction, ...(sourceAction === "overwrite" && access?.fileHandle ? sourceCommitMetadata(access) : {}) }); }
     catch (error) {
       if (error.saveState === "pending") await cancelBrowserSave(entry, saveToken);
-      if (sourceChanged && (isDefinitiveCommitRejection(error) || error.saveState === "pending")) {
-        await restoreSourceHandle(access, sourceSnapshot, deleteOriginal);
+      const reconcile = isDefinitiveCommitRejection(error) || error.saveState === "pending";
+      if (reconcile) {
+        if (sourceChanged) await restoreSourceHandle(access, sourceSnapshot, deleteOriginal);
         if (output) await state.outputDirectoryHandle.removeEntry(output.name).catch(() => {});
       }
       throw error;
@@ -553,13 +554,14 @@ async function runBrowserSave(imageIds, suffix, deleteOriginal, mode = "copy") {
             }); }
             catch (error) {
               if (error.saveState === "pending") await cancelBrowserSave(entry, saveToken);
-              if (sourceChanged && (isDefinitiveCommitRejection(error) || error.saveState === "pending")) try {
+              const reconcile = isDefinitiveCommitRejection(error) || error.saveState === "pending";
+              if (reconcile && sourceChanged) try {
                 if (sourceSnapshot === null) throw new Error();
                 await restoreSourceHandle(access, sourceSnapshot, true);
                 const liveAccess = sourceAccessFor(entry.imageId);
                 if (liveAccess) Object.assign(liveAccess, access);
               } catch { throw codedError("source_restore_failed"); }
-              if (sourceChanged && (isDefinitiveCommitRejection(error) || error.saveState === "pending")) {
+              if (reconcile) {
                 await inputs.outputDirectoryHandle.removeEntry(output.name).catch(() => {});
               }
               throw error;

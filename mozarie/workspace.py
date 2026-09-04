@@ -464,6 +464,7 @@ class WorkspaceStore:
             raise ValueError("project name is required")
         catalog_id = uuid.uuid4().hex
         now = time.time_ns()
+        source_root = next((identity for kind, identity, _display_name, _members in sources if kind == "native-folder"), None)
         source_ids: dict[str, str] = {}
         records: list[Any] = []
         project: dict[str, Any] | None = None
@@ -473,7 +474,7 @@ class WorkspaceStore:
                 try:
                     db.execute(
                         "INSERT INTO catalogs(catalog_id,name,status,source_root,created_at,updated_at) VALUES(?,?,?,?,?,?)",
-                        (catalog_id, clean_name, "working", None, now, now),
+                        (catalog_id, clean_name, "working", source_root, now, now),
                     )
                 except sqlite3.IntegrityError as exc:
                     raise ProjectNameAlreadyExistsError("project name already exists") from exc
