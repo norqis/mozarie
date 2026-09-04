@@ -47,6 +47,7 @@ function clearEditor() {
 }
 
 async function selectImage(imageId, force = false, { saveCurrentDraft = true } = {}) {
+  if (state.projectOperationPending) return;
   if ((isBusy() || state.importing || isGestureActive() || state.candidateBatchPending.size) && !force) return;
   if (state.currentId === imageId && !force && state.pendingImageId !== imageId) return;
   if (saveCurrentDraft) void saveDraft();

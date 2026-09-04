@@ -672,6 +672,7 @@ function setMosaicPreviewEnabled(enabled) {
 }
 
 function resetCatalog(images, root) {
+  ++state.imageGeneration;
   closeBoundaryModeMenu({ restoreFocus: true });
   closeCatalogContextMenu();
   abortCatalogLoads();

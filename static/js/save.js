@@ -720,7 +720,7 @@ async function runBrowserSave(imageIds, suffix, deleteOriginal, mode = "copy") {
           if (catalogCurrent) {
             state.images = latest.images; loadReviewedPaths();
             if (state.project?.id) {
-              const previousImageIds = save.applyCatalogSnapshot?.order || [];
+              const previousImageIds = state.applyCatalogSnapshot?.order || [];
               await forgetProjectImageSources(state.project.id, previousImageIds
                 .filter((imageId) => !state.images.some((item) => item.id === imageId)));
             }
