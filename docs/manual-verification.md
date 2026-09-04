@@ -76,7 +76,7 @@
 | DT-06 | `Scene_00072.png` を最高精度で検出 | 目立つ白い液を検出し、除外範囲へ反映する | |
 | DT-07 | 候補名、上段のON/OFF→検出範囲→適用範囲、各行のOFF/ON→検出範囲→適用範囲、強制ON/OFF、枠pxを確認 | 「手」「白い液」など本来の名称だけを表示し、順序と設定結果が一致する | |
 | DT-08 | 枠pxへキーボード上下、CPU/CUDA/DirectMLと複数GPUを選択して検出 | 数値操作中にページがスクロールせず、provider・物理GPU identityどおりに実行する | |
-| DT-09 | 壊れた・不足したモデルで検出を開始 | 別モデルやCPUへfallbackせず、原因どおりの文言を表示する | |
+| DT-09 | 壊れた・不足したモデルで検出を開始 | 別モデルやCPU専用sessionへ切り替えて再試行せず、原因どおりの文言を表示する | |
 | DT-10 | 初回を含む80枚検出を開始 | 80/80で固着せず、準備中とファイル名が交互点滅しない | |
 
 ## 5. mosaic / exclusion / 2画面 / 全mouse-button
@@ -119,4 +119,4 @@
 | ST-07 | リリースZIPを新規フォルダーで展開し、setup・起動・主要操作・更新を確認 | 必要ファイルだけを含み、不要ログ・開発成果物・旧DB・互換処理を含まない | |
 | ST-08 | 既存workspace DBのPJ名一意制約を確認して起動する | `name COLLATE NOCASE UNIQUE` が欠けるDBを再作成対象として止める | |
 | ST-09 | CPUで連続検出し、CUDA/DirectMLで検出終了後のメモリを確認する | CPUは通常完了後にモデルを再ロードせず、GPUは完了後にVRAMを解放する | |
-| ST-10 | CUDA/DirectMLで利用不能なGPU providerを選んで検出とsetup確認を行う | CPUへfallbackせず、選択したGPUの失敗として停止する | |
+| ST-10 | CUDA/DirectMLで利用不能なGPU providerを選んで検出とsetup確認を行う | CPU専用sessionへ切り替えて再試行せず、選択したGPUの失敗として停止する | |

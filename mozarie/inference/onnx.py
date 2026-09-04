@@ -64,7 +64,7 @@ def available_providers(device: str, gpu_device: int = 0) -> list[object]:
         if "DmlExecutionProvider" not in available:
             raise _gpu_unavailable_error()
         directml_index = _directml_onnx_device_id(int(gpu_device))
-        return [("DmlExecutionProvider", {"device_id": directml_index})]
+        return [("DmlExecutionProvider", {"device_id": directml_index}), "CPUExecutionProvider"]
     if backend != "cuda" or "CUDAExecutionProvider" not in available:
         raise _gpu_unavailable_error()
     options = {
@@ -75,15 +75,13 @@ def available_providers(device: str, gpu_device: int = 0) -> list[object]:
     }
     if int(gpu_device) != 0:
         options["device_id"] = int(gpu_device)
-    return [("CUDAExecutionProvider", options)]
+    return [("CUDAExecutionProvider", options), "CPUExecutionProvider"]
 
 
 def _create_session(model: str | bytes, device: str, gpu_device: int) -> ort.InferenceSession:
     options = ort.SessionOptions()
     options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
     backend = "cpu" if device.lower() == "cpu" else runtime_backend(ort_module=ort)
-    if backend in {"cuda", "directml"}:
-        options.add_session_config_entry("session.disable_cpu_ep_fallback", "1")
     if backend == "directml":
         options.enable_mem_pattern = False
         options.execution_mode = ort.ExecutionMode.ORT_SEQUENTIAL
@@ -91,7 +89,7 @@ def _create_session(model: str | bytes, device: str, gpu_device: int) -> ort.Inf
         providers = available_providers(device, gpu_device)
         if backend == "cuda":
             torch_module()
-        session = ort.InferenceSession(model, sess_options=options, providers=providers)
+        session = ort.InferenceSession(model, sess_options=options, providers=providers, enable_fallback=False)
     except Exception as exc:
         if getattr(exc, "error_code", None):
             raise
@@ -99,7 +97,8 @@ def _create_session(model: str | bytes, device: str, gpu_device: int) -> ort.Inf
     session.disable_fallback()
     expected = {"cuda": "CUDAExecutionProvider", "directml": "DmlExecutionProvider"}.get(backend)
     active_providers = session.get_providers()
-    if expected is not None and tuple(active_providers) != (expected,):
+    expected_providers = (expected, "CPUExecutionProvider") if expected is not None else ("CPUExecutionProvider",)
+    if tuple(active_providers) != expected_providers:
         raise _gpu_unavailable_error()
     return session
 

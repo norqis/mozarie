@@ -99,7 +99,7 @@ Choose one to four workers for automatic detection on either GPU or CPU. A job t
 3. Review the candidates at right and correct them with brushes, erasers, or the boundary tool when needed.
 4. Choose a save target, then save a copy or overwrite the source.
 
-To use GPU processing, select a GPU in **Settings > Detection**. GPU selection never falls back to CPU; Mozarie stops if the selected GPU cannot run it. If GPU memory runs out, close other GPU apps or switch to CPU.
+To use GPU processing, select a GPU in **Settings > Detection**. CPU may assist only operators unsupported by the GPU, but Mozarie never rebuilds a CPU-only session to retry a GPU initialization or execution failure. If GPU memory runs out, close other GPU apps or switch to CPU.
 
 ## Updates
 
