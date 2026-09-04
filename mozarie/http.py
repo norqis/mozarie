@@ -335,10 +335,12 @@ class MosaicHandler(BaseHTTPRequestHandler):
                 client_key = unquote(self.headers.get("X-Mozarie-Client-Key", ""))
                 source_identity = unquote(self.headers.get("X-Mozarie-Source-Id", ""))
                 source_kind = self.headers.get("X-Mozarie-Source-Kind", "browser-files")
+                import_intent = self.headers.get("X-Mozarie-Import-Intent", "")
                 raw_mtime = self.headers.get("X-Mozarie-File-Mtime", "0")
                 raw_size = self.headers.get("X-Mozarie-File-Size", "0")
                 if (source_identity and (len(source_identity) > 128 or not source_identity.replace("-", "").isalnum())
                         or source_kind not in {"browser-files", "browser-directory"}
+                        or import_intent not in {"add", "restore"}
                         or not raw_mtime.isdigit() or not raw_size.isdigit()):
                     raise ClientError("画像の更新情報が正しくありません。", "input_invalid")
                 try:
@@ -365,6 +367,7 @@ class MosaicHandler(BaseHTTPRequestHandler):
                                 "include_images": False, "transfer_active": True,
                                 "source_identity": source_identity or None,
                                 "source_kind": source_kind,
+                                "intent": import_intent,
                                 "mtime_ns": int(raw_mtime) * 1_000_000,
                                 "size_bytes": int(raw_size),
                             }

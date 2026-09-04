@@ -437,7 +437,7 @@ class WorkspaceStore:
         return {"id": str(row["source_id"]), "kind": str(row["kind"]), "displayName": str(row["display_name"]),
                 "nativePath": row["native_path"], "identity": str(row["source_identity"])}
 
-    def relink_native_source(self, catalog_id: str, source_id: str, root: Path, records: list[Any]) -> dict[str, dict[str, Any]]:
+    def relink_native_source(self, catalog_id: str, source_id: str, root: Path, records: list[Any], *, allow_new: bool) -> dict[str, dict[str, Any]]:
         identity = str(root.resolve())
         def update_source(db: sqlite3.Connection, now: int) -> None:
             source = db.execute("SELECT kind FROM project_sources WHERE catalog_id=? AND source_id=?", (catalog_id, source_id)).fetchone()
@@ -451,7 +451,7 @@ class WorkspaceStore:
             db.execute("""UPDATE project_sources SET display_name=?,native_path=?,source_identity=?
                 WHERE catalog_id=? AND source_id=?""", (root.name or identity, identity, identity, catalog_id, source_id))
             db.execute("UPDATE catalogs SET source_root=?,updated_at=? WHERE catalog_id=?", (identity, now, catalog_id))
-        return self.reconcile_images(catalog_id, records, source_id=source_id, before_reconcile=update_source)
+        return self.reconcile_images(catalog_id, records, source_id=source_id, allow_new=allow_new, before_reconcile=update_source)
 
     def reconcile_native_source(self, catalog_id: str, source_id: str, root: Path, records: list[Any]) -> dict[str, dict[str, Any]]:
         identity = str(root.resolve())

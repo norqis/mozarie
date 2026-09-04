@@ -266,7 +266,7 @@ class CatalogMixin:
         records.sort(key=lambda record: (record.relative_path.casefold(), record.relative_path))
         try:
             if relink_source_id:
-                stored = self.workspace_store.relink_native_source(catalog_id, source_id, root, records)
+                stored = self.workspace_store.relink_native_source(catalog_id, source_id, root, records, allow_new=allow_new)
             elif catalog_id is not None:
                 stored = (
                     self.workspace_store.reconcile_native_source(catalog_id, source_id, root, records)
@@ -340,7 +340,7 @@ class CatalogMixin:
                 self.workspace_store.native_source(project_id, source_id)
             except ProjectSourceUnavailableError as exc:
                 raise ClientError("元フォルダーが見つかりません。", "project_source_unavailable") from exc
-            self._set_root(raw_path, project_id, relink_source_id=source_id)
+            self._set_root(raw_path, project_id, relink_source_id=source_id, allow_new=False)
             snapshot = self.catalog_snapshot()
             snapshot["sources"] = [
                 {**source, "exists": source["kind"] != "native-folder" or bool(source.get("nativePath") and Path(str(source["nativePath"])).is_dir())}
@@ -504,7 +504,6 @@ class CatalogMixin:
         native_roots = [Path(str(source["nativePath"])) for source in sources
                         if source["kind"] == "native-folder" and source.get("nativePath") and Path(str(source["nativePath"])).is_dir()]
         if native_roots:
-            restore_allow_new = project["status"] != "completed"
             self.detach_catalog()
             # Loading source bytes is not an edit.  Temporarily permit the
             # catalogue replacement, then restore completed read-only state.
@@ -512,7 +511,7 @@ class CatalogMixin:
             records: list[ImageRecord] = []
             for root in native_roots:
                 self.project_read_only = False
-                records.extend(self._set_root(str(root), catalog_id, defer_replace=True, allow_new=restore_allow_new))
+                records.extend(self._set_root(str(root), catalog_id, defer_replace=True, allow_new=False))
             records.sort(key=lambda record: (record.relative_path.casefold(), record.relative_path, record.image_id))
             images = self._replace_catalog(native_roots[0], records)
             self.project_read_only = project["status"] == "completed"
@@ -1026,15 +1025,22 @@ class CatalogMixin:
         transfer_active: bool = False,
         source_identity: str | None = None,
         source_kind: str = "browser-files",
+        intent: str,
     ) -> tuple[list[dict[str, Any]], list[dict[str, str]]]:
         if not isinstance(files, list) or not files:
             raise ClientError("追加する画像がありません。", "image_not_found")
+        if intent not in {"add", "restore"}:
+            raise ClientError("画像追加の目的が正しくありません。", "input_invalid")
 
         with self.lock:
             root = self.root
             catalog_generation = self.catalog_generation
             if self.job.state in {"running", "pausing", "paused"} or self._has_active_worker():
                 raise ClientError("処理中は画像を追加できません。", "operation_in_progress")
+            if intent == "add" and self.project_read_only:
+                raise ClientError("完了したプロジェクトには新しい画像を追加できません。", "project_read_only")
+            if intent == "restore" and self.catalog_id is None:
+                raise ClientError("復元するプロジェクトが見つかりません。", "project_source_unavailable")
             destination_dir = self._ensure_session()
             browser_identity = source_identity or self.session_dir.name
             source_import_dir = destination_dir / f"source-{browser_identity}"
@@ -1140,11 +1146,9 @@ class CatalogMixin:
                                 kind=source_kind,
                                 display_name=source_kind,
                                 source_identity=browser_identity,
-                                create=not self.project_read_only,
+                                create=intent == "add",
                             )
                         except ValueError as exc:
-                            if self.project_read_only:
-                                raise ClientError("完了したプロジェクトには新しい画像を追加できません。", "project_read_only") from exc
                             raise ClientError("選択した画像ソースをこのプロジェクトに復元できません。", "project_source_unavailable") from exc
                     stored_images: dict[str, dict[str, Any]] = {}
                     if self.catalog_id:
@@ -1153,7 +1157,7 @@ class CatalogMixin:
                                 self.catalog_id,
                                 added,
                                 source_id=durable_source_id,
-                                allow_new=not self.project_read_only,
+                                allow_new=intent == "add",
                             )
                             durable_created_ids = [
                                 str(stored["image_id"])
@@ -1161,8 +1165,6 @@ class CatalogMixin:
                                 if stored["created"]
                             ]
                         except ValueError as exc:
-                            if self.project_read_only:
-                                raise ClientError("完了したプロジェクトには新しい画像を追加できません。", "project_read_only") from exc
                             raise ClientError("選択した画像ソースをこのプロジェクトに復元できません。", "project_source_unavailable") from exc
                     published_imported: list[dict[str, str]] = []
                     replaced_session_paths: list[Path] = []
@@ -1239,6 +1241,7 @@ class CatalogMixin:
         transfer_active: bool = False,
         source_identity: str | None = None,
         source_kind: str = "browser-files",
+        intent: str,
         mtime_ns: int = 0,
         size_bytes: int = 0,
     ) -> tuple[list[dict[str, Any]], list[dict[str, str]]]:
@@ -1251,7 +1254,7 @@ class CatalogMixin:
             "stagedPath": staged_path,
             "mtimeNs": mtime_ns,
             "sizeBytes": size_bytes,
-        }], include_images=include_images, transfer_active=transfer_active, source_identity=source_identity, source_kind=source_kind)
+        }], include_images=include_images, transfer_active=transfer_active, source_identity=source_identity, source_kind=source_kind, intent=intent)
 
     def _clear_cache(self) -> None:
         self.cache_dir.mkdir(parents=True, exist_ok=True)
