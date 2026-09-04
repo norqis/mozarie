@@ -354,7 +354,7 @@ function updateNavigationControls() {
   $("#imagePosition").textContent = position;
   const status = $("#reviewStatus");
   const record = currentRecord();
-  const reviewed = isReviewed(record);
+  const reviewed = record ? isReviewed(record) : false;
   status.textContent = record ? t(reviewed ? "review.reviewed" : "review.unreviewed") : "-";
   status.classList.toggle("reviewed", Boolean(record) && reviewed);
 }
