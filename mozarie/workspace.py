@@ -416,11 +416,6 @@ class WorkspaceStore:
                 db.execute("ROLLBACK")
                 raise
 
-    def best_catalog_for_manifest(self, entries: list[tuple[str, str]], exclude_catalog: str) -> str | None:
-        # Projects are explicit.  Never infer a project from file content or
-        # silently merge browser imports into a similarly shaped project.
-        return None
-
     def reconcile_images(self, catalog_id: str, records: list[Any], source_id: str | None = None) -> dict[str, dict[str, Any]]:
         """Return durable state by path without silently discarding edits."""
         now = time.time_ns()
