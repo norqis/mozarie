@@ -53,9 +53,11 @@ async function selectImage(imageId, force = false, { saveCurrentDraft = true } =
   state.hover = null; updateBrushCursor();
   const generation = ++state.imageGeneration;
   state.pendingImageId = imageId;
+  updateActionButtons();
   const record = state.images.find((image) => image.id === imageId);
   if (!record) {
     state.pendingImageId = null; state.pendingImageKey = null; state.pendingCandidateKey = null;
+    updateActionButtons();
     return;
   }
   state.pendingImageKey = imageCacheKey(record);
@@ -106,6 +108,7 @@ async function selectImage(imageId, force = false, { saveCurrentDraft = true } =
       state.pendingImageId = null; state.pendingImageKey = null; state.pendingCandidateKey = null;
       if (error.code === "stale_asset") invalidateStaleAsset(imageId);
       showUserError(error);
+      updateActionButtons();
     }
   }
 }
