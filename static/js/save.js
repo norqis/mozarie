@@ -255,6 +255,7 @@ async function startSingleSave(event) {
     // Overwrites and source deletion do need authoritative reconciliation.
     if ((sourceAction === "overwrite") || deleteOriginal) {
       const latest = await api("/api/images"); state.images = latest.images;
+      loadReviewedPaths();
       const savedImage = state.images.find((item) => item.id === save.imageId);
       pruneSourceAccess();
       if (deleteOriginal) reconcileBrowserSaveState();
@@ -669,7 +670,7 @@ async function runBrowserSave(imageIds, suffix, deleteOriginal, mode = "copy") {
           // snapshot only after every started entry has settled.
           const latest = await api("/api/images");
           catalogCurrent = isCurrentCatalogEpoch(save.catalogEpoch);
-          if (catalogCurrent) state.images = latest.images;
+          if (catalogCurrent) { state.images = latest.images; loadReviewedPaths(); }
         } catch (error) {
           showApplyError(error);
         }
@@ -813,6 +814,7 @@ async function finishApplyJob(job) {
     const data = await api("/api/images");
     if (!isCurrentGeneration(generation) || !isCurrentCatalogEpoch(catalogEpoch)) return;
     state.images = data.images;
+    loadReviewedPaths();
     pruneSourceAccess();
     state.applyTargetIds = requestedImageIds;
     const reloadedCurrent = reloadCurrent && state.images.some((image) => image.id === keepCurrent);
@@ -861,6 +863,7 @@ async function finishDetectionJob(job) {
   const data = await api("/api/images");
   if (!isCurrentGeneration(generation) || !isCurrentCatalogEpoch(catalogEpoch)) return;
   state.images = data.images;
+  loadReviewedPaths();
   pruneSourceAccess();
   state.maskStatus.clear();
   // Auto-detection replaces candidate IDs and mask bitmaps. Never allow a

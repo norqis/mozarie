@@ -479,6 +479,7 @@ function bindEvents() {
       const snapshot = await api("/api/project/source/relink", { method: "POST", body: JSON.stringify({ projectId: state.project.id, sourceId: source.id, path: input.value.trim() }) });
       state.images = snapshot.images || [];
       applyProjectSnapshot(snapshot);
+      loadReviewedPaths();
       state.missingNativeSources = missingNativeSources(snapshot.sources);
       renderProjectCurrent(); renderCatalogViews();
       if (!state.missingNativeSources.length) $("#nativeRelinkDialog").close(); else renderNativeRelinkDialog();
@@ -504,7 +505,7 @@ function bindEvents() {
     $("#projectNameDialog").close(); if (projectNameMode === "new") { resetCatalog([], ""); state.missingNativeSources = []; } renderProjectCurrent();
   } catch (error) { showUserError(error); } })(); });
   $("#sourceMismatchCancel").addEventListener("click", () => $("#sourceMismatchDialog").close());
-  $("#sourceMismatchForm").addEventListener("submit", (event) => { event.preventDefault(); void (async () => { try { const ids = JSON.parse($("#sourceMismatchDialog").dataset.imageIds || "[]"); const snapshot = await api("/api/project/mismatches", { method: "POST", body: JSON.stringify({ imageIds: ids, clearMasks: $("#sourceMismatchClear").checked }) }); state.images = snapshot.images || state.images; applyProjectSnapshot(snapshot); $("#sourceMismatchDialog").close(); renderCatalogViews(); } catch (error) { showUserError(error); } })(); });
+  $("#sourceMismatchForm").addEventListener("submit", (event) => { event.preventDefault(); void (async () => { try { const ids = JSON.parse($("#sourceMismatchDialog").dataset.imageIds || "[]"); const snapshot = await api("/api/project/mismatches", { method: "POST", body: JSON.stringify({ imageIds: ids, clearMasks: $("#sourceMismatchClear").checked }) }); state.images = snapshot.images || state.images; loadReviewedPaths(); applyProjectSnapshot(snapshot); $("#sourceMismatchDialog").close(); renderCatalogViews(); } catch (error) { showUserError(error); } })(); });
   $("#sameSourceCancel").addEventListener("click", () => $("#sameSourceDialog").close());
   $("#sameSourceOpen").addEventListener("click", () => { const project = sameSourceProjects.find((item) => item.id === sameSourceSelectedProjectId) || sameSourceProjects[0]; $("#sameSourceDialog").close(); if (project) void openProject(project); });
   $("#sameSourceSeparate").addEventListener("click", () => { void (async () => {

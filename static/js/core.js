@@ -2,7 +2,7 @@ const $ = (selector) => document.querySelector(selector);
 
 const state = {
   images: [], currentId: null, currentImage: null, pendingImageId: null, galleryFilter: "all", maskStatus: new Map(),
-  viewMode: "edit", displayMode: "single", compareSplit: .5, overviewFilter: "all", overviewQuery: "", overviewFolder: "", reviewedPaths: new Set(), hiddenPaths: new Set(), reviewRoot: "",
+  viewMode: "edit", displayMode: "single", compareSplit: .5, overviewFilter: "all", overviewQuery: "", overviewFolder: "", reviewedImageIds: new Set(), hiddenImageIds: new Set(), reviewRoot: "",
   selectedImageIds: new Set(), selectionAnchorId: null, batchMode: false,
   navigationShortcutsEnabled: true,
   candidates: [], candidateImages: new Map(), drafts: new Map(),
@@ -369,24 +369,22 @@ function saveTargets(mode = "all") {
   return state.images.map((image) => image.id);
 }
 function normaliseReviewRoot(value) { return String(value || "").trim().replaceAll("/", "\\").replace(/\\+$/, "").toLowerCase(); }
-function reviewPath(image) { return String(image?.relativePath || "").replaceAll("\\", "/").toLowerCase(); }
-function isReviewed(image) { return state.reviewedPaths.has(reviewPath(image)); }
-function isHidden(image) { return state.hiddenPaths.has(reviewPath(image)); }
+function isReviewed(image) { return state.reviewedImageIds.has(image.id); }
+function isHidden(image) { return state.hiddenImageIds.has(image.id); }
 function loadReviewedPaths() {
-  state.reviewedPaths = new Set(state.images.filter((image) => image.reviewed).map(reviewPath));
-  state.hiddenPaths = new Set(state.images.filter((image) => image.hidden).map(reviewPath));
+  state.reviewedImageIds = new Set(state.images.filter((image) => image.reviewed).map((image) => image.id));
+  state.hiddenImageIds = new Set(state.images.filter((image) => image.hidden).map((image) => image.id));
 }
 function publishWorkspaceFlags(imageId, flags) {
   const image = state.images.find((item) => item.id === imageId);
   if (!image) return false;
-  const path = reviewPath(image);
   if (typeof flags.hidden === "boolean") {
     image.hidden = flags.hidden;
-    if (flags.hidden) state.hiddenPaths.add(path); else state.hiddenPaths.delete(path);
+    if (flags.hidden) state.hiddenImageIds.add(imageId); else state.hiddenImageIds.delete(imageId);
   }
   if (typeof flags.reviewed === "boolean") {
     image.reviewed = flags.reviewed;
-    if (flags.reviewed) state.reviewedPaths.add(path); else state.reviewedPaths.delete(path);
+    if (flags.reviewed) state.reviewedImageIds.add(imageId); else state.reviewedImageIds.delete(imageId);
   }
   return true;
 }
@@ -423,7 +421,7 @@ function setHidden(image, hidden) {
     preserveCatalogScroll(renderCatalogViews, scroll); updateSelectionActionBar(); updateNavigationControls(); updateActionButtons();
   });
 }
-function clearStoredCatalogState() { state.reviewedPaths.clear(); state.hiddenPaths.clear(); }
+function clearStoredCatalogState() { state.reviewedImageIds.clear(); state.hiddenImageIds.clear(); }
 function selectedImages() { return state.images.filter((image) => state.selectedImageIds.has(image.id)); }
 function clearBatchSelection() { state.selectedImageIds.clear(); state.selectionAnchorId = null; }
 function updateSelectionActionBar() {
@@ -449,17 +447,6 @@ function setReviewed(image, reviewed) {
   return saveWorkspaceFlag(image, "reviewed", reviewed, () => {
     if (state.images.some((item) => item.id === image.id)) refreshReviewViews(scroll);
   });
-}
-async function moveReviewedPathAfterApply(previousImage, reloadedImage) {
-  const previousPath = reviewPath(previousImage);
-  const reloadedPath = reviewPath(reloadedImage);
-  if (!previousPath || !reloadedPath || previousPath === reloadedPath) return false;
-
-  const wasReviewed = state.reviewedPaths.has(previousPath) || state.reviewedPaths.has(reloadedPath);
-  if (!await setReviewed(reloadedImage, wasReviewed)) return false;
-  state.reviewedPaths.delete(previousPath);
-  refreshReviewViews();
-  return true;
 }
 function markImagesUnreviewed(imageIds, renderAfter = true) {
   let changed = false;

@@ -983,7 +983,7 @@ async function restoreProjectHistory(direction) {
     }
     state.projectHistory.set(imageId, { canUndo: result.canUndo === true, canRedo: result.canRedo === true });
     const snapshot = await api("/api/images");
-    state.images = snapshot.images || state.images; applyProjectSnapshot(snapshot); if (typeof renderCatalogViews === "function") renderCatalogViews();
+    state.images = snapshot.images || state.images; loadReviewedPaths(); applyProjectSnapshot(snapshot); if (typeof renderCatalogViews === "function") renderCatalogViews();
     if (changed.has(imageId)) await selectImage(imageId, true, { saveCurrentDraft: false });
     else updateHistoryButtons();
   } catch (error) { showUserError(error); }
