@@ -65,17 +65,46 @@ async function copyCommand(commandId, resultId) {
 }
 
 let projectNameMode = "name";
+let projectDeleteBusy = false;
 let sameSourceProjects = [];
 let sameSourcePath = "";
 let sameSourceSelectedProjectId = "";
 let sameSourceDirectoryHandle = null;
 let sameSourceCurrentSourceId = null;
+let sameSourceBusy = false;
 let projectDeleteId = "";
 let projectListProjects = new Map();
 let projectExportBusy = new Set();
 let projectListSort = { key: "updated", direction: "desc" };
 let projectListSortPending = false;
 let nativeRelinkSourceId = "";
+let nativeRelinkBusy = false;
+
+function syncProjectNameDialogControls() {
+  if (!$("#projectNameDialog").open) return;
+  const disabled = state.projectOperationPending;
+  $("#projectNameInput").disabled = disabled;
+  $("#projectNameCancel").disabled = disabled;
+  $("#projectNameForm").querySelector('[type="submit"]').disabled = disabled;
+}
+function beginProjectOperation() {
+  if (state.projectOperationPending) return false;
+  state.projectOperationPending = true;
+  updateActionButtons();
+  renderProjectCurrent();
+  syncProjectNameDialogControls();
+  renderProjectSortHeaders();
+  renderProjectTableControls();
+  return true;
+}
+function endProjectOperation() {
+  state.projectOperationPending = false;
+  updateActionButtons();
+  renderProjectCurrent();
+  syncProjectNameDialogControls();
+  renderProjectSortHeaders();
+  renderProjectTableControls();
+}
 
 function projectTitle(project) { return project?.name || t("project.unnamed"); }
 function projectDate(value) {
@@ -93,17 +122,21 @@ function renderProjectCurrent() {
     : t("project.unnamed");
   $("#projectName").dataset.i18n = project ? "project.rename" : "project.saveCurrent";
   $("#projectName").textContent = t($("#projectName").dataset.i18n);
-  $("#projectName").disabled = state.projectReadOnly || (!project && state.images.length === 0);
-  $("#projectComplete").disabled = !project || state.projectReadOnly;
+  const pending = state.projectOperationPending;
+  $("#projectName").disabled = pending || state.projectReadOnly || (!project && state.images.length === 0);
+  $("#projectNew").disabled = pending;
+  $("#projectOpenList").disabled = pending;
+  $("#projectClose").disabled = pending;
+  $("#projectComplete").disabled = pending || !project || state.projectReadOnly;
   $("#projectResume").hidden = !state.projectReadOnly;
-  $("#projectResume").disabled = !project;
+  $("#projectResume").disabled = pending || !project;
   $("#projectReadOnlyNotice").hidden = !state.projectReadOnly;
-  $("#projectSourceAdd").disabled = !project || state.projectReadOnly;
+  $("#projectSourceAdd").disabled = pending || !project || state.projectReadOnly;
   $("#projectSourceRelink").hidden = !state.missingNativeSources.length;
-  $("#projectSourceRelink").disabled = !project || state.projectReadOnly;
+  $("#projectSourceRelink").disabled = pending || !project || state.projectReadOnly;
   $("#projectCloseWorkspace").dataset.i18n = project ? "project.close" : "project.closeWork";
   $("#projectCloseWorkspace").textContent = t($("#projectCloseWorkspace").dataset.i18n);
-  $("#projectCloseWorkspace").disabled = !project && state.images.length === 0;
+  $("#projectCloseWorkspace").disabled = pending || (!project && state.images.length === 0);
 }
 function missingNativeSources(sources) {
   return (sources || []).filter((source) => source.kind === "native-folder" && !source.exists);
@@ -131,19 +164,24 @@ function showNativeRelinkDialog() {
 }
 function openProjectNameDialog(mode) {
   projectNameMode = mode; $("#projectNameInput").value = mode === "name" ? (state.project?.name || "") : "";
+  $("#projectNameInput").disabled = false;
+  $("#projectNameCancel").disabled = false;
+  $("#projectNameForm").querySelector('[type="submit"]').disabled = false;
+  updateActionButtons();
   showModalFromInvoker($("#projectNameDialog")); focusElement($("#projectNameInput"));
 }
 async function finishProjectlessPromotion(promotion) {
   const project = promotion.project;
-  await promoteProjectlessDirectorySources(project.id, promotion.sourceIds);
   const snapshot = await api("/api/images");
   state.images = snapshot.images || state.images;
   applyProjectSnapshot(snapshot);
   loadReviewedPaths();
-  for (const image of state.images) {
+  await promoteProjectlessDirectorySources(project.id, promotion.sourceIds);
+  await rememberProjectSources(project.id, state.images.flatMap((image) => {
     const access = state.sourceAccess.get(image.id);
-    if (access?.fileHandle) await rememberProjectSource(project.id, access.fileHandle, image.id, image.sourceId || promotion.sourceIds?.[image.id]);
-  }
+    return access?.fileHandle && access.sourceKind === "browser-files"
+      ? [{ handle: access.fileHandle, imageId: image.id, sourceId: image.sourceId || promotion.sourceIds?.[image.id] }] : [];
+  }));
   state.project = project;
   state.projectReadOnly = false;
   state.missingNativeSources = [];
@@ -168,13 +206,13 @@ function renderProjectSortHeaders() {
     indicator.classList.toggle("inactive", direction === "none");
     const nextDirection = active && direction === "asc" ? "desc" : "asc";
     button.setAttribute("aria-label", `${projectSortLabel(button.dataset.projectSort)}: ${t(nextDirection === "asc" ? "project.sortAscending" : "project.sortDescending")}`);
-    button.disabled = projectListSortPending;
+    button.disabled = projectListSortPending || state.projectOperationPending;
   }
 }
 
 function renderProjectTableControls() {
-  const blocked = isBusy() || state.importing || projectListSortPending;
-  $("#projectListClose").disabled = projectListSortPending;
+  const blocked = isBusy() || state.importing || projectListSortPending || state.projectOperationPending;
+  $("#projectListClose").disabled = projectListSortPending || state.projectOperationPending;
   for (const row of projectTableRows()) {
     const project = projectListProjects.get(row.dataset.projectId);
     const exportDisabled = blocked || !project || !(project.imageCount > 0) || projectExportBusy.has(project.id);
@@ -235,6 +273,7 @@ function renderProjectTable() {
 }
 
 async function showProjectList({ focusProjectId = "", focusTarget = null, sort = projectListSort, keepClosed = false } = {}) {
+  if (state.projectOperationPending) return;
   const data = await api(`/api/projects?sort=${encodeURIComponent(`${sort.key}_${sort.direction}`)}`);
   projectListProjects = new Map((data.projects || []).map((project) => [project.id, project]));
   projectListSort = sort;
@@ -254,6 +293,7 @@ async function showProjectList({ focusProjectId = "", focusTarget = null, sort =
 }
 
 async function sortProjectList(key, focusTarget) {
+  if (state.projectOperationPending || projectListSortPending) return;
   const previousSort = projectListSort;
   const direction = key === previousSort.key ? (previousSort.direction === "asc" ? "desc" : "asc") : "asc";
   projectListSortPending = true; renderProjectSortHeaders(); renderProjectTableControls();
@@ -279,16 +319,13 @@ async function showSourceMismatches() {
   showModalFromInvoker(dialog);
 }
 async function openProject(project, resume = false) {
+  if (!beginProjectOperation()) return;
   try {
-    if (state.candidateUpdateChains?.size) await waitForCandidateMutations();
+    await flushAllImageMutations();
     await flushAllWorkspaceMutations();
     if (resume) await api("/api/project/resume", { method: "POST", body: JSON.stringify({ projectId: project.id }) });
     const data = await api("/api/project/open", { method: "POST", body: JSON.stringify({ projectId: project.id }) });
     state.project = data.project; state.projectReadOnly = data.project?.status === "completed";
-    modalInvokers.delete($("#projectListDialog"));
-    modalInvokers.delete($("#projectDialog"));
-    $("#projectListDialog").close(); $("#projectDialog").close();
-    focusElement($("#projectButton"));
     if (data.needsSource) {
       const files = await rememberedProjectFileSources(project.id);
       const directories = await rememberedProjectDirectorySources(project.id);
@@ -298,19 +335,24 @@ async function openProject(project, resume = false) {
       const handles = [...directories.map((item) => item.handle), ...files.map((item) => item.handle)].filter(Boolean);
       const granted = await Promise.all(handles.map((handle) => ensureProjectSourcePermission(handle, true)));
       for (let index = 0; index < directories.length; index += 1) {
-        if (granted[index]) await importProjectDirectoryHandle(directories[index].handle, project.id, directories[index].sourceId);
+        if (granted[index]) await importProjectDirectoryHandle(directories[index].handle, project.id, directories[index].sourceId, "restore");
       }
       if (files.length && granted.slice(directories.length).every(Boolean)) await importProjectFileHandles(files, project.id);
       const requiresBrowserSource = (data.sources || []).some((source) => source.kind !== "native-folder");
       if (requiresBrowserSource && (!handles.length || granted.some((ok) => !ok))) showUserError({ code: "project_source_unavailable" });
-      await showSourceMismatches();
     } else {
       resetCatalog(data.images || [], data.project?.sourceRoot || "");
-      applyProjectSnapshot(await api("/api/images")); await showSourceMismatches();
+      applyProjectSnapshot(await api("/api/images"));
     }
     state.missingNativeSources = missingNativeSources(data.sources);
     renderProjectCurrent();
+    modalInvokers.delete($("#projectListDialog"));
+    modalInvokers.delete($("#projectDialog"));
+    $("#projectListDialog").close(); $("#projectDialog").close();
+    focusElement($("#projectButton"));
+    await showSourceMismatches();
   } catch (error) { showUserError(error); }
+  finally { endProjectOperation(); }
 }
 
 async function downloadProjectArtifact(path, filename) {
@@ -329,7 +371,7 @@ async function downloadProjectMasks(project, kind) {
   projectExportBusy.add(project.id); renderProjectTableControls();
   try {
     if (state.project?.id === project.id) {
-      if (state.candidateUpdateChains?.size) await waitForCandidateMutations();
+      await flushAllImageMutations();
       await flushAllWorkspaceMutations();
     }
     const path = `/api/project/masks/${encodeURIComponent(project.id)}/${kind}`;
@@ -345,16 +387,20 @@ async function downloadProjectMasks(project, kind) {
 
 async function resumeCurrentProject() {
   if (!state.project?.id) return;
+  if (!beginProjectOperation()) return;
   try {
     const data = await api("/api/project/resume", { method: "POST", body: JSON.stringify({ projectId: state.project.id }) });
     state.project = data.project; state.projectReadOnly = false; renderProjectCurrent(); renderCandidates(); updateActionButtons();
   } catch (error) { showUserError(error); }
+  finally { endProjectOperation(); }
 }
 
 function openProjectDeleteDialog(projectId) {
   const project = projectListProjects.get(projectId) || (state.project?.id === projectId ? state.project : null);
   if (!project) return;
   projectDeleteId = projectId;
+  $("#projectDeleteConfirm").disabled = false;
+  $("#projectDeleteCancel").disabled = false;
   $("#projectDeleteTarget").textContent = `${t("project.deleteSelected")} ${projectTitle(project)}`;
   $("#projectDeleteDetails").textContent = `${t(`project.${project.status}`)} · ${t("project.imageCount", { count: project.imageCount || 0 })} · ${t("project.source")}: ${projectSource(project)}`;
   showModalFromInvoker($("#projectDeleteDialog"));
@@ -362,14 +408,17 @@ function openProjectDeleteDialog(projectId) {
 }
 
 async function deleteProject(projectId) {
-  if (!projectId) return;
+  if (!projectId || projectDeleteBusy || !beginProjectOperation()) return;
+  projectDeleteBusy = true;
+  $("#projectDeleteConfirm").disabled = true;
+  $("#projectDeleteCancel").disabled = true;
   try {
     const deletingCurrentProject = state.project?.id === projectId;
     const rows = projectTableRows();
     const deletedIndex = rows.findIndex((row) => row.dataset.projectId === projectId);
     const focusProjectId = rows[deletedIndex + 1]?.dataset.projectId || rows[deletedIndex - 1]?.dataset.projectId || "";
     if (deletingCurrentProject) {
-      if (state.candidateUpdateChains?.size) await waitForCandidateMutations();
+      await flushAllImageMutations();
       await flushAllWorkspaceMutations();
     }
     await api(`/api/project/${encodeURIComponent(projectId)}`, { method: "DELETE" });
@@ -394,6 +443,14 @@ async function deleteProject(projectId) {
       }
     }
   } catch (error) { showUserError(error); }
+  finally {
+    projectDeleteBusy = false;
+    if ($("#projectDeleteDialog").open) {
+      $("#projectDeleteConfirm").disabled = false;
+      $("#projectDeleteCancel").disabled = false;
+    }
+    endProjectOperation();
+  }
 }
 
 function showSameSourceDialog(projects, { path = "", directoryHandle = null, currentSourceId = null } = {}) {
@@ -428,18 +485,19 @@ function bindEvents() {
   initCandidatePaddingPopover();
   document.querySelectorAll("dialog").forEach((dialog) => dialog.addEventListener("keydown", trapModalTab));
   $("#projectButton").addEventListener("click", () => { renderProjectCurrent(); showModalFromInvoker($("#projectDialog")); });
-  $("#projectClose").addEventListener("click", () => $("#projectDialog").close());
+  $("#projectClose").addEventListener("click", () => { if (!state.projectOperationPending) $("#projectDialog").close(); });
   $("#projectNew").addEventListener("click", () => openProjectNameDialog("new"));
   $("#projectName").addEventListener("click", () => openProjectNameDialog("name"));
+  $("#projectNameDialog").addEventListener("close", () => { projectNameMode = "name"; updateActionButtons(); });
   $("#projectOpenList").addEventListener("click", () => { void showProjectList().catch(showUserError); });
-  $("#projectListClose").addEventListener("click", () => $("#projectListDialog").close());
-  $("#projectListDialog").addEventListener("cancel", (event) => { if (projectListSortPending) event.preventDefault(); });
+  $("#projectListClose").addEventListener("click", () => { if (!projectListSortPending && !state.projectOperationPending) $("#projectListDialog").close(); });
+  $("#projectListDialog").addEventListener("cancel", (event) => { if (projectListSortPending || state.projectOperationPending) event.preventDefault(); });
   document.querySelectorAll("[data-project-sort]").forEach((button) => button.addEventListener("click", () => {
     void sortProjectList(button.dataset.projectSort, button).catch(showUserError);
   }));
   $("#projectList").addEventListener("click", (event) => {
     const button = event.target.closest("[data-project-action]");
-    if (!button || button.disabled || projectListSortPending) return;
+    if (!button || button.disabled || projectListSortPending || state.projectOperationPending) return;
     const project = projectListProjects.get(button.dataset.projectId);
     if (!project) return;
     if (button.dataset.projectAction === "open") void openProject(project);
@@ -469,12 +527,14 @@ function bindEvents() {
     catch (error) { if (error?.name !== "AbortError") showUserError(error); }
   })(); });
   $("#projectSourceRelink").addEventListener("click", showNativeRelinkDialog);
-  $("#nativeRelinkCancel").addEventListener("click", () => $("#nativeRelinkDialog").close());
-  $("#nativeRelinkDialog").addEventListener("cancel", (event) => { event.preventDefault(); $("#nativeRelinkDialog").close(); });
+  $("#nativeRelinkCancel").addEventListener("click", () => { if (!nativeRelinkBusy) $("#nativeRelinkDialog").close(); });
+  $("#nativeRelinkDialog").addEventListener("cancel", (event) => { event.preventDefault(); if (!nativeRelinkBusy) $("#nativeRelinkDialog").close(); });
   $("#nativeRelinkForm").addEventListener("submit", (event) => { event.preventDefault(); void (async () => {
-    const source = selectedNativeRelinkSource(); if (!source || !state.project?.id) return;
-    const submit = $("#nativeRelinkConfirm"); const input = $("#nativeRelinkPath");
-    submit.disabled = true; input.disabled = true;
+    const source = selectedNativeRelinkSource(); if (!source || !state.project?.id || nativeRelinkBusy) return;
+    nativeRelinkBusy = true;
+    const submit = $("#nativeRelinkConfirm"); const input = $("#nativeRelinkPath"); const cancel = $("#nativeRelinkCancel");
+    submit.disabled = true; input.disabled = true; cancel.disabled = true;
+    $("#nativeRelinkSources").querySelectorAll("button").forEach((button) => { button.disabled = true; });
     try {
       const snapshot = await api("/api/project/source/relink", { method: "POST", body: JSON.stringify({ projectId: state.project.id, sourceId: source.id, path: input.value.trim() }) });
       state.images = snapshot.images || [];
@@ -485,30 +545,40 @@ function bindEvents() {
       if (!state.missingNativeSources.length) $("#nativeRelinkDialog").close(); else renderNativeRelinkDialog();
       await showSourceMismatches();
     } catch (error) { showUserError(error); }
-    finally { submit.disabled = false; input.disabled = false; }
+    finally {
+      nativeRelinkBusy = false;
+      submit.disabled = false; input.disabled = false; cancel.disabled = false;
+      $("#nativeRelinkSources").querySelectorAll("button").forEach((button) => { button.disabled = false; });
+    }
   })(); });
-  $("#projectCloseWorkspace").addEventListener("click", () => { void (async () => { try { await flushAllWorkspaceMutations(); await api("/api/project/close", { method: "POST", body: "{}" }); resetCatalog([], ""); state.project = null; state.projectReadOnly = false; state.missingNativeSources = []; $("#projectDialog").close(); } catch (error) { showUserError(error); } })(); });
-  $("#projectComplete").addEventListener("click", () => { void (async () => { if (!await confirmAction(t("project.complete"), t("project.completeConfirm"))) return; try { await flushAllWorkspaceMutations(); await api("/api/project/complete", { method: "POST", body: "{}" }); resetCatalog([], ""); state.project = null; state.projectReadOnly = false; state.missingNativeSources = []; $("#projectDialog").close(); } catch (error) { showUserError(error); } })(); });
-  $("#projectNameCancel").addEventListener("click", () => $("#projectNameDialog").close());
-  $("#projectDeleteCancel").addEventListener("click", () => { projectDeleteId = ""; $("#projectDeleteDialog").close(); });
+  $("#projectCloseWorkspace").addEventListener("click", () => { void (async () => { if (!beginProjectOperation()) return; try { await flushAllImageMutations(); await flushAllWorkspaceMutations(); await api("/api/project/close", { method: "POST", body: "{}" }); resetCatalog([], ""); state.project = null; state.projectReadOnly = false; state.missingNativeSources = []; $("#projectDialog").close(); } catch (error) { showUserError(error); } finally { endProjectOperation(); } })(); });
+  $("#projectComplete").addEventListener("click", () => { void (async () => { if (state.projectOperationPending || !await confirmAction(t("project.complete"), t("project.completeConfirm")) || !beginProjectOperation()) return; try { await flushAllImageMutations(); await flushAllWorkspaceMutations(); await api("/api/project/complete", { method: "POST", body: "{}" }); resetCatalog([], ""); state.project = null; state.projectReadOnly = false; state.missingNativeSources = []; $("#projectDialog").close(); } catch (error) { showUserError(error); } finally { endProjectOperation(); } })(); });
+  $("#projectNameCancel").addEventListener("click", () => { if (!state.projectOperationPending) $("#projectNameDialog").close(); });
+  $("#projectNameDialog").addEventListener("cancel", (event) => { if (state.projectOperationPending) event.preventDefault(); });
+  $("#projectDeleteCancel").addEventListener("click", () => { if (projectDeleteBusy) return; projectDeleteId = ""; $("#projectDeleteDialog").close(); });
+  $("#projectDeleteDialog").addEventListener("cancel", (event) => { if (projectDeleteBusy) event.preventDefault(); });
   $("#projectDeleteConfirm").addEventListener("click", () => { void deleteProject(projectDeleteId); });
-  $("#projectNameForm").addEventListener("submit", (event) => { event.preventDefault(); void (async () => { try {
-    const name = $("#projectNameInput").value.trim(); const pendingPromotion = state.projectlessPromotion;
-    const projectlessSave = projectNameMode === "name" && !state.project?.id && !pendingPromotion;
-    if (projectNameMode === "new" || projectlessSave) { if (state.candidateUpdateChains?.size) await waitForCandidateMutations(); await flushAllWorkspaceMutations(); }
-    const data = pendingPromotion ? null : projectNameMode === "new"
+  $("#projectNameForm").addEventListener("submit", (event) => { event.preventDefault(); void (async () => { if (!beginProjectOperation()) return; try {
+    const name = $("#projectNameInput").value.trim(); const mode = projectNameMode; const pendingPromotion = state.projectlessPromotion;
+    const projectlessSave = mode === "name" && !state.project?.id && !pendingPromotion;
+    if (mode === "new" || projectlessSave) { await flushAllImageMutations(); await flushAllWorkspaceMutations(); }
+    const data = pendingPromotion ? null : mode === "new"
       ? await api("/api/projects", { method: "POST", body: JSON.stringify({ name }) })
       : await api("/api/project/name", { method: "POST", body: JSON.stringify({ name }) });
     if (projectlessSave) state.projectlessPromotion = { project: data.project, sourceIds: data.project.sourceIds || {} };
     if (state.projectlessPromotion) await finishProjectlessPromotion(state.projectlessPromotion);
     else { state.project = data.project; state.projectReadOnly = false; }
-    $("#projectNameDialog").close(); if (projectNameMode === "new") { resetCatalog([], ""); state.missingNativeSources = []; } renderProjectCurrent();
-  } catch (error) { showUserError(error); } })(); });
+    $("#projectNameDialog").close(); if (mode === "new") { resetCatalog([], ""); state.missingNativeSources = []; } renderProjectCurrent();
+  } catch (error) { showUserError(error); } finally { endProjectOperation(); } })(); });
   $("#sourceMismatchCancel").addEventListener("click", () => $("#sourceMismatchDialog").close());
   $("#sourceMismatchForm").addEventListener("submit", (event) => { event.preventDefault(); void (async () => { try { const ids = JSON.parse($("#sourceMismatchDialog").dataset.imageIds || "[]"); const snapshot = await api("/api/project/mismatches", { method: "POST", body: JSON.stringify({ imageIds: ids, clearMasks: $("#sourceMismatchClear").checked }) }); state.images = snapshot.images || state.images; loadReviewedPaths(); applyProjectSnapshot(snapshot); $("#sourceMismatchDialog").close(); renderCatalogViews(); } catch (error) { showUserError(error); } })(); });
-  $("#sameSourceCancel").addEventListener("click", () => $("#sameSourceDialog").close());
+  $("#sameSourceCancel").addEventListener("click", () => { if (!sameSourceBusy) $("#sameSourceDialog").close(); });
+  $("#sameSourceDialog").addEventListener("cancel", (event) => { if (sameSourceBusy) event.preventDefault(); });
   $("#sameSourceOpen").addEventListener("click", () => { const project = sameSourceProjects.find((item) => item.id === sameSourceSelectedProjectId) || sameSourceProjects[0]; $("#sameSourceDialog").close(); if (project) void openProject(project); });
   $("#sameSourceSeparate").addEventListener("click", () => { void (async () => {
+    if (!beginProjectOperation()) return;
+    sameSourceBusy = true;
+    $("#sameSourceDialog").querySelectorAll("button").forEach((button) => { button.disabled = true; });
     try {
       const handle = sameSourceDirectoryHandle;
       const sourceId = sameSourceCurrentSourceId;
@@ -524,6 +594,11 @@ function bindEvents() {
       state.project = data.project; state.projectReadOnly = false; $("#sameSourceDialog").close(); renderProjectCurrent();
       await loadFolder({ skipSameSourceWarning: true, path: sameSourcePath });
     } catch (error) { showUserError(error); }
+    finally {
+      sameSourceBusy = false;
+      $("#sameSourceDialog").querySelectorAll("button").forEach((button) => { button.disabled = false; });
+      endProjectOperation();
+    }
   })(); });
   document.querySelectorAll("dialog").forEach((dialog) => dialog.addEventListener("close", () => {
     const invoker = modalInvokers.get(dialog);
@@ -901,6 +976,7 @@ function bindEvents() {
   document.querySelectorAll('input[name="singleSaveMode"]').forEach((input) => input.addEventListener("change", syncSingleSaveMode));
   $("#singleSaveCloseButton").addEventListener("click", () => $("#singleSaveDialog").close());
   $("#singleSaveDialog").addEventListener("cancel", (event) => { event.preventDefault(); if (!state.saving) $("#singleSaveDialog").close(); });
+  $("#singleSaveDialog").addEventListener("close", () => { if (!state.saving) state.singleSave = null; });
   lightDismiss($("#singleSaveDialog"), () => { if (!state.saving) $("#singleSaveDialog").close(); });
   $("#confirmDialog").addEventListener("cancel", (event) => { event.preventDefault(); $("#confirmDialog").close("cancel"); });
   lightDismiss($("#confirmDialog"), () => $("#confirmDialog").close("cancel"));
@@ -927,9 +1003,15 @@ function bindEvents() {
     if (processing.kind === "import") { if (state.importSession) state.importSession.cancelled = true; return; }
     await cancelDetection();
   });
-  $("#toggleReviewMenuItem").addEventListener("click", () => {
+  $("#toggleReviewMenuItem").addEventListener("click", () => { void (async () => {
     const image = state.images.find((item) => item.id === state.contextMenuImageId);
-    if (image) void setReviewed(image, !isReviewed(image));
+    if (image) {
+      const scroll = state.contextMenuScroll;
+      await queueImageMutation(image.id, () => saveWorkspaceFlagNow(image, "reviewed", !isReviewed(image), () => {
+        if (state.images.some((item) => item.id === image.id)) refreshReviewViews(scroll);
+      }), { lockCandidateControls: true });
+    }
+  })();
     closeCatalogContextMenu();
   });
   $("#copyImagePathMenuItem").addEventListener("click", () => { void copyContextMenuImagePath(); });

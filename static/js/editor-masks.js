@@ -82,7 +82,7 @@ async function commitCandidatePadding() {
   if (!session || session.committing) return false;
   const value = validateCandidatePadding();
   if (value === null) { $("#candidatePaddingInput").focus(); return false; }
-  if (session.imageId !== state.currentId || state.projectReadOnly || isBusy() || state.importing || state.candidateBatchPending.has(state.currentId)) {
+  if (session.imageId !== state.currentId || state.projectReadOnly || isBusy() || state.importing || candidateControlLocked(state.currentId) || state.candidateBatchPending.has(state.currentId)) {
     closeCandidatePadding({ restoreFocus: true }); return false;
   }
   if (session.mode === "batch") return commitBatchCandidatePadding(session, value);
@@ -106,13 +106,16 @@ async function commitBatchCandidatePadding(session, value) {
   const imageId = session.imageId; const generation = state.imageGeneration;
   state.candidateBatchPending.add(imageId); closeCandidatePadding(); renderCandidates();
   try {
-    const result = await api("/api/candidates/batch", { method: "POST", body: JSON.stringify({ imageId, role: session.role, operation: "set_padding", expandPx: value }) });
+    const result = await enqueueCandidateMutation(imageId, async () => {
+      const result = await api("/api/candidates/batch", { method: "POST", body: JSON.stringify({ imageId, role: session.role, operation: "set_padding", expandPx: value }) });
     if (state.currentId === imageId && isCurrentGeneration(generation)) {
       await reconcileCurrentCandidates(imageId, generation);
       retainCurrentCandidateBundle(imageId, result.candidateRevision);
-      markMaskDirty(); setReviewed(currentRecord(), false); syncCurrentCandidateRecord(); refreshCurrentReviewAndMask(); requestMosaicPreview(); render();
+      markMaskDirty(); await saveWorkspaceFlagNow(currentRecord(), "reviewed", false); syncCurrentCandidateRecord(); refreshCurrentReviewAndMask(); requestMosaicPreview(); render();
     } else await refreshCandidateRecord(imageId, true);
-    return true;
+      return result;
+    });
+    return Boolean(result);
   } catch (error) {
     if (state.currentId === imageId && isCurrentGeneration(generation)) {
       try { await reconcileCurrentCandidates(imageId, generation); } catch { /* Existing visible state remains usable. */ }
@@ -180,6 +183,7 @@ function renderCandidates() {
   const excludeList = $("#exclusionList");
   applyList.textContent = ""; excludeList.textContent = "";
   if (!state.currentId) { syncCandidateDisplayButtons(); updateCandidateBatchButtons(false); return; }
+  const candidateLocked = candidateControlLocked(state.currentId);
   const presence = manualLayerPresence();
   if (!state.candidates.length && !state.manualMaskPresent && !presence.hasManualExclude && !presence.hasManualExclusionErase) {
     const empty = document.createElement("p"); empty.className = "candidate-empty"; empty.textContent = t("candidates.none"); applyList.append(empty); syncCandidateDisplayButtons(presence); updateCandidateBatchButtons(undefined, undefined, presence); return;
@@ -228,12 +232,12 @@ function renderCandidates() {
       markMaskDirty(); saveDraft();
       setReviewed(currentRecord(), false);
       refreshCurrentReviewAndMask(); requestMosaicPreview(); renderCandidates(); render();
-    }, state.projectReadOnly);
+    }, state.projectReadOnly || candidateLocked);
     const blinkId = `manual:${role}`;
     const blink = makeDisplay(blinkId);
     row.dataset.candidateBlinkId = blinkId; row.dataset.candidateBlinkRole = role;
     const label = document.createElement("span"); label.className = "candidate-label"; label.textContent = t("candidates.manual");
-    const remove = document.createElement("button"); remove.type = "button"; remove.className = "candidate-delete"; remove.textContent = "×"; remove.disabled = state.projectReadOnly;
+    const remove = document.createElement("button"); remove.type = "button"; remove.className = "candidate-delete"; remove.textContent = "×"; remove.disabled = state.projectReadOnly || candidateLocked;
     remove.title = isApply ? t("candidates.deleteManual") : t("candidates.deleteManualExclude");
     remove.setAttribute("aria-label", remove.title);
     remove.addEventListener("click", isApply ? deleteManualMask : deleteManualExclusion);
@@ -242,7 +246,7 @@ function renderCandidates() {
         if (isBusy() || state.importing) return;
         state.manualExclusionForced = !state.manualExclusionForced; markMaskDirty(); saveDraft();
         setReviewed(currentRecord(), false); refreshCurrentReviewAndMask(); requestMosaicPreview(); renderCandidates(); render();
-      }, state.projectReadOnly);
+      }, state.projectReadOnly || candidateLocked);
       appendRow(row, label, enabled, [blink, candidateEffectiveToggle(blinkId), forced, remove]);
     } else appendRow(row, label, enabled, [blink, candidateEffectiveToggle(blinkId), remove]);
     list.append(row);
@@ -258,11 +262,11 @@ function renderCandidates() {
       state.manualExclusionEraseEnabled = !state.manualExclusionEraseEnabled; markMaskDirty();
       saveDraft();
       setReviewed(currentRecord(), false); refreshCurrentReviewAndMask(); requestMosaicPreview(); renderCandidates(); render();
-    }, state.projectReadOnly);
+    }, state.projectReadOnly || candidateLocked);
     const blink = makeDisplay(blinkId);
     row.dataset.candidateBlinkId = blinkId; row.dataset.candidateBlinkRole = "exclude";
     const label = document.createElement("span"); label.className = "candidate-label"; label.textContent = t("candidates.manual");
-    const remove = document.createElement("button"); remove.type = "button"; remove.className = "candidate-delete"; remove.textContent = "×"; remove.disabled = state.projectReadOnly;
+    const remove = document.createElement("button"); remove.type = "button"; remove.className = "candidate-delete"; remove.textContent = "×"; remove.disabled = state.projectReadOnly || candidateLocked;
     remove.title = t("candidates.deleteManualExcludeErase"); remove.setAttribute("aria-label", remove.title);
     remove.addEventListener("click", deleteManualExclusionErase);
     appendRow(row, label, enabled, [blink, candidateEffectiveToggle(blinkId), remove]); excludeList.append(row);
@@ -283,7 +287,7 @@ function renderCandidates() {
       markMaskDirty();
       setReviewed(currentRecord(), false);
       syncCurrentCandidateRecord(); refreshCurrentReviewAndMask(); requestMosaicPreview(); render(); await updateCandidate(candidate, previousEnabled, previousMaskStatus);
-    }, deleting || state.projectReadOnly || state.candidateBatchPending.has(state.currentId));
+    }, deleting || state.projectReadOnly || candidateLocked || state.candidateBatchPending.has(state.currentId));
     const blink = makeDisplay(candidate.id);
     row.dataset.candidateBlinkId = candidate.id; row.dataset.candidateBlinkRole = role;
     const label = document.createElement("span"); label.className = "candidate-label";
@@ -291,7 +295,7 @@ function renderCandidates() {
     const confidence = document.createElement("span"); confidence.className = "candidate-conf";
     confidence.textContent = Number.isFinite(candidate.confidence) ? `${Math.round(candidate.confidence * 100)}%` : "";
     label.append(name, confidence);
-    const remove = document.createElement("button"); remove.type = "button"; remove.className = "candidate-delete"; remove.textContent = "×"; remove.disabled = deleting || state.projectReadOnly || state.candidateBatchPending.has(state.currentId);
+    const remove = document.createElement("button"); remove.type = "button"; remove.className = "candidate-delete"; remove.textContent = "×"; remove.disabled = deleting || state.projectReadOnly || candidateLocked || state.candidateBatchPending.has(state.currentId);
     const deleteLabel = t("candidates.delete", { label: labelText });
     remove.title = deleteLabel; remove.setAttribute("aria-label", deleteLabel);
     remove.addEventListener("click", () => deleteCandidate(candidate));
@@ -304,13 +308,13 @@ function renderCandidates() {
         markMaskDirty();
         syncCurrentCandidateRecord(); refreshCurrentReviewAndMask(); requestMosaicPreview(); render();
         await updateCandidate(candidate, candidate.enabled, previousMaskStatus, previousForced);
-      }, deleting || state.projectReadOnly || state.candidateBatchPending.has(state.currentId));
-      appendRow(row, label, enabled, [blink, candidateEffectiveToggle(candidate.id), makeExpandButton(candidate, deleting || state.projectReadOnly || isBusy() || state.importing || state.candidateBatchPending.has(state.currentId), labelText), forced, remove]);
-    } else appendRow(row, label, enabled, [blink, candidateEffectiveToggle(candidate.id), makeExpandButton(candidate, deleting || state.projectReadOnly || isBusy() || state.importing || state.candidateBatchPending.has(state.currentId), labelText), remove]);
+      }, deleting || state.projectReadOnly || candidateLocked || state.candidateBatchPending.has(state.currentId));
+      appendRow(row, label, enabled, [blink, candidateEffectiveToggle(candidate.id), makeExpandButton(candidate, deleting || state.projectReadOnly || candidateLocked || isBusy() || state.importing || state.candidateBatchPending.has(state.currentId), labelText), forced, remove]);
+    } else appendRow(row, label, enabled, [blink, candidateEffectiveToggle(candidate.id), makeExpandButton(candidate, deleting || state.projectReadOnly || candidateLocked || isBusy() || state.importing || state.candidateBatchPending.has(state.currentId), labelText), remove]);
     (role === "apply" ? applyList : excludeList).append(row);
   }
   appendEmpty(applyList); appendEmpty(excludeList);
-  syncCandidateDisplayButtons(presence); updateCandidateBatchButtons(undefined, undefined, presence, isBusy() || state.importing || state.candidateBatchPending.has(state.currentId));
+  syncCandidateDisplayButtons(presence); updateCandidateBatchButtons(undefined, undefined, presence, candidateLocked || isBusy() || state.importing || state.candidateBatchPending.has(state.currentId));
 }
 
 function candidateDisplayMode(id) {
@@ -428,8 +432,7 @@ async function refreshCandidateBitmap(candidate, imageId, revision, generation, 
   return true;
 }
 function enqueueCandidateMutation(imageId, send) {
-  const previous = state.candidateUpdateChains.get(imageId) || Promise.resolve();
-  const queued = previous.then(send, send);
+  const queued = queueImageMutation(imageId, send, { lockCandidateControls: true });
   const tracked = queued.finally(() => {
     if (state.candidateUpdateChains.get(imageId) === tracked) state.candidateUpdateChains.delete(imageId);
     updateActionButtons();
@@ -583,7 +586,8 @@ async function batchCandidateOperation(spec) {
       if (manualErase) { state.manualExclusionEraseEnabled = operation === "enable"; markMaskDirty(); }
       if (manual || manualErase) saveDraft();
       retainCurrentCandidateBundle(imageId, result.candidateRevision);
-      setReviewed(currentRecord(), false); syncCurrentCandidateRecord(); refreshCurrentReviewAndMask(); requestMosaicPreview(); renderCandidates(); render();
+      await saveWorkspaceFlagNow(currentRecord(), "reviewed", false);
+      syncCurrentCandidateRecord(); refreshCurrentReviewAndMask(); requestMosaicPreview(); renderCandidates(); render();
       if (state.project?.id) void refreshProjectHistory(imageId);
     } catch (error) {
       if (state.currentId === imageId && isCurrentGeneration(generation)) showUserError(error);
@@ -973,19 +977,21 @@ async function restoreProjectHistory(direction) {
   if ((direction === "undo" && !history.canUndo) || (direction === "redo" && !history.canRedo)) return;
   state.projectHistoryBusy = true; updateHistoryButtons();
   try {
-    await flushWorkspaceDraft(imageId);
-    const result = await api(`/api/project/history/${encodeURIComponent(imageId)}/${direction}`, { method: "POST", body: "{}" });
-    const changed = new Set(result.changedImageIds || []);
-    for (const changedId of changed) {
-      state.drafts.delete(changedId); state.projectHistory.delete(changedId); releaseCandidateBundles(changedId);
-      const record = state.images.find((image) => image.id === changedId);
-      if (record && changedId === imageId && result.current) record.candidateRevision = Number(result.current.candidateRevision || 0);
-    }
-    state.projectHistory.set(imageId, { canUndo: result.canUndo === true, canRedo: result.canRedo === true });
-    const snapshot = await api("/api/images");
-    state.images = snapshot.images || state.images; loadReviewedPaths(); applyProjectSnapshot(snapshot); if (typeof renderCatalogViews === "function") renderCatalogViews();
-    if (changed.has(imageId)) await selectImage(imageId, true, { saveCurrentDraft: false });
-    else updateHistoryButtons();
+    await queueImageMutation(imageId, async () => {
+      await flushWorkspaceDraft(imageId);
+      const result = await api(`/api/project/history/${encodeURIComponent(imageId)}/${direction}`, { method: "POST", body: "{}" });
+      const changed = new Set(result.changedImageIds || []);
+      for (const changedId of changed) {
+        state.drafts.delete(changedId); state.projectHistory.delete(changedId); releaseCandidateBundles(changedId);
+        const record = state.images.find((image) => image.id === changedId);
+        if (record && changedId === imageId && result.current) record.candidateRevision = Number(result.current.candidateRevision || 0);
+      }
+      state.projectHistory.set(imageId, { canUndo: result.canUndo === true, canRedo: result.canRedo === true });
+      const snapshot = await api("/api/images");
+      state.images = snapshot.images || state.images; loadReviewedPaths(); applyProjectSnapshot(snapshot); if (typeof renderCatalogViews === "function") renderCatalogViews();
+      if (changed.has(imageId)) await selectImage(imageId, true, { saveCurrentDraft: false });
+      else updateHistoryButtons();
+    }, { lockCandidateControls: true });
   } catch (error) { showUserError(error); }
   finally { state.projectHistoryBusy = false; updateHistoryButtons(); }
 }

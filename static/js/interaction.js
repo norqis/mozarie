@@ -126,10 +126,13 @@ async function clearMasks(imageIds, titleKey, messageKey) {
   if (!imageIds.length || isBusy() || state.importing) return;
   if (!await confirmAction(t(titleKey), t(messageKey), "clearMasks")) return;
   state.masksClearing = true;
-  const catalogEpoch = beginCatalogEpoch();
-  ++state.imageGeneration;
+  let catalogEpoch = null;
   updateActionButtons();
   try {
+    await flushAllImageMutations();
+    await Promise.all([...new Set(imageIds)].map(flushWorkspaceDraft));
+    catalogEpoch = beginCatalogEpoch();
+    ++state.imageGeneration;
     await api("/api/masks/clear", { method: "POST", body: JSON.stringify({ imageIds }) });
     if (!isCurrentCatalogEpoch(catalogEpoch)) return;
     for (const imageId of imageIds) state.drafts.delete(imageId);
@@ -152,7 +155,7 @@ async function clearMasks(imageIds, titleKey, messageKey) {
     imageIds.forEach((imageId) => state.maskStatus.delete(imageId));
     markImagesUnreviewed(imageIds, false);
     renderCatalogViews(); updateNavigationControls(); clearStatus();
-  } catch (error) { if (isCurrentCatalogEpoch(catalogEpoch)) showUserError(error); }
+  } catch (error) { if (catalogEpoch === null || isCurrentCatalogEpoch(catalogEpoch)) showUserError(error); }
   finally { state.masksClearing = false; updateActionButtons(); }
 }
 
@@ -164,6 +167,7 @@ async function clearCatalog() {
   ++state.imageGeneration;
   updateActionButtons();
   try {
+    await flushAllImageMutations();
     await flushAllWorkspaceMutations();
     await api("/api/catalog/clear", { method: "POST", body: JSON.stringify({}) });
     if (!isCurrentCatalogEpoch(catalogEpoch)) return;
@@ -249,9 +253,12 @@ async function removeImageFromCatalog(imageId = state.contextMenuImageId) {
   ++state.imageGeneration;
   updateActionButtons();
   try {
+    await flushAllImageMutations();
+    await flushWorkspaceDraft(imageId);
     const data = await api(`/api/catalog/image/${encodeURIComponent(imageId)}`, { method: "DELETE" });
     if (!isCurrentCatalogEpoch(catalogEpoch)) return;
     state.images = data.images;
+    if (state.project?.id) await forgetProjectImageSources(state.project.id, [imageId]);
     loadReviewedPaths();
     state.selectedImageIds.delete(imageId);
     if (!state.images.length) { state.batchMode = false; clearBatchSelection(); }
@@ -285,6 +292,7 @@ async function runSelectionAction(action) {
       : { reviewed: action === "reviewed" };
     const epoch = beginCatalogEpoch(); state.catalogMutation = true; updateActionButtons();
     try {
+      if (action === "reviewed" || action === "unreviewed") await waitForCandidateMutations();
       await flushAllWorkspaceMutations();
       const data = await api("/api/workspace/images", { method: "POST", body: JSON.stringify({ imageIds: ids, ...flags }) });
       if (!isCurrentCatalogEpoch(epoch)) return;
@@ -300,6 +308,7 @@ async function runSelectionAction(action) {
     if (!await confirmAction(t("confirm.removeImages.title"), t("confirm.removeImages.message", { count: ids.length }), "removeImage")) return;
     const epoch = beginCatalogEpoch(); state.catalogMutation = true; updateActionButtons();
     try {
+      await flushAllImageMutations();
       await flushAllWorkspaceMutations();
       const data = await api("/api/catalog/remove", { method: "POST", body: JSON.stringify({ imageIds: ids }) });
       if (!isCurrentCatalogEpoch(epoch)) return;
@@ -307,6 +316,7 @@ async function runSelectionAction(action) {
         releaseImageCaches(image.id); state.sourceAccess.delete(image.id); state.drafts.delete(image.id); state.maskStatus.delete(image.id); clearReviewForRemovedImage(image);
       }
       state.images = data.images || [];
+      if (state.project?.id) await forgetProjectImageSources(state.project.id, ids.filter((imageId) => !state.images.some((image) => image.id === imageId)));
       loadReviewedPaths();
       pruneSourceAccess();
       state.batchMode = false; clearBatchSelection(); updateSelectionActionBar();
@@ -351,25 +361,26 @@ function pruneSourceAccess() {
   }
 }
 
-function rememberImportedSource(result, session) {
+async function rememberImportedSource(result, session) {
   for (const imported of result.data.imported || []) {
     if (imported.clientKey !== result.clientKey || !result.entry.fileHandle || !imported.imageId) continue;
+    state.sourceAccess.set(imported.imageId, {
+      fileHandle: result.entry.fileHandle, parentHandle: result.entry.parentHandle || null,
+      name: result.entry.file.name, size: result.entry.file.size, lastModified: result.entry.file.lastModified, sourceKind: session.sourceKind,
+    });
     if (session.sourceKind === "browser-directory") {
       const source = state.projectlessDirectorySources.get(result.sourceId);
       if (source) source.imageIds.add(imported.imageId);
       continue;
     }
-    state.sourceAccess.set(imported.imageId, {
-      fileHandle: result.entry.fileHandle, parentHandle: result.entry.parentHandle || null,
-      name: result.entry.file.name, size: result.entry.file.size, lastModified: result.entry.file.lastModified,
-    });
-    if (state.project?.id) void rememberProjectSource(state.project.id, result.entry.fileHandle, imported.imageId, result.sourceId);
+    if (state.project?.id) await rememberProjectSource(state.project.id, result.entry.fileHandle, imported.imageId, result.sourceId, result.clientKey, result.entry.relativePath);
   }
 }
 
 async function importFiles(files) {
   const session = arguments.length > 1 ? arguments[1] : beginImportSession();
   if (!session || state.importSession !== session) return;
+  if (session.sourceKind === "browser-files") session.sourceId ||= crypto.randomUUID();
   const supportedFiles = [...files]
     .map((entry) => entry.file || entry.getFile ? entry : { file: entry, relativePath: entry.name, fileHandle: null, parentHandle: null })
     .filter((entry) => isSupportedImageFile(entry.file || { name: entry.name || entry.relativePath }));
@@ -384,18 +395,37 @@ async function importFiles(files) {
         if (session.cancelled) return;
         const index = nextIndex; nextIndex += 1;
         if (index >= supportedFiles.length) return;
-        const descriptor = supportedFiles[index]; const clientKey = newClientKey();
-        const file = descriptor.file || await descriptor.getFile();
+        const descriptor = supportedFiles[index]; const clientKey = descriptor.clientKey || newClientKey();
+        let file;
+        try { file = descriptor.file || await descriptor.getFile(); }
+        catch (error) {
+          if (session.catalogId && descriptor.fileHandle && error?.name === "NotFoundError") {
+            session.missingFileHandles = true;
+            session.completed += 1;
+            showProcessing({ kind: "import", state: "running", total: session.total, completed: session.completed, current: descriptor.relativePath || descriptor.fileHandle.name });
+            continue;
+          }
+          throw error;
+        }
         if (session.cancelled || state.importSession !== session) return;
         if (!isSupportedImageFile(file)) continue;
         const entry = { ...descriptor, file, relativePath: descriptor.relativePath || file.name };
         showProcessing({ kind: "import", state: "running", total: session.total, completed: session.completed, current: entry.relativePath });
-        const data = await importSingleFile(entry, clientKey, session.catalogId, session.sourceId, session.sourceKind);
+        const stagedSource = Boolean(session.catalogId && session.sourceKind === "browser-files" && entry.fileHandle);
+        if (stagedSource) await rememberProjectSource(session.catalogId, entry.fileHandle, null, session.sourceId, clientKey, entry.relativePath);
+        let data;
+        try { data = await importSingleFile(entry, clientKey, session.catalogId, session.sourceId, session.sourceKind, session.importIntent); }
+        catch (error) {
+          if (stagedSource && Number.isInteger(error?.status) && error.status >= 400 && error.status < 500) {
+            await forgetPendingProjectSource(session.catalogId, session.sourceId, clientKey);
+          }
+          throw error;
+        }
         if (!session.catalogId && data.catalogId) session.catalogId = data.catalogId;
         const result = { entry, clientKey, data, sourceId: session.sourceId };
         // Keep source access for each committed upload, including a later
         // cancellation or an unrelated upload failure.
-        rememberImportedSource(result, session);
+        await rememberImportedSource(result, session);
         session.completed += 1;
         showProcessing({ kind: "import", state: "running", total: session.total, completed: session.completed, current: entry.relativePath });
       }
@@ -417,6 +447,7 @@ async function importFiles(files) {
     state.images = latest.images;
     applyProjectSnapshot(latest);
     loadReviewedPaths();
+    if (session.missingFileHandles) showUserError({ code: "project_source_unavailable" });
     pruneSourceAccess(); renderCatalogViews(); setStatusKey("gallery.imported", { count: supportedFiles.length });
   } catch (error) {
     try {
@@ -428,7 +459,7 @@ async function importFiles(files) {
   finally { finishImportSession(session); }
 }
 
-async function importSingleFile(entry, clientKey, catalogId = null, sourceId = null, sourceKind = null) {
+async function importSingleFile(entry, clientKey, catalogId = null, sourceId = null, sourceKind = null, importIntent = "add") {
   const token = document.querySelector('meta[name="mozarie-token"]')?.content || "";
   const response = await fetch("/api/import/file", {
     method: "POST",
@@ -442,6 +473,7 @@ async function importSingleFile(entry, clientKey, catalogId = null, sourceId = n
       "X-Mozarie-File-Size": String(Math.max(0, Number(entry.file.size || 0))),
       ...(sourceId ? { "X-Mozarie-Source-Id": encodeURIComponent(sourceId) } : {}),
       ...(sourceKind ? { "X-Mozarie-Source-Kind": sourceKind } : {}),
+      "X-Mozarie-Import-Intent": importIntent,
       ...(catalogId ? { "X-Mozarie-Catalog-Id": encodeURIComponent(catalogId) } : {}),
     },
     body: entry.file,
@@ -453,7 +485,7 @@ async function importSingleFile(entry, clientKey, catalogId = null, sourceId = n
 
 function beginImportSession() {
   if (isBusy() || state.importing) return null;
-  const session = { id: newClientKey(), epoch: beginCatalogEpoch(), paused: false, cancelled: false, completed: 0, total: 0, catalogId: null, sourceId: null, sourceKind: "browser-files" };
+  const session = { id: newClientKey(), epoch: beginCatalogEpoch(), paused: false, cancelled: false, completed: 0, total: 0, catalogId: null, sourceId: null, sourceKind: "browser-files", importIntent: "add" };
   state.importing = true; state.importSession = session;
   updateActionButtons();
   return session;
@@ -497,7 +529,10 @@ async function importFileHandles(handles, session = beginImportSession()) {
   if (!session) return;
   session.sourceId ||= crypto.randomUUID();
   session.sourceKind = "browser-files";
-  await importHandleEntries(handles.map((handle) => ({ handle, relativePath: handle.name, parentHandle: null })), session);
+  await importHandleEntries(handles.map((item) => {
+    const handle = item?.handle || item;
+    return { handle, clientKey: item?.clientKey || null, relativePath: item?.relativePath || handle.name, parentHandle: null };
+  }), session);
 }
 
 async function importDirectoryHandle(directoryHandle, session = beginImportSession()) {
@@ -529,13 +564,14 @@ async function importDirectoryHandle(directoryHandle, session = beginImportSessi
   }
 }
 
-async function importProjectDirectoryHandle(directoryHandle, projectId, sourceId = null) {
+async function importProjectDirectoryHandle(directoryHandle, projectId, sourceId = null, importIntent = "add") {
   const session = beginImportSession(); if (!session) return;
   try {
     await flushAllWorkspaceMutations();
     session.catalogId = projectId;
     session.sourceId = await rememberProjectSource(projectId, directoryHandle, null, sourceId);
     session.sourceKind = "browser-directory";
+    session.importIntent = importIntent;
     const entries = [];
     showProcessing({ kind: "import", state: "running", total: 1, completed: 0, current: directoryHandle.name || "" });
     async function collect(handle, relativePath = "", parentHandle = null) {
@@ -559,7 +595,7 @@ async function importProjectFileHandles(sources, projectId) {
     if (!handle) continue;
     const sourceId = source?.sourceId || crypto.randomUUID();
     const handles = groups.get(sourceId) || [];
-    handles.push(handle); groups.set(sourceId, handles);
+    handles.push({ handle, clientKey: source?.clientKey || null, relativePath: source?.relativePath || handle.name }); groups.set(sourceId, handles);
   }
   for (const [sourceId, handles] of groups) {
     const session = beginImportSession(); if (!session) return;
@@ -568,6 +604,7 @@ async function importProjectFileHandles(sources, projectId) {
       session.catalogId = projectId;
       session.sourceId = sourceId;
       session.sourceKind = "browser-files";
+      session.importIntent = "restore";
       await importFileHandles(handles, session);
     } finally { finishImportSession(session); }
   }

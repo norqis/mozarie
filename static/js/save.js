@@ -221,6 +221,7 @@ async function startSingleSave(event) {
     state.saving = true; updateActionButtons(); syncSingleSaveMode(); setSingleSaveResult("");
     let entry; let saveToken = ""; let output = null; let sourceSnapshot = null; let sourceChanged = false;
     try {
+    await flushWorkspaceDraft(save.imageId);
     const prepared = await api("/api/save/prepare", { method: "POST", body: JSON.stringify({ imageIds: [save.imageId], divisor: save.divisor, suffix, deleteOriginal: false }) });
     entry = prepared.entries?.[0]; if (!entry) throw Object.assign(new Error("save_state_changed"), { code: "save_state_changed" });
     const access = sourceAccessFor(save.imageId);
@@ -254,14 +255,20 @@ async function startSingleSave(event) {
     // expensive image reload (and forced editor reload) in that common path.
     // Overwrites and source deletion do need authoritative reconciliation.
     if ((sourceAction === "overwrite") || deleteOriginal) {
+      const previousImageIds = new Set(state.images.map((item) => item.id));
       const latest = await api("/api/images"); state.images = latest.images;
       loadReviewedPaths();
       const savedImage = state.images.find((item) => item.id === save.imageId);
+      if (deleteOriginal && state.project?.id) {
+        await forgetProjectImageSources(state.project.id, [...previousImageIds]
+          .filter((imageId) => !state.images.some((item) => item.id === imageId)));
+      }
       pruneSourceAccess();
       if (deleteOriginal) reconcileBrowserSaveState();
       else if (savedImage && state.currentId === save.imageId) await selectImage(save.imageId, true, { saveCurrentDraft: false });
       renderCatalogViews();
     }
+    state.singleSave = null;
     setSingleSaveResult(copying ? `${t("apply.complete", { completed: 1 })} ${state.outputDirectoryHandle.name}/${output.name}` : t("apply.complete", { completed: 1 }));
     } catch (error) {
       if (saveToken && entry) await cancelBrowserSave(entry, saveToken);
@@ -381,7 +388,47 @@ function reconcileStoredMaskStatuses() {
   }
 }
 
+function discardRemovedBrowserSaveState() {
+  const remainingImageIds = new Set(state.images.map((image) => image.id));
+  const removedImageIds = new Set();
+  const collectRemoved = (ids) => {
+    for (const imageId of ids) if (!remainingImageIds.has(imageId)) removedImageIds.add(imageId);
+  };
+  collectRemoved(state.drafts.keys());
+  collectRemoved(state.projectHistory.keys());
+  collectRemoved(state.maskStatus.keys());
+  collectRemoved(state.sourceAccess.keys());
+  collectRemoved(state.draftSaveChains.keys());
+  collectRemoved(state.workspaceDraftChains.keys());
+  collectRemoved(state.workspaceDraftTimers.keys());
+  collectRemoved(state.workspaceMutationErrors.keys());
+  collectRemoved(state.selectedImageIds);
+  collectRemoved(state.applyCatalogSnapshot?.order || []);
+  if (state.singleSave?.imageId && !remainingImageIds.has(state.singleSave.imageId)) removedImageIds.add(state.singleSave.imageId);
+  for (const [imageId, timer] of state.workspaceDraftTimers) {
+    if (!remainingImageIds.has(imageId)) { clearTimeout(timer); state.workspaceDraftTimers.delete(imageId); }
+  }
+  for (const imageId of removedImageIds) {
+    state.drafts.delete(imageId);
+    state.projectHistory.delete(imageId);
+    state.maskStatus.delete(imageId);
+    state.draftSaveChains.delete(imageId);
+    state.workspaceDraftChains.delete(imageId);
+    state.workspaceMutationErrors.delete(imageId);
+    releaseImageCaches(imageId);
+    releaseCandidateBundles(imageId);
+  }
+  for (const [imageId] of state.sourceAccess) if (!remainingImageIds.has(imageId)) state.sourceAccess.delete(imageId);
+  for (const [imageId] of state.draftSaveChains) if (!remainingImageIds.has(imageId)) state.draftSaveChains.delete(imageId);
+  for (const [imageId] of state.workspaceDraftChains) if (!remainingImageIds.has(imageId)) state.workspaceDraftChains.delete(imageId);
+  for (const [imageId] of state.workspaceMutationErrors) if (!remainingImageIds.has(imageId)) state.workspaceMutationErrors.delete(imageId);
+  for (const key of state.workspaceFlagPending.keys()) if (!remainingImageIds.has(key.split(":", 1)[0])) state.workspaceFlagPending.delete(key);
+  state.selectedImageIds = new Set([...state.selectedImageIds].filter((imageId) => remainingImageIds.has(imageId)));
+  pruneSourceAccess();
+}
+
 function reconcileBrowserSaveState() {
+  discardRemovedBrowserSaveState();
   reconcileStoredMaskStatuses();
   if (state.currentId && !state.images.some((image) => image.id === state.currentId)) {
     const removedCurrentId = state.currentId;
@@ -670,7 +717,14 @@ async function runBrowserSave(imageIds, suffix, deleteOriginal, mode = "copy") {
           // snapshot only after every started entry has settled.
           const latest = await api("/api/images");
           catalogCurrent = isCurrentCatalogEpoch(save.catalogEpoch);
-          if (catalogCurrent) { state.images = latest.images; loadReviewedPaths(); }
+          if (catalogCurrent) {
+            state.images = latest.images; loadReviewedPaths();
+            if (state.project?.id) {
+              const previousImageIds = save.applyCatalogSnapshot?.order || [];
+              await forgetProjectImageSources(state.project.id, previousImageIds
+                .filter((imageId) => !state.images.some((item) => item.id === imageId)));
+            }
+          }
         } catch (error) {
           showApplyError(error);
         }
@@ -746,7 +800,7 @@ async function startApplyFromDialog(event) {
     await ensureSaveSources(imageIds, mode, copy && $("#deleteOriginal").checked);
     if (state.candidateUpdateChains.size) await waitForCandidateMutations();
     if (state.importing) return;
-    await flushDraftSaves(imageIds);
+    await Promise.all(imageIds.map((imageId) => flushWorkspaceDraft(imageId)));
     state.saveStarting = false;
     await runBrowserSave(imageIds, suffix, copy && $("#deleteOriginal").checked, mode);
   } catch (error) {

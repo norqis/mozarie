@@ -42,40 +42,93 @@ async function directoryCatalogStore() {
   });
 }
 
-async function rememberProjectSource(projectId, handle, imageId = null, sourceId = null) {
-  const stableId = sourceId || projectSourceId();
-  if (!projectId) return stableId;
-  if (!handle) throw new Error("画像ソースを保存できません。");
+async function rememberProjectSources(projectId, sources) {
+  const prepared = sources.map((source) => ({ ...source, stableId: source.sourceId || projectSourceId() }));
+  if (!prepared.length) return [];
+  if (!projectId) return prepared.map((source) => source.stableId);
+  if (prepared.some((source) => !source.handle)) throw codedError("project_source_unavailable");
   const db = await directoryCatalogStore();
-  if (!db) throw new Error("画像ソースを保存できません。");
+  if (!db) throw codedError("project_source_unavailable");
   try {
     await new Promise((resolve, reject) => {
       let transaction;
       try {
         transaction = db.transaction("projectSources", "readwrite");
-        transaction.objectStore("projectSources").put({
-          key: `${projectId}:${stableId}:${imageId || "root"}`,
-          projectId, imageId, sourceId: stableId, handle,
-        });
+        const store = transaction.objectStore("projectSources");
+        for (const source of prepared) {
+          const keyPart = source.imageId || (source.clientKey ? `pending:${source.clientKey}` : "root");
+          store.put({
+            key: `${projectId}:${source.stableId}:${keyPart}`,
+            projectId, imageId: source.imageId || null, sourceId: source.stableId, clientKey: source.clientKey || null, relativePath: source.relativePath || null, handle: source.handle,
+          });
+          if (source.imageId && source.clientKey) store.delete(`${projectId}:${source.stableId}:pending:${source.clientKey}`);
+        }
       } catch (error) {
         reject(error); return;
       }
       transaction.oncomplete = () => resolve();
-      transaction.onerror = () => reject(transaction.error || new Error("画像ソースを保存できません。"));
-      transaction.onabort = () => reject(transaction.error || new Error("画像ソースを保存できません。"));
+      transaction.onerror = () => reject(codedError("project_source_unavailable"));
+      transaction.onabort = () => reject(codedError("project_source_unavailable"));
     });
-    return stableId;
+    return prepared.map((source) => source.stableId);
+  } catch (error) {
+    if (error?.code) throw error;
+    throw codedError("project_source_unavailable");
   } finally { db.close(); }
 }
 
+async function rememberProjectSource(projectId, handle, imageId = null, sourceId = null, clientKey = null, relativePath = null) {
+  return (await rememberProjectSources(projectId, [{ handle, imageId, sourceId, clientKey, relativePath }]))[0];
+}
+
+async function forgetPendingProjectSource(projectId, sourceId, clientKey) {
+  const db = await directoryCatalogStore();
+  if (!db) return;
+  try {
+    await new Promise((resolve, reject) => {
+      let transaction;
+      try {
+        transaction = db.transaction("projectSources", "readwrite");
+        transaction.objectStore("projectSources").delete(`${projectId}:${sourceId}:pending:${clientKey}`);
+      } catch (error) { reject(error); return; }
+      transaction.oncomplete = () => resolve();
+      transaction.onerror = () => reject(transaction.error);
+      transaction.onabort = () => reject(transaction.error);
+    });
+  } finally { db.close(); }
+}
+
+async function forgetProjectImageSources(projectId, imageIds) {
+  const db = await directoryCatalogStore();
+  const removed = new Set(imageIds || []);
+  if (!db || !projectId || !removed.size) return;
+  try {
+    const rows = await new Promise((resolve) => {
+      const request = db.transaction("projectSources").objectStore("projectSources").getAll();
+      request.onsuccess = () => resolve(request.result || []); request.onerror = () => resolve([]);
+    });
+    await new Promise((resolve, reject) => {
+      const transaction = db.transaction("projectSources", "readwrite");
+      const store = transaction.objectStore("projectSources");
+      for (const row of rows) if (row.projectId === projectId && removed.has(row.imageId)) store.delete(row.key);
+      transaction.oncomplete = () => resolve();
+      transaction.onerror = () => reject(transaction.error);
+      transaction.onabort = () => reject(transaction.error);
+    });
+  } catch { /* Local handle cleanup is best effort. */ }
+  finally { db.close(); }
+}
+
 async function promoteProjectlessDirectorySources(projectId, sourceIds) {
+  const sources = [];
   for (const source of state.projectlessDirectorySources.values()) {
     const durableSourceId = [...source.imageIds]
       .map((imageId) => sourceIds?.[imageId])
       .find(Boolean);
-    if (!durableSourceId) throw new Error("画像ソースを保存できません。");
-    await rememberProjectSource(projectId, source.handle, null, durableSourceId);
+    if (!durableSourceId) throw codedError("project_source_unavailable");
+    sources.push({ handle: source.handle, sourceId: durableSourceId });
   }
+  await rememberProjectSources(projectId, sources);
 }
 async function rememberedProjectSource(projectId, sourceId = null, imageId = null) {
   const db = await directoryCatalogStore(); if (!db || !projectId) return null;
@@ -92,8 +145,8 @@ async function rememberedProjectFileSources(projectId) {
   db.close();
   // Preserve the server source ID.  Recreating one on every reopen would
   // create a second source and duplicate every browser-imported image.
-  return rows.filter((row) => row.projectId === projectId && row.imageId && row.handle?.kind === "file")
-    .map((row) => ({ sourceId: row.sourceId, handle: row.handle }));
+  return rows.filter((row) => row.projectId === projectId && (row.imageId || row.clientKey) && row.handle?.kind === "file")
+    .map((row) => ({ sourceId: row.sourceId, clientKey: row.clientKey || null, relativePath: row.relativePath || row.handle.name, handle: row.handle }));
 }
 async function rememberedProjectDirectorySources(projectId) {
   const db = await directoryCatalogStore(); if (!db || !projectId) return [];
@@ -210,6 +263,10 @@ function queueWorkspaceDraft(imageId, immediate = false) {
         draft.dirtyLayers = [];
         draft.dirtyRois = {};
       }
+      if (state.drafts.get(imageId) === draft) {
+        const image = state.images.find((entry) => entry.id === imageId);
+        if (image) image.hasEffectiveMask = draft?.hasEffectiveMask === true;
+      }
       if (state.project?.id && state.currentId === imageId) void refreshProjectHistory(imageId);
       // A project has a durable copy and can reload an inactive draft on
       // demand.  Projectless sessions have no equivalent recovery path, so
@@ -222,12 +279,6 @@ function queueWorkspaceDraft(imageId, immediate = false) {
         && !state.workspaceMutationErrors.has(imageId)
         && (!state.workspaceDraftChains.has(imageId) || state.workspaceDraftChains.get(imageId) === persisted)
       ) {
-        // Keep the lightweight catalogue scalar before freeing bitmap data, so
-        // filtered save targets remain correct until this draft is rehydrated.
-        if (draft?.hasEffectiveMask === true) {
-          const image = state.images.find((entry) => entry.id === imageId);
-          if (image) image.hasEffectiveMask = true;
-        }
         state.drafts.delete(imageId);
         state.maskStatus.delete(imageId);
       }

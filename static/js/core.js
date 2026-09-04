@@ -17,7 +17,7 @@ const state = {
   outputDirectoryPicking: false, outputDirectoryHandle: null, singleSave: null,
   detectionTargetIds: [], pendingDetectionTargetIds: [], detectCancelRequested: false,
   pageLoadedAt: Date.now() / 1000, handledDetectionStartedAt: null, importSession: null,
-  candidateUpdateChains: new Map(), candidateUpdateVersions: new Map(), candidateDeleting: new Set(), candidateBatchPending: new Set(),
+  candidateUpdateChains: new Map(), candidateUpdateVersions: new Map(), candidateDeleting: new Set(), candidateBatchPending: new Set(), imageMutationChains: new Map(), candidateControlLocks: new Map(),
   manualMaskPresent: false, manualEnabled: true, manualExclusionEnabled: true, manualExclusionForced: true, manualExclusionEraseEnabled: true,
   galleryNodes: new Map(), overviewNodes: new Map(), contextMenuImageId: null, contextMenuOrigin: null, contextMenuScroll: null, browserSave: null, pollInFlight: null, pollFailures: 0,
   // Browser file handles never leave this tab. They make imported images real save targets.
@@ -31,7 +31,7 @@ const state = {
   imageCache: null, candidateBundleCache: null, catalogLoadControllers: new Set(),
   prefetchQueue: [], prefetchActive: 0, prefetchTimer: null,
   fillWorker: null, fillPending: false,
-  project: null, projectReadOnly: false, projectHistory: new Map(), projectHistoryBusy: false,
+  project: null, projectReadOnly: false, projectHistory: new Map(), projectHistoryBusy: false, projectOperationPending: false,
   missingNativeSources: [],
   renderFrame: 0,
   maskDirty: false, draftDirty: false, draftLayerDirty: new Set(), draftDirtyRois: new Map(), historyBaseDirty: false, draftSaveChains: new Map(),
@@ -85,7 +85,7 @@ const USER_ERROR_CODES = {
   api_not_found: "response_invalid", connection_lost: "connection_lost", output_folder_unavailable: "output_folder_unavailable", output_permission_denied: "output_permission_denied", request_failed: "internal_error",
   image_not_found: "image_not_found", image_read_failed: "image_read_failed", image_format_unsupported: "image_format_unsupported",
   save_write_failed: "save_write_failed", save_state_changed: "save_state_changed", folder_not_found: "folder_not_found",
-  source_restore_failed: "project_source_unavailable", project_source_unavailable: "project_source_unavailable", project_name_invalid: "project_name_invalid", project_name_duplicate: "project_name_duplicate", project_read_only: "project_read_only",
+  source_restore_failed: "project_source_unavailable", project_source_unavailable: "project_source_unavailable", project_source_conflict: "project_source_conflict", project_name_invalid: "project_name_invalid", project_name_duplicate: "project_name_duplicate", project_read_only: "project_read_only",
   project_not_found: "folder_not_found", workspace_recreate_required: "workspace_corrupt", source_mismatch: "image_changed",
   source_permission_denied: "source_permission_denied", source_action_unavailable: "source_action_unavailable",
   source_busy: "source_busy", source_write_unsupported: "source_write_unsupported", output_write_unsupported: "output_write_unsupported", output_cleanup_failed: "output_cleanup_failed",
@@ -388,7 +388,32 @@ function publishWorkspaceFlags(imageId, flags) {
   }
   return true;
 }
-function saveWorkspaceFlag(image, field, desired, onSaved) {
+function candidateControlLocked(imageId) { return (state.candidateControlLocks.get(imageId) || 0) > 0; }
+function queueImageMutation(imageId, send, { lockCandidateControls = false } = {}) {
+  if (!imageId) return Promise.resolve(false);
+  if (lockCandidateControls) {
+    state.candidateControlLocks.set(imageId, (state.candidateControlLocks.get(imageId) || 0) + 1);
+    updateActionButtons();
+    if (imageId === state.currentId && typeof renderCandidates === "function") renderCandidates();
+  }
+  const previous = state.imageMutationChains.get(imageId) || Promise.resolve();
+  const queued = previous.catch(() => {}).then(send);
+  const tracked = queued.finally(() => {
+    if (state.imageMutationChains.get(imageId) === tracked) state.imageMutationChains.delete(imageId);
+    if (lockCandidateControls) {
+      const count = (state.candidateControlLocks.get(imageId) || 1) - 1;
+      if (count > 0) state.candidateControlLocks.set(imageId, count); else state.candidateControlLocks.delete(imageId);
+    }
+    updateActionButtons();
+    if (lockCandidateControls && imageId === state.currentId && typeof renderCandidates === "function") renderCandidates();
+  });
+  state.imageMutationChains.set(imageId, tracked);
+  return tracked;
+}
+async function flushAllImageMutations() {
+  while (state.imageMutationChains.size) await Promise.allSettled([...state.imageMutationChains.values()]);
+}
+function saveWorkspaceFlagNow(image, field, desired, onSaved) {
   if (!image) return Promise.resolve(false);
   const key = `${image.id}:${field}`;
   const pending = state.workspaceFlagPending.get(key);
@@ -407,6 +432,10 @@ function saveWorkspaceFlag(image, field, desired, onSaved) {
   });
   state.workspaceFlagPending.set(key, { desired, promise });
   return promise;
+}
+function saveWorkspaceFlag(image, field, desired, onSaved) {
+  if (!image) return Promise.resolve(false);
+  return queueImageMutation(image.id, () => saveWorkspaceFlagNow(image, field, desired, onSaved), { lockCandidateControls: true });
 }
 function preserveCatalogScroll(renderCatalogs, positions = null) {
   const gallery = $("#gallery"); const overview = $("#overviewGrid");
@@ -486,7 +515,7 @@ function updateActionButtons() {
   const running = isBusy();
   const sourceIncompatible = Boolean(currentRecord()?.sourceDimensionsChanged);
   const busyLocked = running || state.importing;
-  const mutationLocked = state.projectReadOnly || sourceIncompatible;
+  const mutationLocked = state.projectReadOnly || sourceIncompatible || state.projectOperationPending;
   const mutatingCandidates = state.candidateUpdateChains.size > 0;
   // Do not let controls mutate the image that is being replaced under the
   // editor.  Gallery selection may still supersede this request; its generation
@@ -527,7 +556,8 @@ function updateActionButtons() {
   $("#hideAndNextButton").disabled = busyLocked || mutationLocked || switchingImages || !hasImage;
   $("#downloadCurrentMosaicMask").disabled = !hasImage || !state.project;
   $("#downloadCurrentExcludeMask").disabled = !hasImage || !state.project;
-  updateCandidateBatchButtons(hasImage, busyLocked || mutationLocked || switchingImages, undefined, busyLocked || switchingImages);
+  const candidateLocked = candidateControlLocked(state.currentId);
+  updateCandidateBatchButtons(hasImage, busyLocked || mutationLocked || switchingImages || candidateLocked, undefined, busyLocked || switchingImages || candidateLocked);
   updateHistoryButtons();
   if (busyLocked) {
     for (const control of controls) {
@@ -539,7 +569,7 @@ function updateActionButtons() {
     }
   } else if (mutationLocked) {
     const availableInReadOnly = new Set([
-      "projectButton", "projectClose", "projectOpenList", "projectListClose", "projectResume", "projectCloseWorkspace",
+      "projectButton", "projectClose", "projectOpenList", "projectListClose", "projectResume", "projectCloseWorkspace", "projectNew",
       "downloadCurrentMosaicMask", "downloadCurrentExcludeMask",
       "singleViewButton", "compareViewButton", "fitButton", "mosaicPreviewButton", "previousImageButton", "nextImageButton",
       "galleryFilter", "overviewButton", "collapseGalleryButton", "collapseInspectorButton", "settingsButton", "settingsCloseButton", "errorDialogClose",
@@ -549,7 +579,7 @@ function updateActionButtons() {
     const availableInReadOnlyControls = new Set([
       ...document.querySelectorAll(".gallery-item, .overview-item, .overview-filter, .project-table [data-project-action], .project-sort-button, [data-candidate-display-toggle], [data-candidate-effective-toggle], [data-candidate-display-id], [data-candidate-effective-id]"),
     ]);
-    const availableInReadOnlyDialogs = ["#settingsDialog", "#modelHelpDialog", "#modelDownloadDialog"].map($);
+    const availableInReadOnlyDialogs = ["#settingsDialog", "#modelHelpDialog", "#modelDownloadDialog", ...(projectNameMode === "new" ? ["#projectNameDialog"] : []), ...(sourceIncompatible ? ["#sourceMismatchDialog"] : [])].map($);
     for (const control of controls) {
       if (availableInReadOnly.has(control.id) || availableInReadOnlyControls.has(control)
         || availableInReadOnlyDialogs.some((dialog) => dialog.contains(control))) continue;
@@ -558,8 +588,8 @@ function updateActionButtons() {
     }
   }
   $("#gallery").classList.toggle("locked", busyLocked);
-  canvas.style.pointerEvents = busyLocked || switchingImages ? "none" : "";
-  canvas.setAttribute("aria-disabled", String(busyLocked || switchingImages));
+  canvas.style.pointerEvents = busyLocked || mutationLocked || switchingImages ? "none" : "";
+  canvas.setAttribute("aria-disabled", String(busyLocked || mutationLocked || switchingImages));
   syncDetectionActions();
   if (typeof renderProjectTableControls === "function") renderProjectTableControls();
 }
@@ -648,6 +678,7 @@ function resetCatalog(images, root) {
   cancelFillWork();
   releaseImageCaches();
   state.images = images;
+  state.singleSave = null;
   state.projectHistory.clear();
   state.sourceAccess.clear();
   state.projectlessDirectorySources.clear();
@@ -658,7 +689,7 @@ function resetCatalog(images, root) {
   loadReviewedPaths();
   state.currentId = null; state.currentImage = null; state.pendingImageId = null; state.pendingImageKey = null; state.pendingCandidateKey = null; state.maskStatus.clear();
   state.candidates = []; state.candidateImages = new Map(); state.drafts.clear(); state.selectedImageIds.clear(); state.selectionAnchorId = null; state.batchMode = false; clearCandidateBlink(); state.contextMenuImageId = null; state.contextMenuOrigin = null; clearBoundaryInteraction();
-  state.candidateUpdateChains.clear(); state.candidateUpdateVersions.clear(); state.candidateDeleting.clear(); state.candidateBatchPending.clear();
+  state.candidateUpdateChains.clear(); state.candidateUpdateVersions.clear(); state.candidateDeleting.clear(); state.candidateBatchPending.clear(); state.imageMutationChains.clear(); state.candidateControlLocks.clear();
   discardCatalogNodes(state.galleryNodes, $("#gallery"));
   discardCatalogNodes(state.overviewNodes, $("#overviewGrid"));
   resetCatalogWindows();

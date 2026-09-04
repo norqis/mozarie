@@ -402,6 +402,7 @@ class SavingMixin:
                         self.order = [current_id for current_id in self.order if current_id != image_id]
                         self.candidate_revisions.pop(image_id, None)
                         self.candidates.pop(image_id, None)
+                        self.projectless_manual_drafts.pop(image_id, None)
                         self._image_io_locks.pop(image_id, None)
                     self.browser_save_tokens.pop(save_token, None)
                     self.browser_save_receipts[save_token] = BrowserSaveReceipt(image_id, revision, source_action, cleared, not cleared, deleted, time.monotonic())

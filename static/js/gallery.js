@@ -321,21 +321,28 @@ function moveCurrentBy(offset) {
   if (target) void selectImage(target.id);
 }
 async function reviewAndMoveNext() {
-  if (isGestureActive()) return null;
   const current = currentRecord();
-  if (!current) return null;
-  const target = state.images.slice(imageIndex(current.id) + 1).find((image) => !isHidden(image)) || null;
-  if (!await setReviewed(current, true)) return null;
-  if (target) void selectImage(target.id);
+  if (isGestureActive() || !current) return null;
+  const currentId = current.id;
+  const target = state.images.slice(imageIndex(currentId) + 1).find((image) => !isHidden(image)) || null;
+  const reviewed = await queueImageMutation(currentId, async () => {
+    const scroll = state.contextMenuScroll;
+    return saveWorkspaceFlagNow(current, "reviewed", true, () => {
+      if (state.images.some((image) => image.id === current.id)) refreshReviewViews(scroll);
+    });
+  }, { lockCandidateControls: true });
+  if (!reviewed) return null;
+  if (target && state.currentId === currentId) void selectImage(target.id);
   return target;
 }
 async function hideAndMoveNext() {
   if (isGestureActive()) return;
   const current = currentRecord();
   if (!current) return;
-  const target = state.images.slice(imageIndex(current.id) + 1).find((image) => !isHidden(image)) || null;
+  const currentId = current.id;
+  const target = state.images.slice(imageIndex(currentId) + 1).find((image) => !isHidden(image)) || null;
   if (!await setHidden(current, true)) return;
-  if (target) await selectImage(target.id);
+  if (target && state.currentId === currentId) await selectImage(target.id);
 }
 async function runNavigationAction(action) {
   await action();
