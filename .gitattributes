@@ -6,3 +6,6 @@
 *.webp binary
 *.safetensors binary
 *.pth binary
+/.github export-ignore
+/AGENTS.md export-ignore
+/docs export-ignore
