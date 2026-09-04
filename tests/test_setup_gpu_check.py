@@ -36,7 +36,7 @@ class SetupGpuCheckTests(unittest.TestCase):
             SimpleNamespace(
                 get_available_providers=lambda: providers,
                 SessionOptions=lambda: options,
-                InferenceSession=lambda *_args, providers, **_kwargs: session if providers == ["CUDAExecutionProvider"] else cpu_session,
+                InferenceSession=lambda *_args, providers, **_kwargs: session if providers == ["CUDAExecutionProvider", "CPUExecutionProvider"] else cpu_session,
             ),
             SimpleNamespace(cuda=SimpleNamespace(is_available=lambda: cuda, device_count=lambda: 1), ones=Mock(return_value=tensor)),
             SimpleNamespace(get_example=lambda _name: "model.onnx"),
@@ -74,11 +74,12 @@ class SetupGpuCheckTests(unittest.TestCase):
         wrong_provider = SimpleNamespace(
             disable_fallback=lambda: None,
             get_providers=lambda: ["CPUExecutionProvider"],
-            run=lambda *_args: None,
+            run=Mock(),
         )
         result, store, output = self.run_check(session=wrong_provider)
         self.assertEqual(result, 1)
         store.save.assert_not_called()
+        wrong_provider.run.assert_not_called()
         self.assertIn("CUDA detection runtime could not start", output)
 
     def test_runtime_import_failure_stops_without_changing_the_provider(self):
@@ -131,7 +132,7 @@ class SetupGpuCheckTests(unittest.TestCase):
         # A successful smoke test does not touch an existing CPU selection.
         store.save.assert_not_called()
 
-    def test_cuda_probe_uses_strict_session_options_and_never_registers_cpu(self):
+    def test_cuda_probe_keeps_cpu_ep_after_cuda_without_a_strict_option(self):
         tensor = Mock(); tensor.add_.return_value = tensor; tensor.cpu.return_value = tensor
         options = SimpleNamespace(add_session_config_entry=Mock())
         session = SimpleNamespace(disable_fallback=Mock(), get_providers=lambda: ["CUDAExecutionProvider"], run=lambda *_args: None)
@@ -142,8 +143,9 @@ class SetupGpuCheckTests(unittest.TestCase):
         )
         torch = SimpleNamespace(cuda=SimpleNamespace(is_available=lambda: True, device_count=lambda: 1), ones=Mock(return_value=tensor))
         self.assertTrue(setup_gpu_check._gpu_is_ready(SimpleNamespace(ones=lambda *_args, **_kwargs: object(), float32=object()), ort, torch, SimpleNamespace(get_example=lambda _name: "model.onnx"), 0))
-        options.add_session_config_entry.assert_called_once_with("session.disable_cpu_ep_fallback", "1")
-        self.assertEqual(ort.InferenceSession.call_args.kwargs["providers"], ["CUDAExecutionProvider"])
+        options.add_session_config_entry.assert_not_called()
+        self.assertEqual(ort.InferenceSession.call_args.kwargs["providers"], ["CUDAExecutionProvider", "CPUExecutionProvider"])
+        self.assertEqual(ort.InferenceSession.call_args.kwargs["provider_options"], [{"device_id": "0"}, {}])
         session.disable_fallback.assert_called_once_with()
 
     def test_directml_validates_the_configured_device_without_switching_provider(self):

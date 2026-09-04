@@ -46,15 +46,15 @@ def _gpu_is_ready(np, ort, torch, datasets, device: int) -> bool:
             return False
         torch.ones((1,), device=f"cuda:{device}").add_(1).cpu()
         options = ort.SessionOptions()
-        options.add_session_config_entry("session.disable_cpu_ep_fallback", "1")
         session = ort.InferenceSession(
             datasets.get_example("mul_1.onnx"),
             sess_options=options,
-            providers=["CUDAExecutionProvider"],
-            provider_options=[{"device_id": str(device)}],
+            providers=["CUDAExecutionProvider", "CPUExecutionProvider"],
+            provider_options=[{"device_id": str(device)}, {}],
         )
         session.disable_fallback()
-        if session.get_providers()[0] != "CUDAExecutionProvider":
+        active_providers = session.get_providers()
+        if not active_providers or active_providers[0] != "CUDAExecutionProvider":
             return False
         session.run(None, {"X": np.ones((3, 2), dtype=np.float32)})
         return True

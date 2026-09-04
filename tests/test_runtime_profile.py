@@ -10,7 +10,7 @@ import tempfile
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from mozarie import runtime_profile
 
@@ -100,11 +100,18 @@ class RuntimeProfileTests(unittest.TestCase):
     def test_onnx_probe_requires_the_selected_cuda_provider_first(self) -> None:
         ort, onnx, np = self._probe_dependencies(["CUDAExecutionProvider", "CPUExecutionProvider"])
         self.assertEqual(runtime_profile._probe_onnx(ort, onnx, np, "cuda", 0), "CUDAExecutionProvider")
+        wrong = SimpleNamespace(
+            disable_fallback=lambda: None,
+            get_providers=lambda: ["CPUExecutionProvider", "CUDAExecutionProvider"],
+            run=Mock(),
+        )
         ort, onnx, np = self._probe_dependencies(["CPUExecutionProvider", "CUDAExecutionProvider"])
+        ort.InferenceSession = lambda *_args, **_kwargs: wrong
         with self.assertRaisesRegex(runtime_profile.ProfileError, "selected"):
             runtime_profile._probe_onnx(ort, onnx, np, "cuda", 0)
+        wrong.run.assert_not_called()
 
-    def test_onnx_gpu_probe_passes_only_the_selected_provider_and_strict_option(self) -> None:
+    def test_onnx_gpu_probe_keeps_cpu_ep_after_the_selected_provider(self) -> None:
         ort, onnx, np = self._probe_dependencies(["CUDAExecutionProvider"])
         config = []
         ort.options.add_session_config_entry = lambda key, value: config.append((key, value))
@@ -115,10 +122,10 @@ class RuntimeProfileTests(unittest.TestCase):
             run=lambda *_args: [[[1.0]]],
         ))
         self.assertEqual(runtime_profile._probe_onnx(ort, onnx, np, "cuda", 2), "CUDAExecutionProvider")
-        self.assertEqual(created[0]["providers"], [("CUDAExecutionProvider", {"device_id": 2})])
-        self.assertEqual(config, [("session.disable_cpu_ep_fallback", "1")])
+        self.assertEqual(created[0]["providers"], [("CUDAExecutionProvider", {"device_id": 2}), "CPUExecutionProvider"])
+        self.assertEqual(config, [])
 
-    def test_onnx_directml_probe_passes_only_directml_and_strict_option(self) -> None:
+    def test_onnx_directml_probe_keeps_cpu_ep_after_directml(self) -> None:
         ort, onnx, np = self._probe_dependencies(["DmlExecutionProvider"])
         config = []
         ort.options.add_session_config_entry = lambda key, value: config.append((key, value))
@@ -130,8 +137,8 @@ class RuntimeProfileTests(unittest.TestCase):
         ))
         with patch("mozarie.runtime.directml_onnx_device_id", return_value=5):
             self.assertEqual(runtime_profile._probe_onnx(ort, onnx, np, "directml", 2, directml_identity=object()), "DmlExecutionProvider")
-        self.assertEqual(created[0]["providers"], [("DmlExecutionProvider", {"device_id": 5})])
-        self.assertEqual(config, [("session.disable_cpu_ep_fallback", "1")])
+        self.assertEqual(created[0]["providers"], [("DmlExecutionProvider", {"device_id": 5}), "CPUExecutionProvider"])
+        self.assertEqual(config, [])
 
     def test_validate_imports_torch_before_onnxruntime(self) -> None:
         source = inspect.getsource(runtime_profile.validate)

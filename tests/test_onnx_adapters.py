@@ -65,7 +65,7 @@ class OnnxAdapterTests(unittest.TestCase):
                     "cudnn_conv_use_max_workspace": "0",
                     "do_copy_in_default_stream": "1",
                 },
-            )])
+            ), "CPUExecutionProvider"])
             self.assertEqual(create.call_args_list[1].kwargs["providers"], ["CPUExecutionProvider"])
             cuda_session.disable_fallback.assert_called_once_with()
             cpu_session.disable_fallback.assert_called_once_with()
@@ -77,7 +77,7 @@ class OnnxAdapterTests(unittest.TestCase):
                 "cudnn_conv_algo_search": "HEURISTIC",
                 "cudnn_conv_use_max_workspace": "0",
                 "do_copy_in_default_stream": "1",
-            })])
+            }), "CPUExecutionProvider"])
 
     def test_available_providers_rejects_missing_selected_gpu_provider(self) -> None:
         with patch.dict(os.environ, {"MOZARIE_RUNTIME": "directml"}), patch("mozarie.inference.onnx.ort.get_available_providers", return_value=[]):
@@ -117,10 +117,10 @@ class OnnxAdapterTests(unittest.TestCase):
             self.assertIs(create.call_args.kwargs["sess_options"], options)
             self.assertFalse(options.enable_mem_pattern)
             self.assertEqual(options.execution_mode, 0)
-            options.add_session_config_entry.assert_called_once_with("session.disable_cpu_ep_fallback", "1")
-            self.assertEqual(create.call_args.kwargs["providers"], [("DmlExecutionProvider", {"device_id": 1})])
+            options.add_session_config_entry.assert_not_called()
+            self.assertEqual(create.call_args.kwargs["providers"], [("DmlExecutionProvider", {"device_id": 1}), "CPUExecutionProvider"])
 
-    def test_gpu_session_disables_cpu_fallback_and_loads_torch_immediately_before_ort(self) -> None:
+    def test_gpu_session_keeps_cpu_ep_and_loads_torch_immediately_before_ort(self) -> None:
         session = Mock()
         session.get_providers.return_value = ["CUDAExecutionProvider"]
         options = Mock()
@@ -139,16 +139,16 @@ class OnnxAdapterTests(unittest.TestCase):
                 patch("mozarie.inference.onnx.ort.InferenceSession", side_effect=create_session) as create:
             self.assertIs(onnx_module._create_session("model", "gpu", 0), session)
         self.assertEqual(events, ["torch", "ort"])
-        options.add_session_config_entry.assert_called_once_with("session.disable_cpu_ep_fallback", "1")
+        options.add_session_config_entry.assert_not_called()
         self.assertEqual(create.call_args.kwargs["providers"], [("CUDAExecutionProvider", {
             "arena_extend_strategy": "kSameAsRequested",
             "cudnn_conv_algo_search": "HEURISTIC",
             "cudnn_conv_use_max_workspace": "0",
             "do_copy_in_default_stream": "1",
-        })])
+        }), "CPUExecutionProvider"])
         session.disable_fallback.assert_called_once_with()
 
-    def test_cuda_session_creation_failure_never_retries_with_cpu(self) -> None:
+    def test_cuda_session_creation_failure_does_not_retry_in_application_code(self) -> None:
         options = Mock()
         with patch("mozarie.inference.onnx.ort.SessionOptions", return_value=options), \
                 patch("mozarie.inference.onnx.ort.get_available_providers", return_value=["CUDAExecutionProvider", "CPUExecutionProvider"]), \
@@ -162,7 +162,7 @@ class OnnxAdapterTests(unittest.TestCase):
             "cudnn_conv_algo_search": "HEURISTIC",
             "cudnn_conv_use_max_workspace": "0",
             "do_copy_in_default_stream": "1",
-        })])
+        }), "CPUExecutionProvider"])
 
     def test_gpu_session_keeps_model_loading_errors(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -214,6 +214,7 @@ class OnnxAdapterTests(unittest.TestCase):
                     patch("mozarie.inference.onnx.ort.InferenceSession", return_value=wrong):
                 self.assertIs(create_session(path), wrong)
             self.assertEqual(wrong.disable_fallback.call_count, 2)
+            wrong.run.assert_not_called()
             session = Mock()
             session.get_inputs.return_value = [SimpleNamespace(name="image", shape=[None, "dynamic", -1, 3])]
             session.get_providers.return_value = ["CPUExecutionProvider"]
