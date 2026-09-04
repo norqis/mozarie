@@ -637,7 +637,7 @@ function setGalleryDropOverlay(visible) {
 }
 
 function handleEditorKeydown(event) {
-  if (isBusy() || state.importing || isEditableTarget(document.activeElement) || hasOpenDialog()) return false;
+  if (isBusy() || state.importing || isGestureActive() || isEditableTarget(document.activeElement) || hasOpenDialog()) return false;
   if (state.viewMode !== "edit") return false;
   const binding = shortcutFromEvent(event);
   const shortcuts = state.settings?.shortcuts?.bindings || { undo: "Ctrl+Z", redo: "Ctrl+Shift+Z" };

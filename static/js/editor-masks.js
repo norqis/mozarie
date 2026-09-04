@@ -997,7 +997,7 @@ async function refreshProjectHistory(imageId = state.currentId) {
 async function restoreProjectHistory(direction) {
   const imageId = state.currentId;
   const generation = state.imageGeneration;
-  if (!state.project?.id || !imageId || state.projectReadOnly || state.projectHistoryBusy || isBusy() || state.importing || currentImageActionPending()) return;
+  if (!state.project?.id || !imageId || state.projectReadOnly || state.projectHistoryBusy || isBusy() || state.importing || isGestureActive() || currentImageActionPending()) return;
   const history = state.projectHistory.get(imageId) || {};
   if ((direction === "undo" && !history.canUndo) || (direction === "redo" && !history.canRedo)) return;
   state.projectHistoryBusy = true; updateHistoryButtons();
@@ -1023,7 +1023,7 @@ async function restoreProjectHistory(direction) {
 
 function restoreSnapshot(index) {
   if (state.project?.id) { void restoreProjectHistory(index < state.historyIndex ? "undo" : "redo"); return; }
-  if (isBusy() || state.importing || currentImageActionPending() || index < 0 || index > state.history.length) return;
+  if (isBusy() || state.importing || isGestureActive() || currentImageActionPending() || index < 0 || index > state.history.length) return;
   if (index === state.historyIndex) return;
   const imageId = state.currentId;
   const generation = state.imageGeneration;
