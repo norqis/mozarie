@@ -1444,19 +1444,26 @@ class CatalogMixin:
         with self.lock:
             self._assert_catalog_mutable()
         changed_ids = self.workspace_store.restore_history(image_id, direction)
-        records = [self.image_snapshot(changed_id) for changed_id in changed_ids if changed_id in self.images]
-        locks = [(record.image_id, self.image_io_lock(record.image_id)) for record in records]
+        with self.lock:
+            record_ids = [changed_id for changed_id in changed_ids if changed_id in self.images]
+        locks = [(changed_id, self.image_io_lock(changed_id)) for changed_id in record_ids]
         with ExitStack() as stack:
             for _changed_id, image_lock in sorted(locks): stack.enter_context(image_lock)
+            hydrated: dict[str, tuple[int, list[Candidate], bool, bool]] = {}
+            for changed_id in record_ids:
+                shutil.rmtree(self.cache_dir / changed_id, ignore_errors=True)
+                revision, candidates = self.workspace_store.hydrate_candidates(
+                    changed_id, self.cache_dir / changed_id, self._candidate_from_workspace,
+                )
+                hidden, reviewed = self.workspace_store.image_state(changed_id)
+                hydrated[changed_id] = (revision, candidates, hidden, reviewed)
             with self.lock:
-                for record in records:
-                    shutil.rmtree(self.cache_dir / record.image_id, ignore_errors=True)
-                    revision, candidates = self.workspace_store.hydrate_candidates(
-                        record.image_id, self.cache_dir / record.image_id, self._candidate_from_workspace,
-                    )
-                    self.candidates[record.image_id] = candidates
-                    self.candidate_revisions[record.image_id] = revision
-                    record.hidden, record.reviewed = self.workspace_store.image_state(record.image_id)
+                for changed_id, (revision, candidates, hidden, reviewed) in hydrated.items():
+                    record = self.images[changed_id]
+                    record.hidden = hidden
+                    record.reviewed = reviewed
+                    self.candidates[changed_id] = candidates
+                    self.candidate_revisions[changed_id] = revision
         current = {
             "candidateRevision": self._candidate_revision(image_id),
             "candidates": [candidate.as_api_dict() for candidate in self.candidates.get(image_id, [])],

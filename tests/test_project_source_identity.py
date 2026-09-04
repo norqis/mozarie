@@ -194,6 +194,19 @@ class SourceIdentityRegressionTests(unittest.TestCase):
         project = state.create_project("flags")
         first = self.import_browser(state, name="first.png", identity="handle")
         second = self.import_browser(state, name="second.png", identity="handle")
+        for image_id in (first, second):
+            mask_path = state.cache_dir / image_id / "candidate.png"
+            mask_path.parent.mkdir(parents=True, exist_ok=True)
+            encoded_mask = io.BytesIO()
+            Image.new("L", (8, 8), 255).save(encoded_mask, format="PNG")
+            mask_path.write_bytes(encoded_mask.getvalue())
+            candidate = Candidate("candidate", "penis", .9, mask_path)
+            with state.lock:
+                state._commit_candidate_snapshot(image_id, [candidate], replace=True)
+            state.save_manual_workspace(image_id, {
+                "add": "", "exclusion": "", "exclusionErase": "", "removedCandidateIds": [],
+                "candidateRevision": state._candidate_revision(image_id), "hasEffectiveMask": False,
+            })
         for payload in ({}, {"imageIds": "not-a-list"}, {"imageIds": [], "hidden": True}, {"imageIds": [first], "hidden": 1}, {"imageIds": ["missing"], "reviewed": True}):
             with self.subTest(payload=payload), self.assertRaises(ClientError):
                 state.set_image_flags_bulk(payload)
@@ -209,6 +222,20 @@ class SourceIdentityRegressionTests(unittest.TestCase):
         self.assertTrue(all(not record.hidden and not record.reviewed for record in state.images.values()))
         self.assertEqual(state.workspace_store.image_state(first), (False, False))
         self.assertEqual(state.workspace_store.image_state(second), (False, False))
+        undone_catalog = {item["id"]: item for item in state.catalog_snapshot()["images"]}
+        for image_id in (first, second):
+            self.assertEqual((undone_catalog[image_id]["hidden"], undone_catalog[image_id]["reviewed"]), (False, False))
+            self.assertEqual([candidate["id"] for candidate in state.list_candidates(image_id)], ["candidate"])
+            self.assertIsNotNone(state.manual_workspace(image_id))
+        redone = state.restore_project_history(second, "redo")
+        self.assertEqual(set(redone["changedImageIds"]), {first, second})
+        redone_catalog = {item["id"]: item for item in state.catalog_snapshot()["images"]}
+        for image_id in (first, second):
+            self.assertEqual(state.workspace_store.image_state(image_id), (True, True))
+            self.assertTrue(state.images[image_id].hidden and state.images[image_id].reviewed)
+            self.assertEqual((redone_catalog[image_id]["hidden"], redone_catalog[image_id]["reviewed"]), (True, True))
+            self.assertEqual([candidate["id"] for candidate in state.list_candidates(image_id)], ["candidate"])
+            self.assertIsNotNone(state.manual_workspace(image_id))
 
     def test_durable_manual_delete_clear_and_invalid_rename_leave_no_hidden_state(self) -> None:
         state = self.studio()
