@@ -134,6 +134,12 @@ class RealDetectionRegressionTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "expected 5 memory samples"):
             real_detection_regression._settled_private_bytes_averages([])
 
+    def test_scene_00060_contract_accepts_verified_right_thigh_fluid(self) -> None:
+        scene = real_detection_regression.SAMPLES["Scene_00060.png"]
+        self.assertEqual(scene["fluid_bbox"], (250, 760, 780, 1340))
+        self.assertIn(("far-right", (720, 750, 800, 900), .02), scene["regions"])
+        self.assertEqual(scene["negative_regions"], (("shirt", (300, 650, 600, 750)),))
+
     def test_cowgirl_fluid_contract_and_generic_nonfluid_guard(self) -> None:
         cowgirl = real_detection_regression.SAMPLES["Scene_cowgirl_00023.png"]
         self.assertEqual(cowgirl["candidates"]["fluid"], ("exclude", "fluid_exclusion", False))
