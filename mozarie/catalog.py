@@ -27,7 +27,7 @@ from .core import (
     safe_import_relative_path, torch_module,
 )
 from .domain import Candidate, CandidateRole
-from .image_io import _valid_color, decode_draft_masks, draft_manual_exclusion_forced, inspect_import_image, oriented_image_size, unique_session_import_destination
+from .image_io import _valid_color, decode_draft_masks, draft_manual_exclusion_forced, inspect_import_image, oriented_image_size
 from .masks import compose_masks, expand_mask
 from .runtime import patch_directml_sam_prompt_encoder, runtime_backend, torch_device
 from .workspace import ProjectNameAlreadyExistsError, ProjectSourcePathConflictError, ProjectSourceUnavailableError, WorkspaceStore
@@ -191,7 +191,7 @@ class CatalogMixin:
             return self._set_root(raw_path)
 
     def _set_root(self, raw_path: str, project_id: str | None = None, *, defer_replace: bool = False,
-                  relink_source_id: str | None = None) -> list[Any]:
+                  relink_source_id: str | None = None, allow_new: bool = True) -> list[Any]:
         if not raw_path or not isinstance(raw_path, str):
             raise ClientError("Windowsフォルダを入力してください。", "input_invalid")
         root = Path(raw_path).expanduser().resolve()
@@ -266,7 +266,7 @@ class CatalogMixin:
         records.sort(key=lambda record: (record.relative_path.casefold(), record.relative_path))
         try:
             stored = self.workspace_store.relink_native_source(catalog_id, source_id, root, records) if relink_source_id else (
-                self.workspace_store.reconcile_images(catalog_id, records, source_id=source_id) if catalog_id is not None else {}
+                self.workspace_store.reconcile_images(catalog_id, records, source_id=source_id, allow_new=allow_new) if catalog_id is not None else {}
             )
         except ProjectSourcePathConflictError as exc:
             if relink_source_id:
@@ -280,6 +280,8 @@ class CatalogMixin:
             raise
         # A project can have several sources. Missing files remain durable so
         # their masks can still be exported or relinked later.
+        if not allow_new:
+            records = [record for record in records if record.relative_path in stored]
         for record in records:
             saved = stored.get(record.relative_path)
             if saved is not None:
@@ -305,7 +307,7 @@ class CatalogMixin:
             self.source_mismatches = retained_mismatches
         self.catalog_id = catalog_id
         completed = bool(catalog_id and (self.workspace_store.project(catalog_id) or {}).get("status") == "completed")
-        if catalog_id is not None:
+        if catalog_id is not None and allow_new:
             self.workspace_store.set_project_source_root(catalog_id, str(root))
         if defer_replace:
             return records
@@ -498,6 +500,7 @@ class CatalogMixin:
         native_roots = [Path(str(source["nativePath"])) for source in sources
                         if source["kind"] == "native-folder" and source.get("nativePath") and Path(str(source["nativePath"])).is_dir()]
         if native_roots:
+            restore_allow_new = project["status"] != "completed"
             self.detach_catalog()
             # Loading source bytes is not an edit.  Temporarily permit the
             # catalogue replacement, then restore completed read-only state.
@@ -505,7 +508,7 @@ class CatalogMixin:
             records: list[ImageRecord] = []
             for root in native_roots:
                 self.project_read_only = False
-                records.extend(self._set_root(str(root), catalog_id, defer_replace=True))
+                records.extend(self._set_root(str(root), catalog_id, defer_replace=True, allow_new=restore_allow_new))
             records.sort(key=lambda record: (record.relative_path.casefold(), record.relative_path, record.image_id))
             images = self._replace_catalog(native_roots[0], records)
             self.project_read_only = project["status"] == "completed"
@@ -1083,7 +1086,9 @@ class CatalogMixin:
                         # physical staging trees separate, but never let a
                         # filesystem collision rename the source-relative DB/UI
                         # path that identifies this image within its source.
-                        destination = unique_session_import_destination(source_import_dir / relative)
+                        destination = source_import_dir / relative
+                        if destination.exists():
+                            raise ClientError("同じソース内に同じ相対パスの画像があります。", "input_invalid")
                         destination.parent.mkdir(parents=True, exist_ok=True)
                         os.replace(temporary, destination)
                         final_paths.append(destination)
@@ -1153,9 +1158,13 @@ class CatalogMixin:
                             if self.project_read_only:
                                 raise ClientError("完了したプロジェクトには新しい画像を追加できません。", "project_read_only") from exc
                             raise ClientError("選択した画像ソースをこのプロジェクトに復元できません。", "project_source_unavailable") from exc
+                    published_imported: list[dict[str, str]] = []
                     for index, record in enumerate(added):
                         if self.catalog_id:
-                            stored = stored_images[record.relative_path]
+                            stored = stored_images.get(record.relative_path)
+                            if stored is None:
+                                record.path.unlink(missing_ok=True)
+                                continue
                             record.image_id = str(stored["image_id"]); record.hidden = bool(stored["hidden"]); record.reviewed = bool(stored["reviewed"])
                             record.source_id = durable_source_id
                             if stored.get("changed"):
@@ -1165,11 +1174,12 @@ class CatalogMixin:
                                 self.candidates[record.image_id] = restored
                                 self.candidate_revisions[record.image_id] = _revision
                         imported[index]["imageId"] = record.image_id
+                        published_imported.append(imported[index])
                         self.images[record.image_id] = record
                         self.order.append(record.image_id)
                     self.order.sort(key=lambda image_id: self.images[image_id].relative_path.lower())
                     images = self.list_images() if include_images else []
-                    return images, imported
+                    return images, published_imported
                 except Exception:
                     try:
                         if self.catalog_id and durable_source_id:

@@ -684,7 +684,7 @@ class WorkspaceStore:
                     row = existing.get(record.relative_path)
                     if row is None:
                         if not allow_new:
-                            raise ValueError("project source cannot add images")
+                            continue
                         # A projectless session owns a real, opaque image ID
                         # already.  Promoting it to a project must preserve
                         # that identity so its current editor state can be
