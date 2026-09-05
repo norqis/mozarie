@@ -301,7 +301,7 @@ function renderCandidates() {
     const label = document.createElement("span"); label.className = "candidate-label";
     const name = document.createElement("span"); name.className = "candidate-class"; name.textContent = labelText;
     const confidence = document.createElement("span"); confidence.className = "candidate-conf";
-    confidence.textContent = Number.isFinite(candidate.confidence) ? `${Math.round(candidate.confidence * 100)}%` : "";
+    confidence.textContent = Number.isFinite(candidate.confidence) ? `${Math.max(0, Math.min(100, Math.round(candidate.confidence * 100)))}%` : "";
     label.append(name, confidence);
     const remove = document.createElement("button"); remove.type = "button"; remove.className = "candidate-delete"; remove.textContent = "×"; remove.disabled = deleting || state.projectReadOnly || candidateLocked || state.candidateBatchPending.has(state.currentId);
     const deleteLabel = t("candidates.delete", { label: labelText });
@@ -317,8 +317,8 @@ function renderCandidates() {
         syncCurrentCandidateRecord(); refreshCurrentReviewAndMask(); requestMosaicPreview(); render();
         await updateCandidate(candidate, candidate.enabled, previousMaskStatus, previousForced);
       }, deleting || state.projectReadOnly || candidateLocked || state.candidateBatchPending.has(state.currentId));
-      appendRow(row, label, enabled, [blink, candidateEffectiveToggle(candidate.id), makeExpandButton(candidate, deleting || state.projectReadOnly || candidateLocked || isBusy() || state.importing || state.candidateBatchPending.has(state.currentId), labelText), forced, remove]);
-    } else appendRow(row, label, enabled, [blink, candidateEffectiveToggle(candidate.id), makeExpandButton(candidate, deleting || state.projectReadOnly || candidateLocked || isBusy() || state.importing || state.candidateBatchPending.has(state.currentId), labelText), remove]);
+      appendRow(row, label, enabled, [blink, candidateEffectiveToggle(candidate.id), makeExpandButton(candidate, deleting || state.projectReadOnly || candidateLocked || state.candidateBatchPending.has(state.currentId), labelText), forced, remove]);
+    } else appendRow(row, label, enabled, [blink, candidateEffectiveToggle(candidate.id), makeExpandButton(candidate, deleting || state.projectReadOnly || candidateLocked || state.candidateBatchPending.has(state.currentId), labelText), remove]);
     (role === "apply" ? applyList : excludeList).append(row);
   }
   appendEmpty(applyList); appendEmpty(excludeList);
