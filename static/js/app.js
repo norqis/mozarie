@@ -114,7 +114,6 @@ async function toggleImageFlip(axis) {
       recordHistoryOperation({ kind: "transform", flipH: axis === "horizontal", flipV: axis === "vertical" });
       saveDraft();
     }
-    prepareOriginalImage(); releaseMosaicPreview(); requestMosaicPreview();
     renderCatalogViews(); updateHistoryButtons(); render();
   } catch (error) {
     showUserError(error, axis === "horizontal" ? $("#flipHorizontalButton") : $("#flipVerticalButton"));
