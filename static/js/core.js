@@ -530,6 +530,7 @@ function updateActionButtons() {
   const presence = hasImage && !candidateViewLocked ? manualLayerPresence()
     : { hasManualExclude: false, hasManualExclusionErase: false };
   const controls = [...document.querySelectorAll("button, input, select, textarea")];
+  const confirmDialog = $("#confirmDialog");
   for (const control of controls) {
     if (control.dataset.disabledByLock === "true") {
       control.disabled = false;
@@ -573,7 +574,7 @@ function updateActionButtons() {
     for (const control of controls) {
       if ((["applyPauseButton", "applyCancelButton"].includes(control.id) && state.applyRunning)
         || (["processingPauseButton", "processingCancelButton"].includes(control.id) && state.processing)
-        || control.id === "errorDialogClose") continue;
+        || control.id === "errorDialogClose" || (state.saveStarting && confirmDialog.open && confirmDialog.contains(control))) continue;
       if (!control.disabled) control.dataset.disabledByLock = "true";
       control.disabled = true;
     }
