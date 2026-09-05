@@ -1019,6 +1019,7 @@ class CatalogMixin:
                 for record in records:
                     self.candidates[record.image_id] = []
                     self.candidate_revisions[record.image_id] = revisions[record.image_id]
+                    record.reviewed = False
             self._delete_mask_files(mask_paths, [self.cache_dir / record.image_id for record in records])
         return len(records)
 

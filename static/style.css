@@ -52,9 +52,9 @@ h2 { margin: 0 0 2px; font-size: 14px; } .muted { color: #98a2ad; font-size: 12p
 .gallery-empty-state[hidden], .gallery-drop-overlay[hidden] { display: none; }
 .gallery-drop-overlay { z-index: 2; border: 2px dashed #4bb99d; border-radius: 5px; background: #213631eb; color: #d9fff2; font-weight: 600; }
 .gallery.locked, #editorCanvas[aria-disabled="true"] { pointer-events: none; }
-.gallery-item { position: relative; display: grid; grid-template-rows: auto 32px; align-self: start; min-width: 0; min-height: 0; padding: 0; overflow: hidden; border: 1px solid #424953; border-radius: 5px; background: #282d33; cursor: pointer; text-align: left; }
+.gallery-item { position: relative; display: grid; grid-template-rows: minmax(0, 1fr) 32px; align-self: start; min-width: 0; min-height: 0; padding: 0; overflow: hidden; border: 1px solid #424953; border-radius: 5px; background: #282d33; cursor: pointer; text-align: left; }
 .gallery-item:hover { border-color: #6d7783; } .gallery-item.current { border-color: #42a98f; box-shadow: inset 0 0 0 1px #42a98f; }
-.gallery-item img { display: block; width: calc(100% - 8px); aspect-ratio: 4 / 3; margin: 4px 4px 0; border-radius: 3px; object-fit: contain; background: #151719; }
+.gallery-item img { display: block; width: calc(100% - 8px); min-height: 0; max-height: calc(100% - 4px); aspect-ratio: 4 / 3; margin: 4px 4px 0; border-radius: 3px; object-fit: contain; background: #151719; }
 .gallery-review-badge { position: absolute; top: 5px; right: 5px; max-width: calc(100% - 10px); padding: 2px 5px; overflow: hidden; border: 1px solid #3a9780; border-radius: 3px; background: #173e35e8; color: #d8fff3; font-size: 10px; line-height: 1.25; text-overflow: ellipsis; white-space: nowrap; }
 .gallery-item.reviewed .gallery-review-badge { border-color: #3a9780; background: #173e35e8; color: #d8fff3; }
 .catalog-card-footer { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 8px; align-items: center; min-width: 0; height: 32px; padding: 0 8px; }
