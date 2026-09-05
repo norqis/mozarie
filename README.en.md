@@ -2,14 +2,14 @@
 
 [日本語](README.md) · [Latest release](https://github.com/norqis/mozarie/releases/latest) · [Report an issue](https://github.com/norqis/mozarie/issues)
 
-Mozarie is a local Windows app for detecting, reviewing, editing, and saving mosaic areas in images. You decide which candidates to apply or exclude, make manual corrections, and choose where to save.
+Mozarie is a local Windows app for detecting, reviewing, editing, and saving mosaic areas in images.
 
 ## Key features
 
-- Load PNG, JPEG, and WebP images or folders; run automatic detection on the current image or the whole set.
-- Show, exclude, remove, and edit candidates with mosaic/exclusion brushes, erasers, and the boundary tool.
-- Exclude hand areas and force an exclusion to take priority over mosaic areas.
-- Save the current image, mosaicked images, or reviewed images as copies, or overwrite the source.
+- Load PNG, JPEG, and WebP images or folders; run automatic detection on the current image or all images.
+- Candidate review, exclusion, removal, and editing with mosaic/exclusion brushes, erasers, and the boundary tool.
+- Hand-area exclusion and forced exclusions that take priority over mosaics.
+- Save copies of current, mosaicked, and reviewed images, or overwrite the source.
 
 ## Installation
 
@@ -27,12 +27,18 @@ Mozarie is a local Windows app for detecting, reviewing, editing, and saving mos
 .\setup.bat
 ```
 
-`setup.bat` detects the GPU and selects CUDA when NVIDIA hardware is present, or DirectML when AMD hardware is present without NVIDIA. On systems with both vendors, NVIDIA/CUDA takes priority to preserve the existing CUDA behavior. You can explicitly select a backend before setup when needed.
+`setup.bat` detects the GPU and selects NVIDIA/CUDA, AMD/DirectML, or CPU in that order. You can select a backend before setup.
+
+| Value | Backend |
+| --- | --- |
+| `cuda` | NVIDIA/CUDA |
+| `directml` | AMD/DirectML |
+| `cpu` | CPU |
+
+Example: select AMD/DirectML.
 
 ```powershell
-$env:MOZARIE_RUNTIME = "cuda"      # NVIDIA/CUDA
-$env:MOZARIE_RUNTIME = "directml"  # AMD/DirectML
-$env:MOZARIE_RUNTIME = "cpu"       # CPU only
+$env:MOZARIE_RUNTIME = "directml"
 .\setup.bat
 ```
 
@@ -60,19 +66,21 @@ In **Settings > Detection**, select **Download** for the model you need. Mozarie
 | Anime-style hand detection | ONNX | [anime_hand_detection](https://huggingface.co/deepghs/anime_hand_detection) |
 | Hand contour refinement | safetensors | [HandSegNet anime SDXL](https://huggingface.co/Ov3rLoRd-MLEngineer/handsegnet-anime-sdxl) |
 
-### Prepare yourself
+### User-provided models
 
-NTD11 is an adult model. Sign in to Civitai.com and complete its age check before downloading and extracting its ZIP. Anonymous access is not guaranteed.
+NTD11 is an adult model. Sign in to Civitai.com, complete its age check, then download and extract its ZIP. Anonymous downloads are not guaranteed.
 
-| Use | What to prepare | Source and selection |
+Select models with **Browse** in **Settings > Detection**.
+
+| Use | What to prepare | Source |
 | --- | --- | --- |
-| Primary genital detection | ONNX from the source | Get it from the [source](https://huggingface.co/01miku/anime-nsfw-segm-yolo26), then select it with **Browse**. No conversion is required. |
-| NTD11 supplemental detection | ONNX converted from the `.pt` file included in the NTD11 ZIP | [Download the NTD11 ZIP](https://civitai.com/api/download/models/2350456?fileId=2240838), extract it, convert the included `.pt` file, then select the generated ONNX file with **Browse**. |
-| Sensitive supplemental detection | ONNX converted from a Sensitive `.pt` file | Get it from the [source](https://huggingface.co/sugarknight/sensitive-detect), convert it, then select the ONNX file with **Browse**. |
+| Primary genital detection | ONNX from the source; no conversion | [Source](https://huggingface.co/01miku/anime-nsfw-segm-yolo26) |
+| NTD11 supplemental detection | Convert the `.pt` file in the NTD11 ZIP to ONNX | [Download the NTD11 ZIP](https://civitai.com/api/download/models/2350456?fileId=2240838) |
+| Sensitive supplemental detection | Convert the Sensitive `.pt` file to ONNX | [Source](https://huggingface.co/sugarknight/sensitive-detect) |
 
 > **About `.pt` files:** PyTorch `.pt` files, including NTD files, can execute code through pickle while loading, so do not run a `.pt` obtained from any source other than those listed here.
 
-After running `setup.bat`, open PowerShell in the Mozarie folder and run the command below.
+After running `setup.bat`, open PowerShell in the Mozarie folder and run the conversion command.
 
 Convert NTD11:
 
@@ -86,20 +94,20 @@ Convert Sensitive:
 & ".\.venv\Scripts\yolo.exe" export model="path\to\downloaded\Sensitive.pt" format=onnx imgsz=1024 batch=1 dynamic=False simplify=False opset=17 nms=False end2end=False device=cpu
 ```
 
-The conversion creates a same-stem `.onnx` file in the same folder. Select that ONNX file in Settings, confirm its model status is valid, then run detection.
+The converted ONNX file is saved beside the source `.pt` with the same stem. Select it in Settings, confirm that its model status is valid, then run detection.
 
-Review the source terms and licenses for each model and the [third-party notices and model sources](THIRD_PARTY_NOTICES.md).
+Review each model's source terms and licenses and the [third-party notices and model sources](THIRD_PARTY_NOTICES.md).
 
 ## Use
 
-Choose one to four workers for automatic detection on either GPU or CPU. A job targeting one image uses one worker.
+Set one to four workers for automatic detection on GPU or CPU. A single-image job uses one worker.
 
-1. Import images or a folder.
+1. Load images or a folder.
 2. Run automatic detection for the current image or all images.
-3. Review the candidates at right and correct them with brushes, erasers, or the boundary tool when needed.
-4. Choose a save target, then save a copy or overwrite the source.
+3. Review the candidates at right; correct them with brushes, erasers, or the boundary tool as needed.
+4. Choose a save target; save a copy or overwrite the source.
 
-To use GPU processing, select a GPU in **Settings > Detection**. CPU may assist only operators unsupported by the GPU, but Mozarie never rebuilds a CPU-only session to retry a GPU initialization or execution failure. If GPU memory runs out, close other GPU apps or switch to CPU.
+For GPU processing, select a GPU in **Settings > Detection**. CPU assists unsupported operators. Mozarie does not automatically retry on CPU when GPU initialization or execution fails. If GPU memory runs out, close other GPU apps or switch to CPU.
 
 ## Updates
 
