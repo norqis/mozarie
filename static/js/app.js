@@ -721,7 +721,7 @@ function bindEvents() {
   let compareDrag = null;
   const setCompareSplit = (clientX) => {
     const rect = canvas.getBoundingClientRect();
-    state.compareSplit = clampCompareSplit((clientX - rect.left) / rect.width, rect.width);
+    state.compareSplit = clampCompareSplit(compareDrag.initial + (clientX - compareDrag.startX) / rect.width, rect.width);
     updateCompareSplitter(); render(); updateBrushCursor();
   };
   const flushCompareDrag = () => {
@@ -906,7 +906,8 @@ function bindEvents() {
         drag.moved = true;
         element.classList.add("dragging");
       }
-      drag.latest = side === "gallery" ? clientX - grid.getBoundingClientRect().left : grid.getBoundingClientRect().right - clientX;
+      const deltaX = clientX - drag.startX;
+      drag.latest = drag.initial + (side === "gallery" ? deltaX : -deltaX);
       if (!drag.frame) drag.frame = requestAnimationFrame(() => { drag.frame = 0; if (drag?.latest !== null) updatePaneWidth(side, drag.latest, false); });
     };
     element.addEventListener("pointerdown", (event) => {
