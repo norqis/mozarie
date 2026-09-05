@@ -31,6 +31,7 @@ function syncApplyOutputOptions() {
   if (format === "jpg") metadata.checked = false;
   if (requiresCopy) $("#applyCopyMode").checked = true;
   note.textContent = format === "jpg" ? t("apply.jpgMetadataDisabled") : (requiresCopy ? t("apply.formatRequiresCopy") : "");
+  note.classList.toggle("save-option-warning", format === "jpg");
   note.hidden = !note.textContent;
   $("#applyOverwriteMode").disabled = $("#applyOverwriteMode").disabled || requiresCopy;
   $("#applyOverwriteRow").classList.toggle("muted", $("#applyOverwriteMode").disabled);
@@ -43,6 +44,7 @@ function syncSingleOutputOptions() {
   if (format === "jpg") metadata.checked = false;
   if (requiresCopy) $("#singleSaveCopyMode").checked = true;
   note.textContent = format === "jpg" ? t("apply.jpgMetadataDisabled") : (requiresCopy ? t("apply.formatRequiresCopy") : "");
+  note.classList.toggle("save-option-warning", format === "jpg");
   note.hidden = !note.textContent;
   $("#singleSaveOverwriteMode").disabled = $("#singleSaveOverwriteMode").disabled || requiresCopy;
   $("#singleSaveOverwriteRow").classList.toggle("muted", $("#singleSaveOverwriteMode").disabled);
