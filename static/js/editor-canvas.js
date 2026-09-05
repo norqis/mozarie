@@ -300,7 +300,7 @@ async function loadCandidateBundle(imageId, generation, reconciled = false) {
       if (controller.signal.aborted || !catalogRecordMatches(record, epoch, { version })) throw new DOMException("stale catalog", "AbortError");
       const revision = Number(candidateData.candidateRevision);
       const cacheKey = candidateCacheKey(imageId, revision);
-      if (state.pendingImageId === imageId) state.pendingCandidateKey = cacheKey;
+      if (state.pendingImageId === imageId || (state.currentId === imageId && isCurrentGeneration(generation))) state.pendingCandidateKey = cacheKey;
       const cached = state.candidateBundleCache.get(cacheKey);
       if (cached) { record.candidateRevision = revision; return cached; }
       candidateImages = new Map();
@@ -338,21 +338,28 @@ async function loadCandidateBundle(imageId, generation, reconciled = false) {
 }
 
 async function reconcileCurrentCandidates(imageId, generation) {
-  const bundle = await loadCandidateBundle(imageId, generation);
-  if (state.currentId !== imageId || !isCurrentGeneration(generation)) return false;
-  state.candidates = bundle.candidates;
-  state.candidateImages = bundle.candidateImages;
-  const record = state.images.find((image) => image.id === imageId);
-  if (record) {
-    const visible = bundle.candidates.filter((candidate) => !state.removedCandidateIds.has(candidate.id));
-    record.candidateCount = visible.length;
-    record.enabledCandidateCount = visible.filter((candidate) => candidate.enabled && candidate.role !== "exclude").length;
-    record.candidateRevision = bundle.candidateRevision;
+  try {
+    const bundle = await loadCandidateBundle(imageId, generation);
+    if (state.currentId !== imageId || !isCurrentGeneration(generation)) return false;
+    state.candidates = bundle.candidates;
+    state.candidateImages = bundle.candidateImages;
+    const record = state.images.find((image) => image.id === imageId);
+    if (record) {
+      const visible = bundle.candidates.filter((candidate) => !state.removedCandidateIds.has(candidate.id));
+      record.candidateCount = visible.length;
+      record.enabledCandidateCount = visible.filter((candidate) => candidate.enabled && candidate.role !== "exclude").length;
+      record.candidateRevision = bundle.candidateRevision;
+    }
+    invalidateCandidateBundles(imageId);
+    markMaskDirty();
+    refreshMaskStatus(true); updateCandidateStatus(); requestMosaicPreview(); renderCandidates(); render();
+    return true;
+  } finally {
+    if (state.currentId === imageId && isCurrentGeneration(generation) && state.pendingImageId !== imageId) {
+      state.pendingCandidateKey = null;
+      state.imageCache.trim(); state.candidateBundleCache.trim();
+    }
   }
-  invalidateCandidateBundles(imageId);
-  markMaskDirty();
-  refreshMaskStatus(true); updateCandidateStatus(); requestMosaicPreview(); renderCandidates(); render();
-  return true;
 }
 
 
