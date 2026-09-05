@@ -323,12 +323,9 @@ class JobsMixin:
             if not apply_candidates and add_mask is None:
                 return None
             shape = (record.height, record.width)
-            apply_union = np.zeros(shape, dtype=np.uint8)
-            exclude_union = np.zeros(shape, dtype=np.uint8)
-            forced_exclude_union = np.zeros(shape, dtype=np.uint8)
-            has_apply = False
-            has_exclude = False
-            has_forced_exclude = False
+            apply_union: np.ndarray | None = None
+            exclude_union: np.ndarray | None = None
+            forced_exclude_union: np.ndarray | None = None
             for candidate in candidates:
                 self.materialize_candidate_mask(candidate, image_id)
                 try:
@@ -339,17 +336,14 @@ class JobsMixin:
                 if mask.shape != shape:
                     raise RuntimeError("検出マスクのサイズが元画像と一致しません。")
                 if candidate.role == CandidateRole.APPLY:
-                    union_mask(apply_union, mask)
-                    has_apply = True
+                    apply_union = union_mask(apply_union, mask)
                 else:
-                    union_mask(exclude_union, mask)
-                    has_exclude = True
+                    exclude_union = union_mask(exclude_union, mask)
                     if candidate.forced:
-                        union_mask(forced_exclude_union, mask)
-                        has_forced_exclude = True
+                        forced_exclude_union = union_mask(forced_exclude_union, mask)
             result = compose_masks(
-                shape, [apply_union] if has_apply else [], [exclude_union] if has_exclude else [], add_mask, exclusion_mask,
-                [forced_exclude_union] if has_forced_exclude else [], True if manual_exclude_forced is None else manual_exclude_forced, exclusion_erase_mask,
+                shape, [apply_union] if apply_union is not None else [], [exclude_union] if exclude_union is not None else [], add_mask, exclusion_mask,
+                [forced_exclude_union] if forced_exclude_union is not None else [], True if manual_exclude_forced is None else manual_exclude_forced, exclusion_erase_mask,
             )
             with self.lock:
                 current_record = self.images.get(image_id)

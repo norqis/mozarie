@@ -168,12 +168,9 @@ class SavingMixin:
                 # A candidate can disappear between the metadata snapshot and the
                 # disk read.  Do not compose a silently reduced mask.
                 shape = (record.height, record.width)
-                apply_union = np.zeros(shape, dtype=np.uint8)
-                exclude_union = np.zeros(shape, dtype=np.uint8)
-                forced_exclude_union = np.zeros(shape, dtype=np.uint8)
-                has_apply = False
-                has_exclude = False
-                has_forced_exclude = False
+                apply_union: np.ndarray | None = None
+                exclude_union: np.ndarray | None = None
+                forced_exclude_union: np.ndarray | None = None
                 add_mask, exclusion_mask, exclusion_erase_mask = draft_masks
                 for candidate in candidates:
                     try:
@@ -192,17 +189,14 @@ class SavingMixin:
                     if candidate_mask.shape != shape:
                         raise RuntimeError("検出マスクのサイズが元画像と一致しません。")
                     if candidate.role == CandidateRole.APPLY:
-                        union_mask(apply_union, candidate_mask)
-                        has_apply = True
+                        apply_union = union_mask(apply_union, candidate_mask)
                     else:
-                        union_mask(exclude_union, candidate_mask)
-                        has_exclude = True
+                        exclude_union = union_mask(exclude_union, candidate_mask)
                         if candidate.forced:
-                            union_mask(forced_exclude_union, candidate_mask)
-                            has_forced_exclude = True
+                            forced_exclude_union = union_mask(forced_exclude_union, candidate_mask)
                 mask = compose_masks(
-                    shape, [apply_union] if has_apply else [], [exclude_union] if has_exclude else [], add_mask, exclusion_mask,
-                    [forced_exclude_union] if has_forced_exclude else [], manual_exclude_forced, exclusion_erase_mask,
+                    shape, [apply_union] if apply_union is not None else [], [exclude_union] if exclude_union is not None else [], add_mask, exclusion_mask,
+                    [forced_exclude_union] if forced_exclude_union is not None else [], manual_exclude_forced, exclusion_erase_mask,
                 )
                 no_effect = (mask is None or not np.any(mask)) and output_format_matches_source(record, output_format) and keep_metadata and \
                     record.flip_horizontal == record.source_flip_horizontal and record.flip_vertical == record.source_flip_vertical

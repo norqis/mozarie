@@ -6,9 +6,12 @@ import numpy as np
 import cv2
 
 
-def union_mask(target: np.ndarray, mask: np.ndarray) -> None:
-    """Add non-zero mask pixels to an existing uint8 union in place."""
+def union_mask(target: np.ndarray | None, mask: np.ndarray) -> np.ndarray:
+    """Add non-zero mask pixels to an existing or newly allocated uint8 union."""
+    if target is None:
+        target = np.zeros(mask.shape, dtype=np.uint8)
     np.maximum(target, np.asarray(mask > 0, dtype=np.uint8) * 255, out=target)
+    return target
 
 
 def expand_mask(mask: np.ndarray, expand_px: int) -> np.ndarray:

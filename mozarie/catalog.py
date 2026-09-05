@@ -572,8 +572,9 @@ class CatalogMixin:
         add, manual_exclude, erase = decode_draft_masks(draft, width, height)
         removed = {str(item) for item in draft.get("removedCandidateIds", [])}
         shape = (height, width)
-        apply_union = np.zeros(shape, dtype=np.uint8); exclude_union = np.zeros(shape, dtype=np.uint8); forced_union = np.zeros(shape, dtype=np.uint8)
-        has_apply = False; has_exclude = False; has_forced = False
+        apply_union: np.ndarray | None = None
+        exclude_union: np.ndarray | None = None
+        forced_union: np.ndarray | None = None
         for candidate in state["candidates"]:
             if not candidate.get("enabled") or candidate.get("deleted") or candidate.get("id") in removed:
                 continue
@@ -583,15 +584,15 @@ class CatalogMixin:
             if mask.shape != shape:
                 raise ValueError("apply mask dimensions do not match the source image" if candidate.get("role") == CandidateRole.APPLY.value else "exclude mask dimensions do not match the source image")
             if candidate.get("role") == CandidateRole.APPLY.value:
-                union_mask(apply_union, mask); has_apply = True
+                apply_union = union_mask(apply_union, mask)
             else:
-                union_mask(exclude_union, mask); has_exclude = True
+                exclude_union = union_mask(exclude_union, mask)
                 if candidate.get("forced"):
-                    union_mask(forced_union, mask); has_forced = True
+                    forced_union = union_mask(forced_union, mask)
         if kind == "mosaic":
-            value = compose_masks(shape, [apply_union] if has_apply else [], [exclude_union] if has_exclude else [], add if draft.get("manualEnabled") is not False else None, manual_exclude if draft.get("manualExclusionEnabled") is not False else None, [forced_union] if has_forced else [], draft_manual_exclusion_forced(draft, True), erase if draft.get("manualExclusionEraseEnabled") is not False else None)
+            value = compose_masks(shape, [apply_union] if apply_union is not None else [], [exclude_union] if exclude_union is not None else [], add if draft.get("manualEnabled") is not False else None, manual_exclude if draft.get("manualExclusionEnabled") is not False else None, [forced_union] if forced_union is not None else [], draft_manual_exclusion_forced(draft, True), erase if draft.get("manualExclusionEraseEnabled") is not False else None)
         else:
-            value = exclude_union
+            value = exclude_union if exclude_union is not None else np.zeros(shape, dtype=np.uint8)
             if manual_exclude is not None and draft.get("manualExclusionEnabled") is not False: union_mask(value, manual_exclude)
             if erase is not None and draft.get("manualExclusionEraseEnabled") is not False: value[np.asarray(erase) > 0] = 0
         transform = state.get("transform", {})
@@ -650,8 +651,9 @@ class CatalogMixin:
         manual_exclude = self._raw_workspace_mask(manual.get("exclusion"), width, height)
         erase = self._raw_workspace_mask(manual.get("erase"), width, height)
         shape = (height, width)
-        apply_union = np.zeros(shape, dtype=np.uint8); exclude_union = np.zeros(shape, dtype=np.uint8); forced_union = np.zeros(shape, dtype=np.uint8)
-        has_apply = False; has_exclude = False; has_forced = False
+        apply_union: np.ndarray | None = None
+        exclude_union: np.ndarray | None = None
+        forced_union: np.ndarray | None = None
         for candidate in state["candidates"]:
             if not candidate.get("enabled") or candidate["id"] in removed:
                 continue
@@ -662,21 +664,21 @@ class CatalogMixin:
             if mask.shape != shape:
                 raise ValueError("apply mask dimensions do not match the source image" if candidate.get("role") == CandidateRole.APPLY.value else "exclude mask dimensions do not match the source image")
             if candidate.get("role") == CandidateRole.APPLY.value:
-                union_mask(apply_union, mask); has_apply = True
+                apply_union = union_mask(apply_union, mask)
             else:
-                union_mask(exclude_union, mask); has_exclude = True
+                exclude_union = union_mask(exclude_union, mask)
                 if candidate.get("forced"):
-                    union_mask(forced_union, mask); has_forced = True
+                    forced_union = union_mask(forced_union, mask)
         if kind == "mosaic":
             value = compose_masks(
-                shape, [apply_union] if has_apply else [], [exclude_union] if has_exclude else [],
+                shape, [apply_union] if apply_union is not None else [], [exclude_union] if exclude_union is not None else [],
                 add if manual.get("manualEnabled", True) else None,
                 manual_exclude if manual.get("exclusionEnabled", True) else None,
-                [forced_union] if has_forced else [], bool(manual.get("exclusionForced", True)),
+                [forced_union] if forced_union is not None else [], bool(manual.get("exclusionForced", True)),
                 erase if manual.get("eraseEnabled", True) else None,
             )
         else:
-            value = exclude_union
+            value = exclude_union if exclude_union is not None else np.zeros(shape, dtype=np.uint8)
             if manual_exclude is not None and manual.get("exclusionEnabled", True):
                 union_mask(value, manual_exclude)
             if erase is not None and manual.get("eraseEnabled", True):

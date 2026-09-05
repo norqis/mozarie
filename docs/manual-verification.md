@@ -38,3 +38,4 @@
 4. [保存・書き出し・異常時・リリース](manual-verification/save-release.md)
 5. [通信・対象の組合せ・PJデータ照合](manual-verification/data-integrity.md)
 6. [画像反転・保存形式・メタ情報](manual-verification/flip-export.md)
+7. [無名作業の反転上書きと4K多候補の保存・マスク書出し（DI-099〜101）](manual-verification/data-integrity.md)：単一・一括保存、PNG・ZIPの出力範囲と処理中メモリを確認する。
