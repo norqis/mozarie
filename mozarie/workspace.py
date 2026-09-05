@@ -119,6 +119,12 @@ class WorkspaceStore:
                     candidate_revision INTEGER NOT NULL DEFAULT 0, updated_at INTEGER NOT NULL,
                     PRIMARY KEY(source_id, relative_path)
                 );
+                CREATE TABLE IF NOT EXISTS image_transforms (
+                    image_id TEXT PRIMARY KEY REFERENCES images(image_id) ON DELETE CASCADE,
+                    flip_horizontal INTEGER NOT NULL DEFAULT 0, flip_vertical INTEGER NOT NULL DEFAULT 0,
+                    source_flip_horizontal INTEGER NOT NULL DEFAULT 0, source_flip_vertical INTEGER NOT NULL DEFAULT 0,
+                    revision INTEGER NOT NULL DEFAULT 0
+                );
                 CREATE TABLE IF NOT EXISTS candidates (
                     image_id TEXT NOT NULL REFERENCES images(image_id) ON DELETE CASCADE,
                     candidate_id TEXT NOT NULL, label_token TEXT NOT NULL, confidence REAL,
@@ -244,6 +250,7 @@ class WorkspaceStore:
         meta = {str(row["name"]): row for row in db.execute("PRAGMA table_info(meta)")}
         catalogs = {str(row["name"]): row for row in db.execute("PRAGMA table_info(catalogs)")}
         images = {str(row["name"]): row for row in db.execute("PRAGMA table_info(images)")}
+        transforms = {str(row["name"]): row for row in db.execute("PRAGMA table_info(image_transforms)")} if "image_transforms" in tables else {}
         history = {str(row["name"]): row for row in db.execute("PRAGMA table_info(history_entries)")}
         foreign = list(db.execute("PRAGMA foreign_key_list(images)"))
         indexes = list(db.execute("PRAGMA index_list(catalogs)"))
@@ -264,6 +271,7 @@ class WorkspaceStore:
                 or str(meta["value"]["type"]).upper() != "TEXT" or not int(meta["value"]["notnull"])
                 or "catalog_id" not in catalogs or not int(catalogs["catalog_id"]["pk"])
                 or not {"catalog_id", "source_id", "relative_path", "image_id", "size_bytes", "mtime_ns", "width", "height", "source_blocked"}.issubset(images)
+                or (transforms and set(transforms) != {"image_id", "flip_horizontal", "flip_vertical", "source_flip_horizontal", "source_flip_vertical", "revision"})
                 or not {"entry_id", "catalog_id", "image_id", "before_json", "after_json", "delta_json", "created_at"}.issubset(history)
                 or not foreign
                 or not name_unique_nocase):
@@ -542,6 +550,10 @@ class WorkspaceStore:
                             (catalog_id, source_id, record.relative_path, record.image_id, record.size_bytes,
                              record.mtime_ns, record.width, record.height, now),
                         )
+                        if record.flip_horizontal or record.flip_vertical or record.source_flip_horizontal or record.source_flip_vertical or record.transform_revision:
+                            db.execute("""INSERT INTO image_transforms(image_id,flip_horizontal,flip_vertical,source_flip_horizontal,source_flip_vertical,revision)
+                                VALUES(?,?,?,?,?,?)""", (record.image_id, int(record.flip_horizontal), int(record.flip_vertical),
+                                int(record.source_flip_horizontal), int(record.source_flip_vertical), record.transform_revision))
                         source_ids[record.image_id] = source_id
                         records.append(record)
                 for record in records:
@@ -726,12 +738,22 @@ class WorkspaceStore:
                     # Keep the old baseline until the user accepts the source
                     # change in the warning dialog. This makes a reopened
                     # project warn again instead of silently normalising it.
+                    if changed:
+                        # An outside write has no Mozarie transform contract;
+                        # never compensate it as if it had been our bake.
+                        db.execute("UPDATE image_transforms SET source_flip_horizontal=0,source_flip_vertical=0,revision=revision+1 WHERE image_id=?", (row["image_id"],))
+                    transform = db.execute("SELECT * FROM image_transforms WHERE image_id=?", (row["image_id"],)).fetchone()
                     result[record.relative_path] = {
                         "image_id": row["image_id"], "hidden": bool(row["hidden"]),
                         "reviewed": False if changed else bool(row["reviewed"]),
                         "revision": int(row["candidate_revision"]),
                         "changed": changed or bool(row["source_blocked"]),
                         "dimensions_changed": dimensions_changed or bool(row["source_blocked"]),
+                        "flip_horizontal": bool(transform["flip_horizontal"]) if transform else False,
+                        "flip_vertical": bool(transform["flip_vertical"]) if transform else False,
+                        "source_flip_horizontal": bool(transform["source_flip_horizontal"]) if transform else False,
+                        "source_flip_vertical": bool(transform["source_flip_vertical"]) if transform else False,
+                        "transform_revision": int(transform["revision"]) if transform else 0,
                         "created": False,
                     }
                 db.execute("COMMIT")
@@ -984,7 +1006,8 @@ class WorkspaceStore:
 
     def commit_save(self, image_id: str, *, mtime_ns: int | None = None, size_bytes: int | None = None,
                     candidate_revision: int | None = None,
-                    clear_workspace: bool, delete_image: bool = False) -> None:
+                    clear_workspace: bool, delete_image: bool = False,
+                    source_flip_horizontal: bool | None = None, source_flip_vertical: bool | None = None) -> None:
         """Commit one completed save before its in-memory review state is published."""
         if not delete_image and mtime_ns is None and size_bytes is None and candidate_revision is None and not clear_workspace:
             return
@@ -997,6 +1020,11 @@ class WorkspaceStore:
                     db.execute("UPDATE images SET mtime_ns=?,size_bytes=?,updated_at=? WHERE image_id=?", (mtime_ns, size_bytes, time.time_ns(), image_id))
                 if candidate_revision is not None and not delete_image:
                     db.execute("UPDATE images SET candidate_revision=?,reviewed=0,updated_at=? WHERE image_id=?", (candidate_revision, time.time_ns(), image_id))
+                if source_flip_horizontal is not None and source_flip_vertical is not None and not delete_image:
+                    db.execute("""INSERT INTO image_transforms(image_id,flip_horizontal,flip_vertical,source_flip_horizontal,source_flip_vertical,revision)
+                        VALUES(?,?,?,?,?,1) ON CONFLICT(image_id) DO UPDATE SET
+                        source_flip_horizontal=excluded.source_flip_horizontal,source_flip_vertical=excluded.source_flip_vertical,revision=image_transforms.revision+1""",
+                        (image_id, 0, 0, int(source_flip_horizontal), int(source_flip_vertical)))
                 if clear_workspace and not delete_image:
                     db.execute("DELETE FROM candidates WHERE image_id=?", (image_id,))
                     db.execute("DELETE FROM manual_edits WHERE image_id=?", (image_id,))
@@ -1004,6 +1032,38 @@ class WorkspaceStore:
             except Exception:
                 db.execute("ROLLBACK")
                 raise
+
+    def image_transform(self, image_id: str) -> dict[str, Any]:
+        with self._connect() as db:
+            row = db.execute("SELECT * FROM image_transforms WHERE image_id=?", (image_id,)).fetchone()
+        if row is None:
+            return {"flipHorizontal": False, "flipVertical": False, "sourceFlipHorizontal": False, "sourceFlipVertical": False, "transformRevision": 0}
+        return {"flipHorizontal": bool(row["flip_horizontal"]), "flipVertical": bool(row["flip_vertical"]),
+                "sourceFlipHorizontal": bool(row["source_flip_horizontal"]), "sourceFlipVertical": bool(row["source_flip_vertical"]),
+                "transformRevision": int(row["revision"])}
+
+    def set_image_transform(self, image_id: str, flip_horizontal: bool, flip_vertical: bool) -> dict[str, Any]:
+        if not isinstance(flip_horizontal, bool) or not isinstance(flip_vertical, bool):
+            raise ValueError("invalid image transform")
+        with self._lock, self._connect() as db:
+            db.execute("BEGIN IMMEDIATE")
+            try:
+                before = self._history_state_db(db, image_id)
+                current = db.execute("SELECT * FROM image_transforms WHERE image_id=?", (image_id,)).fetchone()
+                source_h = bool(current["source_flip_horizontal"]) if current else False
+                source_v = bool(current["source_flip_vertical"]) if current else False
+                revision = (int(current["revision"]) + 1) if current else 1
+                db.execute("""INSERT INTO image_transforms(image_id,flip_horizontal,flip_vertical,source_flip_horizontal,source_flip_vertical,revision)
+                    VALUES(?,?,?,?,?,?) ON CONFLICT(image_id) DO UPDATE SET flip_horizontal=excluded.flip_horizontal,
+                    flip_vertical=excluded.flip_vertical,revision=excluded.revision""",
+                    (image_id, int(flip_horizontal), int(flip_vertical), int(source_h), int(source_v), revision))
+                after = self._history_state_db(db, image_id)
+                self._record_history_db(db, image_id, before, after)
+                db.execute("COMMIT")
+            except Exception:
+                db.execute("ROLLBACK")
+                raise
+        return self.image_transform(image_id)
 
     @staticmethod
     def _update_manual_candidate_state(db: sqlite3.Connection, image_id: str, revision: int, candidate_ids: set[str], effective: bool) -> None:
@@ -1290,8 +1350,11 @@ class WorkspaceStore:
                 "exclusionForced": bool(manual["exclusion_forced"]), "removed": str(manual["removed_candidate_ids"]),
                 "revision": int(manual["candidate_revision"]), "effective": bool(manual["has_effective_mask"]),
             }
+        transform = db.execute("SELECT flip_horizontal,flip_vertical FROM image_transforms WHERE image_id=?", (image_id,)).fetchone()
         return {"catalog": str(image["catalog_id"]), "revision": int(image["candidate_revision"]),
                 "flags": {"hidden": bool(image["hidden"]), "reviewed": bool(image["reviewed"])},
+                "transform": {"flipHorizontal": bool(transform["flip_horizontal"]) if transform else False,
+                              "flipVertical": bool(transform["flip_vertical"]) if transform else False},
                 "candidates": packed_candidates, "manual": packed_manual, "_manual_raw": manual_raw}
 
     def export_state(self, image_id: str) -> dict[str, Any]:
@@ -1316,7 +1379,8 @@ class WorkspaceStore:
             db.execute("BEGIN")
             try:
                 images = db.execute("""SELECT images.image_id,images.relative_path,images.width,images.height,images.source_id,
-                    project_sources.display_name FROM images JOIN project_sources ON project_sources.source_id=images.source_id
+                    project_sources.display_name,image_transforms.flip_horizontal,image_transforms.flip_vertical FROM images JOIN project_sources ON project_sources.source_id=images.source_id
+                    LEFT JOIN image_transforms ON image_transforms.image_id=images.image_id
                     WHERE images.catalog_id=? ORDER BY images.image_id""", (catalog_id,))
                 candidate_rows = iter(db.execute("""SELECT candidates.image_id,candidates.candidate_id,candidates.mask_png,candidates.enabled,
                     candidates.role,candidates.forced,candidate_metadata.expand_px FROM candidates JOIN images USING(image_id)
@@ -1341,7 +1405,8 @@ class WorkspaceStore:
                     yield {
                         "image": {"id": image_id, "relativePath": str(image["relative_path"]),
                                   "width": int(image["width"]), "height": int(image["height"]),
-                                  "sourceId": str(image["source_id"]), "sourceDisplay": str(image["display_name"])},
+                                  "sourceId": str(image["source_id"]), "sourceDisplay": str(image["display_name"]),
+                                  "flipH": bool(image["flip_horizontal"]), "flipV": bool(image["flip_vertical"])},
                         "candidates": candidates,
                         "manual": None if current_manual is None else {
                             "add": current_manual["add_png"], "exclusion": current_manual["exclusion_png"], "erase": current_manual["exclusion_erase_png"],
@@ -1561,6 +1626,17 @@ class WorkspaceStore:
         if not isinstance(flags, dict) or not isinstance(flags.get("hidden", False), bool) or not isinstance(flags.get("reviewed", False), bool):
             raise ValueError("workspace history is invalid")
         db.execute("UPDATE images SET candidate_revision=?,hidden=?,reviewed=?,updated_at=? WHERE image_id=?", (revision, int(flags.get("hidden", False)), int(flags.get("reviewed", False)), time.time_ns(), image_id))
+        transform = state.get("transform", {"flipHorizontal": False, "flipVertical": False})
+        if not isinstance(transform, dict) or not isinstance(transform.get("flipHorizontal", False), bool) or not isinstance(transform.get("flipVertical", False), bool):
+            raise ValueError("workspace history is invalid")
+        current_transform = db.execute("SELECT source_flip_horizontal,source_flip_vertical,revision FROM image_transforms WHERE image_id=?", (image_id,)).fetchone()
+        source_h = bool(current_transform["source_flip_horizontal"]) if current_transform else False
+        source_v = bool(current_transform["source_flip_vertical"]) if current_transform else False
+        next_revision = int(current_transform["revision"]) + 1 if current_transform else 1
+        db.execute("""INSERT INTO image_transforms(image_id,flip_horizontal,flip_vertical,source_flip_horizontal,source_flip_vertical,revision)
+            VALUES(?,?,?,?,?,?) ON CONFLICT(image_id) DO UPDATE SET flip_horizontal=excluded.flip_horizontal,
+            flip_vertical=excluded.flip_vertical,revision=excluded.revision""",
+            (image_id, int(transform["flipHorizontal"]), int(transform["flipVertical"]), int(source_h), int(source_v), next_revision))
 
     def history_status(self, image_id: str) -> dict[str, bool]:
         with self._connect() as db:

@@ -118,7 +118,7 @@ function setFluidExclusionEnabled(enabled) {
   if (stateLabel) stateLabel.textContent = t(enabled ? "settings.on" : "settings.off");
 }
 
-function toolRailItems() { return ["#brushTool", "#bucketTool", "#mosaicEraserTool", "#boundaryTool", "#eraserTool", "#excludeBucketTool", "#excludeEraserTool", "#singleViewButton", "#compareViewButton", "#fitButton", "#undoButton", "#redoButton", "#mosaicPreviewButton"].map($); }
+function toolRailItems() { return ["#brushTool", "#bucketTool", "#mosaicEraserTool", "#boundaryTool", "#eraserTool", "#excludeBucketTool", "#excludeEraserTool", "#singleViewButton", "#compareViewButton", "#fitButton", "#undoButton", "#redoButton", "#flipHorizontalButton", "#flipVerticalButton", "#mosaicPreviewButton"].map($); }
 
 function setToolRailTabStop(activeItem = null) {
   const items = toolRailItems().filter((item) => !item.disabled);

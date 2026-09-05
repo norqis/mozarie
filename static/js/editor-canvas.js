@@ -680,6 +680,28 @@ function resizeRenderCanvas() {
 
 function setCssTransform(context) { const dpr = window.devicePixelRatio || 1; context.setTransform(dpr, 0, 0, dpr, 0, 0); }
 
+function desiredFlipHorizontal(record = currentRecord()) { return record?.flipH === true; }
+function desiredFlipVertical(record = currentRecord()) { return record?.flipV === true; }
+function effectiveFlipHorizontal(record = currentRecord()) { return desiredFlipHorizontal(record) !== (record?.sourceFlipH === true); }
+function effectiveFlipVertical(record = currentRecord()) { return desiredFlipVertical(record) !== (record?.sourceFlipV === true); }
+
+function transformImagePoint(point, record = currentRecord()) {
+  if (!state.currentImage) return point;
+  return {
+    x: desiredFlipHorizontal(record) ? state.currentImage.width - point.x : point.x,
+    y: desiredFlipVertical(record) ? state.currentImage.height - point.y : point.y,
+  };
+}
+
+function inverseTransformImagePoint(point, record = currentRecord()) { return transformImagePoint(point, record); }
+
+function applyImageDrawTransform(target, offset = 0, record = currentRecord()) {
+  target.translate(offset + state.view.x, state.view.y);
+  target.scale(state.view.scale, state.view.scale);
+  if (desiredFlipHorizontal(record)) { target.translate(state.currentImage.width, 0); target.scale(-1, 1); }
+  if (desiredFlipVertical(record)) { target.translate(0, state.currentImage.height); target.scale(1, -1); }
+}
+
 function releaseMosaicPreview() {
   state.mosaicPreviewGeneration += 1;
   state.mosaicWorker?.postMessage?.({ type: "release" });
@@ -699,7 +721,12 @@ function releaseMosaicPreview() {
 function prepareOriginalImage() {
   if (!state.currentImage) return;
   originalCanvas.width = state.currentImage.width; originalCanvas.height = state.currentImage.height;
-  originalCtx.clearRect(0, 0, originalCanvas.width, originalCanvas.height); originalCtx.drawImage(state.currentImage, 0, 0);
+  originalCtx.clearRect(0, 0, originalCanvas.width, originalCanvas.height);
+  originalCtx.save();
+  const record = currentRecord();
+  if (record?.sourceFlipH === true) { originalCtx.translate(originalCanvas.width, 0); originalCtx.scale(-1, 1); }
+  if (record?.sourceFlipV === true) { originalCtx.translate(0, originalCanvas.height); originalCtx.scale(1, -1); }
+  originalCtx.drawImage(state.currentImage, 0, 0); originalCtx.restore();
 }
 
 function mosaicPreviewFailed() {
@@ -765,7 +792,7 @@ async function ensureMosaicPreviewSource(worker) {
     let source = null;
     try {
       if (typeof createImageBitmap !== "function" || typeof OffscreenCanvas !== "function") throw new Error("preview APIs unavailable");
-      source = await createImageBitmap(image);
+      source = await createImageBitmap(originalCanvas);
       if (state.currentImage !== image || state.mosaicWorker !== worker) { source.close?.(); return ""; }
       worker.postMessage({ type: "source", sourceId, source, generation: sourceGeneration }, [source]);
       source = null;
@@ -958,7 +985,7 @@ function paintMosaicPreviewAt(offset) {
   if (!state.currentImage) return;
   const width = stage.clientWidth; const height = stage.clientHeight;
   setCssTransform(layerCtx); layerCtx.clearRect(0, 0, width, height);
-  layerCtx.save(); layerCtx.translate(offset + state.view.x, state.view.y); layerCtx.scale(state.view.scale, state.view.scale);
+  layerCtx.save(); applyImageDrawTransform(layerCtx, offset);
   layerCtx.drawImage(mosaicCanvas, 0, 0);
   layerCtx.globalCompositeOperation = "destination-in";
   layerCtx.drawImage(combinedCanvas, 0, 0);
@@ -969,8 +996,9 @@ function updateBrushCursor() {
   const cursor = $("#brushCursor");
   if (!state.hover || !state.currentImage || state.panning || isBusy() || state.importing || !["brush", "mosaic_eraser", "eraser", "exclude_eraser", "boundary_brush"].includes(state.tool)) { cursor.hidden = true; state.brushCursorGeometry = ""; return; }
   const radius = Math.max(1, Number($("#brushSize").value) * state.view.scale / 2);
-  const x = compareSideOffset(state.hoverDisplaySide) + state.view.x + state.hover.x * state.view.scale;
-  const y = state.view.y + state.hover.y * state.view.scale;
+  const point = transformImagePoint(state.hover);
+  const x = compareSideOffset(state.hoverDisplaySide) + state.view.x + point.x * state.view.scale;
+  const y = state.view.y + point.y * state.view.scale;
   const diameter = Math.max(2, radius * 2);
   const geometry = `${state.tool}:${diameter}`;
   cursor.hidden = false;
@@ -1099,7 +1127,8 @@ function boundaryPath(shape, context = ctx, offset = compareSideOffset(state.bou
   const roi = boundaryDraftBounds(shape);
   if (shape.type === "polygon" && shape.points?.length) {
     shape.points.forEach((point, index) => {
-      const x = offset + state.view.x + point.x * state.view.scale; const y = state.view.y + point.y * state.view.scale;
+      const transformed = transformImagePoint(point);
+      const x = offset + state.view.x + transformed.x * state.view.scale; const y = state.view.y + transformed.y * state.view.scale;
       if (index) context.lineTo(x, y); else context.moveTo(x, y);
     });
     if (shape.points.length === 4) context.closePath();
@@ -1107,13 +1136,16 @@ function boundaryPath(shape, context = ctx, offset = compareSideOffset(state.bou
   }
   if (shape.type === "brush" && shape.points?.length) {
     const points = shape.points;
-    const first = points[0];
+    const first = transformImagePoint(points[0]);
     context.moveTo(offset + state.view.x + first.x * state.view.scale, state.view.y + first.y * state.view.scale);
-    for (const point of points.slice(1)) context.lineTo(offset + state.view.x + point.x * state.view.scale, state.view.y + point.y * state.view.scale);
+    for (const point of points.slice(1)) { const transformed = transformImagePoint(point); context.lineTo(offset + state.view.x + transformed.x * state.view.scale, state.view.y + transformed.y * state.view.scale); }
     if (points.length === 1) context.lineTo(offset + state.view.x + first.x * state.view.scale + 0.01, state.view.y + first.y * state.view.scale + 0.01);
     return;
   }
-  if (roi) context.rect(offset + state.view.x + roi.left * state.view.scale, state.view.y + roi.top * state.view.scale, (roi.right - roi.left) * state.view.scale, (roi.bottom - roi.top) * state.view.scale);
+  if (roi) {
+    const start = transformImagePoint({ x: roi.left, y: roi.top }); const end = transformImagePoint({ x: roi.right, y: roi.bottom });
+    context.rect(offset + state.view.x + Math.min(start.x, end.x) * state.view.scale, state.view.y + Math.min(start.y, end.y) * state.view.scale, Math.abs(end.x - start.x) * state.view.scale, Math.abs(end.y - start.y) * state.view.scale);
+  }
 }
 
 function drawBoundaryScrim(shapes, offset = compareSideOffset(state.boundaryDisplaySide)) {
@@ -1142,7 +1174,8 @@ function drawBoundaryShape(shape, offset = compareSideOffset(state.boundaryDispl
   if (shape.type === "brush") { ctx.lineWidth = Math.max(2, shape.radius * state.view.scale); ctx.lineCap = "round"; ctx.lineJoin = "round"; ctx.stroke(); }
   else ctx.stroke();
   if (shape.type === "polygon") for (const point of shape.points) {
-    const x = offset + state.view.x + point.x * state.view.scale; const y = state.view.y + point.y * state.view.scale;
+    const transformed = transformImagePoint(point);
+    const x = offset + state.view.x + transformed.x * state.view.scale; const y = state.view.y + transformed.y * state.view.scale;
     ctx.beginPath(); ctx.arc(x, y, 5, 0, Math.PI * 2); ctx.fillStyle = "#effff4"; ctx.fill(); ctx.stroke();
   }
   ctx.restore();
@@ -1195,9 +1228,10 @@ function boundaryActionAnchor() {
   const roi = boundaryDraftBounds(active);
   if (!roi) return null;
   const offset = compareSideOffset(state.boundaryDisplaySide);
+  const start = transformImagePoint({ x: roi.left, y: roi.top }); const end = transformImagePoint({ x: roi.right, y: roi.bottom });
   return {
-    left: offset + state.view.x + roi.left * state.view.scale, right: offset + state.view.x + roi.right * state.view.scale,
-    top: state.view.y + roi.top * state.view.scale, bottom: state.view.y + roi.bottom * state.view.scale,
+    left: offset + state.view.x + Math.min(start.x, end.x) * state.view.scale, right: offset + state.view.x + Math.max(start.x, end.x) * state.view.scale,
+    top: state.view.y + Math.min(start.y, end.y) * state.view.scale, bottom: state.view.y + Math.max(start.y, end.y) * state.view.scale,
   };
 }
 
@@ -1249,7 +1283,7 @@ function paintTintedLayer(color, opacity, offset, paintMask) {
 function paintTintedMask(mask, color, opacity, offset, clipMask = null) {
   if (!mask) return;
   paintTintedLayer(color, opacity, offset, (target) => {
-    target.save(); target.translate(offset + state.view.x, state.view.y); target.scale(state.view.scale, state.view.scale);
+    target.save(); applyImageDrawTransform(target, offset);
     target.drawImage(mask, 0, 0);
     if (clipMask) { target.globalCompositeOperation = "destination-in"; target.drawImage(clipMask, 0, 0); }
     target.restore();
@@ -1262,14 +1296,14 @@ function paintEffectiveManualExclusionErase(offset, color, opacity) {
   // post-erase exclusion canvas remains untouched.
   setCssTransform(boundaryOverlayCtx); boundaryOverlayCtx.clearRect(0, 0, stage.clientWidth, stage.clientHeight);
   boundaryOverlayCtx.save(); clipRenderPane(boundaryOverlayCtx, offset);
-  boundaryOverlayCtx.translate(offset + state.view.x, state.view.y); boundaryOverlayCtx.scale(state.view.scale, state.view.scale);
+  applyImageDrawTransform(boundaryOverlayCtx, offset);
   for (const candidate of state.candidates) {
     if (!state.removedCandidateIds.has(candidate.id) && candidate.enabled && candidate.role === "exclude") boundaryOverlayCtx.drawImage(state.candidateImages.get(candidate.id), 0, 0);
   }
   if (state.manualExclusionEnabled) boundaryOverlayCtx.drawImage(exclusionCanvas, 0, 0);
   boundaryOverlayCtx.restore();
   paintTintedLayer(color, opacity, offset, (target) => {
-    target.save(); target.translate(offset + state.view.x, state.view.y); target.scale(state.view.scale, state.view.scale); target.drawImage(exclusionEraseCanvas, 0, 0); target.restore();
+    target.save(); applyImageDrawTransform(target, offset); target.drawImage(exclusionEraseCanvas, 0, 0); target.restore();
     target.save(); target.setTransform(1, 0, 0, 1, 0, 0); target.globalCompositeOperation = "destination-in";
     target.drawImage(boundaryOverlayCanvas, 0, 0); target.restore();
   });
@@ -1316,7 +1350,7 @@ function drawCompareRangeOverlay(offset) {
   setCssTransform(layerCtx);
   const paint = (mask, color) => {
     layerCtx.clearRect(0, 0, stage.clientWidth, stage.clientHeight);
-    layerCtx.save(); layerCtx.translate(offset + state.view.x, state.view.y); layerCtx.scale(state.view.scale, state.view.scale);
+    layerCtx.save(); applyImageDrawTransform(layerCtx, offset);
     layerCtx.drawImage(mask, 0, 0); layerCtx.globalCompositeOperation = "source-in"; layerCtx.fillStyle = color;
     layerCtx.fillRect(0, 0, originalCanvas.width, originalCanvas.height); layerCtx.restore();
   };
@@ -1329,7 +1363,7 @@ function renderNow() {
   const width = stage.clientWidth; const height = stage.clientHeight;
   setCssTransform(ctx); ctx.clearRect(0, 0, width, height);
   if (!state.currentImage) { updateBrushCursor(); return; }
-  ctx.save(); clipRenderPane(ctx); ctx.translate(state.view.x, state.view.y); ctx.scale(state.view.scale, state.view.scale); ctx.drawImage(state.currentImage, 0, 0); ctx.restore();
+  ctx.save(); clipRenderPane(ctx); applyImageDrawTransform(ctx); ctx.drawImage(originalCanvas, 0, 0); ctx.restore();
   if (state.displayMode === "compare") {
     const [, rightPane] = comparePaneBounds(width); const offset = rightPane.offset;
     if (state.mosaicPreviewEnabled) paintMosaicPreview();

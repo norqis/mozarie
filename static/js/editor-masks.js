@@ -673,7 +673,11 @@ async function addBoundaryCandidate() {
 }
 
 function escapeHtml(value) { return String(value).replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character]); }
-function pointFromEvent(event) { const rect = canvas.getBoundingClientRect(); const side = state.gestureDisplaySide ?? compareEventSide(event, rect); const offset = compareSideOffset(side, rect.width); return { x: (event.clientX - rect.left - offset - state.view.x) / state.view.scale, y: (event.clientY - rect.top - state.view.y) / state.view.scale }; }
+function pointFromEvent(event) {
+  const rect = canvas.getBoundingClientRect(); const side = state.gestureDisplaySide ?? compareEventSide(event, rect); const offset = compareSideOffset(side, rect.width);
+  const point = { x: (event.clientX - rect.left - offset - state.view.x) / state.view.scale, y: (event.clientY - rect.top - state.view.y) / state.view.scale };
+  return inverseTransformImagePoint(point);
+}
 function clampPoint(point) {
   if (!state.currentImage) return point;
   return {
@@ -919,6 +923,7 @@ function cancelManualStroke() {
 }
 
 function replayManualStroke(stroke, addContext = addCtx, exclusionContext = exclusionCtx, exclusionEraseContext = exclusionEraseCtx) {
+  if (stroke.kind === "transform") return;
   if (stroke.kind === "removeCandidates") { stroke.ids.forEach((id) => state.removedCandidateIds.add(id)); return; }
   if (stroke.kind === "restoreCandidates") { stroke.ids.forEach((id) => state.removedCandidateIds.delete(id)); return; }
   if (stroke.kind === "addCandidates") { stroke.ids.forEach((id) => state.removedCandidateIds.delete(id)); return; }
@@ -1021,6 +1026,31 @@ async function restoreProjectHistory(direction) {
   finally { state.projectHistoryBusy = false; updateActionButtons(); }
 }
 
+function localTransformForHistoryIndex(index, previousIndex) {
+  const record = currentRecord();
+  if (!record) return null;
+  let flipH = record.flipH === true; let flipV = record.flipV === true;
+  for (const operation of state.history.slice(Math.min(index, previousIndex), Math.max(index, previousIndex))) {
+    if (operation.kind !== "transform") continue;
+    flipH = flipH !== (operation.flipH === true); flipV = flipV !== (operation.flipV === true);
+  }
+  return { flipH, flipV };
+}
+
+async function syncLocalTransformFromHistory(imageId, generation, previousIndex) {
+  const record = currentRecord(); const transform = localTransformForHistoryIndex(state.historyIndex, previousIndex);
+  if (!record || !transform || record.id !== imageId || (record.flipH === transform.flipH && record.flipV === transform.flipV)) return;
+  state.transformPending = true; updateActionButtons();
+  try {
+    const result = await api(`/api/images/${encodeURIComponent(imageId)}/transform`, { method: "POST", body: JSON.stringify(transform) });
+    if (state.currentId !== imageId || !isCurrentGeneration(generation) || !result.image || result.image.id !== imageId) return;
+    const recordIndex = state.images.findIndex((image) => image.id === imageId);
+    if (recordIndex >= 0) Object.assign(state.images[recordIndex], result.image);
+    renderCatalogViews(); render();
+  } catch (error) { showUserError(error); }
+  finally { state.transformPending = false; updateActionButtons(); }
+}
+
 function restoreSnapshot(index) {
   if (state.project?.id) { void restoreProjectHistory(index < state.historyIndex ? "undo" : "redo"); return; }
   if (isBusy() || state.importing || isGestureActive() || currentImageActionPending() || index < 0 || index > state.history.length) return;
@@ -1028,9 +1058,11 @@ function restoreSnapshot(index) {
   const imageId = state.currentId;
   const generation = state.imageGeneration;
   const restoreToken = ++state.historyRestoreToken;
+  const previousHistoryIndex = state.historyIndex;
   state.historyIndex = index;
   rebuildManualMaskFromHistory();
   scheduleManualWorkspaceSave();
+  void syncLocalTransformFromHistory(imageId, generation, previousHistoryIndex);
   setReviewed(currentRecord(), false);
   updateHistoryButtons(); renderCandidates(); render();
   requestAnimationFrame(() => {

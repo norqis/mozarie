@@ -296,6 +296,9 @@ class CatalogMixin:
                 record.image_id = str(saved["image_id"])
                 record.hidden = bool(saved["hidden"])
                 record.reviewed = bool(saved["reviewed"])
+                record.flip_horizontal = bool(saved.get("flip_horizontal", False)); record.flip_vertical = bool(saved.get("flip_vertical", False))
+                record.source_flip_horizontal = bool(saved.get("source_flip_horizontal", False)); record.source_flip_vertical = bool(saved.get("source_flip_vertical", False))
+                record.transform_revision = int(saved.get("transform_revision", 0))
             record.source_id = source_id
             record.source_root = root
         source_image_ids = {record.image_id for record in records}
@@ -586,6 +589,9 @@ class CatalogMixin:
             for mask in exclude_masks: value = np.maximum(value, np.asarray(mask > 0, dtype=np.uint8) * 255)
             if manual_exclude is not None and draft.get("manualExclusionEnabled") is not False: value = np.maximum(value, np.asarray(manual_exclude > 0, dtype=np.uint8) * 255)
             if erase is not None and draft.get("manualExclusionEraseEnabled") is not False: value[np.asarray(erase) > 0] = 0
+        transform = state.get("transform", {})
+        if bool(transform.get("flipHorizontal", False)): value = np.fliplr(value)
+        if bool(transform.get("flipVertical", False)): value = np.flipud(value)
         output = io.BytesIO(); Image.fromarray(value, "L").save(output, format="PNG"); return output.getvalue()
 
     def project_mask_images(self) -> list[dict[str, Any]]:
@@ -668,6 +674,8 @@ class CatalogMixin:
                 value = np.maximum(value, np.asarray(manual_exclude > 0, dtype=np.uint8) * 255)
             if erase is not None and manual.get("eraseEnabled", True):
                 value[np.asarray(erase) > 0] = 0
+        if bool(image.get("flipH", False)): value = np.fliplr(value)
+        if bool(image.get("flipV", False)): value = np.flipud(value)
         output = io.BytesIO(); Image.fromarray(value, "L").save(output, format="PNG")
         return output.getvalue()
 
@@ -963,6 +971,7 @@ class CatalogMixin:
         output_fingerprint: tuple[int, int] | None = None,
         allow_copy_action: bool = False,
         no_effect: bool = False,
+        output_format: str = "original", keep_metadata: bool = True,
     ) -> str:
         self._discard_expired_browser_save_tokens_unchecked()
         token = secrets.token_urlsafe(32)
@@ -977,6 +986,9 @@ class CatalogMixin:
             output_fingerprint=output_fingerprint,
             allow_copy_action=allow_copy_action,
             no_effect=no_effect,
+            output_format=output_format, keep_metadata=keep_metadata, transform_revision=record.transform_revision,
+            flip_horizontal=record.flip_horizontal, flip_vertical=record.flip_vertical,
+            source_flip_horizontal=record.source_flip_horizontal, source_flip_vertical=record.source_flip_vertical,
         )
         return token
 
@@ -1197,6 +1209,9 @@ class CatalogMixin:
                                 record.path.unlink(missing_ok=True)
                                 continue
                             record.image_id = str(stored["image_id"]); record.hidden = bool(stored["hidden"]); record.reviewed = bool(stored["reviewed"])
+                            record.flip_horizontal = bool(stored.get("flip_horizontal", False)); record.flip_vertical = bool(stored.get("flip_vertical", False))
+                            record.source_flip_horizontal = bool(stored.get("source_flip_horizontal", False)); record.source_flip_vertical = bool(stored.get("source_flip_vertical", False))
+                            record.transform_revision = int(stored.get("transform_revision", 0))
                             record.source_id = durable_source_id
                             if stored.get("changed"):
                                 self.source_mismatches[record.image_id] = bool(stored.get("dimensions_changed"))
@@ -1580,25 +1595,31 @@ class CatalogMixin:
         locks = [(changed_id, self.image_io_lock(changed_id)) for changed_id in record_ids]
         with ExitStack() as stack:
             for _changed_id, image_lock in sorted(locks): stack.enter_context(image_lock)
-            hydrated: dict[str, tuple[int, list[Candidate], bool, bool]] = {}
+            hydrated: dict[str, tuple[int, list[Candidate], bool, bool, dict[str, Any]]] = {}
             for changed_id in record_ids:
                 shutil.rmtree(self.cache_dir / changed_id, ignore_errors=True)
                 revision, candidates = self.workspace_store.hydrate_candidates(
                     changed_id, self.cache_dir / changed_id, self._candidate_from_workspace,
                 )
                 hidden, reviewed = self.workspace_store.image_state(changed_id)
-                hydrated[changed_id] = (revision, candidates, hidden, reviewed)
+                hydrated[changed_id] = (revision, candidates, hidden, reviewed, self.workspace_store.image_transform(changed_id))
             with self.lock:
-                for changed_id, (revision, candidates, hidden, reviewed) in hydrated.items():
+                for changed_id, (revision, candidates, hidden, reviewed, transform) in hydrated.items():
                     record = self.images[changed_id]
                     record.hidden = hidden
                     record.reviewed = reviewed
+                    record.flip_horizontal = bool(transform["flipHorizontal"]); record.flip_vertical = bool(transform["flipVertical"])
+                    record.source_flip_horizontal = bool(transform["sourceFlipHorizontal"]); record.source_flip_vertical = bool(transform["sourceFlipVertical"])
+                    record.transform_revision = int(transform["transformRevision"])
                     self.candidates[changed_id] = candidates
                     self.candidate_revisions[changed_id] = revision
         current = {
             "candidateRevision": self._candidate_revision(image_id),
             "candidates": [candidate.as_api_dict() for candidate in self.candidates.get(image_id, [])],
             "manual": self.workspace_store.manual(image_id, self._encode_workspace_mask),
+            "image": {"id": self.images[image_id].image_id, "flipH": self.images[image_id].flip_horizontal, "flipV": self.images[image_id].flip_vertical,
+                      "sourceFlipH": self.images[image_id].source_flip_horizontal, "sourceFlipV": self.images[image_id].source_flip_vertical,
+                      "transformRevision": self.images[image_id].transform_revision},
         }
         return {"changedImageIds": changed_ids, "current": current, **self.workspace_store.history_status(image_id)}
 
@@ -1650,6 +1671,11 @@ class CatalogMixin:
                     "sourceId": record.source_id,
                     "sourceMismatch": record.image_id in self.source_mismatches,
                     "sourceDimensionsChanged": bool(self.source_mismatches.get(record.image_id)),
+                    "flipH": record.flip_horizontal,
+                    "flipV": record.flip_vertical,
+                    "sourceFlipH": record.source_flip_horizontal,
+                    "sourceFlipV": record.source_flip_vertical,
+                    "transformRevision": record.transform_revision,
                 }
                 if record.source_kind == "filesystem":
                     item["sourcePath"] = str(record.path)
@@ -1662,6 +1688,27 @@ class CatalogMixin:
                 "project": self.workspace_store.project(self.catalog_id) if self.catalog_id else None,
                 "readOnly": self.project_read_only,
             }
+
+    def set_image_transform(self, image_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+        self._assert_image_editable(image_id)
+        flip_h, flip_v = payload.get("flipH"), payload.get("flipV")
+        if not isinstance(flip_h, bool) or not isinstance(flip_v, bool):
+            raise ClientError("反転状態が正しくありません。", "input_invalid")
+        with self.image_io_lock(image_id):
+            with self.lock:
+                self._assert_catalog_mutable()
+                record = self.images.get(image_id)
+                if record is None: raise ClientError("画像が見つかりません。", "image_not_found")
+                if self.catalog_id is None:
+                    record.flip_horizontal = flip_h; record.flip_vertical = flip_v; record.transform_revision += 1
+                else:
+                    transform = self.workspace_store.set_image_transform(image_id, flip_h, flip_v)
+                    record.flip_horizontal = bool(transform["flipHorizontal"]); record.flip_vertical = bool(transform["flipVertical"])
+                    record.source_flip_horizontal = bool(transform["sourceFlipHorizontal"]); record.source_flip_vertical = bool(transform["sourceFlipVertical"])
+                    record.transform_revision = int(transform["transformRevision"])
+                return {"image": {"id": record.image_id, "flipH": record.flip_horizontal, "flipV": record.flip_vertical,
+                                   "sourceFlipH": record.source_flip_horizontal, "sourceFlipV": record.source_flip_vertical,
+                                   "transformRevision": record.transform_revision}, **self.workspace_store.history_status(image_id)}
 
     def list_candidates(self, image_id: str) -> list[dict[str, Any]]:
         return self.candidate_snapshot(image_id)["candidates"]

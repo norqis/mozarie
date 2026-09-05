@@ -14,6 +14,41 @@ function isTerminalApply(job) {
 }
 
 function selectedSaveMode() { return document.querySelector('input[name="batchSaveMode"]:checked').value; }
+function selectedApplyOutputFormat() { return $("#applyOutputFormat").value; }
+function selectedSingleOutputFormat() { return $("#singleSaveOutputFormat").value; }
+function sourceMatchesOutputFormat(image, format) {
+  if (format === "original") return true;
+  const extension = String(image?.relativePath || "").split(".").at(-1).toLowerCase();
+  return format === "png" ? extension === "png" : ["jpg", "jpeg"].includes(extension);
+}
+function formatRequiresCopy(imageIds, format) {
+  return format !== "original" && imageIds.some((imageId) => !sourceMatchesOutputFormat(state.images.find((image) => image.id === imageId), format));
+}
+function syncApplyOutputOptions() {
+  const format = selectedApplyOutputFormat(); const requiresCopy = formatRequiresCopy(state.applyTargetIds, format);
+  const metadata = $("#applyKeepMetadata"); const note = $("#applyFormatNote");
+  metadata.disabled = format === "jpg" || state.applyRunning || state.saveStarting;
+  if (format === "jpg") metadata.checked = false;
+  if (requiresCopy) $("#applyCopyMode").checked = true;
+  note.textContent = [format === "jpg" ? t("apply.jpgMetadataDisabled") : "", requiresCopy ? t("apply.formatRequiresCopy") : ""].filter(Boolean).join(" ");
+  note.classList.toggle("save-option-warning", format === "jpg");
+  note.hidden = !note.textContent;
+  $("#applyOverwriteMode").disabled = $("#applyOverwriteMode").disabled || requiresCopy;
+  $("#applyOverwriteRow").classList.toggle("muted", $("#applyOverwriteMode").disabled);
+}
+function syncSingleOutputOptions() {
+  const save = state.singleSave; const format = selectedSingleOutputFormat();
+  const requiresCopy = formatRequiresCopy(save?.imageId ? [save.imageId] : [], format);
+  const metadata = $("#singleSaveKeepMetadata"); const note = $("#singleSaveFormatNote");
+  metadata.disabled = format === "jpg" || state.saving || state.saveStarting;
+  if (format === "jpg") metadata.checked = false;
+  if (requiresCopy) $("#singleSaveCopyMode").checked = true;
+  note.textContent = [format === "jpg" ? t("apply.jpgMetadataDisabled") : "", requiresCopy ? t("apply.formatRequiresCopy") : ""].filter(Boolean).join(" ");
+  note.classList.toggle("save-option-warning", format === "jpg");
+  note.hidden = !note.textContent;
+  $("#singleSaveOverwriteMode").disabled = $("#singleSaveOverwriteMode").disabled || requiresCopy;
+  $("#singleSaveOverwriteRow").classList.toggle("muted", $("#singleSaveOverwriteMode").disabled);
+}
 function sourceAccessFor(imageId) { return state.sourceAccess.get(imageId) || null; }
 function sourceCanOverwrite(image) { return image?.sourceKind === "filesystem" || Boolean(sourceAccessFor(image?.id)?.fileHandle); }
 function sourceCanDelete(image) {
@@ -32,10 +67,12 @@ function applyRestrictionMessage() {
   const noDelete = state.applyTargetIds.filter((imageId) => !sourceCanDelete(state.images.find((image) => image.id === imageId)));
   if (selectedSaveMode() === "overwrite" && noOverwrite.length) return t("apply.overwriteUnavailable", { count: noOverwrite.length });
   if (selectedSaveMode() === "copy" && $("#deleteOriginal").checked && noDelete.length) return t("apply.deleteUnavailable", { count: noDelete.length });
+  if (selectedSaveMode() === "overwrite" && formatRequiresCopy(state.applyTargetIds, selectedApplyOutputFormat())) return t("apply.formatRequiresCopy");
   return "";
 }
 
 function syncApplyMode() {
+  if (formatRequiresCopy(state.applyTargetIds, selectedApplyOutputFormat())) $("#applyCopyMode").checked = true;
   const canOverwrite = applyTargetsSupport("overwrite");
   const canDelete = applyTargetsSupport("delete");
   const copying = selectedSaveMode() === "copy";
@@ -57,6 +94,7 @@ function syncApplyMode() {
   $("#applyTemporarySourceNote").textContent = restriction || capabilityNote || t("apply.handleSource");
   $("#applyTemporarySourceNote").hidden = !restriction && !capabilityNote;
   $("#applyStartButton").disabled = Boolean(restriction) || state.applyRunning || state.saveStarting || state.applyTargetIds.length === 0 || (copying && !state.outputDirectoryHandle);
+  syncApplyOutputOptions();
 }
 
 function refreshApplyTargets() {
@@ -75,7 +113,6 @@ async function openApplyDialog(options = {}) {
   catch (error) { showUserError(error); return; }
   $("#applyTargetMode").value = initialMode;
   refreshApplyTargets();
-  if (!state.applyTargetIds.length) return;
   state.applyRunning = false;
   $("#applyDivisor").value = $("#divisor").value;
   updateBlockSizeDisplay();
@@ -85,6 +122,8 @@ async function openApplyDialog(options = {}) {
   $("#applyPauseButton").hidden = true;
   $("#applyCancelButton").hidden = true;
   $("#applySettings").disabled = false;
+  $("#applyOutputFormat").value = "original";
+  $("#applyKeepMetadata").checked = true;
   setApplyResult(""); syncApplyMode();
   showModalFromInvoker($("#applyDialog"), invoker);
 }
@@ -96,6 +135,7 @@ function setSingleSaveResult(message, error = false) {
 function syncSingleSaveMode() {
   const save = state.singleSave;
   const image = state.images.find((entry) => entry.id === save?.imageId);
+  if (formatRequiresCopy(save?.imageId ? [save.imageId] : [], selectedSingleOutputFormat())) $("#singleSaveCopyMode").checked = true;
   const copying = selectedSingleSaveMode() === "copy";
   const canOverwrite = sourceCanOverwrite(image);
   const canDelete = sourceCanDelete(image);
@@ -110,6 +150,7 @@ function syncSingleSaveMode() {
   $("#singleSaveStartButton").disabled = state.saving || state.saveStarting || !image || (copying && !state.outputDirectoryHandle) || (!copying && !canOverwrite);
   $("#singleSaveSettings").disabled = state.saving || state.saveStarting;
   renderOutputDirectory();
+  syncSingleOutputOptions();
 }
 
 async function openSingleSaveDialog(imageId = state.currentId) {
@@ -126,6 +167,8 @@ async function openSingleSaveDialog(imageId = state.currentId) {
   $("#singleSaveTarget").textContent = t("apply.singleTarget", { name: image.relativePath });
   $("#singleSaveCopyMode").checked = true;
   $("#singleSaveDeleteOriginal").checked = false;
+  $("#singleSaveOutputFormat").value = "original";
+  $("#singleSaveKeepMetadata").checked = true;
   setSingleSaveResult("");
   syncSingleSaveMode();
   showModalFromInvoker($("#singleSaveDialog"), invoker);
@@ -138,15 +181,15 @@ async function chooseSingleOutputDirectory() {
   syncSingleSaveMode();
 }
 
-function singleOutputName(relativePath, suffix, sequence = 0) {
+function singleOutputName(relativePath, suffix, sequence = 0, format = "original") {
   const name = String(relativePath).split("/").at(-1) || "image";
   const dot = name.lastIndexOf(".");
   const stem = dot > 0 ? name.slice(0, dot) : name;
-  const extension = dot > 0 ? name.slice(dot) : "";
+  const extension = format === "original" ? (dot > 0 ? name.slice(dot) : "") : `.${format}`;
   return `${stem}${suffix}${sequence ? `_${sequence}` : ""}${extension}`;
 }
 
-async function writeSingleOutput(handle, relativePath, suffix, response) {
+async function writeSingleOutput(handle, relativePath, suffix, response, format = "original") {
   if (!navigator.locks || typeof navigator.locks.request !== "function") throw codedError("output_write_unsupported");
   let entered = false;
   let reservation;
@@ -155,7 +198,7 @@ async function writeSingleOutput(handle, relativePath, suffix, response) {
       entered = true;
       let fileHandle; let name; let created = false;
       for (let sequence = 0; sequence < 10000; sequence += 1) {
-        name = singleOutputName(relativePath, suffix, sequence);
+        name = singleOutputName(relativePath, suffix, sequence, format);
         try { await handle.getFileHandle(name); }
         catch (error) {
           if (error?.name !== "NotFoundError") throw error;
@@ -215,6 +258,7 @@ async function startSingleSave(event) {
   const mode = selectedSingleSaveMode(); const copying = mode === "copy";
   const deleteOriginal = copying && $("#singleSaveDeleteOriginal").checked;
   const suffix = $("#singleSaveSuffix").value;
+  const format = selectedSingleOutputFormat(); const keepMetadata = $("#singleSaveKeepMetadata").checked;
   if (copying && !state.outputDirectoryHandle) return syncSingleSaveMode();
   state.saveStarting = true;
   syncSingleSaveMode();
@@ -227,11 +271,11 @@ async function startSingleSave(event) {
     let entry; let saveToken = ""; let output = null; let sourceSnapshot = null;
     try {
     await flushWorkspaceDraft(save.imageId);
-    const prepared = await api("/api/save/prepare", { method: "POST", body: JSON.stringify({ imageIds: [save.imageId], divisor: save.divisor, suffix, deleteOriginal: false }) });
+    const prepared = await api("/api/save/prepare", { method: "POST", body: JSON.stringify({ imageIds: [save.imageId], divisor: save.divisor, suffix, deleteOriginal: false, format, keepMetadata }) });
     entry = prepared.entries?.[0]; if (!entry) throw Object.assign(new Error("save_state_changed"), { code: "save_state_changed" });
     const access = sourceAccessFor(save.imageId);
     if (!copying) await ensureSaveSources([save.imageId], "overwrite", false);
-    const response = await renderSingleSave({ imageId: save.imageId, candidateRevision: entry.candidateRevision, divisor: save.divisor, draft: save.draft, copyToBrowser: copying, suffix });
+    const response = await renderSingleSave({ imageId: save.imageId, candidateRevision: entry.candidateRevision, divisor: save.divisor, draft: save.draft, copyToBrowser: copying, suffix, format, keepMetadata });
     saveToken = response.headers.get("X-Mozarie-Save-Token") || "";
     if (!saveToken) throw Object.assign(new Error("save_state_changed"), { code: "save_state_changed" });
     const noEffect = response.headers.get("X-Mozarie-No-Effect") === "1";
@@ -239,7 +283,7 @@ async function startSingleSave(event) {
     let committed; let commitStarted = false;
     try {
       if (copying) {
-        output = await writeSingleOutput(state.outputDirectoryHandle, entry.relativePath, suffix, response);
+        output = await writeSingleOutput(state.outputDirectoryHandle, entry.relativePath, suffix, response, format);
         sourceAction = deleteOriginal ? "deleted" : "keep";
         if (access?.fileHandle) {
           await ensureHandlePermission(access, deleteOriginal);
@@ -546,6 +590,8 @@ async function runBrowserSave(imageIds, suffix, deleteOriginal, mode = "copy") {
     imageIds: [...imageIds],
     divisor: Number($("#applyDivisor").value),
     suffix,
+    format: selectedApplyOutputFormat(),
+    keepMetadata: $("#applyKeepMetadata").checked,
     deleteOriginal,
     mode,
     outputDirectoryHandle: state.outputDirectoryHandle,
@@ -558,7 +604,7 @@ async function runBrowserSave(imageIds, suffix, deleteOriginal, mode = "copy") {
   };
   const result = await api("/api/save/prepare", {
     method: "POST",
-    body: JSON.stringify({ imageIds: inputs.imageIds, divisor: inputs.divisor, suffix: inputs.suffix, deleteOriginal: false }),
+    body: JSON.stringify({ imageIds: inputs.imageIds, divisor: inputs.divisor, suffix: inputs.suffix, deleteOriginal: false, format: inputs.format, keepMetadata: inputs.keepMetadata }),
   });
   const save = {
     entries: result.entries, completed: 0, stale: 0, paused: false, cancelled: false, failed: false,
@@ -593,13 +639,13 @@ async function runBrowserSave(imageIds, suffix, deleteOriginal, mode = "copy") {
           let response;
           try {
             response = await renderSingleSave({ imageId: entry.imageId, candidateRevision: entry.candidateRevision,
-              divisor: inputs.divisor, draft, copyToBrowser: true, suffix: inputs.suffix });
+              divisor: inputs.divisor, draft, copyToBrowser: true, suffix: inputs.suffix, format: inputs.format, keepMetadata: inputs.keepMetadata });
           } finally { inputs.drafts.delete(entry.imageId); }
           const saveToken = response.headers.get("X-Mozarie-Save-Token") || "";
           if (!saveToken) throw Object.assign(new Error("save_state_changed"), { code: "save_state_changed" });
           let output;
           try {
-            output = await writeSingleOutput(inputs.outputDirectoryHandle, entry.relativePath, inputs.suffix, response);
+            output = await writeSingleOutput(inputs.outputDirectoryHandle, entry.relativePath, inputs.suffix, response, inputs.format);
           } catch (error) {
             await cancelBrowserSave(entry, saveToken);
             throw error;
@@ -646,7 +692,7 @@ async function runBrowserSave(imageIds, suffix, deleteOriginal, mode = "copy") {
           try {
             binary = await fetch("/api/save/render", {
             method: "POST", headers: { "Content-Type": "application/json", "X-Mozarie-Token": document.querySelector('meta[name="mozarie-token"]')?.content || "" },
-            body: JSON.stringify({ imageId: entry.imageId, candidateRevision: entry.candidateRevision, divisor: inputs.divisor, draft }),
+            body: JSON.stringify({ imageId: entry.imageId, candidateRevision: entry.candidateRevision, divisor: inputs.divisor, draft, format: inputs.format, keepMetadata: inputs.keepMetadata }),
             });
           } finally { inputs.drafts.delete(entry.imageId); }
           if (!binary.ok) throw responseError(binary, await binary.json().catch(() => ({})));
@@ -682,7 +728,7 @@ async function runBrowserSave(imageIds, suffix, deleteOriginal, mode = "copy") {
           try {
             binary = await fetch("/api/save/render", {
             method: "POST", headers: { "Content-Type": "application/json", "X-Mozarie-Token": document.querySelector('meta[name="mozarie-token"]')?.content || "" },
-            body: JSON.stringify({ imageId: entry.imageId, candidateRevision: entry.candidateRevision, divisor: inputs.divisor, draft }),
+            body: JSON.stringify({ imageId: entry.imageId, candidateRevision: entry.candidateRevision, divisor: inputs.divisor, draft, format: inputs.format, keepMetadata: inputs.keepMetadata }),
             });
           } finally { inputs.drafts.delete(entry.imageId); }
           if (!binary.ok) throw responseError(binary, await binary.json().catch(() => ({})));

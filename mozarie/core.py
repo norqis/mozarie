@@ -170,6 +170,13 @@ class ImageRecord:
     asset_revision: int = 0
     hidden: bool = False
     reviewed: bool = False
+    # Edit coordinates are always canonical.  The desired flips are visible
+    # to the user; source flips describe pixels already baked into the file.
+    flip_horizontal: bool = False
+    flip_vertical: bool = False
+    source_flip_horizontal: bool = False
+    source_flip_vertical: bool = False
+    transform_revision: int = 0
     # A project may combine independent folders or browser selections.  The
     # opaque source id keeps identical relative paths distinct.
     source_id: str | None = None
@@ -204,6 +211,13 @@ class BrowserSaveToken:
     output_fingerprint: tuple[int, int] | None = None
     allow_copy_action: bool = False
     no_effect: bool = False
+    output_format: str = "original"
+    keep_metadata: bool = True
+    transform_revision: int = 0
+    flip_horizontal: bool = False
+    flip_vertical: bool = False
+    source_flip_horizontal: bool = False
+    source_flip_vertical: bool = False
 
 
 @dataclass(frozen=True)
@@ -216,6 +230,9 @@ class BrowserSaveRender:
     save_token: str
     output_path: Path | None
     no_effect: bool = False
+    output_format: str = "original"
+    mime_type: str = "application/octet-stream"
+    extension: str = ""
 
     def __iter__(self):
         yield self.output

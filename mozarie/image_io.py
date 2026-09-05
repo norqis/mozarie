@@ -444,6 +444,76 @@ def read_stable_source_bytes(record: ImageRecord, expected: tuple[int, int] | No
     return source
 
 
+def canonical_image(record: ImageRecord, source: bytes | None = None) -> tuple[Image.Image, bytes, dict[str, Any]]:
+    """Load source pixels into the stable, unflipped editing coordinate space."""
+    raw = read_stable_source_bytes(record) if source is None else source
+    with Image.open(io.BytesIO(raw)) as image:
+        image.load()
+        normalized = ImageOps.exif_transpose(image)
+        info = dict(image.info)
+    if "exif" in info:
+        info["exif"] = _normalized_exif_bytes(raw)
+    if record.source_flip_horizontal:
+        normalized = ImageOps.mirror(normalized)
+    if record.source_flip_vertical:
+        normalized = ImageOps.flip(normalized)
+    return normalized, raw, info
+
+
+def transform_mask(mask: np.ndarray, flip_horizontal: bool, flip_vertical: bool) -> np.ndarray:
+    if flip_horizontal: mask = np.fliplr(mask)
+    if flip_vertical: mask = np.flipud(mask)
+    return mask
+
+
+def _output_spec(record: ImageRecord, output_format: str) -> tuple[str, str, str]:
+    if output_format == "original":
+        suffix = record.path.suffix.lower(); image_format = _expected_image_format(suffix)
+    elif output_format == "png": suffix, image_format = ".png", "PNG"
+    elif output_format == "jpg": suffix, image_format = ".jpg", "JPEG"
+    else: raise ClientError("保存形式が正しくありません。", "input_invalid")
+    return suffix, image_format, {"PNG": "image/png", "JPEG": "image/jpeg", "WEBP": "image/webp"}[image_format]
+
+
+def output_format_matches_source(record: ImageRecord, output_format: str) -> bool:
+    """Whether an explicit export choice encodes the source's file format."""
+    _suffix, output_image_format, _mime = _output_spec(record, output_format)
+    return output_image_format == _expected_image_format(record.path.suffix.lower())
+
+
+def render_output(record: ImageRecord, mask: np.ndarray | None, block_size: int, output_format: str, keep_metadata: bool) -> tuple[bytes, str, str]:
+    """Render canonical mosaic plus desired flip to the explicit output format."""
+    suffix, image_format, mime = _output_spec(record, output_format)
+    if output_format == "jpg" and keep_metadata:
+        raise ClientError("JPG形式ではメタ情報を保持できません。", "input_invalid")
+    canonical, source, source_info = canonical_image(record)
+    modified = canonical if mask is None or not np.any(mask) else _apply_mosaic_to_image(canonical, mask, block_size)
+    if record.flip_horizontal: modified = ImageOps.mirror(modified)
+    if record.flip_vertical: modified = ImageOps.flip(modified)
+    has_transparency = "A" in modified.getbands() or "transparency" in modified.info
+    if image_format == "JPEG" and has_transparency:
+        rgba = modified.convert("RGBA")
+        background = Image.new("RGB", modified.size, "white"); background.paste(rgba, mask=rgba.getchannel("A")); modified = background
+    if not keep_metadata:
+        # Palette/RGB PNG transparency is carried in ``info``. Materialise it
+        # as pixels before dropping metadata so an export stays transparent.
+        if image_format != "JPEG" and has_transparency and "A" not in modified.getbands():
+            modified = modified.convert("RGBA")
+        modified = modified.copy(); modified.info.clear()
+    if image_format == "JPEG": modified = modified.convert("RGB")
+    if image_format == "PNG":
+        if keep_metadata and record.path.suffix.lower() == ".png":
+            return _png_with_original_chunks(source, modified, normalize_orientation=True), suffix, mime
+        encoded = io.BytesIO(); args = {key: source_info[key] for key in ("exif", "icc_profile") if keep_metadata and key in source_info}; modified.save(encoded, format="PNG", **args); return encoded.getvalue(), suffix, mime
+    if image_format == "JPEG":
+        if keep_metadata and record.path.suffix.lower() in {".jpg", ".jpeg"}:
+            return _jpeg_with_original_metadata(source, modified, normalize_orientation=True), suffix, mime
+        encoded = io.BytesIO(); modified.save(encoded, format="JPEG", quality=95); return encoded.getvalue(), suffix, mime
+    if keep_metadata:
+        return _webp_with_original_metadata(source, modified, source_info, normalize_orientation=True), suffix, mime
+    encoded = io.BytesIO(); modified.save(encoded, format="WEBP", quality=95); return encoded.getvalue(), suffix, mime
+
+
 def render_with_mask(record: ImageRecord, mask: np.ndarray, block_size: int) -> bytes:
     """Render one image without changing the source file or its catalogue state."""
     source = read_stable_source_bytes(record)

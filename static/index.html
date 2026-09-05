@@ -90,6 +90,8 @@
           <button id="fitButton" class="tool icon-button" type="button" data-toolbar-item aria-label="全体表示" title="全体表示" data-i18n-aria-label="editor.fit" data-i18n-title="editor.fit">⊙</button>
           <button id="undoButton" class="tool icon-button" type="button" data-toolbar-item aria-label="元に戻す" title="元に戻す" data-i18n-aria-label="editor.undo" data-i18n-title="editor.undo">↶</button>
           <button id="redoButton" class="tool icon-button" type="button" data-toolbar-item aria-label="やり直す" title="やり直す" data-i18n-aria-label="editor.redo" data-i18n-title="editor.redo">↷</button>
+          <button id="flipHorizontalButton" class="tool icon-button" type="button" data-toolbar-item aria-pressed="false" aria-label="左右反転" title="左右反転" data-i18n-aria-label="editor.flipHorizontal" data-i18n-title="editor.flipHorizontal">⇋</button>
+          <button id="flipVerticalButton" class="tool icon-button" type="button" data-toolbar-item aria-pressed="false" aria-label="上下反転" title="上下反転" data-i18n-aria-label="editor.flipVertical" data-i18n-title="editor.flipVertical">⇅</button>
           <button id="mosaicPreviewButton" class="tool icon-button active" type="button" data-toolbar-item aria-pressed="true" aria-label="モザイク表示" title="モザイク表示" data-i18n-aria-label="editor.mosaicPreview" data-i18n-title="editor.mosaicPreview">▦</button>
         <span class="tool-separator" aria-hidden="true"></span>
         <div class="canvas-settings-bar" data-i18n-aria-label="editor.settings" aria-label="編集設定">
@@ -382,6 +384,9 @@
         <label class="choice-row"><input id="applyCopyMode" type="radio" name="batchSaveMode" value="copy" checked><span data-i18n="apply.copy">コピー保存</span></label>
         <label id="applyOverwriteRow" class="choice-row"><input id="applyOverwriteMode" type="radio" name="batchSaveMode" value="overwrite"><span data-i18n="apply.overwrite">元画像を上書き</span></label>
         <label id="applySuffixRow" class="form-row"><span data-i18n="apply.suffix">ファイル名の末尾</span><input id="applySuffix" type="text" value="_censored"></label>
+        <label class="form-row"><span data-i18n="apply.format">出力形式</span><select id="applyOutputFormat"><option value="original" data-i18n="apply.formatOriginal">元画像と同じ</option><option value="png">PNG</option><option value="jpg">JPG</option></select></label>
+        <label class="choice-row"><input id="applyKeepMetadata" type="checkbox" checked><span data-i18n="apply.keepMetadata">メタ情報を保持</span></label>
+        <p id="applyFormatNote" class="fixed-note" hidden></p>
         <label id="deleteOriginalRow" class="choice-row"><input id="deleteOriginal" type="checkbox"><span data-i18n="apply.deleteOriginal">コピー成功後に元画像を削除</span></label>
         <div id="applyOutputDirectoryRow" class="output-directory-row">
           <input id="applyOutputDirectoryStatus" class="fixed-note" type="text" readonly data-i18n-dynamic data-i18n-aria-label="settings.defaultOutputDirectory" aria-label="既定の保存先">
@@ -414,6 +419,9 @@
         <label class="choice-row"><input id="singleSaveCopyMode" type="radio" name="singleSaveMode" value="copy" checked><span data-i18n="apply.copy">コピー保存</span></label>
         <label id="singleSaveOverwriteRow" class="choice-row"><input id="singleSaveOverwriteMode" type="radio" name="singleSaveMode" value="overwrite"><span data-i18n="apply.overwrite">元画像を上書き</span></label>
         <label id="singleSaveSuffixRow" class="form-row"><span data-i18n="apply.suffix">ファイル名の末尾</span><input id="singleSaveSuffix" type="text"></label>
+        <label class="form-row"><span data-i18n="apply.format">出力形式</span><select id="singleSaveOutputFormat"><option value="original" data-i18n="apply.formatOriginal">元画像と同じ</option><option value="png">PNG</option><option value="jpg">JPG</option></select></label>
+        <label class="choice-row"><input id="singleSaveKeepMetadata" type="checkbox" checked><span data-i18n="apply.keepMetadata">メタ情報を保持</span></label>
+        <p id="singleSaveFormatNote" class="fixed-note" hidden></p>
         <label id="singleSaveDeleteOriginalRow" class="choice-row"><input id="singleSaveDeleteOriginal" type="checkbox"><span data-i18n="apply.deleteOriginal">コピー成功後に元画像を削除</span></label>
         <div id="singleSaveOutputDirectoryRow" class="output-directory-row"><output id="singleSaveOutputDirectoryStatus" class="fixed-note" aria-live="polite"></output><button id="singleSaveChooseOutputDirectoryButton" type="button" data-i18n="apply.changeOutputDirectory">保存先を変更</button></div>
       </fieldset>
