@@ -1025,24 +1025,19 @@ async function restoreProjectHistory(direction) {
   finally { state.projectHistoryBusy = false; updateActionButtons(); }
 }
 
-function localTransformForHistoryIndex(index) {
+function localTransformForHistoryIndex(index, previousIndex) {
   const record = currentRecord();
   if (!record) return null;
-  let baseH = record.flipH === true; let baseV = record.flipV === true;
-  for (const operation of state.history) {
-    if (operation.kind !== "transform") continue;
-    baseH = baseH !== (operation.flipH === true); baseV = baseV !== (operation.flipV === true);
-  }
-  let flipH = baseH; let flipV = baseV;
-  for (const operation of state.history.slice(0, index)) {
+  let flipH = record.flipH === true; let flipV = record.flipV === true;
+  for (const operation of state.history.slice(Math.min(index, previousIndex), Math.max(index, previousIndex))) {
     if (operation.kind !== "transform") continue;
     flipH = flipH !== (operation.flipH === true); flipV = flipV !== (operation.flipV === true);
   }
   return { flipH, flipV };
 }
 
-async function syncLocalTransformFromHistory(imageId, generation) {
-  const record = currentRecord(); const transform = localTransformForHistoryIndex(state.historyIndex);
+async function syncLocalTransformFromHistory(imageId, generation, previousIndex) {
+  const record = currentRecord(); const transform = localTransformForHistoryIndex(state.historyIndex, previousIndex);
   if (!record || !transform || record.id !== imageId || (record.flipH === transform.flipH && record.flipV === transform.flipV)) return;
   state.transformPending = true; updateActionButtons();
   try {
@@ -1062,10 +1057,11 @@ function restoreSnapshot(index) {
   const imageId = state.currentId;
   const generation = state.imageGeneration;
   const restoreToken = ++state.historyRestoreToken;
+  const previousHistoryIndex = state.historyIndex;
   state.historyIndex = index;
   rebuildManualMaskFromHistory();
   scheduleManualWorkspaceSave();
-  void syncLocalTransformFromHistory(imageId, generation);
+  void syncLocalTransformFromHistory(imageId, generation, previousHistoryIndex);
   setReviewed(currentRecord(), false);
   updateHistoryButtons(); renderCandidates(); render();
   requestAnimationFrame(() => {
