@@ -6,6 +6,11 @@ import numpy as np
 import cv2
 
 
+def union_mask(target: np.ndarray, mask: np.ndarray) -> None:
+    """Add non-zero mask pixels to an existing uint8 union in place."""
+    np.maximum(target, np.asarray(mask > 0, dtype=np.uint8) * 255, out=target)
+
+
 def expand_mask(mask: np.ndarray, expand_px: int) -> np.ndarray:
     """Expand a binary candidate mask in source-image pixels."""
     limit = int(np.ceil(np.hypot(mask.shape[0] - 1, mask.shape[1] - 1)))
@@ -46,16 +51,16 @@ def compose_masks(
     for mask in apply_masks:
         if mask.shape != shape:
             raise ValueError("apply mask dimensions do not match the source image")
-        result = np.maximum(result, np.asarray(mask > 0, dtype=np.uint8) * 255)
+        union_mask(result, mask)
     exclusions = np.zeros(shape, dtype=np.uint8)
     for mask in exclude_masks:
         if mask.shape != shape:
             raise ValueError("exclude mask dimensions do not match the source image")
-        exclusions = np.maximum(exclusions, np.asarray(mask > 0, dtype=np.uint8) * 255)
+        union_mask(exclusions, mask)
     if manual_exclude is not None:
         if manual_exclude.shape != shape:
             raise ValueError("manual exclude mask dimensions do not match the source image")
-        exclusions = np.maximum(exclusions, np.asarray(manual_exclude > 0, dtype=np.uint8) * 255)
+        union_mask(exclusions, manual_exclude)
     if exclusion_erase is not None:
         if exclusion_erase.shape != shape:
             raise ValueError("exclusion erase mask dimensions do not match the source image")
@@ -64,14 +69,14 @@ def compose_masks(
     if manual_add is not None:
         if manual_add.shape != shape:
             raise ValueError("manual add mask dimensions do not match the source image")
-        result = np.maximum(result, np.asarray(manual_add > 0, dtype=np.uint8) * 255)
+        union_mask(result, manual_add)
     forced_exclusions = np.zeros(shape, dtype=np.uint8)
     for mask in forced_exclude_masks or []:
         if mask.shape != shape:
             raise ValueError("forced exclude mask dimensions do not match the source image")
-        forced_exclusions = np.maximum(forced_exclusions, np.asarray(mask > 0, dtype=np.uint8) * 255)
+        union_mask(forced_exclusions, mask)
     if manual_exclude is not None and manual_exclude_forced:
-        forced_exclusions = np.maximum(forced_exclusions, np.asarray(manual_exclude > 0, dtype=np.uint8) * 255)
+        union_mask(forced_exclusions, manual_exclude)
     if exclusion_erase is not None:
         forced_exclusions[np.asarray(exclusion_erase) > 0] = 0
     result[forced_exclusions > 0] = 0

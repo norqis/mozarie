@@ -15,7 +15,7 @@ from PIL import Image
 
 from .core import JOB_LABELS, LOGGER, CandidateRole, ClientError, ImageRecord, Job, JobControl
 from .image_io import calculate_block_size
-from .masks import compose_masks, expand_mask
+from .masks import compose_masks, expand_mask, union_mask
 from .runtime import runtime_backend
 
 class JobsMixin:
@@ -322,9 +322,13 @@ class JobsMixin:
             apply_candidates = [candidate for candidate in candidates if candidate.role == CandidateRole.APPLY]
             if not apply_candidates and add_mask is None:
                 return None
-            apply_masks: list[np.ndarray] = []
-            exclude_masks: list[np.ndarray] = []
-            forced_exclude_masks: list[np.ndarray] = []
+            shape = (record.height, record.width)
+            apply_union = np.zeros(shape, dtype=np.uint8)
+            exclude_union = np.zeros(shape, dtype=np.uint8)
+            forced_exclude_union = np.zeros(shape, dtype=np.uint8)
+            has_apply = False
+            has_exclude = False
+            has_forced_exclude = False
             for candidate in candidates:
                 self.materialize_candidate_mask(candidate, image_id)
                 try:
@@ -332,17 +336,20 @@ class JobsMixin:
                         mask = expand_mask(np.asarray(mask_image.convert("L"), dtype=np.uint8), candidate.expand_px)
                 except FileNotFoundError as exc:
                     raise ClientError("検出候補のマスクが見つかりません。自動検出をやり直してください。", "catalog_changed") from exc
-                if mask.shape != (record.height, record.width):
+                if mask.shape != shape:
                     raise RuntimeError("検出マスクのサイズが元画像と一致しません。")
                 if candidate.role == CandidateRole.APPLY:
-                    apply_masks.append(mask)
+                    union_mask(apply_union, mask)
+                    has_apply = True
                 else:
-                    exclude_masks.append(mask)
+                    union_mask(exclude_union, mask)
+                    has_exclude = True
                     if candidate.forced:
-                        forced_exclude_masks.append(mask)
+                        union_mask(forced_exclude_union, mask)
+                        has_forced_exclude = True
             result = compose_masks(
-                (record.height, record.width), apply_masks, exclude_masks, add_mask, exclusion_mask,
-                forced_exclude_masks, True if manual_exclude_forced is None else manual_exclude_forced, exclusion_erase_mask,
+                shape, [apply_union] if has_apply else [], [exclude_union] if has_exclude else [], add_mask, exclusion_mask,
+                [forced_exclude_union] if has_forced_exclude else [], True if manual_exclude_forced is None else manual_exclude_forced, exclusion_erase_mask,
             )
             with self.lock:
                 current_record = self.images.get(image_id)
