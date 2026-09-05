@@ -490,11 +490,15 @@ def render_output(record: ImageRecord, mask: np.ndarray | None, block_size: int,
     modified = canonical if mask is None or not np.any(mask) else _apply_mosaic_to_image(canonical, mask, block_size)
     if record.flip_horizontal: modified = ImageOps.mirror(modified)
     if record.flip_vertical: modified = ImageOps.flip(modified)
-    has_transparency = "A" in modified.getbands() or (modified.mode == "P" and "transparency" in modified.info)
+    has_transparency = "A" in modified.getbands() or "transparency" in modified.info
     if image_format == "JPEG" and has_transparency:
         rgba = modified.convert("RGBA")
         background = Image.new("RGB", modified.size, "white"); background.paste(rgba, mask=rgba.getchannel("A")); modified = background
     if not keep_metadata:
+        # Palette/RGB PNG transparency is carried in ``info``. Materialise it
+        # as pixels before dropping metadata so an export stays transparent.
+        if image_format != "JPEG" and has_transparency and "A" not in modified.getbands():
+            modified = modified.convert("RGBA")
         modified = modified.copy(); modified.info.clear()
     if image_format == "JPEG": modified = modified.convert("RGB")
     if image_format == "PNG":
