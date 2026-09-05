@@ -475,6 +475,12 @@ def _output_spec(record: ImageRecord, output_format: str) -> tuple[str, str, str
     return suffix, image_format, {"PNG": "image/png", "JPEG": "image/jpeg", "WEBP": "image/webp"}[image_format]
 
 
+def output_format_matches_source(record: ImageRecord, output_format: str) -> bool:
+    """Whether an explicit export choice encodes the source's file format."""
+    _suffix, output_image_format, _mime = _output_spec(record, output_format)
+    return output_image_format == _expected_image_format(record.path.suffix.lower())
+
+
 def render_output(record: ImageRecord, mask: np.ndarray | None, block_size: int, output_format: str, keep_metadata: bool) -> tuple[bytes, str, str]:
     """Render canonical mosaic plus desired flip to the explicit output format."""
     suffix, image_format, mime = _output_spec(record, output_format)

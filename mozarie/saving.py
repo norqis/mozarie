@@ -18,7 +18,7 @@ from .core import (
 )
 from .config import SettingsError, validate_output_directory_ready
 from .image_io import (
-    _assert_source_stat_matches, _stage_record_replacement, _stage_save_with_mask, calculate_block_size, read_stable_source_bytes, render_with_mask, render_output,
+    _assert_source_stat_matches, _stage_record_replacement, _stage_save_with_mask, calculate_block_size, read_stable_source_bytes, render_with_mask, render_output, output_format_matches_source,
     decode_draft_masks, draft_manual_exclusion_forced, save_with_mask,
     unique_session_import_destination, write_rendered_copy,
 )
@@ -197,7 +197,7 @@ class SavingMixin:
                     (record.height, record.width), apply_masks, exclude_masks, add_mask, exclusion_mask,
                     forced_exclude_masks, manual_exclude_forced, exclusion_erase_mask,
                 )
-                no_effect = (mask is None or not np.any(mask)) and output_format == "original" and keep_metadata and \
+                no_effect = (mask is None or not np.any(mask)) and output_format_matches_source(record, output_format) and keep_metadata and \
                     record.flip_horizontal == record.source_flip_horizontal and record.flip_vertical == record.source_flip_vertical
                 source_fingerprint = record.asset_fingerprint()
                 # Saving every listed image means an image without a mosaic is
@@ -316,7 +316,7 @@ class SavingMixin:
                             or token_details.flip_horizontal != record.flip_horizontal or token_details.flip_vertical != record.flip_vertical
                             or token_details.source_flip_horizontal != record.source_flip_horizontal or token_details.source_flip_vertical != record.source_flip_vertical):
                         raise ClientError("反転状態が変更されました。保存をやり直してください。", "save_state_changed")
-                    if source_action == "overwrite" and token_details.output_format != "original":
+                    if source_action == "overwrite" and not output_format_matches_source(record, token_details.output_format):
                         raise ClientError("形式変換はコピー保存で行ってください。", "input_invalid")
                     if not token_allows_action(token_details):
                         raise ClientError("保存確認トークンと元画像の処理が一致しません。保存をやり直してください。", "save_state_changed")
@@ -520,11 +520,11 @@ class SavingMixin:
                             )
                     except Exception:
                         raise
-                    no_effect = (mask is None or not np.any(mask)) and output_format == "original" and keep_metadata and \
+                    no_effect = (mask is None or not np.any(mask)) and output_format_matches_source(record, output_format) and keep_metadata and \
                         record.flip_horizontal == record.source_flip_horizontal and record.flip_vertical == record.source_flip_vertical
                     source_fingerprint = record.asset_fingerprint()
                     source_stage = None
-                    if output_format != "original" and not copy_to_default:
+                    if not output_format_matches_source(record, output_format) and not copy_to_default:
                         raise ClientError("形式変換はコピー保存で行ってください。", "input_invalid")
                     if no_effect:
                         output = read_stable_source_bytes(record, source_fingerprint); output_suffix = record.path.suffix.lower()
