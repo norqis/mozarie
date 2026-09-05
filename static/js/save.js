@@ -30,7 +30,7 @@ function syncApplyOutputOptions() {
   metadata.disabled = format === "jpg" || state.applyRunning || state.saveStarting;
   if (format === "jpg") metadata.checked = false;
   if (requiresCopy) $("#applyCopyMode").checked = true;
-  note.textContent = format === "jpg" ? t("apply.jpgMetadataDisabled") : (requiresCopy ? t("apply.formatRequiresCopy") : "");
+  note.textContent = [format === "jpg" ? t("apply.jpgMetadataDisabled") : "", requiresCopy ? t("apply.formatRequiresCopy") : ""].filter(Boolean).join(" ");
   note.classList.toggle("save-option-warning", format === "jpg");
   note.hidden = !note.textContent;
   $("#applyOverwriteMode").disabled = $("#applyOverwriteMode").disabled || requiresCopy;
@@ -43,7 +43,7 @@ function syncSingleOutputOptions() {
   metadata.disabled = format === "jpg" || state.saving || state.saveStarting;
   if (format === "jpg") metadata.checked = false;
   if (requiresCopy) $("#singleSaveCopyMode").checked = true;
-  note.textContent = format === "jpg" ? t("apply.jpgMetadataDisabled") : (requiresCopy ? t("apply.formatRequiresCopy") : "");
+  note.textContent = [format === "jpg" ? t("apply.jpgMetadataDisabled") : "", requiresCopy ? t("apply.formatRequiresCopy") : ""].filter(Boolean).join(" ");
   note.classList.toggle("save-option-warning", format === "jpg");
   note.hidden = !note.textContent;
   $("#singleSaveOverwriteMode").disabled = $("#singleSaveOverwriteMode").disabled || requiresCopy;
