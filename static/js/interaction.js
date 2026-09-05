@@ -124,7 +124,7 @@ function resetCurrentDraft() {
 
 async function clearMasks(imageIds, titleKey, messageKey, expectedImageId = null, expectedGeneration = null) {
   if (!imageIds.length || isBusy() || state.importing || currentImageActionPending()) return;
-  if (!await confirmAction(t(titleKey), t(messageKey), "clearMasks")) return;
+  if (!await confirmAction(t(titleKey, { count: imageIds.length }), t(messageKey, { count: imageIds.length }), "clearMasks")) return;
   if (expectedImageId && (state.currentId !== expectedImageId || !isCurrentGeneration(expectedGeneration) || currentImageActionPending())) return;
   state.masksClearing = true;
   let catalogEpoch = null;
