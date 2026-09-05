@@ -490,7 +490,7 @@ def render_output(record: ImageRecord, mask: np.ndarray | None, block_size: int,
         background = Image.new("RGB", modified.size, "white"); background.paste(rgba, mask=rgba.getchannel("A")); modified = background
     if not keep_metadata:
         modified = modified.copy(); modified.info.clear()
-    elif image_format == "JPEG": modified = modified.convert("RGB")
+    if image_format == "JPEG": modified = modified.convert("RGB")
     if image_format == "PNG":
         if keep_metadata and record.path.suffix.lower() == ".png":
             return _png_with_original_chunks(source, modified, normalize_orientation=True), suffix, mime
