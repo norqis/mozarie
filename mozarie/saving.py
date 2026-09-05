@@ -18,7 +18,7 @@ from .core import (
 )
 from .config import SettingsError, validate_output_directory_ready
 from .image_io import (
-    _assert_source_stat_matches, _stage_record_replacement, _stage_save_with_mask, calculate_block_size, read_stable_source_bytes, render_with_mask,
+    _assert_source_stat_matches, _stage_record_replacement, _stage_save_with_mask, calculate_block_size, read_stable_source_bytes, render_with_mask, render_output,
     decode_draft_masks, draft_manual_exclusion_forced, save_with_mask,
     unique_session_import_destination, write_rendered_copy,
 )
@@ -34,6 +34,8 @@ class SavingMixin:
         drafts: dict[str, dict[str, Any]],
         copy_to_default: bool = False,
         suffix: str = "_censored",
+        output_format: str = "original",
+        keep_metadata: bool = True,
     ) -> bool:
         if not image_ids:
             return False
@@ -45,6 +47,8 @@ class SavingMixin:
         if not isinstance(drafts, dict):
             raise ClientError("手描きマスクの形式が正しくありません。", "input_invalid")
         suffix = _read_save_suffix(suffix)
+        if output_format not in {"original", "png", "jpg"} or not isinstance(keep_metadata, bool) or (output_format == "jpg" and keep_metadata):
+            raise ClientError("保存形式が正しくありません。", "input_invalid")
         with self.lock:
             if self.catalog_generation != catalog_generation or any(self.images.get(record.image_id) is not record for record in records):
                 raise ClientError("画像一覧が更新されたため、もう一度実行してください。", "save_state_changed")
@@ -59,7 +63,7 @@ class SavingMixin:
         drafts = {str(image_id): (dict(draft) if isinstance(draft, dict) else draft) for image_id, draft in drafts.items()}
         self._start_job(
             "apply", records, self._apply_worker, divisor, drafts, copy_to_default, suffix,
-            saving_parallelism, output_directory,
+            saving_parallelism, output_directory, output_format, keep_metadata,
             expected_catalog_generation=catalog_generation,
         )
         return True
@@ -68,7 +72,7 @@ class SavingMixin:
         """Reserve a copy name while another worker may be choosing one."""
         with self.output_destination_lock:
             relative = safe_import_relative_path(record.relative_path)
-            target = output_directory / relative
+            target = (output_directory / relative).with_suffix(record.path.suffix)
             destination = unique_session_import_destination(
                 target.with_name(f"{target.stem}{_read_save_suffix(suffix)}{target.suffix}"), self.reserved_output_paths,
             )
@@ -115,6 +119,8 @@ class SavingMixin:
         copy_to_default: bool = False,
         copy_to_browser: bool = False,
         suffix: str = "_censored",
+        output_format: str = "original",
+        keep_metadata: bool = True,
     ) -> BrowserSaveRender:
         self._assert_image_editable(image_id)
         record = self.image_snapshot(image_id)
@@ -124,6 +130,10 @@ class SavingMixin:
         manual_exclude_forced = draft_manual_exclusion_forced(draft, self.settings["detection"].get("exclude_forced_default", True))
         removed_candidate_ids = {str(value) for value in draft.get("removedCandidateIds", [])} if isinstance(draft, dict) else set()
         divisor = _read_mosaic_divisor(divisor)
+        if output_format not in {"original", "png", "jpg"} or not isinstance(keep_metadata, bool):
+            raise ClientError("保存形式が正しくありません。", "input_invalid")
+        if output_format == "jpg" and keep_metadata:
+            raise ClientError("JPG形式ではメタ情報を保持できません。", "input_invalid")
         rendered_path: Path | None = None
         output_path: Path | None = None
         output_fingerprint: tuple[int, int] | None = None
@@ -187,20 +197,22 @@ class SavingMixin:
                     (record.height, record.width), apply_masks, exclude_masks, add_mask, exclusion_mask,
                     forced_exclude_masks, manual_exclude_forced, exclusion_erase_mask,
                 )
-                no_effect = mask is None or not np.any(mask)
+                no_effect = (mask is None or not np.any(mask)) and output_format == "original" and keep_metadata and \
+                    record.flip_horizontal == record.source_flip_horizontal and record.flip_vertical == record.source_flip_vertical
                 source_fingerprint = record.asset_fingerprint()
                 # Saving every listed image means an image without a mosaic is
                 # copied as-is.  An overwrite deliberately becomes a commit
                 # with ``keep`` instead of touching its source file.
-                output = read_stable_source_bytes(record, source_fingerprint) if no_effect else render_with_mask(
-                    record, mask, calculate_block_size(record.width, record.height, divisor),
-                )
+                if no_effect:
+                    output = read_stable_source_bytes(record, source_fingerprint); output_suffix = record.path.suffix.lower()
+                    _output_mime = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp"}.get(output_suffix, "application/octet-stream")
+                else:
+                    output, output_suffix, _output_mime = render_output(record, mask, calculate_block_size(record.width, record.height, divisor), output_format, keep_metadata)
                 if copy_to_default:
                     if not configured_output_directory.is_dir():
                         raise ClientError("保存先フォルダを使用できません。設定で変更してください。", "output_folder_unavailable")
-                    output_path = self._reserve_output_destination(
-                        record, _read_save_suffix(suffix), configured_output_directory,
-                    )
+                    target_record = replace(record, path=record.path.with_suffix(output_suffix))
+                    output_path = self._reserve_output_destination(target_record, _read_save_suffix(suffix), configured_output_directory)
                     try:
                         write_rendered_copy(output_path, output)
                         output_stat = output_path.stat()
@@ -217,7 +229,7 @@ class SavingMixin:
                     # overwrite still needs this staged replacement.
                     rendered_dir = self.cache_dir / "browser-save"
                     rendered_dir.mkdir(parents=True, exist_ok=True)
-                    with tempfile.NamedTemporaryFile(dir=rendered_dir, suffix=record.path.suffix.lower(), delete=False) as handle:
+                    with tempfile.NamedTemporaryFile(dir=rendered_dir, suffix=output_suffix, delete=False) as handle:
                         rendered_path = Path(handle.name)
                         handle.write(output)
                         handle.flush()
@@ -237,9 +249,10 @@ class SavingMixin:
                         record, current_revision, source_fingerprint, catalog_generation, rendered_path, output_path, output_fingerprint,
                         allow_copy_action=copy_to_browser or no_effect,
                         no_effect=no_effect,
+                        output_format=output_format, keep_metadata=keep_metadata,
                     )
                     rendered_path = None
-            return BrowserSaveRender(output, record, current_revision, save_token, output_path, no_effect)
+            return BrowserSaveRender(output, record, current_revision, save_token, output_path, no_effect, output_format, _output_mime, output_suffix)
         finally:
             if rendered_path is not None:
                 rendered_path.unlink(missing_ok=True)
@@ -299,6 +312,12 @@ class SavingMixin:
                         raise ClientError("保存確認トークンが無効または期限切れです。保存をやり直してください。", "save_state_changed")
                     if token_details.image_id != image_id or token_details.candidate_revision != revision:
                         raise ClientError("保存確認トークンが保存対象と一致しません。保存をやり直してください。", "save_state_changed")
+                    if (record is None or token_details.transform_revision != record.transform_revision
+                            or token_details.flip_horizontal != record.flip_horizontal or token_details.flip_vertical != record.flip_vertical
+                            or token_details.source_flip_horizontal != record.source_flip_horizontal or token_details.source_flip_vertical != record.source_flip_vertical):
+                        raise ClientError("反転状態が変更されました。保存をやり直してください。", "save_state_changed")
+                    if source_action == "overwrite" and token_details.output_format != "original":
+                        raise ClientError("形式変換はコピー保存で行ってください。", "input_invalid")
                     if not token_allows_action(token_details):
                         raise ClientError("保存確認トークンと元画像の処理が一致しません。保存をやり直してください。", "save_state_changed")
                     if token_details.issued_at < time.monotonic() - SAVE_TOKEN_TTL_SECONDS:
@@ -375,6 +394,8 @@ class SavingMixin:
                             size_bytes=persisted_size if source_action == "overwrite" else None,
                             clear_workspace=deleted,
                             delete_image=deleted,
+                            source_flip_horizontal=record_snapshot.flip_horizontal if source_action == "overwrite" else None,
+                            source_flip_vertical=record_snapshot.flip_vertical if source_action == "overwrite" else None,
                         )
                 except Exception:
                     if source_stage is not None:
@@ -388,6 +409,8 @@ class SavingMixin:
                     if record is None:
                         raise ClientError("画像一覧が変更されました。保存をやり直してください。", "save_state_changed")
                     if source_action == "overwrite":
+                        record.source_flip_horizontal = record.flip_horizontal; record.source_flip_vertical = record.flip_vertical
+                        record.transform_revision += 1
                         record.set_asset_fingerprint(*record_snapshot.asset_fingerprint())
                         if record.source_kind == "filesystem":
                             record.mtime_ns = record_snapshot.mtime_ns
@@ -465,6 +488,8 @@ class SavingMixin:
         suffix: str = "_censored",
         saving_parallelism: int = 1,
         output_directory: Path | None = None,
+        output_format: str = "original",
+        keep_metadata: bool = True,
         *,
         control: JobControl | None = None,
         job_generation: int | None = None,
@@ -495,21 +520,32 @@ class SavingMixin:
                             )
                     except Exception:
                         raise
-                    no_effect = mask is None or not np.any(mask)
+                    no_effect = (mask is None or not np.any(mask)) and output_format == "original" and keep_metadata and \
+                        record.flip_horizontal == record.source_flip_horizontal and record.flip_vertical == record.source_flip_vertical
                     source_fingerprint = record.asset_fingerprint()
                     source_stage = None
-                    output_path = self._reserve_output_destination(record, suffix, output_directory) if copy_to_default else record.path
+                    if output_format != "original" and not copy_to_default:
+                        raise ClientError("形式変換はコピー保存で行ってください。", "input_invalid")
+                    if no_effect:
+                        output = read_stable_source_bytes(record, source_fingerprint); output_suffix = record.path.suffix.lower()
+                    else:
+                        output, output_suffix, _mime = render_output(record, mask, calculate_block_size(record.width, record.height, divisor), output_format, keep_metadata)
+                    target_record = replace(record, path=record.path.with_suffix(output_suffix))
+                    output_path = self._reserve_output_destination(target_record, suffix, output_directory) if copy_to_default else record.path
                     if copy_to_default:
                         try:
-                            output = read_stable_source_bytes(record, source_fingerprint) if no_effect else render_with_mask(
-                                record, mask, calculate_block_size(record.width, record.height, divisor),
-                            )
                             write_rendered_copy(output_path, output)
                         finally:
                             self._release_output_destination(output_path)
                     else:
                         if not no_effect:
-                            source_stage = _stage_save_with_mask(record, mask, calculate_block_size(record.width, record.height, divisor))
+                            rendered_dir = self.cache_dir / "apply-render"; rendered_dir.mkdir(parents=True, exist_ok=True)
+                            with tempfile.NamedTemporaryFile(dir=rendered_dir, suffix=output_suffix, delete=False) as handle:
+                                stage_path = Path(handle.name); handle.write(output); handle.flush()
+                            try:
+                                source_stage = _stage_record_replacement(record, stage_path, source_fingerprint)
+                            finally:
+                                stage_path.unlink(missing_ok=True)
                             output_stat = record.path.stat()
                     # Files are fully written before the state mutation. Saving
                     # never clears candidates or manual workspace.
@@ -526,12 +562,18 @@ class SavingMixin:
                                 mtime_ns=None if copy_to_default or no_effect else output_stat.st_mtime_ns,
                                 size_bytes=None if copy_to_default or no_effect else output_stat.st_size,
                                 clear_workspace=False,
+                                source_flip_horizontal=record.flip_horizontal if not copy_to_default and not no_effect else None,
+                                source_flip_vertical=record.flip_vertical if not copy_to_default and not no_effect else None,
                             )
                             if not copy_to_default and not no_effect:
                                 live_record = self.images[record.image_id]
                                 live_record.mtime_ns = output_stat.st_mtime_ns
                                 live_record.size_bytes = output_stat.st_size
+                                live_record.set_asset_fingerprint(*record.asset_fingerprint())
                                 live_record.asset_revision += 1
+                                live_record.source_flip_horizontal = live_record.flip_horizontal
+                                live_record.source_flip_vertical = live_record.flip_vertical
+                                live_record.transform_revision += 1
                             self._record_job_success(index, record.image_id, str(output_path), job_generation, catalog_generation)
                     except Exception:
                         if source_stage is not None:
@@ -543,6 +585,8 @@ class SavingMixin:
                         raise
                     if source_stage is not None:
                         source_stage.finalize()
+                        for thumbnail_path in (self.cache_dir / "thumbnails").glob(f"{record.image_id}-*.jpg"):
+                            thumbnail_path.unlink(missing_ok=True)
                     if not no_effect:
                         self.invalidate_sam_image(record.image_id)
                     self._set_job_current(record.relative_path, job_generation, catalog_generation)

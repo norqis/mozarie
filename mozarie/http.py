@@ -422,6 +422,9 @@ class MosaicHandler(BaseHTTPRequestHandler):
             elif path.startswith("/api/workspace/manual/"):
                 STATE.save_manual_workspace(path.removeprefix("/api/workspace/manual/"), payload)
                 self._json({"ok": True})
+            elif path.startswith("/api/images/") and path.endswith("/transform"):
+                image_id = path.removeprefix("/api/images/").removesuffix("/transform").rstrip("/")
+                self._json(STATE.set_image_transform(image_id, payload))
             elif path == "/api/catalog/remove":
                 self._json(STATE.remove_images_from_catalog(payload.get("imageIds", [])))
             elif path == "/api/masks/clear":
@@ -505,6 +508,8 @@ class MosaicHandler(BaseHTTPRequestHandler):
                     copy_to_default=copy_to_default,
                     copy_to_browser=copy_to_browser,
                     suffix=_read_save_suffix(payload.get("suffix", "_censored")),
+                    output_format=str(payload.get("format", "original")),
+                    keep_metadata=_read_bool(payload.get("keepMetadata", True), "メタ情報の保持"),
                 )
                 output, record, revision, save_token = rendered
                 if copy_to_default:
@@ -512,7 +517,7 @@ class MosaicHandler(BaseHTTPRequestHandler):
                 else:
                     self._binary(
                         output,
-                        mimetypes.guess_type(record.path.name)[0] or "application/octet-stream",
+                        rendered.mime_type,
                         headers={
                             "X-Mozarie-Revision": str(revision),
                             "X-Mozarie-Save-Token": save_token,
@@ -550,6 +555,8 @@ class MosaicHandler(BaseHTTPRequestHandler):
                     payload.get("imageIds", []), divisor, payload.get("drafts", {}),
                     _read_bool(payload.get("copyToDefault", False), "既定の保存先へコピー"),
                     _read_save_suffix(payload.get("suffix", "_censored")),
+                    str(payload.get("format", "original")),
+                    _read_bool(payload.get("keepMetadata", True), "メタ情報の保持"),
                 )
                 self._json({"ok": started, "cancelled": not started})
             elif path == "/api/job/pause":
@@ -696,6 +703,10 @@ class MosaicHandler(BaseHTTPRequestHandler):
                         try:
                             with Image.open(record.path) as image:
                                 image = ImageOps.exif_transpose(image)
+                                if record.flip_horizontal != record.source_flip_horizontal:
+                                    image = ImageOps.mirror(image)
+                                if record.flip_vertical != record.source_flip_vertical:
+                                    image = ImageOps.flip(image)
                                 image.thumbnail((280, 280), Image.Resampling.LANCZOS)
                                 output = io.BytesIO()
                                 image.convert("RGB").save(output, format="JPEG", quality=82)

@@ -23,6 +23,7 @@ from .core import (
     torch_module, _read_detection_parallelism, _read_target_classes,
 )
 from .fluid import white_fluid_mask
+from .image_io import canonical_image
 from .runtime import runtime_backend
 from .runtime_types import DetectionModels
 
@@ -643,9 +644,9 @@ class DetectionMixin:
             )
         with self.image_io_lock(record.image_id):
             self._assert_record_stat_matches(record)
-            with Image.open(record.path) as image:
-                scene_fluid_tags = _scene_fluid_tags(dict(image.info))
-                rgb = np.asarray(ImageOps.exif_transpose(image).convert("RGB")).copy()
+            image, _source, info = canonical_image(record)
+            scene_fluid_tags = _scene_fluid_tags(info)
+            rgb = np.asarray(image.convert("RGB")).copy()
         if not self.settings["detection"]["fluid_exclusion_enabled"]:
             scene_fluid_tags = frozenset()
         segments = self._detect_arbitrated_segments(models, rgb, confidence, target_classes or TARGET_CLASSES, scene_fluid_tags)
@@ -758,8 +759,8 @@ class DetectionMixin:
             roi, point = read_boundary_request(payload, record.width, record.height)
         with self.image_io_lock(image_id):
             self._assert_record_stat_matches(record)
-            with Image.open(record.path) as image:
-                rgb = np.asarray(ImageOps.exif_transpose(image).convert("RGB")).copy()
+            image, _source, _info = canonical_image(record)
+            rgb = np.asarray(image.convert("RGB")).copy()
         with self.inference_lock:
             with self.lock:
                 if self.job.state in {"running", "pausing"} or self._has_active_worker():
