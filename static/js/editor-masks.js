@@ -1049,7 +1049,7 @@ async function syncLocalTransformFromHistory(imageId, generation) {
     const result = await api(`/api/images/${encodeURIComponent(imageId)}/transform`, { method: "POST", body: JSON.stringify(transform) });
     if (state.currentId !== imageId || !isCurrentGeneration(generation) || !result.image || result.image.id !== imageId) return;
     const recordIndex = state.images.findIndex((image) => image.id === imageId);
-    if (recordIndex >= 0) state.images[recordIndex] = result.image;
+    if (recordIndex >= 0) Object.assign(state.images[recordIndex], result.image);
     prepareOriginalImage(); releaseMosaicPreview(); requestMosaicPreview(); renderCatalogViews(); render();
   } catch (error) { showUserError(error); }
   finally { state.transformPending = false; updateActionButtons(); }

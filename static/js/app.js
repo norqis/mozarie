@@ -107,7 +107,7 @@ async function toggleImageFlip(axis) {
     const updated = result.image;
     if (!updated || updated.id !== imageId) throw codedError("response_invalid");
     const index = state.images.findIndex((image) => image.id === imageId);
-    if (index >= 0) state.images[index] = updated;
+    if (index >= 0) Object.assign(state.images[index], updated);
     if (state.project?.id) {
       state.projectHistory.set(imageId, { canUndo: result.canUndo === true, canRedo: result.canRedo === true });
     } else {
