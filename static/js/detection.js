@@ -148,7 +148,7 @@ async function saveCurrent() {
   if (state.candidateUpdateChains.size) await waitForCandidateMutations();
   const record = state.images.find((image) => image.id === imageId);
   if (isBusy() || state.importing || currentImageActionPending() || state.currentId !== imageId || !isCurrentGeneration(generation)
-    || !state.currentImage || state.projectReadOnly || record?.sourceDimensionsChanged || !record || !imageHasMask(record)) return;
+    || !state.currentImage || state.projectReadOnly || record?.sourceDimensionsChanged || !record) return;
   await openSingleSaveDialog(imageId);
 }
 
