@@ -74,6 +74,8 @@ function setCatalogNode(windowState, image, index, layout, rowNode) {
   cell.setAttribute("aria-selected", String(scope === "gallery" ? current : batchSelected));
   cell.setAttribute("aria-colindex", String(column + 1));
   const preview = item.querySelector("img"); observeThumbnail(preview, image, scope); preview.alt = image.relativePath;
+  const flipH = (image.flipH === true) !== (image.sourceFlipH === true); const flipV = (image.flipV === true) !== (image.sourceFlipV === true);
+  preview.style.transform = flipH || flipV ? `scale(${flipH ? -1 : 1}, ${flipV ? -1 : 1})` : "";
   // Overview is initially rendered in a hidden panel.  Some Chromium builds
   // do not deliver that first IntersectionObserver entry after it becomes
   // visible, so load its small mounted window immediately.

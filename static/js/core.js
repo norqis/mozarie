@@ -11,7 +11,7 @@ const state = {
   boundaryDrafts: [], boundaryDraftSequence: 0, boundaryActiveId: null, boundaryBrushStroke: null,
   polygonPoints: [], polygonDragIndex: -1, polygonDraftDrag: null, blinkCandidateIds: new Set(), blinkModes: new Map(), blinkPhase: false, blinkTimer: null,
   pointer: null, hover: null, brushCursorGeometry: "", history: [], historyIndex: 0, activeStroke: null, manualStrokePaintFrame: 0, removedCandidateIds: new Set(),
-  view: { scale: 1, x: 0, y: 0 }, job: null, saving: false, saveStarting: false, detectionStarting: false, masksClearing: false,
+  view: { scale: 1, x: 0, y: 0 }, job: null, saving: false, saveStarting: false, detectionStarting: false, masksClearing: false, transformPending: false,
   catalogMutation: false, imageGeneration: 0, catalogEpoch: 0, viewGeneration: 0, historyRestoreToken: 0, translations: {},
   applyTargetIds: [], applyTargetMode: "masked", applyCatalogSnapshot: null, applyRunning: false, applyFinishing: false, handledApplyStartedAt: null, importing: false, mosaicPreviewEnabled: true, mosaicPreviewGeneration: 0, mosaicWorker: null, mosaicPreviewRequested: false, mosaicWorkerBusy: false, mosaicPending: null, mosaicPreviewRoi: null, mosaicSourceImage: null, mosaicSourceId: "", mosaicSourcePromise: null, mosaicPreviewFailureReported: false,
   outputDirectoryPicking: false, outputDirectoryHandle: null, singleSave: null,
@@ -552,7 +552,7 @@ function updateActionButtons() {
   $("#batchModeButton").disabled = busyLocked || mutationLocked || state.images.length === 0;
   $("#galleryFilter").disabled = busyLocked;
   $("#saveAllButton").disabled = busyLocked || mutationLocked || mutatingCandidates || state.images.length === 0;
-  const currentSaveDisabled = busyLocked || mutationLocked || switchingImages || mutatingCandidates || !hasImage || !imageHasMask(current);
+  const currentSaveDisabled = busyLocked || mutationLocked || switchingImages || mutatingCandidates || !hasImage;
   $("#saveButton").disabled = currentSaveDisabled;
   $("#applyStartButton").disabled = busyLocked || mutationLocked || mutatingCandidates || state.applyTargetIds.length === 0
     || Boolean(applyRestrictionMessage()) || (selectedSaveMode() === "copy" && !state.outputDirectoryHandle);
@@ -570,6 +570,7 @@ function updateActionButtons() {
   }
   updateCandidateBatchButtons(hasImage, candidateControlsLocked, presence, candidateViewLocked);
   updateHistoryButtons();
+  if (typeof syncFlipControls === "function") syncFlipControls();
   if (busyLocked) {
     for (const control of controls) {
       if ((["applyPauseButton", "applyCancelButton"].includes(control.id) && state.applyRunning)

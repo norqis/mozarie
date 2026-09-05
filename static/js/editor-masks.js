@@ -673,7 +673,11 @@ async function addBoundaryCandidate() {
 }
 
 function escapeHtml(value) { return String(value).replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character]); }
-function pointFromEvent(event) { const rect = canvas.getBoundingClientRect(); const side = state.gestureDisplaySide ?? compareEventSide(event, rect); const offset = compareSideOffset(side, rect.width); return { x: (event.clientX - rect.left - offset - state.view.x) / state.view.scale, y: (event.clientY - rect.top - state.view.y) / state.view.scale }; }
+function pointFromEvent(event) {
+  const rect = canvas.getBoundingClientRect(); const side = state.gestureDisplaySide ?? compareEventSide(event, rect); const offset = compareSideOffset(side, rect.width);
+  const point = { x: (event.clientX - rect.left - offset - state.view.x) / state.view.scale, y: (event.clientY - rect.top - state.view.y) / state.view.scale };
+  return inverseTransformImagePoint(point);
+}
 function clampPoint(point) {
   if (!state.currentImage) return point;
   return {
@@ -1021,6 +1025,36 @@ async function restoreProjectHistory(direction) {
   finally { state.projectHistoryBusy = false; updateActionButtons(); }
 }
 
+function localTransformForHistoryIndex(index) {
+  const record = currentRecord();
+  if (!record) return null;
+  let baseH = record.flipH === true; let baseV = record.flipV === true;
+  for (const operation of state.history) {
+    if (operation.kind !== "transform") continue;
+    baseH = baseH !== (operation.flipH === true); baseV = baseV !== (operation.flipV === true);
+  }
+  let flipH = baseH; let flipV = baseV;
+  for (const operation of state.history.slice(0, index)) {
+    if (operation.kind !== "transform") continue;
+    flipH = flipH !== (operation.flipH === true); flipV = flipV !== (operation.flipV === true);
+  }
+  return { flipH, flipV };
+}
+
+async function syncLocalTransformFromHistory(imageId, generation) {
+  const record = currentRecord(); const transform = localTransformForHistoryIndex(state.historyIndex);
+  if (!record || !transform || record.id !== imageId || (record.flipH === transform.flipH && record.flipV === transform.flipV)) return;
+  state.transformPending = true; updateActionButtons();
+  try {
+    const result = await api(`/api/images/${encodeURIComponent(imageId)}/transform`, { method: "POST", body: JSON.stringify(transform) });
+    if (state.currentId !== imageId || !isCurrentGeneration(generation) || !result.image || result.image.id !== imageId) return;
+    const recordIndex = state.images.findIndex((image) => image.id === imageId);
+    if (recordIndex >= 0) state.images[recordIndex] = result.image;
+    prepareOriginalImage(); releaseMosaicPreview(); requestMosaicPreview(); renderCatalogViews(); render();
+  } catch (error) { showUserError(error); }
+  finally { state.transformPending = false; updateActionButtons(); }
+}
+
 function restoreSnapshot(index) {
   if (state.project?.id) { void restoreProjectHistory(index < state.historyIndex ? "undo" : "redo"); return; }
   if (isBusy() || state.importing || isGestureActive() || currentImageActionPending() || index < 0 || index > state.history.length) return;
@@ -1031,6 +1065,7 @@ function restoreSnapshot(index) {
   state.historyIndex = index;
   rebuildManualMaskFromHistory();
   scheduleManualWorkspaceSave();
+  void syncLocalTransformFromHistory(imageId, generation);
   setReviewed(currentRecord(), false);
   updateHistoryButtons(); renderCandidates(); render();
   requestAnimationFrame(() => {

@@ -81,6 +81,48 @@ let projectListSortPending = false;
 let nativeRelinkSourceId = "";
 let nativeRelinkBusy = false;
 
+function syncFlipControls() {
+  const record = currentRecord();
+  const disabled = !record || !state.currentImage || state.transformPending || state.projectReadOnly || isBusy() || state.importing || currentImageActionPending() || currentRecord()?.sourceDimensionsChanged;
+  for (const [id, value] of [["#flipHorizontalButton", record?.flipH === true], ["#flipVerticalButton", record?.flipV === true]]) {
+    const button = $(id); if (!button) continue;
+    button.disabled = disabled;
+    button.setAttribute("aria-pressed", String(value));
+    button.classList.toggle("active", value);
+  }
+}
+
+async function toggleImageFlip(axis) {
+  const record = currentRecord();
+  const imageId = state.currentId;
+  const generation = state.imageGeneration;
+  if (!record || !imageId || !state.currentImage || state.transformPending || state.projectReadOnly || isBusy() || state.importing || currentImageActionPending() || record.sourceDimensionsChanged) return;
+  state.transformPending = true; updateActionButtons();
+  try {
+    await flushWorkspaceDraft(imageId);
+    const flipH = axis === "horizontal" ? record.flipH !== true : record.flipH === true;
+    const flipV = axis === "vertical" ? record.flipV !== true : record.flipV === true;
+    const result = await api(`/api/images/${encodeURIComponent(imageId)}/transform`, { method: "POST", body: JSON.stringify({ flipH, flipV }) });
+    if (state.currentId !== imageId || !isCurrentGeneration(generation)) return;
+    const updated = result.image;
+    if (!updated || updated.id !== imageId) throw codedError("response_invalid");
+    const index = state.images.findIndex((image) => image.id === imageId);
+    if (index >= 0) state.images[index] = updated;
+    if (state.project?.id) {
+      state.projectHistory.set(imageId, { canUndo: result.canUndo === true, canRedo: result.canRedo === true });
+    } else {
+      recordHistoryOperation({ kind: "transform", flipH: axis === "horizontal", flipV: axis === "vertical" });
+      saveDraft();
+    }
+    prepareOriginalImage(); releaseMosaicPreview(); requestMosaicPreview();
+    renderCatalogViews(); updateHistoryButtons(); render();
+  } catch (error) {
+    showUserError(error, axis === "horizontal" ? $("#flipHorizontalButton") : $("#flipVerticalButton"));
+  } finally {
+    state.transformPending = false; updateActionButtons();
+  }
+}
+
 function syncProjectNameDialogControls() {
   if (!$("#projectNameDialog").open) return;
   const disabled = state.projectOperationPending;
@@ -706,6 +748,8 @@ function bindEvents() {
   document.querySelectorAll("#dialogTargetPenis, #dialogTargetPussy").forEach((input) => input.addEventListener("change", () => validateDetectionTargets(detectionTargets("dialogTarget"), $("#detectTargetValidation"))));
   $("#detectCurrentButton").addEventListener("click", () => { if (!currentImageActionPending() && state.currentId) void runDetection([state.currentId], detectionConfidence(), 1, detectionTargets()); });
   $("#saveAllButton").addEventListener("click", saveAll); $("#saveButton").addEventListener("click", saveCurrent); $("#singleViewButton").addEventListener("click", () => setDisplayMode("single")); $("#compareViewButton").addEventListener("click", () => setDisplayMode("compare")); $("#fitButton").addEventListener("click", () => { if (!isBusy() && !state.importing) fitImage(); });
+  $("#flipHorizontalButton").addEventListener("click", () => { void toggleImageFlip("horizontal"); });
+  $("#flipVerticalButton").addEventListener("click", () => { void toggleImageFlip("vertical"); });
   $("#downloadCurrentMosaicMask").addEventListener("click", () => { const imageId = state.currentId; if (!currentImageActionPending() && imageId) void downloadProjectArtifact(`/api/project/mask/${encodeURIComponent(imageId)}/mosaic`, "mosaic-mask.png", imageId, state.imageGeneration); });
   $("#downloadCurrentExcludeMask").addEventListener("click", () => { const imageId = state.currentId; if (!currentImageActionPending() && imageId) void downloadProjectArtifact(`/api/project/mask/${encodeURIComponent(imageId)}/exclude`, "exclude-mask.png", imageId, state.imageGeneration); });
   $("#bucketTolerance").addEventListener("input", (event) => setFillColorTolerance(event.currentTarget.value));
@@ -964,6 +1008,7 @@ function bindEvents() {
   $("#chooseOutputDirectoryButton").addEventListener("click", chooseOutputDirectory);
   document.querySelectorAll('input[name="batchSaveMode"]').forEach((input) => input.addEventListener("change", syncApplyMode));
   $("#applyTargetMode").addEventListener("change", refreshApplyTargets);
+  $("#applyOutputFormat").addEventListener("change", syncApplyMode);
   $("#mosaicHelpButton").addEventListener("click", () => {
     showModalFromInvoker($("#mosaicHelpDialog"));
   });
@@ -980,6 +1025,7 @@ function bindEvents() {
   $("#singleSaveForm").addEventListener("submit", startSingleSave);
   $("#singleSaveChooseOutputDirectoryButton").addEventListener("click", () => { void chooseSingleOutputDirectory(); });
   document.querySelectorAll('input[name="singleSaveMode"]').forEach((input) => input.addEventListener("change", syncSingleSaveMode));
+  $("#singleSaveOutputFormat").addEventListener("change", syncSingleSaveMode);
   $("#singleSaveCloseButton").addEventListener("click", () => $("#singleSaveDialog").close());
   $("#singleSaveDialog").addEventListener("cancel", (event) => { event.preventDefault(); if (!state.saving) $("#singleSaveDialog").close(); });
   $("#singleSaveDialog").addEventListener("close", () => { if (!state.saving) state.singleSave = null; });
