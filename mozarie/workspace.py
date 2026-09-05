@@ -1022,9 +1022,9 @@ class WorkspaceStore:
                     db.execute("UPDATE images SET candidate_revision=?,reviewed=0,updated_at=? WHERE image_id=?", (candidate_revision, time.time_ns(), image_id))
                 if source_flip_horizontal is not None and source_flip_vertical is not None and not delete_image:
                     db.execute("""INSERT INTO image_transforms(image_id,flip_horizontal,flip_vertical,source_flip_horizontal,source_flip_vertical,revision)
-                        VALUES(?,?,?,?,?,1) ON CONFLICT(image_id) DO UPDATE SET
+                        SELECT image_id,0,0,?,?,1 FROM images WHERE image_id=? ON CONFLICT(image_id) DO UPDATE SET
                         source_flip_horizontal=excluded.source_flip_horizontal,source_flip_vertical=excluded.source_flip_vertical,revision=image_transforms.revision+1""",
-                        (image_id, 0, 0, int(source_flip_horizontal), int(source_flip_vertical)))
+                        (int(source_flip_horizontal), int(source_flip_vertical), image_id))
                 if clear_workspace and not delete_image:
                     db.execute("DELETE FROM candidates WHERE image_id=?", (image_id,))
                     db.execute("DELETE FROM manual_edits WHERE image_id=?", (image_id,))

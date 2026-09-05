@@ -28,7 +28,7 @@ from .core import (
 )
 from .domain import Candidate, CandidateRole
 from .image_io import _valid_color, decode_draft_masks, draft_manual_exclusion_forced, inspect_import_image, oriented_image_size, unique_session_import_destination
-from .masks import compose_masks, expand_mask
+from .masks import compose_masks, expand_mask, union_mask
 from .runtime import patch_directml_sam_prompt_encoder, runtime_backend, torch_device
 from .workspace import ProjectNameAlreadyExistsError, ProjectSourceNoMatchError, ProjectSourcePathConflictError, ProjectSourceUnavailableError, WorkspaceStore
 
@@ -571,23 +571,29 @@ class CatalogMixin:
         except (TypeError, ValueError, json.JSONDecodeError) as exc: raise ClientError("保存済みマスクが正しくありません。", "workspace_write_failed") from exc
         add, manual_exclude, erase = decode_draft_masks(draft, width, height)
         removed = {str(item) for item in draft.get("removedCandidateIds", [])}
-        apply_masks: list[np.ndarray] = []; exclude_masks: list[np.ndarray] = []; forced: list[np.ndarray] = []
+        shape = (height, width)
+        apply_union: np.ndarray | None = None
+        exclude_union: np.ndarray | None = None
+        forced_union: np.ndarray | None = None
         for candidate in state["candidates"]:
             if not candidate.get("enabled") or candidate.get("deleted") or candidate.get("id") in removed:
                 continue
             try: raw = base64.b64decode(str(candidate["mask"]), validate=True)
             except (KeyError, ValueError, binascii.Error) as exc: raise ClientError("保存済みマスクが正しくありません。", "workspace_write_failed") from exc
             with Image.open(io.BytesIO(raw)) as image: mask = expand_mask(np.asarray(image.convert("L"), dtype=np.uint8), int(candidate.get("expandPx", 0)))
-            if candidate.get("role") == CandidateRole.APPLY.value: apply_masks.append(mask)
+            if mask.shape != shape:
+                raise ValueError("apply mask dimensions do not match the source image" if candidate.get("role") == CandidateRole.APPLY.value else "exclude mask dimensions do not match the source image")
+            if candidate.get("role") == CandidateRole.APPLY.value:
+                apply_union = union_mask(apply_union, mask)
             else:
-                exclude_masks.append(mask)
-                if candidate.get("forced"): forced.append(mask)
+                exclude_union = union_mask(exclude_union, mask)
+                if candidate.get("forced"):
+                    forced_union = union_mask(forced_union, mask)
         if kind == "mosaic":
-            value = compose_masks((height, width), apply_masks, exclude_masks, add if draft.get("manualEnabled") is not False else None, manual_exclude if draft.get("manualExclusionEnabled") is not False else None, forced, draft_manual_exclusion_forced(draft, True), erase if draft.get("manualExclusionEraseEnabled") is not False else None)
+            value = compose_masks(shape, [apply_union] if apply_union is not None else [], [exclude_union] if exclude_union is not None else [], add if draft.get("manualEnabled") is not False else None, manual_exclude if draft.get("manualExclusionEnabled") is not False else None, [forced_union] if forced_union is not None else [], draft_manual_exclusion_forced(draft, True), erase if draft.get("manualExclusionEraseEnabled") is not False else None)
         else:
-            value = np.zeros((height, width), dtype=np.uint8)
-            for mask in exclude_masks: value = np.maximum(value, np.asarray(mask > 0, dtype=np.uint8) * 255)
-            if manual_exclude is not None and draft.get("manualExclusionEnabled") is not False: value = np.maximum(value, np.asarray(manual_exclude > 0, dtype=np.uint8) * 255)
+            value = exclude_union if exclude_union is not None else np.zeros(shape, dtype=np.uint8)
+            if manual_exclude is not None and draft.get("manualExclusionEnabled") is not False: union_mask(value, manual_exclude)
             if erase is not None and draft.get("manualExclusionEraseEnabled") is not False: value[np.asarray(erase) > 0] = 0
         transform = state.get("transform", {})
         if bool(transform.get("flipHorizontal", False)): value = np.fliplr(value)
@@ -644,7 +650,10 @@ class CatalogMixin:
         add = self._raw_workspace_mask(manual.get("add"), width, height)
         manual_exclude = self._raw_workspace_mask(manual.get("exclusion"), width, height)
         erase = self._raw_workspace_mask(manual.get("erase"), width, height)
-        apply_masks: list[np.ndarray] = []; exclude_masks: list[np.ndarray] = []; forced: list[np.ndarray] = []
+        shape = (height, width)
+        apply_union: np.ndarray | None = None
+        exclude_union: np.ndarray | None = None
+        forced_union: np.ndarray | None = None
         for candidate in state["candidates"]:
             if not candidate.get("enabled") or candidate["id"] in removed:
                 continue
@@ -652,26 +661,26 @@ class CatalogMixin:
             if mask is None:
                 raise ClientError("保存済みマスクが正しくありません。", "workspace_write_failed")
             mask = expand_mask(mask, int(candidate.get("expandPx", 0)))
+            if mask.shape != shape:
+                raise ValueError("apply mask dimensions do not match the source image" if candidate.get("role") == CandidateRole.APPLY.value else "exclude mask dimensions do not match the source image")
             if candidate.get("role") == CandidateRole.APPLY.value:
-                apply_masks.append(mask)
+                apply_union = union_mask(apply_union, mask)
             else:
-                exclude_masks.append(mask)
+                exclude_union = union_mask(exclude_union, mask)
                 if candidate.get("forced"):
-                    forced.append(mask)
+                    forced_union = union_mask(forced_union, mask)
         if kind == "mosaic":
             value = compose_masks(
-                (height, width), apply_masks, exclude_masks,
+                shape, [apply_union] if apply_union is not None else [], [exclude_union] if exclude_union is not None else [],
                 add if manual.get("manualEnabled", True) else None,
                 manual_exclude if manual.get("exclusionEnabled", True) else None,
-                forced, bool(manual.get("exclusionForced", True)),
+                [forced_union] if forced_union is not None else [], bool(manual.get("exclusionForced", True)),
                 erase if manual.get("eraseEnabled", True) else None,
             )
         else:
-            value = np.zeros((height, width), dtype=np.uint8)
-            for mask in exclude_masks:
-                value = np.maximum(value, np.asarray(mask > 0, dtype=np.uint8) * 255)
+            value = exclude_union if exclude_union is not None else np.zeros(shape, dtype=np.uint8)
             if manual_exclude is not None and manual.get("exclusionEnabled", True):
-                value = np.maximum(value, np.asarray(manual_exclude > 0, dtype=np.uint8) * 255)
+                union_mask(value, manual_exclude)
             if erase is not None and manual.get("eraseEnabled", True):
                 value[np.asarray(erase) > 0] = 0
         if bool(image.get("flipH", False)): value = np.fliplr(value)

@@ -22,7 +22,7 @@ from .image_io import (
     decode_draft_masks, draft_manual_exclusion_forced, save_with_mask,
     unique_session_import_destination, write_rendered_copy,
 )
-from .masks import compose_masks, expand_mask
+from .masks import compose_masks, expand_mask, union_mask
 
 _SAVE_RENDER_MEMORY_BUDGET = 512 * 1024 * 1024
 
@@ -167,9 +167,10 @@ class SavingMixin:
                         configured_output_directory = Path(self.settings["saving"]["default_output_directory"]).resolve()
                 # A candidate can disappear between the metadata snapshot and the
                 # disk read.  Do not compose a silently reduced mask.
-                apply_masks: list[np.ndarray] = []
-                exclude_masks: list[np.ndarray] = []
-                forced_exclude_masks: list[np.ndarray] = []
+                shape = (record.height, record.width)
+                apply_union: np.ndarray | None = None
+                exclude_union: np.ndarray | None = None
+                forced_exclude_union: np.ndarray | None = None
                 add_mask, exclusion_mask, exclusion_erase_mask = draft_masks
                 for candidate in candidates:
                     try:
@@ -185,17 +186,17 @@ class SavingMixin:
                                     replace=True,
                                 )
                         raise ClientError("候補が変更されました。保存をやり直してください。", "save_state_changed") from exc
-                    if candidate_mask.shape != (record.height, record.width):
+                    if candidate_mask.shape != shape:
                         raise RuntimeError("検出マスクのサイズが元画像と一致しません。")
                     if candidate.role == CandidateRole.APPLY:
-                        apply_masks.append(candidate_mask)
+                        apply_union = union_mask(apply_union, candidate_mask)
                     else:
-                        exclude_masks.append(candidate_mask)
+                        exclude_union = union_mask(exclude_union, candidate_mask)
                         if candidate.forced:
-                            forced_exclude_masks.append(candidate_mask)
+                            forced_exclude_union = union_mask(forced_exclude_union, candidate_mask)
                 mask = compose_masks(
-                    (record.height, record.width), apply_masks, exclude_masks, add_mask, exclusion_mask,
-                    forced_exclude_masks, manual_exclude_forced, exclusion_erase_mask,
+                    shape, [apply_union] if apply_union is not None else [], [exclude_union] if exclude_union is not None else [], add_mask, exclusion_mask,
+                    [forced_exclude_union] if forced_exclude_union is not None else [], manual_exclude_forced, exclusion_erase_mask,
                 )
                 no_effect = (mask is None or not np.any(mask)) and output_format_matches_source(record, output_format) and keep_metadata and \
                     record.flip_horizontal == record.source_flip_horizontal and record.flip_vertical == record.source_flip_vertical
