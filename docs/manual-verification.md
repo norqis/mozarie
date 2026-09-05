@@ -37,3 +37,4 @@
 3. [検出・モデル・設定・ショートカット](manual-verification/settings-detection.md)
 4. [保存・書き出し・異常時・リリース](manual-verification/save-release.md)
 5. [通信・対象の組合せ・PJデータ照合](manual-verification/data-integrity.md)
+6. [画像反転・保存形式・メタ情報](manual-verification/flip-export.md)
