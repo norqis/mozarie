@@ -176,7 +176,7 @@ class StudioState(CatalogMixin, SavingMixin, DetectionMixin, JobsMixin):
                 and Path(str(source["nativePath"])).resolve() == requested_root
                 for source in sources
             )
-            if same_project_source:
+            if not sources or same_project_source:
                 return self._set_root(raw_path)
             # The path-input action means "open this folder", not "add a source
             # to this project". Explicit project source addition has its own UI.
