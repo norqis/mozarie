@@ -32,7 +32,7 @@
 
 ## 確認項目
 
-1. [起動・読み込み・一覧・プロジェクト](manual-verification/workspace.md)
+1. [起動・読み込み・一覧・プロジェクト](manual-verification/workspace.md)：別フォルダー再読込時の一覧置換と、名前付きPJから通常読込へ切り替える際のPJ分離も確認する。
 2. [描画・境界・候補・表示・履歴](manual-verification/editor.md)
 3. [検出・モデル・設定・ショートカット](manual-verification/settings-detection.md)
 4. [保存・書き出し・異常時・リリース](manual-verification/save-release.md)
