@@ -182,7 +182,7 @@ class StudioState(CatalogMixin, SavingMixin, DetectionMixin, JobsMixin):
             # to this project". Explicit project source addition has its own UI.
             with self.lock:
                 if self.catalog_id != catalog_id or self.catalog_generation != catalog_generation:
-                    raise ClientError("画像一覧が更新されたため、フォルダを再読み込みしてください。", "catalog_changed")
+                    raise ClientError("", "catalog_changed")
                 self.catalog_id = None
                 self.project_read_only = False
                 self.source_mismatches = {}
