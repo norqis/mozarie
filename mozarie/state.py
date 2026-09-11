@@ -153,6 +153,49 @@ class StudioState(CatalogMixin, SavingMixin, DetectionMixin, JobsMixin):
         self.inference_lock = InferenceGate()
         self._cleanup_stale_sessions()
 
+    def set_root(self, raw_path: str) -> list[dict[str, Any]]:
+        """Keep ordinary folder loads out of a project unless reloading one of its existing native sources."""
+        with self.import_lock:
+            if not isinstance(raw_path, str) or not raw_path:
+                return self._set_root(raw_path)
+            requested_root = Path(raw_path).expanduser()
+            if not requested_root.is_dir():
+                return self._set_root(raw_path)
+            requested_root = requested_root.resolve()
+            with self.lock:
+                catalog_id = self.catalog_id
+                catalog_generation = self.catalog_generation
+                project_read_only = self.project_read_only
+                source_mismatches = dict(self.source_mismatches)
+            if catalog_id is None:
+                return self._set_root(raw_path)
+            sources = self.workspace_store.project_sources(catalog_id)
+            same_project_source = any(
+                source["kind"] == "native-folder"
+                and source.get("nativePath")
+                and Path(str(source["nativePath"])).resolve() == requested_root
+                for source in sources
+            )
+            if same_project_source:
+                return self._set_root(raw_path)
+            # The path-input action means "open this folder", not "add a source
+            # to this project". Explicit project source addition has its own UI.
+            with self.lock:
+                if self.catalog_id != catalog_id or self.catalog_generation != catalog_generation:
+                    raise ClientError("画像一覧が更新されたため、フォルダを再読み込みしてください。", "catalog_changed")
+                self.catalog_id = None
+                self.project_read_only = False
+                self.source_mismatches = {}
+            try:
+                return self._set_root(raw_path)
+            except Exception:
+                with self.lock:
+                    if self.catalog_id is None and self.catalog_generation == catalog_generation:
+                        self.catalog_id = catalog_id
+                        self.project_read_only = project_read_only
+                        self.source_mismatches = source_mismatches
+                raise
+
     def update_settings(self, update: dict[str, Any]) -> dict[str, Any]:
         """Persist user-selected options and release only model objects that changed."""
         if not isinstance(update, dict):
