@@ -137,7 +137,7 @@ class CatalogMixin:
                 projectless_draft["hasEffectiveMask"] = effective
         return revision
 
-    def _replace_catalog(self, root: Path, records: list[ImageRecord]) -> list[dict[str, Any]]:
+    def _replace_catalog(self, root: Path, records: list[ImageRecord], *, detach_project: bool = False) -> list[dict[str, Any]]:
         with self.lock:
             previous_ids = tuple(self.images)
         locks = [(image_id, self.image_io_lock(image_id)) for image_id in previous_ids]
@@ -146,6 +146,10 @@ class CatalogMixin:
                 stack.enter_context(image_lock)
             with self.lock:
                 self._assert_catalog_mutable()
+                if detach_project:
+                    self.catalog_id = None
+                    self.project_read_only = False
+                    self.source_mismatches = {}
                 self.images = {record.image_id: record for record in records}
                 self.order = [record.image_id for record in records]
                 self.candidates = {}
@@ -188,10 +192,27 @@ class CatalogMixin:
 
     def set_root(self, raw_path: str) -> list[dict[str, Any]]:
         with self.import_lock:
-            return self._set_root(raw_path)
+            if not raw_path or not isinstance(raw_path, str):
+                return self._set_root(raw_path)
+            root = Path(raw_path).expanduser().resolve()
+            if not root.is_dir():
+                return self._set_root(raw_path)
+            with self.lock:
+                catalog_id = self.catalog_id
+            if catalog_id is None:
+                return self._set_root(raw_path)
+            sources = self.workspace_store.project_sources(catalog_id)
+            same_project_source = any(
+                source["kind"] == "native-folder"
+                and source.get("nativePath")
+                and Path(str(source["nativePath"])).resolve() == root
+                for source in sources
+            )
+            return self._set_root(raw_path, inherit_current_catalog=not sources or same_project_source)
 
     def _set_root(self, raw_path: str, project_id: str | None = None, *, defer_replace: bool = False,
-                  relink_source_id: str | None = None, allow_new: bool = True) -> list[Any]:
+                  relink_source_id: str | None = None, allow_new: bool = True,
+                  inherit_current_catalog: bool = True) -> list[Any]:
         if not raw_path or not isinstance(raw_path, str):
             raise ClientError("Windowsフォルダを入力してください。", "input_invalid")
         root = Path(raw_path).expanduser().resolve()
@@ -199,9 +220,9 @@ class CatalogMixin:
             raise ClientError("指定フォルダが見つかりません。", "folder_not_found")
         with self.lock:
             self._assert_catalog_mutable()
+            previous_catalog_id = self.catalog_id
 
-        previous_catalog_id = self.catalog_id
-        catalog_id = project_id or previous_catalog_id
+        catalog_id = project_id or (previous_catalog_id if inherit_current_catalog else None)
         if catalog_id is not None and not self.workspace_store.catalog_exists(catalog_id):
             raise ClientError("プロジェクトが見つかりません。", "project_not_found")
         source_id = None
@@ -306,17 +327,18 @@ class CatalogMixin:
             str(saved["image_id"]): bool(saved.get("dimensions_changed"))
             for saved in stored.values() if saved.get("changed")
         }
-        # Re-importing one source of a multi-folder project must not dismiss a
-        # change acknowledgement still required for another source.
-        with self.lock:
-            retained_mismatches = {
-                image_id: dimensions_changed
-                for image_id, dimensions_changed in self.source_mismatches.items()
-                if image_id not in source_image_ids
-            }
-            retained_mismatches.update(source_mismatches)
-            self.source_mismatches = retained_mismatches
-        self.catalog_id = catalog_id
+        if inherit_current_catalog:
+            # Re-importing one source of a multi-folder project must not dismiss a
+            # change acknowledgement still required for another source.
+            with self.lock:
+                retained_mismatches = {
+                    image_id: dimensions_changed
+                    for image_id, dimensions_changed in self.source_mismatches.items()
+                    if image_id not in source_image_ids
+                }
+                retained_mismatches.update(source_mismatches)
+                self.source_mismatches = retained_mismatches
+                self.catalog_id = catalog_id
         completed = bool(catalog_id and (self.workspace_store.project(catalog_id) or {}).get("status") == "completed")
         if defer_replace:
             return records
@@ -327,7 +349,7 @@ class CatalogMixin:
                 retained = [record for record in self.images.values() if record.source_id != source_id]
             records = retained + records
             records.sort(key=lambda record: (record.relative_path.casefold(), record.relative_path, record.image_id))
-        images = self._replace_catalog(root, records)
+        images = self._replace_catalog(root, records, detach_project=not inherit_current_catalog)
         with self.lock:
             self.project_read_only = completed
         return images
@@ -1670,8 +1692,7 @@ class CatalogMixin:
                     "assetVersion": self.asset_version(record),
                     "candidateCount": len(self.candidates.get(image_id, [])),
                     "enabledCandidateCount": sum(
-                        candidate.enabled and candidate.role == CandidateRole.APPLY
-                        for candidate in self.candidates.get(image_id, [])
+                        candidate.enabled and candidate.role == CandidateRole.APPLY for candidate in self.candidates.get(image_id, [])
                     ),
                     "hasEffectiveMask": has_effective_mask,
                     "candidateRevision": candidate_revision,
