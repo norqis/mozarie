@@ -13,7 +13,7 @@ from PIL import Image, ImageOps, PngImagePlugin
 from .core import (
     DEFAULT_COLORS, DEFAULT_DETECTION_CONFIDENCE, HAND_CONFIDENCE,
     DETECTED_TARGET_CLASSES, TARGET_CLASSES, Candidate, CandidateRole,
-    ClientError, ImageRecord, JobControl, accepted_hand_sam_mask,
+    ClientError, HAND_MAX_REMOVAL_RATIO, ImageRecord, JobControl, accepted_hand_sam_mask,
     accepted_specialist_hand_mask, arbitrate_segment_sources, clip_mask_to_roi,
     confidence_for_source, detection_tiles, mask_iou, materialize_tile_mask,
     merge_tile_segment, padded_hand_box, read_boundary_request,
@@ -598,6 +598,22 @@ class DetectionMixin:
             prompt_points, labels = sam_refinement_prompts(source_mask, hand_mask)
             if not len(prompt_points):
                 continue
+            consensus = len(segment.get("_consensus_sources", frozenset({str(segment["source"])}))) >= 2
+
+            def select_mask(
+                candidates: np.ndarray, candidate_scores: np.ndarray, *, allow_relaxed: bool = True,
+            ) -> tuple[tuple[np.ndarray, int] | None, bool]:
+                selected = select_semantic_sam_mask(
+                    candidates, candidate_scores, source_mask, hand_mask, prompt_points, labels,
+                )
+                if selected is None and consensus and allow_relaxed:
+                    selected = select_semantic_sam_mask(
+                        candidates, candidate_scores, source_mask, hand_mask, prompt_points, labels,
+                        max_hand_ratio=HAND_MAX_REMOVAL_RATIO,
+                    )
+                    return selected, selected is not None
+                return selected, False
+
             masks, scores, logits = predictor.predict(
                 point_coords=prompt_points,
                 point_labels=labels,
@@ -605,7 +621,7 @@ class DetectionMixin:
                 multimask_output=True,
             )
             clipped_masks = np.asarray([clip_mask_to_roi(mask, roi) for mask in masks])
-            selected = select_semantic_sam_mask(clipped_masks, scores, source_mask, hand_mask, prompt_points, labels)
+            selected, initial_relaxed = select_mask(clipped_masks, scores)
             if selected is None:
                 continue
             refined, selected_index = selected
@@ -615,7 +631,10 @@ class DetectionMixin:
                     point_coords=prompt_points, point_labels=labels, box=np.asarray(roi, dtype=np.float32),
                     mask_input=np.asarray(logits[selected_index:selected_index + 1]), multimask_output=False,
                 )
-                retry = select_semantic_sam_mask(np.asarray([clip_mask_to_roi(mask, roi) for mask in retry_masks]), retry_scores, source_mask, hand_mask, prompt_points, labels)
+                retry, _ = select_mask(
+                    np.asarray([clip_mask_to_roi(mask, roi) for mask in retry_masks]), retry_scores,
+                    allow_relaxed=initial_relaxed,
+                )
                 if retry is not None:
                     retry_mask = retry[0]
                     retry_hand = int(np.count_nonzero((retry_mask > 0) & (hand_mask > 0)))

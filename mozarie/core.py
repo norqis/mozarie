@@ -530,6 +530,7 @@ def arbitrate_segment_sources(segments: list[dict[str, Any]]) -> list[dict[str, 
     )
     accepted: list[dict[str, Any]] = []
     for segment in ordered:
+        segment["_consensus_sources"] = frozenset({str(segment["source"])})
         duplicate = False
         for winner in accepted:
             if winner["source"] == segment["source"]:
@@ -539,8 +540,11 @@ def arbitrate_segment_sources(segments: list[dict[str, Any]]) -> list[dict[str, 
             else:
                 iou_threshold, containment_threshold = 0.75, 0.95
             if segment_overlaps(winner, segment, iou_threshold, containment_threshold):
+                winner["_consensus_sources"] = (
+                    frozenset(winner.get("_consensus_sources", {str(winner["source"])}))
+                    | segment["_consensus_sources"]
+                )
                 duplicate = True
-                break
         if not duplicate:
             accepted.append(segment)
     return accepted
@@ -732,7 +736,7 @@ def sam_refinement_prompts(source_mask: np.ndarray, hand_mask: np.ndarray) -> tu
 
 def select_semantic_sam_mask(
     masks: np.ndarray, scores: np.ndarray, source_mask: np.ndarray, hand_mask: np.ndarray,
-    point_coords: np.ndarray, point_labels: np.ndarray,
+    point_coords: np.ndarray, point_labels: np.ndarray, *, max_hand_ratio: float = 0.15,
 ) -> tuple[np.ndarray, int] | None:
     """Choose only a SAM proposal that preserves detector semantics and avoids hands."""
     source = np.asarray(source_mask > 0, dtype=bool)
@@ -761,7 +765,7 @@ def select_semantic_sam_mask(
         overlap = int(np.count_nonzero(mask & source))
         hand_overlap = int(np.count_nonzero(mask & hand))
         hand_ratio = hand_overlap / max(1, area)
-        if hand_ratio > 0.15:
+        if hand_ratio > max_hand_ratio:
             continue
         retention = overlap / source_area
         if retention < 0.50:
