@@ -40,15 +40,14 @@
     <aside id="galleryPane" class="gallery-pane" data-i18n-aria-label="gallery.aria">
       <div class="pane-heading gallery-heading"><div class="gallery-title"><h2 data-i18n="gallery.title">画像</h2><span class="gallery-local-count muted">0件</span></div><div class="gallery-heading-actions"><button id="batchMoreButton" type="button" popovertarget="batchMoreMenu" aria-expanded="false" data-i18n="batch.actions">全画像操作</button><div id="batchMoreMenu" class="batch-more-menu" popover><button id="clearAllMasksButton" class="danger" type="button" data-i18n="gallery.clearAllMasks">全画像のモザイク指定をクリア</button><button id="clearCatalogButton" class="danger" type="button" data-i18n="gallery.clearCatalog">読み込んだ画像をすべてクリア</button></div><button id="collapseGalleryButton" class="pane-rail" type="button" aria-controls="galleryPaneContent" aria-expanded="true" aria-label="画像一覧を閉じる" title="画像一覧を閉じる" data-i18n-aria-label="workspace.collapseGallery" data-i18n-title="workspace.collapseGallery">‹</button></div></div>
       <div id="galleryPaneContent" class="pane-content">
-      <div class="gallery-tabs" data-i18n-aria-label="gallery.tabs" aria-label="画像一覧の表示">
-        <select id="galleryFilter" data-i18n-aria-label="gallery.tabs">
-          <option value="all" data-i18n="gallery.tabAll">すべて</option>
-          <option value="masked" data-i18n="gallery.tabMasked">モザイクあり</option>
-          <option value="unmasked" data-i18n="gallery.tabUnmasked">モザイク無し</option>
-          <option value="hidden" data-i18n="gallery.tabHidden">非表示</option>
-          <option value="reviewed" data-i18n="gallery.tabReviewed">確認済</option>
-          <option value="unreviewed" data-i18n="gallery.tabUnreviewed">未確認</option>
-        </select>
+      <div class="gallery-tabs">
+        <fieldset id="galleryFilter" class="filter-choices" data-i18n-aria-label="gallery.tabs" aria-label="画像一覧の表示">
+          <label><input type="checkbox" data-gallery-filter="masked"> <span data-i18n="gallery.tabMasked">モザイクあり</span></label>
+          <label><input type="checkbox" data-gallery-filter="unmasked"> <span data-i18n="gallery.tabUnmasked">モザイク無し</span></label>
+          <label><input type="checkbox" data-gallery-filter="reviewed"> <span data-i18n="gallery.tabReviewed">確認済</span></label>
+          <label><input type="checkbox" data-gallery-filter="unreviewed"> <span data-i18n="gallery.tabUnreviewed">未確認</span></label>
+          <label><input type="checkbox" data-gallery-filter="hidden"> <span data-i18n="gallery.tabHidden">非表示</span></label>
+        </fieldset>
         <button id="overviewButton" type="button" data-i18n="navigation.overview">画像一覧</button>
       </div>
       <div class="gallery-viewport">
@@ -166,13 +165,13 @@
           <output id="overviewCount" class="muted">0 / 0</output>
           <button id="batchModeButton" type="button" aria-pressed="false" disabled data-i18n="selection.batchMode">一括編集</button>
         </div>
-        <div class="overview-filters" data-i18n-aria-label="overview.filters" aria-label="一覧の絞り込み">
-          <button class="overview-filter active" type="button" data-overview-filter="all" aria-pressed="true" data-i18n="overview.filterAll">すべて</button>
-          <button class="overview-filter" type="button" data-overview-filter="unreviewed" aria-pressed="false" data-i18n="overview.filterUnreviewed">未確認</button>
-          <button class="overview-filter" type="button" data-overview-filter="reviewed" aria-pressed="false" data-i18n="overview.filterReviewed">確認済</button>
-          <button class="overview-filter" type="button" data-overview-filter="masked" aria-pressed="false" data-i18n="overview.filterMasked">モザイクあり</button>
-          <button class="overview-filter" type="button" data-overview-filter="unmasked" aria-pressed="false" data-i18n="overview.filterUnmasked">モザイク無し</button>
-          <button class="overview-filter" type="button" data-overview-filter="hidden" aria-pressed="false" data-i18n="overview.filterHidden">非表示</button>
+        <fieldset class="overview-filters filter-choices" data-i18n-aria-label="overview.filters" aria-label="一覧の絞り込み">
+          <label><input class="overview-filter" type="checkbox" data-overview-filter="unreviewed"> <span data-i18n="overview.filterUnreviewed">未確認</span></label>
+          <label><input class="overview-filter" type="checkbox" data-overview-filter="reviewed"> <span data-i18n="overview.filterReviewed">確認済</span></label>
+          <label><input class="overview-filter" type="checkbox" data-overview-filter="masked"> <span data-i18n="overview.filterMasked">モザイクあり</span></label>
+          <label><input class="overview-filter" type="checkbox" data-overview-filter="unmasked"> <span data-i18n="overview.filterUnmasked">モザイク無し</span></label>
+          <label><input class="overview-filter" type="checkbox" data-overview-filter="hidden"> <span data-i18n="overview.filterHidden">非表示</span></label>
+        </fieldset>
         </div>
         <div class="overview-search-controls">
           <input id="overviewQuery" type="search" autocomplete="off" spellcheck="false" data-i18n-placeholder="overview.searchPlaceholder" placeholder="ファイル名・相対パスを検索">

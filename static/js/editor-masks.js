@@ -1012,7 +1012,7 @@ async function restoreProjectHistory(direction) {
       const result = await api(`/api/project/history/${encodeURIComponent(imageId)}/${direction}`, { method: "POST", body: "{}" });
       const changed = new Set(result.changedImageIds || []);
       for (const changedId of changed) {
-        state.drafts.delete(changedId); state.projectHistory.delete(changedId); releaseCandidateBundles(changedId);
+        state.drafts.delete(changedId); state.maskStatus.delete(changedId); state.projectHistory.delete(changedId); releaseCandidateBundles(changedId);
         const record = state.images.find((image) => image.id === changedId);
         if (record && changedId === imageId && result.current) record.candidateRevision = Number(result.current.candidateRevision || 0);
       }

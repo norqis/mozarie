@@ -941,6 +941,7 @@ async function finishApplyJob(job) {
     const data = await api("/api/images");
     if (!isCurrentGeneration(generation) || !isCurrentCatalogEpoch(catalogEpoch)) return;
     state.images = data.images;
+    for (const imageId of completedImageIds) state.maskStatus.delete(imageId);
     loadReviewedPaths();
     pruneSourceAccess();
     state.applyTargetIds = requestedImageIds;
@@ -992,11 +993,13 @@ async function finishDetectionJob(job) {
   state.images = data.images;
   loadReviewedPaths();
   pruneSourceAccess();
-  state.maskStatus.clear();
   // Auto-detection replaces candidate IDs and mask bitmaps. Never allow a
   // cached bundle (including the currently pinned one) to survive that
   // revision boundary.
-  for (const imageId of targetIds) releaseCandidateBundles(imageId);
+  for (const imageId of targetIds) {
+    state.maskStatus.delete(imageId);
+    releaseCandidateBundles(imageId);
+  }
   state.handledDetectionStartedAt = job.startedAt;
   state.detectionTargetIds = [];
   state.detectCancelRequested = false;

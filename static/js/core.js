@@ -1,8 +1,8 @@
 const $ = (selector) => document.querySelector(selector);
 
 const state = {
-  images: [], currentId: null, currentImage: null, pendingImageId: null, galleryFilter: "all", maskStatus: new Map(),
-  viewMode: "edit", displayMode: "single", compareSplit: .5, overviewFilter: "all", overviewQuery: "", overviewFolder: "", reviewedImageIds: new Set(), hiddenImageIds: new Set(), reviewRoot: "",
+  images: [], currentId: null, currentImage: null, pendingImageId: null, galleryFilter: new Set(), maskStatus: new Map(),
+  viewMode: "edit", displayMode: "single", compareSplit: .5, overviewFilter: new Set(), overviewQuery: "", overviewFolder: "", reviewedImageIds: new Set(), hiddenImageIds: new Set(), reviewRoot: "",
   selectedImageIds: new Set(), selectionAnchorId: null, batchMode: false,
   navigationShortcutsEnabled: true,
   candidates: [], candidateImages: new Map(), drafts: new Map(),
@@ -550,7 +550,6 @@ function updateActionButtons() {
   visibilityButton.textContent = visibilityLabel; visibilityButton.title = visibilityLabel; visibilityButton.setAttribute("aria-label", visibilityLabel);
   for (const id of ["#clearAllMasksButton", "#clearCatalogButton", "#batchMoreButton"]) $(id).disabled = busyLocked || mutationLocked || state.images.length === 0;
   $("#batchModeButton").disabled = busyLocked || mutationLocked || state.images.length === 0;
-  $("#galleryFilter").disabled = busyLocked;
   $("#saveAllButton").disabled = busyLocked || mutationLocked || mutatingCandidates || state.images.length === 0;
   const currentSaveDisabled = busyLocked || mutationLocked || switchingImages || mutatingCandidates || !hasImage;
   $("#saveButton").disabled = currentSaveDisabled;
@@ -584,12 +583,12 @@ function updateActionButtons() {
       "projectButton", "projectClose", "projectOpenList", "projectListClose", "projectResume", "projectCloseWorkspace", "projectNew",
       "downloadCurrentMosaicMask", "downloadCurrentExcludeMask",
       "singleViewButton", "compareViewButton", "fitButton", "mosaicPreviewButton", "previousImageButton", "nextImageButton",
-      "galleryFilter", "overviewButton", "collapseGalleryButton", "collapseInspectorButton", "settingsButton", "settingsCloseButton", "errorDialogClose",
+      "overviewButton", "collapseGalleryButton", "collapseInspectorButton", "settingsButton", "settingsCloseButton", "errorDialogClose",
       "closeOverviewButton", "overviewQuery", "overviewFolder", "sourceMismatchCancel", "detectCancelButton",
       "projectDeleteCancel", "projectDeleteConfirm", "copyImagePathMenuItem",
     ]);
     const availableInReadOnlyControls = new Set([
-      ...document.querySelectorAll(".gallery-item, .overview-item, .overview-filter, .project-table [data-project-action], .project-sort-button, [data-candidate-display-toggle], [data-candidate-effective-toggle], [data-candidate-display-id], [data-candidate-effective-id]"),
+      ...document.querySelectorAll(".gallery-item, .overview-item, [data-gallery-filter], [data-overview-filter], .project-table [data-project-action], .project-sort-button, [data-candidate-display-toggle], [data-candidate-effective-toggle], [data-candidate-display-id], [data-candidate-effective-id]"),
     ]);
     const availableInReadOnlyDialogs = ["#settingsDialog", "#modelHelpDialog", "#modelDownloadDialog", ...(projectNameMode === "new" ? ["#projectNameDialog"] : []), ...(sourceIncompatible ? ["#sourceMismatchDialog"] : [])].map($);
     for (const control of controls) {

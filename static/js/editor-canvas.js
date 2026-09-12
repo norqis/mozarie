@@ -178,9 +178,9 @@ async function refreshWorkspaceImages(snapshot, imageIds, { clearWorkspace = fal
   const currentId = ids.has(state.currentId) ? state.currentId : null;
   invalidateStaleAssets(ids);
   for (const imageId of ids) {
+    state.maskStatus.delete(imageId);
     if (!resetWorkspace) continue;
     state.drafts.delete(imageId);
-    state.maskStatus.delete(imageId);
     state.projectHistory.delete(imageId);
     clearCandidateMutationState(imageId);
   }

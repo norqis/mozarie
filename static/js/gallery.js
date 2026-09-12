@@ -192,21 +192,23 @@ function renderGallery(force = false) {
   const visibleImages = state.images.filter(imageMatchesGalleryFilter);
   const imageCount = t("gallery.count", { count: visibleImages.length });
   for (const element of document.querySelectorAll(".gallery-local-count")) element.textContent = imageCount;
-  $("#galleryFilter").value = state.galleryFilter;
+  document.querySelectorAll("[data-gallery-filter]").forEach((input) => { input.checked = state.galleryFilter.has(input.dataset.galleryFilter); });
   $("#galleryEmptyState").hidden = state.images.length !== 0;
   $("#galleryFilteredEmptyState").hidden = !(state.images.length && !visibleImages.length);
   renderCatalog("gallery", visibleImages, state.galleryNodes, { container: "#gallery", template: "#galleryItemTemplate", padding: 8, gap: 8, minWidth: 108, rowHeight: 152, overscan: 3 });
   updateActionButtons();
 }
 
+function imageMatchesStateFilter(image, filters) {
+  if (!filters.size) return true;
+  if (isHidden(image)) return filters.has("hidden");
+  return (filters.has("masked") && imageHasMask(image))
+    || (filters.has("unmasked") && !imageHasMask(image))
+    || (filters.has("reviewed") && isReviewed(image))
+    || (filters.has("unreviewed") && !isReviewed(image));
+}
 function imageMatchesGalleryFilter(image) {
-  if (state.galleryFilter === "hidden") return isHidden(image);
-  if (state.galleryFilter !== "all" && isHidden(image)) return false;
-  if (state.galleryFilter === "masked") return imageHasMask(image);
-  if (state.galleryFilter === "unmasked") return !imageHasMask(image);
-  if (state.galleryFilter === "reviewed") return isReviewed(image);
-  if (state.galleryFilter === "unreviewed") return !isReviewed(image);
-  return true;
+  return imageMatchesStateFilter(image, state.galleryFilter);
 }
 
 function updateGalleryCurrent() {
@@ -233,12 +235,7 @@ function overviewImages() {
   const query = state.overviewQuery.trim().toLowerCase();
   const folder = state.overviewFolder;
   return state.images.filter((image) => {
-    if (state.overviewFilter === "hidden" && !isHidden(image)) return false;
-    if (state.overviewFilter !== "all" && state.overviewFilter !== "hidden" && isHidden(image)) return false;
-    if (state.overviewFilter === "unreviewed" && isReviewed(image)) return false;
-    if (state.overviewFilter === "reviewed" && !isReviewed(image)) return false;
-    if (state.overviewFilter === "masked" && !imageHasMask(image)) return false;
-    if (state.overviewFilter === "unmasked" && imageHasMask(image)) return false;
+    if (!imageMatchesStateFilter(image, state.overviewFilter)) return false;
     const path = image.relativePath.replaceAll("\\", "/");
     if (folder && path !== folder && !path.startsWith(`${folder}/`)) return false;
     return !query || path.toLowerCase().includes(query);
@@ -283,10 +280,7 @@ function renderOverview(force = false) {
   syncOverviewFolders();
   const visibleImages = overviewImages();
   $("#overviewCount").textContent = t("overview.count", { visible: visibleImages.length, total: state.images.length });
-  document.querySelectorAll(".overview-filter").forEach((button) => {
-    const active = button.dataset.overviewFilter === state.overviewFilter;
-    button.classList.toggle("active", active); button.setAttribute("aria-pressed", String(active));
-  });
+  document.querySelectorAll("[data-overview-filter]").forEach((input) => { input.checked = state.overviewFilter.has(input.dataset.overviewFilter); });
   $("#overviewEmptyState").hidden = visibleImages.length !== 0;
   renderCatalog("overview", visibleImages, state.overviewNodes, { container: "#overviewGrid", template: "#overviewItemTemplate", padding: 14, gap: 10, minWidth: 1, columns: 8, rowHeight: 182, overscan: 3 });
 }
@@ -326,7 +320,9 @@ async function reviewAndMoveNext() {
   const current = currentRecord();
   if (isGestureActive() || currentImageActionPending() || !current) return null;
   const currentId = current.id;
-  const target = state.images.slice(imageIndex(currentId) + 1).find((image) => !isHidden(image)) || null;
+  const filteredImages = state.images.filter(imageMatchesGalleryFilter);
+  const currentIndex = filteredImages.findIndex((image) => image.id === currentId);
+  const target = currentIndex < 0 ? filteredImages[0] || null : filteredImages[currentIndex + 1] || null;
   const reviewed = await queueImageMutation(currentId, async () => {
     const scroll = state.contextMenuScroll;
     return saveWorkspaceFlagNow(current, "reviewed", true, () => {

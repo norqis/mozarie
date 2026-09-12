@@ -826,7 +826,11 @@ function bindEvents() {
   for (const [menuId, buttonId] of [["#batchMoreMenu", "#batchMoreButton"], ["#selectionActionsMenu", "#selectionActionsButton"]]) {
     $(menuId).addEventListener("toggle", () => $(buttonId).setAttribute("aria-expanded", String($(menuId).matches(":popover-open"))));
   }
-  $("#galleryFilter").addEventListener("change", (event) => { if (isBusy() || state.importing) return; state.galleryFilter = event.currentTarget.value; renderGallery(); });
+  document.querySelectorAll("[data-gallery-filter]").forEach((input) => input.addEventListener("change", () => {
+    if (isBusy() || state.importing) return;
+    state.galleryFilter = new Set([...document.querySelectorAll("[data-gallery-filter]:checked")].map((item) => item.dataset.galleryFilter));
+    renderGallery();
+  }));
   $("#overviewButton").addEventListener("click", () => { if (!isBusy() && !state.importing) setViewMode("overview"); });
   $("#closeOverviewButton").addEventListener("click", () => setViewMode("edit"));
   $("#previousImageButton").addEventListener("click", () => runNavigationAction(() => moveCurrentBy(-1)));
@@ -846,9 +850,10 @@ function bindEvents() {
     await loadTranslations(event.target.value);
     renderShortcutBindings(bindings, actions);
   });
-  document.querySelectorAll(".overview-filter").forEach((button) => button.addEventListener("click", () => {
+  document.querySelectorAll("[data-overview-filter]").forEach((input) => input.addEventListener("change", () => {
     if (isBusy() || state.importing) return;
-    state.overviewFilter = button.dataset.overviewFilter; renderOverview();
+    state.overviewFilter = new Set([...document.querySelectorAll("[data-overview-filter]:checked")].map((item) => item.dataset.overviewFilter));
+    renderOverview();
   }));
   let overviewQueryTimer = null;
   $("#overviewQuery").addEventListener("input", (event) => {
