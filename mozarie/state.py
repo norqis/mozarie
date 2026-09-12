@@ -153,6 +153,11 @@ class StudioState(CatalogMixin, SavingMixin, DetectionMixin, JobsMixin):
         self.inference_lock = InferenceGate()
         self._cleanup_stale_sessions()
 
+    def set_image_flags_bulk(self, payload: dict[str, Any]) -> dict[str, dict[str, bool]]:
+        """Keep durable bulk flags and a concurrent catalog publication in one state epoch."""
+        with self.lock:
+            return super().set_image_flags_bulk(payload)
+
     def update_settings(self, update: dict[str, Any]) -> dict[str, Any]:
         """Persist user-selected options and release only model objects that changed."""
         if not isinstance(update, dict):
