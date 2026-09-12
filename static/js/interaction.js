@@ -279,7 +279,7 @@ async function runSelectionAction(action) {
   if (["hide", "show", "reviewed", "unreviewed"].includes(action)) {
     const flags = action === "hide" ? { hidden: true } : action === "show" ? { hidden: false }
       : { reviewed: action === "reviewed" };
-    const epoch = beginCatalogEpoch(); state.catalogMutation = true; updateActionButtons();
+    const epoch = state.catalogEpoch; state.catalogMutation = true; updateActionButtons();
     try {
       await flushAllImageMutations();
       await flushAllWorkspaceMutations();
