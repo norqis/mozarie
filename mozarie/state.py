@@ -32,6 +32,9 @@ from .model_downloads import ModelDownloadManager
 from .workspace import WorkspaceOpenError, WorkspaceStore
 
 
+_IMPORT_SESSION_TTL_SECONDS = 30.0
+
+
 def cuda_device_statuses(torch: Any) -> list[dict[str, object]]:
     """List CUDA devices that this PyTorch build can actually execute on."""
     cuda = torch.cuda
@@ -96,6 +99,7 @@ class StudioState(CatalogMixin, SavingMixin, DetectionMixin, JobsMixin):
         self.import_lock = threading.RLock()
         self._request_catalog_expectation = threading.local()
         self.active_import_count = 0
+        self._import_sessions: dict[str, dict[str, Any]] = {}
         self._cache_lock_handle: Any | None = None
         self._owns_process_cache = cache_dir is None
         if cache_dir is None:
@@ -264,18 +268,68 @@ class StudioState(CatalogMixin, SavingMixin, DetectionMixin, JobsMixin):
                 self._release_gpu_cache(provider="gpu", gpu_device=int(previous_models.get("gpu_device", 0)))
             return self.settings
 
-    def begin_import_transfer(self) -> None:
-        """Block conflicting mutations from the first upload byte onward."""
+    def _cleanup_import_sessions_unchecked(self) -> None:
+        cutoff = time.monotonic() - _IMPORT_SESSION_TTL_SECONDS
+        self._import_sessions = {
+            session_id: session for session_id, session in self._import_sessions.items()
+            if session["active"] or session["touched"] >= cutoff
+        }
+
+    def begin_import_transfer(self, session_id: str, expected_project_id: str | None, expected_catalog_generation: int) -> None:
+        """Claim one browser import batch without serialising its file I/O."""
+        if not isinstance(session_id, str) or not session_id or len(session_id) > 128:
+            raise ClientError("画像追加セッションが正しくありません。", "input_invalid")
         with self.import_lock:
             with self.lock:
+                self._cleanup_import_sessions_unchecked()
                 if self.job.state in {"running", "pausing", "paused"} or self._has_active_worker():
                     raise ClientError("処理中は画像を追加できません。", "operation_in_progress")
+                session = self._import_sessions.get(session_id)
+                if session is None:
+                    if self._import_sessions:
+                        raise ClientError("別の画像追加が完了するまでお待ちください。", "operation_in_progress")
+                    self._assert_catalog_expectation(expected_project_id, expected_catalog_generation)
+                    session = {"project_id": expected_project_id, "generation": expected_catalog_generation,
+                               "active": 0, "touched": time.monotonic()}
+                    self._import_sessions[session_id] = session
+                elif session["project_id"] != expected_project_id or session["generation"] != expected_catalog_generation:
+                    raise ClientError("画像追加セッションが更新されています。", "stale_catalog")
+                elif self.catalog_id != expected_project_id or self.catalog_generation < expected_catalog_generation:
+                    raise ClientError("プロジェクト一覧が更新されました。もう一度操作してください。", "stale_catalog")
+                session["active"] += 1
+                session["touched"] = time.monotonic()
                 self.active_import_count += 1
 
-    def end_import_transfer(self) -> None:
+    def import_session_is_current(self, session_id: str | None, expected_project_id: str | None,
+                                  expected_catalog_generation: int) -> bool:
+        session = self._import_sessions.get(session_id or "")
+        return bool(session and session["project_id"] == expected_project_id
+                    and session["generation"] == expected_catalog_generation
+                    and self.catalog_id == expected_project_id
+                    and self.catalog_generation >= expected_catalog_generation)
+
+    def end_import_transfer(self, session_id: str) -> None:
         with self.lock:
             if self.active_import_count:
                 self.active_import_count -= 1
+            session = self._import_sessions.get(session_id)
+            if session is not None:
+                session["active"] = max(0, session["active"] - 1)
+                session["touched"] = time.monotonic()
+
+    def finish_import_session(self, session_id: str, expected_project_id: str | None,
+                              expected_catalog_generation: int) -> dict[str, int | bool]:
+        with self.import_lock:
+            with self.lock:
+                self._cleanup_import_sessions_unchecked()
+                session = self._import_sessions.get(session_id)
+                if session is None:
+                    return {"ok": True, "catalogGeneration": self.catalog_generation}
+                self._assert_catalog_expectation(expected_project_id, expected_catalog_generation)
+                if session["project_id"] != expected_project_id or session["active"]:
+                    raise ClientError("画像追加が完了するまでお待ちください。", "operation_in_progress")
+                del self._import_sessions[session_id]
+                return {"ok": True, "catalogGeneration": self.catalog_generation}
 
     def settings_status(self, settings: dict[str, Any] | None = None) -> dict[str, Any]:
         """Report configured model files without loading model data."""

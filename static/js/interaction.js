@@ -406,7 +406,7 @@ async function importFiles(files) {
         const stagedSource = Boolean(session.catalogId && session.sourceKind === "browser-files" && entry.fileHandle);
         if (stagedSource) await rememberProjectSource(session.catalogId, entry.fileHandle, null, session.sourceId, clientKey, entry.relativePath);
         let data;
-        try { data = await importSingleFile(entry, clientKey, session.catalogId, session.sourceId, session.sourceKind, session.importIntent); }
+        try { data = await importSingleFile(entry, clientKey, session.catalogId, session.sourceId, session.sourceKind, session.importIntent, session); }
         catch (error) {
           if (stagedSource && Number.isInteger(error?.status) && error.status >= 400 && error.status < 500) {
             await forgetPendingProjectSource(session.catalogId, session.sourceId, clientKey);
@@ -422,11 +422,7 @@ async function importFiles(files) {
         showProcessing({ kind: "import", state: "running", total: session.total, completed: session.completed, current: entry.relativePath });
       }
     };
-    // Each committed import advances the catalogue generation.  Keep this
-    // browser session serial so the next upload carries that new expectation;
-    // another tab therefore sees the change immediately instead of joining a
-    // stale parallel batch.
-    const workerCount = 1;
+    const workerCount = Math.min(supportedFiles.length, importParallelism());
     const workers = Array.from({ length: workerCount }, worker);
     try {
       await Promise.all(workers);
@@ -452,10 +448,10 @@ async function importFiles(files) {
     } catch { /* Keep the import failure visible. */ }
     if (isCurrentCatalogEpoch(session.epoch) && state.importSession === session) showUserError(error);
   }
-  finally { finishImportSession(session); }
+  finally { await finishImportServerSession(session); finishImportSession(session); }
 }
 
-async function importSingleFile(entry, clientKey, catalogId = null, sourceId = null, sourceKind = null, importIntent = "add") {
+async function importSingleFile(entry, clientKey, catalogId = null, sourceId = null, sourceKind = null, importIntent = "add", session = null) {
   const token = document.querySelector('meta[name="mozarie-token"]')?.content || "";
   const response = await fetch("/api/import/file", {
     method: "POST",
@@ -470,24 +466,34 @@ async function importSingleFile(entry, clientKey, catalogId = null, sourceId = n
       ...(sourceId ? { "X-Mozarie-Source-Id": encodeURIComponent(sourceId) } : {}),
       ...(sourceKind ? { "X-Mozarie-Source-Kind": sourceKind } : {}),
       "X-Mozarie-Import-Intent": importIntent,
+      "X-Mozarie-Import-Session": session?.id || "",
       ...(catalogId ? { "X-Mozarie-Catalog-Id": encodeURIComponent(catalogId) } : {}),
-      "X-Mozarie-Expected-Project-Id": encodeURIComponent(state.project?.id || ""),
-      "X-Mozarie-Expected-Catalog-Generation": String(state.catalogGeneration),
+      "X-Mozarie-Expected-Project-Id": encodeURIComponent(session?.expectedProjectId ?? state.project?.id ?? ""),
+      "X-Mozarie-Expected-Catalog-Generation": String(session?.expectedCatalogGeneration ?? state.catalogGeneration),
     },
     body: entry.file,
   });
   const data = await response.json().catch(() => ({}));
   if (!response.ok) throw responseError(response, data);
-  if (Number.isInteger(data?.catalogGeneration)) state.catalogGeneration = data.catalogGeneration;
+  if (Number.isInteger(data?.catalogGeneration)) state.catalogGeneration = Math.max(state.catalogGeneration, data.catalogGeneration);
   return data;
 }
 
 function beginImportSession() {
   if (isBusy() || state.importing) return null;
-  const session = { id: newClientKey(), epoch: beginCatalogEpoch(), paused: false, cancelled: false, completed: 0, total: 0, catalogId: null, sourceId: null, sourceKind: "browser-files", importIntent: "add" };
+  const session = { id: newClientKey(), epoch: beginCatalogEpoch(), expectedProjectId: state.project?.id || "", expectedCatalogGeneration: state.catalogGeneration, paused: false, cancelled: false, completed: 0, total: 0, catalogId: null, sourceId: null, sourceKind: "browser-files", importIntent: "add" };
   state.importing = true; state.importSession = session;
   updateActionButtons();
   return session;
+}
+
+async function finishImportServerSession(session) {
+  if (!session?.id) return;
+  try {
+    await api("/api/import/finish", { method: "POST", body: JSON.stringify({ sessionId: session.id }) });
+  } catch (error) {
+    // The next claimed import expires an abandoned batch after its short TTL.
+  }
 }
 
 function remapImportedImageIds(imageIds) {

@@ -1178,6 +1178,9 @@ class CatalogMixin:
         *,
         include_images: bool = True,
         transfer_active: bool = False,
+        import_session_id: str | None = None,
+        import_project_id: str | None = None,
+        import_catalog_generation: int | None = None,
         source_identity: str | None = None,
         source_kind: str = "browser-files",
         intent: str,
@@ -1234,9 +1237,12 @@ class CatalogMixin:
                     raise
 
             with self.import_lock, self.lock:
+                session_current = transfer_active and import_catalog_generation is not None and self.import_session_is_current(
+                    import_session_id, import_project_id, import_catalog_generation,
+                )
                 if (
                     self.root != root
-                    or self.catalog_generation != catalog_generation
+                    or (self.catalog_generation != catalog_generation and not session_current)
                     or self.job.state in {"running", "pausing", "paused"}
                     or self._has_active_worker()
                 ):
@@ -1402,6 +1408,9 @@ class CatalogMixin:
         client_key: str,
         include_images: bool = True,
         transfer_active: bool = False,
+        import_session_id: str | None = None,
+        import_project_id: str | None = None,
+        import_catalog_generation: int | None = None,
         source_identity: str | None = None,
         source_kind: str = "browser-files",
         intent: str,
@@ -1417,7 +1426,9 @@ class CatalogMixin:
             "stagedPath": staged_path,
             "mtimeNs": mtime_ns,
             "sizeBytes": size_bytes,
-        }], include_images=include_images, transfer_active=transfer_active, source_identity=source_identity, source_kind=source_kind, intent=intent)
+        }], include_images=include_images, transfer_active=transfer_active, import_session_id=import_session_id,
+        import_project_id=import_project_id, import_catalog_generation=import_catalog_generation,
+        source_identity=source_identity, source_kind=source_kind, intent=intent)
 
     def _clear_cache(self) -> None:
         self.cache_dir.mkdir(parents=True, exist_ok=True)

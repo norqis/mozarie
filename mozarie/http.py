@@ -354,6 +354,7 @@ class MosaicHandler(BaseHTTPRequestHandler):
                 source_identity = unquote(self.headers.get("X-Mozarie-Source-Id", ""))
                 source_kind = self.headers.get("X-Mozarie-Source-Kind", "browser-files")
                 import_intent = self.headers.get("X-Mozarie-Import-Intent", "")
+                import_session_id = self.headers.get("X-Mozarie-Import-Session", "")
                 raw_mtime = self.headers.get("X-Mozarie-File-Mtime", "0")
                 raw_size = self.headers.get("X-Mozarie-File-Size", "0")
                 if (source_identity and (len(source_identity) > 128 or not source_identity.replace("-", "").isalnum())
@@ -361,15 +362,13 @@ class MosaicHandler(BaseHTTPRequestHandler):
                         or import_intent not in {"add", "restore"}
                         or not raw_mtime.isdigit() or not raw_size.isdigit()):
                     raise ClientError("画像の更新情報が正しくありません。", "input_invalid")
+                expected_project_id, expected_catalog_generation = self._catalog_expectation()
                 try:
-                    STATE.begin_import_transfer()
+                    STATE.begin_import_transfer(import_session_id, expected_project_id, expected_catalog_generation)
                 except ClientError as exc:
                     self._reject_unread_request(exc)
                 try:
                     with STATE.import_staging_gate:
-                        expected_project_id, expected_catalog_generation = self._catalog_expectation()
-                        with STATE.import_lock:
-                            STATE.assert_catalog_expectation(expected_project_id, expected_catalog_generation)
                         staged_path = self._read_binary_body_to_file()
                         requested_catalog = unquote(self.headers.get("X-Mozarie-Catalog-Id", ""))
                         try:
@@ -386,6 +385,9 @@ class MosaicHandler(BaseHTTPRequestHandler):
                             import_args = {
                                 "name": name, "relative_path": relative_path, "client_key": client_key,
                                 "include_images": False, "transfer_active": True,
+                                "import_session_id": import_session_id,
+                                "import_project_id": expected_project_id,
+                                "import_catalog_generation": expected_catalog_generation,
                                 "source_identity": source_identity or None,
                                 "source_kind": source_kind,
                                 "intent": import_intent,
@@ -398,12 +400,15 @@ class MosaicHandler(BaseHTTPRequestHandler):
                     self._json({"imported": imported, "catalogId": STATE.catalog_id,
                                 "catalogGeneration": STATE.catalog_snapshot()["catalogGeneration"]})
                 finally:
-                    STATE.end_import_transfer()
+                    STATE.end_import_transfer(import_session_id)
                 return
             self._require_json_request()
             payload = self._read_json_body()
             expected_project_id, expected_catalog_generation = self._catalog_expectation(payload)
-            if path == "/api/folder":
+            if path == "/api/import/finish":
+                self._json(STATE.finish_import_session(str(payload.get("sessionId", "")), expected_project_id,
+                                                        expected_catalog_generation))
+            elif path == "/api/folder":
                 STATE.set_root(str(payload.get("path", "")), expected_project_id=expected_project_id,
                                expected_catalog_generation=expected_catalog_generation)
                 self._json(STATE.catalog_snapshot())
