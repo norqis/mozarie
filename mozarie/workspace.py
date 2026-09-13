@@ -341,9 +341,16 @@ class WorkspaceStore:
         if kind not in {"native-folder", "browser-directory", "browser-files"} or not identity:
             raise ValueError("invalid project source")
         with self._lock, self._connect() as db:
-            if db.execute("SELECT 1 FROM catalogs WHERE catalog_id=?", (catalog_id,)).fetchone() is None:
-                raise ValueError("project is missing")
-            return self._ensure_project_source_db(db, catalog_id, kind, display_name, identity)
+            db.execute("BEGIN IMMEDIATE")
+            try:
+                if db.execute("SELECT 1 FROM catalogs WHERE catalog_id=?", (catalog_id,)).fetchone() is None:
+                    raise ValueError("project is missing")
+                source_id = self._ensure_project_source_db(db, catalog_id, kind, display_name, identity)
+                db.execute("COMMIT")
+                return source_id
+            except Exception:
+                db.execute("ROLLBACK")
+                raise
 
     def resolve_browser_source(
         self,

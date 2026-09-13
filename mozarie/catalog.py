@@ -224,15 +224,16 @@ class CatalogMixin:
             return self._set_root(raw_path, inherit_current_catalog=not sources or same_project_source)
 
     def _set_root(self, raw_path: str, project_id: str | None = None, *, defer_replace: bool = False,
-                  relink_source_id: str | None = None, allow_new: bool = True,
-                  inherit_current_catalog: bool = True) -> list[Any]:
+                   relink_source_id: str | None = None, allow_new: bool = True,
+                   inherit_current_catalog: bool = True, staging: bool = False) -> list[Any]:
         if not raw_path or not isinstance(raw_path, str):
             raise ClientError("Windowsフォルダを入力してください。", "input_invalid")
         root = Path(raw_path).expanduser().resolve()
         if not root.is_dir():
             raise ClientError("指定フォルダが見つかりません。", "folder_not_found")
         with self.lock:
-            self._assert_catalog_mutable()
+            if not staging:
+                self._assert_catalog_mutable()
             previous_catalog_id = self.catalog_id
 
         catalog_id = project_id or (previous_catalog_id if inherit_current_catalog else None)
@@ -499,19 +500,19 @@ class CatalogMixin:
 
     def complete_project(self, *, expected_project_id: str | None = None,
                          expected_catalog_generation: int | None = None) -> dict[str, Any]:
-        with self.lock:
-            if expected_catalog_generation is not None:
-                self._assert_catalog_expectation(expected_project_id, expected_catalog_generation)
-            if not self.catalog_id:
-                raise ClientError("プロジェクトを開いていません。", "project_not_found")
-            self._assert_catalog_mutable()
-            catalog_id = self.catalog_id
-            # Keep the completed DB row and the in-memory edit gate in the
-            # same state epoch. A job cannot start between them.
-            project = self.workspace_store.set_project_status(catalog_id, "completed")
-            self.project_read_only = True
-        self.detach_catalog()
-        return project
+        with self.import_lock:
+            with self.lock:
+                if expected_catalog_generation is not None:
+                    self._assert_catalog_expectation(expected_project_id, expected_catalog_generation)
+                if not self.catalog_id:
+                    raise ClientError("プロジェクトを開いていません。", "project_not_found")
+                self._assert_catalog_mutable()
+                self._assert_catalog_detachable_unchecked()
+                catalog_id = self.catalog_id
+                project = self.workspace_store.set_project_status(catalog_id, "completed")
+                self.project_read_only = True
+            self.detach_catalog()
+            return project
 
     def close_project(self, *, expected_project_id: str | None = None,
                       expected_catalog_generation: int | None = None) -> None:
@@ -566,16 +567,9 @@ class CatalogMixin:
             with self.lock:
                 if expected_catalog_generation is not None:
                     self._assert_catalog_expectation(expected_project_id, expected_catalog_generation)
-            data = self._open_project(catalog_id)
-            if resume:
-                project = self.workspace_store.set_project_status(catalog_id, "working")
-                with self.lock:
-                    if self.catalog_id == catalog_id:
-                        self.project_read_only = False
-                data["project"] = project
-            return data
+            return self._open_project(catalog_id, resume=resume)
 
-    def _open_project(self, catalog_id: str) -> dict[str, Any]:
+    def _open_project(self, catalog_id: str, *, resume: bool = False) -> dict[str, Any]:
         project = self.workspace_store.project(catalog_id)
         if not project:
             raise ClientError("プロジェクトが見つかりません。", "project_not_found")
@@ -592,9 +586,11 @@ class CatalogMixin:
             records: list[ImageRecord] = []
             for root in native_roots:
                 records.extend(self._set_root(
-                    str(root), catalog_id, defer_replace=True, allow_new=False, inherit_current_catalog=False,
+                    str(root), catalog_id, defer_replace=True, allow_new=False, inherit_current_catalog=False, staging=True,
                 ))
             records.sort(key=lambda record: (record.relative_path.casefold(), record.relative_path, record.image_id))
+            if resume:
+                project = self.workspace_store.set_project_status(catalog_id, "working")
             self.detach_catalog()
             images = self._replace_catalog(native_roots[0], records)
             with self.lock:
@@ -610,6 +606,8 @@ class CatalogMixin:
                 for source in sources
             )
             return {"project": project, "images": images, "needsSource": needs_source, "sources": sources}
+        if resume:
+            project = self.workspace_store.set_project_status(catalog_id, "working")
         self.detach_catalog()
         with self.lock:
             self.catalog_id = catalog_id; self.project_read_only = project["status"] == "completed"; self.source_mismatches = {}
