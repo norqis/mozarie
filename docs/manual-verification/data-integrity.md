@@ -174,7 +174,7 @@ A～Hは確認用画像を区別する記号。ファイル名は任意とし、
 | DI-115 | browser restore/importを正常完了した直後に続けて別のimportを開始する | 前の転送の成功応答が返る前にactive数を解放し、完了要求が保留されず次のimportを開始できる |
 | DI-116 | 並列browser restore/importの途中で1件を失敗または取消し、その直後に別のimportを開始する | 最後の転送終了で完了要求を解放する。失敗・取消したsessionが30秒間次のimportを塞がず、別sessionの画像を変更しない |
 | DI-117 | browser restore/importの各転送終了後、完了要求の前に別PJへ切り替えてから元のsessionを完了する | 開始時のPJ・session IDが一致すると安全に解放する。切替先のPJや一覧を変更せず、完了済み・未知sessionの終了は冪等で、別session IDでは追加を受け付けない |
-| DI-118 | タブAでフォルダー読込、PJ作成・名前保存・改名・完了・閉じる・開く・再開・開いているPJの削除、変更元再指定、browser source追加の各応答をNetworkで遅延し、応答直前にタブBで別のPJ遷移を試す | タブAの成功応答と `/api/images` に含まれるPJ・画像・root・sources・needsSource・catalogGenerationは同じ遷移時点の組合せとなる。タブBは応答スナップショット取得後に実行されるか、古い世代として拒否され、異なるPJの内容と世代を混ぜない |
+| DI-118 | native PJ Aからbrowser-only PJ B、空PJ作成、閉じる、開いているPJの削除を含め、タブAでフォルダー読込、PJ作成・名前保存・改名・完了・再開、変更元再指定、browser source追加の各応答をNetworkで遅延し、応答直前にタブBで別のPJ遷移を試す | タブAの成功応答と `/api/images` に含まれるPJ・画像・root・sources・needsSource・catalogGenerationは同じ遷移時点の組合せとなる。native sourceのないPJまたは空作業で旧PJのrootを返さない。タブBは応答スナップショット取得後に実行されるか、古い世代として拒否され、異なるPJの内容と世代を混ぜない |
 | DI-119 | PJ Aの複数画像へ確認済み・非表示の一括変更を送信し、応答前に別タブでPJ Bへ遷移する | 一括変更はPJ AのDBと画面へ全件そろって反映されてから切り替わるか、古い要求として拒否される。PJ Bの状態やcatalogGenerationをPJ Aの応答に混ぜない |
 | DI-120 | 複数の元フォルダーを持つPJを開く際、後半の元フォルダーまたは保存済み候補を読めない状態にして失敗させる。直前に開いていた別PJと、開こうとしたPJを再確認する | 画面は直前のPJ・画像・候補・catalogGenerationを保持する。開けなかったPJは元フォルダーの記録、確認済み状態、反転状態、PJ状態を変更しない |
 | DI-121 | 保存済み候補のメタデータまたはマスクが不正なPJフォルダーを通常のパス入力で読み込む。失敗応答後に現在の一覧とNetworkのcatalogGenerationを確認する | 読込失敗前のPJまたは無名一覧、候補、catalogGenerationを保持する。失敗した読込先を途中状態で公開せず、古い一覧を保持したブラウザーと食い違わない |

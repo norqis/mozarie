@@ -918,6 +918,7 @@ class CatalogMixin:
         self.catalog_id = None
         self.project_read_only = False
         self.source_mismatches = {}
+        self.root = None
         self.source_roots = {}
         self.catalog_sources = []
         self.catalog_generation += 1
