@@ -639,8 +639,9 @@ class CatalogMixin:
             if expected_catalog_generation is not None:
                 self._assert_catalog_expectation(expected_project_id, expected_catalog_generation)
             project = self.workspace_store.set_project_status(catalog_id, "working")
-            if self.catalog_id == catalog_id:
+            if self.catalog_id == catalog_id and self.project_read_only:
                 self.project_read_only = False
+                self.catalog_generation += 1
         return project
 
     def open_project(self, catalog_id: str, *, expected_project_id: str | None = None,
