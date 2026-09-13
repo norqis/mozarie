@@ -211,6 +211,12 @@ class MosaicHandler(BaseHTTPRequestHandler):
         with STATE.catalog_request(expected_project_id, expected_catalog_generation):
             return operation()
 
+    def _catalog_transition_snapshot(self, operation: Any) -> tuple[Any, dict[str, Any]]:
+        """Capture a transition result and its catalogue version without interleaving another transition."""
+        with STATE.import_lock:
+            result = operation()
+            return result, STATE.catalog_snapshot()
+
     def do_GET(self) -> None:  # noqa: N802
         try:
             self._require_local_host()
@@ -411,38 +417,58 @@ class MosaicHandler(BaseHTTPRequestHandler):
                 self._json(STATE.finish_import_session(str(payload.get("sessionId", "")), expected_project_id,
                                                         expected_catalog_generation))
             elif path == "/api/folder":
-                STATE.set_root(str(payload.get("path", "")), expected_project_id=expected_project_id,
-                               expected_catalog_generation=expected_catalog_generation)
-                self._json(STATE.catalog_snapshot())
+                _result, snapshot = self._catalog_transition_snapshot(
+                    lambda: STATE.set_root(str(payload.get("path", "")), expected_project_id=expected_project_id,
+                                           expected_catalog_generation=expected_catalog_generation)
+                )
+                self._json(snapshot)
             elif path == "/api/projects":
-                project = STATE.create_project(payload.get("name"), expected_project_id=expected_project_id,
-                                               expected_catalog_generation=expected_catalog_generation)
-                self._json({"project": project, "catalogGeneration": STATE.catalog_snapshot()["catalogGeneration"]})
+                project, snapshot = self._catalog_transition_snapshot(
+                    lambda: STATE.create_project(payload.get("name"), expected_project_id=expected_project_id,
+                                                 expected_catalog_generation=expected_catalog_generation)
+                )
+                self._json({"project": project, "catalogGeneration": snapshot["catalogGeneration"]})
             elif path == "/api/project/name":
-                project = STATE.name_current_project(str(payload.get("name", "")), str(payload.get("projectId", "")),
-                                                     expected_project_id=expected_project_id, expected_catalog_generation=expected_catalog_generation)
-                self._json({"project": project, "catalogGeneration": STATE.catalog_snapshot()["catalogGeneration"]})
+                project, snapshot = self._catalog_transition_snapshot(
+                    lambda: STATE.name_current_project(str(payload.get("name", "")), str(payload.get("projectId", "")),
+                                                       expected_project_id=expected_project_id,
+                                                       expected_catalog_generation=expected_catalog_generation)
+                )
+                self._json({"project": project, "catalogGeneration": snapshot["catalogGeneration"]})
             elif path == "/api/project/complete":
-                project = STATE.complete_project(expected_project_id=expected_project_id, expected_catalog_generation=expected_catalog_generation)
-                self._json({"project": project, "catalogGeneration": STATE.catalog_snapshot()["catalogGeneration"]})
+                project, snapshot = self._catalog_transition_snapshot(
+                    lambda: STATE.complete_project(expected_project_id=expected_project_id,
+                                                   expected_catalog_generation=expected_catalog_generation)
+                )
+                self._json({"project": project, "catalogGeneration": snapshot["catalogGeneration"]})
             elif path == "/api/project/close":
-                STATE.close_project(expected_project_id=expected_project_id, expected_catalog_generation=expected_catalog_generation)
-                self._json({"ok": True, "catalogGeneration": STATE.catalog_snapshot()["catalogGeneration"]})
+                _result, snapshot = self._catalog_transition_snapshot(
+                    lambda: STATE.close_project(expected_project_id=expected_project_id,
+                                                expected_catalog_generation=expected_catalog_generation)
+                )
+                self._json({"ok": True, "catalogGeneration": snapshot["catalogGeneration"]})
             elif path == "/api/project/open":
-                data = STATE.open_project(str(payload.get("projectId", "")), expected_project_id=expected_project_id,
-                                          expected_catalog_generation=expected_catalog_generation, resume=bool(payload.get("resume")))
-                self._json({**data, "catalogGeneration": STATE.catalog_snapshot()["catalogGeneration"]})
+                data, snapshot = self._catalog_transition_snapshot(
+                    lambda: STATE.open_project(str(payload.get("projectId", "")), expected_project_id=expected_project_id,
+                                              expected_catalog_generation=expected_catalog_generation,
+                                              resume=bool(payload.get("resume")))
+                )
+                self._json({**data, "catalogGeneration": snapshot["catalogGeneration"]})
             elif path == "/api/project/resume":
-                project = STATE.resume_project(str(payload.get("projectId", "")), expected_project_id=expected_project_id,
+                project, snapshot = self._catalog_transition_snapshot(
+                    lambda: STATE.resume_project(str(payload.get("projectId", "")), expected_project_id=expected_project_id,
                                                expected_catalog_generation=expected_catalog_generation)
-                self._json({"project": project, "catalogGeneration": STATE.catalog_snapshot()["catalogGeneration"]})
+                )
+                self._json({"project": project, "catalogGeneration": snapshot["catalogGeneration"]})
             elif path == "/api/project/mismatches":
                 ids = payload.get("imageIds", [])
                 if not isinstance(ids, list):
                     raise ClientError("画像IDの一覧が正しくありません。", "input_invalid")
-                self._catalog_mutation(expected_project_id, expected_catalog_generation,
-                                       lambda: STATE.resolve_source_mismatches(ids, bool(payload.get("clearMasks"))))
-                self._json(STATE.catalog_snapshot())
+                _result, snapshot = self._catalog_transition_snapshot(
+                    lambda: self._catalog_mutation(expected_project_id, expected_catalog_generation,
+                                                   lambda: STATE.resolve_source_mismatches(ids, bool(payload.get("clearMasks"))))
+                )
+                self._json(snapshot)
             elif path == "/api/project/source-check":
                 self._json({"projects": STATE.projects_for_source_root(str(payload.get("path", "")))})
             elif path == "/api/project/source/relink":
@@ -663,9 +689,11 @@ class MosaicHandler(BaseHTTPRequestHandler):
                 project_id = path.removeprefix("/api/project/")
                 if not project_id or "/" in project_id:
                     raise ClientError("プロジェクトが見つかりません。", "project_not_found")
-                STATE.delete_project(project_id, expected_project_id=expected_project_id,
-                                     expected_catalog_generation=expected_catalog_generation)
-                self._json({"deleted": True, "catalogGeneration": STATE.catalog_snapshot()["catalogGeneration"]})
+                _result, snapshot = self._catalog_transition_snapshot(
+                    lambda: STATE.delete_project(project_id, expected_project_id=expected_project_id,
+                                                 expected_catalog_generation=expected_catalog_generation)
+                )
+                self._json({"deleted": True, "catalogGeneration": snapshot["catalogGeneration"]})
             elif path.startswith("/api/candidate/"):
                 image_id, candidate_id = _route_ids(path, "/api/candidate/")
                 deleted = self._catalog_mutation(expected_project_id, expected_catalog_generation,
