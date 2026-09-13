@@ -301,6 +301,7 @@ function renderProjectTable() {
 async function showProjectList({ focusProjectId = "", focusTarget = null, sort = projectListSort, keepClosed = false } = {}) {
   if (state.projectOperationPending) return;
   const data = await api(`/api/projects?sort=${encodeURIComponent(`${sort.key}_${sort.direction}`)}`);
+  await forgetOrphanedProjectSources(new Set((data.projects || []).map((project) => project.id)));
   projectListProjects = new Map((data.projects || []).map((project) => [project.id, project]));
   projectListSort = sort;
   renderProjectTable();
@@ -351,14 +352,16 @@ async function openProject(project, resume = false) {
     await runCatalogTransition(async ({ epoch, signal }) => {
       await flushAllImageMutations();
       await flushAllWorkspaceMutations();
-      const data = await catalogApi("/api/project/open", { projectId: project.id, resume }, { method: "POST", signal });
+      const data = await catalogApi("/api/project/open", { projectId: project.id, resume }, { method: "POST", signal, resyncOnFailure: false });
       if (!isCurrentCatalogEpoch(epoch)) return;
       state.project = data.project; state.projectReadOnly = data.project?.status === "completed";
       resetCatalog(data.images || [], data.root || data.project?.sourceRoot || "");
       applyProjectSnapshot(data);
       const restoreFailures = [];
+      let files = [];
+      let directories = [];
       if (data.needsSource) {
-        const [files, directories] = await Promise.all([rememberedProjectFileSources(project.id), rememberedProjectDirectorySources(project.id)]);
+        [files, directories] = await Promise.all([rememberedProjectFileSources(project.id), rememberedProjectDirectorySources(project.id)]);
         if (!isCurrentCatalogEpoch(epoch)) return;
         for (const source of directories) {
           if (!await ensureProjectSourcePermission(source.handle, true)) { restoreFailures.push(source); continue; }
@@ -376,7 +379,8 @@ async function openProject(project, resume = false) {
         if (!isCurrentCatalogEpoch(epoch)) return;
       }
       state.missingNativeSources = missingNativeSources(data.sources);
-      if (restoreFailures.length || (data.needsSource && !(data.sources || []).some((source) => source.kind === "native-folder"))) {
+      const needsBrowserSources = (data.sources || []).some((source) => source.kind !== "native-folder");
+      if (needsBrowserSources && (restoreFailures.length || (!files.length && !directories.length))) {
         showUserError({ code: "project_source_unavailable" });
       }
       renderProjectCurrent();
@@ -427,7 +431,7 @@ async function resumeCurrentProject() {
   if (!beginProjectOperation()) return;
   try {
     await runCatalogTransition(async ({ epoch, signal }) => {
-      const data = await catalogApi("/api/project/resume", { projectId: state.project.id }, { method: "POST", signal });
+      const data = await catalogApi("/api/project/resume", { projectId: state.project.id }, { method: "POST", signal, resyncOnFailure: false });
       if (!isCurrentCatalogEpoch(epoch)) return;
       state.project = data.project; state.projectReadOnly = false; renderProjectCurrent(); renderCandidates(); updateActionButtons();
     });

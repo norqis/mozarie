@@ -192,6 +192,25 @@ async function forgetProjectSources(projectId) {
   } catch { /* Local handle cleanup is best effort and never blocks deletion. */ }
   finally { db.close(); }
 }
+async function forgetOrphanedProjectSources(projectIds) {
+  const db = await directoryCatalogStore();
+  if (!db) return;
+  try {
+    await new Promise((resolve, reject) => {
+      const transaction = db.transaction("projectSources", "readwrite");
+      const store = transaction.objectStore("projectSources");
+      const request = store.getAll();
+      request.onsuccess = () => {
+        for (const row of request.result || []) if (!projectIds.has(row.projectId)) store.delete(row.key);
+      };
+      request.onerror = () => reject(request.error);
+      transaction.oncomplete = () => resolve();
+      transaction.onerror = () => reject(transaction.error);
+      transaction.onabort = () => reject(transaction.error);
+    });
+  } catch { /* The next project-list refresh retries orphan cleanup. */ }
+  finally { db.close(); }
+}
 async function ensureProjectSourcePermission(handle, request = false) {
   if (!handle?.queryPermission) return Boolean(handle);
   try {

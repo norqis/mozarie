@@ -367,10 +367,20 @@ function catalogResponse(snapshot) {
   return snapshot;
 }
 async function catalogApi(path, payload = {}, options = {}) {
+  const { resyncOnFailure = true, ...requestOptions } = options;
+  const expectedCatalogGeneration = state.serverCatalogGeneration;
   try {
-    return catalogResponse(await api(path, { ...options, body: JSON.stringify(catalogExpectation(payload)) }));
+    return catalogResponse(await api(path, {
+      ...requestOptions,
+      body: JSON.stringify(catalogExpectation(payload)),
+      headers: {
+        "X-Mozarie-Expected-Project-Id": state.project?.id || "",
+        ...(Number.isSafeInteger(expectedCatalogGeneration) ? { "X-Mozarie-Expected-Catalog-Generation": String(expectedCatalogGeneration) } : {}),
+        ...(requestOptions.headers || {}),
+      },
+    }));
   } catch (error) {
-    if (error?.name !== "AbortError") {
+    if (resyncOnFailure && error?.name !== "AbortError") {
       const transition = state.catalogTransition;
       await resyncCatalog(transition?.epoch ?? state.catalogEpoch, transition?.controller.signal).catch(() => {});
     }
@@ -378,8 +388,9 @@ async function catalogApi(path, payload = {}, options = {}) {
   }
 }
 async function resyncCatalog(epoch = state.catalogEpoch, signal = undefined) {
-  const snapshot = catalogResponse(await api("/api/images", { signal }));
+  const snapshot = await api("/api/images", { signal });
   if (!isCurrentCatalogEpoch(epoch)) return null;
+  catalogResponse(snapshot);
   resetCatalog(snapshot.images || [], snapshot.root || "");
   applyProjectSnapshot(snapshot);
   state.missingNativeSources = typeof missingNativeSources === "function" ? missingNativeSources(snapshot.sources) : [];
@@ -828,7 +839,7 @@ async function loadFolder({ skipSameSourceWarning = false, path: suppliedPath = 
       setStatusKey("status.loadingImages", {}, "running");
       await flushAllImageMutations();
       await flushAllWorkspaceMutations();
-      const data = await catalogApi("/api/folder", { path }, { method: "POST", signal });
+      const data = await catalogApi("/api/folder", { path }, { method: "POST", signal, resyncOnFailure: false });
       if (!isCurrentCatalogEpoch(epoch)) return;
       resetCatalog(data.images || [], data.root || path);
       applyProjectSnapshot(data);

@@ -478,8 +478,8 @@ async function importSingleFile(entry, clientKey, catalogId = null, sourceId = n
   return data;
 }
 
-function beginImportSession() {
-  if (isBusy() || state.importing) return null;
+function beginImportSession({ allowDuringCatalogTransition = false } = {}) {
+  if (isBusy() || state.importing || (state.catalogTransition && !allowDuringCatalogTransition)) return null;
   const session = { id: newClientKey(), epoch: state.catalogTransition?.epoch || beginCatalogEpoch(), expectedCatalogGeneration: state.serverCatalogGeneration, paused: false, cancelled: false, completed: 0, total: 0, catalogId: null, sourceId: null, sourceKind: "browser-files", importIntent: "add" };
   state.importing = true; state.importSession = session;
   updateActionButtons();
@@ -561,7 +561,7 @@ async function importDirectoryHandle(directoryHandle, session = beginImportSessi
 }
 
 async function importProjectDirectoryHandle(directoryHandle, projectId, sourceId = null, importIntent = "add") {
-  const session = beginImportSession(); if (!session) return;
+  const session = beginImportSession({ allowDuringCatalogTransition: true }); if (!session) return;
   try {
     await flushAllImageMutations();
     await flushAllWorkspaceMutations();
@@ -595,7 +595,7 @@ async function importProjectFileHandles(sources, projectId) {
   }
   const failures = [];
   for (const [sourceId, handles] of groups) {
-    const session = beginImportSession(); if (!session) return;
+    const session = beginImportSession({ allowDuringCatalogTransition: true }); if (!session) return failures;
     try {
       await flushAllWorkspaceMutations();
       session.catalogId = projectId;
