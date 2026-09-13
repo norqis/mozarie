@@ -1404,7 +1404,7 @@ class WorkspaceStore:
 
     def iter_project_export_states(self, catalog_id: str):
         """Yield one consistent project export from a temporary SQLite snapshot."""
-        with tempfile.TemporaryDirectory(prefix="mozarie-export-") as directory:
+        with tempfile.TemporaryDirectory(prefix="mozarie-export-", dir=self.path.parent) as directory:
             snapshot_path = Path(directory) / "project.sqlite3"
             with self._connect() as db:
                 db.execute("BEGIN")
@@ -1424,7 +1424,7 @@ class WorkspaceStore:
                         JOIN main.images AS image ON image.image_id=candidate.image_id
                         LEFT JOIN main.candidate_metadata AS metadata
                             ON metadata.image_id=candidate.image_id AND metadata.candidate_id=candidate.candidate_id
-                        WHERE image.catalog_id=? AND candidate.deleted=0""", (catalog_id,))
+                        WHERE image.catalog_id=? AND candidate.deleted=0 AND candidate.enabled=1""", (catalog_id,))
                     db.execute("""CREATE TABLE export_snapshot.manual_edits AS
                         SELECT manual.image_id,manual.add_png,manual.exclusion_png,manual.exclusion_erase_png,
                             manual.manual_enabled,manual.exclusion_enabled,manual.exclusion_erase_enabled,
