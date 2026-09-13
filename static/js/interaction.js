@@ -1,5 +1,5 @@
 function setTool(tool) {
-  if (isBusy() || state.importing) return;
+  if (isBusy() || state.importing || (catalogStagingEditsActive() && ["boundary", "polygon", "boundary_brush"].includes(tool))) return;
   const previousTool = state.tool;
   const toggleTolerance = fillToleranceToggleRequest === tool;
   fillToleranceToggleRequest = null;
@@ -123,7 +123,7 @@ function resetCurrentDraft() {
 }
 
 async function clearMasks(imageIds, titleKey, messageKey, expectedImageId = null, expectedGeneration = null) {
-  if (!imageIds.length || isBusy() || state.importing || currentImageActionPending()) return;
+  if (!imageIds.length || isBusy() || state.importing || catalogStagingEditsActive() || currentImageActionPending()) return;
   if (!await confirmAction(t(titleKey, { count: imageIds.length }), t(messageKey, { count: imageIds.length }), "clearMasks")) return;
   if (expectedImageId && (state.currentId !== expectedImageId || !isCurrentGeneration(expectedGeneration) || currentImageActionPending())) return;
   state.masksClearing = true;
@@ -145,7 +145,7 @@ async function clearMasks(imageIds, titleKey, messageKey, expectedImageId = null
 }
 
 async function clearCatalog() {
-  if (!state.images.length || isBusy() || state.importing) return;
+  if (!state.images.length || isBusy() || state.importing || catalogStagingEditsActive()) return;
   if (!await confirmAction(t("confirm.clearCatalog.title"), t("confirm.clearCatalog.message"), "clearCatalog")) return;
   state.catalogMutation = true;
   const catalogEpoch = beginCatalogEpoch();
@@ -228,7 +228,7 @@ function clearReviewForRemovedImage(image) {
 }
 
 async function removeImageFromCatalog(imageId = state.contextMenuImageId) {
-  if (!imageId || isBusy() || state.importing) return;
+  if (!imageId || isBusy() || state.importing || catalogStagingEditsActive()) return;
   const image = state.images.find((item) => item.id === imageId);
   if (!image) return;
   if (!await confirmAction(t("confirm.removeImage.title"), t("confirm.removeImage.message"), "removeImage")) return;
@@ -275,6 +275,7 @@ async function removeImageFromCatalog(imageId = state.contextMenuImageId) {
 
 async function runSelectionAction(action) {
   const images = selectedImages(); if (!images.length || isBusy() || state.importing) return;
+  if (catalogStagingEditsActive() && !["hide", "show", "reviewed", "unreviewed"].includes(action)) return;
   closeBatchMoreMenus();
   const ids = images.map((image) => image.id);
   if (["hide", "show", "reviewed", "unreviewed"].includes(action)) {

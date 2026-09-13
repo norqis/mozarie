@@ -166,7 +166,7 @@ function renderProjectCurrent() {
     : t("project.unnamed");
   $("#projectName").dataset.i18n = project ? "project.rename" : "project.saveCurrent";
   $("#projectName").textContent = t($("#projectName").dataset.i18n);
-  const pending = state.projectOperationPending;
+  const pending = state.projectOperationPending || Boolean(state.catalogTransition);
   $("#projectName").disabled = pending || state.projectReadOnly || (!project && state.images.length === 0);
   $("#projectNew").disabled = pending;
   $("#projectOpenList").disabled = pending;
@@ -237,8 +237,8 @@ function renderProjectSortHeaders() {
 }
 
 function renderProjectTableControls() {
-  const blocked = isBusy() || state.importing || projectListSortPending || state.projectOperationPending;
-  $("#projectListClose").disabled = projectListSortPending || state.projectOperationPending;
+  const blocked = isBusy() || state.importing || projectListSortPending || state.projectOperationPending || state.catalogTransition;
+  $("#projectListClose").disabled = projectListSortPending || state.projectOperationPending || Boolean(state.catalogTransition);
   for (const row of projectTableRows()) {
     const project = projectListProjects.get(row.dataset.projectId);
     const exportDisabled = blocked || !project || !(project.imageCount > 0) || projectExportBusy.has(project.id);
@@ -299,7 +299,7 @@ function renderProjectTable() {
 }
 
 async function showProjectList({ focusProjectId = "", focusTarget = null, sort = projectListSort, keepClosed = false } = {}) {
-  if (state.projectOperationPending) return;
+  if (state.projectOperationPending || state.catalogTransition) return;
   const data = await api(`/api/projects?sort=${encodeURIComponent(`${sort.key}_${sort.direction}`)}`);
   projectListProjects = new Map((data.projects || []).map((project) => [project.id, project]));
   projectListSort = sort;
@@ -319,7 +319,7 @@ async function showProjectList({ focusProjectId = "", focusTarget = null, sort =
 }
 
 async function sortProjectList(key, focusTarget) {
-  if (state.projectOperationPending || projectListSortPending) return;
+  if (state.projectOperationPending || state.catalogTransition || projectListSortPending) return;
   const previousSort = projectListSort;
   const direction = key === previousSort.key ? (previousSort.direction === "asc" ? "desc" : "asc") : "asc";
   projectListSortPending = true; renderProjectSortHeaders(); renderProjectTableControls();
@@ -388,7 +388,7 @@ async function openProject(project, resume = false) {
       $("#projectListDialog").close(); $("#projectDialog").close();
       focusElement($("#projectButton"));
       await showSourceMismatches();
-    });
+    }, { allowNested: true });
   } catch (error) { showUserError(error); }
   finally { endProjectOperation(); }
 }
@@ -433,7 +433,7 @@ async function resumeCurrentProject() {
       const data = await catalogApi("/api/project/resume", { projectId: state.project.id }, { method: "POST", signal, resyncOnFailure: false });
       if (!isCurrentCatalogEpoch(epoch)) return;
       state.project = data.project; state.projectReadOnly = false; renderProjectCurrent(); renderCandidates(); updateActionButtons();
-    });
+    }, { allowNested: true });
   } catch (error) { showUserError(error); }
   finally { endProjectOperation(); }
 }

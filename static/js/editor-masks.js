@@ -387,6 +387,7 @@ function setCandidateDisplayMode(ids, mode) {
 }
 
 function toggleCandidateDisplay(role) {
+  if (catalogStagingEditsActive()) return;
   if (currentImageActionPending()) return;
   const ids = candidateDisplayIdsForRole(role);
   if (!ids.length) return;
@@ -395,6 +396,7 @@ function toggleCandidateDisplay(role) {
 }
 
 function toggleCandidateEffective(role) {
+  if (catalogStagingEditsActive()) return;
   if (currentImageActionPending()) return;
   const ids = candidateDisplayIdsForRole(role);
   if (!ids.length) return;
@@ -562,7 +564,7 @@ function shouldBlinkNewManual(role) {
 async function batchCandidateOperation(spec) {
   const imageId = state.currentId;
   const generation = state.imageGeneration;
-  if (!imageId || isBusy() || state.importing || currentImageActionPending()) return;
+  if (!imageId || isBusy() || state.importing || catalogStagingEditsActive() || currentImageActionPending()) return;
   let [role, operation] = spec.split(":");
   const manual = role === "apply" ? state.manualMaskPresent : state.manualExclusionPresent;
   const manualErase = role === "exclude" && state.manualExclusionErasePresent;
@@ -710,6 +712,7 @@ function rectangleDraftAt(point) {
     && point.y >= draft.roi.top && point.y < draft.roi.bottom) || null;
 }
 function cancelBoundary() {
+  if (catalogStagingEditsActive()) return;
   clearBoundaryInteraction(); render();
 }
 function copyCanvas(source, target) {
@@ -1000,6 +1003,7 @@ async function refreshProjectHistory(imageId = state.currentId) {
 }
 
 async function restoreProjectHistory(direction) {
+  if (catalogStagingEditsActive()) return;
   const imageId = state.currentId;
   const generation = state.imageGeneration;
   if (!state.project?.id || !imageId || state.projectReadOnly || state.projectHistoryBusy || isBusy() || state.importing || isGestureActive() || currentImageActionPending()) return;
@@ -1052,6 +1056,7 @@ async function syncLocalTransformFromHistory(imageId, generation, previousIndex)
 }
 
 function restoreSnapshot(index) {
+  if (catalogStagingEditsActive()) return;
   if (state.project?.id) { void restoreProjectHistory(index < state.historyIndex ? "undo" : "redo"); return; }
   if (isBusy() || state.importing || isGestureActive() || currentImageActionPending() || index < 0 || index > state.history.length) return;
   if (index === state.historyIndex) return;

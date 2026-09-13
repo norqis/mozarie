@@ -26,7 +26,7 @@ function validateDetectionCandidatePadding() {
   return valid;
 }
 function syncDetectionActions() {
-  const enabled = persistedDetectionTargets().length > 0 && !isBusy() && !state.importing
+  const enabled = persistedDetectionTargets().length > 0 && !isBusy() && !state.importing && !catalogStagingEditsActive()
     && !state.projectReadOnly && !currentRecord()?.sourceDimensionsChanged && !currentImageActionPending();
   $("#detectAllButton").disabled = !enabled || !state.images.length;
   $("#detectCurrentButton").disabled = !enabled || !state.currentId;
@@ -55,7 +55,7 @@ function importParallelism() {
 }
 
 function openDetectionDialog(imageIds) {
-  if (!imageIds.length || isBusy() || state.importing) return;
+  if (!imageIds.length || isBusy() || state.importing || catalogStagingEditsActive()) return;
   state.pendingDetectionTargetIds = [...imageIds];
   setDetectionConfidence(detectionConfidence());
   $("#detectParallelism").value = String(detectionParallelism());
@@ -69,7 +69,7 @@ function openDetectionDialog(imageIds) {
 }
 
 async function runDetection(imageIds, confidence = detectionConfidence(), parallelism = 1, targetClasses = persistedDetectionTargets()) {
-  if (!imageIds.length || (!state.detectionStarting && (isBusy() || state.importing))) return;
+  if (!imageIds.length || catalogStagingEditsActive() || (!state.detectionStarting && (isBusy() || state.importing))) return;
   if (!validateDetectionTargets(targetClasses, $("#detectionTargetValidation"))) return;
   if (!state.detectionStarting) beginDetectionStart(imageIds);
   updateActionButtons();
@@ -105,6 +105,7 @@ function failDetectionStart(error) {
 
 async function startDetectionFromDialog(event) {
   event.preventDefault();
+  if (catalogStagingEditsActive()) return;
   const imageIds = state.pendingDetectionTargetIds;
   if (!imageIds.length) return;
   const confidence = normaliseDetectionConfidence($("#detectConfidenceNumber").value);
@@ -144,7 +145,7 @@ async function cancelDetection() {
 async function saveCurrent() {
   const imageId = state.currentId;
   const generation = state.imageGeneration;
-  if (isBusy() || state.importing || currentImageActionPending() || !imageId) return;
+  if (isBusy() || state.importing || catalogStagingEditsActive() || currentImageActionPending() || !imageId) return;
   if (state.candidateUpdateChains.size) await waitForCandidateMutations();
   const record = state.images.find((image) => image.id === imageId);
   if (isBusy() || state.importing || currentImageActionPending() || state.currentId !== imageId || !isCurrentGeneration(generation)
@@ -153,7 +154,7 @@ async function saveCurrent() {
 }
 
 async function saveAll() {
-  if (isBusy() || state.importing) return;
+  if (isBusy() || state.importing || catalogStagingEditsActive()) return;
   if (state.candidateUpdateChains.size) await waitForCandidateMutations();
   if (isBusy() || state.importing) return;
   saveDraft(); refreshMaskStatus();

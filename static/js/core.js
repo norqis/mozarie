@@ -347,6 +347,7 @@ function isBusy() {
 }
 function beginCatalogEpoch() { state.catalogEpoch += 1; return state.catalogEpoch; }
 function isCurrentCatalogEpoch(epoch) { return state.catalogEpoch === epoch; }
+function catalogStagingEditsActive() { return state.catalogTransition?.allowEdits === true; }
 function catalogExpectation(payload = {}) {
   return {
     ...payload,
@@ -423,8 +424,9 @@ async function syncCatalogOnReturn() {
     if (state.catalogRefreshController === controller) state.catalogRefreshController = null;
   }
 }
-async function runCatalogTransition(work, { allowEdits = false } = {}) {
+async function runCatalogTransition(work, { allowEdits = false, allowNested = false } = {}) {
   if (state.catalogTransition) {
+    if (!allowNested) return null;
     const active = state.catalogTransition;
     try { return await work(active); }
     catch (error) {
@@ -434,8 +436,9 @@ async function runCatalogTransition(work, { allowEdits = false } = {}) {
   }
   const ownsProjectOperation = !allowEdits && !state.projectOperationPending;
   if (ownsProjectOperation && typeof beginProjectOperation === "function" && !beginProjectOperation()) return null;
-  const transition = state.catalogTransition || { epoch: beginCatalogEpoch(), controller: new AbortController() };
+  const transition = state.catalogTransition || { epoch: beginCatalogEpoch(), controller: new AbortController(), allowEdits };
   state.catalogTransition = transition;
+  updateActionButtons();
   const { epoch, controller } = transition;
   try {
     return await work({ epoch, signal: controller.signal });
@@ -447,6 +450,7 @@ async function runCatalogTransition(work, { allowEdits = false } = {}) {
   } finally {
     if (state.catalogTransition?.epoch === epoch) state.catalogTransition = null;
     if (ownsProjectOperation && typeof endProjectOperation === "function") endProjectOperation();
+    else updateActionButtons();
   }
 }
 function catalogRecordMatches(record, epoch, { version = imageAssetVersion(record), revision = null } = {}) {
@@ -616,6 +620,7 @@ function setNavigationShortcutsEnabled(enabled) {
 
 function updateActionButtons() {
   const running = isBusy();
+  const catalogStaging = catalogStagingEditsActive();
   const sourceIncompatible = Boolean(currentRecord()?.sourceDimensionsChanged);
   const busyLocked = running || state.importing;
   const mutationLocked = state.projectReadOnly || sourceIncompatible || state.projectOperationPending;
@@ -639,29 +644,29 @@ function updateActionButtons() {
       delete control.dataset.disabledByLock;
     }
   }
-  $("#pickFolder").disabled = busyLocked || mutationLocked;
+  $("#pickFolder").disabled = busyLocked || mutationLocked || catalogStaging;
   const detectAllButton = $("#detectAllButton");
   detectAllButton.textContent = t("gallery.detectAll");
-  detectAllButton.disabled = busyLocked || mutationLocked || state.images.length === 0;
-  $("#detectCurrentButton").disabled = busyLocked || mutationLocked || switchingImages || !hasImage;
-  $("#clearCurrentMasksButton").disabled = busyLocked || mutationLocked || switchingImages || candidateLocked || !hasImage
+  detectAllButton.disabled = busyLocked || mutationLocked || catalogStaging || state.images.length === 0;
+  $("#detectCurrentButton").disabled = busyLocked || mutationLocked || catalogStaging || switchingImages || !hasImage;
+  $("#clearCurrentMasksButton").disabled = busyLocked || mutationLocked || catalogStaging || switchingImages || candidateLocked || !hasImage
     || !(current.candidateCount || state.manualMaskPresent || presence?.hasManualExclude || presence?.hasManualExclusionErase || imageHasMask(current));
   const visibilityButton = $("#removeCurrentImageButton");
   visibilityButton.disabled = busyLocked || mutationLocked || switchingImages || !hasImage;
   const visibilityLabel = t(current && isHidden(current) ? "editor.show" : "editor.hide");
   visibilityButton.textContent = visibilityLabel; visibilityButton.title = visibilityLabel; visibilityButton.setAttribute("aria-label", visibilityLabel);
-  for (const id of ["#clearAllMasksButton", "#clearCatalogButton", "#batchMoreButton"]) $(id).disabled = busyLocked || mutationLocked || state.images.length === 0;
+  for (const id of ["#clearAllMasksButton", "#clearCatalogButton", "#batchMoreButton"]) $(id).disabled = busyLocked || mutationLocked || catalogStaging || state.images.length === 0;
   $("#batchModeButton").disabled = busyLocked || mutationLocked || state.images.length === 0;
-  $("#saveAllButton").disabled = busyLocked || mutationLocked || mutatingCandidates || state.images.length === 0;
-  const currentSaveDisabled = busyLocked || mutationLocked || switchingImages || mutatingCandidates || !hasImage;
+  $("#saveAllButton").disabled = busyLocked || mutationLocked || catalogStaging || mutatingCandidates || state.images.length === 0;
+  const currentSaveDisabled = busyLocked || mutationLocked || catalogStaging || switchingImages || mutatingCandidates || !hasImage;
   $("#saveButton").disabled = currentSaveDisabled;
-  $("#applyStartButton").disabled = busyLocked || mutationLocked || mutatingCandidates || state.applyTargetIds.length === 0
+  $("#applyStartButton").disabled = busyLocked || mutationLocked || catalogStaging || mutatingCandidates || state.applyTargetIds.length === 0
     || Boolean(applyRestrictionMessage()) || (selectedSaveMode() === "copy" && !state.outputDirectoryHandle);
   $("#overviewButton").disabled = busyLocked || state.images.length === 0;
   $("#previousImageButton").disabled = busyLocked || switchingImages || imageIndex() <= 0;
   $("#nextImageButton").disabled = busyLocked || switchingImages || imageIndex() < 0 || imageIndex() >= state.images.length - 1;
   $("#reviewAndNextButton").disabled = busyLocked || mutationLocked || switchingImages || !hasImage;
-  $("#removeAndNextButton").disabled = busyLocked || mutationLocked || switchingImages || !hasImage;
+  $("#removeAndNextButton").disabled = busyLocked || mutationLocked || catalogStaging || switchingImages || !hasImage;
   $("#hideAndNextButton").disabled = busyLocked || mutationLocked || switchingImages || !hasImage;
   $("#downloadCurrentMosaicMask").disabled = switchingImages || !hasImage || !state.project;
   $("#downloadCurrentExcludeMask").disabled = switchingImages || !hasImage || !state.project;
@@ -669,7 +674,17 @@ function updateActionButtons() {
     if (!control.disabled) control.dataset.disabledByLock = "true";
     control.disabled = true;
   }
-  updateCandidateBatchButtons(hasImage, candidateControlsLocked, presence, candidateViewLocked);
+  updateCandidateBatchButtons(hasImage, candidateControlsLocked || catalogStaging, presence, candidateViewLocked || catalogStaging);
+  for (const button of document.querySelectorAll("[data-selection-action]")) {
+    if (["hide", "show", "reviewed", "unreviewed"].includes(button.dataset.selectionAction)) continue;
+    if (catalogStaging && !button.disabled) { button.dataset.disabledByCatalogStaging = "true"; button.disabled = true; }
+    if (!catalogStaging && button.dataset.disabledByCatalogStaging === "true") { button.disabled = false; delete button.dataset.disabledByCatalogStaging; }
+  }
+  for (const id of ["#boundaryTool", "#rectangleTool", "#polygonTool", "#boundaryBrushTool", "#boundaryDetectButton", "#boundaryCancelButton"]) {
+    const button = $(id);
+    if (catalogStaging && !button.disabled) { button.dataset.disabledByCatalogStaging = "true"; button.disabled = true; }
+    if (!catalogStaging && button.dataset.disabledByCatalogStaging === "true") { button.disabled = false; delete button.dataset.disabledByCatalogStaging; }
+  }
   updateHistoryButtons();
   if (typeof syncFlipControls === "function") syncFlipControls();
   if (busyLocked) {
@@ -704,6 +719,7 @@ function updateActionButtons() {
   canvas.style.pointerEvents = busyLocked || mutationLocked || switchingImages ? "none" : "";
   canvas.setAttribute("aria-disabled", String(busyLocked || mutationLocked || switchingImages));
   syncDetectionActions();
+  if (typeof renderProjectCurrent === "function") renderProjectCurrent();
   if (typeof renderProjectTableControls === "function") renderProjectTableControls();
 }
 
@@ -851,6 +867,6 @@ async function loadFolder({ skipSameSourceWarning = false, path: suppliedPath = 
       state.missingNativeSources = typeof missingNativeSources === "function" ? missingNativeSources(data.sources) : [];
       setStatusKey("status.imagesLoaded", { count: state.images.length });
       if (typeof showSourceMismatches === "function") await showSourceMismatches();
-    }, { allowEdits: true });
+    }, { allowEdits: true, allowNested: allowDuringCatalogTransition });
   } catch (error) { showUserError(error); }
 }
