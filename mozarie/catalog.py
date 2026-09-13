@@ -376,6 +376,9 @@ class CatalogMixin:
             if staging:
                 stored = self.workspace_store.preview_reconcile_images(catalog_id, source_id, records)
             elif relink_source_id:
+                preview = self.workspace_store.preview_reconcile_images(catalog_id, source_id, records)
+                staged_records, _staged_mismatches = self._apply_source_state(records, preview, source_id, root, keep_unstored=allow_new)
+                prehydrated = self._stage_workspace_candidates(staged_records)
                 stored = self.workspace_store.relink_native_source(catalog_id, source_id, root, records, allow_new=allow_new)
             elif catalog_id is not None:
                 preview = self.workspace_store.preview_reconcile_images(catalog_id, source_id, records)

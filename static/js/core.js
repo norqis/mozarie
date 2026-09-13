@@ -217,6 +217,9 @@ async function resyncAfterStaleCatalog(error, epoch = state.catalogEpoch) {
   try { await resyncCurrentCatalog(epoch); } catch { /* Keep the original operation error. */ }
   error.catalogResynced = true;
 }
+function catalogFailureMayHaveCommitted(error) {
+  return !Number.isInteger(error?.status) || error.status >= 500 || error?.code === "stale_catalog";
+}
 
 async function api(path, options = {}) {
   const { resyncOnStale = true, ...requestOptions } = options;
@@ -432,7 +435,7 @@ async function catalogApi(path, payload = {}, options = {}) {
       },
     }));
   } catch (error) {
-    const ambiguous = !Number.isInteger(error?.status) || error.status >= 500 || error?.code === "stale_catalog";
+    const ambiguous = catalogFailureMayHaveCommitted(error);
     if (resyncOnFailure && ambiguous && !error.catalogResynced && error?.name !== "AbortError") {
       const snapshot = await api("/api/images", { resyncOnStale: false }).catch(() => null);
       if (snapshot && isCurrentCatalogEpoch(requestEpoch)) {
@@ -484,7 +487,7 @@ async function runCatalogTransition(work, { allowEdits = false, allowNested = fa
     const active = state.catalogTransition;
     try { return await work(active); }
     catch (error) {
-      if (isCurrentCatalogEpoch(active.epoch) && !error.catalogResynced && error?.name !== "AbortError") {
+      if (isCurrentCatalogEpoch(active.epoch) && catalogFailureMayHaveCommitted(error) && !error.catalogResynced && error?.name !== "AbortError") {
         await resyncCurrentCatalog(active.epoch).catch(() => {});
         if (error?.code === "stale_catalog") error.catalogResynced = true;
       }
@@ -500,7 +503,7 @@ async function runCatalogTransition(work, { allowEdits = false, allowNested = fa
   try {
     return await work({ epoch, signal: controller.signal });
   } catch (error) {
-    if (isCurrentCatalogEpoch(epoch) && !error.catalogResynced && error?.name !== "AbortError") {
+    if (isCurrentCatalogEpoch(epoch) && catalogFailureMayHaveCommitted(error) && !error.catalogResynced && error?.name !== "AbortError") {
       await resyncCurrentCatalog(epoch).catch(() => {});
       if (error?.code === "stale_catalog") error.catalogResynced = true;
     }

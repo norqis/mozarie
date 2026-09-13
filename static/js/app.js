@@ -82,9 +82,10 @@ let nativeRelinkSourceId = "";
 let nativeRelinkBusy = false;
 let pendingBrowserProjectSources = [];
 const browserSourceRestoreBusy = new Set();
-function clearPendingBrowserProjectSources() { pendingBrowserProjectSources = []; browserSourceRestoreBusy.clear(); }
+let browserSourceRestoreGeneration = 0;
+function clearPendingBrowserProjectSources() { browserSourceRestoreGeneration += 1; pendingBrowserProjectSources = []; browserSourceRestoreBusy.clear(); }
 async function restoreBrowserProjectSourcesForCurrentCatalog() {
-  const projectId = state.project?.id; const epoch = state.catalogEpoch;
+  const projectId = state.project?.id; const epoch = state.catalogEpoch; const restoreGeneration = ++browserSourceRestoreGeneration;
   if (!projectId) return;
   let remembered;
   try { remembered = await rememberedProjectSources(projectId); }
@@ -123,7 +124,7 @@ async function restoreBrowserProjectSourcesForCurrentCatalog() {
     try { await collect(source.handle, "", source.handle); }
     catch { pending.push({ ...source, projectId, kind: "directory", key: `directory:${source.sourceId}` }); }
   }
-  if (isCurrentCatalogEpoch(epoch) && state.project?.id === projectId) {
+  if (restoreGeneration === browserSourceRestoreGeneration && isCurrentCatalogEpoch(epoch) && state.project?.id === projectId) {
     state.sourceAccess = stagedAccess;
     pendingBrowserProjectSources = pending; renderProjectCurrent();
   }
@@ -245,6 +246,7 @@ function renderProjectCurrent() {
 
 async function restoreBrowserProjectSource(source) {
   if (!state.project?.id || source.projectId !== state.project.id || browserSourceRestoreBusy.has(source.key) || !beginProjectOperation()) return;
+  browserSourceRestoreGeneration += 1;
   browserSourceRestoreBusy.add(source.key); renderProjectCurrent();
   try {
     // Call requestPermission directly from this click handler. A project open
@@ -1379,10 +1381,12 @@ async function initialise() {
   updateBrushSize($("#brushSize").value); resizeRenderCanvas(); updateHistoryButtons(); updateNavigationControls(); updateActionButtons();
   try {
     const data = catalogResponse(await api("/api/images"));
+    $("#folderPath").value = data.root || "";
+    resetCatalog(data.images || [], data.root || "");
+    applyProjectSnapshot(data);
+    state.missingNativeSources = typeof missingNativeSources === "function" ? missingNativeSources(data.sources) : [];
+    if (typeof restoreBrowserProjectSourcesForCurrentCatalog === "function") void restoreBrowserProjectSourcesForCurrentCatalog().catch(() => {});
     if (data.images.length) {
-      $("#folderPath").value = data.root || "";
-      resetCatalog(data.images, data.root);
-      if (typeof restoreBrowserProjectSourcesForCurrentCatalog === "function") void restoreBrowserProjectSourcesForCurrentCatalog().catch(() => {});
       setStatusKey("status.imagesLoaded", { count: state.images.length });
     }
   } catch (error) { showUserError(error); }
