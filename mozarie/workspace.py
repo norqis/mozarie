@@ -530,6 +530,29 @@ class WorkspaceStore:
         with self._connect() as db:
             return db.execute("SELECT 1 FROM images WHERE catalog_id=? AND image_id=?", (catalog_id, image_id)).fetchone() is not None
 
+    def image_states(self, image_ids: list[str]) -> dict[str, dict[str, Any]]:
+        if not image_ids:
+            return {}
+        result: dict[str, dict[str, Any]] = {}
+        with self._connect() as db:
+            for chunk in _chunks(image_ids):
+                placeholders = ",".join("?" for _ in chunk)
+                rows = db.execute(f"""SELECT images.image_id,images.hidden,images.reviewed,
+                    transform.flip_horizontal,transform.flip_vertical,transform.source_flip_horizontal,
+                    transform.source_flip_vertical,transform.revision AS transform_revision
+                    FROM images LEFT JOIN image_transforms AS transform ON transform.image_id=images.image_id
+                    WHERE images.image_id IN ({placeholders})""", chunk)
+                for row in rows:
+                    result[str(row["image_id"])] = {
+                        "hidden": bool(row["hidden"]), "reviewed": bool(row["reviewed"]),
+                        "flip_horizontal": bool(row["flip_horizontal"]) if row["flip_horizontal"] is not None else False,
+                        "flip_vertical": bool(row["flip_vertical"]) if row["flip_vertical"] is not None else False,
+                        "source_flip_horizontal": bool(row["source_flip_horizontal"]) if row["source_flip_horizontal"] is not None else False,
+                        "source_flip_vertical": bool(row["source_flip_vertical"]) if row["source_flip_vertical"] is not None else False,
+                        "transform_revision": int(row["transform_revision"]) if row["transform_revision"] is not None else 0,
+                    }
+        return result
+
     def create_project(self, name: str | None = None, source_root: str | None = None) -> dict[str, Any]:
         clean_name = name.strip() if isinstance(name, str) else ""
         if name is not None and not clean_name:

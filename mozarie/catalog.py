@@ -158,6 +158,17 @@ class CatalogMixin:
             [record.image_id for record in records], self.cache_dir, self._candidate_from_workspace,
         )
 
+    def _refresh_catalog_records(self, records: list[ImageRecord]) -> None:
+        states = self.workspace_store.image_states([record.image_id for record in records])
+        for record in records:
+            saved = states.get(record.image_id)
+            if saved is None:
+                continue
+            record.hidden = saved["hidden"]; record.reviewed = saved["reviewed"]
+            record.flip_horizontal = saved["flip_horizontal"]; record.flip_vertical = saved["flip_vertical"]
+            record.source_flip_horizontal = saved["source_flip_horizontal"]; record.source_flip_vertical = saved["source_flip_vertical"]
+            record.transform_revision = saved["transform_revision"]
+
     @staticmethod
     def _apply_source_state(records: list[ImageRecord], stored: dict[str, dict[str, Any]], source_id: str, root: Path) -> tuple[list[ImageRecord], dict[str, bool]]:
         accepted: list[ImageRecord] = []
@@ -190,6 +201,9 @@ class CatalogMixin:
         with ExitStack() as stack:
             for _image_id, image_lock in sorted(locks):
                 stack.enter_context(image_lock)
+            if prehydrated is not None:
+                self._refresh_catalog_records(records)
+                prehydrated = self._stage_workspace_candidates(records)
             with self.lock:
                 if publish_catalog_id is None:
                     self._assert_catalog_mutable()
@@ -1652,18 +1666,20 @@ class CatalogMixin:
         reviewed = payload.get("reviewed")
         if hidden is not None and not isinstance(hidden, bool) or reviewed is not None and not isinstance(reviewed, bool):
             raise ClientError("画像の状態が正しくありません。", "input_invalid")
-        with self.lock:
-            self._assert_catalog_mutable()
-            record = self.images.get(image_id)
-            if record is None:
-                raise ClientError("画像が見つかりません。", "image_not_found")
-            # The state lock is the publication boundary. Do not let a stale
-            # request write an old project's SQLite row after a switch.
-            if self.workspace_store.has_image(image_id):
-                self.workspace_store.set_image_flags(image_id, hidden=hidden, reviewed=reviewed)
-            if hidden is not None: record.hidden = hidden
-            if reviewed is not None: record.reviewed = reviewed
-            return {"hidden": record.hidden, "reviewed": record.reviewed}
+        image_lock = self.image_io_lock(image_id)
+        with image_lock:
+            with self.lock:
+                self._assert_catalog_mutable()
+                record = self.images.get(image_id)
+                if record is None:
+                    raise ClientError("画像が見つかりません。", "image_not_found")
+                # The state lock is the publication boundary. Do not let a stale
+                # request write an old project's SQLite row after a switch.
+                if self.workspace_store.has_image(image_id):
+                    self.workspace_store.set_image_flags(image_id, hidden=hidden, reviewed=reviewed)
+                if hidden is not None: record.hidden = hidden
+                if reviewed is not None: record.reviewed = reviewed
+                return {"hidden": record.hidden, "reviewed": record.reviewed}
 
     def set_image_flags_bulk(self, payload: dict[str, Any]) -> dict[str, dict[str, bool]]:
         if not isinstance(payload, dict) or not isinstance(payload.get("imageIds"), list):
@@ -1675,19 +1691,23 @@ class CatalogMixin:
         image_ids = list(dict.fromkeys(str(image_id) for image_id in payload["imageIds"] if isinstance(image_id, str) and image_id))
         if not image_ids:
             raise ClientError("画像が選択されていません。", "image_not_found")
-        with self.lock:
-            self._assert_catalog_mutable()
-            records = [self.images.get(image_id) for image_id in image_ids]
-            if any(record is None for record in records):
-                raise ClientError("画像が見つかりません。", "image_not_found")
-            if self.catalog_id is not None:
-                self.workspace_store.set_image_flags_bulk(image_ids, hidden=hidden, reviewed=reviewed)
-            result: dict[str, dict[str, bool]] = {}
-            for image_id, record in zip(image_ids, records):
-                if hidden is not None: record.hidden = hidden
-                if reviewed is not None: record.reviewed = reviewed
-                result[image_id] = {"hidden": record.hidden, "reviewed": record.reviewed}
-            return result
+        locks = [(image_id, self.image_io_lock(image_id)) for image_id in image_ids]
+        with ExitStack() as stack:
+            for _image_id, image_lock in sorted(locks):
+                stack.enter_context(image_lock)
+            with self.lock:
+                self._assert_catalog_mutable()
+                records = [self.images.get(image_id) for image_id in image_ids]
+                if any(record is None for record in records):
+                    raise ClientError("画像が見つかりません。", "image_not_found")
+                if self.catalog_id is not None:
+                    self.workspace_store.set_image_flags_bulk(image_ids, hidden=hidden, reviewed=reviewed)
+                result: dict[str, dict[str, bool]] = {}
+                for image_id, record in zip(image_ids, records):
+                    if hidden is not None: record.hidden = hidden
+                    if reviewed is not None: record.reviewed = reviewed
+                    result[image_id] = {"hidden": record.hidden, "reviewed": record.reviewed}
+                return result
 
     @staticmethod
     def _decode_workspace_mask(value: Any) -> bytes | None:

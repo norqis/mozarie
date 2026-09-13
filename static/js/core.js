@@ -846,6 +846,7 @@ function setMosaicPreviewEnabled(enabled) {
 }
 
 function resetCatalog(images, root) {
+  if (typeof clearPendingBrowserProjectSources === "function") clearPendingBrowserProjectSources();
   ++state.imageGeneration;
   closeBoundaryModeMenu({ restoreFocus: true });
   closeCatalogContextMenu();

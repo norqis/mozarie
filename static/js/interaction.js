@@ -310,6 +310,8 @@ async function runSelectionAction(action) {
   if (action === "remove") {
     if (!await confirmAction(t("confirm.removeImages.title"), t("confirm.removeImages.message", { count: ids.length }), "removeImage")) return;
     const epoch = beginCatalogEpoch(); state.catalogMutation = true; updateActionButtons();
+    const projectId = state.project?.id || null;
+    const cleanupIntents = projectId ? new Map(await Promise.all(ids.map(async (imageId) => [imageId, await rememberProjectImageSourceCleanup(projectId, imageId)]))) : new Map();
     try {
       await flushAllImageMutations();
       await flushAllWorkspaceMutations();
@@ -319,12 +321,27 @@ async function runSelectionAction(action) {
         releaseImageCaches(image.id); state.sourceAccess.delete(image.id); state.drafts.delete(image.id); state.maskStatus.delete(image.id); clearReviewForRemovedImage(image);
       }
       state.images = data.images || [];
-      if (state.project?.id) await forgetProjectImageSources(state.project.id, ids.filter((imageId) => !state.images.some((image) => image.id === imageId)));
+      if (projectId) {
+        const removed = ids.filter((imageId) => !state.images.some((image) => image.id === imageId));
+        if (await forgetProjectImageSources(projectId, removed)) {
+          await clearProjectSourceCleanup({ intentIds: removed.map((imageId) => cleanupIntents.get(imageId)).filter(Boolean) });
+        }
+      }
       loadReviewedPaths();
       pruneSourceAccess();
       state.batchMode = false; clearBatchSelection(); updateSelectionActionBar();
       renderCatalogViews();
-    } catch (error) { if (isCurrentCatalogEpoch(epoch)) showUserError(error); }
+    } catch (error) {
+      if (Number.isInteger(error?.status) && error.status >= 400 && error.status < 500) {
+        await clearProjectSourceCleanup({ intentIds: [...cleanupIntents.values()].filter(Boolean) });
+      } else if (projectId && state.project?.id === projectId) {
+        const removed = ids.filter((imageId) => !state.images.some((image) => image.id === imageId));
+        if (removed.length && await forgetProjectImageSources(projectId, removed)) {
+          await clearProjectSourceCleanup({ intentIds: removed.map((imageId) => cleanupIntents.get(imageId)).filter(Boolean) });
+        }
+      }
+      if (isCurrentCatalogEpoch(epoch)) showUserError(error);
+    }
     finally { state.catalogMutation = false; updateActionButtons(); }
   }
 }
