@@ -884,9 +884,10 @@ class CatalogMixin:
 
     def clear_catalog(self) -> int:
         """Explicit user clear: commit durable removal before detaching the view."""
-        self._detach_catalog(prune_workspace=True)
-        with self.lock:
-            return self.catalog_generation
+        with self.import_lock:
+            self._detach_catalog(prune_workspace=True)
+            with self.lock:
+                return self.catalog_generation
 
     def remove_image_from_catalog(self, image_id: str) -> dict[str, Any]:
         """Remove one image's working state without deleting its source file."""
@@ -928,8 +929,8 @@ class CatalogMixin:
                         removed_set = set(removed_ids)
                         self.order = [current_id for current_id in self.order if current_id not in removed_set]
                         self.catalog_generation += 1
-                    response_generation = self.catalog_generation
                     self._clear_browser_save_tokens_unchecked()
+                snapshot = self.catalog_snapshot()
                 self._delete_mask_files(mask_paths, [self.cache_dir / record.image_id for record in records])
                 thumbnail_dir = self.cache_dir / "thumbnails"
                 removed_set = set(removed_ids)
@@ -951,9 +952,8 @@ class CatalogMixin:
         self.cleanup_expired_browser_save_tokens()
         for image_id in removed_ids:
             self.invalidate_sam_image(image_id)
-        snapshot = self.catalog_snapshot()
         return {"images": snapshot["images"], "removedImageIds": removed_ids,
-                "catalogGeneration": response_generation}
+                "catalogGeneration": snapshot["catalogGeneration"]}
 
     def shutdown(self) -> None:
         """Stop background work before releasing the session import directory."""

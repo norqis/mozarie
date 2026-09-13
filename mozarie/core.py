@@ -251,6 +251,7 @@ class BrowserSaveReceipt:
     cleared: bool
     stale: bool
     deleted: bool
+    catalog_generation: int
     completed_at: float
 
 

@@ -210,7 +210,7 @@ function api(path, options = {}) {
       if (!response.ok) {
         throw responseError(response, data);
       }
-      if (Number.isInteger(data?.catalogGeneration)) state.catalogGeneration = data.catalogGeneration;
+      if (Number.isInteger(data?.catalogGeneration)) state.catalogGeneration = Math.max(state.catalogGeneration, data.catalogGeneration);
       return data;
     })
     .catch((error) => {

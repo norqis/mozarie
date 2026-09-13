@@ -287,12 +287,13 @@ class SavingMixin:
 
         with self.import_lock, ExitStack() as exit_stack:
             with self.lock:
-                self._assert_request_catalog_expectation()
                 receipt = self.browser_save_receipts.get(save_token)
                 if receipt is not None:
                     if receipt.image_id != image_id or receipt.candidate_revision != revision or receipt.source_action != source_action:
                         raise ClientError("保存確認トークンが保存対象と一致しません。保存をやり直してください。", "save_state_changed")
-                    return {"cleared": receipt.cleared, "stale": receipt.stale, "deleted": receipt.deleted}
+                    return {"cleared": receipt.cleared, "stale": receipt.stale, "deleted": receipt.deleted,
+                            "catalogGeneration": receipt.catalog_generation}
+                self._assert_request_catalog_expectation()
                 token_details = self.browser_save_tokens.get(save_token)
                 if token_details is None:
                     raise ClientError("保存確認トークンが無効または期限切れです。保存をやり直してください。", "save_state_changed")
@@ -303,12 +304,13 @@ class SavingMixin:
             image_lock = self.image_io_lock(image_id)
             with image_lock:
                 with self.lock:
-                    self._assert_request_catalog_expectation()
                     receipt = self.browser_save_receipts.get(save_token)
                     if receipt is not None:
                         if receipt.image_id != image_id or receipt.candidate_revision != revision or receipt.source_action != source_action:
                             raise ClientError("保存確認トークンが保存対象と一致しません。保存をやり直してください。", "save_state_changed")
-                        return {"cleared": receipt.cleared, "stale": receipt.stale, "deleted": receipt.deleted}
+                        return {"cleared": receipt.cleared, "stale": receipt.stale, "deleted": receipt.deleted,
+                                "catalogGeneration": receipt.catalog_generation}
+                    self._assert_request_catalog_expectation()
                     token_details = self.browser_save_tokens.get(save_token)
                     record = self.images.get(image_id)
                     if token_details is None:
@@ -433,9 +435,9 @@ class SavingMixin:
                         self._image_io_locks.pop(image_id, None)
                         self.catalog_generation += 1
                     self.browser_save_tokens.pop(save_token, None)
-                    self.browser_save_receipts[save_token] = BrowserSaveReceipt(image_id, revision, source_action, cleared, not cleared, deleted, time.monotonic())
-                    rendered_path = token_details.rendered_path
                     response_generation = self.catalog_generation
+                    self.browser_save_receipts[save_token] = BrowserSaveReceipt(image_id, revision, source_action, cleared, not cleared, deleted, response_generation, time.monotonic())
+                    rendered_path = token_details.rendered_path
                     if deleted:
                         self._discard_browser_save_tokens_for_image_unchecked(image_id)
                 if source_action == "overwrite" or deleted:
@@ -460,12 +462,13 @@ class SavingMixin:
     def browser_save_status(self, image_id: str, revision: int, save_token: str, source_action: str) -> dict[str, Any]:
         """Report only the finite state of one opaque save token."""
         with self.lock:
-            self._assert_request_catalog_expectation()
             receipt = self.browser_save_receipts.get(save_token)
             if receipt is not None:
                 if receipt.image_id == image_id and receipt.candidate_revision == revision and receipt.source_action == source_action:
-                    return {"state": "committed", "cleared": receipt.cleared, "stale": receipt.stale, "deleted": receipt.deleted}
+                    return {"state": "committed", "cleared": receipt.cleared, "stale": receipt.stale, "deleted": receipt.deleted,
+                            "catalogGeneration": receipt.catalog_generation}
                 return {"state": "unknown"}
+            self._assert_request_catalog_expectation()
             details = self.browser_save_tokens.get(save_token)
             if details is not None and details.image_id == image_id and details.candidate_revision == revision:
                 return {"state": "pending"}
