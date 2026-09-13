@@ -206,6 +206,11 @@ class MosaicHandler(BaseHTTPRequestHandler):
             raise ClientError("プロジェクト一覧の版番号が正しくありません。", "input_invalid")
         return (raw_project or None, raw_generation)
 
+    def _catalog_mutation(self, expected_project_id: str | None, expected_catalog_generation: int, operation: Any) -> Any:
+        """Keep one request's catalogue epoch available at its state commit."""
+        with STATE.catalog_request(expected_project_id, expected_catalog_generation):
+            return operation()
+
     def do_GET(self) -> None:  # noqa: N802
         try:
             self._require_local_host()
@@ -427,36 +432,44 @@ class MosaicHandler(BaseHTTPRequestHandler):
                 ids = payload.get("imageIds", [])
                 if not isinstance(ids, list):
                     raise ClientError("画像IDの一覧が正しくありません。", "input_invalid")
-                STATE.resolve_source_mismatches(ids, bool(payload.get("clearMasks")))
+                self._catalog_mutation(expected_project_id, expected_catalog_generation,
+                                       lambda: STATE.resolve_source_mismatches(ids, bool(payload.get("clearMasks"))))
                 self._json(STATE.catalog_snapshot())
             elif path == "/api/project/source-check":
                 self._json({"projects": STATE.projects_for_source_root(str(payload.get("path", "")))})
             elif path == "/api/project/source/relink":
-                self._json(STATE.relink_project_native_source(
+                self._json(self._catalog_mutation(expected_project_id, expected_catalog_generation, lambda: STATE.relink_project_native_source(
                     str(payload.get("projectId", "")), str(payload.get("sourceId", "")), str(payload.get("path", "")),
-                ))
+                )))
             elif path.startswith("/api/project/history/"):
                 image_id, action = _route_ids(path, "/api/project/history/")
                 if action not in {"undo", "redo"}:
                     raise ClientError("履歴の操作が正しくありません。", "input_invalid")
-                self._json(STATE.restore_project_history(image_id, action))
+                self._json(self._catalog_mutation(expected_project_id, expected_catalog_generation,
+                                                   lambda: STATE.restore_project_history(image_id, action)))
             elif path == "/api/catalog/clear":
-                STATE.clear_catalog()
+                self._catalog_mutation(expected_project_id, expected_catalog_generation, STATE.clear_catalog)
                 self._json({"images": []})
             elif path.startswith("/api/workspace/image/"):
-                self._json(STATE.set_image_flags(path.removeprefix("/api/workspace/image/"), payload))
+                self._json(self._catalog_mutation(expected_project_id, expected_catalog_generation,
+                                                   lambda: STATE.set_image_flags(path.removeprefix("/api/workspace/image/"), payload)))
             elif path == "/api/workspace/images":
-                self._json({"flags": STATE.set_image_flags_bulk(payload)})
+                self._json({"flags": self._catalog_mutation(expected_project_id, expected_catalog_generation,
+                                                              lambda: STATE.set_image_flags_bulk(payload))})
             elif path.startswith("/api/workspace/manual/"):
-                STATE.save_manual_workspace(path.removeprefix("/api/workspace/manual/"), payload)
+                self._catalog_mutation(expected_project_id, expected_catalog_generation,
+                                       lambda: STATE.save_manual_workspace(path.removeprefix("/api/workspace/manual/"), payload))
                 self._json({"ok": True})
             elif path.startswith("/api/images/") and path.endswith("/transform"):
                 image_id = path.removeprefix("/api/images/").removesuffix("/transform").rstrip("/")
-                self._json(STATE.set_image_transform(image_id, payload))
+                self._json(self._catalog_mutation(expected_project_id, expected_catalog_generation,
+                                                   lambda: STATE.set_image_transform(image_id, payload)))
             elif path == "/api/catalog/remove":
-                self._json(STATE.remove_images_from_catalog(payload.get("imageIds", [])))
+                self._json(self._catalog_mutation(expected_project_id, expected_catalog_generation,
+                                                   lambda: STATE.remove_images_from_catalog(payload.get("imageIds", []))))
             elif path == "/api/masks/clear":
-                self._json({"cleared": STATE.clear_masks(payload.get("imageIds", []))})
+                self._json({"cleared": self._catalog_mutation(expected_project_id, expected_catalog_generation,
+                                                                lambda: STATE.clear_masks(payload.get("imageIds", [])))})
             elif path == "/api/detect":
                 detect_args = (
                     payload.get("imageIds", []),
@@ -464,9 +477,11 @@ class MosaicHandler(BaseHTTPRequestHandler):
                     _read_detection_parallelism(payload.get("parallelism", STATE.settings["detection"]["parallelism"])),
                 )
                 if "targetClasses" in payload:
-                    STATE.start_detection(*detect_args, _read_target_classes(payload["targetClasses"]))
+                    self._catalog_mutation(expected_project_id, expected_catalog_generation,
+                                           lambda: STATE.start_detection(*detect_args, _read_target_classes(payload["targetClasses"])))
                 else:
-                    STATE.start_detection(*detect_args)
+                    self._catalog_mutation(expected_project_id, expected_catalog_generation,
+                                           lambda: STATE.start_detection(*detect_args))
                 self._json({"ok": True})
             elif path == "/api/candidates/batch":
                 image_id = str(payload.get("imageId", ""))
@@ -474,10 +489,12 @@ class MosaicHandler(BaseHTTPRequestHandler):
                 if image_ids is not None:
                     if not isinstance(image_ids, list):
                         raise ClientError("画像IDの一覧が正しくありません。", "input_invalid")
-                    revisions = STATE.batch_update_candidates_many(image_ids, payload)
+                    revisions = self._catalog_mutation(expected_project_id, expected_catalog_generation,
+                                                       lambda: STATE.batch_update_candidates_many(image_ids, payload))
                     self._json({"ok": True, "candidateRevisions": revisions})
                 else:
-                    revision = STATE.batch_update_candidates(image_id, payload)
+                    revision = self._catalog_mutation(expected_project_id, expected_catalog_generation,
+                                                      lambda: STATE.batch_update_candidates(image_id, payload))
                     self._json({"ok": True, "candidateRevision": revision})
             elif path == "/api/settings":
                 settings = STATE.update_settings(payload)
@@ -516,19 +533,20 @@ class MosaicHandler(BaseHTTPRequestHandler):
                 threading.Thread(target=_start_update_after_response, args=(self.server,), daemon=True).start()
             elif path == "/api/boundary":
                 image_id = str(payload.get("imageId", ""))
-                self._json(STATE.add_boundary_candidate(image_id, payload))
+                self._json(self._catalog_mutation(expected_project_id, expected_catalog_generation,
+                                                   lambda: STATE.add_boundary_candidate(image_id, payload)))
             elif path == "/api/save/prepare":
-                entries = STATE.prepare_browser_save(
+                entries = self._catalog_mutation(expected_project_id, expected_catalog_generation, lambda: STATE.prepare_browser_save(
                     payload.get("imageIds", []),
                     _read_mosaic_divisor(payload.get("divisor")),
                     str(payload.get("suffix", "_censored")),
                     _read_bool(payload.get("deleteOriginal", False), "元画像削除"),
-                )
+                ))
                 self._json({"entries": entries})
             elif path == "/api/save/render":
                 copy_to_default = _read_bool(payload.get("copyToDefault", False), "既定の保存先へコピー")
                 copy_to_browser = _read_bool(payload.get("copyToBrowser", False), "ブラウザ保存")
-                rendered = STATE.render_browser_save(
+                rendered = self._catalog_mutation(expected_project_id, expected_catalog_generation, lambda: STATE.render_browser_save(
                     str(payload.get("imageId", "")),
                     _read_candidate_revision(payload.get("candidateRevision")),
                     _read_mosaic_divisor(payload.get("divisor")),
@@ -538,7 +556,7 @@ class MosaicHandler(BaseHTTPRequestHandler):
                     suffix=_read_save_suffix(payload.get("suffix", "_censored")),
                     output_format=str(payload.get("format", "original")),
                     keep_metadata=_read_bool(payload.get("keepMetadata", True), "メタ情報の保持"),
-                )
+                ))
                 output, record, revision, save_token = rendered
                 if copy_to_default:
                     self._json({"output": str(rendered.output_path), "candidateRevision": revision, "saveToken": save_token})
@@ -559,43 +577,47 @@ class MosaicHandler(BaseHTTPRequestHandler):
                     raise ClientError("保存後の元画像情報が正しくありません。", "input_invalid")
                 if source_size_bytes is not None and (not isinstance(source_size_bytes, int) or isinstance(source_size_bytes, bool) or source_size_bytes < 0):
                     raise ClientError("保存後の元画像情報が正しくありません。", "input_invalid")
-                self._json(STATE.commit_browser_save(
+                self._json(self._catalog_mutation(expected_project_id, expected_catalog_generation, lambda: STATE.commit_browser_save(
                     str(payload.get("imageId", "")),
                     _read_candidate_revision(payload.get("candidateRevision")),
                     payload.get("saveToken"),
                     payload.get("sourceAction"),
                     source_mtime_ns=source_mtime_ms * 1_000_000 if source_mtime_ms is not None else None,
                     source_size_bytes=source_size_bytes,
-                ))
+                )))
             elif path == "/api/save/status":
-                self._json(STATE.browser_save_status(
+                self._json(self._catalog_mutation(expected_project_id, expected_catalog_generation, lambda: STATE.browser_save_status(
                     str(payload.get("imageId", "")), _read_candidate_revision(payload.get("candidateRevision")),
                     str(payload.get("saveToken", "")), str(payload.get("sourceAction", "")),
-                ))
+                )))
             elif path == "/api/save/cancel":
-                self._json(STATE.cancel_browser_save(
+                self._json(self._catalog_mutation(expected_project_id, expected_catalog_generation, lambda: STATE.cancel_browser_save(
                     str(payload.get("imageId", "")), _read_candidate_revision(payload.get("candidateRevision")),
                     str(payload.get("saveToken", "")),
-                ))
+                )))
             elif path == "/api/apply":
                 divisor = _read_mosaic_divisor(payload.get("divisor"))
-                started = STATE.start_apply(
+                started = self._catalog_mutation(expected_project_id, expected_catalog_generation, lambda: STATE.start_apply(
                     payload.get("imageIds", []), divisor, payload.get("drafts", {}),
                     _read_bool(payload.get("copyToDefault", False), "既定の保存先へコピー"),
                     _read_save_suffix(payload.get("suffix", "_censored")),
                     str(payload.get("format", "original")),
                     _read_bool(payload.get("keepMetadata", True), "メタ情報の保持"),
-                )
+                ))
                 self._json({"ok": started, "cancelled": not started})
             elif path == "/api/job/pause":
-                self._json(STATE.request_pause().as_dict())
+                self._json(self._catalog_mutation(expected_project_id, expected_catalog_generation,
+                                                   lambda: STATE.request_pause().as_dict()))
             elif path == "/api/job/resume":
-                self._json(STATE.resume_job().as_dict())
+                self._json(self._catalog_mutation(expected_project_id, expected_catalog_generation,
+                                                   lambda: STATE.resume_job().as_dict()))
             elif path == "/api/job/cancel":
-                self._json(STATE.request_cancel().as_dict())
+                self._json(self._catalog_mutation(expected_project_id, expected_catalog_generation,
+                                                   lambda: STATE.request_cancel().as_dict()))
             elif path.startswith("/api/candidate/"):
                 image_id, candidate_id = _route_ids(path, "/api/candidate/")
-                revision = STATE.set_candidate_state(image_id, candidate_id, payload)
+                revision = self._catalog_mutation(expected_project_id, expected_catalog_generation,
+                                                  lambda: STATE.set_candidate_state(image_id, candidate_id, payload))
                 self._json({"ok": True, "candidateRevision": revision})
             else:
                 self._client_error(ClientError("APIが見つかりません。", "api_not_found"), HTTPStatus.NOT_FOUND)
@@ -627,7 +649,8 @@ class MosaicHandler(BaseHTTPRequestHandler):
             expected_project_id, expected_catalog_generation = self._catalog_expectation()
             if path.startswith("/api/catalog/image/"):
                 image_id = path.removeprefix("/api/catalog/image/")
-                self._json({"images": STATE.remove_image_from_catalog(image_id)})
+                self._json({"images": self._catalog_mutation(expected_project_id, expected_catalog_generation,
+                                                               lambda: STATE.remove_image_from_catalog(image_id))})
             elif path.startswith("/api/project/"):
                 project_id = path.removeprefix("/api/project/")
                 if not project_id or "/" in project_id:
@@ -637,10 +660,12 @@ class MosaicHandler(BaseHTTPRequestHandler):
                 self._json({"deleted": True, "catalogGeneration": STATE.catalog_snapshot()["catalogGeneration"]})
             elif path.startswith("/api/candidate/"):
                 image_id, candidate_id = _route_ids(path, "/api/candidate/")
-                deleted = STATE.delete_candidate(image_id, candidate_id)
+                deleted = self._catalog_mutation(expected_project_id, expected_catalog_generation,
+                                                  lambda: STATE.delete_candidate(image_id, candidate_id))
                 self._json({"deleted": deleted, "candidateRevision": STATE._candidate_revision(image_id)})
             elif path.startswith("/api/workspace/manual/"):
-                STATE.delete_manual_workspace(path.removeprefix("/api/workspace/manual/"))
+                self._catalog_mutation(expected_project_id, expected_catalog_generation,
+                                       lambda: STATE.delete_manual_workspace(path.removeprefix("/api/workspace/manual/")))
                 self._json({"ok": True})
             else:
                 self._client_error(ClientError("APIが見つかりません。", "api_not_found"), HTTPStatus.NOT_FOUND)

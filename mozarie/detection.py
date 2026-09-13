@@ -777,6 +777,8 @@ class DetectionMixin:
                 self._release_gpu_job_memory()
         with self.image_io_lock(image_id):
             record = self.image_for_id(image_id)
+            with self.lock:
+                self._assert_request_catalog_expectation()
             self._assert_record_stat_matches(record)
         polygon_mask: np.ndarray | None = None
         if "points" in payload:
@@ -878,12 +880,14 @@ class DetectionMixin:
                 with self.image_io_lock(image_id):
                     self._assert_record_stat_matches(record)
                     with self.lock:
+                        self._assert_request_catalog_expectation()
                         if self.images.get(image_id) is not record:
                             raise ClientError("フォルダを再読み込みしたため、境界の検出結果を破棄しました。", "catalog_changed")
                     for temporary, candidate in zip(temporary_paths, created):
                         os.replace(temporary, candidate.mask_path)
                     temporary_paths.clear()
                     with self.lock:
+                        self._assert_request_catalog_expectation()
                         catalog_current = self.images.get(image_id) is record
                         if catalog_current:
                             revision = self._commit_candidate_snapshot(

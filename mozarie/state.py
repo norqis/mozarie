@@ -11,6 +11,7 @@ import shutil
 import threading
 import time
 import uuid
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
@@ -93,6 +94,7 @@ class StudioState(CatalogMixin, SavingMixin, DetectionMixin, JobsMixin):
         self._active_detection_default_padding = int(self.settings["detection"]["default_candidate_padding_px"])
         self.lock = threading.RLock()
         self.import_lock = threading.RLock()
+        self._request_catalog_expectation = threading.local()
         self.active_import_count = 0
         self._cache_lock_handle: Any | None = None
         self._owns_process_cache = cache_dir is None
@@ -157,6 +159,16 @@ class StudioState(CatalogMixin, SavingMixin, DetectionMixin, JobsMixin):
         """Keep durable bulk flags and a concurrent catalog publication in one state epoch."""
         with self.lock:
             return super().set_image_flags_bulk(payload)
+
+    @contextmanager
+    def catalog_request(self, expected_project_id: str | None, expected_catalog_generation: int):
+        """Make one HTTP mutation verify its captured catalogue at commit points."""
+        previous = getattr(self._request_catalog_expectation, "value", None)
+        self._request_catalog_expectation.value = (expected_project_id, expected_catalog_generation)
+        try:
+            yield
+        finally:
+            self._request_catalog_expectation.value = previous
 
     def update_settings(self, update: dict[str, Any]) -> dict[str, Any]:
         """Persist user-selected options and release only model objects that changed."""

@@ -38,6 +38,11 @@ class CatalogMixin:
         if expected_project_id != self.catalog_id or expected_catalog_generation != self.catalog_generation:
             raise ClientError("プロジェクト一覧が更新されました。もう一度操作してください。", "stale_catalog")
 
+    def _assert_request_catalog_expectation(self) -> None:
+        expectation = getattr(self._request_catalog_expectation, "value", None)
+        if expectation is not None:
+            self._assert_catalog_expectation(*expectation)
+
     def assert_catalog_expectation(self, expected_project_id: str | None, expected_catalog_generation: int) -> None:
         with self.lock:
             self._assert_catalog_expectation(expected_project_id, expected_catalog_generation)
@@ -92,6 +97,7 @@ class CatalogMixin:
 
     def _commit_candidate_snapshot(self, image_id: str, candidates: list[Candidate], *, replace: bool, history_group: str | None = None) -> int:
         """Durably commit a candidate revision, then publish it while the caller holds ``self.lock``."""
+        self._assert_request_catalog_expectation()
         revision = self._candidate_revision(image_id) + 1
         if self.workspace_store.has_image(image_id):
             self.workspace_store.commit_candidate_state(
@@ -155,7 +161,8 @@ class CatalogMixin:
     def _replace_catalog(self, root: Path, records: list[ImageRecord], *, detach_project: bool = False,
                          prehydrated: dict[str, tuple[int, list[Candidate]]] | None = None,
                          publish_catalog_id: str | None = None,
-                         publish_read_only: bool = False) -> list[dict[str, Any]]:
+                         publish_read_only: bool = False,
+                         publish_source_mismatches: dict[str, bool] | None = None) -> list[dict[str, Any]]:
         with self.lock:
             previous_ids = tuple(self.images)
         locks = [(image_id, self.image_io_lock(image_id)) for image_id in previous_ids]
@@ -181,7 +188,7 @@ class CatalogMixin:
                 if publish_catalog_id is not None:
                     self.catalog_id = publish_catalog_id
                     self.project_read_only = publish_read_only
-                    self.source_mismatches = {}
+                    self.source_mismatches = dict(publish_source_mismatches or {})
                 self._invalidate_sam_cache()
                 self.job = Job()
                 self.catalog_generation += 1
@@ -199,6 +206,7 @@ class CatalogMixin:
         return self.worker_thread is not None and self.worker_thread.is_alive()
 
     def _assert_catalog_mutable(self, *, allow_terminal_cleanup: bool = False) -> None:
+        self._assert_request_catalog_expectation()
         if self.project_read_only:
             raise ClientError("完了したプロジェクトは再開するまで編集できません。", "project_read_only")
         worker_cleanup = (
@@ -241,7 +249,8 @@ class CatalogMixin:
 
     def _set_root(self, raw_path: str, project_id: str | None = None, *, defer_replace: bool = False,
                    relink_source_id: str | None = None, allow_new: bool = True,
-                   inherit_current_catalog: bool = True, staging: bool = False) -> list[Any]:
+                   inherit_current_catalog: bool = True, staging: bool = False,
+                   staged_source_mismatches: dict[str, bool] | None = None) -> list[Any]:
         if not raw_path or not isinstance(raw_path, str):
             raise ClientError("Windowsフォルダを入力してください。", "input_invalid")
         root = Path(raw_path).expanduser().resolve()
@@ -357,6 +366,8 @@ class CatalogMixin:
             str(saved["image_id"]): bool(saved.get("dimensions_changed"))
             for saved in stored.values() if saved.get("changed")
         }
+        if staged_source_mismatches is not None:
+            staged_source_mismatches.update(source_mismatches)
         if inherit_current_catalog:
             # Re-importing one source of a multi-folder project must not dismiss a
             # change acknowledgement still required for another source.
@@ -389,6 +400,7 @@ class CatalogMixin:
             raise ClientError("指定フォルダーが見つかりません。", "folder_not_found")
         with self.import_lock:
             with self.lock:
+                self._assert_request_catalog_expectation()
                 if self.catalog_id != project_id:
                     raise ClientError("開いているプロジェクトの元フォルダーだけ再指定できます。", "project_source_unavailable")
                 if self.project_read_only:
@@ -601,9 +613,11 @@ class CatalogMixin:
             # catalogue. A bad later source must leave the current screen in
             # place instead of exposing a half-open target project.
             records: list[ImageRecord] = []
+            staged_source_mismatches: dict[str, bool] = {}
             for root in native_roots:
                 records.extend(self._set_root(
                     str(root), catalog_id, defer_replace=True, allow_new=False, inherit_current_catalog=False, staging=True,
+                    staged_source_mismatches=staged_source_mismatches,
                 ))
             records.sort(key=lambda record: (record.relative_path.casefold(), record.relative_path, record.image_id))
             prehydrated = self._stage_workspace_candidates(records)
@@ -612,6 +626,7 @@ class CatalogMixin:
             images = self._replace_catalog(
                 native_roots[0], records, prehydrated=prehydrated,
                 publish_catalog_id=catalog_id, publish_read_only=project["status"] == "completed",
+                publish_source_mismatches=staged_source_mismatches,
             )
             # Browser sources may still need a user-granted handle.  Native
             # images are shown immediately and the UI can add the rest.
@@ -842,6 +857,7 @@ class CatalogMixin:
     def _detach_catalog(self, *, prune_workspace: bool) -> str | None:
         with self.import_lock:
             with self.lock:
+                self._assert_request_catalog_expectation()
                 self._assert_catalog_detachable_unchecked()
                 catalog_id = self.catalog_id
                 catalog_generation = self.catalog_generation
@@ -1077,6 +1093,7 @@ class CatalogMixin:
         no_effect: bool = False,
         output_format: str = "original", keep_metadata: bool = True,
     ) -> str:
+        self._assert_request_catalog_expectation()
         self._discard_expired_browser_save_tokens_unchecked()
         token = secrets.token_urlsafe(32)
         self.browser_save_tokens[token] = BrowserSaveToken(
@@ -1655,6 +1672,10 @@ class CatalogMixin:
         self._assert_image_editable(image_id)
         with self.image_io_lock(image_id):
             with self.lock:
+                self._assert_request_catalog_expectation()
+                self._assert_catalog_mutable()
+                if image_id not in self.images:
+                    raise ClientError("画像が見つかりません。", "image_not_found")
                 committed = dict(payload)
                 dirty_layers = committed.get("dirtyLayers")
                 existing = self.projectless_manual_drafts.get(image_id) if self.catalog_id is None else self.workspace_store.manual(image_id, self._encode_workspace_mask)
@@ -1742,6 +1763,8 @@ class CatalogMixin:
         self._assert_image_editable(image_id)
         with self.image_io_lock(image_id):
             with self.lock:
+                self._assert_request_catalog_expectation()
+                self._assert_catalog_mutable()
                 if self.catalog_id is None:
                     self.projectless_manual_drafts.pop(image_id, None)
                 else:
@@ -1929,6 +1952,8 @@ class CatalogMixin:
         self._assert_image_editable(image_id)
         with self.image_io_lock(image_id):
             with self.lock:
+                self._assert_request_catalog_expectation()
+                self._assert_catalog_mutable()
                 if self._has_active_worker():
                     raise ClientError("バックグラウンド処理中は候補を変更できません。", "operation_in_progress")
                 candidates = [replace(item) for item in self.candidates.get(image_id, [])]
@@ -1981,6 +2006,8 @@ class CatalogMixin:
                 raise ClientError(f"候補の枠pxは0から{max_expand_px}までの整数で指定してください。", "input_invalid")
         with self.image_io_lock(image_id):
             with self.lock:
+                self._assert_request_catalog_expectation()
+                self._assert_catalog_mutable()
                 if self._has_active_worker():
                     raise ClientError("バックグラウンド処理中は候補を変更できません。", "operation_in_progress")
                 current = self.candidates.get(image_id, [])
@@ -2027,6 +2054,21 @@ class CatalogMixin:
             with self.lock:
                 if self.catalog_id != catalog_id or self.catalog_generation != catalog_generation:
                     raise ClientError("プロジェクト一覧が更新されました。もう一度操作してください。", "stale_catalog")
+                role = payload.get("role")
+                operation = payload.get("operation")
+                if role not in {"apply", "exclude"} or operation not in {"enable", "disable", "delete", "set_padding"}:
+                    raise ClientError("候補の一括操作が正しくありません。", "input_invalid")
+                expand_px = payload.get("expandPx")
+                for image_id in unique:
+                    record = self.images[image_id]
+                    selected = [item for item in self.candidates.get(image_id, []) if item.role.value == role]
+                    if not selected:
+                        raise ClientError("更新する候補がありません。", "candidate_not_found")
+                    if operation == "set_padding":
+                        max_expand_px = int(np.ceil(np.hypot(record.width - 1, record.height - 1)))
+                        if (isinstance(expand_px, bool) or not isinstance(expand_px, int)
+                                or not 0 <= expand_px <= max_expand_px):
+                            raise ClientError(f"候補の枠pxは0から{max_expand_px}までの整数で指定してください。", "input_invalid")
                 group_id = self.workspace_store.begin_history_group() if len(unique) > 1 else None
                 try:
                     result = {image_id: self.batch_update_candidates(image_id, payload, history_group=group_id) for image_id in unique}
@@ -2041,6 +2083,8 @@ class CatalogMixin:
         self._assert_image_editable(image_id)
         with self.image_io_lock(image_id):
             with self.lock:
+                self._assert_request_catalog_expectation()
+                self._assert_catalog_mutable()
                 if self._has_active_worker():
                     raise ClientError("バックグラウンド処理中は候補を変更できません。", "operation_in_progress")
                 candidates = self.candidates.get(image_id, [])

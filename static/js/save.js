@@ -242,7 +242,7 @@ async function writeSingleOutput(handle, relativePath, suffix, response, format 
 
 async function renderSingleSave(payload) {
   const response = await fetch("/api/save/render", {
-    method: "POST", headers: { "Content-Type": "application/json", "X-Mozarie-Token": document.querySelector('meta[name="mozarie-token"]')?.content || "" },
+    method: "POST", headers: catalogRequestHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify(payload),
   });
   if (response.ok) return response;
@@ -691,7 +691,7 @@ async function runBrowserSave(imageIds, suffix, deleteOriginal, mode = "copy") {
           let binary;
           try {
             binary = await fetch("/api/save/render", {
-            method: "POST", headers: { "Content-Type": "application/json", "X-Mozarie-Token": document.querySelector('meta[name="mozarie-token"]')?.content || "" },
+            method: "POST", headers: catalogRequestHeaders({ "Content-Type": "application/json" }),
             body: JSON.stringify({ imageId: entry.imageId, candidateRevision: entry.candidateRevision, divisor: inputs.divisor, draft, format: inputs.format, keepMetadata: inputs.keepMetadata }),
             });
           } finally { inputs.drafts.delete(entry.imageId); }
@@ -727,7 +727,7 @@ async function runBrowserSave(imageIds, suffix, deleteOriginal, mode = "copy") {
           let binary;
           try {
             binary = await fetch("/api/save/render", {
-            method: "POST", headers: { "Content-Type": "application/json", "X-Mozarie-Token": document.querySelector('meta[name="mozarie-token"]')?.content || "" },
+            method: "POST", headers: catalogRequestHeaders({ "Content-Type": "application/json" }),
             body: JSON.stringify({ imageId: entry.imageId, candidateRevision: entry.candidateRevision, divisor: inputs.divisor, draft, format: inputs.format, keepMetadata: inputs.keepMetadata }),
             });
           } finally { inputs.drafts.delete(entry.imageId); }

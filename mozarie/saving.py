@@ -287,6 +287,7 @@ class SavingMixin:
 
         with self.import_lock, ExitStack() as exit_stack:
             with self.lock:
+                self._assert_request_catalog_expectation()
                 receipt = self.browser_save_receipts.get(save_token)
                 if receipt is not None:
                     if receipt.image_id != image_id or receipt.candidate_revision != revision or receipt.source_action != source_action:
@@ -302,6 +303,7 @@ class SavingMixin:
             image_lock = self.image_io_lock(image_id)
             with image_lock:
                 with self.lock:
+                    self._assert_request_catalog_expectation()
                     receipt = self.browser_save_receipts.get(save_token)
                     if receipt is not None:
                         if receipt.image_id != image_id or receipt.candidate_revision != revision or receipt.source_action != source_action:
@@ -455,6 +457,7 @@ class SavingMixin:
     def browser_save_status(self, image_id: str, revision: int, save_token: str, source_action: str) -> dict[str, Any]:
         """Report only the finite state of one opaque save token."""
         with self.lock:
+            self._assert_request_catalog_expectation()
             receipt = self.browser_save_receipts.get(save_token)
             if receipt is not None:
                 if receipt.image_id == image_id and receipt.candidate_revision == revision and receipt.source_action == source_action:
@@ -471,6 +474,7 @@ class SavingMixin:
         # detached a token, cancellation must never remove its successful copy.
         with self.import_lock:
             with self.lock:
+                self._assert_request_catalog_expectation()
                 details = self.browser_save_tokens.get(save_token)
                 if details is None or details.image_id != image_id or details.candidate_revision != revision:
                     return {"state": "unknown"}

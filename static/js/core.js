@@ -189,14 +189,20 @@ function responseError(response, payload) {
   return error;
 }
 
-function api(path, options = {}) {
+function catalogRequestHeaders(headers = {}) {
   const token = document.querySelector('meta[name="mozarie-token"]')?.content || "";
-  const expectedProjectId = state.project?.id || "";
+  return {
+    "X-Mozarie-Token": token,
+    "X-Mozarie-Expected-Project-Id": encodeURIComponent(state.project?.id || ""),
+    "X-Mozarie-Expected-Catalog-Generation": String(state.catalogGeneration),
+    ...headers,
+  };
+}
+
+function api(path, options = {}) {
   return fetch(path, {
     ...options,
-    headers: { "Content-Type": "application/json", "X-Mozarie-Token": token,
-      "X-Mozarie-Expected-Project-Id": encodeURIComponent(expectedProjectId),
-      "X-Mozarie-Expected-Catalog-Generation": String(state.catalogGeneration), ...(options.headers || {}) },
+    headers: catalogRequestHeaders({ "Content-Type": "application/json", ...(options.headers || {}) }),
   })
     .then(async (response) => {
       if (state.status?.connectionFailure) clearStatus();

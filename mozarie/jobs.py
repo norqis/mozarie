@@ -122,6 +122,7 @@ class JobsMixin:
 
     def request_pause(self) -> Job:
         with self.lock:
+            self._assert_request_catalog_expectation()
             if (self.job.kind not in {"apply", "detect"} or self.job.state != "running"
                     or self.job.completed >= self.job.total):
                 raise ClientError("一時停止できる処理はありません。", "operation_in_progress")
@@ -131,6 +132,7 @@ class JobsMixin:
         # successful pause request; already claimed images finish atomically.
         with control.claim_lock:
             with self.lock:
+                self._assert_request_catalog_expectation()
                 if self.job_control is not control or self.job.state != "running":
                     raise ClientError("一時停止できる処理はありません。", "operation_in_progress")
                 control.pause_requested.set()
@@ -142,6 +144,7 @@ class JobsMixin:
 
     def resume_job(self) -> Job:
         with self.lock:
+            self._assert_request_catalog_expectation()
             if self.job.kind not in {"apply", "detect"} or self.job.state != "paused":
                 raise ClientError("再開できる処理はありません。", "operation_in_progress")
             assert self.job_control is not None
@@ -153,6 +156,7 @@ class JobsMixin:
 
     def request_cancel(self) -> Job:
         with self.lock:
+            self._assert_request_catalog_expectation()
             if self.job.kind not in {"apply", "detect"} or self.job.state not in {"running", "pausing", "paused"}:
                 raise ClientError("キャンセルできる処理はありません。", "operation_in_progress")
             assert self.job_control is not None
@@ -161,6 +165,7 @@ class JobsMixin:
         # followed by another claim.
         with control.claim_lock:
             with self.lock:
+                self._assert_request_catalog_expectation()
                 if self.job_control is not control or self.job.state not in {"running", "pausing", "paused"}:
                     raise ClientError("キャンセルできる処理はありません。", "operation_in_progress")
                 control.cancel_requested.set()
@@ -238,6 +243,7 @@ class JobsMixin:
         expected_catalog_generation: int | None = None,
     ) -> None:
         with self.lock:
+            self._assert_request_catalog_expectation()
             if self.active_import_count or self.job.state in {"running", "pausing", "paused"} or self._has_active_worker():
                 raise ClientError("別の処理が進行中です。", "operation_in_progress")
             if expected_catalog_generation is not None and self.catalog_generation != expected_catalog_generation:
