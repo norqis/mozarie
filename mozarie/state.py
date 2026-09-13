@@ -161,8 +161,7 @@ class StudioState(CatalogMixin, SavingMixin, DetectionMixin, JobsMixin):
 
     def set_image_flags_bulk(self, payload: dict[str, Any]) -> dict[str, dict[str, bool]]:
         """Keep durable bulk flags and a concurrent catalog publication in one state epoch."""
-        with self.lock:
-            return super().set_image_flags_bulk(payload)
+        return super().set_image_flags_bulk(payload)
 
     @contextmanager
     def catalog_request(self, expected_project_id: str | None, expected_catalog_generation: int):

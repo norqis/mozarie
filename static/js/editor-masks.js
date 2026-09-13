@@ -1021,9 +1021,11 @@ async function restoreProjectHistory(direction) {
         if (record && changedId === imageId && result.current) record.candidateRevision = Number(result.current.candidateRevision || 0);
       }
       state.projectHistory.set(imageId, { canUndo: result.canUndo === true, canRedo: result.canRedo === true });
-      const snapshot = catalogResponse(await api("/api/images"));
+      const capturedProjectId = state.project?.id || null; const capturedCatalogGeneration = state.serverCatalogGeneration;
+      const snapshot = await api("/api/images");
+      const replaced = reconcileCatalogSnapshot(snapshot, capturedProjectId, capturedCatalogGeneration);
       state.images = snapshot.images || state.images; loadReviewedPaths(); applyProjectSnapshot(snapshot); if (typeof renderCatalogViews === "function") renderCatalogViews();
-      if (changed.has(imageId) && state.currentId === imageId && isCurrentGeneration(generation) && !currentImageActionPending()) await selectImage(imageId, true, { saveCurrentDraft: false });
+      if (!replaced && changed.has(imageId) && state.currentId === imageId && isCurrentGeneration(generation) && !currentImageActionPending()) await selectImage(imageId, true, { saveCurrentDraft: false });
       else if (state.currentId === imageId && isCurrentGeneration(generation) && !currentImageActionPending()) updateHistoryButtons();
     }, { lockCandidateControls: true });
   } catch (error) { showUserError(error); }

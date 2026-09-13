@@ -157,7 +157,7 @@ async function rememberedProjectSources(projectId) {
   // create a second source and duplicate every browser-imported image.
   return {
     files: rows.filter((row) => (row.imageId || row.clientKey) && row.handle?.kind === "file")
-      .map((row) => ({ sourceId: row.sourceId, clientKey: row.clientKey || null, relativePath: row.relativePath || row.handle.name, handle: row.handle })),
+      .map((row) => ({ imageId: row.imageId || null, sourceId: row.sourceId, clientKey: row.clientKey || null, relativePath: row.relativePath || row.handle.name, handle: row.handle })),
     directories: rows.filter((row) => !row.imageId && row.handle?.kind === "directory")
       .map((row) => ({ sourceId: row.sourceId, handle: row.handle })),
   };

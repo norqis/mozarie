@@ -83,6 +83,19 @@ let nativeRelinkBusy = false;
 let pendingBrowserProjectSources = [];
 const browserSourceRestoreBusy = new Set();
 function clearPendingBrowserProjectSources() { pendingBrowserProjectSources = []; browserSourceRestoreBusy.clear(); }
+async function restoreBrowserProjectSourcesForCurrentCatalog() {
+  const projectId = state.project?.id; const epoch = state.catalogEpoch;
+  if (!projectId) return;
+  const { files, directories } = await rememberedProjectSources(projectId);
+  if (!isCurrentCatalogEpoch(epoch) || state.project?.id !== projectId) return;
+  const pending = [];
+  for (const source of files) {
+    if (await ensureProjectSourcePermission(source.handle)) state.sourceAccess.set(source.imageId, { fileHandle: source.handle, sourceId: source.sourceId, clientKey: source.clientKey, relativePath: source.relativePath, sourceKind: "browser-files" });
+    else pending.push({ ...source, projectId, kind: "file", key: `file:${source.sourceId}:${source.clientKey || source.relativePath}` });
+  }
+  for (const source of directories) if (!await ensureProjectSourcePermission(source.handle)) pending.push({ ...source, projectId, kind: "directory", key: `directory:${source.sourceId}` });
+  if (isCurrentCatalogEpoch(epoch) && state.project?.id === projectId) { pendingBrowserProjectSources = pending; renderProjectCurrent(); }
+}
 
 function syncFlipControls() {
   const record = currentRecord();

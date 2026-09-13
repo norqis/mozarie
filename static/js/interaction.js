@@ -136,9 +136,11 @@ async function clearMasks(imageIds, titleKey, messageKey, expectedImageId = null
     catalogEpoch = beginCatalogEpoch();
     await api("/api/masks/clear", { method: "POST", body: JSON.stringify({ imageIds }) });
     if (!isCurrentCatalogEpoch(catalogEpoch)) return;
-    const refreshed = catalogResponse(await api("/api/images"));
+    const capturedProjectId = state.project?.id || null; const capturedCatalogGeneration = state.serverCatalogGeneration;
+    const refreshed = await api("/api/images");
+    const replaced = reconcileCatalogSnapshot(refreshed, capturedProjectId, capturedCatalogGeneration);
     if (!isCurrentCatalogEpoch(catalogEpoch)) return;
-    await refreshWorkspaceImages(refreshed, imageIds, { clearWorkspace: true });
+    if (!replaced) await refreshWorkspaceImages(refreshed, imageIds, { clearWorkspace: true });
     clearStatus();
   } catch (error) { if (catalogEpoch === null || isCurrentCatalogEpoch(catalogEpoch)) showUserError(error); }
   finally { state.masksClearing = false; updateActionButtons(); }
@@ -311,10 +313,11 @@ async function runSelectionAction(action) {
     if (!await confirmAction(t("confirm.removeImages.title"), t("confirm.removeImages.message", { count: ids.length }), "removeImage")) return;
     const epoch = beginCatalogEpoch(); state.catalogMutation = true; updateActionButtons();
     const projectId = state.project?.id || null;
-    const cleanupIntents = projectId ? new Map(await Promise.all(ids.map(async (imageId) => [imageId, await rememberProjectImageSourceCleanup(projectId, imageId)]))) : new Map();
+    let cleanupIntents = new Map();
     try {
       await flushAllImageMutations();
       await flushAllWorkspaceMutations();
+      cleanupIntents = projectId ? new Map(await Promise.all(ids.map(async (imageId) => [imageId, await rememberProjectImageSourceCleanup(projectId, imageId)]))) : new Map();
       const data = await catalogApi("/api/catalog/remove", { imageIds: ids }, { method: "POST" });
       if (!isCurrentCatalogEpoch(epoch)) return;
       for (const image of images) {
