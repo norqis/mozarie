@@ -361,9 +361,14 @@ function applyCatalogGeneration(snapshot) {
   state.serverCatalogGeneration = generation;
   return true;
 }
+function isCompleteCatalogSnapshot(snapshot) {
+  return Array.isArray(snapshot?.images)
+    && Object.prototype.hasOwnProperty.call(snapshot, "project")
+    && Object.prototype.hasOwnProperty.call(snapshot, "readOnly");
+}
 function catalogResponse(snapshot) {
   if (!applyCatalogGeneration(snapshot)) throw codedError("stale_catalog");
-  if (snapshot && typeof applyProjectSnapshot === "function") applyProjectSnapshot(snapshot);
+  if (isCompleteCatalogSnapshot(snapshot) && typeof applyProjectSnapshot === "function") applyProjectSnapshot(snapshot);
   return snapshot;
 }
 async function catalogApi(path, payload = {}, options = {}) {
@@ -826,8 +831,8 @@ function updateProgress(job) {
   updateActionButtons();
 }
 
-async function loadFolder({ skipSameSourceWarning = false, path: suppliedPath = null } = {}) {
-  if (isBusy() || state.importing || state.catalogTransition) return;
+async function loadFolder({ skipSameSourceWarning = false, path: suppliedPath = null, allowDuringCatalogTransition = false } = {}) {
+  if (isBusy() || state.importing || (state.catalogTransition && !allowDuringCatalogTransition)) return;
   const path = suppliedPath || $("#folderPath").value.trim();
   if (!path) return setStatusKey("status.enterFolder");
   if (!skipSameSourceWarning && typeof openSameSourceDialog === "function" && await openSameSourceDialog(path)) return;

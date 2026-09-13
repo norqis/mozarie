@@ -238,37 +238,38 @@ async function removeImageFromCatalog(imageId = state.contextMenuImageId) {
   const nextImageId = state.images[index + 1]?.id || state.images[index - 1]?.id || null;
   const removingCurrent = state.currentId === imageId || state.pendingImageId === imageId;
   state.catalogMutation = true;
-  const catalogEpoch = beginCatalogEpoch();
   ++state.imageGeneration;
   updateActionButtons();
   try {
-    await flushAllImageMutations();
-    await flushWorkspaceDraft(imageId);
-    const data = await api(`/api/catalog/image/${encodeURIComponent(imageId)}`, { method: "DELETE" });
-    if (!isCurrentCatalogEpoch(catalogEpoch)) return;
-    state.images = data.images;
-    if (state.project?.id) await forgetProjectImageSources(state.project.id, [imageId]);
-    loadReviewedPaths();
-    state.selectedImageIds.delete(imageId);
-    if (!state.images.length) { state.batchMode = false; clearBatchSelection(); }
-    releaseImageCaches(imageId);
-    state.sourceAccess.delete(imageId);
-    state.drafts.delete(imageId);
-    state.maskStatus.delete(imageId);
-    pruneSourceAccess();
-    clearReviewForRemovedImage(image);
-    if (removingCurrent) {
-      state.currentId = null; state.currentImage = null; state.pendingImageId = null; state.pendingImageKey = null; state.pendingCandidateKey = null;
-      state.candidates = []; state.candidateImages = new Map(); clearEditor();
-    }
-    renderCatalogViews(); updateSelectionActionBar();
-    if (removingCurrent && nextImageId && state.images.some((item) => item.id === nextImageId)) {
-      await selectImage(nextImageId, true, { saveCurrentDraft: false });
-    } else {
-      updateNavigationControls(); updateActionButtons();
-      clearStatus();
-    }
-  } catch (error) { if (isCurrentCatalogEpoch(catalogEpoch)) showUserError(error); }
+    await runCatalogTransition(async ({ epoch, signal }) => {
+      await flushAllImageMutations();
+      await flushWorkspaceDraft(imageId);
+      const data = await catalogApi(`/api/catalog/image/${encodeURIComponent(imageId)}`, {}, { method: "DELETE", signal, resyncOnFailure: false });
+      if (!isCurrentCatalogEpoch(epoch)) return;
+      state.images = data.images;
+      if (state.project?.id) await forgetProjectImageSources(state.project.id, [imageId]);
+      loadReviewedPaths();
+      state.selectedImageIds.delete(imageId);
+      if (!state.images.length) { state.batchMode = false; clearBatchSelection(); }
+      releaseImageCaches(imageId);
+      state.sourceAccess.delete(imageId);
+      state.drafts.delete(imageId);
+      state.maskStatus.delete(imageId);
+      pruneSourceAccess();
+      clearReviewForRemovedImage(image);
+      if (removingCurrent) {
+        state.currentId = null; state.currentImage = null; state.pendingImageId = null; state.pendingImageKey = null; state.pendingCandidateKey = null;
+        state.candidates = []; state.candidateImages = new Map(); clearEditor();
+      }
+      renderCatalogViews(); updateSelectionActionBar();
+      if (removingCurrent && nextImageId && state.images.some((item) => item.id === nextImageId)) {
+        await selectImage(nextImageId, true, { saveCurrentDraft: false });
+      } else {
+        updateNavigationControls(); updateActionButtons();
+        clearStatus();
+      }
+    });
+  } catch (error) { showUserError(error); }
   finally { state.catalogMutation = false; updateActionButtons(); }
 }
 

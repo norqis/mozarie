@@ -654,7 +654,7 @@ function bindEvents() {
       await flushAllWorkspaceMutations();
       const data = await catalogApi("/api/projects", {}, { method: "POST" });
       state.project = data.project; state.projectReadOnly = false; $("#sameSourceDialog").close(); renderProjectCurrent();
-      await loadFolder({ skipSameSourceWarning: true, path: sameSourcePath });
+      await loadFolder({ skipSameSourceWarning: true, path: sameSourcePath, allowDuringCatalogTransition: true });
     } catch (error) { showUserError(error); }
     finally {
       sameSourceBusy = false;
@@ -1297,9 +1297,7 @@ async function initialise() {
       setStatusKey("status.imagesLoaded", { count: state.images.length });
     }
   } catch (error) { showUserError(error); }
-  void api("/api/projects?sort=updated_desc")
-    .then((data) => forgetOrphanedProjectSources(new Set((data.projects || []).map((project) => project.id))))
-    .catch(() => {});
+  void retryProjectSourceCleanup().catch(() => {});
   if (document.visibilityState === "visible") setTimeout(() => { void checkForUpdate({ silent: true }); }, 1000);
 }
 

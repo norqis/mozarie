@@ -27,6 +27,7 @@ function queueWorkspaceFlags(imageId, payload) {
 }
 
 const DIRECTORY_DB = "mozarie-directory-catalogs";
+const PROJECT_SOURCE_CLEANUP_KEY = "project-source-cleanup";
 function projectSourceId() { return globalThis.crypto?.randomUUID?.() || `source-${Date.now()}-${Math.random().toString(16).slice(2)}`; }
 async function directoryCatalogStore() {
   if (!window.indexedDB) return null;
@@ -173,7 +174,27 @@ async function matchingProjectDirectorySources(handle) {
     return matches;
   } finally { db.close(); }
 }
-async function forgetProjectSources(projectId) {
+async function rememberProjectSourceCleanup(projectId) {
+  const db = await directoryCatalogStore(); if (!db || !projectId) return;
+  try {
+    await new Promise((resolve, reject) => {
+      const transaction = db.transaction("directories", "readwrite");
+      const store = transaction.objectStore("directories");
+      const request = store.get(PROJECT_SOURCE_CLEANUP_KEY);
+      request.onsuccess = () => {
+        const projectIds = new Set(request.result?.projectIds || []);
+        projectIds.add(projectId);
+        store.put({ catalogId: PROJECT_SOURCE_CLEANUP_KEY, projectIds: [...projectIds] });
+      };
+      request.onerror = () => reject(request.error);
+      transaction.oncomplete = () => resolve();
+      transaction.onerror = () => reject(transaction.error);
+      transaction.onabort = () => reject(transaction.error);
+    });
+  } catch { /* Failed source cleanup is retried when storage becomes available. */ }
+  finally { db.close(); }
+}
+async function forgetProjectSources(projectId, { rememberFailure = true } = {}) {
   const db = await directoryCatalogStore(); if (!db || !projectId) return;
   try {
     await new Promise((resolve, reject) => {
@@ -186,30 +207,31 @@ async function forgetProjectSources(projectId) {
       transaction.onerror = () => reject(transaction.error);
       transaction.onabort = () => reject(transaction.error);
     });
-  } catch { /* Local handle cleanup is best effort and never blocks deletion. */ }
+    return true;
+  } catch {
+    if (rememberFailure) await rememberProjectSourceCleanup(projectId);
+    return false;
+  }
   finally { db.close(); }
 }
-async function forgetOrphanedProjectSources(projectIds) {
+async function retryProjectSourceCleanup() {
   const db = await directoryCatalogStore();
   if (!db) return;
   try {
+    const pending = await new Promise((resolve) => {
+      const request = db.transaction("directories").objectStore("directories").get(PROJECT_SOURCE_CLEANUP_KEY);
+      request.onsuccess = () => resolve(request.result?.projectIds || []); request.onerror = () => resolve([]);
+    });
+    const remaining = [];
+    for (const projectId of pending) if (!await forgetProjectSources(projectId, { rememberFailure: false })) remaining.push(projectId);
     await new Promise((resolve, reject) => {
-      const transaction = db.transaction("projectSources", "readwrite");
-      const store = transaction.objectStore("projectSources");
-      const request = store.openCursor();
-      request.onsuccess = () => {
-        const cursor = request.result;
-        if (!cursor) return;
-        if (!projectIds.has(cursor.value.projectId)) cursor.delete();
-        cursor.continue();
-      };
-      request.onerror = () => reject(request.error);
+      const transaction = db.transaction("directories", "readwrite");
+      transaction.objectStore("directories").put({ catalogId: PROJECT_SOURCE_CLEANUP_KEY, projectIds: remaining });
       transaction.oncomplete = () => resolve();
       transaction.onerror = () => reject(transaction.error);
       transaction.onabort = () => reject(transaction.error);
     });
-  } catch { /* The next project-list refresh retries orphan cleanup. */ }
-  finally { db.close(); }
+  } finally { db.close(); }
 }
 async function ensureProjectSourcePermission(handle, request = false) {
   if (!handle?.queryPermission) return Boolean(handle);
