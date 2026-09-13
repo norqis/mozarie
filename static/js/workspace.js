@@ -285,9 +285,7 @@ async function retryProjectSourceCleanup(existingProjectIds) {
     for (const intent of pending.imageIntents || []) {
       try {
         const status = await api(`/api/project/source-status?projectId=${encodeURIComponent(intent.projectId)}&imageId=${encodeURIComponent(intent.imageId)}`, { resyncOnStale: false });
-        if (status.exists) {
-          await clearProjectSourceCleanup({ intentIds: [intent.intentId] });
-        } else if (await forgetProjectImageSources(intent.projectId, [intent.imageId])) {
+        if (!status.exists && await forgetProjectImageSources(intent.projectId, [intent.imageId])) {
           await clearProjectSourceCleanup({ intentIds: [intent.intentId] });
         }
       } catch { /* Keep ambiguous cleanup intents for the next startup. */ }
