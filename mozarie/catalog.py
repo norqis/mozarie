@@ -1356,6 +1356,11 @@ class CatalogMixin:
                         if previous is None:
                             self.order.append(record.image_id)
                     self.order.sort(key=lambda image_id: self.images[image_id].relative_path.lower())
+                    if published_imported:
+                        # Browser imports are committed one request at a time.
+                        # Publishing their generation lets another tab reject a
+                        # request captured before this visible catalogue change.
+                        self.catalog_generation += 1
                     images = self.list_images() if include_images else []
                     for path in set(replaced_session_paths):
                         try:

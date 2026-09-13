@@ -50,10 +50,6 @@ function normaliseImportParallelism(value) {
   return Number.isFinite(number) ? Math.min(10, Math.max(1, Math.round(number))) : 3;
 }
 
-function importParallelism() {
-  return normaliseImportParallelism(state.settings?.importing?.parallelism);
-}
-
 function openDetectionDialog(imageIds) {
   if (!imageIds.length || isBusy() || state.importing) return;
   state.pendingDetectionTargetIds = [...imageIds];

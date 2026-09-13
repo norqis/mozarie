@@ -395,7 +395,8 @@ class MosaicHandler(BaseHTTPRequestHandler):
                             _images, imported = STATE.import_image_file_for_api(staged_path, **import_args)
                         finally:
                             staged_path.unlink(missing_ok=True)
-                    self._json({"imported": imported, "catalogId": STATE.catalog_id})
+                    self._json({"imported": imported, "catalogId": STATE.catalog_id,
+                                "catalogGeneration": STATE.catalog_snapshot()["catalogGeneration"]})
                 finally:
                     STATE.end_import_transfer()
                 return

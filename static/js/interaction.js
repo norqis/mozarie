@@ -422,7 +422,11 @@ async function importFiles(files) {
         showProcessing({ kind: "import", state: "running", total: session.total, completed: session.completed, current: entry.relativePath });
       }
     };
-    const workerCount = Math.min(supportedFiles.length, importParallelism());
+    // Each committed import advances the catalogue generation.  Keep this
+    // browser session serial so the next upload carries that new expectation;
+    // another tab therefore sees the change immediately instead of joining a
+    // stale parallel batch.
+    const workerCount = 1;
     const workers = Array.from({ length: workerCount }, worker);
     try {
       await Promise.all(workers);
@@ -474,6 +478,7 @@ async function importSingleFile(entry, clientKey, catalogId = null, sourceId = n
   });
   const data = await response.json().catch(() => ({}));
   if (!response.ok) throw responseError(response, data);
+  if (Number.isInteger(data?.catalogGeneration)) state.catalogGeneration = data.catalogGeneration;
   return data;
 }
 
