@@ -479,9 +479,7 @@ class CatalogMixin:
                 raise ClientError("", "project_name_duplicate") from exc
             except ValueError as exc:
                 raise ClientError("プロジェクト名を確認してください。", "project_name_invalid") from exc
-            self.detach_catalog()
-            with self.lock:
-                self.catalog_id = str(project["id"]); self.project_read_only = False; self.source_mismatches = {}; self.catalog_sources = []
+            self._detach_catalog(prune_workspace=False, publish_catalog_id=str(project["id"]), publish_sources=[])
             return project
 
     def save_current_as_project(self, name: str, project_id: str, *, expected_project_id: str | None = None,
@@ -602,16 +600,31 @@ class CatalogMixin:
                                                       or self.job.state in {"running", "pausing", "paused"}):
                     raise ClientError("処理中のプロジェクトは削除できません。", "operation_in_progress")
                 active = self.catalog_id == catalog_id
-            try:
-                image_ids = self.workspace_store.delete_project(catalog_id)
-            except ValueError as exc:
-                raise ClientError("プロジェクトが見つかりません。", "project_not_found") from exc
-            # The durable deletion is the boundary.  Do not detach or mutate
-            # live completed-project state until SQLite has committed it.
             if active:
                 with self.lock:
-                    self.project_read_only = False
-                self.detach_catalog()
+                    image_ids_before = tuple(self.images)
+                    generation = self.catalog_generation
+                locks = [(image_id, self.image_io_lock(image_id)) for image_id in image_ids_before]
+                with ExitStack() as stack:
+                    for _image_id, image_lock in sorted(locks):
+                        stack.enter_context(image_lock)
+                    with self.lock:
+                        if (self.catalog_id, self.catalog_generation, tuple(self.images)) != (catalog_id, generation, image_ids_before):
+                            raise ClientError("画像一覧が変更されたため、操作をやり直してください。", "catalog_changed")
+                        try:
+                            image_ids = self.workspace_store.delete_project(catalog_id)
+                        except ValueError as exc:
+                            raise ClientError("プロジェクトが見つかりません。", "project_not_found") from exc
+                        _detached_catalog, session = self._detach_catalog_state_unchecked()
+                    self._clear_cache()
+                    self._release_detached_session(session)
+            else:
+                try:
+                    image_ids = self.workspace_store.delete_project(catalog_id)
+                except ValueError as exc:
+                    raise ClientError("プロジェクトが見つかりません。", "project_not_found") from exc
+            if active:
+                self.cleanup_expired_browser_save_tokens()
             for image_id in image_ids:
                 try:
                     shutil.rmtree(self.cache_dir / image_id, ignore_errors=True)
@@ -694,9 +707,10 @@ class CatalogMixin:
             return {"project": project, "images": images, "needsSource": needs_source, "sources": sources}
         if resume:
             project = self.workspace_store.set_project_status(catalog_id, "working")
-        self.detach_catalog()
-        with self.lock:
-            self.catalog_id = catalog_id; self.project_read_only = project["status"] == "completed"; self.source_mismatches = {}; self.catalog_sources = [dict(source) for source in sources]
+        self._detach_catalog(
+            prune_workspace=False, publish_catalog_id=catalog_id,
+            publish_read_only=project["status"] == "completed", publish_sources=sources,
+        )
         return {"project": project, "images": [], "needsSource": bool(sources), "sources": sources}
 
     def source_mismatch_snapshot(self) -> list[dict[str, Any]]:
@@ -910,7 +924,10 @@ class CatalogMixin:
         self._image_io_locks.clear()
         return catalog_id, session
 
-    def _detach_catalog(self, *, prune_workspace: bool) -> str | None:
+    def _detach_catalog(
+        self, *, prune_workspace: bool, publish_catalog_id: str | None = None,
+        publish_read_only: bool = False, publish_sources: list[dict[str, Any]] | None = None,
+    ) -> str | None:
         with self.import_lock:
             with self.lock:
                 self._assert_request_catalog_expectation()
@@ -929,6 +946,10 @@ class CatalogMixin:
                     if prune_workspace and catalog_id:
                         self.workspace_store.prune_catalog_images(catalog_id, set())
                     catalog_id, session = self._detach_catalog_state_unchecked()
+                    if publish_catalog_id is not None:
+                        self.catalog_id = publish_catalog_id
+                        self.project_read_only = publish_read_only
+                        self.catalog_sources = [dict(source) for source in publish_sources or []]
                 self._clear_cache()
                 self._release_detached_session(session)
         self.cleanup_expired_browser_save_tokens()
