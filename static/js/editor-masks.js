@@ -621,7 +621,7 @@ async function batchCandidateOperation(spec) {
 }
 
 async function addBoundaryCandidate() {
-  if (!canDetectBoundary()) return;
+  if (catalogStagingEditsActive() || !canDetectBoundary()) return;
   const imageId = state.currentId;
   const viewGeneration = state.imageGeneration;
   const requests = boundaryRequests();

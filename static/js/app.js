@@ -1114,6 +1114,7 @@ function bindEvents() {
     }
     if (event.button !== 0) return;
     if (state.projectReadOnly || currentRecord()?.sourceDimensionsChanged) return;
+    if (catalogStagingEditsActive() && ["boundary", "polygon", "boundary_brush"].includes(state.tool)) return;
     canvas.setPointerCapture(event.pointerId);
     state.gestureDisplaySide = compareEventSide(event);
     const rawPoint = pointFromEvent(event); const point = clampPoint(rawPoint);

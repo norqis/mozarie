@@ -1216,7 +1216,7 @@ function polygonIsValid() { return polygonPointsValid(state.polygonPoints); }
 function canDetectBoundary() {
   const constructing = state.boundaryDragging || state.polygonPoints.length > 0 || Boolean(state.boundaryBrushStroke);
   return Boolean(state.currentId && state.currentImage && boundaryRequests().length)
-    && !constructing && !state.pendingImageId && !state.boundaryPending && !isBusy() && !state.importing;
+    && !constructing && !state.pendingImageId && !state.boundaryPending && !isBusy() && !state.importing && !catalogStagingEditsActive();
 }
 
 function hasBoundaryDraft() {
