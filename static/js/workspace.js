@@ -175,28 +175,31 @@ async function matchingProjectDirectorySources(handle) {
   } finally { db.close(); }
 }
 async function rememberProjectSourceCleanup(projectId) {
-  const db = await directoryCatalogStore(); if (!db || !projectId) return;
+  const intentId = projectSourceId();
+  const db = await directoryCatalogStore(); if (!db || !projectId) return null;
   try {
     await new Promise((resolve, reject) => {
       const transaction = db.transaction("directories", "readwrite");
       const store = transaction.objectStore("directories");
       const request = store.get(PROJECT_SOURCE_CLEANUP_KEY);
       request.onsuccess = () => {
-        const projectIds = new Set(request.result?.projectIds || []);
-        projectIds.add(projectId);
-        store.put({ catalogId: PROJECT_SOURCE_CLEANUP_KEY, projectIds: [...projectIds] });
+        const intents = request.result?.intents || (request.result?.projectIds || []).map((id) => ({ projectId: id, intentId: `legacy:${id}` }));
+        intents.push({ projectId, intentId });
+        store.put({ catalogId: PROJECT_SOURCE_CLEANUP_KEY, intents });
       };
       request.onerror = () => reject(request.error);
       transaction.oncomplete = () => resolve();
       transaction.onerror = () => reject(transaction.error);
       transaction.onabort = () => reject(transaction.error);
     });
-  } catch { /* Failed source cleanup is retried when storage becomes available. */ }
+    return intentId;
+  } catch { return null; }
   finally { db.close(); }
 }
-async function clearProjectSourceCleanup(projectIds) {
-  const removed = new Set(Array.isArray(projectIds) ? projectIds : [projectIds]);
-  if (!removed.size) return;
+async function clearProjectSourceCleanup({ projectIds = [], intentIds = [] } = {}) {
+  const removedProjects = new Set(projectIds);
+  const removedIntents = new Set(intentIds);
+  if (!removedProjects.size && !removedIntents.size) return;
   const db = await directoryCatalogStore(); if (!db) return;
   try {
     await new Promise((resolve, reject) => {
@@ -204,8 +207,8 @@ async function clearProjectSourceCleanup(projectIds) {
       const store = transaction.objectStore("directories");
       const request = store.get(PROJECT_SOURCE_CLEANUP_KEY);
       request.onsuccess = () => {
-        const projectIds = (request.result?.projectIds || []).filter((projectId) => !removed.has(projectId));
-        store.put({ catalogId: PROJECT_SOURCE_CLEANUP_KEY, projectIds });
+        const intents = request.result?.intents || (request.result?.projectIds || []).map((projectId) => ({ projectId, intentId: `legacy:${projectId}` }));
+        store.put({ catalogId: PROJECT_SOURCE_CLEANUP_KEY, intents: intents.filter((intent) => !removedProjects.has(intent.projectId) && !removedIntents.has(intent.intentId)) });
       };
       request.onerror = () => reject(request.error);
       transaction.oncomplete = () => resolve();
@@ -228,7 +231,7 @@ async function forgetProjectSources(projectId, { rememberFailure = true, clearIn
       transaction.onerror = () => reject(transaction.error);
       transaction.onabort = () => reject(transaction.error);
     });
-    if (clearIntent) await clearProjectSourceCleanup(projectId);
+    if (clearIntent) await clearProjectSourceCleanup({ projectIds: [projectId] });
     return true;
   } catch {
     if (rememberFailure) await rememberProjectSourceCleanup(projectId);
@@ -243,13 +246,13 @@ async function retryProjectSourceCleanup(existingProjectIds) {
   try {
     const pending = await new Promise((resolve) => {
       const request = db.transaction("directories").objectStore("directories").get(PROJECT_SOURCE_CLEANUP_KEY);
-      request.onsuccess = () => resolve(request.result?.projectIds || []); request.onerror = () => resolve([]);
+      request.onsuccess = () => resolve(request.result?.intents || (request.result?.projectIds || []).map((projectId) => ({ projectId, intentId: `legacy:${projectId}` }))); request.onerror = () => resolve([]);
     });
     const resolved = [];
-    for (const projectId of pending) {
-      if (existingProjectIds?.has(projectId) || await forgetProjectSources(projectId, { rememberFailure: false, clearIntent: false })) resolved.push(projectId);
+    for (const projectId of new Set(pending.map((intent) => intent.projectId))) {
+      if (!existingProjectIds.has(projectId) && await forgetProjectSources(projectId, { rememberFailure: false, clearIntent: false })) resolved.push(projectId);
     }
-    await clearProjectSourceCleanup(resolved);
+    await clearProjectSourceCleanup({ projectIds: resolved });
   } finally { db.close(); }
 }
 async function ensureProjectSourcePermission(handle, request = false) {

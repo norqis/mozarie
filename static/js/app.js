@@ -450,18 +450,10 @@ function openProjectDeleteDialog(projectId) {
   focusElement($("#projectDeleteCancel"));
 }
 
-async function resolveProjectSourceCleanup(projectId) {
-  const data = await api("/api/projects?sort=updated_desc");
-  if ((data.projects || []).some((project) => project.id === projectId)) {
-    await clearProjectSourceCleanup(projectId);
-  } else {
-    await forgetProjectSources(projectId);
-  }
-}
-
 async function deleteProject(projectId) {
   if (!projectId || projectDeleteBusy || !beginProjectOperation()) return;
   projectDeleteBusy = true;
+  let cleanupIntent = null;
   $("#projectDeleteConfirm").disabled = true;
   $("#projectDeleteCancel").disabled = true;
   try {
@@ -473,7 +465,7 @@ async function deleteProject(projectId) {
       await flushAllImageMutations();
       await flushAllWorkspaceMutations();
     }
-    await rememberProjectSourceCleanup(projectId);
+    cleanupIntent = await rememberProjectSourceCleanup(projectId);
     await catalogApi(`/api/project/${encodeURIComponent(projectId)}`, {}, { method: "DELETE" });
     await forgetProjectSources(projectId);
     if (deletingCurrentProject) {
@@ -496,7 +488,7 @@ async function deleteProject(projectId) {
       }
     }
   } catch (error) {
-    await resolveProjectSourceCleanup(projectId).catch(() => {});
+    if (cleanupIntent && Number.isInteger(error?.status) && error.status >= 400 && error.status < 500) await clearProjectSourceCleanup({ intentIds: [cleanupIntent] });
     showUserError(error);
   }
   finally {
