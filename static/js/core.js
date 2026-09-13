@@ -704,6 +704,7 @@ function updateActionButtons() {
   const current = currentRecord();
   const hasImage = Boolean(state.currentId && state.currentImage && current);
   const candidateLocked = candidateControlLocked(state.currentId);
+  const filterLocked = busyLocked || catalogStaging;
   const candidateViewLocked = busyLocked || switchingImages || candidateLocked;
   const candidateControlsLocked = mutationLocked || candidateViewLocked;
   const presence = hasImage && !candidateViewLocked ? manualLayerPresence()
@@ -727,8 +728,9 @@ function updateActionButtons() {
   visibilityButton.disabled = busyLocked || mutationLocked || switchingImages || !hasImage;
   const visibilityLabel = t(current && isHidden(current) ? "editor.show" : "editor.hide");
   visibilityButton.textContent = visibilityLabel; visibilityButton.title = visibilityLabel; visibilityButton.setAttribute("aria-label", visibilityLabel);
-  for (const id of ["#galleryFilterButton", "#overviewFilterButton"]) $(id).disabled = busyLocked;
-  if (busyLocked) closeFilterPopovers();
+  for (const id of ["#galleryFilterButton", "#overviewFilterButton"]) $(id).disabled = filterLocked;
+  for (const input of document.querySelectorAll("[data-gallery-filter], [data-overview-filter]")) input.disabled = filterLocked;
+  if (filterLocked) closeFilterPopovers();
   for (const id of ["#clearAllMasksButton", "#clearCatalogButton", "#batchMoreButton"]) $(id).disabled = busyLocked || mutationLocked || catalogStaging || state.images.length === 0;
   $("#batchModeButton").disabled = busyLocked || mutationLocked || state.images.length === 0;
   $("#saveAllButton").disabled = busyLocked || mutationLocked || catalogStaging || mutatingCandidates || state.images.length === 0;
