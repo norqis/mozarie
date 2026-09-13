@@ -1688,51 +1688,54 @@ class CatalogMixin:
         return self.workspace_store.history_status(image_id)
 
     def restore_project_history(self, image_id: str, direction: str) -> dict[str, Any]:
-        self.image_for_id(image_id)
-        with self.lock:
-            self._assert_catalog_mutable()
-            catalog_id = self.catalog_id
-            catalog_generation = self.catalog_generation
-            # History restore is a short durable transaction. Holding the
-            # catalogue lock prevents it from targeting a project just closed.
-            changed_ids = self.workspace_store.restore_history(image_id, direction)
-        with self.lock:
-            record_ids = [changed_id for changed_id in changed_ids if changed_id in self.images]
-        locks = [(changed_id, self.image_io_lock(changed_id)) for changed_id in record_ids]
-        with ExitStack() as stack:
-            for _changed_id, image_lock in sorted(locks): stack.enter_context(image_lock)
-            hydrated: dict[str, tuple[int, list[Candidate], bool, bool, dict[str, Any]]] = {}
-            for changed_id in record_ids:
-                shutil.rmtree(self.cache_dir / changed_id, ignore_errors=True)
-                revision, candidates = self.workspace_store.hydrate_candidates(
-                    changed_id, self.cache_dir / changed_id, self._candidate_from_workspace,
-                )
-                hidden, reviewed = self.workspace_store.image_state(changed_id)
-                hydrated[changed_id] = (revision, candidates, hidden, reviewed, self.workspace_store.image_transform(changed_id))
+        # ``restore_history`` discovers every member of a grouped operation in
+        # its durable transaction. Keep project transitions out until those
+        # members have been hydrated and published; their per-image locks can
+        # then follow the normal image-lock-before-state-lock order.
+        with self.import_lock:
+            self.image_for_id(image_id)
             with self.lock:
-                if self.catalog_id != catalog_id or self.catalog_generation != catalog_generation:
+                self._assert_catalog_mutable()
+                catalog_id = self.catalog_id
+                catalog_generation = self.catalog_generation
+                changed_ids = self.workspace_store.restore_history(image_id, direction)
+            with self.lock:
+                record_ids = [changed_id for changed_id in changed_ids if changed_id in self.images]
+            locks = [(changed_id, self.image_io_lock(changed_id)) for changed_id in record_ids]
+            with ExitStack() as stack:
+                for _changed_id, image_lock in sorted(locks): stack.enter_context(image_lock)
+                hydrated: dict[str, tuple[int, list[Candidate], bool, bool, dict[str, Any]]] = {}
+                for changed_id in record_ids:
+                    shutil.rmtree(self.cache_dir / changed_id, ignore_errors=True)
+                    revision, candidates = self.workspace_store.hydrate_candidates(
+                        changed_id, self.cache_dir / changed_id, self._candidate_from_workspace,
+                    )
+                    hidden, reviewed = self.workspace_store.image_state(changed_id)
+                    hydrated[changed_id] = (revision, candidates, hidden, reviewed, self.workspace_store.image_transform(changed_id))
+                with self.lock:
+                    if self.catalog_id != catalog_id or self.catalog_generation != catalog_generation:
+                        raise ClientError("プロジェクト一覧が更新されました。もう一度操作してください。", "stale_catalog")
+                    for changed_id, (revision, candidates, hidden, reviewed, transform) in hydrated.items():
+                        record = self.images[changed_id]
+                        record.hidden = hidden
+                        record.reviewed = reviewed
+                        record.flip_horizontal = bool(transform["flipHorizontal"]); record.flip_vertical = bool(transform["flipVertical"])
+                        record.source_flip_horizontal = bool(transform["sourceFlipHorizontal"]); record.source_flip_vertical = bool(transform["sourceFlipVertical"])
+                        record.transform_revision = int(transform["transformRevision"])
+                        self.candidates[changed_id] = candidates
+                        self.candidate_revisions[changed_id] = revision
+            with self.lock:
+                if self.catalog_id != catalog_id or self.catalog_generation != catalog_generation or image_id not in self.images:
                     raise ClientError("プロジェクト一覧が更新されました。もう一度操作してください。", "stale_catalog")
-                for changed_id, (revision, candidates, hidden, reviewed, transform) in hydrated.items():
-                    record = self.images[changed_id]
-                    record.hidden = hidden
-                    record.reviewed = reviewed
-                    record.flip_horizontal = bool(transform["flipHorizontal"]); record.flip_vertical = bool(transform["flipVertical"])
-                    record.source_flip_horizontal = bool(transform["sourceFlipHorizontal"]); record.source_flip_vertical = bool(transform["sourceFlipVertical"])
-                    record.transform_revision = int(transform["transformRevision"])
-                    self.candidates[changed_id] = candidates
-                    self.candidate_revisions[changed_id] = revision
-        with self.lock:
-            if self.catalog_id != catalog_id or self.catalog_generation != catalog_generation or image_id not in self.images:
-                raise ClientError("プロジェクト一覧が更新されました。もう一度操作してください。", "stale_catalog")
-            current = {
-                "candidateRevision": self._candidate_revision(image_id),
-                "candidates": [candidate.as_api_dict() for candidate in self.candidates.get(image_id, [])],
-                "manual": self.workspace_store.manual(image_id, self._encode_workspace_mask),
-                "image": {"id": self.images[image_id].image_id, "flipH": self.images[image_id].flip_horizontal, "flipV": self.images[image_id].flip_vertical,
-                          "sourceFlipH": self.images[image_id].source_flip_horizontal, "sourceFlipV": self.images[image_id].source_flip_vertical,
-                          "transformRevision": self.images[image_id].transform_revision},
-            }
-        return {"changedImageIds": changed_ids, "current": current, **self.workspace_store.history_status(image_id)}
+                current = {
+                    "candidateRevision": self._candidate_revision(image_id),
+                    "candidates": [candidate.as_api_dict() for candidate in self.candidates.get(image_id, [])],
+                    "manual": self.workspace_store.manual(image_id, self._encode_workspace_mask),
+                    "image": {"id": self.images[image_id].image_id, "flipH": self.images[image_id].flip_horizontal, "flipV": self.images[image_id].flip_vertical,
+                              "sourceFlipH": self.images[image_id].source_flip_horizontal, "sourceFlipV": self.images[image_id].source_flip_vertical,
+                              "transformRevision": self.images[image_id].transform_revision},
+                }
+            return {"changedImageIds": changed_ids, "current": current, **self.workspace_store.history_status(image_id)}
 
     def delete_manual_workspace(self, image_id: str) -> None:
         self.image_for_id(image_id)
