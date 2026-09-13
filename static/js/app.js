@@ -130,8 +130,9 @@ function syncProjectNameDialogControls() {
   $("#projectNameForm").querySelector('[type="submit"]').disabled = disabled;
 }
 function beginProjectOperation() {
-  if (state.projectOperationPending) return false;
+  if (state.projectOperationPending || state.catalogTransition) return false;
   state.projectOperationPending = true;
+  state.catalogTransition = { epoch: beginCatalogEpoch(), controller: new AbortController() };
   updateActionButtons();
   renderProjectCurrent();
   syncProjectNameDialogControls();
@@ -141,6 +142,7 @@ function beginProjectOperation() {
 }
 function endProjectOperation() {
   state.projectOperationPending = false;
+  if (state.catalogTransition) state.catalogTransition = null;
   updateActionButtons();
   renderProjectCurrent();
   syncProjectNameDialogControls();
@@ -346,35 +348,44 @@ async function showSourceMismatches() {
 async function openProject(project, resume = false) {
   if (!beginProjectOperation()) return;
   try {
-    await flushAllImageMutations();
-    await flushAllWorkspaceMutations();
-    const data = await api("/api/project/open", { method: "POST", body: JSON.stringify({ projectId: project.id, resume }) });
-    state.project = data.project; state.projectReadOnly = data.project?.status === "completed";
-    if (data.needsSource) {
-      const files = await rememberedProjectFileSources(project.id);
-      const directories = await rememberedProjectDirectorySources(project.id);
-      // Keep the native portion visible while browser handles are restored.
-      resetCatalog(data.images || [], data.project?.sourceRoot || "");
-      applyProjectSnapshot(await api("/api/images"));
-      const handles = [...directories.map((item) => item.handle), ...files.map((item) => item.handle)].filter(Boolean);
-      const granted = await Promise.all(handles.map((handle) => ensureProjectSourcePermission(handle, true)));
-      for (let index = 0; index < directories.length; index += 1) {
-        if (granted[index]) await importProjectDirectoryHandle(directories[index].handle, project.id, directories[index].sourceId, "restore");
+    await runCatalogTransition(async ({ epoch, signal }) => {
+      await flushAllImageMutations();
+      await flushAllWorkspaceMutations();
+      const data = await catalogApi("/api/project/open", { projectId: project.id, resume }, { method: "POST", signal });
+      if (!isCurrentCatalogEpoch(epoch)) return;
+      state.project = data.project; state.projectReadOnly = data.project?.status === "completed";
+      resetCatalog(data.images || [], data.root || data.project?.sourceRoot || "");
+      applyProjectSnapshot(data);
+      const restoreFailures = [];
+      if (data.needsSource) {
+        const [files, directories] = await Promise.all([rememberedProjectFileSources(project.id), rememberedProjectDirectorySources(project.id)]);
+        if (!isCurrentCatalogEpoch(epoch)) return;
+        for (const source of directories) {
+          if (!await ensureProjectSourcePermission(source.handle, true)) { restoreFailures.push(source); continue; }
+          try {
+            await importProjectDirectoryHandle(source.handle, project.id, source.sourceId, "restore");
+          } catch (error) { restoreFailures.push(source); }
+          if (!isCurrentCatalogEpoch(epoch)) return;
+        }
+        const allowedFiles = [];
+        for (const source of files) {
+          if (await ensureProjectSourcePermission(source.handle, true)) allowedFiles.push(source); else restoreFailures.push(source);
+        }
+        const failedFiles = await importProjectFileHandles(allowedFiles, project.id);
+        restoreFailures.push(...failedFiles);
+        if (!isCurrentCatalogEpoch(epoch)) return;
       }
-      if (files.length && granted.slice(directories.length).every(Boolean)) await importProjectFileHandles(files, project.id);
-      const requiresBrowserSource = (data.sources || []).some((source) => source.kind !== "native-folder");
-      if (requiresBrowserSource && (!handles.length || granted.some((ok) => !ok))) showUserError({ code: "project_source_unavailable" });
-    } else {
-      resetCatalog(data.images || [], data.project?.sourceRoot || "");
-      applyProjectSnapshot(await api("/api/images"));
-    }
-    state.missingNativeSources = missingNativeSources(data.sources);
-    renderProjectCurrent();
-    modalInvokers.delete($("#projectListDialog"));
-    modalInvokers.delete($("#projectDialog"));
-    $("#projectListDialog").close(); $("#projectDialog").close();
-    focusElement($("#projectButton"));
-    await showSourceMismatches();
+      state.missingNativeSources = missingNativeSources(data.sources);
+      if (restoreFailures.length || (data.needsSource && !(data.sources || []).some((source) => source.kind === "native-folder"))) {
+        showUserError({ code: "project_source_unavailable" });
+      }
+      renderProjectCurrent();
+      modalInvokers.delete($("#projectListDialog"));
+      modalInvokers.delete($("#projectDialog"));
+      $("#projectListDialog").close(); $("#projectDialog").close();
+      focusElement($("#projectButton"));
+      await showSourceMismatches();
+    });
   } catch (error) { showUserError(error); }
   finally { endProjectOperation(); }
 }
@@ -415,8 +426,11 @@ async function resumeCurrentProject() {
   if (!state.project?.id) return;
   if (!beginProjectOperation()) return;
   try {
-    const data = await api("/api/project/resume", { method: "POST", body: JSON.stringify({ projectId: state.project.id }) });
-    state.project = data.project; state.projectReadOnly = false; renderProjectCurrent(); renderCandidates(); updateActionButtons();
+    await runCatalogTransition(async ({ epoch, signal }) => {
+      const data = await catalogApi("/api/project/resume", { projectId: state.project.id }, { method: "POST", signal });
+      if (!isCurrentCatalogEpoch(epoch)) return;
+      state.project = data.project; state.projectReadOnly = false; renderProjectCurrent(); renderCandidates(); updateActionButtons();
+    });
   } catch (error) { showUserError(error); }
   finally { endProjectOperation(); }
 }
@@ -447,7 +461,7 @@ async function deleteProject(projectId) {
       await flushAllImageMutations();
       await flushAllWorkspaceMutations();
     }
-    await api(`/api/project/${encodeURIComponent(projectId)}`, { method: "DELETE" });
+    await catalogApi(`/api/project/${encodeURIComponent(projectId)}`, {}, { method: "DELETE" });
     await forgetProjectSources(projectId);
     if (deletingCurrentProject) {
       resetCatalog([], ""); state.project = null; state.projectReadOnly = false; state.missingNativeSources = []; renderProjectCurrent(); updateActionButtons();
@@ -570,7 +584,7 @@ function bindEvents() {
       await flushAllImageMutations();
       await flushAllWorkspaceMutations();
       const imageIds = state.images.filter((image) => image.sourceId === source.id).map((image) => image.id);
-      const snapshot = await api("/api/project/source/relink", { method: "POST", body: JSON.stringify({ projectId: state.project.id, sourceId: source.id, path: input.value.trim() }) });
+      const snapshot = await catalogApi("/api/project/source/relink", { projectId: state.project.id, sourceId: source.id, path: input.value.trim() }, { method: "POST" });
       await refreshWorkspaceImages(snapshot, imageIds);
       state.missingNativeSources = missingNativeSources(snapshot.sources);
       renderProjectCurrent();
@@ -583,8 +597,8 @@ function bindEvents() {
       $("#nativeRelinkSources").querySelectorAll("button").forEach((button) => { button.disabled = false; });
     }
   })(); });
-  $("#projectCloseWorkspace").addEventListener("click", () => { void (async () => { if (!beginProjectOperation()) return; try { await flushAllImageMutations(); await flushAllWorkspaceMutations(); await api("/api/project/close", { method: "POST", body: "{}" }); resetCatalog([], ""); state.project = null; state.projectReadOnly = false; state.missingNativeSources = []; $("#projectDialog").close(); } catch (error) { showUserError(error); } finally { endProjectOperation(); } })(); });
-  $("#projectComplete").addEventListener("click", () => { void (async () => { if (state.projectOperationPending || !await confirmAction(t("project.complete"), t("project.completeConfirm")) || !beginProjectOperation()) return; try { await flushAllImageMutations(); await flushAllWorkspaceMutations(); await api("/api/project/complete", { method: "POST", body: "{}" }); resetCatalog([], ""); state.project = null; state.projectReadOnly = false; state.missingNativeSources = []; $("#projectDialog").close(); } catch (error) { showUserError(error); } finally { endProjectOperation(); } })(); });
+  $("#projectCloseWorkspace").addEventListener("click", () => { void (async () => { if (!beginProjectOperation()) return; try { await flushAllImageMutations(); await flushAllWorkspaceMutations(); await catalogApi("/api/project/close", {}, { method: "POST" }); resetCatalog([], ""); state.project = null; state.projectReadOnly = false; state.missingNativeSources = []; $("#projectDialog").close(); } catch (error) { showUserError(error); } finally { endProjectOperation(); } })(); });
+  $("#projectComplete").addEventListener("click", () => { void (async () => { if (state.projectOperationPending || !await confirmAction(t("project.complete"), t("project.completeConfirm")) || !beginProjectOperation()) return; try { await flushAllImageMutations(); await flushAllWorkspaceMutations(); await catalogApi("/api/project/complete", {}, { method: "POST" }); resetCatalog([], ""); state.project = null; state.projectReadOnly = false; state.missingNativeSources = []; $("#projectDialog").close(); } catch (error) { showUserError(error); } finally { endProjectOperation(); } })(); });
   $("#projectNameCancel").addEventListener("click", () => { if (!state.projectOperationPending) $("#projectNameDialog").close(); });
   $("#projectNameDialog").addEventListener("cancel", (event) => { if (state.projectOperationPending) event.preventDefault(); });
   $("#projectDeleteCancel").addEventListener("click", () => { if (projectDeleteBusy) return; projectDeleteId = ""; $("#projectDeleteDialog").close(); });
@@ -599,8 +613,8 @@ function bindEvents() {
     let data;
     try {
       data = mode === "new"
-      ? await api("/api/projects", { method: "POST", body: JSON.stringify({ name }) })
-      : await api("/api/project/name", { method: "POST", body: JSON.stringify({ name, projectId }) });
+      ? await catalogApi("/api/projects", { name }, { method: "POST" })
+      : await catalogApi("/api/project/name", { name, projectId }, { method: "POST" });
     } catch (error) {
       if (projectlessSave && Number.isInteger(error?.status) && error.status >= 400 && error.status < 500) await forgetProjectSources(projectId);
       throw error;
@@ -613,7 +627,7 @@ function bindEvents() {
     $("#projectNameDialog").close(); if (mode === "new") { resetCatalog([], ""); state.missingNativeSources = []; } renderProjectCurrent();
   } catch (error) { showUserError(error); } finally { endProjectOperation(); } })(); });
   $("#sourceMismatchCancel").addEventListener("click", () => $("#sourceMismatchDialog").close());
-  $("#sourceMismatchForm").addEventListener("submit", (event) => { event.preventDefault(); void (async () => { try { const ids = JSON.parse($("#sourceMismatchDialog").dataset.imageIds || "[]"); const clearWorkspace = $("#sourceMismatchClear").checked; await flushAllImageMutations(); await flushAllWorkspaceMutations(); const snapshot = await api("/api/project/mismatches", { method: "POST", body: JSON.stringify({ imageIds: ids, clearMasks: clearWorkspace }) }); await refreshWorkspaceImages(snapshot, ids, { clearWorkspace, resetWorkspace: true }); $("#sourceMismatchDialog").close(); } catch (error) { showUserError(error); } })(); });
+  $("#sourceMismatchForm").addEventListener("submit", (event) => { event.preventDefault(); void (async () => { try { const ids = JSON.parse($("#sourceMismatchDialog").dataset.imageIds || "[]"); const clearWorkspace = $("#sourceMismatchClear").checked; await flushAllImageMutations(); await flushAllWorkspaceMutations(); const snapshot = await catalogApi("/api/project/mismatches", { imageIds: ids, clearMasks: clearWorkspace }, { method: "POST" }); await refreshWorkspaceImages(snapshot, ids, { clearWorkspace, resetWorkspace: true }); $("#sourceMismatchDialog").close(); } catch (error) { showUserError(error); } })(); });
   $("#sameSourceCancel").addEventListener("click", () => { if (!sameSourceBusy) $("#sameSourceDialog").close(); });
   $("#sameSourceDialog").addEventListener("cancel", (event) => { if (sameSourceBusy) event.preventDefault(); });
   $("#sameSourceOpen").addEventListener("click", () => { const project = sameSourceProjects.find((item) => item.id === sameSourceSelectedProjectId) || sameSourceProjects[0]; $("#sameSourceDialog").close(); if (project) void openProject(project); });
@@ -635,7 +649,7 @@ function bindEvents() {
       }
       await flushAllImageMutations();
       await flushAllWorkspaceMutations();
-      const data = await api("/api/projects", { method: "POST", body: JSON.stringify({}) });
+      const data = await catalogApi("/api/projects", {}, { method: "POST" });
       state.project = data.project; state.projectReadOnly = false; $("#sameSourceDialog").close(); renderProjectCurrent();
       await loadFolder({ skipSameSourceWarning: true, path: sameSourcePath });
     } catch (error) { showUserError(error); }
@@ -1266,11 +1280,14 @@ async function initialise() {
   renderOutputDirectory();
   setNavigationShortcutsEnabled(state.settings?.general?.shortcuts_enabled ?? true);
   new ResizeObserver(resizeRenderCanvas).observe(stage); scheduleJobPoll(true);
-  document.addEventListener("visibilitychange", () => scheduleJobPoll(document.visibilityState === "visible"));
+  document.addEventListener("visibilitychange", () => {
+    scheduleJobPoll(document.visibilityState === "visible");
+    if (document.visibilityState === "visible") void syncCatalogOnReturn();
+  });
+  window.addEventListener("pageshow", (event) => { if (event.persisted) void syncCatalogOnReturn(); });
   updateBrushSize($("#brushSize").value); resizeRenderCanvas(); updateHistoryButtons(); updateNavigationControls(); updateActionButtons();
   try {
-    const data = await api("/api/images");
-    if (typeof applyProjectSnapshot === "function") applyProjectSnapshot(data);
+    const data = catalogResponse(await api("/api/images"));
     if (data.images.length) {
       $("#folderPath").value = data.root || "";
       resetCatalog(data.images, data.root);

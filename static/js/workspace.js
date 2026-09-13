@@ -31,14 +31,24 @@ function projectSourceId() { return globalThis.crypto?.randomUUID?.() || `source
 async function directoryCatalogStore() {
   if (!window.indexedDB) return null;
   return new Promise((resolve) => {
-    const request = indexedDB.open(DIRECTORY_DB, 2);
+    const request = indexedDB.open(DIRECTORY_DB, 3);
     request.onupgradeneeded = () => {
       const names = request.result.objectStoreNames;
       if (!names?.contains?.("directories")) request.result.createObjectStore("directories", { keyPath: "catalogId" });
-      if (!names?.contains?.("projectSources")) request.result.createObjectStore("projectSources", { keyPath: "key" });
+      const sources = names?.contains?.("projectSources")
+        ? request.transaction.objectStore("projectSources")
+        : request.result.createObjectStore("projectSources", { keyPath: "key" });
+      if (!sources.indexNames.contains("projectId")) sources.createIndex("projectId", "projectId", { unique: false });
     };
     request.onsuccess = () => resolve(request.result);
     request.onerror = () => resolve(null);
+  });
+}
+
+function projectSourceRows(db, projectId) {
+  return new Promise((resolve) => {
+    const request = db.transaction("projectSources").objectStore("projectSources").index("projectId").getAll(IDBKeyRange.only(projectId));
+    request.onsuccess = () => resolve(request.result || []); request.onerror = () => resolve([]);
   });
 }
 
@@ -103,14 +113,12 @@ async function forgetProjectImageSources(projectId, imageIds) {
   const removed = new Set(imageIds || []);
   if (!db || !projectId || !removed.size) return;
   try {
-    const rows = await new Promise((resolve) => {
-      const request = db.transaction("projectSources").objectStore("projectSources").getAll();
-      request.onsuccess = () => resolve(request.result || []); request.onerror = () => resolve([]);
-    });
     await new Promise((resolve, reject) => {
       const transaction = db.transaction("projectSources", "readwrite");
       const store = transaction.objectStore("projectSources");
-      for (const row of rows) if (row.projectId === projectId && removed.has(row.imageId)) store.delete(row.key);
+      const request = store.index("projectId").getAll(IDBKeyRange.only(projectId));
+      request.onsuccess = () => { for (const row of request.result || []) if (removed.has(row.imageId)) store.delete(row.key); };
+      request.onerror = () => reject(request.error);
       transaction.oncomplete = () => resolve();
       transaction.onerror = () => reject(transaction.error);
       transaction.onabort = () => reject(transaction.error);
@@ -132,30 +140,24 @@ async function rememberProjectlessPromotionSources(projectId) {
 }
 async function rememberedProjectSource(projectId, sourceId = null, imageId = null) {
   const db = await directoryCatalogStore(); if (!db || !projectId) return null;
-  const rows = await new Promise((resolve) => { const request = db.transaction("projectSources").objectStore("projectSources").getAll(); request.onsuccess = () => resolve(request.result || []); request.onerror = () => resolve([]); });
+  const rows = await projectSourceRows(db, projectId);
   const value = rows.find((row) => row.projectId === projectId && (!sourceId || row.sourceId === sourceId) && (imageId == null ? !row.imageId : row.imageId === imageId));
   db.close(); return value?.handle || null;
 }
 async function rememberedProjectFileSources(projectId) {
   const db = await directoryCatalogStore(); if (!db || !projectId) return [];
-  const rows = await new Promise((resolve) => {
-    const request = db.transaction("projectSources").objectStore("projectSources").getAll();
-    request.onsuccess = () => resolve(request.result || []); request.onerror = () => resolve([]);
-  });
+  const rows = await projectSourceRows(db, projectId);
   db.close();
   // Preserve the server source ID.  Recreating one on every reopen would
   // create a second source and duplicate every browser-imported image.
-  return rows.filter((row) => row.projectId === projectId && (row.imageId || row.clientKey) && row.handle?.kind === "file")
+  return rows.filter((row) => (row.imageId || row.clientKey) && row.handle?.kind === "file")
     .map((row) => ({ sourceId: row.sourceId, clientKey: row.clientKey || null, relativePath: row.relativePath || row.handle.name, handle: row.handle }));
 }
 async function rememberedProjectDirectorySources(projectId) {
   const db = await directoryCatalogStore(); if (!db || !projectId) return [];
-  const rows = await new Promise((resolve) => {
-    const request = db.transaction("projectSources").objectStore("projectSources").getAll();
-    request.onsuccess = () => resolve(request.result || []); request.onerror = () => resolve([]);
-  });
+  const rows = await projectSourceRows(db, projectId);
   db.close();
-  return rows.filter((row) => row.projectId === projectId && !row.imageId && row.handle?.kind === "directory")
+  return rows.filter((row) => !row.imageId && row.handle?.kind === "directory")
     .map((row) => ({ sourceId: row.sourceId, handle: row.handle }));
 }
 async function matchingProjectDirectorySources(handle) {
@@ -177,12 +179,16 @@ async function matchingProjectDirectorySources(handle) {
 async function forgetProjectSources(projectId) {
   const db = await directoryCatalogStore(); if (!db || !projectId) return;
   try {
-    const rows = await new Promise((resolve) => {
-      const request = db.transaction("projectSources").objectStore("projectSources").getAll();
-      request.onsuccess = () => resolve(request.result || []); request.onerror = () => resolve([]);
+    await new Promise((resolve, reject) => {
+      const transaction = db.transaction("projectSources", "readwrite");
+      const store = transaction.objectStore("projectSources");
+      const request = store.index("projectId").getAll(IDBKeyRange.only(projectId));
+      request.onsuccess = () => { for (const row of request.result || []) store.delete(row.key); };
+      request.onerror = () => reject(request.error);
+      transaction.oncomplete = () => resolve();
+      transaction.onerror = () => reject(transaction.error);
+      transaction.onabort = () => reject(transaction.error);
     });
-    const store = db.transaction("projectSources", "readwrite").objectStore("projectSources");
-    for (const row of rows) if (row.projectId === projectId) store.delete(row.key);
   } catch { /* Local handle cleanup is best effort and never blocks deletion. */ }
   finally { db.close(); }
 }

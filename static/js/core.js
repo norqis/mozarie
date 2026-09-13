@@ -12,7 +12,7 @@ const state = {
   polygonPoints: [], polygonDragIndex: -1, polygonDraftDrag: null, blinkCandidateIds: new Set(), blinkModes: new Map(), blinkPhase: false, blinkTimer: null,
   pointer: null, hover: null, brushCursorGeometry: "", history: [], historyIndex: 0, activeStroke: null, manualStrokePaintFrame: 0, removedCandidateIds: new Set(),
   view: { scale: 1, x: 0, y: 0 }, job: null, saving: false, saveStarting: false, detectionStarting: false, masksClearing: false, transformPending: false,
-  catalogMutation: false, imageGeneration: 0, catalogEpoch: 0, catalogGeneration: 0, viewGeneration: 0, historyRestoreToken: 0, translations: {},
+  catalogMutation: false, imageGeneration: 0, catalogEpoch: 0, serverCatalogGeneration: null, catalogTransition: null, viewGeneration: 0, historyRestoreToken: 0, translations: {},
   applyTargetIds: [], applyTargetMode: "masked", applyCatalogSnapshot: null, applyRunning: false, applyFinishing: false, handledApplyStartedAt: null, importing: false, mosaicPreviewEnabled: true, mosaicPreviewGeneration: 0, mosaicWorker: null, mosaicPreviewRequested: false, mosaicWorkerBusy: false, mosaicPending: null, mosaicPreviewRoi: null, mosaicSourceImage: null, mosaicSourceId: "", mosaicSourcePromise: null, mosaicPreviewFailureReported: false,
   outputDirectoryPicking: false, outputDirectoryHandle: null, singleSave: null,
   detectionTargetIds: [], pendingDetectionTargetIds: [], detectCancelRequested: false,
@@ -81,7 +81,7 @@ const USER_ERROR_CODES = {
   model_profile_invalid: "model_file_invalid", sam_checkpoint_invalid: "model_type_mismatch",
   sam_provider_unavailable: "gpu_runtime_unavailable", hand_segmentation_invalid: "model_load_failed",
   model_picker_busy: "operation_in_progress", model_picker_failed: "model_picker_failed", model_picker_invalid: "model_file_invalid",
-  model_download_invalid: "model_download_invalid", catalog_changed: "catalog_changed", stale_catalog: "catalog_changed", job_running: "operation_in_progress",
+  model_download_invalid: "model_download_invalid", catalog_changed: "catalog_changed", job_running: "operation_in_progress",
   mask_not_found: "mask_not_found", candidate_not_found: "mask_not_found", invalid_settings: "input_invalid", invalid_request: "input_invalid",
   api_not_found: "response_invalid", connection_lost: "connection_lost", output_folder_unavailable: "output_folder_unavailable", output_permission_denied: "output_permission_denied", request_failed: "internal_error",
   image_not_found: "image_not_found", image_read_failed: "image_read_failed", image_format_unsupported: "image_format_unsupported",
@@ -189,20 +189,11 @@ function responseError(response, payload) {
   return error;
 }
 
-function catalogRequestHeaders(headers = {}) {
-  const token = document.querySelector('meta[name="mozarie-token"]')?.content || "";
-  return {
-    "X-Mozarie-Token": token,
-    "X-Mozarie-Expected-Project-Id": encodeURIComponent(state.project?.id || ""),
-    "X-Mozarie-Expected-Catalog-Generation": String(state.catalogGeneration),
-    ...headers,
-  };
-}
-
 function api(path, options = {}) {
+  const token = document.querySelector('meta[name="mozarie-token"]')?.content || "";
   return fetch(path, {
     ...options,
-    headers: catalogRequestHeaders({ "Content-Type": "application/json", ...(options.headers || {}) }),
+    headers: { "Content-Type": "application/json", "X-Mozarie-Token": token, ...(options.headers || {}) },
   })
     .then(async (response) => {
       if (state.status?.connectionFailure) clearStatus();
@@ -210,7 +201,6 @@ function api(path, options = {}) {
       if (!response.ok) {
         throw responseError(response, data);
       }
-      if (Number.isInteger(data?.catalogGeneration)) state.catalogGeneration = Math.max(state.catalogGeneration, data.catalogGeneration);
       return data;
     })
     .catch((error) => {
@@ -357,6 +347,92 @@ function isBusy() {
 }
 function beginCatalogEpoch() { state.catalogEpoch += 1; return state.catalogEpoch; }
 function isCurrentCatalogEpoch(epoch) { return state.catalogEpoch === epoch; }
+function catalogExpectation(payload = {}) {
+  return {
+    ...payload,
+    expectedProjectId: state.project?.id || null,
+    expectedCatalogGeneration: state.serverCatalogGeneration,
+  };
+}
+function applyCatalogGeneration(snapshot) {
+  const generation = snapshot?.catalogGeneration;
+  if (!Number.isSafeInteger(generation)) return true;
+  if (state.serverCatalogGeneration !== null && generation < state.serverCatalogGeneration) return false;
+  state.serverCatalogGeneration = generation;
+  return true;
+}
+function catalogResponse(snapshot) {
+  if (!applyCatalogGeneration(snapshot)) throw codedError("stale_catalog");
+  if (snapshot && typeof applyProjectSnapshot === "function") applyProjectSnapshot(snapshot);
+  return snapshot;
+}
+async function catalogApi(path, payload = {}, options = {}) {
+  try {
+    return catalogResponse(await api(path, { ...options, body: JSON.stringify(catalogExpectation(payload)) }));
+  } catch (error) {
+    if (error?.name !== "AbortError") {
+      const transition = state.catalogTransition;
+      await resyncCatalog(transition?.epoch ?? state.catalogEpoch, transition?.controller.signal).catch(() => {});
+    }
+    throw error;
+  }
+}
+async function resyncCatalog(epoch = state.catalogEpoch, signal = undefined) {
+  const snapshot = catalogResponse(await api("/api/images", { signal }));
+  if (!isCurrentCatalogEpoch(epoch)) return null;
+  resetCatalog(snapshot.images || [], snapshot.root || "");
+  applyProjectSnapshot(snapshot);
+  state.missingNativeSources = typeof missingNativeSources === "function" ? missingNativeSources(snapshot.sources) : [];
+  return snapshot;
+}
+async function syncCatalogOnReturn() {
+  if (document.visibilityState !== "visible" || state.catalogTransition || state.importing) return;
+  state.catalogRefreshController?.abort();
+  const controller = new AbortController();
+  state.catalogRefreshController = controller;
+  const epoch = state.catalogEpoch;
+  const knownGeneration = state.serverCatalogGeneration;
+  try {
+    const snapshot = await api("/api/images", { signal: controller.signal });
+    if (controller.signal.aborted || !isCurrentCatalogEpoch(epoch)) return;
+    const changed = Number.isSafeInteger(snapshot.catalogGeneration) && snapshot.catalogGeneration !== knownGeneration;
+    catalogResponse(snapshot);
+    if (changed) {
+      resetCatalog(snapshot.images || [], snapshot.root || "");
+      state.missingNativeSources = typeof missingNativeSources === "function" ? missingNativeSources(snapshot.sources) : [];
+    }
+  } catch (error) {
+    if (error?.name !== "AbortError") showUserError(error);
+  } finally {
+    if (state.catalogRefreshController === controller) state.catalogRefreshController = null;
+  }
+}
+async function runCatalogTransition(work) {
+  if (state.catalogTransition) {
+    const active = state.catalogTransition;
+    try { return await work(active); }
+    catch (error) {
+      if (isCurrentCatalogEpoch(active.epoch) && error?.name !== "AbortError") await resyncCatalog(active.epoch, active.controller.signal).catch(() => {});
+      throw error;
+    }
+  }
+  const ownsProjectOperation = !state.projectOperationPending;
+  if (ownsProjectOperation && typeof beginProjectOperation === "function" && !beginProjectOperation()) return null;
+  const transition = state.catalogTransition || { epoch: beginCatalogEpoch(), controller: new AbortController() };
+  state.catalogTransition = transition;
+  const { epoch, controller } = transition;
+  try {
+    return await work({ epoch, signal: controller.signal });
+  } catch (error) {
+    if (isCurrentCatalogEpoch(epoch) && error?.name !== "AbortError") {
+      await resyncCatalog(epoch, controller.signal).catch(() => {});
+    }
+    throw error;
+  } finally {
+    if (state.catalogTransition?.epoch === epoch) state.catalogTransition = null;
+    if (ownsProjectOperation && typeof endProjectOperation === "function") endProjectOperation();
+  }
+}
 function catalogRecordMatches(record, epoch, { version = imageAssetVersion(record), revision = null } = {}) {
   const current = state.images.find((image) => image.id === record?.id);
   return Boolean(record) && isCurrentCatalogEpoch(epoch) && current === record && imageAssetVersion(current) === version
@@ -715,7 +791,6 @@ function resetCatalog(images, root) {
 }
 
 function applyProjectSnapshot(snapshot) {
-  if (Number.isInteger(snapshot?.catalogGeneration)) state.catalogGeneration = snapshot.catalogGeneration;
   state.project = snapshot?.project || null;
   state.projectReadOnly = snapshot?.readOnly === true || state.project?.status === "completed";
   if (typeof renderProjectCurrent === "function") renderProjectCurrent();
@@ -741,23 +816,25 @@ function updateProgress(job) {
 }
 
 async function loadFolder({ skipSameSourceWarning = false, path: suppliedPath = null } = {}) {
-  if (isBusy() || state.importing) return;
+  if (isBusy() || state.importing || state.catalogTransition) return;
   const path = suppliedPath || $("#folderPath").value.trim();
   if (!path) return setStatusKey("status.enterFolder");
   if (!skipSameSourceWarning && typeof openSameSourceDialog === "function" && await openSameSourceDialog(path)) return;
   const picker = $("#pickerMenu");
   if (picker?.matches?.(":popover-open")) picker.hidePopover();
-  const catalogEpoch = beginCatalogEpoch();
-  ++state.imageGeneration;
-  setStatusKey("status.loadingImages", {}, "running");
   try {
-    await flushAllImageMutations();
-    await flushAllWorkspaceMutations();
-    const data = await api("/api/folder", { method: "POST", body: JSON.stringify({ path }) });
-    if (!isCurrentCatalogEpoch(catalogEpoch)) return;
-    resetCatalog(data.images, data.root || path);
-    setStatusKey("status.imagesLoaded", { count: state.images.length });
-    applyProjectSnapshot(data);
-    if (typeof showSourceMismatches === "function") await showSourceMismatches();
-  } catch (error) { if (isCurrentCatalogEpoch(catalogEpoch)) showUserError(error); }
+    await runCatalogTransition(async ({ epoch, signal }) => {
+      ++state.imageGeneration;
+      setStatusKey("status.loadingImages", {}, "running");
+      await flushAllImageMutations();
+      await flushAllWorkspaceMutations();
+      const data = await catalogApi("/api/folder", { path }, { method: "POST", signal });
+      if (!isCurrentCatalogEpoch(epoch)) return;
+      resetCatalog(data.images || [], data.root || path);
+      applyProjectSnapshot(data);
+      state.missingNativeSources = typeof missingNativeSources === "function" ? missingNativeSources(data.sources) : [];
+      setStatusKey("status.imagesLoaded", { count: state.images.length });
+      if (typeof showSourceMismatches === "function") await showSourceMismatches();
+    });
+  } catch (error) { showUserError(error); }
 }

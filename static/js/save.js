@@ -317,7 +317,7 @@ async function startSingleSave(event) {
     // Overwrites and source deletion do need authoritative reconciliation.
     if ((sourceAction === "overwrite") || deleteOriginal) {
       const previousImageIds = new Set(state.images.map((item) => item.id));
-      const latest = await api("/api/images"); state.images = latest.images;
+      const latest = catalogResponse(await api("/api/images")); state.images = latest.images;
       loadReviewedPaths();
       const savedImage = state.images.find((item) => item.id === save.imageId);
       if (deleteOriginal && state.project?.id) {
@@ -788,7 +788,7 @@ async function runBrowserSave(imageIds, suffix, deleteOriginal, mode = "copy") {
         try {
           // Commits may resolve out of order; apply one authoritative catalogue
           // snapshot only after every started entry has settled.
-          const latest = await api("/api/images");
+          const latest = catalogResponse(await api("/api/images"));
           catalogCurrent = isCurrentCatalogEpoch(save.catalogEpoch);
           if (catalogCurrent) {
             state.images = latest.images; loadReviewedPaths();
@@ -938,7 +938,7 @@ async function finishApplyJob(job) {
       ? job.completedImageIds
       : [];
     const reloadCurrent = Boolean(keepCurrent && completedImageIds.includes(keepCurrent));
-    const data = await api("/api/images");
+    const data = catalogResponse(await api("/api/images"));
     if (!isCurrentGeneration(generation) || !isCurrentCatalogEpoch(catalogEpoch)) return;
     state.images = data.images;
     for (const imageId of completedImageIds) state.maskStatus.delete(imageId);
@@ -988,7 +988,7 @@ async function finishDetectionJob(job) {
   const targetIds = Array.isArray(job.completedImageIds) && job.completedImageIds.length
     ? job.completedImageIds
     : (job.state === "complete" ? requestedIds : []);
-  const data = await api("/api/images");
+  const data = catalogResponse(await api("/api/images"));
   if (!isCurrentGeneration(generation) || !isCurrentCatalogEpoch(catalogEpoch)) return;
   state.images = data.images;
   loadReviewedPaths();
