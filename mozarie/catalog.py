@@ -2150,28 +2150,22 @@ class CatalogMixin:
                     image_id: self._effective_mask_for_draft(image_id, updates[image_id], draft)
                     for image_id, draft in projectless_drafts.items()
                 }
-                pending = self.workspace_store.prepare_candidate_states(durable_states, history_group=group_id) if durable_states else None
-                try:
-                    with self.lock:
-                        if self.catalog_id != catalog_id or self.catalog_generation != catalog_generation:
-                            raise ClientError("プロジェクト一覧が更新されました。もう一度操作してください。", "stale_catalog")
-                        self._assert_catalog_mutable()
-                        if any(self._candidate_revision(image_id) != revisions[image_id] - 1 for image_id in unique):
-                            raise ClientError("候補が変更されました。もう一度操作してください。", "catalog_changed")
-                        if pending is not None:
-                            pending.commit()
-                            pending = None
-                        for image_id in unique:
-                            draft = self.projectless_manual_drafts.get(image_id)
-                            if draft is not None and image_id in projectless_effective:
-                                draft["candidateRevision"] = revisions[image_id]
-                                draft["hasEffectiveMask"] = projectless_effective[image_id]
-                            self.candidates[image_id] = updates[image_id]
-                            self.candidate_revisions[image_id] = revisions[image_id]
-                        result = revisions
-                finally:
-                    if pending is not None:
-                        pending.rollback()
+                with self.lock:
+                    if self.catalog_id != catalog_id or self.catalog_generation != catalog_generation:
+                        raise ClientError("プロジェクト一覧が更新されました。もう一度操作してください。", "stale_catalog")
+                    self._assert_catalog_mutable()
+                    if any(self._candidate_revision(image_id) != revisions[image_id] - 1 for image_id in unique):
+                        raise ClientError("候補が変更されました。もう一度操作してください。", "catalog_changed")
+                    if durable_states:
+                        self.workspace_store.commit_candidate_states(durable_states, history_group=group_id)
+                    for image_id in unique:
+                        draft = self.projectless_manual_drafts.get(image_id)
+                        if draft is not None and image_id in projectless_effective:
+                            draft["candidateRevision"] = revisions[image_id]
+                            draft["hasEffectiveMask"] = projectless_effective[image_id]
+                        self.candidates[image_id] = updates[image_id]
+                        self.candidate_revisions[image_id] = revisions[image_id]
+                    result = revisions
                 self._delete_mask_files(delete_paths, [])
                 return result
 

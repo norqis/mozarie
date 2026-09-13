@@ -1279,23 +1279,6 @@ class WorkspaceStore:
                 db.close()
                 raise
 
-    def prepare_candidate_states(self, states: list[tuple[str, int, list[Any], bool, bool]], *, history_group: str | None = None) -> _PendingWorkspaceCommit:
-        """Stage one all-or-nothing multi-image candidate change for publication."""
-        with self._lock:
-            db = self._connect()
-            db.execute("BEGIN IMMEDIATE")
-            try:
-                for image_id, revision, candidates, effective, replace in states:
-                    self._write_candidate_state_db(
-                        db, image_id, revision, candidates, effective, replace=replace,
-                        history_group=history_group, require_candidate_masks=True,
-                    )
-                return _PendingWorkspaceCommit(db)
-            except Exception:
-                db.execute("ROLLBACK")
-                db.close()
-                raise
-
     def hydrate_candidates(self, image_id: str, directory: Path, candidate_factory: Any) -> tuple[int, list[Any]]:
         with self._connect() as db:
             image = db.execute("SELECT candidate_revision FROM images WHERE image_id=?", (image_id,)).fetchone()
