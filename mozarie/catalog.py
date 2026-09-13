@@ -196,7 +196,8 @@ class CatalogMixin:
                          prehydrated: dict[str, tuple[int, list[Candidate]]] | None = None,
                          publish_catalog_id: str | None = None,
                          publish_read_only: bool = False,
-                         publish_source_mismatches: dict[str, bool] | None = None) -> list[dict[str, Any]]:
+                         publish_source_mismatches: dict[str, bool] | None = None,
+                         publish_sources: list[dict[str, Any]] | None = None) -> list[dict[str, Any]]:
         with self.lock:
             previous_ids = tuple(self.images)
         locks = [(image_id, self.image_io_lock(image_id)) for image_id in previous_ids]
@@ -222,6 +223,7 @@ class CatalogMixin:
                 self._clear_browser_save_tokens_unchecked()
                 self.root = root
                 self.source_roots = {str(record.source_id): record.source_root for record in records if record.source_id and record.source_root}
+                self.catalog_sources = [dict(source) for source in publish_sources] if publish_sources is not None else ([] if detach_project else self.catalog_sources)
                 if publish_catalog_id is not None:
                     self.catalog_id = publish_catalog_id
                     self.project_read_only = publish_read_only
@@ -425,12 +427,14 @@ class CatalogMixin:
             records = retained + records
             records.sort(key=lambda record: (record.relative_path.casefold(), record.relative_path, record.image_id))
         prehydrated = self._stage_workspace_candidates(records) if catalog_id is not None and prehydrated is None else prehydrated
+        publish_sources = self.workspace_store.project_sources(catalog_id) if catalog_id is not None else []
         with self.lock:
             publish_mismatches = {image_id: dimensions for image_id, dimensions in self.source_mismatches.items()
                                   if image_id not in source_image_ids}
         publish_mismatches.update(source_mismatches)
         images = self._replace_catalog(root, records, detach_project=not inherit_current_catalog, prehydrated=prehydrated,
-                                       publish_source_mismatches=publish_mismatches if catalog_id is not None else None)
+                                       publish_source_mismatches=publish_mismatches if catalog_id is not None else None,
+                                       publish_sources=publish_sources)
         with self.lock:
             self.project_read_only = completed
         return images
@@ -477,7 +481,7 @@ class CatalogMixin:
                 raise ClientError("プロジェクト名を確認してください。", "project_name_invalid") from exc
             self.detach_catalog()
             with self.lock:
-                self.catalog_id = str(project["id"]); self.project_read_only = False; self.source_mismatches = {}
+                self.catalog_id = str(project["id"]); self.project_read_only = False; self.source_mismatches = {}; self.catalog_sources = []
             return project
 
     def save_current_as_project(self, name: str, project_id: str, *, expected_project_id: str | None = None,
@@ -541,7 +545,9 @@ class CatalogMixin:
                 for record in records:
                     record.source_id = source_ids[record.image_id]
                 self.catalog_id = catalog_id
+                self.catalog_sources = self.workspace_store.project_sources(catalog_id)
                 self.projectless_manual_drafts.clear()
+                self.catalog_generation += 1
                 project["sourceIds"] = source_ids
                 return project
 
@@ -675,6 +681,7 @@ class CatalogMixin:
                 native_roots[0], records, prehydrated=prehydrated,
                 publish_catalog_id=catalog_id, publish_read_only=project["status"] == "completed",
                 publish_source_mismatches=staged_source_mismatches,
+                publish_sources=sources,
             )
             # Browser sources may still need a user-granted handle.  Native
             # images are shown immediately and the UI can add the rest.
@@ -689,7 +696,7 @@ class CatalogMixin:
             project = self.workspace_store.set_project_status(catalog_id, "working")
         self.detach_catalog()
         with self.lock:
-            self.catalog_id = catalog_id; self.project_read_only = project["status"] == "completed"; self.source_mismatches = {}
+            self.catalog_id = catalog_id; self.project_read_only = project["status"] == "completed"; self.source_mismatches = {}; self.catalog_sources = [dict(source) for source in sources]
         return {"project": project, "images": [], "needsSource": bool(sources), "sources": sources}
 
     def source_mismatch_snapshot(self) -> list[dict[str, Any]]:
@@ -897,6 +904,7 @@ class CatalogMixin:
         self.project_read_only = False
         self.source_mismatches = {}
         self.source_roots = {}
+        self.catalog_sources = []
         self.catalog_generation += 1
         session = self._detach_session_unchecked()
         self._image_io_locks.clear()
@@ -1349,6 +1357,7 @@ class CatalogMixin:
                 live_candidates = {image_id: list(candidates) for image_id, candidates in self.candidates.items()}
                 live_revisions = dict(self.candidate_revisions)
                 live_mismatches = dict(self.source_mismatches)
+                live_sources = [dict(source) for source in self.catalog_sources]
                 durable_source_id: str | None = None
                 durable_source_created = False
                 durable_created_ids: list[str] = []
@@ -1416,6 +1425,7 @@ class CatalogMixin:
                             self.order.append(record.image_id)
                     self.order.sort(key=lambda image_id: self.images[image_id].relative_path.lower())
                     if published_imported:
+                        self.catalog_sources = self.workspace_store.project_sources(self.catalog_id) if self.catalog_id else []
                         # Browser imports are committed one request at a time.
                         # Publishing their generation lets another tab reject a
                         # request captured before this visible catalogue change.
@@ -1444,6 +1454,7 @@ class CatalogMixin:
                         self.candidates = live_candidates
                         self.candidate_revisions = live_revisions
                         self.source_mismatches = live_mismatches
+                        self.catalog_sources = live_sources
                     raise
         finally:
             for temporary, _name, _width, _height, _client_key, _mtime, _size in pending:
@@ -1862,16 +1873,18 @@ class CatalogMixin:
                     image_id: dict(draft) for image_id, draft in self.projectless_manual_drafts.items()
                 } if catalog_id is None else {}
                 mismatches = dict(self.source_mismatches)
+                source_records = [dict(source) for source in self.catalog_sources]
 
             sources = [] if catalog_id is None else [
                 {**source, "exists": source["kind"] != "native-folder" or bool(source.get("nativePath") and Path(str(source["nativePath"])).is_dir())}
-                for source in self.workspace_store.project_sources(catalog_id)
+                for source in source_records
             ]
 
             with self.lock:
                 if self.catalog_id != catalog_id or self.catalog_generation != generation:
                     continue
                 if (self.project_read_only != read_only or self.source_mismatches != mismatches
+                        or self.catalog_sources != source_records
                         or any(self.images.get(record.image_id) != record for record in records)
                         or candidate_state != {
                             image_id: (

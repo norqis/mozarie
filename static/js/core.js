@@ -411,6 +411,7 @@ function reconcileCatalogSnapshot(snapshot, expectedProjectId, expectedCatalogGe
     resetCatalog(snapshot.images || [], snapshot.root || "");
     applyProjectSnapshot(snapshot);
     state.missingNativeSources = typeof missingNativeSources === "function" ? missingNativeSources(snapshot.sources) : [];
+    if (typeof restoreBrowserProjectSourcesForCurrentCatalog === "function") void restoreBrowserProjectSourcesForCurrentCatalog().catch(() => {});
   }
   return replaced;
 }
@@ -449,6 +450,7 @@ async function resyncCatalog(epoch = state.catalogEpoch, signal = undefined) {
   resetCatalog(snapshot.images || [], snapshot.root || "");
   applyProjectSnapshot(snapshot);
   state.missingNativeSources = typeof missingNativeSources === "function" ? missingNativeSources(snapshot.sources) : [];
+  if (typeof restoreBrowserProjectSourcesForCurrentCatalog === "function") void restoreBrowserProjectSourcesForCurrentCatalog().catch(() => {});
   return snapshot;
 }
 async function syncCatalogOnReturn() {
@@ -458,14 +460,17 @@ async function syncCatalogOnReturn() {
   state.catalogRefreshController = controller;
   const epoch = state.catalogEpoch;
   const knownGeneration = state.serverCatalogGeneration;
+  const knownProjectId = state.project?.id || null;
   try {
     const snapshot = await api("/api/images", { signal: controller.signal });
     if (controller.signal.aborted || !isCurrentCatalogEpoch(epoch)) return;
-    const changed = Number.isSafeInteger(snapshot.catalogGeneration) && snapshot.catalogGeneration !== knownGeneration;
+    const changed = (Number.isSafeInteger(snapshot.catalogGeneration) && snapshot.catalogGeneration !== knownGeneration)
+      || (snapshot?.project?.id || null) !== knownProjectId;
     catalogResponse(snapshot);
     if (changed) {
       resetCatalog(snapshot.images || [], snapshot.root || "");
       state.missingNativeSources = typeof missingNativeSources === "function" ? missingNativeSources(snapshot.sources) : [];
+      if (typeof restoreBrowserProjectSourcesForCurrentCatalog === "function") void restoreBrowserProjectSourcesForCurrentCatalog().catch(() => {});
     }
   } catch (error) {
     if (error?.name !== "AbortError") showUserError(error);
@@ -863,7 +868,6 @@ function resetCatalog(images, root) {
   state.projectHistory.clear();
   state.sourceAccess.clear();
   state.projectlessDirectorySources.clear();
-  if (typeof restoreBrowserProjectSourcesForCurrentCatalog === "function") void restoreBrowserProjectSourcesForCurrentCatalog().catch(() => {});
   state.missingNativeSources = [];
   state.reviewRoot = normaliseReviewRoot(root);
   state.overviewFolder = "";
@@ -920,6 +924,7 @@ async function loadFolder({ skipSameSourceWarning = false, path: suppliedPath = 
       resetCatalog(data.images || [], data.root || path);
       applyProjectSnapshot(data);
       state.missingNativeSources = typeof missingNativeSources === "function" ? missingNativeSources(data.sources) : [];
+      if (typeof restoreBrowserProjectSourcesForCurrentCatalog === "function") void restoreBrowserProjectSourcesForCurrentCatalog().catch(() => {});
       setStatusKey("status.imagesLoaded", { count: state.images.length });
       if (typeof showSourceMismatches === "function") await showSourceMismatches();
     }, { allowEdits: true, allowNested: allowDuringCatalogTransition });

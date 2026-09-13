@@ -488,8 +488,10 @@ async function importFiles(files) {
     } catch { /* Keep the import failure visible. */ }
     if (isCurrentCatalogEpoch(session.epoch) && state.importSession === session) showUserError(error);
     return false;
+  } finally {
+    await finishImportServerSession(session);
+    finishImportSession(session);
   }
-  finally { await finishImportServerSession(session); finishImportSession(session); }
 }
 
 async function importSingleFile(entry, clientKey, catalogId = null, sourceId = null, sourceKind = null, importIntent = "add", session = null) {
@@ -638,7 +640,7 @@ async function importProjectDirectoryHandle(directoryHandle, projectId, sourceId
     }
     for await (const handle of directoryHandle.values()) await collect(handle, "", directoryHandle);
     if (await waitForImportSession(session) && !await importHandleEntries(entries, session)) throw codedError("project_source_unavailable");
-  finally { finishImportSession(session); }
+  } finally { finishImportSession(session); }
 }
 
 async function importProjectFileHandles(sources, projectId) {

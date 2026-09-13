@@ -115,6 +115,9 @@ class StudioState(CatalogMixin, SavingMixin, DetectionMixin, JobsMixin):
         self._session_lock_handle: Any | None = None
         self.root: Path | None = None
         self.source_roots: dict[str, Path] = {}
+        # Published with the catalogue; never read a newer durable source list
+        # into an older live image/root generation.
+        self.catalog_sources: list[dict[str, Any]] = []
         self.images: dict[str, ImageRecord] = {}
         self.order: list[str] = []
         self.candidates: dict[str, list[Candidate]] = {}
