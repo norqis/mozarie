@@ -526,6 +526,10 @@ class WorkspaceStore:
         return {"id": str(row["image_id"]), "relativePath": str(row["relative_path"]), "width": int(row["width"]), "height": int(row["height"]),
                 "sourceId": str(row["source_id"]), "sourceDisplay": str(row["display_name"])} if row else None
 
+    def project_has_image(self, catalog_id: str, image_id: str) -> bool:
+        with self._connect() as db:
+            return db.execute("SELECT 1 FROM images WHERE catalog_id=? AND image_id=?", (catalog_id, image_id)).fetchone() is not None
+
     def create_project(self, name: str | None = None, source_root: str | None = None) -> dict[str, Any]:
         clean_name = name.strip() if isinstance(name, str) else ""
         if name is not None and not clean_name:
@@ -791,6 +795,90 @@ class WorkspaceStore:
                 db.execute("ROLLBACK")
                 raise
         return result
+
+    @staticmethod
+    def _reconciled_source_state(row: sqlite3.Row, record: Any) -> dict[str, Any]:
+        width, height = int(getattr(record, "width", 0)), int(getattr(record, "height", 0))
+        changed = (int(row["size_bytes"]) != record.size_bytes or int(row["mtime_ns"]) != record.mtime_ns
+                   or int(row["width"]) != width or int(row["height"]) != height)
+        return {
+            "image_id": row["image_id"], "hidden": bool(row["hidden"]),
+            "reviewed": False if changed else bool(row["reviewed"]),
+            "revision": int(row["candidate_revision"]),
+            "changed": changed or bool(row["source_blocked"]),
+            "dimensions_changed": int(row["width"]) != width or int(row["height"]) != height or bool(row["source_blocked"]),
+            "flip_horizontal": bool(row["transform_flip_horizontal"]) if row["transform_flip_horizontal"] is not None else False,
+            "flip_vertical": bool(row["transform_flip_vertical"]) if row["transform_flip_vertical"] is not None else False,
+            "source_flip_horizontal": bool(row["transform_source_flip_horizontal"]) if row["transform_source_flip_horizontal"] is not None else False,
+            "source_flip_vertical": bool(row["transform_source_flip_vertical"]) if row["transform_source_flip_vertical"] is not None else False,
+            "transform_revision": int(row["transform_revision"]) if row["transform_revision"] is not None else 0,
+            "created": False,
+        }
+
+    @staticmethod
+    def _source_rows(db: sqlite3.Connection, catalog_id: str, source_id: str) -> dict[str, sqlite3.Row]:
+        source = db.execute("SELECT 1 FROM project_sources WHERE source_id=? AND catalog_id=?", (source_id, catalog_id)).fetchone()
+        if source is None:
+            raise ValueError("project source is missing")
+        rows = db.execute("""SELECT images.*,transform.flip_horizontal AS transform_flip_horizontal,
+            transform.flip_vertical AS transform_flip_vertical,transform.source_flip_horizontal AS transform_source_flip_horizontal,
+            transform.source_flip_vertical AS transform_source_flip_vertical,transform.revision AS transform_revision
+            FROM images LEFT JOIN image_transforms AS transform ON transform.image_id=images.image_id
+            WHERE images.catalog_id=? AND images.source_id=?""", (catalog_id, source_id))
+        return {str(row["relative_path"]): row for row in rows}
+
+    def preview_reconcile_images(self, catalog_id: str, source_id: str, records: list[Any]) -> dict[str, dict[str, Any]]:
+        """Read the durable state needed to stage a project open without writing it."""
+        with self._lock, self._connect() as db:
+            existing = self._source_rows(db, catalog_id, source_id)
+        return {
+            str(record.relative_path): self._reconciled_source_state(row, record)
+            for record in records
+            if (row := existing.get(str(record.relative_path))) is not None
+        }
+
+    def reconcile_project_open(self, catalog_id: str, sources: list[tuple[str, Path, list[Any]]], *, resume: bool) -> tuple[dict[str, dict[str, dict[str, Any]]], dict[str, Any]]:
+        """Commit every staged native source and an optional resume as one transaction."""
+        results: dict[str, dict[str, dict[str, Any]]] = {}
+        now = time.time_ns()
+        with self._lock, self._connect() as db:
+            db.execute("BEGIN IMMEDIATE")
+            try:
+                for source_id, root, records in sources:
+                    db.execute("UPDATE catalogs SET source_root=?,updated_at=? WHERE catalog_id=?", (str(root.resolve()), now, catalog_id))
+                    existing = self._source_rows(db, catalog_id, source_id)
+                    source_result: dict[str, dict[str, Any]] = {}
+                    for record in records:
+                        row = existing.get(str(record.relative_path))
+                        if row is None:
+                            continue
+                        width, height = int(getattr(record, "width", 0)), int(getattr(record, "height", 0))
+                        changed = (int(row["size_bytes"]) != record.size_bytes or int(row["mtime_ns"]) != record.mtime_ns
+                                   or int(row["width"]) != width or int(row["height"]) != height)
+                        if changed:
+                            db.execute("UPDATE image_transforms SET source_flip_horizontal=0,source_flip_vertical=0,revision=revision+1 WHERE image_id=?", (row["image_id"],))
+                            row = db.execute("""SELECT images.*,transform.flip_horizontal AS transform_flip_horizontal,
+                                transform.flip_vertical AS transform_flip_vertical,transform.source_flip_horizontal AS transform_source_flip_horizontal,
+                                transform.source_flip_vertical AS transform_source_flip_vertical,transform.revision AS transform_revision
+                                FROM images LEFT JOIN image_transforms AS transform ON transform.image_id=images.image_id
+                                WHERE images.image_id=?""", (row["image_id"],)).fetchone()
+                        source_result[str(record.relative_path)] = self._reconciled_source_state(row, record)
+                    results[source_id] = source_result
+                if resume:
+                    cursor = db.execute("UPDATE catalogs SET status='working',updated_at=? WHERE catalog_id=?", (now, catalog_id))
+                    if not cursor.rowcount:
+                        raise ValueError("project is missing")
+                row = db.execute("""SELECT catalogs.*,COUNT(images.image_id) AS image_count FROM catalogs
+                    LEFT JOIN images ON images.catalog_id=catalogs.catalog_id WHERE catalogs.catalog_id=?
+                    GROUP BY catalogs.catalog_id""", (catalog_id,)).fetchone()
+                if row is None:
+                    raise ValueError("project is missing")
+                project = self._project_row(row)
+                db.execute("COMMIT")
+            except Exception:
+                db.execute("ROLLBACK")
+                raise
+        return results, project
 
     def source_image_metadata(self, source_id: str) -> dict[str, tuple[int, int, int, int]]:
         """Return the fingerprint needed to skip image decoding during a reopen."""
@@ -1185,6 +1273,23 @@ class WorkspaceStore:
                 self._write_candidate_state_db(db, image_id, revision, candidates, effective, replace=replace,
                                                history_group=history_group, expected_revision=expected_revision,
                                                preserve_reviewed=preserve_reviewed)
+                return _PendingWorkspaceCommit(db)
+            except Exception:
+                db.execute("ROLLBACK")
+                db.close()
+                raise
+
+    def prepare_candidate_states(self, states: list[tuple[str, int, list[Any], bool, bool]], *, history_group: str | None = None) -> _PendingWorkspaceCommit:
+        """Stage one all-or-nothing multi-image candidate change for publication."""
+        with self._lock:
+            db = self._connect()
+            db.execute("BEGIN IMMEDIATE")
+            try:
+                for image_id, revision, candidates, effective, replace in states:
+                    self._write_candidate_state_db(
+                        db, image_id, revision, candidates, effective, replace=replace,
+                        history_group=history_group, require_candidate_masks=True,
+                    )
                 return _PendingWorkspaceCommit(db)
             except Exception:
                 db.execute("ROLLBACK")

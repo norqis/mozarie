@@ -269,6 +269,11 @@ class MosaicHandler(BaseHTTPRequestHandler):
             elif path == "/api/project/source-check":
                 raw_path = parse_qs(parsed.query).get("path", [""])[0]
                 self._json({"projects": STATE.projects_for_source_root(raw_path)})
+            elif path == "/api/project/source-status":
+                query = parse_qs(parsed.query)
+                project_id = query.get("projectId", [""])[0]
+                image_id = query.get("imageId", [""])[0]
+                self._json({"exists": bool(project_id and image_id and STATE.workspace_store.project_has_image(project_id, image_id))})
             elif path.startswith("/api/project/history/"):
                 self._json(STATE.project_history_status(path.removeprefix("/api/project/history/")))
             elif path == "/api/job":

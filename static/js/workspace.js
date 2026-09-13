@@ -124,7 +124,11 @@ async function forgetProjectImageSources(projectId, imageIds) {
       transaction.onerror = () => reject(transaction.error);
       transaction.onabort = () => reject(transaction.error);
     });
-  } catch { /* Local handle cleanup is best effort. */ }
+    return true;
+  } catch {
+    await Promise.all([...removed].map((imageId) => rememberProjectImageSourceCleanup(projectId, imageId)));
+    return false;
+  }
   finally { db.close(); }
 }
 
@@ -185,12 +189,33 @@ async function rememberProjectSourceCleanup(projectId) {
       request.onsuccess = () => {
         const intents = request.result?.intents || (request.result?.projectIds || []).map((id) => ({ projectId: id, intentId: `legacy:${id}` }));
         intents.push({ projectId, intentId });
-        store.put({ catalogId: PROJECT_SOURCE_CLEANUP_KEY, intents });
+        store.put({ ...request.result, catalogId: PROJECT_SOURCE_CLEANUP_KEY, intents });
       };
       request.onerror = () => reject(request.error);
       transaction.oncomplete = () => resolve();
       transaction.onerror = () => reject(transaction.error);
       transaction.onabort = () => reject(transaction.error);
+    });
+    return intentId;
+  } catch { return null; }
+  finally { db.close(); }
+}
+async function rememberProjectImageSourceCleanup(projectId, imageId) {
+  const intentId = projectSourceId();
+  const db = await directoryCatalogStore(); if (!db || !projectId || !imageId) return null;
+  try {
+    await new Promise((resolve, reject) => {
+      const transaction = db.transaction("directories", "readwrite");
+      const store = transaction.objectStore("directories");
+      const request = store.get(PROJECT_SOURCE_CLEANUP_KEY);
+      request.onsuccess = () => {
+        const value = request.result || { catalogId: PROJECT_SOURCE_CLEANUP_KEY };
+        const imageIntents = value.imageIntents || [];
+        imageIntents.push({ projectId, imageId, intentId });
+        store.put({ ...value, catalogId: PROJECT_SOURCE_CLEANUP_KEY, imageIntents });
+      };
+      request.onerror = () => reject(request.error);
+      transaction.oncomplete = () => resolve(); transaction.onerror = () => reject(transaction.error); transaction.onabort = () => reject(transaction.error);
     });
     return intentId;
   } catch { return null; }
@@ -208,7 +233,10 @@ async function clearProjectSourceCleanup({ projectIds = [], intentIds = [] } = {
       const request = store.get(PROJECT_SOURCE_CLEANUP_KEY);
       request.onsuccess = () => {
         const intents = request.result?.intents || (request.result?.projectIds || []).map((projectId) => ({ projectId, intentId: `legacy:${projectId}` }));
-        store.put({ catalogId: PROJECT_SOURCE_CLEANUP_KEY, intents: intents.filter((intent) => !removedProjects.has(intent.projectId) && !removedIntents.has(intent.intentId)) });
+        store.put({ ...request.result, catalogId: PROJECT_SOURCE_CLEANUP_KEY,
+          intents: intents.filter((intent) => !removedProjects.has(intent.projectId) && !removedIntents.has(intent.intentId)),
+          imageIntents: (request.result?.imageIntents || []).filter((intent) => !removedProjects.has(intent.projectId) && !removedIntents.has(intent.intentId)),
+        });
       };
       request.onerror = () => reject(request.error);
       transaction.oncomplete = () => resolve();
@@ -246,13 +274,24 @@ async function retryProjectSourceCleanup(existingProjectIds) {
   try {
     const pending = await new Promise((resolve) => {
       const request = db.transaction("directories").objectStore("directories").get(PROJECT_SOURCE_CLEANUP_KEY);
-      request.onsuccess = () => resolve(request.result?.intents || (request.result?.projectIds || []).map((projectId) => ({ projectId, intentId: `legacy:${projectId}` }))); request.onerror = () => resolve([]);
+      request.onsuccess = () => resolve(request.result || {}); request.onerror = () => resolve({});
     });
+    const projectIntents = pending.intents || (pending.projectIds || []).map((projectId) => ({ projectId, intentId: `legacy:${projectId}` }));
     const resolved = [];
-    for (const projectId of new Set(pending.map((intent) => intent.projectId))) {
+    for (const projectId of new Set(projectIntents.map((intent) => intent.projectId))) {
       if (!existingProjectIds.has(projectId) && await forgetProjectSources(projectId, { rememberFailure: false, clearIntent: false })) resolved.push(projectId);
     }
     await clearProjectSourceCleanup({ projectIds: resolved });
+    for (const intent of pending.imageIntents || []) {
+      try {
+        const status = await api(`/api/project/source-status?projectId=${encodeURIComponent(intent.projectId)}&imageId=${encodeURIComponent(intent.imageId)}`, { resyncOnStale: false });
+        if (status.exists) {
+          await clearProjectSourceCleanup({ intentIds: [intent.intentId] });
+        } else if (await forgetProjectImageSources(intent.projectId, [intent.imageId])) {
+          await clearProjectSourceCleanup({ intentIds: [intent.intentId] });
+        }
+      } catch { /* Keep ambiguous cleanup intents for the next startup. */ }
+    }
   } finally { db.close(); }
 }
 async function ensureProjectSourcePermission(handle, request = false) {
@@ -264,6 +303,11 @@ async function ensureProjectSourcePermission(handle, request = false) {
     if (!request || !handle.requestPermission) return false;
     return (await handle.requestPermission({ mode })) === "granted";
   } catch { return false; }
+}
+async function requestProjectSourcePermission(handle) {
+  if (!handle?.requestPermission) return Boolean(handle);
+  try { return (await handle.requestPermission({ mode: "read" })) === "granted"; }
+  catch { return false; }
 }
 async function rememberedOutputDirectoryHandle() {
   const db = await directoryCatalogStore();

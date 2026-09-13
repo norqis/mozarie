@@ -39,4 +39,4 @@
 5. [通信・対象の組合せ・PJデータ照合](manual-verification/data-integrity.md)
 6. [画像反転・保存形式・メタ情報](manual-verification/flip-export.md)
 7. [無名作業の反転上書きと4K多候補の保存・マスク書出し（DI-099〜101）](manual-verification/data-integrity.md)：単一・一括保存、PNG・ZIPの出力範囲と処理中メモリを確認する。
-8. [カタログ世代・PJ切替・ブラウザー復元・ZIPスナップショット（DI-102〜117）](manual-verification/data-integrity.md)：遅延要求、並列インポート、保存後の古い要求、ZIP書出し中の編集を確認する。
+8. [カタログ世代・PJ切替・ブラウザー復元・ZIPスナップショット（DI-102〜125）](manual-verification/data-integrity.md)：遅延要求、並列インポート、保存後の古い要求、ZIP書出し中の編集、候補保存と切替の境界を確認する。

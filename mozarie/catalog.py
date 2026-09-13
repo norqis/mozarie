@@ -158,6 +158,27 @@ class CatalogMixin:
             [record.image_id for record in records], self.cache_dir, self._candidate_from_workspace,
         )
 
+    @staticmethod
+    def _apply_source_state(records: list[ImageRecord], stored: dict[str, dict[str, Any]], source_id: str, root: Path) -> tuple[list[ImageRecord], dict[str, bool]]:
+        accepted: list[ImageRecord] = []
+        mismatches: dict[str, bool] = {}
+        for record in records:
+            saved = stored.get(record.relative_path)
+            if saved is None:
+                continue
+            record.image_id = str(saved["image_id"])
+            record.hidden = bool(saved["hidden"])
+            record.reviewed = bool(saved["reviewed"])
+            record.flip_horizontal = bool(saved.get("flip_horizontal", False)); record.flip_vertical = bool(saved.get("flip_vertical", False))
+            record.source_flip_horizontal = bool(saved.get("source_flip_horizontal", False)); record.source_flip_vertical = bool(saved.get("source_flip_vertical", False))
+            record.transform_revision = int(saved.get("transform_revision", 0))
+            record.source_id = source_id
+            record.source_root = root
+            accepted.append(record)
+            if saved.get("changed"):
+                mismatches[record.image_id] = bool(saved.get("dimensions_changed"))
+        return accepted, mismatches
+
     def _replace_catalog(self, root: Path, records: list[ImageRecord], *, detach_project: bool = False,
                          prehydrated: dict[str, tuple[int, list[Candidate]]] | None = None,
                          publish_catalog_id: str | None = None,
@@ -250,7 +271,8 @@ class CatalogMixin:
     def _set_root(self, raw_path: str, project_id: str | None = None, *, defer_replace: bool = False,
                    relink_source_id: str | None = None, allow_new: bool = True,
                    inherit_current_catalog: bool = True, staging: bool = False,
-                   staged_source_mismatches: dict[str, bool] | None = None) -> list[Any]:
+                   staged_source_mismatches: dict[str, bool] | None = None,
+                   staged_source_id: str | None = None) -> list[Any]:
         if not raw_path or not isinstance(raw_path, str):
             raise ClientError("Windowsフォルダを入力してください。", "input_invalid")
         root = Path(raw_path).expanduser().resolve()
@@ -267,11 +289,17 @@ class CatalogMixin:
         source_id = None
         stored_metadata: dict[str, tuple[int, int, int, int]] = {}
         if catalog_id is not None:
-            source_id = relink_source_id or self.workspace_store.ensure_project_source(
-                catalog_id, kind="native-folder", display_name=root.name or str(root), identity=native_source_identity(root),
-            )
-            if relink_source_id:
+            if staging:
+                if not staged_source_id:
+                    raise ValueError("staged project source is missing")
+                source_id = staged_source_id
                 self.workspace_store.native_source(catalog_id, source_id)
+            else:
+                source_id = relink_source_id or self.workspace_store.ensure_project_source(
+                    catalog_id, kind="native-folder", display_name=root.name or str(root), identity=native_source_identity(root),
+                )
+                if relink_source_id:
+                    self.workspace_store.native_source(catalog_id, source_id)
             stored_metadata = self.workspace_store.source_image_metadata(source_id)
 
         paths = [path for path in root.rglob("*") if path.is_file() and path.suffix.lower() in IMAGE_SUFFIXES]
@@ -325,7 +353,9 @@ class CatalogMixin:
                     worker.result()
         records.sort(key=lambda record: (record.relative_path.casefold(), record.relative_path))
         try:
-            if relink_source_id:
+            if staging:
+                stored = self.workspace_store.preview_reconcile_images(catalog_id, source_id, records)
+            elif relink_source_id:
                 stored = self.workspace_store.relink_native_source(catalog_id, source_id, root, records, allow_new=allow_new)
             elif catalog_id is not None:
                 stored = (
@@ -346,26 +376,11 @@ class CatalogMixin:
             if relink_source_id:
                 raise ClientError("元フォルダーを読み込めません。", "project_source_unavailable") from exc
             raise
-        # A project can have several sources. Missing files remain durable so
-        # their masks can still be exported or relinked later.
-        if not allow_new:
-            records = [record for record in records if record.relative_path in stored]
-        for record in records:
-            saved = stored.get(record.relative_path)
-            if saved is not None:
-                record.image_id = str(saved["image_id"])
-                record.hidden = bool(saved["hidden"])
-                record.reviewed = bool(saved["reviewed"])
-                record.flip_horizontal = bool(saved.get("flip_horizontal", False)); record.flip_vertical = bool(saved.get("flip_vertical", False))
-                record.source_flip_horizontal = bool(saved.get("source_flip_horizontal", False)); record.source_flip_vertical = bool(saved.get("source_flip_vertical", False))
-                record.transform_revision = int(saved.get("transform_revision", 0))
-            record.source_id = source_id
-            record.source_root = root
+        if catalog_id is not None:
+            records, source_mismatches = self._apply_source_state(records, stored, source_id, root)
+        else:
+            source_mismatches = {}
         source_image_ids = {record.image_id for record in records}
-        source_mismatches = {
-            str(saved["image_id"]): bool(saved.get("dimensions_changed"))
-            for saved in stored.values() if saved.get("changed")
-        }
         if staged_source_mismatches is not None:
             staged_source_mismatches.update(source_mismatches)
         if inherit_current_catalog:
@@ -390,7 +405,8 @@ class CatalogMixin:
                 retained = [record for record in self.images.values() if record.source_id != source_id]
             records = retained + records
             records.sort(key=lambda record: (record.relative_path.casefold(), record.relative_path, record.image_id))
-        images = self._replace_catalog(root, records, detach_project=not inherit_current_catalog)
+        prehydrated = self._stage_workspace_candidates(records) if catalog_id is not None else None
+        images = self._replace_catalog(root, records, detach_project=not inherit_current_catalog, prehydrated=prehydrated)
         with self.lock:
             self.project_read_only = completed
         return images
@@ -614,15 +630,28 @@ class CatalogMixin:
             # place instead of exposing a half-open target project.
             records: list[ImageRecord] = []
             staged_source_mismatches: dict[str, bool] = {}
-            for root in native_roots:
-                records.extend(self._set_root(
+            staged_sources: list[tuple[str, Path, list[ImageRecord]]] = []
+            for source in sources:
+                native_path = source.get("nativePath")
+                if source["kind"] != "native-folder" or not native_path or not Path(str(native_path)).is_dir():
+                    continue
+                root = Path(str(native_path))
+                source_records = self._set_root(
                     str(root), catalog_id, defer_replace=True, allow_new=False, inherit_current_catalog=False, staging=True,
-                    staged_source_mismatches=staged_source_mismatches,
-                ))
+                    staged_source_mismatches=staged_source_mismatches, staged_source_id=str(source["id"]),
+                )
+                staged_sources.append((str(source["id"]), root, source_records))
+                records.extend(source_records)
             records.sort(key=lambda record: (record.relative_path.casefold(), record.relative_path, record.image_id))
             prehydrated = self._stage_workspace_candidates(records)
-            if resume:
-                project = self.workspace_store.set_project_status(catalog_id, "working")
+            reconciled_sources, project = self.workspace_store.reconcile_project_open(catalog_id, staged_sources, resume=resume)
+            records = []
+            staged_source_mismatches = {}
+            for source_id, root, source_records in staged_sources:
+                accepted, mismatches = self._apply_source_state(source_records, reconciled_sources[source_id], source_id, root)
+                records.extend(accepted)
+                staged_source_mismatches.update(mismatches)
+            records.sort(key=lambda record: (record.relative_path.casefold(), record.relative_path, record.image_id))
             images = self._replace_catalog(
                 native_roots[0], records, prehydrated=prehydrated,
                 publish_catalog_id=catalog_id, publish_read_only=project["status"] == "completed",
@@ -1651,12 +1680,8 @@ class CatalogMixin:
             records = [self.images.get(image_id) for image_id in image_ids]
             if any(record is None for record in records):
                 raise ClientError("画像が見つかりません。", "image_not_found")
-            catalog_generation = self.catalog_generation
-        if self.catalog_id is not None:
-            self.workspace_store.set_image_flags_bulk(image_ids, hidden=hidden, reviewed=reviewed)
-        with self.lock:
-            if self.catalog_generation != catalog_generation or any(self.images.get(image_id) is not record for image_id, record in zip(image_ids, records)):
-                raise ClientError("画像一覧が更新されました。もう一度お試しください。", "operation_in_progress")
+            if self.catalog_id is not None:
+                self.workspace_store.set_image_flags_bulk(image_ids, hidden=hidden, reviewed=reviewed)
             result: dict[str, dict[str, bool]] = {}
             for image_id, record in zip(image_ids, records):
                 if hidden is not None: record.hidden = hidden
@@ -2060,76 +2085,95 @@ class CatalogMixin:
         unique = list(dict.fromkeys(str(image_id) for image_id in image_ids if str(image_id)))
         if not unique:
             raise ClientError("候補を更新する画像がありません。", "image_not_found")
-        with self.lock:
-            self._assert_catalog_mutable()
-            catalog_id = self.catalog_id
-            catalog_generation = self.catalog_generation
-            if any(image_id not in self.images for image_id in unique):
-                raise ClientError("画像が見つかりません。", "image_not_found")
-        locks = [(image_id, self.image_io_lock(image_id)) for image_id in unique]
-        with ExitStack() as stack:
-            for _image_id, image_lock in sorted(locks):
-                stack.enter_context(image_lock)
-            # Hold the catalogue state for the complete durable group. This
-            # leaves no interval where a project switch can publish a prefix.
+        role = payload.get("role")
+        operation = payload.get("operation")
+        if role not in {"apply", "exclude"} or operation not in {"enable", "disable", "delete", "set_padding"}:
+            raise ClientError("候補の一括操作が正しくありません。", "input_invalid")
+        expand_px = payload.get("expandPx")
+        with self.import_lock:
             with self.lock:
-                if self.catalog_id != catalog_id or self.catalog_generation != catalog_generation:
-                    raise ClientError("プロジェクト一覧が更新されました。もう一度操作してください。", "stale_catalog")
                 self._assert_catalog_mutable()
-                role = payload.get("role")
-                operation = payload.get("operation")
-                if role not in {"apply", "exclude"} or operation not in {"enable", "disable", "delete", "set_padding"}:
-                    raise ClientError("候補の一括操作が正しくありません。", "input_invalid")
-                expand_px = payload.get("expandPx")
-                updates: dict[str, list[Candidate]] = {}
-                delete_paths: list[Path] = []
-                for image_id in unique:
-                    self._assert_image_editable(image_id)
-                    record = self.images[image_id]
-                    selected = [item for item in self.candidates.get(image_id, []) if item.role.value == role]
-                    if not selected:
-                        raise ClientError("更新する候補がありません。", "candidate_not_found")
-                    if operation == "set_padding":
-                        max_expand_px = int(np.ceil(np.hypot(record.width - 1, record.height - 1)))
-                        if (isinstance(expand_px, bool) or not isinstance(expand_px, int)
-                                or not 0 <= expand_px <= max_expand_px):
-                            raise ClientError(f"候補の枠pxは0から{max_expand_px}までの整数で指定してください。", "input_invalid")
-                    current = self.candidates.get(image_id, [])
-                    if operation == "delete":
-                        updates[image_id] = [replace(item) for item in current if item not in selected]
-                        delete_paths.extend(item.mask_path for item in selected)
-                    else:
-                        candidates = [replace(item) for item in current]
-                        for candidate in candidates:
-                            if candidate.role.value == role:
-                                if operation == "set_padding": candidate.expand_px = expand_px
-                                else: candidate.enabled = operation == "enable"
-                        updates[image_id] = candidates
-                revisions = {image_id: self._candidate_revision(image_id) + 1 for image_id in unique}
+                catalog_id = self.catalog_id
+                catalog_generation = self.catalog_generation
+                if any(image_id not in self.images for image_id in unique):
+                    raise ClientError("画像が見つかりません。", "image_not_found")
+            locks = [(image_id, self.image_io_lock(image_id)) for image_id in unique]
+            with ExitStack() as stack:
+                for _image_id, image_lock in sorted(locks):
+                    stack.enter_context(image_lock)
+                # Image locks keep the target snapshots stable while mask
+                # composition and SQLite staging run without the global lock.
+                with self.lock:
+                    if self.catalog_id != catalog_id or self.catalog_generation != catalog_generation:
+                        raise ClientError("プロジェクト一覧が更新されました。もう一度操作してください。", "stale_catalog")
+                    self._assert_catalog_mutable()
+                    if self._has_active_worker():
+                        raise ClientError("バックグラウンド処理中は候補を変更できません。", "operation_in_progress")
+                    updates: dict[str, list[Candidate]] = {}
+                    delete_paths: list[Path] = []
+                    revisions: dict[str, int] = {}
+                    projectless_drafts: dict[str, dict[str, Any]] = {}
+                    for image_id in unique:
+                        self._assert_image_editable(image_id)
+                        record = self.images[image_id]
+                        selected = [item for item in self.candidates.get(image_id, []) if item.role.value == role]
+                        if not selected:
+                            raise ClientError("更新する候補がありません。", "candidate_not_found")
+                        if operation == "set_padding":
+                            max_expand_px = int(np.ceil(np.hypot(record.width - 1, record.height - 1)))
+                            if (isinstance(expand_px, bool) or not isinstance(expand_px, int)
+                                    or not 0 <= expand_px <= max_expand_px):
+                                raise ClientError(f"候補の枠pxは0から{max_expand_px}までの整数で指定してください。", "input_invalid")
+                        current = self.candidates.get(image_id, [])
+                        if operation == "delete":
+                            updates[image_id] = [replace(item) for item in current if item not in selected]
+                            delete_paths.extend(item.mask_path for item in selected)
+                        else:
+                            candidates = [replace(item) for item in current]
+                            for candidate in candidates:
+                                if candidate.role.value == role:
+                                    if operation == "set_padding": candidate.expand_px = expand_px
+                                    else: candidate.enabled = operation == "enable"
+                            updates[image_id] = candidates
+                        revisions[image_id] = self._candidate_revision(image_id) + 1
+                        draft = self.projectless_manual_drafts.get(image_id)
+                        if draft is not None:
+                            projectless_drafts[image_id] = dict(draft)
+
                 group_id = uuid.uuid4().hex if len(unique) > 1 else None
-                durable_ids = {image_id for image_id in unique if self.workspace_store.has_image(image_id)}
+                durable_ids = {image_id for image_id in unique if catalog_id is not None and self.workspace_store.has_image(image_id)}
                 durable_states = [
                     (image_id, revisions[image_id], updates[image_id], self._effective_mask_for_candidates(image_id, updates[image_id]), operation == "delete")
                     for image_id in unique if image_id in durable_ids
                 ]
-                projectless_effective: dict[str, bool] = {}
-                for image_id in unique:
-                    if image_id not in durable_ids:
-                        draft = self.projectless_manual_drafts.get(image_id)
-                        if draft is not None:
-                            projectless_effective[image_id] = self._effective_mask_for_draft(image_id, updates[image_id], draft)
-                if durable_states:
-                    self.workspace_store.commit_candidate_states(durable_states, history_group=group_id)
-                for image_id in unique:
-                    draft = self.projectless_manual_drafts.get(image_id)
-                    if draft is not None and image_id in projectless_effective:
-                        draft["candidateRevision"] = revisions[image_id]
-                        draft["hasEffectiveMask"] = projectless_effective[image_id]
-                    self.candidates[image_id] = updates[image_id]
-                    self.candidate_revisions[image_id] = revisions[image_id]
-                result = revisions
-            self._delete_mask_files(delete_paths, [])
-            return result
+                projectless_effective = {
+                    image_id: self._effective_mask_for_draft(image_id, updates[image_id], draft)
+                    for image_id, draft in projectless_drafts.items()
+                }
+                pending = self.workspace_store.prepare_candidate_states(durable_states, history_group=group_id) if durable_states else None
+                try:
+                    with self.lock:
+                        if self.catalog_id != catalog_id or self.catalog_generation != catalog_generation:
+                            raise ClientError("プロジェクト一覧が更新されました。もう一度操作してください。", "stale_catalog")
+                        self._assert_catalog_mutable()
+                        if any(self._candidate_revision(image_id) != revisions[image_id] - 1 for image_id in unique):
+                            raise ClientError("候補が変更されました。もう一度操作してください。", "catalog_changed")
+                        if pending is not None:
+                            pending.commit()
+                            pending = None
+                        for image_id in unique:
+                            draft = self.projectless_manual_drafts.get(image_id)
+                            if draft is not None and image_id in projectless_effective:
+                                draft["candidateRevision"] = revisions[image_id]
+                                draft["hasEffectiveMask"] = projectless_effective[image_id]
+                            self.candidates[image_id] = updates[image_id]
+                            self.candidate_revisions[image_id] = revisions[image_id]
+                        result = revisions
+                finally:
+                    if pending is not None:
+                        pending.rollback()
+                self._delete_mask_files(delete_paths, [])
+                return result
 
     def delete_candidate(self, image_id: str, candidate_id: str) -> bool:
         self.image_for_id(image_id)

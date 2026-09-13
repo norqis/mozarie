@@ -80,6 +80,8 @@ let projectListSort = { key: "updated", direction: "desc" };
 let projectListSortPending = false;
 let nativeRelinkSourceId = "";
 let nativeRelinkBusy = false;
+let pendingBrowserProjectSources = [];
+const browserSourceRestoreBusy = new Set();
 
 function syncFlipControls() {
   const record = currentRecord();
@@ -181,6 +183,35 @@ function renderProjectCurrent() {
   $("#projectCloseWorkspace").dataset.i18n = project ? "project.close" : "project.closeWork";
   $("#projectCloseWorkspace").textContent = t($("#projectCloseWorkspace").dataset.i18n);
   $("#projectCloseWorkspace").disabled = pending || (!project && state.images.length === 0);
+  const browserRestore = $("#projectBrowserRestore");
+  const list = $("#projectBrowserRestoreList");
+  browserRestore.hidden = !project || !pendingBrowserProjectSources.length;
+  list.replaceChildren(...pendingBrowserProjectSources.map((source) => {
+    const item = document.createElement("div"); item.setAttribute("role", "listitem");
+    const button = document.createElement("button"); button.type = "button";
+    button.textContent = `${source.handle?.name || source.relativePath || t("project.noSource")} · ${t("project.sourceRestore")}`;
+    button.disabled = pending || browserSourceRestoreBusy.has(source.key);
+    button.addEventListener("click", () => { void restoreBrowserProjectSource(source); });
+    item.append(button); return item;
+  }));
+}
+
+async function restoreBrowserProjectSource(source) {
+  if (!state.project?.id || browserSourceRestoreBusy.has(source.key) || !beginProjectOperation()) return;
+  browserSourceRestoreBusy.add(source.key); renderProjectCurrent();
+  try {
+    // Call requestPermission directly from this click handler. A project open
+    // has already awaited IndexedDB and cannot retain user activation.
+    if (!await requestProjectSourcePermission(source.handle)) return;
+    if (source.kind === "directory") await importProjectDirectoryHandle(source.handle, state.project.id, source.sourceId, "restore");
+    else if ((await importProjectFileHandles([source], state.project.id)).length) throw codedError("project_source_unavailable");
+    pendingBrowserProjectSources = pendingBrowserProjectSources.filter((item) => item.key !== source.key);
+    await showSourceMismatches();
+  } catch (error) { showUserError(error); }
+  finally {
+    browserSourceRestoreBusy.delete(source.key);
+    endProjectOperation(); renderProjectCurrent();
+  }
 }
 function missingNativeSources(sources) {
   return (sources || []).filter((source) => source.kind === "native-folder" && !source.exists);
@@ -351,6 +382,7 @@ async function openProject(project, resume = false) {
     await runCatalogTransition(async ({ epoch, signal }) => {
       await flushAllImageMutations();
       await flushAllWorkspaceMutations();
+      pendingBrowserProjectSources = [];
       const data = await catalogApi("/api/project/open", { projectId: project.id, resume }, { method: "POST", signal, resyncOnFailure: false });
       if (!isCurrentCatalogEpoch(epoch)) return;
       state.project = data.project; state.projectReadOnly = data.project?.status === "completed";
@@ -363,30 +395,33 @@ async function openProject(project, resume = false) {
         ({ files, directories } = await rememberedProjectSources(project.id));
         if (!isCurrentCatalogEpoch(epoch)) return;
         for (const source of directories) {
-          if (!await ensureProjectSourcePermission(source.handle, true)) { restoreFailures.push(source); continue; }
+          if (!await ensureProjectSourcePermission(source.handle)) { restoreFailures.push({ ...source, kind: "directory", key: `directory:${source.sourceId}` }); continue; }
           try {
             await importProjectDirectoryHandle(source.handle, project.id, source.sourceId, "restore");
-          } catch (error) { restoreFailures.push(source); }
+          } catch (error) { restoreFailures.push({ ...source, kind: "directory", key: `directory:${source.sourceId}` }); }
           if (!isCurrentCatalogEpoch(epoch)) return;
         }
         const allowedFiles = [];
         for (const source of files) {
-          if (await ensureProjectSourcePermission(source.handle, true)) allowedFiles.push(source); else restoreFailures.push(source);
+          if (await ensureProjectSourcePermission(source.handle)) allowedFiles.push(source);
+          else restoreFailures.push({ ...source, kind: "file", key: `file:${source.sourceId}:${source.clientKey || source.relativePath}` });
         }
         const failedFiles = await importProjectFileHandles(allowedFiles, project.id);
-        restoreFailures.push(...failedFiles);
+        restoreFailures.push(...failedFiles.map((source) => ({ ...source, kind: "file", key: `file:${source.sourceId}:${source.clientKey || source.relativePath}` })));
         if (!isCurrentCatalogEpoch(epoch)) return;
       }
+      pendingBrowserProjectSources = restoreFailures;
       state.missingNativeSources = missingNativeSources(data.sources);
-      const needsBrowserSources = (data.sources || []).some((source) => source.kind !== "native-folder");
-      if (needsBrowserSources && (restoreFailures.length || (!files.length && !directories.length))) {
-        showUserError({ code: "project_source_unavailable" });
-      }
       renderProjectCurrent();
       modalInvokers.delete($("#projectListDialog"));
-      modalInvokers.delete($("#projectDialog"));
-      $("#projectListDialog").close(); $("#projectDialog").close();
-      focusElement($("#projectButton"));
+      $("#projectListDialog").close();
+      if (pendingBrowserProjectSources.length) {
+        showModalFromInvoker($("#projectDialog"), $("#projectButton"));
+        focusElement($("#projectBrowserRestoreList button"));
+      } else {
+        modalInvokers.delete($("#projectDialog"));
+        $("#projectDialog").close(); focusElement($("#projectButton"));
+      }
       await showSourceMismatches();
     }, { allowNested: true });
   } catch (error) { showUserError(error); }

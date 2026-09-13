@@ -200,26 +200,45 @@ function catalogRequestHeaders(headers = {}) {
   };
 }
 
-function api(path, options = {}) {
-  return fetch(path, {
-    ...options,
-    headers: catalogRequestHeaders({ "Content-Type": "application/json", ...(options.headers || {}) }),
-  })
-    .then(async (response) => {
-      if (state.status?.connectionFailure) clearStatus();
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        throw responseError(response, data);
-      }
-      applyCatalogGeneration(data);
-      return data;
-    })
-    .catch((error) => {
-      if (error?.code) throw error;
-      const safeError = new Error();
-      safeError.code = "connection_lost";
-      throw safeError;
+let catalogResync = null;
+
+async function resyncCurrentCatalog(epoch = state.catalogEpoch) {
+  if (!catalogResync || catalogResync.epoch !== epoch) {
+    const promise = resyncCatalog(epoch).finally(() => {
+      if (catalogResync?.promise === promise) catalogResync = null;
     });
+    catalogResync = { epoch, promise };
+  }
+  return catalogResync.promise;
+}
+
+async function resyncAfterStaleCatalog(error, epoch = state.catalogEpoch) {
+  if (error?.code !== "stale_catalog" || error.catalogResynced) return;
+  try { await resyncCurrentCatalog(epoch); } catch { /* Keep the original operation error. */ }
+  error.catalogResynced = true;
+}
+
+async function api(path, options = {}) {
+  const { resyncOnStale = true, ...requestOptions } = options;
+  try {
+    const response = await fetch(path, {
+    ...requestOptions,
+    headers: catalogRequestHeaders({ "Content-Type": "application/json", ...(options.headers || {}) }),
+    });
+    if (state.status?.connectionFailure) clearStatus();
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw responseError(response, data);
+    applyCatalogGeneration(data);
+    return data;
+  } catch (error) {
+    if (error?.code) {
+      if (resyncOnStale && error?.name !== "AbortError") await resyncAfterStaleCatalog(error);
+      throw error;
+    }
+    const safeError = new Error();
+    safeError.code = "connection_lost";
+    throw safeError;
+  }
 }
 
 function showConnectionFailure() {
@@ -383,12 +402,25 @@ function catalogResponse(snapshot) {
   if (isCompleteCatalogSnapshot(snapshot) && typeof applyProjectSnapshot === "function") applyProjectSnapshot(snapshot);
   return snapshot;
 }
+function reconcileCatalogSnapshot(snapshot, expectedProjectId, expectedCatalogGeneration) {
+  const projectId = snapshot?.project?.id || null;
+  const replaced = isCompleteCatalogSnapshot(snapshot)
+    && (projectId !== (expectedProjectId || null) || snapshot.catalogGeneration !== expectedCatalogGeneration);
+  catalogResponse(snapshot);
+  if (replaced) {
+    resetCatalog(snapshot.images || [], snapshot.root || "");
+    applyProjectSnapshot(snapshot);
+    state.missingNativeSources = typeof missingNativeSources === "function" ? missingNativeSources(snapshot.sources) : [];
+  }
+  return replaced;
+}
 async function catalogApi(path, payload = {}, options = {}) {
   const { resyncOnFailure = true, ...requestOptions } = options;
   const expectedCatalogGeneration = state.serverCatalogGeneration;
   try {
     return catalogResponse(await api(path, {
       ...requestOptions,
+      resyncOnStale: false,
       body: JSON.stringify(catalogExpectation(payload)),
       headers: {
         "X-Mozarie-Expected-Project-Id": state.project?.id || "",
@@ -397,15 +429,16 @@ async function catalogApi(path, payload = {}, options = {}) {
       },
     }));
   } catch (error) {
-    if (resyncOnFailure && error?.name !== "AbortError") {
+    if (resyncOnFailure && !error.catalogResynced && error?.name !== "AbortError") {
       const transition = state.catalogTransition;
-      await resyncCatalog(transition?.epoch ?? state.catalogEpoch, transition?.controller.signal).catch(() => {});
+      await resyncCurrentCatalog(transition?.epoch ?? state.catalogEpoch).catch(() => {});
+      if (error?.code === "stale_catalog") error.catalogResynced = true;
     }
     throw error;
   }
 }
 async function resyncCatalog(epoch = state.catalogEpoch, signal = undefined) {
-  const snapshot = await api("/api/images", { signal });
+  const snapshot = await api("/api/images", { signal, resyncOnStale: false });
   if (!isCurrentCatalogEpoch(epoch)) return null;
   catalogResponse(snapshot);
   resetCatalog(snapshot.images || [], snapshot.root || "");
@@ -441,7 +474,10 @@ async function runCatalogTransition(work, { allowEdits = false, allowNested = fa
     const active = state.catalogTransition;
     try { return await work(active); }
     catch (error) {
-      if (isCurrentCatalogEpoch(active.epoch) && error?.name !== "AbortError") await resyncCatalog(active.epoch, active.controller.signal).catch(() => {});
+      if (isCurrentCatalogEpoch(active.epoch) && !error.catalogResynced && error?.name !== "AbortError") {
+        await resyncCurrentCatalog(active.epoch).catch(() => {});
+        if (error?.code === "stale_catalog") error.catalogResynced = true;
+      }
       throw error;
     }
   }
@@ -454,8 +490,9 @@ async function runCatalogTransition(work, { allowEdits = false, allowNested = fa
   try {
     return await work({ epoch, signal: controller.signal });
   } catch (error) {
-    if (isCurrentCatalogEpoch(epoch) && error?.name !== "AbortError") {
-      await resyncCatalog(epoch, controller.signal).catch(() => {});
+    if (isCurrentCatalogEpoch(epoch) && !error.catalogResynced && error?.name !== "AbortError") {
+      await resyncCurrentCatalog(epoch).catch(() => {});
+      if (error?.code === "stale_catalog") error.catalogResynced = true;
     }
     throw error;
   } finally {

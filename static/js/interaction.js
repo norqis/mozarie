@@ -240,6 +240,8 @@ async function removeImageFromCatalog(imageId = state.contextMenuImageId) {
   state.catalogMutation = true;
   ++state.imageGeneration;
   updateActionButtons();
+  const projectId = state.project?.id || null;
+  const cleanupIntent = projectId ? await rememberProjectImageSourceCleanup(projectId, imageId) : null;
   try {
     await runCatalogTransition(async ({ epoch, signal }) => {
       await flushAllImageMutations();
@@ -247,7 +249,9 @@ async function removeImageFromCatalog(imageId = state.contextMenuImageId) {
       const data = await catalogApi(`/api/catalog/image/${encodeURIComponent(imageId)}`, {}, { method: "DELETE", signal, resyncOnFailure: false });
       if (!isCurrentCatalogEpoch(epoch)) return;
       state.images = data.images;
-      if (state.project?.id) await forgetProjectImageSources(state.project.id, [imageId]);
+      if (projectId && await forgetProjectImageSources(projectId, [imageId]) && cleanupIntent) {
+        await clearProjectSourceCleanup({ intentIds: [cleanupIntent] });
+      }
       loadReviewedPaths();
       state.selectedImageIds.delete(imageId);
       if (!state.images.length) { state.batchMode = false; clearBatchSelection(); }
@@ -269,7 +273,15 @@ async function removeImageFromCatalog(imageId = state.contextMenuImageId) {
         clearStatus();
       }
     });
-  } catch (error) { showUserError(error); }
+  } catch (error) {
+    if (cleanupIntent && Number.isInteger(error?.status) && error.status >= 400 && error.status < 500) {
+      await clearProjectSourceCleanup({ intentIds: [cleanupIntent] });
+    } else if (cleanupIntent && state.project?.id === projectId && !state.images.some((item) => item.id === imageId)
+      && await forgetProjectImageSources(projectId, [imageId])) {
+      await clearProjectSourceCleanup({ intentIds: [cleanupIntent] });
+    }
+    showUserError(error);
+  }
   finally { state.catalogMutation = false; updateActionButtons(); }
 }
 
@@ -437,7 +449,8 @@ async function importFiles(files) {
     }
     if (!isCurrentCatalogEpoch(session.epoch) || state.importSession !== session) return false;
     if (session.cancelled) { setStatusKey("status.importCancelled", { completed: session.completed }); return false; }
-    const latest = catalogResponse(await api("/api/images"));
+    const latest = await api("/api/images");
+    reconcileCatalogSnapshot(latest, session.expectedProjectId, session.expectedCatalogGeneration);
     state.images = latest.images;
     loadReviewedPaths();
     if (session.missingFileHandles) showUserError({ code: "project_source_unavailable" });
@@ -445,7 +458,8 @@ async function importFiles(files) {
     return !session.missingFileHandles;
   } catch (error) {
     try {
-      const latest = catalogResponse(await api("/api/images"));
+      const latest = await api("/api/images");
+      reconcileCatalogSnapshot(latest, session.expectedProjectId, session.expectedCatalogGeneration);
       if (isCurrentCatalogEpoch(session.epoch) && state.importSession === session) { state.images = latest.images; loadReviewedPaths(); renderCatalogViews(); }
     } catch { /* Keep the import failure visible. */ }
     if (isCurrentCatalogEpoch(session.epoch) && state.importSession === session) showUserError(error);
@@ -477,7 +491,11 @@ async function importSingleFile(entry, clientKey, catalogId = null, sourceId = n
     body: entry.file,
   });
   const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw responseError(response, data);
+  if (!response.ok) {
+    const error = responseError(response, data);
+    await resyncAfterStaleCatalog(error);
+    throw error;
+  }
   applyCatalogGeneration(data);
   return data;
 }
