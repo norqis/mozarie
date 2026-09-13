@@ -11,6 +11,7 @@ import json
 import base64
 import os
 import sqlite3
+import tempfile
 import threading
 import time
 import uuid
@@ -1402,20 +1403,45 @@ class WorkspaceStore:
         return self._history_public_state(state)
 
     def iter_project_export_states(self, catalog_id: str):
-        """Yield project masks from one read transaction without text encoding them."""
-        with self._connect() as db:
-            db.execute("BEGIN")
-            try:
-                images = db.execute("""SELECT images.image_id,images.relative_path,images.width,images.height,images.source_id,
-                    project_sources.display_name,image_transforms.flip_horizontal,image_transforms.flip_vertical FROM images JOIN project_sources ON project_sources.source_id=images.source_id
-                    LEFT JOIN image_transforms ON image_transforms.image_id=images.image_id
-                    WHERE images.catalog_id=? ORDER BY images.image_id""", (catalog_id,))
-                candidate_rows = iter(db.execute("""SELECT candidates.image_id,candidates.candidate_id,candidates.mask_png,candidates.enabled,
-                    candidates.role,candidates.forced,candidate_metadata.expand_px FROM candidates JOIN images USING(image_id)
-                    LEFT JOIN candidate_metadata USING(image_id,candidate_id)
-                    WHERE images.catalog_id=? AND candidates.deleted=0 ORDER BY candidates.image_id,candidates.candidate_id""", (catalog_id,)))
-                manual_rows = iter(db.execute("""SELECT manual_edits.* FROM manual_edits JOIN images USING(image_id)
-                    WHERE images.catalog_id=? ORDER BY manual_edits.image_id""", (catalog_id,)))
+        """Yield one consistent project export from a temporary SQLite snapshot."""
+        with tempfile.TemporaryDirectory(prefix="mozarie-export-") as directory:
+            snapshot_path = Path(directory) / "project.sqlite3"
+            with self._connect() as db:
+                db.execute("BEGIN")
+                try:
+                    db.execute("ATTACH DATABASE ? AS export_snapshot", (str(snapshot_path),))
+                    db.execute("""CREATE TABLE export_snapshot.images AS
+                        SELECT image.image_id,image.relative_path,image.width,image.height,image.source_id,
+                            source.display_name,transform.flip_horizontal,transform.flip_vertical
+                        FROM main.images AS image
+                        JOIN main.project_sources AS source ON source.source_id=image.source_id
+                        LEFT JOIN main.image_transforms AS transform ON transform.image_id=image.image_id
+                        WHERE image.catalog_id=?""", (catalog_id,))
+                    db.execute("""CREATE TABLE export_snapshot.candidates AS
+                        SELECT candidate.image_id,candidate.candidate_id,candidate.mask_png,candidate.enabled,
+                            candidate.role,candidate.forced,metadata.expand_px
+                        FROM main.candidates AS candidate
+                        JOIN main.images AS image ON image.image_id=candidate.image_id
+                        LEFT JOIN main.candidate_metadata AS metadata
+                            ON metadata.image_id=candidate.image_id AND metadata.candidate_id=candidate.candidate_id
+                        WHERE image.catalog_id=? AND candidate.deleted=0""", (catalog_id,))
+                    db.execute("""CREATE TABLE export_snapshot.manual_edits AS
+                        SELECT manual.image_id,manual.add_png,manual.exclusion_png,manual.exclusion_erase_png,
+                            manual.manual_enabled,manual.exclusion_enabled,manual.exclusion_erase_enabled,
+                            manual.exclusion_forced,manual.removed_candidate_ids
+                        FROM main.manual_edits AS manual
+                        JOIN main.images AS image ON image.image_id=manual.image_id
+                        WHERE image.catalog_id=?""", (catalog_id,))
+                    db.execute("COMMIT")
+                except Exception:
+                    db.execute("ROLLBACK")
+                    raise
+            with sqlite3.connect(snapshot_path, factory=_ClosingConnection) as db:
+                db.row_factory = sqlite3.Row
+                images = db.execute("SELECT * FROM images ORDER BY image_id")
+                candidate_rows = iter(db.execute("""SELECT * FROM candidates
+                    ORDER BY image_id,candidate_id"""))
+                manual_rows = iter(db.execute("SELECT * FROM manual_edits ORDER BY image_id"))
                 candidate = next(candidate_rows, None)
                 manual = next(manual_rows, None)
                 for image in images:

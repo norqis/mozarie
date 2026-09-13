@@ -161,3 +161,4 @@ A～Hは確認用画像を区別する記号。ファイル名は任意とし、
 | DI-102 | NetworkでPJ作成・改名・完了・閉じる・開く・再開・フォルダー読込の応答を遅延または切断する。各要求の expectedProjectId、expectedCatalogGeneration、応答の catalogGeneration と直後の `/api/images` を確認する | 遷移要求は表示中PJと世代を期待値として送る。古い世代は stale_catalog として受理されず、応答喪失・エラー後は `/api/images` のPJ・画像・catalogGeneration を再取得して画面と一致させる |
 | DI-103 | 2つのPJにブラウザーファイルとブラウザーフォルダーを多数保存してから、一方を削除し、もう一方を閉じて再開する。DevTools Applicationで projectSources の projectId index と削除完了を確認する | PJごとの復元・削除は projectId index を使い、削除要求の完了後に該当PJのブラウザー保持ソースだけが残らない。別PJの保持ソースと復元結果は変わらない |
 | DI-104 | ブラウザー保持ソースを持つPJを削除する要求の応答をNetworkで切断し、直後にページを閉じて開き直す。別タブで同じPJの削除を同時に開始し、一方の要求を4xxで拒否させる場合も確認する | 削除済みまたはサーバーに存在しないPJの保持ソースは次回起動時に消える。応答喪失や起動時にPJが残る場合はcleanup intentと保持ソースを残し、明確な4xx拒否はその要求のintentだけを解除する。別タブのintentを消さない |
+| DI-105 | 大規模なPJのモザイクZIPまたは除外ZIPを出力中に、別のPJで候補または手描き範囲を編集して保存する。出力中と完了後にタスクマネージャーでMozarieの保存応答と `workspaces.sqlite3-wal` の大きさを見る | 別PJの編集は待たされず保存され、WALが出力時間に比例して増え続けない。ZIP内の各PNGは出力開始時点のPJ状態で揃い、途中編集前後の世代を混在させない |
