@@ -18,6 +18,7 @@ from .core import (
     confidence_for_source, detection_tiles, mask_iou, materialize_tile_mask,
     merge_tile_segment, padded_hand_box, read_boundary_request,
     read_polygon_boundary_request, sam_refinement_prompts,
+    sam_hand_overlap_negative_points,
     refine_mask_with_hand,
     select_best_sam_mask, select_semantic_sam_mask,
     torch_module, _read_detection_parallelism, _read_target_classes,
@@ -610,6 +611,7 @@ class DetectionMixin:
                     selected = select_semantic_sam_mask(
                         candidates, candidate_scores, source_mask, hand_mask, prompt_points, labels,
                         max_hand_ratio=HAND_MAX_REMOVAL_RATIO,
+                        prioritize_hand_overlap=True,
                     )
                     return selected, selected is not None
                 return selected, False
@@ -627,8 +629,11 @@ class DetectionMixin:
             refined, selected_index = selected
             hand_overlap = int(np.count_nonzero((refined > 0) & (hand_mask > 0)))
             if hand_overlap and logits is not None and len(logits) > selected_index:
+                retry_points, retry_labels = sam_hand_overlap_negative_points(
+                    refined, hand_mask, prompt_points, labels,
+                )
                 retry_masks, retry_scores, _ = predictor.predict(
-                    point_coords=prompt_points, point_labels=labels, box=np.asarray(roi, dtype=np.float32),
+                    point_coords=retry_points, point_labels=retry_labels, box=np.asarray(roi, dtype=np.float32),
                     mask_input=np.asarray(logits[selected_index:selected_index + 1]), multimask_output=False,
                 )
                 retry, _ = select_mask(
@@ -639,9 +644,11 @@ class DetectionMixin:
                     retry_mask = retry[0]
                     retry_hand = int(np.count_nonzero((retry_mask > 0) & (hand_mask > 0)))
                     source_area = max(1, int(np.count_nonzero(source_mask)))
-                    retained = int(np.count_nonzero((refined > 0) & (source_mask > 0))) / source_area
+                    visible_source = (source_mask > 0) & (hand_mask == 0)
+                    retained_visible = int(np.count_nonzero((refined > 0) & visible_source))
                     retry_retained = int(np.count_nonzero((retry_mask > 0) & (source_mask > 0))) / source_area
-                    if retry_hand < hand_overlap and retry_retained >= retained and retry_retained >= 0.50:
+                    retry_visible = int(np.count_nonzero((retry_mask > 0) & visible_source))
+                    if retry_hand < hand_overlap and retry_retained >= 0.50 and retry_visible >= retained_visible:
                         refined = retry_mask
             segment["mask"] = refined
             segment["_apply_mask"] = refined

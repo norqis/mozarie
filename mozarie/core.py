@@ -734,9 +734,65 @@ def sam_refinement_prompts(source_mask: np.ndarray, hand_mask: np.ndarray) -> tu
     return np.asarray(points, dtype=np.float32), np.asarray(labels, dtype=np.int32)
 
 
+def sam_hand_overlap_negative_points(
+    refined_mask: np.ndarray, hand_mask: np.ndarray, point_coords: np.ndarray, point_labels: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Add up to two spatially separated negative points inside a SAM hand overlap."""
+    overlap = np.asarray((refined_mask > 0) & (hand_mask > 0), dtype=np.uint8)
+    points = np.asarray(point_coords, dtype=np.float32)
+    labels = np.asarray(point_labels, dtype=np.int32)
+    if not np.any(overlap) or points.ndim != 2 or points.shape[1:] != (2,) or len(points) != len(labels):
+        return points, labels
+    available = min(2, max(0, 3 - int(np.count_nonzero(labels == 0))))
+    if available == 0:
+        return points, labels
+
+    left, top, width, height = cv2.boundingRect(overlap)
+    overlap_roi = overlap[top:top + height, left:left + width]
+    local_points = points.astype(int).copy()
+    local_points[:, 0] -= left
+    local_points[:, 1] -= top
+    overlap_depth = cv2.distanceTransform(
+        cv2.copyMakeBorder(overlap_roi, 1, 1, 1, 1, cv2.BORDER_CONSTANT), cv2.DIST_L2, 3,
+    )[1:-1, 1:-1]
+    seeds = np.ones_like(overlap_roi, dtype=np.uint8)
+    seeded = False
+    for x, y in local_points:
+        if 0 <= x < width and 0 <= y < height:
+            seeds[y, x] = 0
+            seeded = True
+
+    additions: list[list[int]] = []
+    candidates = overlap_roi.copy()
+    for x, y in local_points:
+        if 0 <= x < width and 0 <= y < height:
+            candidates[y, x] = 0
+    for _index in range(available):
+        if not np.any(candidates):
+            break
+        if seeded:
+            separation = cv2.distanceTransform(seeds, cv2.DIST_L2, 3)
+            farthest = np.where(candidates > 0, separation, -1.0)
+            candidate = farthest == np.max(farthest)
+            y, x = np.unravel_index(int(np.argmax(np.where(candidate, overlap_depth, -1.0))), overlap_roi.shape)
+        else:
+            y, x = np.unravel_index(int(np.argmax(np.where(candidates > 0, overlap_depth, -1.0))), overlap_roi.shape)
+        additions.append([int(x + left), int(y + top)])
+        candidates[y, x] = 0
+        seeds[y, x] = 0
+        seeded = True
+    if not additions:
+        return points, labels
+    return (
+        np.concatenate((points, np.asarray(additions, dtype=np.float32))),
+        np.concatenate((labels, np.zeros(len(additions), dtype=np.int32))),
+    )
+
+
 def select_semantic_sam_mask(
     masks: np.ndarray, scores: np.ndarray, source_mask: np.ndarray, hand_mask: np.ndarray,
     point_coords: np.ndarray, point_labels: np.ndarray, *, max_hand_ratio: float = 0.15,
+    prioritize_hand_overlap: bool = False,
 ) -> tuple[np.ndarray, int] | None:
     """Choose only a SAM proposal that preserves detector semantics and avoids hands."""
     source = np.asarray(source_mask > 0, dtype=bool)
@@ -770,9 +826,11 @@ def select_semantic_sam_mask(
         retention = overlap / source_area
         if retention < 0.50:
             continue
-        # Deterministic selection is intentionally limited to the semantic
-        # gates above, then retention and SAM's own score.
-        choices.append(((-retention, -float(scores[index]), hand_ratio, index), mask.astype(np.uint8) * 255, index))
+        # A consensus-only relaxation treats less hand overlap as the first
+        # preference. The normal path retains its detector-first ordering.
+        rank = ((hand_ratio, -retention, -float(scores[index]), index)
+                if prioritize_hand_overlap else (-retention, -float(scores[index]), hand_ratio, index))
+        choices.append((rank, mask.astype(np.uint8) * 255, index))
     if not choices:
         return None
     _rank, mask, index = min(choices, key=lambda choice: choice[0])
