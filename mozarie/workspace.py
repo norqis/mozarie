@@ -1469,8 +1469,6 @@ class WorkspaceStore:
                             "removed": str(current_manual["removed_candidate_ids"]),
                         },
                     }
-            finally:
-                db.execute("ROLLBACK")
 
     @staticmethod
     def _history_public_state(state: dict[str, Any]) -> dict[str, Any]:
