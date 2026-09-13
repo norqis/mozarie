@@ -170,12 +170,14 @@ class CatalogMixin:
             record.transform_revision = saved["transform_revision"]
 
     @staticmethod
-    def _apply_source_state(records: list[ImageRecord], stored: dict[str, dict[str, Any]], source_id: str, root: Path) -> tuple[list[ImageRecord], dict[str, bool]]:
+    def _apply_source_state(records: list[ImageRecord], stored: dict[str, dict[str, Any]], source_id: str, root: Path, *, keep_unstored: bool = False) -> tuple[list[ImageRecord], dict[str, bool]]:
         accepted: list[ImageRecord] = []
         mismatches: dict[str, bool] = {}
         for record in records:
             saved = stored.get(record.relative_path)
             if saved is None:
+                if keep_unstored:
+                    record.source_id = source_id; record.source_root = root; accepted.append(record)
                 continue
             record.image_id = str(saved["image_id"])
             record.hidden = bool(saved["hidden"])
@@ -223,7 +225,8 @@ class CatalogMixin:
                 if publish_catalog_id is not None:
                     self.catalog_id = publish_catalog_id
                     self.project_read_only = publish_read_only
-                    self.source_mismatches = dict(publish_source_mismatches or {})
+                if publish_source_mismatches is not None:
+                    self.source_mismatches = dict(publish_source_mismatches)
                 self._invalidate_sam_cache()
                 self.job = Job()
                 self.catalog_generation += 1
@@ -366,16 +369,18 @@ class CatalogMixin:
                 for worker in workers:
                     worker.result()
         records.sort(key=lambda record: (record.relative_path.casefold(), record.relative_path))
+        prehydrated: dict[str, tuple[int, list[Candidate]]] | None = None
         try:
             if staging:
                 stored = self.workspace_store.preview_reconcile_images(catalog_id, source_id, records)
             elif relink_source_id:
                 stored = self.workspace_store.relink_native_source(catalog_id, source_id, root, records, allow_new=allow_new)
             elif catalog_id is not None:
-                stored = (
-                    self.workspace_store.reconcile_native_source(catalog_id, source_id, root, records)
-                    if allow_new else self.workspace_store.reconcile_images(catalog_id, records, source_id=source_id, allow_new=False)
-                )
+                preview = self.workspace_store.preview_reconcile_images(catalog_id, source_id, records)
+                staged_records, _staged_mismatches = self._apply_source_state(records, preview, source_id, root, keep_unstored=allow_new)
+                prehydrated = self._stage_workspace_candidates(staged_records)
+                stored = (self.workspace_store.reconcile_native_source(catalog_id, source_id, root, records)
+                          if allow_new else self.workspace_store.reconcile_images(catalog_id, records, source_id=source_id, allow_new=False))
             else:
                 stored = {}
         except ProjectSourcePathConflictError as exc:
@@ -397,7 +402,7 @@ class CatalogMixin:
         source_image_ids = {record.image_id for record in records}
         if staged_source_mismatches is not None:
             staged_source_mismatches.update(source_mismatches)
-        if inherit_current_catalog:
+        if inherit_current_catalog and defer_replace:
             # Re-importing one source of a multi-folder project must not dismiss a
             # change acknowledgement still required for another source.
             with self.lock:
@@ -419,8 +424,13 @@ class CatalogMixin:
                 retained = [record for record in self.images.values() if record.source_id != source_id]
             records = retained + records
             records.sort(key=lambda record: (record.relative_path.casefold(), record.relative_path, record.image_id))
-        prehydrated = self._stage_workspace_candidates(records) if catalog_id is not None else None
-        images = self._replace_catalog(root, records, detach_project=not inherit_current_catalog, prehydrated=prehydrated)
+        prehydrated = self._stage_workspace_candidates(records) if catalog_id is not None and prehydrated is None else prehydrated
+        with self.lock:
+            publish_mismatches = {image_id: dimensions for image_id, dimensions in self.source_mismatches.items()
+                                  if image_id not in source_image_ids}
+        publish_mismatches.update(source_mismatches)
+        images = self._replace_catalog(root, records, detach_project=not inherit_current_catalog, prehydrated=prehydrated,
+                                       publish_source_mismatches=publish_mismatches if catalog_id is not None else None)
         with self.lock:
             self.project_read_only = completed
         return images
