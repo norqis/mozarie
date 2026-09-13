@@ -32,10 +32,11 @@
 
 ## 確認項目
 
-1. [起動・読み込み・一覧・プロジェクト](manual-verification/workspace.md)：別フォルダー再読込時の一覧置換と、名前付きPJから通常読込へ切り替える際のPJ分離も確認する。
+1. [起動・読み込み・一覧・プロジェクト](manual-verification/workspace.md)：別フォルダー再読込時の一覧置換と、名前付きPJから通常読込へ切り替える際のPJ分離、PJ操作・検出・削除・再開の競合も確認する。
 2. [描画・境界・候補・表示・履歴](manual-verification/editor.md)
 3. [検出・モデル・設定・ショートカット](manual-verification/settings-detection.md)
 4. [保存・書き出し・異常時・リリース](manual-verification/save-release.md)
 5. [通信・対象の組合せ・PJデータ照合](manual-verification/data-integrity.md)
 6. [画像反転・保存形式・メタ情報](manual-verification/flip-export.md)
 7. [無名作業の反転上書きと4K多候補の保存・マスク書出し（DI-099〜101）](manual-verification/data-integrity.md)：単一・一括保存、PNG・ZIPの出力範囲と処理中メモリを確認する。
+8. [カタログ世代・PJ切替・ブラウザー復元・ZIPスナップショット（DI-102〜117）](manual-verification/data-integrity.md)：遅延要求、並列インポート、保存後の古い要求、ZIP書出し中の編集を確認する。

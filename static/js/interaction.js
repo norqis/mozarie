@@ -408,7 +408,7 @@ async function importFiles(files) {
         const stagedSource = Boolean(session.catalogId && session.sourceKind === "browser-files" && entry.fileHandle);
         if (stagedSource) await rememberProjectSource(session.catalogId, entry.fileHandle, null, session.sourceId, clientKey, entry.relativePath);
         let data;
-        try { data = await importSingleFile(entry, clientKey, session.catalogId, session.sourceId, session.sourceKind, session.importIntent, session.expectedCatalogGeneration); }
+        try { data = await importSingleFile(entry, clientKey, session.catalogId, session.sourceId, session.sourceKind, session.importIntent, session); }
         catch (error) {
           if (stagedSource && Number.isInteger(error?.status) && error.status >= 400 && error.status < 500) {
             await forgetPendingProjectSource(session.catalogId, session.sourceId, clientKey);
@@ -451,10 +451,10 @@ async function importFiles(files) {
     if (isCurrentCatalogEpoch(session.epoch) && state.importSession === session) showUserError(error);
     return false;
   }
-  finally { finishImportSession(session); }
+  finally { await finishImportServerSession(session); finishImportSession(session); }
 }
 
-async function importSingleFile(entry, clientKey, catalogId = null, sourceId = null, sourceKind = null, importIntent = "add", expectedCatalogGeneration = null) {
+async function importSingleFile(entry, clientKey, catalogId = null, sourceId = null, sourceKind = null, importIntent = "add", session = null) {
   const token = document.querySelector('meta[name="mozarie-token"]')?.content || "";
   const response = await fetch("/api/import/file", {
     method: "POST",
@@ -469,23 +469,38 @@ async function importSingleFile(entry, clientKey, catalogId = null, sourceId = n
       ...(sourceId ? { "X-Mozarie-Source-Id": encodeURIComponent(sourceId) } : {}),
       ...(sourceKind ? { "X-Mozarie-Source-Kind": sourceKind } : {}),
       "X-Mozarie-Import-Intent": importIntent,
+      "X-Mozarie-Import-Session": session?.id || "",
       ...(catalogId ? { "X-Mozarie-Catalog-Id": encodeURIComponent(catalogId) } : {}),
-      "X-Mozarie-Expected-Project-Id": encodeURIComponent(state.project?.id || ""),
-      ...(Number.isSafeInteger(expectedCatalogGeneration) ? { "X-Mozarie-Expected-Catalog-Generation": String(expectedCatalogGeneration) } : {}),
+      "X-Mozarie-Expected-Project-Id": encodeURIComponent(session?.expectedProjectId ?? state.project?.id ?? ""),
+      ...(Number.isSafeInteger(session?.expectedCatalogGeneration) ? { "X-Mozarie-Expected-Catalog-Generation": String(session.expectedCatalogGeneration) } : {}),
     },
     body: entry.file,
   });
   const data = await response.json().catch(() => ({}));
   if (!response.ok) throw responseError(response, data);
+  applyCatalogGeneration(data);
   return data;
 }
 
 function beginImportSession({ allowDuringCatalogTransition = false } = {}) {
   if (isBusy() || state.importing || (state.catalogTransition && !allowDuringCatalogTransition)) return null;
-  const session = { id: newClientKey(), epoch: state.catalogTransition?.epoch || beginCatalogEpoch(), expectedCatalogGeneration: state.serverCatalogGeneration, paused: false, cancelled: false, completed: 0, total: 0, catalogId: null, sourceId: null, sourceKind: "browser-files", importIntent: "add" };
+  const session = { id: newClientKey(), epoch: state.catalogTransition?.epoch || beginCatalogEpoch(), expectedProjectId: state.project?.id || "", expectedCatalogGeneration: state.serverCatalogGeneration, paused: false, cancelled: false, completed: 0, total: 0, catalogId: null, sourceId: null, sourceKind: "browser-files", importIntent: "add" };
   state.importing = true; state.importSession = session;
   updateActionButtons();
   return session;
+}
+
+async function finishImportServerSession(session) {
+  if (!session?.id || !Number.isSafeInteger(session.expectedCatalogGeneration)) return;
+  try {
+    await api("/api/import/finish", { method: "POST", body: JSON.stringify({
+      sessionId: session.id,
+      expectedProjectId: session.expectedProjectId,
+      expectedCatalogGeneration: session.expectedCatalogGeneration,
+    }) });
+  } catch {
+    // The next claimed import expires an abandoned batch after its short TTL.
+  }
 }
 
 function remapImportedImageIds(imageIds) {

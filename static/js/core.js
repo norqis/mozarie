@@ -189,11 +189,21 @@ function responseError(response, payload) {
   return error;
 }
 
-function api(path, options = {}) {
+function catalogRequestHeaders(headers = {}) {
   const token = document.querySelector('meta[name="mozarie-token"]')?.content || "";
+  const expectedCatalogGeneration = state.serverCatalogGeneration;
+  return {
+    "X-Mozarie-Token": token,
+    "X-Mozarie-Expected-Project-Id": encodeURIComponent(state.project?.id || ""),
+    ...(Number.isSafeInteger(expectedCatalogGeneration) ? { "X-Mozarie-Expected-Catalog-Generation": String(expectedCatalogGeneration) } : {}),
+    ...headers,
+  };
+}
+
+function api(path, options = {}) {
   return fetch(path, {
     ...options,
-    headers: { "Content-Type": "application/json", "X-Mozarie-Token": token, ...(options.headers || {}) },
+    headers: catalogRequestHeaders({ "Content-Type": "application/json", ...(options.headers || {}) }),
   })
     .then(async (response) => {
       if (state.status?.connectionFailure) clearStatus();
@@ -201,6 +211,7 @@ function api(path, options = {}) {
       if (!response.ok) {
         throw responseError(response, data);
       }
+      applyCatalogGeneration(data);
       return data;
     })
     .catch((error) => {
