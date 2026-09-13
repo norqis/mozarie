@@ -12,7 +12,7 @@ const state = {
   polygonPoints: [], polygonDragIndex: -1, polygonDraftDrag: null, blinkCandidateIds: new Set(), blinkModes: new Map(), blinkPhase: false, blinkTimer: null,
   pointer: null, hover: null, brushCursorGeometry: "", history: [], historyIndex: 0, activeStroke: null, manualStrokePaintFrame: 0, removedCandidateIds: new Set(),
   view: { scale: 1, x: 0, y: 0 }, job: null, saving: false, saveStarting: false, detectionStarting: false, masksClearing: false, transformPending: false,
-  catalogMutation: false, imageGeneration: 0, catalogEpoch: 0, viewGeneration: 0, historyRestoreToken: 0, translations: {},
+  catalogMutation: false, imageGeneration: 0, catalogEpoch: 0, catalogGeneration: 0, viewGeneration: 0, historyRestoreToken: 0, translations: {},
   applyTargetIds: [], applyTargetMode: "masked", applyCatalogSnapshot: null, applyRunning: false, applyFinishing: false, handledApplyStartedAt: null, importing: false, mosaicPreviewEnabled: true, mosaicPreviewGeneration: 0, mosaicWorker: null, mosaicPreviewRequested: false, mosaicWorkerBusy: false, mosaicPending: null, mosaicPreviewRoi: null, mosaicSourceImage: null, mosaicSourceId: "", mosaicSourcePromise: null, mosaicPreviewFailureReported: false,
   outputDirectoryPicking: false, outputDirectoryHandle: null, singleSave: null,
   detectionTargetIds: [], pendingDetectionTargetIds: [], detectCancelRequested: false,
@@ -81,7 +81,7 @@ const USER_ERROR_CODES = {
   model_profile_invalid: "model_file_invalid", sam_checkpoint_invalid: "model_type_mismatch",
   sam_provider_unavailable: "gpu_runtime_unavailable", hand_segmentation_invalid: "model_load_failed",
   model_picker_busy: "operation_in_progress", model_picker_failed: "model_picker_failed", model_picker_invalid: "model_file_invalid",
-  model_download_invalid: "model_download_invalid", catalog_changed: "catalog_changed", job_running: "operation_in_progress",
+  model_download_invalid: "model_download_invalid", catalog_changed: "catalog_changed", stale_catalog: "catalog_changed", job_running: "operation_in_progress",
   mask_not_found: "mask_not_found", candidate_not_found: "mask_not_found", invalid_settings: "input_invalid", invalid_request: "input_invalid",
   api_not_found: "response_invalid", connection_lost: "connection_lost", output_folder_unavailable: "output_folder_unavailable", output_permission_denied: "output_permission_denied", request_failed: "internal_error",
   image_not_found: "image_not_found", image_read_failed: "image_read_failed", image_format_unsupported: "image_format_unsupported",
@@ -191,9 +191,12 @@ function responseError(response, payload) {
 
 function api(path, options = {}) {
   const token = document.querySelector('meta[name="mozarie-token"]')?.content || "";
+  const expectedProjectId = state.project?.id || "";
   return fetch(path, {
     ...options,
-    headers: { "Content-Type": "application/json", "X-Mozarie-Token": token, ...(options.headers || {}) },
+    headers: { "Content-Type": "application/json", "X-Mozarie-Token": token,
+      "X-Mozarie-Expected-Project-Id": encodeURIComponent(expectedProjectId),
+      "X-Mozarie-Expected-Catalog-Generation": String(state.catalogGeneration), ...(options.headers || {}) },
   })
     .then(async (response) => {
       if (state.status?.connectionFailure) clearStatus();
@@ -201,6 +204,7 @@ function api(path, options = {}) {
       if (!response.ok) {
         throw responseError(response, data);
       }
+      if (Number.isInteger(data?.catalogGeneration)) state.catalogGeneration = data.catalogGeneration;
       return data;
     })
     .catch((error) => {
@@ -705,6 +709,7 @@ function resetCatalog(images, root) {
 }
 
 function applyProjectSnapshot(snapshot) {
+  if (Number.isInteger(snapshot?.catalogGeneration)) state.catalogGeneration = snapshot.catalogGeneration;
   state.project = snapshot?.project || null;
   state.projectReadOnly = snapshot?.readOnly === true || state.project?.status === "completed";
   if (typeof renderProjectCurrent === "function") renderProjectCurrent();
@@ -744,10 +749,9 @@ async function loadFolder({ skipSameSourceWarning = false, path: suppliedPath = 
     await flushAllWorkspaceMutations();
     const data = await api("/api/folder", { method: "POST", body: JSON.stringify({ path }) });
     if (!isCurrentCatalogEpoch(catalogEpoch)) return;
-    resetCatalog(data.images, path);
+    resetCatalog(data.images, data.root || path);
     setStatusKey("status.imagesLoaded", { count: state.images.length });
-    const snapshot = await api("/api/images");
-    applyProjectSnapshot(snapshot);
+    applyProjectSnapshot(data);
     if (typeof showSourceMismatches === "function") await showSourceMismatches();
   } catch (error) { if (isCurrentCatalogEpoch(catalogEpoch)) showUserError(error); }
 }

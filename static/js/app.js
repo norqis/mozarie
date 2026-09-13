@@ -348,8 +348,7 @@ async function openProject(project, resume = false) {
   try {
     await flushAllImageMutations();
     await flushAllWorkspaceMutations();
-    if (resume) await api("/api/project/resume", { method: "POST", body: JSON.stringify({ projectId: project.id }) });
-    const data = await api("/api/project/open", { method: "POST", body: JSON.stringify({ projectId: project.id }) });
+    const data = await api("/api/project/open", { method: "POST", body: JSON.stringify({ projectId: project.id, resume }) });
     state.project = data.project; state.projectReadOnly = data.project?.status === "completed";
     if (data.needsSource) {
       const files = await rememberedProjectFileSources(project.id);

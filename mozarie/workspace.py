@@ -9,6 +9,7 @@ from __future__ import annotations
 import io
 import json
 import base64
+import os
 import sqlite3
 import threading
 import time
@@ -28,6 +29,11 @@ _BULK_CHUNK_SIZE = 900
 
 def _chunks(values: list[str]) -> list[list[str]]:
     return [values[index:index + _BULK_CHUNK_SIZE] for index in range(0, len(values), _BULK_CHUNK_SIZE)]
+
+
+def native_source_identity(root: Path | str) -> str:
+    """Use Windows' case-insensitive path identity in durable source rows."""
+    return os.path.normcase(str(Path(root).resolve()))
 
 
 class WorkspaceOpenError(RuntimeError):
@@ -321,7 +327,7 @@ class WorkspaceStore:
 
     @staticmethod
     def _ensure_project_source_db(db: sqlite3.Connection, catalog_id: str, kind: str, display_name: str, identity: str) -> str:
-        row = db.execute("SELECT source_id,kind FROM project_sources WHERE catalog_id=? AND source_identity=?", (catalog_id, identity)).fetchone()
+        row = db.execute("SELECT source_id,kind FROM project_sources WHERE catalog_id=? AND source_identity=? COLLATE NOCASE", (catalog_id, identity)).fetchone()
         if row:
             if str(row["kind"]) != kind:
                 raise ValueError("project source kind does not match")
@@ -452,14 +458,14 @@ class WorkspaceStore:
                 "nativePath": row["native_path"], "identity": str(row["source_identity"])}
 
     def relink_native_source(self, catalog_id: str, source_id: str, root: Path, records: list[Any], *, allow_new: bool) -> dict[str, dict[str, Any]]:
-        identity = str(root.resolve())
+        identity = native_source_identity(root)
         incoming_paths = {str(record.relative_path) for record in records}
         def update_source(db: sqlite3.Connection, now: int) -> None:
             source = db.execute("SELECT kind FROM project_sources WHERE catalog_id=? AND source_id=?", (catalog_id, source_id)).fetchone()
             if source is None or str(source["kind"]) != "native-folder":
                 raise ProjectSourceUnavailableError("native project source is missing")
             conflict = db.execute("""SELECT source_id FROM project_sources
-                WHERE catalog_id=? AND kind='native-folder' AND source_identity=? AND source_id<>?""",
+                WHERE catalog_id=? AND kind='native-folder' AND source_identity=? COLLATE NOCASE AND source_id<>?""",
                                   (catalog_id, identity, source_id)).fetchone()
             if conflict is not None:
                 raise ProjectSourcePathConflictError("native project source path already belongs to this project")
@@ -632,7 +638,7 @@ class WorkspaceStore:
         with self._connect() as db:
             sql = """SELECT catalogs.*,COUNT(images.image_id) AS image_count FROM catalogs
                 JOIN project_sources ON project_sources.catalog_id=catalogs.catalog_id
-                LEFT JOIN images ON images.catalog_id=catalogs.catalog_id WHERE project_sources.source_identity=?"""
+                LEFT JOIN images ON images.catalog_id=catalogs.catalog_id WHERE project_sources.source_identity=? COLLATE NOCASE"""
             values: list[Any] = [source_root]
             if exclude_catalog:
                 sql += " AND catalogs.catalog_id<>?"; values.append(exclude_catalog)

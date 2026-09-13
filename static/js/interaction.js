@@ -467,6 +467,8 @@ async function importSingleFile(entry, clientKey, catalogId = null, sourceId = n
       ...(sourceKind ? { "X-Mozarie-Source-Kind": sourceKind } : {}),
       "X-Mozarie-Import-Intent": importIntent,
       ...(catalogId ? { "X-Mozarie-Catalog-Id": encodeURIComponent(catalogId) } : {}),
+      "X-Mozarie-Expected-Project-Id": encodeURIComponent(state.project?.id || ""),
+      "X-Mozarie-Expected-Catalog-Generation": String(state.catalogGeneration),
     },
     body: entry.file,
   });

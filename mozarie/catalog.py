@@ -30,9 +30,18 @@ from .domain import Candidate, CandidateRole
 from .image_io import _valid_color, decode_draft_masks, draft_manual_exclusion_forced, inspect_import_image, oriented_image_size, unique_session_import_destination
 from .masks import compose_masks, expand_mask, union_mask
 from .runtime import patch_directml_sam_prompt_encoder, runtime_backend, torch_device
-from .workspace import ProjectNameAlreadyExistsError, ProjectSourceNoMatchError, ProjectSourcePathConflictError, ProjectSourceUnavailableError, WorkspaceStore
+from .workspace import ProjectNameAlreadyExistsError, ProjectSourceNoMatchError, ProjectSourcePathConflictError, ProjectSourceUnavailableError, WorkspaceStore, native_source_identity
 
 class CatalogMixin:
+    def _assert_catalog_expectation(self, expected_project_id: str | None, expected_catalog_generation: int | None) -> None:
+        """Reject a request captured from a different live catalogue."""
+        if expected_project_id != self.catalog_id or expected_catalog_generation != self.catalog_generation:
+            raise ClientError("プロジェクト一覧が更新されました。もう一度操作してください。", "stale_catalog")
+
+    def assert_catalog_expectation(self, expected_project_id: str | None, expected_catalog_generation: int) -> None:
+        with self.lock:
+            self._assert_catalog_expectation(expected_project_id, expected_catalog_generation)
+
     def _assert_image_editable(self, image_id: str) -> None:
         with self.lock:
             self._assert_catalog_mutable()
@@ -190,8 +199,12 @@ class CatalogMixin:
             and (catalog_generation is None or self.catalog_generation == catalog_generation)
         )
 
-    def set_root(self, raw_path: str) -> list[dict[str, Any]]:
+    def set_root(self, raw_path: str, *, expected_project_id: str | None = None,
+                 expected_catalog_generation: int | None = None) -> list[dict[str, Any]]:
         with self.import_lock:
+            with self.lock:
+                if expected_catalog_generation is not None:
+                    self._assert_catalog_expectation(expected_project_id, expected_catalog_generation)
             if not raw_path or not isinstance(raw_path, str):
                 return self._set_root(raw_path)
             root = Path(raw_path).expanduser().resolve()
@@ -205,7 +218,7 @@ class CatalogMixin:
             same_project_source = any(
                 source["kind"] == "native-folder"
                 and source.get("nativePath")
-                and Path(str(source["nativePath"])).resolve() == root
+                and native_source_identity(str(source["nativePath"])) == native_source_identity(root)
                 for source in sources
             )
             return self._set_root(raw_path, inherit_current_catalog=not sources or same_project_source)
@@ -229,7 +242,7 @@ class CatalogMixin:
         stored_metadata: dict[str, tuple[int, int, int, int]] = {}
         if catalog_id is not None:
             source_id = relink_source_id or self.workspace_store.ensure_project_source(
-                catalog_id, kind="native-folder", display_name=root.name or str(root), identity=str(root.resolve()),
+                catalog_id, kind="native-folder", display_name=root.name or str(root), identity=native_source_identity(root),
             )
             if relink_source_id:
                 self.workspace_store.native_source(catalog_id, source_id)
@@ -384,9 +397,12 @@ class CatalogMixin:
             raise ClientError("画像フォルダが見つかりません。", "folder_not_found")
         return self.workspace_store.projects_for_source_root(str(root.resolve()), self.catalog_id)
 
-    def create_project(self, name: str | None = None) -> dict[str, Any]:
+    def create_project(self, name: str | None = None, *, expected_project_id: str | None = None,
+                       expected_catalog_generation: int | None = None) -> dict[str, Any]:
         with self.import_lock:
             with self.lock:
+                if expected_catalog_generation is not None:
+                    self._assert_catalog_expectation(expected_project_id, expected_catalog_generation)
                 if self.active_import_count or self.job.state in {"running", "pausing", "paused"} or self._has_active_worker():
                     raise ClientError("処理が終了するまで画像一覧を変更できません。", "operation_in_progress")
             try:
@@ -400,10 +416,13 @@ class CatalogMixin:
                 self.catalog_id = str(project["id"]); self.project_read_only = False; self.source_mismatches = {}
             return project
 
-    def save_current_as_project(self, name: str, project_id: str) -> dict[str, Any]:
+    def save_current_as_project(self, name: str, project_id: str, *, expected_project_id: str | None = None,
+                                expected_catalog_generation: int | None = None) -> dict[str, Any]:
         """Make the current projectless session durable without replacing it."""
         with self.import_lock:
             with self.lock:
+                if expected_catalog_generation is not None:
+                    self._assert_catalog_expectation(expected_project_id, expected_catalog_generation)
                 self._assert_catalog_mutable()
                 if self.catalog_id:
                     catalog_id = self.catalog_id
@@ -430,7 +449,7 @@ class CatalogMixin:
                 for record in records:
                     if record.source_kind == "filesystem":
                         root = (record.source_root or self.root or record.path.parent).resolve()
-                        source = ("native-folder", str(root), root.name or str(root))
+                        source = ("native-folder", native_source_identity(root), root.name or str(root))
                     else:
                         kind = record.project_source_kind or "browser-files"
                         identity = record.project_source_identity or f"browser:{self.session_dir.name if self.session_dir else uuid.uuid4().hex}"
@@ -462,33 +481,55 @@ class CatalogMixin:
                 project["sourceIds"] = source_ids
                 return project
 
-    def name_current_project(self, name: str, project_id: str = "") -> dict[str, Any]:
+    def name_current_project(self, name: str, project_id: str = "", *, expected_project_id: str | None = None,
+                             expected_catalog_generation: int | None = None) -> dict[str, Any]:
         with self.lock:
+            if expected_catalog_generation is not None:
+                self._assert_catalog_expectation(expected_project_id, expected_catalog_generation)
             catalog_id = self.catalog_id
-        if not catalog_id:
-            return self.save_current_as_project(name, project_id)
-        try: return self.workspace_store.name_project(catalog_id, name)
-        except ProjectNameAlreadyExistsError as exc: raise ClientError("", "project_name_duplicate") from exc
-        except ValueError as exc: raise ClientError("プロジェクト名を確認してください。", "project_name_invalid") from exc
+            if catalog_id:
+                try:
+                    return self.workspace_store.name_project(catalog_id, name)
+                except ProjectNameAlreadyExistsError as exc:
+                    raise ClientError("", "project_name_duplicate") from exc
+                except ValueError as exc:
+                    raise ClientError("プロジェクト名を確認してください。", "project_name_invalid") from exc
+        return self.save_current_as_project(name, project_id, expected_project_id=expected_project_id,
+                                            expected_catalog_generation=expected_catalog_generation)
 
-    def complete_project(self) -> dict[str, Any]:
+    def complete_project(self, *, expected_project_id: str | None = None,
+                         expected_catalog_generation: int | None = None) -> dict[str, Any]:
         with self.lock:
+            if expected_catalog_generation is not None:
+                self._assert_catalog_expectation(expected_project_id, expected_catalog_generation)
             if not self.catalog_id:
                 raise ClientError("プロジェクトを開いていません。", "project_not_found")
             self._assert_catalog_mutable()
             catalog_id = self.catalog_id
-        project = self.workspace_store.set_project_status(catalog_id, "completed")
+            # Keep the completed DB row and the in-memory edit gate in the
+            # same state epoch. A job cannot start between them.
+            project = self.workspace_store.set_project_status(catalog_id, "completed")
+            self.project_read_only = True
         self.detach_catalog()
         return project
 
-    def close_project(self) -> None:
-        self.detach_catalog()
+    def close_project(self, *, expected_project_id: str | None = None,
+                      expected_catalog_generation: int | None = None) -> None:
+        with self.import_lock:
+            with self.lock:
+                if expected_catalog_generation is not None:
+                    self._assert_catalog_expectation(expected_project_id, expected_catalog_generation)
+            self.detach_catalog()
 
-    def delete_project(self, catalog_id: str) -> None:
+    def delete_project(self, catalog_id: str, *, expected_project_id: str | None = None,
+                       expected_catalog_generation: int | None = None) -> None:
         """Delete project-only state while leaving every original image untouched."""
         with self.import_lock:
             with self.lock:
-                if self.catalog_id == catalog_id and self._has_active_worker():
+                if expected_catalog_generation is not None:
+                    self._assert_catalog_expectation(expected_project_id, expected_catalog_generation)
+                if self.catalog_id == catalog_id and (self.active_import_count or self._has_active_worker()
+                                                      or self.job.state in {"running", "pausing", "paused"}):
                     raise ClientError("処理中のプロジェクトは削除できません。", "operation_in_progress")
                 active = self.catalog_id == catalog_id
             try:
@@ -509,16 +550,30 @@ class CatalogMixin:
                 except OSError:
                     LOGGER.warning("Could not clean deleted-project cache for %s", image_id)
 
-    def resume_project(self, catalog_id: str) -> dict[str, Any]:
-        project = self.workspace_store.set_project_status(catalog_id, "working")
+    def resume_project(self, catalog_id: str, *, expected_project_id: str | None = None,
+                       expected_catalog_generation: int | None = None) -> dict[str, Any]:
         with self.lock:
+            if expected_catalog_generation is not None:
+                self._assert_catalog_expectation(expected_project_id, expected_catalog_generation)
+            project = self.workspace_store.set_project_status(catalog_id, "working")
             if self.catalog_id == catalog_id:
                 self.project_read_only = False
         return project
 
-    def open_project(self, catalog_id: str) -> dict[str, Any]:
+    def open_project(self, catalog_id: str, *, expected_project_id: str | None = None,
+                     expected_catalog_generation: int | None = None, resume: bool = False) -> dict[str, Any]:
         with self.import_lock:
-            return self._open_project(catalog_id)
+            with self.lock:
+                if expected_catalog_generation is not None:
+                    self._assert_catalog_expectation(expected_project_id, expected_catalog_generation)
+            data = self._open_project(catalog_id)
+            if resume:
+                project = self.workspace_store.set_project_status(catalog_id, "working")
+                with self.lock:
+                    if self.catalog_id == catalog_id:
+                        self.project_read_only = False
+                data["project"] = project
+            return data
 
     def _open_project(self, catalog_id: str) -> dict[str, Any]:
         project = self.workspace_store.project(catalog_id)
@@ -531,17 +586,21 @@ class CatalogMixin:
         native_roots = [Path(str(source["nativePath"])) for source in sources
                         if source["kind"] == "native-folder" and source.get("nativePath") and Path(str(source["nativePath"])).is_dir()]
         if native_roots:
-            self.detach_catalog()
-            # Loading source bytes is not an edit.  Temporarily permit the
-            # catalogue replacement, then restore completed read-only state.
-            self.project_read_only = False
+            # Inspect and reconcile every source before replacing the live
+            # catalogue. A bad later source must leave the current screen in
+            # place instead of exposing a half-open target project.
             records: list[ImageRecord] = []
             for root in native_roots:
-                self.project_read_only = False
-                records.extend(self._set_root(str(root), catalog_id, defer_replace=True, allow_new=False))
+                records.extend(self._set_root(
+                    str(root), catalog_id, defer_replace=True, allow_new=False, inherit_current_catalog=False,
+                ))
             records.sort(key=lambda record: (record.relative_path.casefold(), record.relative_path, record.image_id))
+            self.detach_catalog()
             images = self._replace_catalog(native_roots[0], records)
-            self.project_read_only = project["status"] == "completed"
+            with self.lock:
+                self.catalog_id = catalog_id
+                self.project_read_only = project["status"] == "completed"
+                self.source_mismatches = {}
             # Browser sources may still need a user-granted handle.  Native
             # images are shown immediately and the UI can add the rest.
             needs_source = any(
@@ -1517,12 +1576,10 @@ class CatalogMixin:
             record = self.images.get(image_id)
             if record is None:
                 raise ClientError("画像が見つかりません。", "image_not_found")
-            catalog_generation = self.catalog_generation
-        if self.workspace_store.has_image(image_id):
-            self.workspace_store.set_image_flags(image_id, hidden=hidden, reviewed=reviewed)
-        with self.lock:
-            if self.images.get(image_id) is not record or self.catalog_generation != catalog_generation:
-                raise ClientError("画像一覧が更新されました。もう一度お試しください。", "operation_in_progress")
+            # The state lock is the publication boundary. Do not let a stale
+            # request write an old project's SQLite row after a switch.
+            if self.workspace_store.has_image(image_id):
+                self.workspace_store.set_image_flags(image_id, hidden=hidden, reviewed=reviewed)
             if hidden is not None: record.hidden = hidden
             if reviewed is not None: record.reviewed = reviewed
             return {"hidden": record.hidden, "reviewed": record.reviewed}
@@ -1620,7 +1677,11 @@ class CatalogMixin:
         self.image_for_id(image_id)
         with self.lock:
             self._assert_catalog_mutable()
-        changed_ids = self.workspace_store.restore_history(image_id, direction)
+            catalog_id = self.catalog_id
+            catalog_generation = self.catalog_generation
+            # History restore is a short durable transaction. Holding the
+            # catalogue lock prevents it from targeting a project just closed.
+            changed_ids = self.workspace_store.restore_history(image_id, direction)
         with self.lock:
             record_ids = [changed_id for changed_id in changed_ids if changed_id in self.images]
         locks = [(changed_id, self.image_io_lock(changed_id)) for changed_id in record_ids]
@@ -1635,6 +1696,8 @@ class CatalogMixin:
                 hidden, reviewed = self.workspace_store.image_state(changed_id)
                 hydrated[changed_id] = (revision, candidates, hidden, reviewed, self.workspace_store.image_transform(changed_id))
             with self.lock:
+                if self.catalog_id != catalog_id or self.catalog_generation != catalog_generation:
+                    raise ClientError("プロジェクト一覧が更新されました。もう一度操作してください。", "stale_catalog")
                 for changed_id, (revision, candidates, hidden, reviewed, transform) in hydrated.items():
                     record = self.images[changed_id]
                     record.hidden = hidden
@@ -1644,14 +1707,17 @@ class CatalogMixin:
                     record.transform_revision = int(transform["transformRevision"])
                     self.candidates[changed_id] = candidates
                     self.candidate_revisions[changed_id] = revision
-        current = {
-            "candidateRevision": self._candidate_revision(image_id),
-            "candidates": [candidate.as_api_dict() for candidate in self.candidates.get(image_id, [])],
-            "manual": self.workspace_store.manual(image_id, self._encode_workspace_mask),
-            "image": {"id": self.images[image_id].image_id, "flipH": self.images[image_id].flip_horizontal, "flipV": self.images[image_id].flip_vertical,
-                      "sourceFlipH": self.images[image_id].source_flip_horizontal, "sourceFlipV": self.images[image_id].source_flip_vertical,
-                      "transformRevision": self.images[image_id].transform_revision},
-        }
+        with self.lock:
+            if self.catalog_id != catalog_id or self.catalog_generation != catalog_generation or image_id not in self.images:
+                raise ClientError("プロジェクト一覧が更新されました。もう一度操作してください。", "stale_catalog")
+            current = {
+                "candidateRevision": self._candidate_revision(image_id),
+                "candidates": [candidate.as_api_dict() for candidate in self.candidates.get(image_id, [])],
+                "manual": self.workspace_store.manual(image_id, self._encode_workspace_mask),
+                "image": {"id": self.images[image_id].image_id, "flipH": self.images[image_id].flip_horizontal, "flipV": self.images[image_id].flip_vertical,
+                          "sourceFlipH": self.images[image_id].source_flip_horizontal, "sourceFlipV": self.images[image_id].source_flip_vertical,
+                          "transformRevision": self.images[image_id].transform_revision},
+            }
         return {"changedImageIds": changed_ids, "current": current, **self.workspace_store.history_status(image_id)}
 
     def delete_manual_workspace(self, image_id: str) -> None:
@@ -1929,14 +1995,29 @@ class CatalogMixin:
         unique = list(dict.fromkeys(str(image_id) for image_id in image_ids if str(image_id)))
         if not unique:
             raise ClientError("候補を更新する画像がありません。", "image_not_found")
-        group_id = self.workspace_store.begin_history_group() if len(unique) > 1 else None
-        try:
-            result = {image_id: self.batch_update_candidates(image_id, payload, history_group=group_id) for image_id in unique}
-        except Exception:
-            if group_id: self.workspace_store.finish_history_group(group_id, failed=True)
-            raise
-        if group_id: self.workspace_store.finish_history_group(group_id)
-        return result
+        with self.lock:
+            self._assert_catalog_mutable()
+            catalog_id = self.catalog_id
+            catalog_generation = self.catalog_generation
+            if any(image_id not in self.images for image_id in unique):
+                raise ClientError("画像が見つかりません。", "image_not_found")
+        locks = [(image_id, self.image_io_lock(image_id)) for image_id in unique]
+        with ExitStack() as stack:
+            for _image_id, image_lock in sorted(locks):
+                stack.enter_context(image_lock)
+            # Hold the catalogue state for the complete durable group. This
+            # leaves no interval where a project switch can publish a prefix.
+            with self.lock:
+                if self.catalog_id != catalog_id or self.catalog_generation != catalog_generation:
+                    raise ClientError("プロジェクト一覧が更新されました。もう一度操作してください。", "stale_catalog")
+                group_id = self.workspace_store.begin_history_group() if len(unique) > 1 else None
+                try:
+                    result = {image_id: self.batch_update_candidates(image_id, payload, history_group=group_id) for image_id in unique}
+                except Exception:
+                    if group_id: self.workspace_store.finish_history_group(group_id, failed=True)
+                    raise
+                if group_id: self.workspace_store.finish_history_group(group_id)
+                return result
 
     def delete_candidate(self, image_id: str, candidate_id: str) -> bool:
         self.image_for_id(image_id)
