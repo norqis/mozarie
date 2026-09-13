@@ -5,6 +5,13 @@ function closeBatchMoreMenus() {
   }
 }
 
+function closeFilterPopovers() {
+  for (const id of ["#galleryFilterMenu", "#overviewFilterMenu"]) {
+    const menu = $(id);
+    if (menu.matches(":popover-open")) menu.hidePopover();
+  }
+}
+
 function renderModelStatus() {
   const modelStatus = Object.entries(state.settingsStatus?.models || {});
   const activeModels = modelStatus.filter(([, model]) => model.required === true || model.enabled === true);

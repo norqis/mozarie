@@ -190,6 +190,8 @@
   "gallery.tabAll": "All",
   "gallery.tabMasked": "Mosaicked",
   "gallery.tabs": "Image filters",
+  "filters.button": "Filters",
+  "filters.selected": "Filters ({count})",
   "gallery.title": "Images",
   "navigation.aria": "Image navigation",
   "navigation.next": "Next",

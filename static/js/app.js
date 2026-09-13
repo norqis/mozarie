@@ -928,9 +928,31 @@ function bindEvents() {
   $("#clearCurrentMasksButton").addEventListener("click", () => { const imageId = state.currentId; if (!currentImageActionPending() && imageId) void clearMasks([imageId], "confirm.clearCurrent.title", "confirm.clearCurrent.message", imageId, state.imageGeneration); });
   $("#clearAllMasksButton").addEventListener("click", () => { closeBatchMoreMenus(); void clearMasks(state.images.map((image) => image.id), "confirm.clearAllMasks.title", "confirm.clearAllMasks.message"); });
   $("#clearCatalogButton").addEventListener("click", () => { closeBatchMoreMenus(); void clearCatalog(); });
-  for (const [menuId, buttonId] of [["#batchMoreMenu", "#batchMoreButton"], ["#selectionActionsMenu", "#selectionActionsButton"]]) {
-    $(menuId).addEventListener("toggle", () => $(buttonId).setAttribute("aria-expanded", String($(menuId).matches(":popover-open"))));
+  const positionFilterPopover = (menu, button) => {
+    const margin = 8;
+    const trigger = button.getBoundingClientRect();
+    const popover = menu.getBoundingClientRect();
+    const left = Math.max(margin, Math.min(innerWidth - popover.width - margin, trigger.left));
+    const below = trigger.bottom + 5;
+    const top = below + popover.height <= innerHeight - margin ? below : Math.max(margin, trigger.top - popover.height - 5);
+    menu.style.left = `${left}px`;
+    menu.style.top = `${top}px`;
+  };
+  const filterMenus = [["#galleryFilterMenu", "#galleryFilterButton"], ["#overviewFilterMenu", "#overviewFilterButton"]];
+  for (const [menuId, buttonId] of [["#batchMoreMenu", "#batchMoreButton"], ["#selectionActionsMenu", "#selectionActionsButton"], ...filterMenus]) {
+    const menu = $(menuId); const button = $(buttonId);
+    menu.addEventListener("toggle", () => {
+      const open = menu.matches(":popover-open");
+      button.setAttribute("aria-expanded", String(open));
+      if (open && filterMenus.some(([id]) => id === menuId)) positionFilterPopover(menu, button);
+    });
   }
+  window.addEventListener("resize", () => {
+    for (const [menuId, buttonId] of filterMenus) {
+      const menu = $(menuId);
+      if (menu.matches(":popover-open")) positionFilterPopover(menu, $(buttonId));
+    }
+  });
   document.querySelectorAll("[data-gallery-filter]").forEach((input) => input.addEventListener("change", () => {
     if (isBusy() || state.importing) return;
     state.galleryFilter = new Set([...document.querySelectorAll("[data-gallery-filter]:checked")].map((item) => item.dataset.galleryFilter));
@@ -1095,6 +1117,7 @@ function bindEvents() {
     const content = $(isGallery ? "#galleryPaneContent" : "#candidatePaneContent");
     const button = $(isGallery ? "#collapseGalleryButton" : "#collapseInspectorButton");
     const className = isGallery ? "gallery-collapsed" : "inspector-collapsed";
+    if (collapsed) closeFilterPopovers();
     state[isGallery ? "galleryCollapsed" : "inspectorCollapsed"] = collapsed;
     grid.classList.toggle(className, collapsed);
     content.inert = collapsed;

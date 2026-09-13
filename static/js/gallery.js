@@ -193,6 +193,7 @@ function renderGallery(force = false) {
   const imageCount = t("gallery.count", { count: visibleImages.length });
   for (const element of document.querySelectorAll(".gallery-local-count")) element.textContent = imageCount;
   document.querySelectorAll("[data-gallery-filter]").forEach((input) => { input.checked = state.galleryFilter.has(input.dataset.galleryFilter); });
+  updateFilterMenuButtons();
   $("#galleryEmptyState").hidden = state.images.length !== 0;
   $("#galleryFilteredEmptyState").hidden = !(state.images.length && !visibleImages.length);
   renderCatalog("gallery", visibleImages, state.galleryNodes, { container: "#gallery", template: "#galleryItemTemplate", padding: 8, gap: 8, minWidth: 108, rowHeight: 152, overscan: 3 });
@@ -281,6 +282,7 @@ function renderOverview(force = false) {
   const visibleImages = overviewImages();
   $("#overviewCount").textContent = t("overview.count", { visible: visibleImages.length, total: state.images.length });
   document.querySelectorAll("[data-overview-filter]").forEach((input) => { input.checked = state.overviewFilter.has(input.dataset.overviewFilter); });
+  updateFilterMenuButtons();
   $("#overviewEmptyState").hidden = visibleImages.length !== 0;
   renderCatalog("overview", visibleImages, state.overviewNodes, { container: "#overviewGrid", template: "#overviewItemTemplate", padding: 14, gap: 10, minWidth: 1, columns: 8, rowHeight: 182, overscan: 3 });
 }
@@ -288,6 +290,7 @@ function renderCatalogViews() { renderGallery(); renderOverview(); }
 function setViewMode(mode, refreshGallery = true) {
   if (state.viewMode !== mode) {
     closeBatchMoreMenus();
+    closeFilterPopovers();
     state.batchMode = false;
     clearBatchSelection();
     updateSelectionActionBar();

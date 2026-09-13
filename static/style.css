@@ -37,9 +37,15 @@ h2 { margin: 0 0 2px; font-size: 14px; } .muted { color: #98a2ad; font-size: 12p
 #selectionActionsButton { anchor-name: --selection-actions-menu; }
 #selectionActionsMenu { position-anchor: --selection-actions-menu; inset: auto; right: anchor(right); left: auto; top: anchor(bottom); width: 140px; min-width: 0; max-width: calc(100vw - 16px); margin-top: 5px; overflow-wrap: anywhere; }
 .gallery-tabs { display: flex; gap: 6px; align-items: center; padding: 7px 8px; border-bottom: 1px solid #3b424a; }
-.filter-choices { display: flex; flex: 1 1 auto; flex-wrap: wrap; gap: 4px 7px; min-width: 0; margin: 0; padding: 0; border: 0; }
-.filter-choices label { display: inline-flex; align-items: center; gap: 3px; color: #c3c9cf; font-size: 12px; white-space: nowrap; }
-.filter-choices input { margin: 0; accent-color: #4bb99d; }
+.filter-menu-button[aria-expanded="true"] { border-color: #72cdb3; background: #29483f; }
+.filter-popover { position: fixed; z-index: 25; display: none; width: min(220px, calc(100vw - 16px)); max-height: min(340px, calc(100vh - 16px)); margin: 0; padding: 8px; overflow: auto; border: 1px solid #4a535d; border-radius: 5px; background: #20252b; box-shadow: 0 8px 22px #0009; color: #e7eaed; }
+.filter-popover:popover-open { display: grid; gap: 6px; }
+.filter-popover label { display: flex; align-items: center; gap: 6px; min-width: 0; color: #c3c9cf; font-size: 12px; }
+.filter-popover input { flex: 0 0 auto; margin: 0; accent-color: #4bb99d; }
+#galleryFilterButton { anchor-name: --gallery-filter-menu; }
+#galleryFilterMenu { position-anchor: --gallery-filter-menu; inset: auto; left: anchor(left); top: anchor(bottom); margin-top: 5px; }
+#overviewFilterButton { anchor-name: --overview-filter-menu; }
+#overviewFilterMenu { position-anchor: --overview-filter-menu; inset: auto; left: anchor(left); top: anchor(bottom); margin-top: 5px; }
 .gallery-viewport { position: relative; flex: 1 1 auto; min-height: 0; overflow: hidden; }
 .gallery { position: relative; width: 100%; height: 100%; display: grid; grid-template-columns: repeat(auto-fill, minmax(108px, 1fr)); grid-auto-rows: max-content; align-content: start; gap: 8px; padding: 8px; overflow: auto; }
 .catalog-window { display: block; padding: 0; overflow: auto; }
@@ -159,7 +165,7 @@ h2 { margin: 0 0 2px; font-size: 14px; } .muted { color: #98a2ad; font-size: 12p
 
 .overview-pane { height: 100%; min-height: 0; display: grid; grid-template-rows: auto auto minmax(0, 1fr); background: #171a1d; } .overview-pane[hidden] { display: none; }
 .overview-toolbar { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 10px; align-items: center; padding: 10px 14px; border-bottom: 1px solid #3b424a; background: #20252a; }
-.overview-heading, .overview-filters, .overview-search-controls, .overview-selection-bar { display: flex; gap: 6px; align-items: center; min-width: 0; } .overview-heading h2 { font-size: 15px; } .overview-heading #batchModeButton { margin-left: auto; }
+.overview-heading, .overview-search-controls, .overview-selection-bar { display: flex; gap: 6px; align-items: center; min-width: 0; } .overview-heading h2 { font-size: 15px; } .overview-heading #batchModeButton { margin-left: auto; }
 .overview-selection-bar { min-height: 45px; padding: 6px 14px; border-bottom: 1px solid #3b424a; background: #20252a; } .overview-selection-bar[hidden] { display: none; } .overview-selection-bar output { min-width: 0; margin-right: auto; color: #d5f2e9; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .overview-search-controls input { width: min(280px, 24vw); } .overview-search-controls select { width: min(220px, 19vw); }
 .overview-grid-viewport { position: relative; min-height: 0; overflow: hidden; }
@@ -231,7 +237,7 @@ h2 { margin: 0 0 2px; font-size: 14px; } .muted { color: #98a2ad; font-size: 12p
   .studio-grid { grid-template-columns: 190px minmax(0, 1fr) 270px; }
   .gallery { grid-template-columns: 1fr; }
   .overview-toolbar { grid-template-columns: minmax(0, 1fr) auto; }
-  .overview-filters, .overview-search-controls { grid-column: 1 / -1; }
+  .overview-search-controls { grid-column: 1 / -1; }
   .overview-grid { --catalog-columns: 6; }
 }
 

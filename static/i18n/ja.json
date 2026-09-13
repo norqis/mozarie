@@ -42,6 +42,8 @@
   "gallery.imported": "{count}件の画像を追加しました",
   "gallery.importProgress": "画像を追加中 {completed} / {total}",
   "gallery.tabs": "画像一覧の表示",
+  "filters.button": "絞り込み",
+  "filters.selected": "絞り込み ({count})",
   "gallery.tabAll": "すべて",
   "gallery.tabMasked": "モザイクあり",
   "gallery.saveAll": "モザイク画像を一括保存",

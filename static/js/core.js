@@ -352,7 +352,18 @@ function renderLocalizedDynamicState() {
   syncApplyMode();
   updateProgress(state.job);
   renderStatus();
+  updateFilterMenuButtons();
   if (typeof renderProjectTable === "function") renderProjectTable();
+}
+
+function updateFilterMenuButtons() {
+  for (const [buttonId, filter] of [["#galleryFilterButton", state.galleryFilter], ["#overviewFilterButton", state.overviewFilter]]) {
+    const button = $(buttonId); if (!button) continue;
+    const count = filter?.size || 0;
+    const label = count ? t("filters.selected", { count }) : t("filters.button");
+    button.textContent = label;
+    button.setAttribute("aria-label", label);
+  }
 }
 
 function currentRecord() { return state.images.find((image) => image.id === state.currentId) || null; }
@@ -716,6 +727,8 @@ function updateActionButtons() {
   visibilityButton.disabled = busyLocked || mutationLocked || switchingImages || !hasImage;
   const visibilityLabel = t(current && isHidden(current) ? "editor.show" : "editor.hide");
   visibilityButton.textContent = visibilityLabel; visibilityButton.title = visibilityLabel; visibilityButton.setAttribute("aria-label", visibilityLabel);
+  for (const id of ["#galleryFilterButton", "#overviewFilterButton"]) $(id).disabled = busyLocked;
+  if (busyLocked) closeFilterPopovers();
   for (const id of ["#clearAllMasksButton", "#clearCatalogButton", "#batchMoreButton"]) $(id).disabled = busyLocked || mutationLocked || catalogStaging || state.images.length === 0;
   $("#batchModeButton").disabled = busyLocked || mutationLocked || state.images.length === 0;
   $("#saveAllButton").disabled = busyLocked || mutationLocked || catalogStaging || mutatingCandidates || state.images.length === 0;
@@ -761,7 +774,7 @@ function updateActionButtons() {
       "projectButton", "projectClose", "projectOpenList", "projectListClose", "projectResume", "projectCloseWorkspace", "projectNew",
       "downloadCurrentMosaicMask", "downloadCurrentExcludeMask",
       "singleViewButton", "compareViewButton", "fitButton", "mosaicPreviewButton", "previousImageButton", "nextImageButton",
-      "overviewButton", "collapseGalleryButton", "collapseInspectorButton", "settingsButton", "settingsCloseButton", "errorDialogClose",
+      "overviewButton", "galleryFilterButton", "overviewFilterButton", "collapseGalleryButton", "collapseInspectorButton", "settingsButton", "settingsCloseButton", "errorDialogClose",
       "closeOverviewButton", "overviewQuery", "overviewFolder", "sourceMismatchCancel", "detectCancelButton",
       "projectDeleteCancel", "projectDeleteConfirm", "copyImagePathMenuItem",
     ]);
