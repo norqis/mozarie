@@ -290,10 +290,12 @@ class StudioState(CatalogMixin, SavingMixin, DetectionMixin, JobsMixin):
                         raise ClientError("別の画像追加が完了するまでお待ちください。", "operation_in_progress")
                     self._assert_catalog_expectation(expected_project_id, expected_catalog_generation)
                     session = {"project_id": expected_project_id, "generation": expected_catalog_generation,
-                               "active": 0, "touched": time.monotonic()}
+                               "active": 0, "finish_requested": False, "touched": time.monotonic()}
                     self._import_sessions[session_id] = session
                 elif session["project_id"] != expected_project_id or session["generation"] != expected_catalog_generation:
                     raise ClientError("画像追加セッションが更新されています。", "stale_catalog")
+                elif session["finish_requested"]:
+                    raise ClientError("画像追加セッションは完了しています。", "operation_in_progress")
                 elif self.catalog_id != expected_project_id or self.catalog_generation < expected_catalog_generation:
                     raise ClientError("プロジェクト一覧が更新されました。もう一度操作してください。", "stale_catalog")
                 session["active"] += 1
@@ -309,25 +311,32 @@ class StudioState(CatalogMixin, SavingMixin, DetectionMixin, JobsMixin):
                     and self.catalog_generation >= expected_catalog_generation)
 
     def end_import_transfer(self, session_id: str) -> None:
-        with self.lock:
-            if self.active_import_count:
-                self.active_import_count -= 1
-            session = self._import_sessions.get(session_id)
-            if session is not None:
-                session["active"] = max(0, session["active"] - 1)
-                session["touched"] = time.monotonic()
+        with self.import_lock:
+            with self.lock:
+                if self.active_import_count:
+                    self.active_import_count -= 1
+                session = self._import_sessions.get(session_id)
+                if session is not None:
+                    session["active"] = max(0, session["active"] - 1)
+                    session["touched"] = time.monotonic()
+                    if session["finish_requested"] and not session["active"]:
+                        del self._import_sessions[session_id]
 
-    def finish_import_session(self, session_id: str, expected_project_id: str | None,
-                              expected_catalog_generation: int) -> dict[str, int | bool]:
+    def finish_import_session(self, session_id: str, owner_project_id: str | None,
+                              owner_catalog_generation: int) -> dict[str, int | bool]:
+        """Release a batch by its immutable starting owner, even after a view switch."""
         with self.import_lock:
             with self.lock:
                 self._cleanup_import_sessions_unchecked()
                 session = self._import_sessions.get(session_id)
                 if session is None:
                     return {"ok": True, "catalogGeneration": self.catalog_generation}
-                self._assert_catalog_expectation(expected_project_id, expected_catalog_generation)
-                if session["project_id"] != expected_project_id or session["active"]:
-                    raise ClientError("画像追加が完了するまでお待ちください。", "operation_in_progress")
+                if session["project_id"] != owner_project_id or session["generation"] != owner_catalog_generation:
+                    raise ClientError("画像追加セッションが更新されています。", "stale_catalog")
+                session["finish_requested"] = True
+                session["touched"] = time.monotonic()
+                if session["active"]:
+                    return {"ok": True, "pending": True, "catalogGeneration": self.catalog_generation}
                 del self._import_sessions[session_id]
                 return {"ok": True, "catalogGeneration": self.catalog_generation}
 

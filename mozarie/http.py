@@ -367,6 +367,7 @@ class MosaicHandler(BaseHTTPRequestHandler):
                     STATE.begin_import_transfer(import_session_id, expected_project_id, expected_catalog_generation)
                 except ClientError as exc:
                     self._reject_unread_request(exc)
+                response = None
                 try:
                     with STATE.import_staging_gate:
                         staged_path = self._read_binary_body_to_file()
@@ -397,10 +398,11 @@ class MosaicHandler(BaseHTTPRequestHandler):
                             _images, imported = STATE.import_image_file_for_api(staged_path, **import_args)
                         finally:
                             staged_path.unlink(missing_ok=True)
-                    self._json({"imported": imported, "catalogId": STATE.catalog_id,
-                                "catalogGeneration": STATE.catalog_snapshot()["catalogGeneration"]})
+                    response = {"imported": imported, "catalogId": STATE.catalog_id,
+                                "catalogGeneration": STATE.catalog_snapshot()["catalogGeneration"]}
                 finally:
                     STATE.end_import_transfer(import_session_id)
+                self._json(response)
                 return
             self._require_json_request()
             payload = self._read_json_body()
@@ -454,8 +456,8 @@ class MosaicHandler(BaseHTTPRequestHandler):
                 self._json(self._catalog_mutation(expected_project_id, expected_catalog_generation,
                                                    lambda: STATE.restore_project_history(image_id, action)))
             elif path == "/api/catalog/clear":
-                self._catalog_mutation(expected_project_id, expected_catalog_generation, STATE.clear_catalog)
-                self._json({"images": []})
+                generation = self._catalog_mutation(expected_project_id, expected_catalog_generation, STATE.clear_catalog)
+                self._json({"images": [], "catalogGeneration": generation})
             elif path.startswith("/api/workspace/image/"):
                 self._json(self._catalog_mutation(expected_project_id, expected_catalog_generation,
                                                    lambda: STATE.set_image_flags(path.removeprefix("/api/workspace/image/"), payload)))
@@ -655,8 +657,8 @@ class MosaicHandler(BaseHTTPRequestHandler):
             expected_project_id, expected_catalog_generation = self._catalog_expectation()
             if path.startswith("/api/catalog/image/"):
                 image_id = path.removeprefix("/api/catalog/image/")
-                self._json({"images": self._catalog_mutation(expected_project_id, expected_catalog_generation,
-                                                               lambda: STATE.remove_image_from_catalog(image_id))})
+                self._json(self._catalog_mutation(expected_project_id, expected_catalog_generation,
+                                                   lambda: STATE.remove_image_from_catalog(image_id)))
             elif path.startswith("/api/project/"):
                 project_id = path.removeprefix("/api/project/")
                 if not project_id or "/" in project_id:

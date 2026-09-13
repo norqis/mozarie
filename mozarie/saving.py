@@ -431,9 +431,11 @@ class SavingMixin:
                         self.candidates.pop(image_id, None)
                         self.projectless_manual_drafts.pop(image_id, None)
                         self._image_io_locks.pop(image_id, None)
+                        self.catalog_generation += 1
                     self.browser_save_tokens.pop(save_token, None)
                     self.browser_save_receipts[save_token] = BrowserSaveReceipt(image_id, revision, source_action, cleared, not cleared, deleted, time.monotonic())
                     rendered_path = token_details.rendered_path
+                    response_generation = self.catalog_generation
                     if deleted:
                         self._discard_browser_save_tokens_for_image_unchecked(image_id)
                 if source_action == "overwrite" or deleted:
@@ -452,7 +454,8 @@ class SavingMixin:
                     quarantine_path.unlink(missing_ok=True)
                 if source_action != "keep":
                     self.invalidate_sam_image(image_id)
-                return {"cleared": cleared, "stale": not cleared, "deleted": deleted}
+                return {"cleared": cleared, "stale": not cleared, "deleted": deleted,
+                        "catalogGeneration": response_generation}
 
     def browser_save_status(self, image_id: str, revision: int, save_token: str, source_action: str) -> dict[str, Any]:
         """Report only the finite state of one opaque save token."""

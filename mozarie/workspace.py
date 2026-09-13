@@ -1102,6 +1102,61 @@ class WorkspaceStore:
             expected_revision=expected_revision,
         ).commit()
 
+    def _write_candidate_state_db(self, db: sqlite3.Connection, image_id: str, revision: int, candidates: list[Any], effective: bool,
+                                  *, replace: bool, history_group: str | None = None, expected_revision: int | None = None,
+                                  preserve_reviewed: bool = False, require_candidate_masks: bool = False) -> None:
+        if expected_revision is not None:
+            current = db.execute("SELECT candidate_revision FROM images WHERE image_id=?", (image_id,)).fetchone()
+            if current is None or int(current["candidate_revision"]) != expected_revision:
+                raise ValueError("workspace candidate revision changed")
+        before = self._history_state_db(db, image_id)
+        if preserve_reviewed:
+            db.execute("UPDATE images SET candidate_revision=?, updated_at=? WHERE image_id=?", (revision, time.time_ns(), image_id))
+        else:
+            db.execute("UPDATE images SET candidate_revision=?, reviewed=0, updated_at=? WHERE image_id=?", (revision, time.time_ns(), image_id))
+        if replace:
+            db.execute("UPDATE candidates SET deleted=1 WHERE image_id=?", (image_id,))
+            for candidate in candidates:
+                row = db.execute("SELECT mask_png FROM candidates WHERE image_id=? AND candidate_id=?", (image_id, candidate.candidate_id)).fetchone()
+                if row is None:
+                    try:
+                        with candidate.mask_path.open("rb") as handle: mask = handle.read()
+                    except OSError:
+                        if require_candidate_masks:
+                            raise
+                        continue
+                    self._require_png_mask(mask)
+                    db.execute("""INSERT INTO candidates(image_id,candidate_id,label_token,confidence,mask_png,enabled,color,source,origin,refinement,role,forced,deleted)
+                        VALUES(?,?,?,?,?,?,?,?,?,?,?,?,0)""", (image_id,candidate.candidate_id,candidate.label_token,candidate.confidence,mask,int(candidate.enabled),candidate.color,candidate.source,candidate.origin,candidate.refinement,candidate.role.value,int(candidate.forced)))
+                else:
+                    db.execute("""UPDATE candidates SET label_token=?,confidence=?,enabled=?,color=?,source=?,origin=?,refinement=?,role=?,forced=?,deleted=0
+                        WHERE image_id=? AND candidate_id=?""", (candidate.label_token,candidate.confidence,int(candidate.enabled),candidate.color,candidate.source,candidate.origin,candidate.refinement,candidate.role.value,int(candidate.forced),image_id,candidate.candidate_id))
+                db.execute("""INSERT INTO candidate_metadata(image_id,candidate_id,expand_px) VALUES(?,?,?)
+                    ON CONFLICT(image_id,candidate_id) DO UPDATE SET expand_px=excluded.expand_px""",
+                           (image_id, candidate.candidate_id, int(candidate.expand_px)))
+        else:
+            for candidate in candidates:
+                db.execute("UPDATE candidates SET enabled=?,color=?,role=?,forced=? WHERE image_id=? AND candidate_id=?", (int(candidate.enabled), candidate.color, candidate.role.value, int(candidate.forced), image_id, candidate.candidate_id))
+                db.execute("""INSERT INTO candidate_metadata(image_id,candidate_id,expand_px) VALUES(?,?,?)
+                    ON CONFLICT(image_id,candidate_id) DO UPDATE SET expand_px=excluded.expand_px""",
+                           (image_id, candidate.candidate_id, int(candidate.expand_px)))
+        self._update_manual_candidate_state(db, image_id, revision, {candidate.candidate_id for candidate in candidates}, effective)
+        self._record_history_db(db, image_id, before, self._history_state_db(db, image_id), group_id=history_group)
+
+    def commit_candidate_states(self, states: list[tuple[str, int, list[Any], bool, bool]], *, history_group: str | None = None) -> None:
+        """Commit a complete multi-image candidate operation in one SQLite transaction."""
+        with self._lock, self._connect() as db:
+            db.execute("BEGIN IMMEDIATE")
+            try:
+                for image_id, revision, candidates, effective, replace in states:
+                    self._write_candidate_state_db(db, image_id, revision, candidates, effective,
+                                                   replace=replace, history_group=history_group,
+                                                   require_candidate_masks=True)
+                db.execute("COMMIT")
+            except Exception:
+                db.execute("ROLLBACK")
+                raise
+
     def prepare_candidate_state(self, image_id: str, revision: int, candidates: list[Any], effective: bool, *, replace: bool,
                                 history_group: str | None = None, expected_revision: int | None = None,
                                 preserve_reviewed: bool = False) -> _PendingWorkspaceCommit:
@@ -1110,49 +1165,9 @@ class WorkspaceStore:
             db = self._connect()
             db.execute("BEGIN IMMEDIATE")
             try:
-                if expected_revision is not None:
-                    current = db.execute("SELECT candidate_revision FROM images WHERE image_id=?", (image_id,)).fetchone()
-                    if current is None or int(current["candidate_revision"]) != expected_revision:
-                        raise ValueError("workspace candidate revision changed")
-                before = self._history_state_db(db, image_id)
-                if preserve_reviewed:
-                    db.execute("UPDATE images SET candidate_revision=?, updated_at=? WHERE image_id=?", (revision, time.time_ns(), image_id))
-                else:
-                    db.execute("UPDATE images SET candidate_revision=?, reviewed=0, updated_at=? WHERE image_id=?", (revision, time.time_ns(), image_id))
-                if replace:
-                    db.execute("UPDATE candidates SET deleted=1 WHERE image_id=?", (image_id,))
-                    for candidate in candidates:
-                        row = db.execute("SELECT mask_png FROM candidates WHERE image_id=? AND candidate_id=?", (image_id, candidate.candidate_id)).fetchone()
-                        if row is None:
-                            try:
-                                with candidate.mask_path.open("rb") as handle: mask = handle.read()
-                            except OSError:
-                                continue
-                            self._require_png_mask(mask)
-                            db.execute("""INSERT INTO candidates(image_id,candidate_id,label_token,confidence,mask_png,enabled,color,source,origin,refinement,role,forced,deleted)
-                                VALUES(?,?,?,?,?,?,?,?,?,?,?,?,0)""", (image_id,candidate.candidate_id,candidate.label_token,candidate.confidence,mask,int(candidate.enabled),candidate.color,candidate.source,candidate.origin,candidate.refinement,candidate.role.value,int(candidate.forced)))
-                        else:
-                            # Existing IDs retain the one detector PNG.
-                            # Structural edits only reactivate/update metadata.
-                            db.execute("""UPDATE candidates SET label_token=?,confidence=?,enabled=?,color=?,source=?,origin=?,refinement=?,role=?,forced=?,deleted=0
-                                WHERE image_id=? AND candidate_id=?""", (candidate.label_token,candidate.confidence,int(candidate.enabled),candidate.color,candidate.source,candidate.origin,candidate.refinement,candidate.role.value,int(candidate.forced),image_id,candidate.candidate_id))
-                        db.execute("""INSERT INTO candidate_metadata(image_id,candidate_id,expand_px) VALUES(?,?,?)
-                            ON CONFLICT(image_id,candidate_id) DO UPDATE SET expand_px=excluded.expand_px""",
-                                   (image_id, candidate.candidate_id, int(candidate.expand_px)))
-                    # Deleted rows are referenced by durable undo entries.
-                    # They are collected only when the image/project is
-                    # explicitly deleted, never at every metadata operation.
-                else:
-                    for candidate in candidates:
-                        # Normal candidate controls only alter metadata. Keep
-                        # the durable PNG BLOB untouched instead of rereading
-                        # a potentially lazy cache file.
-                        db.execute("UPDATE candidates SET enabled=?,color=?,role=?,forced=? WHERE image_id=? AND candidate_id=?", (int(candidate.enabled), candidate.color, candidate.role.value, int(candidate.forced), image_id, candidate.candidate_id))
-                        db.execute("""INSERT INTO candidate_metadata(image_id,candidate_id,expand_px) VALUES(?,?,?)
-                            ON CONFLICT(image_id,candidate_id) DO UPDATE SET expand_px=excluded.expand_px""",
-                                   (image_id, candidate.candidate_id, int(candidate.expand_px)))
-                self._update_manual_candidate_state(db, image_id, revision, {candidate.candidate_id for candidate in candidates}, effective)
-                self._record_history_db(db, image_id, before, self._history_state_db(db, image_id), group_id=history_group)
+                self._write_candidate_state_db(db, image_id, revision, candidates, effective, replace=replace,
+                                               history_group=history_group, expected_revision=expected_revision,
+                                               preserve_reviewed=preserve_reviewed)
                 return _PendingWorkspaceCommit(db)
             except Exception:
                 db.execute("ROLLBACK")

@@ -882,13 +882,15 @@ class CatalogMixin:
         """Clear only the live screen state while retaining durable work."""
         return self._detach_catalog(prune_workspace=False)
 
-    def clear_catalog(self) -> None:
+    def clear_catalog(self) -> int:
         """Explicit user clear: commit durable removal before detaching the view."""
         self._detach_catalog(prune_workspace=True)
+        with self.lock:
+            return self.catalog_generation
 
-    def remove_image_from_catalog(self, image_id: str) -> list[dict[str, Any]]:
+    def remove_image_from_catalog(self, image_id: str) -> dict[str, Any]:
         """Remove one image's working state without deleting its source file."""
-        return self.remove_images_from_catalog([image_id])["images"]
+        return self.remove_images_from_catalog([image_id])
 
     def remove_images_from_catalog(self, image_ids: list[str]) -> dict[str, Any]:
         """Remove saved images from the working catalog without deleting source files."""
@@ -926,6 +928,7 @@ class CatalogMixin:
                         removed_set = set(removed_ids)
                         self.order = [current_id for current_id in self.order if current_id not in removed_set]
                         self.catalog_generation += 1
+                    response_generation = self.catalog_generation
                     self._clear_browser_save_tokens_unchecked()
                 self._delete_mask_files(mask_paths, [self.cache_dir / record.image_id for record in records])
                 thumbnail_dir = self.cache_dir / "thumbnails"
@@ -948,7 +951,9 @@ class CatalogMixin:
         self.cleanup_expired_browser_save_tokens()
         for image_id in removed_ids:
             self.invalidate_sam_image(image_id)
-        return {"images": self.list_images(), "removedImageIds": removed_ids}
+        snapshot = self.catalog_snapshot()
+        return {"images": snapshot["images"], "removedImageIds": removed_ids,
+                "catalogGeneration": response_generation}
 
     def shutdown(self) -> None:
         """Stop background work before releasing the session import directory."""
@@ -2070,12 +2075,16 @@ class CatalogMixin:
             with self.lock:
                 if self.catalog_id != catalog_id or self.catalog_generation != catalog_generation:
                     raise ClientError("プロジェクト一覧が更新されました。もう一度操作してください。", "stale_catalog")
+                self._assert_catalog_mutable()
                 role = payload.get("role")
                 operation = payload.get("operation")
                 if role not in {"apply", "exclude"} or operation not in {"enable", "disable", "delete", "set_padding"}:
                     raise ClientError("候補の一括操作が正しくありません。", "input_invalid")
                 expand_px = payload.get("expandPx")
+                updates: dict[str, list[Candidate]] = {}
+                delete_paths: list[Path] = []
                 for image_id in unique:
+                    self._assert_image_editable(image_id)
                     record = self.images[image_id]
                     selected = [item for item in self.candidates.get(image_id, []) if item.role.value == role]
                     if not selected:
@@ -2085,14 +2094,42 @@ class CatalogMixin:
                         if (isinstance(expand_px, bool) or not isinstance(expand_px, int)
                                 or not 0 <= expand_px <= max_expand_px):
                             raise ClientError(f"候補の枠pxは0から{max_expand_px}までの整数で指定してください。", "input_invalid")
-                group_id = self.workspace_store.begin_history_group() if len(unique) > 1 else None
-                try:
-                    result = {image_id: self.batch_update_candidates(image_id, payload, history_group=group_id) for image_id in unique}
-                except Exception:
-                    if group_id: self.workspace_store.finish_history_group(group_id, failed=True)
-                    raise
-                if group_id: self.workspace_store.finish_history_group(group_id)
-                return result
+                    current = self.candidates.get(image_id, [])
+                    if operation == "delete":
+                        updates[image_id] = [replace(item) for item in current if item not in selected]
+                        delete_paths.extend(item.mask_path for item in selected)
+                    else:
+                        candidates = [replace(item) for item in current]
+                        for candidate in candidates:
+                            if candidate.role.value == role:
+                                if operation == "set_padding": candidate.expand_px = expand_px
+                                else: candidate.enabled = operation == "enable"
+                        updates[image_id] = candidates
+                revisions = {image_id: self._candidate_revision(image_id) + 1 for image_id in unique}
+                group_id = uuid.uuid4().hex if len(unique) > 1 else None
+                durable_ids = {image_id for image_id in unique if self.workspace_store.has_image(image_id)}
+                durable_states = [
+                    (image_id, revisions[image_id], updates[image_id], self._effective_mask_for_candidates(image_id, updates[image_id]), operation == "delete")
+                    for image_id in unique if image_id in durable_ids
+                ]
+                projectless_effective: dict[str, bool] = {}
+                for image_id in unique:
+                    if image_id not in durable_ids:
+                        draft = self.projectless_manual_drafts.get(image_id)
+                        if draft is not None:
+                            projectless_effective[image_id] = self._effective_mask_for_draft(image_id, updates[image_id], draft)
+                if durable_states:
+                    self.workspace_store.commit_candidate_states(durable_states, history_group=group_id)
+                for image_id in unique:
+                    draft = self.projectless_manual_drafts.get(image_id)
+                    if draft is not None and image_id in projectless_effective:
+                        draft["candidateRevision"] = revisions[image_id]
+                        draft["hasEffectiveMask"] = projectless_effective[image_id]
+                    self.candidates[image_id] = updates[image_id]
+                    self.candidate_revisions[image_id] = revisions[image_id]
+                result = revisions
+            self._delete_mask_files(delete_paths, [])
+            return result
 
     def delete_candidate(self, image_id: str, candidate_id: str) -> bool:
         self.image_for_id(image_id)

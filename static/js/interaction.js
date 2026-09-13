@@ -490,7 +490,7 @@ function beginImportSession() {
 async function finishImportServerSession(session) {
   if (!session?.id) return;
   try {
-    await api("/api/import/finish", { method: "POST", body: JSON.stringify({ sessionId: session.id }) });
+    await api("/api/import/finish", { method: "POST", body: JSON.stringify({ sessionId: session.id, expectedProjectId: session.expectedProjectId, expectedCatalogGeneration: session.expectedCatalogGeneration }) });
   } catch (error) {
     // The next claimed import expires an abandoned batch after its short TTL.
   }
