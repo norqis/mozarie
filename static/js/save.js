@@ -163,8 +163,7 @@ async function openSingleSaveDialog(imageId = state.currentId) {
   const image = state.images.find((entry) => entry.id === imageId);
   if (!image || isBusy() || state.importing || currentImageActionPending() || state.currentId !== imageId || !isCurrentGeneration(generation)
     || !state.currentImage || state.projectReadOnly || image.sourceDimensionsChanged) return;
-  state.singleSave = { imageId, generation, divisor: Number($("#divisor").value), draft: draftPayload([imageId])[imageId] || null,
-    projectId: state.project?.id || null, catalogGeneration: state.serverCatalogGeneration, invoker };
+  state.singleSave = { imageId, generation, divisor: Number($("#divisor").value), draft: draftPayload([imageId])[imageId] || null, invoker };
   $("#singleSaveTarget").textContent = t("apply.singleTarget", { name: image.relativePath });
   $("#singleSaveCopyMode").checked = true;
   $("#singleSaveDeleteOriginal").checked = false;
@@ -320,8 +319,10 @@ async function startSingleSave(event) {
     // Overwrites and source deletion do need authoritative reconciliation.
     if ((sourceAction === "overwrite") || deleteOriginal) {
       const previousImageIds = new Set(state.images.map((item) => item.id));
+      const capturedProjectId = state.project?.id || null;
+      const capturedCatalogGeneration = state.serverCatalogGeneration;
       const latest = await api("/api/images");
-      reconcileCatalogSnapshot(latest, save.projectId, save.catalogGeneration); state.images = latest.images;
+      reconcileCatalogSnapshot(latest, capturedProjectId, capturedCatalogGeneration); state.images = latest.images;
       loadReviewedPaths();
       const savedImage = state.images.find((item) => item.id === save.imageId);
       if (deleteOriginal && state.project?.id) {
@@ -612,7 +613,7 @@ async function runBrowserSave(imageIds, suffix, deleteOriginal, mode = "copy") {
   });
   const save = {
     entries: result.entries, completed: 0, stale: 0, paused: false, cancelled: false, failed: false,
-    catalogEpoch: state.catalogEpoch, projectId: state.project?.id || null, catalogGeneration: state.serverCatalogGeneration,
+    catalogEpoch: state.catalogEpoch,
   };
   state.browserSave = save;
   state.saving = true;
@@ -800,8 +801,10 @@ async function runBrowserSave(imageIds, suffix, deleteOriginal, mode = "copy") {
         try {
           // Commits may resolve out of order; apply one authoritative catalogue
           // snapshot only after every started entry has settled.
+          const capturedProjectId = state.project?.id || null;
+          const capturedCatalogGeneration = state.serverCatalogGeneration;
           const latest = await api("/api/images");
-          reconcileCatalogSnapshot(latest, save.projectId, save.catalogGeneration);
+          reconcileCatalogSnapshot(latest, capturedProjectId, capturedCatalogGeneration);
           catalogCurrent = isCurrentCatalogEpoch(save.catalogEpoch);
           if (catalogCurrent) {
             state.images = latest.images; loadReviewedPaths();
@@ -944,8 +947,6 @@ async function finishApplyJob(job) {
   let reconciled = false;
   let generation = ++state.imageGeneration;
   const catalogEpoch = state.catalogEpoch;
-  const expectedProjectId = state.project?.id || null;
-  const expectedCatalogGeneration = state.serverCatalogGeneration;
   try {
     const keepCurrent = state.currentId;
     const requestedImageIds = Array.isArray(job.imageIds) ? job.imageIds : state.applyTargetIds;
@@ -953,8 +954,10 @@ async function finishApplyJob(job) {
       ? job.completedImageIds
       : [];
     const reloadCurrent = Boolean(keepCurrent && completedImageIds.includes(keepCurrent));
+    const capturedProjectId = state.project?.id || null;
+    const capturedCatalogGeneration = state.serverCatalogGeneration;
     const data = await api("/api/images");
-    reconcileCatalogSnapshot(data, expectedProjectId, expectedCatalogGeneration);
+    reconcileCatalogSnapshot(data, capturedProjectId, capturedCatalogGeneration);
     if (!isCurrentGeneration(generation) || !isCurrentCatalogEpoch(catalogEpoch)) return;
     state.images = data.images;
     for (const imageId of completedImageIds) state.maskStatus.delete(imageId);
@@ -999,15 +1002,15 @@ async function finishDetectionJob(job) {
   const invoker = modalInvokers.get($("#processingDialog"));
   const generation = ++state.imageGeneration;
   const catalogEpoch = state.catalogEpoch;
-  const expectedProjectId = state.project?.id || null;
-  const expectedCatalogGeneration = state.serverCatalogGeneration;
   const keepCurrent = state.currentId;
   const requestedIds = Array.isArray(job.imageIds) && job.imageIds.length ? job.imageIds : state.detectionTargetIds;
   const targetIds = Array.isArray(job.completedImageIds) && job.completedImageIds.length
     ? job.completedImageIds
     : (job.state === "complete" ? requestedIds : []);
+  const capturedProjectId = state.project?.id || null;
+  const capturedCatalogGeneration = state.serverCatalogGeneration;
   const data = await api("/api/images");
-  reconcileCatalogSnapshot(data, expectedProjectId, expectedCatalogGeneration);
+  reconcileCatalogSnapshot(data, capturedProjectId, capturedCatalogGeneration);
   if (!isCurrentGeneration(generation) || !isCurrentCatalogEpoch(catalogEpoch)) return;
   state.images = data.images;
   loadReviewedPaths();

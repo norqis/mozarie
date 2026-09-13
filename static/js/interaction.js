@@ -449,8 +449,10 @@ async function importFiles(files) {
     }
     if (!isCurrentCatalogEpoch(session.epoch) || state.importSession !== session) return false;
     if (session.cancelled) { setStatusKey("status.importCancelled", { completed: session.completed }); return false; }
+    const capturedProjectId = state.project?.id || null;
+    const capturedCatalogGeneration = state.serverCatalogGeneration;
     const latest = await api("/api/images");
-    reconcileCatalogSnapshot(latest, session.expectedProjectId, session.expectedCatalogGeneration);
+    reconcileCatalogSnapshot(latest, capturedProjectId, capturedCatalogGeneration);
     state.images = latest.images;
     loadReviewedPaths();
     if (session.missingFileHandles) showUserError({ code: "project_source_unavailable" });
@@ -458,8 +460,10 @@ async function importFiles(files) {
     return !session.missingFileHandles;
   } catch (error) {
     try {
+      const capturedProjectId = state.project?.id || null;
+      const capturedCatalogGeneration = state.serverCatalogGeneration;
       const latest = await api("/api/images");
-      reconcileCatalogSnapshot(latest, session.expectedProjectId, session.expectedCatalogGeneration);
+      reconcileCatalogSnapshot(latest, capturedProjectId, capturedCatalogGeneration);
       if (isCurrentCatalogEpoch(session.epoch) && state.importSession === session) { state.images = latest.images; loadReviewedPaths(); renderCatalogViews(); }
     } catch { /* Keep the import failure visible. */ }
     if (isCurrentCatalogEpoch(session.epoch) && state.importSession === session) showUserError(error);
