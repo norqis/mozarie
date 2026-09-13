@@ -146,33 +146,15 @@ class CatalogMixin:
                 projectless_draft["hasEffectiveMask"] = effective
         return revision
 
-    def _stage_workspace_candidates(self, records: list[ImageRecord]) -> tuple[Path, dict[str, tuple[int, list[Candidate]]]]:
-        """Validate and materialise a project before replacing the live cache."""
-        stage_dir = self.cache_dir.parent / f"{self.cache_dir.name}-open-{uuid.uuid4().hex}"
-        try:
-            hydrated = self.workspace_store.hydrate_candidates_bulk(
-                [record.image_id for record in records], stage_dir, self._candidate_from_workspace,
-            )
-            for image_id, (_revision, candidates) in hydrated.items():
-                for candidate in candidates:
-                    raw = self.workspace_store.candidate_png(image_id, candidate.candidate_id)
-                    if raw is None:
-                        raise ClientError("プロジェクト候補を読み込めません。", "workspace_corrupt")
-                    try:
-                        with Image.open(io.BytesIO(raw)) as mask_image:
-                            mask_image.verify()
-                    except (OSError, UnidentifiedImageError) as exc:
-                        raise ClientError("プロジェクト候補を読み込めません。", "workspace_corrupt") from exc
-                    candidate.mask_path.parent.mkdir(parents=True, exist_ok=True)
-                    candidate.mask_path.write_bytes(raw)
-            return stage_dir, hydrated
-        except Exception:
-            shutil.rmtree(stage_dir, ignore_errors=True)
-            raise
+    def _stage_workspace_candidates(self, records: list[ImageRecord]) -> dict[str, tuple[int, list[Candidate]]]:
+        """Validate candidate metadata before replacing the live catalogue."""
+        return self.workspace_store.hydrate_candidates_bulk(
+            [record.image_id for record in records], self.cache_dir, self._candidate_from_workspace,
+        )
 
     def _replace_catalog(self, root: Path, records: list[ImageRecord], *, detach_project: bool = False,
                          prehydrated: dict[str, tuple[int, list[Candidate]]] | None = None,
-                         staged_cache_dir: Path | None = None, publish_catalog_id: str | None = None,
+                         publish_catalog_id: str | None = None,
                          publish_read_only: bool = False) -> list[dict[str, Any]]:
         with self.lock:
             previous_ids = tuple(self.images)
@@ -180,21 +162,6 @@ class CatalogMixin:
         with ExitStack() as stack:
             for _image_id, image_lock in sorted(locks):
                 stack.enter_context(image_lock)
-            if prehydrated is not None:
-                if staged_cache_dir is None:
-                    raise ValueError("prehydrated candidates require a cache stage")
-                published: dict[str, tuple[int, list[Candidate]]] = {}
-                published_dir = self.cache_dir / f".open-{uuid.uuid4().hex}"
-                try:
-                    shutil.move(str(staged_cache_dir), str(published_dir))
-                    for image_id, (revision, candidates) in prehydrated.items():
-                        published[image_id] = (
-                            revision,
-                            [replace(candidate, mask_path=published_dir / candidate.mask_path.relative_to(staged_cache_dir))
-                             for candidate in candidates],
-                        )
-                finally:
-                    shutil.rmtree(staged_cache_dir, ignore_errors=True)
             with self.lock:
                 if publish_catalog_id is None:
                     self._assert_catalog_mutable()
@@ -204,9 +171,9 @@ class CatalogMixin:
                     self.source_mismatches = {}
                 self.images = {record.image_id: record for record in records}
                 self.order = [record.image_id for record in records]
-                self.candidates = {} if prehydrated is None else {image_id: candidates for image_id, (_revision, candidates) in published.items()}
+                self.candidates = {} if prehydrated is None else {image_id: candidates for image_id, (_revision, candidates) in prehydrated.items()}
                 self.candidate_revisions = ({record.image_id: 0 for record in records} if prehydrated is None
-                                            else {record.image_id: published.get(record.image_id, (0, []))[0] for record in records})
+                                            else {record.image_id: prehydrated.get(record.image_id, (0, []))[0] for record in records})
                 self.projectless_manual_drafts.clear()
                 self._clear_browser_save_tokens_unchecked()
                 self.root = root
@@ -220,12 +187,10 @@ class CatalogMixin:
                 self.catalog_generation += 1
                 session = self._detach_session_unchecked()
                 self._image_io_locks.clear()
+            self._clear_cache()
             if prehydrated is None:
-                self._clear_cache()
                 # Cache cleanup intentionally happens before masks are materialised.
                 self._restore_workspace_candidates(records)
-            else:
-                self._clear_cache(keep_names={published_dir.name})
             self._release_detached_session(session)
         self.cleanup_expired_browser_save_tokens()
         return self.list_images()
@@ -641,17 +606,13 @@ class CatalogMixin:
                     str(root), catalog_id, defer_replace=True, allow_new=False, inherit_current_catalog=False, staging=True,
                 ))
             records.sort(key=lambda record: (record.relative_path.casefold(), record.relative_path, record.image_id))
-            stage_dir, prehydrated = self._stage_workspace_candidates(records)
-            try:
-                if resume:
-                    project = self.workspace_store.set_project_status(catalog_id, "working")
-                images = self._replace_catalog(
-                    native_roots[0], records, prehydrated=prehydrated, staged_cache_dir=stage_dir,
-                    publish_catalog_id=catalog_id, publish_read_only=project["status"] == "completed",
-                )
-            except Exception:
-                shutil.rmtree(stage_dir, ignore_errors=True)
-                raise
+            prehydrated = self._stage_workspace_candidates(records)
+            if resume:
+                project = self.workspace_store.set_project_status(catalog_id, "working")
+            images = self._replace_catalog(
+                native_roots[0], records, prehydrated=prehydrated,
+                publish_catalog_id=catalog_id, publish_read_only=project["status"] == "completed",
+            )
             # Browser sources may still need a user-granted handle.  Native
             # images are shown immediately and the UI can add the rest.
             needs_source = any(
@@ -1436,10 +1397,10 @@ class CatalogMixin:
             "sizeBytes": size_bytes,
         }], include_images=include_images, transfer_active=transfer_active, source_identity=source_identity, source_kind=source_kind, intent=intent)
 
-    def _clear_cache(self, *, keep_names: set[str] | None = None) -> None:
+    def _clear_cache(self) -> None:
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         for child in self.cache_dir.iterdir():
-            if child.name == ".active.lock" or child.name in (keep_names or set()):
+            if child.name == ".active.lock":
                 continue
             try:
                 if child.is_dir():
