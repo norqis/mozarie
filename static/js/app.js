@@ -301,7 +301,6 @@ function renderProjectTable() {
 async function showProjectList({ focusProjectId = "", focusTarget = null, sort = projectListSort, keepClosed = false } = {}) {
   if (state.projectOperationPending) return;
   const data = await api(`/api/projects?sort=${encodeURIComponent(`${sort.key}_${sort.direction}`)}`);
-  await forgetOrphanedProjectSources(new Set((data.projects || []).map((project) => project.id)));
   projectListProjects = new Map((data.projects || []).map((project) => [project.id, project]));
   projectListSort = sort;
   renderProjectTable();
@@ -361,7 +360,7 @@ async function openProject(project, resume = false) {
       let files = [];
       let directories = [];
       if (data.needsSource) {
-        [files, directories] = await Promise.all([rememberedProjectFileSources(project.id), rememberedProjectDirectorySources(project.id)]);
+        ({ files, directories } = await rememberedProjectSources(project.id));
         if (!isCurrentCatalogEpoch(epoch)) return;
         for (const source of directories) {
           if (!await ensureProjectSourcePermission(source.handle, true)) { restoreFailures.push(source); continue; }
@@ -1298,6 +1297,9 @@ async function initialise() {
       setStatusKey("status.imagesLoaded", { count: state.images.length });
     }
   } catch (error) { showUserError(error); }
+  void api("/api/projects?sort=updated_desc")
+    .then((data) => forgetOrphanedProjectSources(new Set((data.projects || []).map((project) => project.id))))
+    .catch(() => {});
   if (document.visibilityState === "visible") setTimeout(() => { void checkForUpdate({ silent: true }); }, 1000);
 }
 

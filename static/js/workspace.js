@@ -144,21 +144,18 @@ async function rememberedProjectSource(projectId, sourceId = null, imageId = nul
   const value = rows.find((row) => row.projectId === projectId && (!sourceId || row.sourceId === sourceId) && (imageId == null ? !row.imageId : row.imageId === imageId));
   db.close(); return value?.handle || null;
 }
-async function rememberedProjectFileSources(projectId) {
-  const db = await directoryCatalogStore(); if (!db || !projectId) return [];
+async function rememberedProjectSources(projectId) {
+  const db = await directoryCatalogStore(); if (!db || !projectId) return { files: [], directories: [] };
   const rows = await projectSourceRows(db, projectId);
   db.close();
   // Preserve the server source ID.  Recreating one on every reopen would
   // create a second source and duplicate every browser-imported image.
-  return rows.filter((row) => (row.imageId || row.clientKey) && row.handle?.kind === "file")
-    .map((row) => ({ sourceId: row.sourceId, clientKey: row.clientKey || null, relativePath: row.relativePath || row.handle.name, handle: row.handle }));
-}
-async function rememberedProjectDirectorySources(projectId) {
-  const db = await directoryCatalogStore(); if (!db || !projectId) return [];
-  const rows = await projectSourceRows(db, projectId);
-  db.close();
-  return rows.filter((row) => !row.imageId && row.handle?.kind === "directory")
-    .map((row) => ({ sourceId: row.sourceId, handle: row.handle }));
+  return {
+    files: rows.filter((row) => (row.imageId || row.clientKey) && row.handle?.kind === "file")
+      .map((row) => ({ sourceId: row.sourceId, clientKey: row.clientKey || null, relativePath: row.relativePath || row.handle.name, handle: row.handle })),
+    directories: rows.filter((row) => !row.imageId && row.handle?.kind === "directory")
+      .map((row) => ({ sourceId: row.sourceId, handle: row.handle })),
+  };
 }
 async function matchingProjectDirectorySources(handle) {
   const db = await directoryCatalogStore(); if (!db || !handle?.isSameEntry) return [];
@@ -199,9 +196,12 @@ async function forgetOrphanedProjectSources(projectIds) {
     await new Promise((resolve, reject) => {
       const transaction = db.transaction("projectSources", "readwrite");
       const store = transaction.objectStore("projectSources");
-      const request = store.getAll();
+      const request = store.openCursor();
       request.onsuccess = () => {
-        for (const row of request.result || []) if (!projectIds.has(row.projectId)) store.delete(row.key);
+        const cursor = request.result;
+        if (!cursor) return;
+        if (!projectIds.has(cursor.value.projectId)) cursor.delete();
+        cursor.continue();
       };
       request.onerror = () => reject(request.error);
       transaction.oncomplete = () => resolve();
