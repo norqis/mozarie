@@ -160,3 +160,4 @@ A～Hは確認用画像を区別する記号。ファイル名は任意とし、
 | DI-101 | apply・exclude・forced候補を含む4K画像を3候補と20候補で用意し、手描き除外・除外消しゴムを加える。単一画像保存・一括画像保存、単一モザイクPNG・除外PNG、PJのモザイクZIP・除外ZIPを出力中にRAMの増加を見る | モザイクと手描きに通常／強制除外・除外消しゴムを反映し、単体とZIPの対応PNGで範囲が一致する。候補数に比例して処理中のRAMが増え続けない |
 | DI-102 | NetworkでPJ作成・改名・完了・閉じる・開く・再開・フォルダー読込の応答を遅延または切断する。各要求の expectedProjectId、expectedCatalogGeneration、応答の catalogGeneration と直後の `/api/images` を確認する | 遷移要求は表示中PJと世代を期待値として送る。古い世代は stale_catalog として受理されず、応答喪失・エラー後は `/api/images` のPJ・画像・catalogGeneration を再取得して画面と一致させる |
 | DI-103 | 2つのPJにブラウザーファイルとブラウザーフォルダーを多数保存してから、一方を削除し、もう一方を閉じて再開する。DevTools Applicationで projectSources の projectId index と削除完了を確認する | PJごとの復元・削除は projectId index を使い、削除要求の完了後に該当PJのブラウザー保持ソースだけが残らない。別PJの保持ソースと復元結果は変わらない |
+| DI-104 | ブラウザー保持ソースを持つPJを削除する要求の応答をNetworkで切断し、直後にページを閉じて開き直す。別タブで同時に別PJを作成・保存し、削除要求を失敗させる場合も確認する | 削除済みまたはサーバーに存在しないPJの保持ソースは次回起動時に消える。削除失敗でサーバーに残るPJの保持ソースは消さず、cleanup intentだけを解除する。別タブが追加したcleanup intentを消さない |

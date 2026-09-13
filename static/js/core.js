@@ -423,7 +423,7 @@ async function syncCatalogOnReturn() {
     if (state.catalogRefreshController === controller) state.catalogRefreshController = null;
   }
 }
-async function runCatalogTransition(work) {
+async function runCatalogTransition(work, { allowEdits = false } = {}) {
   if (state.catalogTransition) {
     const active = state.catalogTransition;
     try { return await work(active); }
@@ -432,7 +432,7 @@ async function runCatalogTransition(work) {
       throw error;
     }
   }
-  const ownsProjectOperation = !state.projectOperationPending;
+  const ownsProjectOperation = !allowEdits && !state.projectOperationPending;
   if (ownsProjectOperation && typeof beginProjectOperation === "function" && !beginProjectOperation()) return null;
   const transition = state.catalogTransition || { epoch: beginCatalogEpoch(), controller: new AbortController() };
   state.catalogTransition = transition;
@@ -851,6 +851,6 @@ async function loadFolder({ skipSameSourceWarning = false, path: suppliedPath = 
       state.missingNativeSources = typeof missingNativeSources === "function" ? missingNativeSources(data.sources) : [];
       setStatusKey("status.imagesLoaded", { count: state.images.length });
       if (typeof showSourceMismatches === "function") await showSourceMismatches();
-    });
+    }, { allowEdits: true });
   } catch (error) { showUserError(error); }
 }

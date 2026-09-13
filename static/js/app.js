@@ -450,6 +450,15 @@ function openProjectDeleteDialog(projectId) {
   focusElement($("#projectDeleteCancel"));
 }
 
+async function resolveProjectSourceCleanup(projectId) {
+  const data = await api("/api/projects?sort=updated_desc");
+  if ((data.projects || []).some((project) => project.id === projectId)) {
+    await clearProjectSourceCleanup(projectId);
+  } else {
+    await forgetProjectSources(projectId);
+  }
+}
+
 async function deleteProject(projectId) {
   if (!projectId || projectDeleteBusy || !beginProjectOperation()) return;
   projectDeleteBusy = true;
@@ -464,6 +473,7 @@ async function deleteProject(projectId) {
       await flushAllImageMutations();
       await flushAllWorkspaceMutations();
     }
+    await rememberProjectSourceCleanup(projectId);
     await catalogApi(`/api/project/${encodeURIComponent(projectId)}`, {}, { method: "DELETE" });
     await forgetProjectSources(projectId);
     if (deletingCurrentProject) {
@@ -485,7 +495,10 @@ async function deleteProject(projectId) {
         focusElement($("#projectListBody").querySelector(`tr[data-project-id="${focusProjectId}"] [data-project-action="open"]`));
       }
     }
-  } catch (error) { showUserError(error); }
+  } catch (error) {
+    await resolveProjectSourceCleanup(projectId).catch(() => {});
+    showUserError(error);
+  }
   finally {
     projectDeleteBusy = false;
     if ($("#projectDeleteDialog").open) {
@@ -1297,7 +1310,9 @@ async function initialise() {
       setStatusKey("status.imagesLoaded", { count: state.images.length });
     }
   } catch (error) { showUserError(error); }
-  void retryProjectSourceCleanup().catch(() => {});
+  void api("/api/projects?sort=updated_desc")
+    .then((data) => retryProjectSourceCleanup(new Set((data.projects || []).map((project) => project.id))))
+    .catch(() => {});
   if (document.visibilityState === "visible") setTimeout(() => { void checkForUpdate({ silent: true }); }, 1000);
 }
 
