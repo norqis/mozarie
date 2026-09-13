@@ -10,6 +10,7 @@ import io
 import json
 import base64
 import os
+import shutil
 import sqlite3
 import tempfile
 import threading
@@ -94,6 +95,7 @@ class WorkspaceStore:
         self.path = data_dir / "workspaces.sqlite3"
         self._lock = threading.RLock()
         data_dir.mkdir(parents=True, exist_ok=True)
+        self._cleanup_stale_export_snapshots(data_dir)
         # Inspect an existing database before issuing any write-capable pragma,
         # DDL, or cleanup statement. This schema has no migrations.
         existing = self.path.exists()
@@ -211,6 +213,20 @@ class WorkspaceStore:
             """)
             if not existing:
                 db.execute("INSERT INTO meta(key, value) VALUES('schema_version', ?)", (str(self.VERSION),))
+
+    @staticmethod
+    def _cleanup_stale_export_snapshots(data_dir: Path) -> None:
+        """Best-effort removal of export snapshots left by a forced stop."""
+        try:
+            snapshots = tuple(data_dir.glob("mozarie-export-*"))
+        except OSError:
+            return
+        for snapshot in snapshots:
+            try:
+                if snapshot.is_dir() and not snapshot.is_symlink():
+                    shutil.rmtree(snapshot, ignore_errors=True)
+            except OSError:
+                continue
 
     @classmethod
     def recreate(cls, data_dir: Path) -> None:
