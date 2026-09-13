@@ -261,7 +261,6 @@ class SavingMixin:
                 output_path.unlink(missing_ok=True)
 
     def commit_browser_save(self, image_id: str, revision: int, save_token: str, source_action: str, *, source_mtime_ns: int | None = None, source_size_bytes: int | None = None) -> dict[str, Any]:
-        self._assert_image_editable(image_id)
         if not isinstance(save_token, str) or not save_token:
             raise ClientError("保存確認トークンがありません。保存をやり直してください。", "save_state_changed")
         if source_action not in {"keep", "overwrite", "deleted"}:
@@ -294,6 +293,7 @@ class SavingMixin:
                     return {"cleared": receipt.cleared, "stale": receipt.stale, "deleted": receipt.deleted,
                             "catalogGeneration": receipt.catalog_generation}
                 self._assert_request_catalog_expectation()
+                self._assert_image_editable(image_id)
                 token_details = self.browser_save_tokens.get(save_token)
                 if token_details is None:
                     raise ClientError("保存確認トークンが無効または期限切れです。保存をやり直してください。", "save_state_changed")
@@ -311,6 +311,7 @@ class SavingMixin:
                         return {"cleared": receipt.cleared, "stale": receipt.stale, "deleted": receipt.deleted,
                                 "catalogGeneration": receipt.catalog_generation}
                     self._assert_request_catalog_expectation()
+                    self._assert_image_editable(image_id)
                     token_details = self.browser_save_tokens.get(save_token)
                     record = self.images.get(image_id)
                     if token_details is None:
