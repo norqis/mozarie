@@ -86,7 +86,10 @@ function clearPendingBrowserProjectSources() { pendingBrowserProjectSources = []
 async function restoreBrowserProjectSourcesForCurrentCatalog() {
   const projectId = state.project?.id; const epoch = state.catalogEpoch;
   if (!projectId) return;
-  const { files, directories } = await rememberedProjectSources(projectId);
+  let remembered;
+  try { remembered = await rememberedProjectSources(projectId); }
+  catch { return; }
+  const { files, directories } = remembered;
   if (!isCurrentCatalogEpoch(epoch) || state.project?.id !== projectId) return;
   const stagedAccess = new Map();
   const pending = [];
@@ -106,7 +109,8 @@ async function restoreBrowserProjectSourcesForCurrentCatalog() {
         } else await collect(child, relativePath, handle);
       }
     }
-    await collect(source.handle);
+    try { await collect(source.handle); }
+    catch { pending.push({ ...source, projectId, kind: "directory", key: `directory:${source.sourceId}` }); }
   }
   if (isCurrentCatalogEpoch(epoch) && state.project?.id === projectId) {
     state.sourceAccess = stagedAccess;

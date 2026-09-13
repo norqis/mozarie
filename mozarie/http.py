@@ -326,7 +326,7 @@ class MosaicHandler(BaseHTTPRequestHandler):
         except ForbiddenClientError as exc:
             self._client_error(exc, HTTPStatus.FORBIDDEN)
         except ClientError as exc:
-            self._client_error(exc, HTTPStatus.BAD_REQUEST)
+            self._client_error(exc, HTTPStatus.CONFLICT if exc.error_code == "stale_catalog" else HTTPStatus.BAD_REQUEST)
         except Exception as exc:  # Keep tracebacks in the terminal, not in browser.
             if STATE is not None and (gpu_oom := STATE.recover_gpu_oom_for_request(exc)) is not None:
                 LOGGER.error("GET リクエストでGPUメモリが不足: %s", self.path)
@@ -663,7 +663,7 @@ class MosaicHandler(BaseHTTPRequestHandler):
         except ForbiddenClientError as exc:
             self._client_error(exc, HTTPStatus.FORBIDDEN)
         except ClientError as exc:
-            self._client_error(exc, HTTPStatus.BAD_REQUEST)
+            self._client_error(exc, HTTPStatus.CONFLICT if exc.error_code == "stale_catalog" else HTTPStatus.BAD_REQUEST)
         except Exception as exc:
             # Recovery can fail while no state exists.  It is not a GPU error,
             # and must still return the normal structured server error.
@@ -713,7 +713,7 @@ class MosaicHandler(BaseHTTPRequestHandler):
         except ForbiddenClientError as exc:
             self._client_error(exc, HTTPStatus.FORBIDDEN)
         except ClientError as exc:
-            self._client_error(exc, HTTPStatus.BAD_REQUEST)
+            self._client_error(exc, HTTPStatus.CONFLICT if exc.error_code == "stale_catalog" else HTTPStatus.BAD_REQUEST)
         except Exception as exc:
             if STATE is not None and (gpu_oom := STATE.recover_gpu_oom_for_request(exc)) is not None:
                 LOGGER.error("DELETE リクエストでGPUメモリが不足: %s", self.path)

@@ -450,12 +450,7 @@ class CatalogMixin:
             except ProjectSourceUnavailableError as exc:
                 raise ClientError("元フォルダーが見つかりません。", "project_source_unavailable") from exc
             self._set_root(raw_path, project_id, relink_source_id=source_id, allow_new=False)
-            snapshot = self.catalog_snapshot()
-            snapshot["sources"] = [
-                {**source, "exists": source["kind"] != "native-folder" or bool(source.get("nativePath") and Path(str(source["nativePath"])).is_dir())}
-                for source in self.workspace_store.project_sources(project_id)
-            ]
-            return snapshot
+            return self.catalog_snapshot()
 
     def projects(self, sort: str = "updated_desc") -> list[dict[str, Any]]:
         return self.workspace_store.projects(sort)
@@ -1847,59 +1842,102 @@ class CatalogMixin:
                     self.workspace_store.delete_manual([image_id])
 
     def catalog_snapshot(self) -> dict[str, Any]:
-        """Capture the complete catalogue payload in one lock epoch."""
-        with self.lock:
-            manual_mask_statuses = {} if self.catalog_id is None else self.workspace_store.manual_mask_statuses(list(self.order))
-            output = []
-            for image_id in self.order:
-                record = self.images[image_id]
-                candidate_revision = self._candidate_revision(image_id)
-                fallback_effective = any(
-                    candidate.enabled and candidate.role == CandidateRole.APPLY for candidate in self.candidates.get(image_id, [])
-                )
-                if self.catalog_id is None:
-                    draft = self.projectless_manual_drafts.get(image_id)
-                    has_effective_mask = bool(draft["hasEffectiveMask"]) if draft and draft.get("candidateRevision") == candidate_revision else fallback_effective
-                else:
-                    stored_effective, stored_revision = manual_mask_statuses.get(image_id, (False, -1))
-                    has_effective_mask = stored_effective if stored_revision == candidate_revision else fallback_effective
-                item = {
-                    "id": record.image_id,
-                    "relativePath": record.relative_path,
-                    "sourceKind": record.source_kind,
-                    "width": record.width,
-                    "height": record.height,
-                    "mtimeNs": record.mtime_ns,
-                    "sizeBytes": record.size_bytes,
-                    "assetVersion": self.asset_version(record),
-                    "candidateCount": len(self.candidates.get(image_id, [])),
-                    "enabledCandidateCount": sum(
-                        candidate.enabled and candidate.role == CandidateRole.APPLY for candidate in self.candidates.get(image_id, [])
-                    ),
-                    "hasEffectiveMask": has_effective_mask,
-                    "candidateRevision": candidate_revision,
-                    "hidden": record.hidden,
-                    "reviewed": record.reviewed,
-                    "sourceId": record.source_id,
-                    "sourceMismatch": record.image_id in self.source_mismatches,
-                    "sourceDimensionsChanged": bool(self.source_mismatches.get(record.image_id)),
-                    "flipH": record.flip_horizontal,
-                    "flipV": record.flip_vertical,
-                    "sourceFlipH": record.source_flip_horizontal,
-                    "sourceFlipV": record.source_flip_vertical,
-                    "transformRevision": record.transform_revision,
+        """Capture one catalogue epoch without holding the state lock for SQLite or filesystem I/O."""
+        while True:
+            with self.lock:
+                catalog_id = self.catalog_id
+                generation = self.catalog_generation
+                root = str(self.root) if self.root else None
+                read_only = self.project_read_only
+                records = [replace(self.images[image_id]) for image_id in self.order]
+                candidate_state = {
+                    image_id: (
+                        self._candidate_revision(image_id),
+                        len(self.candidates.get(image_id, [])),
+                        sum(candidate.enabled and candidate.role == CandidateRole.APPLY for candidate in self.candidates.get(image_id, [])),
+                    )
+                    for image_id in self.order
                 }
-                if record.source_kind == "filesystem":
-                    item["sourcePath"] = str(record.path)
-                output.append(item)
-            return {
-                "root": str(self.root) if self.root else None,
-                "images": output,
-                "catalogGeneration": self.catalog_generation,
-                "workspace": self.catalog_id is not None,
-                "project": self.workspace_store.project(self.catalog_id) if self.catalog_id else None,
-                "readOnly": self.project_read_only,
-            }
+                drafts = {
+                    image_id: dict(draft) for image_id, draft in self.projectless_manual_drafts.items()
+                } if catalog_id is None else {}
+                mismatches = dict(self.source_mismatches)
+
+            sources = [] if catalog_id is None else [
+                {**source, "exists": source["kind"] != "native-folder" or bool(source.get("nativePath") and Path(str(source["nativePath"])).is_dir())}
+                for source in self.workspace_store.project_sources(catalog_id)
+            ]
+
+            with self.lock:
+                if self.catalog_id != catalog_id or self.catalog_generation != generation:
+                    continue
+                if (self.project_read_only != read_only or self.source_mismatches != mismatches
+                        or any(self.images.get(record.image_id) != record for record in records)
+                        or candidate_state != {
+                            image_id: (
+                                self._candidate_revision(image_id),
+                                len(self.candidates.get(image_id, [])),
+                                sum(candidate.enabled and candidate.role == CandidateRole.APPLY for candidate in self.candidates.get(image_id, [])),
+                            )
+                            for image_id in self.order
+                        }
+                        or (catalog_id is None and self.projectless_manual_drafts != drafts)):
+                    continue
+                # These short indexed reads are the existing atomic manual and
+                # project metadata boundary; path checks stay outside this lock.
+                manual_mask_statuses = {} if catalog_id is None else self.workspace_store.manual_mask_statuses([record.image_id for record in records])
+                project = self.workspace_store.project(catalog_id) if catalog_id else None
+                output = []
+                for record in records:
+                    candidate_revision, candidate_count, enabled_count = candidate_state[record.image_id]
+                    fallback_effective = bool(enabled_count)
+                    if catalog_id is None:
+                        draft = drafts.get(record.image_id)
+                        has_effective_mask = bool(draft["hasEffectiveMask"]) if draft and draft.get("candidateRevision") == candidate_revision else fallback_effective
+                    else:
+                        stored_effective, stored_revision = manual_mask_statuses.get(record.image_id, (False, -1))
+                        has_effective_mask = stored_effective if stored_revision == candidate_revision else fallback_effective
+                    item = {
+                        "id": record.image_id,
+                        "relativePath": record.relative_path,
+                        "sourceKind": record.source_kind,
+                        "width": record.width,
+                        "height": record.height,
+                        "mtimeNs": record.mtime_ns,
+                        "sizeBytes": record.size_bytes,
+                        "assetVersion": self.asset_version(record),
+                        "candidateCount": candidate_count,
+                        "enabledCandidateCount": enabled_count,
+                        "hasEffectiveMask": has_effective_mask,
+                        "candidateRevision": candidate_revision,
+                        "hidden": record.hidden,
+                        "reviewed": record.reviewed,
+                        "sourceId": record.source_id,
+                        "sourceMismatch": record.image_id in mismatches,
+                        "sourceDimensionsChanged": bool(mismatches.get(record.image_id)),
+                        "flipH": record.flip_horizontal,
+                        "flipV": record.flip_vertical,
+                        "sourceFlipH": record.source_flip_horizontal,
+                        "sourceFlipV": record.source_flip_vertical,
+                        "transformRevision": record.transform_revision,
+                    }
+                    if record.source_kind == "filesystem":
+                        item["sourcePath"] = str(record.path)
+                    output.append(item)
+                needs_source = any(
+                    source["kind"] != "native-folder" or not source.get("nativePath") or not source["exists"]
+                    for source in sources
+                )
+                return {
+                    "root": root,
+                    "images": output,
+                    "catalogGeneration": generation,
+                    "workspace": catalog_id is not None,
+                    "project": project,
+                    "readOnly": read_only,
+                    "sources": sources,
+                    "needsSource": needs_source,
+                }
 
     def set_image_transform(self, image_id: str, payload: dict[str, Any]) -> dict[str, Any]:
         self._assert_image_editable(image_id)

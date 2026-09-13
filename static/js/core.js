@@ -416,7 +416,9 @@ function reconcileCatalogSnapshot(snapshot, expectedProjectId, expectedCatalogGe
 }
 async function catalogApi(path, payload = {}, options = {}) {
   const { resyncOnFailure = true, ...requestOptions } = options;
+  const expectedProjectId = state.project?.id || null;
   const expectedCatalogGeneration = state.serverCatalogGeneration;
+  const requestEpoch = state.catalogEpoch;
   try {
     return catalogResponse(await api(path, {
       ...requestOptions,
@@ -429,10 +431,13 @@ async function catalogApi(path, payload = {}, options = {}) {
       },
     }));
   } catch (error) {
-    if (resyncOnFailure && !error.catalogResynced && error?.name !== "AbortError") {
-      const transition = state.catalogTransition;
-      await resyncCurrentCatalog(transition?.epoch ?? state.catalogEpoch).catch(() => {});
-      if (error?.code === "stale_catalog") error.catalogResynced = true;
+    const ambiguous = !Number.isInteger(error?.status) || error.status >= 500 || error?.code === "stale_catalog";
+    if (resyncOnFailure && ambiguous && !error.catalogResynced && error?.name !== "AbortError") {
+      const snapshot = await api("/api/images", { resyncOnStale: false }).catch(() => null);
+      if (snapshot && isCurrentCatalogEpoch(requestEpoch)) {
+        reconcileCatalogSnapshot(snapshot, expectedProjectId, expectedCatalogGeneration);
+        if (error?.code === "stale_catalog") error.catalogResynced = true;
+      }
     }
     throw error;
   }
@@ -858,7 +863,7 @@ function resetCatalog(images, root) {
   state.projectHistory.clear();
   state.sourceAccess.clear();
   state.projectlessDirectorySources.clear();
-  if (typeof restoreBrowserProjectSourcesForCurrentCatalog === "function") void restoreBrowserProjectSourcesForCurrentCatalog();
+  if (typeof restoreBrowserProjectSourcesForCurrentCatalog === "function") void restoreBrowserProjectSourcesForCurrentCatalog().catch(() => {});
   state.missingNativeSources = [];
   state.reviewRoot = normaliseReviewRoot(root);
   state.overviewFolder = "";
