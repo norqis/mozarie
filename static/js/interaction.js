@@ -256,7 +256,7 @@ async function restoreDeletionSelection(snapshot, imageIds) {
   else if (!(state.currentId === imageId && state.currentImage)) await selectImage(imageId, true, { saveCurrentDraft: false });
 }
 async function removeImageFromCatalog(imageId = state.contextMenuImageId) {
-  if (!imageId || isBusy() || state.importing || catalogStagingEditsActive()) return;
+  if (!canRemoveCurrentImage() || imageId !== state.currentId) return;
   const image = state.images.find((item) => item.id === imageId);
   if (!image) return;
   if (!await confirmAction(t("confirm.removeImage.title"), t("confirm.removeImage.message"), "removeImage")) return;
@@ -744,12 +744,14 @@ function handleEditorKeydown(event) {
 function navigationShortcutAction(event) {
   if (isBusy() || state.importing || isGestureActive() || !state.navigationShortcutsEnabled || isEditableTarget(document.activeElement) || hasOpenDialog()) return null;
   const binding = shortcutFromEvent(event);
-  const bindings = state.settings?.shortcuts?.bindings || { previous: "ArrowLeft", next: "ArrowRight", previousVisible: "ArrowUp", nextVisible: "ArrowDown", first: "Home", last: "End", reviewAndNext: "Enter", toggleOverview: "G", undo: "Ctrl+Z", redo: "Ctrl+Shift+Z" };
+  const bindings = state.settings?.shortcuts?.bindings || { previous: "ArrowLeft", next: "ArrowRight", previousVisible: "ArrowUp", nextVisible: "ArrowDown", first: "Home", last: "End", reviewAndNext: "Enter", removeImage: "Delete", toggleOverview: "G", undo: "Ctrl+Z", redo: "Ctrl+Shift+Z" };
   const actionForBinding = Object.entries(bindings).find(([, value]) => value === binding)?.[0];
   if (!actionForBinding || state.settings?.shortcuts?.actions?.[actionForBinding] === false) return null;
-  if ((currentImageActionPending() || state.projectReadOnly || currentRecord()?.sourceDimensionsChanged) && ["reviewAndNext", "undo", "redo"].includes(actionForBinding)) return null;
   if (actionForBinding === "toggleOverview") return "toggleOverview";
   if (state.viewMode !== "edit") return null;
+  if (actionForBinding === "removeImage" && event.repeat) return "removeImageRepeat";
+  if (actionForBinding === "removeImage" && !canRemoveCurrentImage()) return null;
+  if ((currentImageActionPending() || state.projectReadOnly || currentRecord()?.sourceDimensionsChanged) && ["reviewAndNext", "undo", "redo"].includes(actionForBinding)) return null;
   return actionForBinding;
 }
 
@@ -765,6 +767,7 @@ function handleNavigationKeydown(event) {
   else if (action === "first" && galleryFilteredImages()[0]) void selectImage(galleryFilteredImages()[0].id);
   else if (action === "last" && galleryFilteredImages().at(-1)) void selectImage(galleryFilteredImages().at(-1).id);
   else if (action === "reviewAndNext") void reviewAndMoveNext();
+  else if (action === "removeImage") void removeImageFromCatalog(state.currentId);
   else if (action === "undo") void restoreSnapshot(state.historyIndex - 1);
   else if (action === "redo") void restoreSnapshot(state.historyIndex + 1);
   return true;

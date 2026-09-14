@@ -60,11 +60,12 @@
       "first": "Home",
       "last": "End",
       "reviewAndNext": "Enter",
+      "removeImage": "Delete",
       "toggleOverview": "G",
       "undo": "Ctrl+Z",
       "redo": "Ctrl+Shift+Z"
     },
-    "actions": {"previous": true, "next": true, "previousVisible": true, "nextVisible": true, "first": true, "last": true, "reviewAndNext": true, "toggleOverview": true, "undo": true, "redo": true}
+    "actions": {"previous": true, "next": true, "previousVisible": true, "nextVisible": true, "first": true, "last": true, "reviewAndNext": true, "removeImage": true, "toggleOverview": true, "undo": true, "redo": true}
   },
   "confirmations": {
     "clearMasks": true,

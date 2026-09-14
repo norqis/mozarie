@@ -473,6 +473,7 @@
   "settings.shortcut.first": "First image",
   "settings.shortcut.last": "Last image",
   "settings.shortcut.reviewAndNext": "Mark reviewed and next",
+  "settings.shortcut.removeImage": "Remove image",
   "settings.shortcut.toggleOverview": "Open or close image overview",
   "settings.shortcut.undo": "Undo",
   "settings.shortcut.redo": "Redo",

@@ -473,6 +473,7 @@
   "settings.shortcut.first": "最初の画像",
   "settings.shortcut.last": "最後の画像",
   "settings.shortcut.reviewAndNext": "確認済にして次へ",
+  "settings.shortcut.removeImage": "画像を削除",
   "settings.shortcut.toggleOverview": "画像一覧を開く・閉じる",
   "settings.shortcut.undo": "元に戻す",
   "settings.shortcut.redo": "やり直す",

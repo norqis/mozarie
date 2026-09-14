@@ -31,7 +31,7 @@ class SettingsStore:
 
     def load(self) -> dict[str, Any]:
         defaults = json.loads(self.defaults_path.read_text(encoding="utf-8"))
-        settings = defaults if not self.local_path.is_file() else _merge(defaults, json.loads(self.local_path.read_text(encoding="utf-8")))
+        settings = defaults if not self.local_path.is_file() else _merge(defaults, _migrate_legacy_shortcuts(json.loads(self.local_path.read_text(encoding="utf-8"))))
         return validate_settings(self._set_builtin_output_directory(settings))
 
     def save(self, update: dict[str, Any]) -> dict[str, Any]:
@@ -255,8 +255,29 @@ def _validate_targets(value: Any) -> list[str]:
     return list(dict.fromkeys(value))
 
 
-_DEFAULT_SHORTCUTS = {"previous": "ArrowLeft", "next": "ArrowRight", "previousVisible": "ArrowUp", "nextVisible": "ArrowDown", "first": "Home", "last": "End", "reviewAndNext": "Enter", "toggleOverview": "G", "undo": "Ctrl+Z", "redo": "Ctrl+Shift+Z"}
+_DEFAULT_SHORTCUTS = {"previous": "ArrowLeft", "next": "ArrowRight", "previousVisible": "ArrowUp", "nextVisible": "ArrowDown", "first": "Home", "last": "End", "reviewAndNext": "Enter", "removeImage": "Delete", "toggleOverview": "G", "undo": "Ctrl+Z", "redo": "Ctrl+Shift+Z"}
 _SHORTCUT_ACTIONS = set(_DEFAULT_SHORTCUTS)
+
+
+def _migrate_legacy_shortcuts(settings: Any) -> Any:
+    """Keep an old custom Delete binding usable when the new action is added."""
+    if not isinstance(settings, dict):
+        return settings
+    shortcuts = settings.get("shortcuts")
+    if not isinstance(shortcuts, dict):
+        return settings
+    bindings = shortcuts.get("bindings")
+    actions = shortcuts.get("actions")
+    if (not isinstance(bindings, dict) or ("actions" in shortcuts and not isinstance(actions, dict))
+            or "removeImage" in bindings or "Delete" not in bindings.values()):
+        return settings
+    fallbacks = ("Ctrl+Delete", "Shift+Delete", "Alt+Delete", "Ctrl+Shift+Delete", "Ctrl+Alt+Delete", "Shift+Alt+Delete", "Ctrl+Shift+Alt+Delete")
+    fallback = next(binding for binding in fallbacks if binding not in bindings.values())
+    migrated = copy.deepcopy(settings)
+    migrated_shortcuts = migrated["shortcuts"]
+    migrated_shortcuts["bindings"] = {**bindings, "removeImage": fallback}
+    migrated_shortcuts["actions"] = {**(actions or {}), "removeImage": False}
+    return migrated
 
 
 def _validate_shortcuts(value: Any) -> dict[str, str]:
