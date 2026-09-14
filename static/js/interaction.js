@@ -252,8 +252,8 @@ async function restoreDeletionSelection(snapshot, imageIds) {
     ? nextVisibleImage(snapshot.visibleImages, snapshot.anchorImageId, { excludedImageIds: removedIds, fallback: true })
     : null;
   const imageId = [target?.id, snapshot.pendingImageId, snapshot.currentImageId].find((id) => availableIds.has(id));
-  if (imageId) await selectImage(imageId, true, { saveCurrentDraft: false });
-  else clearCurrentImageSelection();
+  if (!imageId) clearCurrentImageSelection();
+  else if (!(state.currentId === imageId && state.currentImage)) await selectImage(imageId, true, { saveCurrentDraft: false });
 }
 async function removeImageFromCatalog(imageId = state.contextMenuImageId) {
   if (!imageId || isBusy() || state.importing || catalogStagingEditsActive()) return;
