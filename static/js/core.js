@@ -744,8 +744,8 @@ function updateActionButtons() {
   $("#overviewButton").disabled = busyLocked || state.images.length === 0;
   const visibleImages = galleryFilteredImages();
   const visibleIndex = visibleImages.findIndex((image) => image.id === state.currentId);
-  $("#previousImageButton").disabled = busyLocked || switchingImages || visibleIndex <= 0;
-  $("#nextImageButton").disabled = busyLocked || switchingImages || visibleIndex >= visibleImages.length - 1;
+  $("#previousImageButton").disabled = busyLocked || switchingImages || visibleImages.length === 0 || visibleIndex === 0;
+  $("#nextImageButton").disabled = busyLocked || switchingImages || visibleImages.length === 0 || visibleIndex === visibleImages.length - 1;
   $("#reviewAndNextButton").disabled = busyLocked || mutationLocked || switchingImages || !hasImage;
   $("#removeAndNextButton").disabled = busyLocked || mutationLocked || catalogStaging || switchingImages || !hasImage;
   $("#hideAndNextButton").disabled = busyLocked || mutationLocked || switchingImages || !hasImage;

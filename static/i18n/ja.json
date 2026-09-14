@@ -462,7 +462,7 @@
   "confirm.deleteSourceAfterCopy.title": "コピー後に元画像を削除",
   "confirm.deleteSourceAfterCopy.message": "保存後に元画像を削除します。",
   "navigation.reviewAndNext": "確認済にして次へ",
-  "navigation.removeAndNext": "削除して次へ",
+  "navigation.removeAndNext": "削除",
   "navigation.hideAndNext": "非表示にして次へ",
   "settings.saveParallelism": "ファイル保存同時処理数",
   "settings.shortcutHint": "キー欄を選択して、割り当てたいキーを押してください。",

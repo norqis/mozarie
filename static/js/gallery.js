@@ -219,6 +219,10 @@ function nextVisibleImage(images, imageId, { excludedImageIds = new Set(), fallb
   return images.slice(0, index).reverse().find((image) => !excludedImageIds.has(image.id)) || null;
 }
 function nextGalleryFilteredImage(imageId, options = {}) { return nextVisibleImage(galleryFilteredImages(), imageId, options); }
+function clearCurrentImageSelection() {
+  state.currentId = null; state.currentImage = null; state.pendingImageId = null; state.pendingImageKey = null; state.pendingCandidateKey = null;
+  state.candidates = []; state.candidateImages = new Map(); clearEditor();
+}
 
 function updateGalleryCurrent() {
   for (const item of state.galleryNodes.values()) {
@@ -332,14 +336,15 @@ function setViewMode(mode, refreshGallery = true) {
 function moveCurrentBy(offset) {
   if (isGestureActive()) return;
   const visible = galleryFilteredImages(); const index = visible.findIndex((image) => image.id === state.currentId);
-  const target = visible[index + offset];
+  const target = index < 0 ? (offset < 0 ? visible.at(-1) : visible[0]) : visible[index + offset];
   if (target) void selectImage(target.id);
 }
 async function reviewAndMoveNext() {
   const current = currentRecord();
   if (isGestureActive() || currentImageActionPending() || !current) return null;
   const currentId = current.id;
-  const target = nextGalleryFilteredImage(currentId);
+  const filteredImages = galleryFilteredImages();
+  const target = nextVisibleImage(filteredImages, currentId, { fallback: true });
   const reviewed = await queueImageMutation(currentId, async () => {
     const scroll = state.contextMenuScroll;
     return saveWorkspaceFlagNow(current, "reviewed", true, () => {
@@ -347,8 +352,14 @@ async function reviewAndMoveNext() {
     });
   }, { lockCandidateControls: true });
   if (!reviewed) return null;
-  if (target && state.currentId === currentId) void selectImage(target.id);
-  return target;
+  if (state.currentId !== currentId) return target;
+  if (imageMatchesGalleryFilter(current)) return current;
+  if (target && state.images.some((image) => image.id === target.id)) {
+    await selectImage(target.id);
+    return target;
+  }
+  clearCurrentImageSelection();
+  return null;
 }
 async function hideAndMoveNext() {
   if (isGestureActive() || currentImageActionPending()) return;

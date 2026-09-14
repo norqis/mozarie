@@ -228,11 +228,6 @@ function clearReviewForRemovedImage(image) {
   state.reviewedImageIds.delete(image.id);
   state.hiddenImageIds.delete(image.id);
 }
-function clearRemovedCurrentImage() {
-  state.currentId = null; state.currentImage = null; state.pendingImageId = null; state.pendingImageKey = null; state.pendingCandidateKey = null;
-  state.candidates = []; state.candidateImages = new Map(); clearEditor();
-}
-
 async function removeImageFromCatalog(imageId = state.contextMenuImageId) {
   if (!imageId || isBusy() || state.importing || catalogStagingEditsActive()) return;
   const image = state.images.find((item) => item.id === imageId);
@@ -267,7 +262,7 @@ async function removeImageFromCatalog(imageId = state.contextMenuImageId) {
       state.maskStatus.delete(imageId);
       pruneSourceAccess();
       clearReviewForRemovedImage(image);
-      if (removingCurrent) clearRemovedCurrentImage();
+      if (removingCurrent) clearCurrentImageSelection();
       renderCatalogViews(); updateSelectionActionBar();
       selectAfterTransition = removingCurrent && Boolean(nextImageId) && state.images.some((item) => item.id === nextImageId);
     });
@@ -333,7 +328,7 @@ async function runSelectionAction(action) {
       }
       loadReviewedPaths();
       pruneSourceAccess();
-      if (removingCurrent) clearRemovedCurrentImage();
+      if (removingCurrent) clearCurrentImageSelection();
       state.batchMode = false; clearBatchSelection(); updateSelectionActionBar();
       renderCatalogViews();
       if (removingCurrent && nextImageId && state.images.some((image) => image.id === nextImageId)) await selectImage(nextImageId, true, { saveCurrentDraft: false });
