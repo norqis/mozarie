@@ -305,9 +305,11 @@ async function runSelectionAction(action) {
   if (action === "remove") {
     if (!await confirmAction(t("confirm.removeImages.title"), t("confirm.removeImages.message", { count: ids.length }), "removeImage")) return;
     const epoch = beginCatalogEpoch(); state.catalogMutation = true; updateActionButtons();
-    const removingCurrent = ids.includes(state.currentId) || ids.includes(state.pendingImageId);
-    const currentImageId = state.currentId || state.pendingImageId;
+    const removingPending = ids.includes(state.pendingImageId);
+    const removingCurrent = ids.includes(state.currentId) || removingPending;
+    const currentImageId = removingPending ? state.pendingImageId : state.currentId;
     const nextImageId = removingCurrent ? nextVisibleImage(overviewImages(), currentImageId, { excludedImageIds: new Set(ids), fallback: true }) : null;
+    ++state.imageGeneration;
     const projectId = state.project?.id || null;
     let cleanupIntents = new Map();
     try {
