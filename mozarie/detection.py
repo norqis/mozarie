@@ -776,6 +776,7 @@ class DetectionMixin:
                 # model, SAM image or CUDA cache until another request.
                 self._release_gpu_job_memory()
         with self.image_io_lock(image_id):
+            self._assert_image_editable(image_id)
             record = self.image_for_id(image_id)
             with self.lock:
                 self._assert_request_catalog_expectation()
@@ -811,6 +812,7 @@ class DetectionMixin:
         with self.lock:
             if self.images.get(image_id) is not record:
                 raise ClientError("フォルダの再読み込み後に境界の検出結果を受け取ったため、破棄しました。", "catalog_changed")
+            self._assert_image_editable(image_id)
 
         # Keep the selected SAM shape as APPLY. Hand/fluid removal is represented
         # by an independently toggleable EXCLUDE candidate just as in auto detect.

@@ -28,8 +28,8 @@ function validateDetectionCandidatePadding() {
 function syncDetectionActions() {
   const enabled = persistedDetectionTargets().length > 0 && !isBusy() && !state.importing && !catalogStagingEditsActive()
     && !state.projectReadOnly && !currentRecord()?.sourceDimensionsChanged && !currentImageActionPending();
-  $("#detectAllButton").disabled = !enabled || !state.images.length;
-  $("#detectCurrentButton").disabled = !enabled || !state.currentId;
+  $("#detectAllButton").disabled = !enabled || !processableImages().length;
+  $("#detectCurrentButton").disabled = !enabled || !isProcessableImage(currentRecord());
 }
 
 function syncDetectionTargetSwitch(input) {
@@ -55,6 +55,8 @@ function importParallelism() {
 }
 
 function openDetectionDialog(imageIds) {
+  const ids = new Set(processableImages().map((image) => image.id));
+  imageIds = [...new Set(imageIds)].filter((imageId) => ids.has(imageId));
   if (!imageIds.length || isBusy() || state.importing || catalogStagingEditsActive()) return;
   state.pendingDetectionTargetIds = [...imageIds];
   setDetectionConfidence(detectionConfidence());
@@ -69,6 +71,8 @@ function openDetectionDialog(imageIds) {
 }
 
 async function runDetection(imageIds, confidence = detectionConfidence(), parallelism = 1, targetClasses = persistedDetectionTargets()) {
+  const ids = new Set(processableImages().map((image) => image.id));
+  imageIds = [...new Set(imageIds)].filter((imageId) => ids.has(imageId));
   if (!imageIds.length || catalogStagingEditsActive() || (!state.detectionStarting && (isBusy() || state.importing))) return;
   if (!validateDetectionTargets(targetClasses, $("#detectionTargetValidation"))) return;
   if (!state.detectionStarting) beginDetectionStart(imageIds);
@@ -106,7 +110,8 @@ function failDetectionStart(error) {
 async function startDetectionFromDialog(event) {
   event.preventDefault();
   if (catalogStagingEditsActive()) return;
-  const imageIds = state.pendingDetectionTargetIds;
+  const ids = new Set(processableImages().map((image) => image.id));
+  const imageIds = state.pendingDetectionTargetIds.filter((imageId) => ids.has(imageId));
   if (!imageIds.length) return;
   const confidence = normaliseDetectionConfidence($("#detectConfidenceNumber").value);
   const parallelism = detectionParallelism();
@@ -149,7 +154,7 @@ async function saveCurrent() {
   if (state.candidateUpdateChains.size) await waitForCandidateMutations();
   const record = state.images.find((image) => image.id === imageId);
   if (isBusy() || state.importing || currentImageActionPending() || state.currentId !== imageId || !isCurrentGeneration(generation)
-    || !state.currentImage || state.projectReadOnly || record?.sourceDimensionsChanged || !record) return;
+    || !state.currentImage || state.projectReadOnly || record?.sourceDimensionsChanged || !isProcessableImage(record)) return;
   await openSingleSaveDialog(imageId);
 }
 
@@ -158,5 +163,5 @@ async function saveAll() {
   if (state.candidateUpdateChains.size) await waitForCandidateMutations();
   if (isBusy() || state.importing) return;
   saveDraft(); refreshMaskStatus();
-  if (state.images.length) await openApplyDialog({ initialMode: "all" });
+  if (processableImages().length) await openApplyDialog({ initialMode: "all" });
 }

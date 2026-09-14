@@ -50,6 +50,11 @@ class CatalogMixin:
     def _assert_image_editable(self, image_id: str) -> None:
         with self.lock:
             self._assert_catalog_mutable()
+            record = self.images.get(image_id)
+            if record is None:
+                raise ClientError("画像が見つかりません。", "image_not_found")
+            if record.hidden:
+                raise ClientError("非表示の画像は処理できません。再表示してから実行してください。", "image_hidden")
             if image_id in self.source_mismatches:
                 raise ClientError("元画像が変更されています。変更確認を完了してから編集してください。", "source_mismatch")
 
@@ -726,6 +731,7 @@ class CatalogMixin:
         """Return original-size grayscale project masks; never touches source files."""
         if kind not in {"mosaic", "exclude"}:
             raise ClientError("マスク種別が正しくありません。", "input_invalid")
+        self._assert_image_editable(image_id)
         record = self.image_snapshot(image_id)
         return self._export_workspace_mask(image_id, kind, record.width, record.height)
 
@@ -792,6 +798,8 @@ class CatalogMixin:
         image = self.workspace_store.project_image(image_id)
         if image is None:
             raise ClientError("画像が見つかりません。", "image_not_found")
+        if image["hidden"]:
+            raise ClientError("非表示の画像は処理できません。再表示してから実行してください。", "image_hidden")
         return self._export_workspace_mask(image_id, kind, int(image["width"]), int(image["height"]))
 
     def iter_project_mask_exports(self, project_id: str, kind: str):
@@ -1223,6 +1231,8 @@ class CatalogMixin:
                 stack.enter_context(image_lock)
             with self.lock:
                 self._assert_catalog_mutable()
+                for record in records:
+                    self._assert_image_editable(record.image_id)
                 if self.active_import_count or self.job.state in {"running", "pausing", "paused"} or self._has_active_worker():
                     raise ClientError("処理中はモザイク候補をクリアできません。", "operation_in_progress")
                 mask_paths = [
@@ -1715,6 +1725,8 @@ class CatalogMixin:
                 record = self.images.get(image_id)
                 if record is None:
                     raise ClientError("画像が見つかりません。", "image_not_found")
+                if hidden is not None and image_id in self.job.image_ids and self.job.state in {"running", "pausing", "paused"}:
+                    raise ClientError("処理対象の非表示は処理完了後に変更してください。", "operation_in_progress")
                 # The state lock is the publication boundary. Do not let a stale
                 # request write an old project's SQLite row after a switch.
                 if self.workspace_store.has_image(image_id):
@@ -1742,6 +1754,8 @@ class CatalogMixin:
                 records = [self.images.get(image_id) for image_id in image_ids]
                 if any(record is None for record in records):
                     raise ClientError("画像が見つかりません。", "image_not_found")
+                if hidden is not None and any(image_id in self.job.image_ids for image_id in image_ids) and self.job.state in {"running", "pausing", "paused"}:
+                    raise ClientError("処理対象の非表示は処理完了後に変更してください。", "operation_in_progress")
                 if self.catalog_id is not None:
                     self.workspace_store.set_image_flags_bulk(image_ids, hidden=hidden, reviewed=reviewed)
                 result: dict[str, dict[str, bool]] = {}
@@ -1782,6 +1796,7 @@ class CatalogMixin:
             with self.lock:
                 self._assert_request_catalog_expectation()
                 self._assert_catalog_mutable()
+                self._assert_image_editable(image_id)
                 if image_id not in self.images:
                     raise ClientError("画像が見つかりません。", "image_not_found")
                 committed = dict(payload)
@@ -1823,8 +1838,10 @@ class CatalogMixin:
         # then follow the normal image-lock-before-state-lock order.
         with self.import_lock:
             self.image_for_id(image_id)
+            self._assert_image_editable(image_id)
             with self.lock:
                 self._assert_catalog_mutable()
+                self._assert_image_editable(image_id)
                 catalog_id = self.catalog_id
                 catalog_generation = self.catalog_generation
                 changed_ids = self.workspace_store.restore_history(image_id, direction)
@@ -1873,6 +1890,7 @@ class CatalogMixin:
             with self.lock:
                 self._assert_request_catalog_expectation()
                 self._assert_catalog_mutable()
+                self._assert_image_editable(image_id)
                 if self.catalog_id is None:
                     self.projectless_manual_drafts.pop(image_id, None)
                 else:
@@ -1986,6 +2004,7 @@ class CatalogMixin:
         with self.image_io_lock(image_id):
             with self.lock:
                 self._assert_catalog_mutable()
+                self._assert_image_editable(image_id)
                 record = self.images.get(image_id)
                 if record is None: raise ClientError("画像が見つかりません。", "image_not_found")
                 if self.catalog_id is None:
@@ -2107,6 +2126,7 @@ class CatalogMixin:
             with self.lock:
                 self._assert_request_catalog_expectation()
                 self._assert_catalog_mutable()
+                self._assert_image_editable(image_id)
                 if self._has_active_worker():
                     raise ClientError("バックグラウンド処理中は候補を変更できません。", "operation_in_progress")
                 candidates = [replace(item) for item in self.candidates.get(image_id, [])]
@@ -2161,6 +2181,7 @@ class CatalogMixin:
             with self.lock:
                 self._assert_request_catalog_expectation()
                 self._assert_catalog_mutable()
+                self._assert_image_editable(image_id)
                 if self._has_active_worker():
                     raise ClientError("バックグラウンド処理中は候補を変更できません。", "operation_in_progress")
                 current = self.candidates.get(image_id, [])
@@ -2283,6 +2304,7 @@ class CatalogMixin:
             with self.lock:
                 self._assert_request_catalog_expectation()
                 self._assert_catalog_mutable()
+                self._assert_image_editable(image_id)
                 if self._has_active_worker():
                     raise ClientError("バックグラウンド処理中は候補を変更できません。", "operation_in_progress")
                 candidates = self.candidates.get(image_id, [])

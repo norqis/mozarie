@@ -84,7 +84,7 @@ const USER_ERROR_CODES = {
   model_download_invalid: "model_download_invalid", catalog_changed: "catalog_changed", job_running: "operation_in_progress",
   mask_not_found: "mask_not_found", candidate_not_found: "mask_not_found", invalid_settings: "input_invalid", invalid_request: "input_invalid",
   api_not_found: "response_invalid", connection_lost: "connection_lost", output_folder_unavailable: "output_folder_unavailable", output_permission_denied: "output_permission_denied", request_failed: "internal_error",
-  image_not_found: "image_not_found", image_read_failed: "image_read_failed", image_format_unsupported: "image_format_unsupported",
+  image_not_found: "image_not_found", image_hidden: "image_hidden", image_read_failed: "image_read_failed", image_format_unsupported: "image_format_unsupported",
   save_write_failed: "save_write_failed", save_state_changed: "save_state_changed", folder_not_found: "folder_not_found",
   source_restore_failed: "project_source_unavailable", project_source_unavailable: "project_source_unavailable", project_source_conflict: "project_source_conflict", project_source_no_match: "project_source_no_match", project_name_invalid: "project_name_invalid", project_name_duplicate: "project_name_duplicate", project_read_only: "project_read_only",
   project_not_found: "folder_not_found", workspace_recreate_required: "workspace_corrupt", source_mismatch: "image_changed",
@@ -541,13 +541,16 @@ function abortCatalogLoads() {
 function cancelFillWork() { state.fillWorker?.terminate?.(); state.fillWorker = null; state.fillPending = false; }
 function isGestureActive() { return state.drawing || state.panning || state.boundaryDragging; }
 function imageHasMask(image) { return state.maskStatus.get(image.id) ?? image.hasEffectiveMask === true; }
+function isProcessableImage(image) { return Boolean(image) && !isHidden(image); }
+function processableImages(images = state.images) { return images.filter(isProcessableImage); }
 function saveTargets(mode = "all") {
-  if (mode === "current") return state.currentId ? [state.currentId] : [];
+  const images = processableImages();
+  if (mode === "current") return images.some((image) => image.id === state.currentId) ? [state.currentId] : [];
   // Saving never consumes editor state. The normal batch path starts from the
   // complete catalogue every time; narrower targets are explicit choices.
-  if (mode === "masked") return state.images.filter(imageHasMask).map((image) => image.id);
-  if (mode === "reviewed") return state.images.filter(isReviewed).map((image) => image.id);
-  return state.images.map((image) => image.id);
+  if (mode === "masked") return images.filter(imageHasMask).map((image) => image.id);
+  if (mode === "reviewed") return images.filter(isReviewed).map((image) => image.id);
+  return images.map((image) => image.id);
 }
 function normaliseReviewRoot(value) { return String(value || "").trim().replaceAll("/", "\\").replace(/\\+$/, "").toLowerCase(); }
 function isReviewed(image) { return state.reviewedImageIds.has(image.id); }
@@ -714,10 +717,11 @@ function updateActionButtons() {
   const switchingImages = currentImageActionPending();
   const current = currentRecord();
   const hasImage = Boolean(state.currentId && state.currentImage && current);
+  const currentProcessable = hasImage && isProcessableImage(current);
   const candidateLocked = candidateControlLocked(state.currentId);
   const filterLocked = busyLocked || catalogStaging;
   const candidateViewLocked = busyLocked || switchingImages || candidateLocked;
-  const candidateControlsLocked = mutationLocked || candidateViewLocked;
+  const candidateControlsLocked = mutationLocked || candidateViewLocked || !currentProcessable;
   const presence = hasImage && !candidateViewLocked ? manualLayerPresence()
     : { hasManualExclude: false, hasManualExclusionErase: false };
   const controls = [...document.querySelectorAll("button, input, select, textarea")];
@@ -731,9 +735,9 @@ function updateActionButtons() {
   $("#pickFolder").disabled = busyLocked || mutationLocked || catalogStaging;
   const detectAllButton = $("#detectAllButton");
   detectAllButton.textContent = t("gallery.detectAll");
-  detectAllButton.disabled = busyLocked || mutationLocked || catalogStaging || state.images.length === 0;
-  $("#detectCurrentButton").disabled = busyLocked || mutationLocked || catalogStaging || switchingImages || !hasImage;
-  $("#clearCurrentMasksButton").disabled = busyLocked || mutationLocked || catalogStaging || switchingImages || candidateLocked || !hasImage
+  detectAllButton.disabled = busyLocked || mutationLocked || catalogStaging || processableImages().length === 0;
+  $("#detectCurrentButton").disabled = busyLocked || mutationLocked || catalogStaging || switchingImages || !currentProcessable;
+  $("#clearCurrentMasksButton").disabled = busyLocked || mutationLocked || catalogStaging || switchingImages || candidateLocked || !currentProcessable
     || !(current.candidateCount || state.manualMaskPresent || presence?.hasManualExclude || presence?.hasManualExclusionErase || imageHasMask(current));
   const visibilityButton = $("#removeCurrentImageButton");
   visibilityButton.disabled = busyLocked || mutationLocked || switchingImages || !hasImage;
@@ -742,10 +746,11 @@ function updateActionButtons() {
   for (const id of ["#galleryFilterButton", "#overviewFilterButton"]) $(id).disabled = filterLocked;
   for (const input of document.querySelectorAll("[data-gallery-filter], [data-overview-filter]")) input.disabled = filterLocked;
   if (filterLocked) closeFilterPopovers();
-  for (const id of ["#clearAllMasksButton", "#clearCatalogButton", "#batchMoreButton"]) $(id).disabled = busyLocked || mutationLocked || catalogStaging || state.images.length === 0;
+  $("#clearAllMasksButton").disabled = busyLocked || mutationLocked || catalogStaging || processableImages().length === 0;
+  for (const id of ["#clearCatalogButton", "#batchMoreButton"]) $(id).disabled = busyLocked || mutationLocked || catalogStaging || state.images.length === 0;
   $("#batchModeButton").disabled = busyLocked || mutationLocked || state.images.length === 0;
-  $("#saveAllButton").disabled = busyLocked || mutationLocked || catalogStaging || mutatingCandidates || state.images.length === 0;
-  const currentSaveDisabled = busyLocked || mutationLocked || catalogStaging || switchingImages || mutatingCandidates || !hasImage;
+  $("#saveAllButton").disabled = busyLocked || mutationLocked || catalogStaging || mutatingCandidates || processableImages().length === 0;
+  const currentSaveDisabled = busyLocked || mutationLocked || catalogStaging || switchingImages || mutatingCandidates || !currentProcessable;
   $("#saveButton").disabled = currentSaveDisabled;
   $("#applyStartButton").disabled = busyLocked || mutationLocked || catalogStaging || mutatingCandidates || state.applyTargetIds.length === 0
     || Boolean(applyRestrictionMessage()) || (selectedSaveMode() === "copy" && !state.outputDirectoryHandle);
@@ -757,8 +762,8 @@ function updateActionButtons() {
   $("#reviewAndNextButton").disabled = busyLocked || mutationLocked || switchingImages || !hasImage;
   $("#removeAndNextButton").disabled = !canRemoveCurrentImage();
   $("#hideAndNextButton").disabled = busyLocked || mutationLocked || switchingImages || !hasImage;
-  $("#downloadCurrentMosaicMask").disabled = switchingImages || !hasImage || !state.project;
-  $("#downloadCurrentExcludeMask").disabled = switchingImages || !hasImage || !state.project;
+  $("#downloadCurrentMosaicMask").disabled = switchingImages || !currentProcessable || !state.project;
+  $("#downloadCurrentExcludeMask").disabled = switchingImages || !currentProcessable || !state.project;
   if (switchingImages) for (const control of document.querySelectorAll("#candidatePane button, #candidatePaddingPopover button, #candidatePaddingPopover input")) {
     if (!control.disabled) control.dataset.disabledByLock = "true";
     control.disabled = true;
@@ -805,8 +810,8 @@ function updateActionButtons() {
     }
   }
   $("#gallery").classList.toggle("locked", busyLocked);
-  canvas.style.pointerEvents = busyLocked || mutationLocked || switchingImages ? "none" : "";
-  canvas.setAttribute("aria-disabled", String(busyLocked || mutationLocked || switchingImages));
+  canvas.style.pointerEvents = busyLocked || mutationLocked || switchingImages || !currentProcessable ? "none" : "";
+  canvas.setAttribute("aria-disabled", String(busyLocked || mutationLocked || switchingImages || !currentProcessable));
   syncDetectionActions();
   if (typeof renderProjectCurrent === "function") renderProjectCurrent();
   if (typeof renderProjectTableControls === "function") renderProjectTableControls();

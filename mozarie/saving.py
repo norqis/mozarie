@@ -93,6 +93,8 @@ class SavingMixin:
         with self.lock:
             self._assert_catalog_mutable()
         records, _catalog_generation = self._records_for_ids_with_catalog(image_ids)
+        for record in records:
+            self._assert_image_editable(record.image_id)
         _read_mosaic_divisor(divisor)
         _read_save_suffix(suffix)
         with self.lock:

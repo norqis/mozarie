@@ -1543,7 +1543,7 @@ class WorkspaceStore:
                         FROM main.images AS image
                         JOIN main.project_sources AS source ON source.source_id=image.source_id
                         LEFT JOIN main.image_transforms AS transform ON transform.image_id=image.image_id
-                        WHERE image.catalog_id=?""", (catalog_id,))
+                        WHERE image.catalog_id=? AND image.hidden=0""", (catalog_id,))
                     db.execute("""CREATE TABLE export_snapshot.candidates AS
                         SELECT candidate.image_id,candidate.candidate_id,candidate.mask_png,candidate.enabled,
                             candidate.role,candidate.forced,metadata.expand_px
@@ -1551,14 +1551,14 @@ class WorkspaceStore:
                         JOIN main.images AS image ON image.image_id=candidate.image_id
                         LEFT JOIN main.candidate_metadata AS metadata
                             ON metadata.image_id=candidate.image_id AND metadata.candidate_id=candidate.candidate_id
-                        WHERE image.catalog_id=? AND candidate.deleted=0 AND candidate.enabled=1""", (catalog_id,))
+                        WHERE image.catalog_id=? AND image.hidden=0 AND candidate.deleted=0 AND candidate.enabled=1""", (catalog_id,))
                     db.execute("""CREATE TABLE export_snapshot.manual_edits AS
                         SELECT manual.image_id,manual.add_png,manual.exclusion_png,manual.exclusion_erase_png,
                             manual.manual_enabled,manual.exclusion_enabled,manual.exclusion_erase_enabled,
                             manual.exclusion_forced,manual.removed_candidate_ids
                         FROM main.manual_edits AS manual
                         JOIN main.images AS image ON image.image_id=manual.image_id
-                        WHERE image.catalog_id=?""", (catalog_id,))
+                        WHERE image.catalog_id=? AND image.hidden=0""", (catalog_id,))
                     db.execute("COMMIT")
                 except Exception:
                     db.execute("ROLLBACK")

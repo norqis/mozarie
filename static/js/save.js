@@ -147,7 +147,7 @@ function syncSingleSaveMode() {
   $("#singleSaveDeleteOriginal").disabled = !canDelete || state.saving || state.saveStarting;
   if (!canDelete) $("#singleSaveDeleteOriginal").checked = false;
   $("#singleSaveChooseOutputDirectoryButton").disabled = state.outputDirectoryPicking || state.saving || state.saveStarting;
-  $("#singleSaveStartButton").disabled = state.saving || state.saveStarting || !image || (copying && !state.outputDirectoryHandle) || (!copying && !canOverwrite);
+  $("#singleSaveStartButton").disabled = state.saving || state.saveStarting || !isProcessableImage(image) || (copying && !state.outputDirectoryHandle) || (!copying && !canOverwrite);
   $("#singleSaveSettings").disabled = state.saving || state.saveStarting;
   renderOutputDirectory();
   syncSingleOutputOptions();
@@ -161,7 +161,7 @@ async function openSingleSaveDialog(imageId = state.currentId) {
   try { await flushDraftSaves([imageId]); }
   catch (error) { showUserError(error, invoker); return; }
   const image = state.images.find((entry) => entry.id === imageId);
-  if (!image || isBusy() || state.importing || currentImageActionPending() || state.currentId !== imageId || !isCurrentGeneration(generation)
+  if (!isProcessableImage(image) || isBusy() || state.importing || currentImageActionPending() || state.currentId !== imageId || !isCurrentGeneration(generation)
     || !state.currentImage || state.projectReadOnly || image.sourceDimensionsChanged) return;
   state.singleSave = { imageId, generation, divisor: Number($("#divisor").value), draft: draftPayload([imageId])[imageId] || null, invoker };
   $("#singleSaveTarget").textContent = t("apply.singleTarget", { name: image.relativePath });
@@ -255,7 +255,7 @@ async function startSingleSave(event) {
   event.preventDefault();
   const save = state.singleSave;
   const image = state.images.find((entry) => entry.id === save?.imageId);
-  if (!save || !image || state.saving || state.saveStarting || isBusy() || state.importing || catalogStagingEditsActive() || currentImageActionPending()
+  if (!save || !isProcessableImage(image) || state.saving || state.saveStarting || isBusy() || state.importing || catalogStagingEditsActive() || currentImageActionPending()
     || state.currentId !== save.imageId || !isCurrentGeneration(save.generation) || !state.currentImage || state.projectReadOnly || image.sourceDimensionsChanged) return;
   const mode = selectedSingleSaveMode(); const copying = mode === "copy";
   const deleteOriginal = copying && $("#singleSaveDeleteOriginal").checked;
@@ -886,7 +886,13 @@ function isDefinitiveCommitRejection(error) { return Number.isInteger(error?.sta
 
 async function startApplyFromDialog(event) {
   event.preventDefault();
-  const imageIds = [...state.applyTargetIds];
+  const processableIds = new Set(processableImages().map((image) => image.id));
+  const imageIds = state.applyTargetIds.filter((imageId) => processableIds.has(imageId));
+  if (imageIds.length !== state.applyTargetIds.length) {
+    state.applyTargetIds = imageIds;
+    $("#applyTargetCount").textContent = t("apply.target", { count: imageIds.length });
+    syncApplyMode();
+  }
   if (!imageIds.length || state.saveStarting || isBusy() || state.importing || catalogStagingEditsActive()) return;
   const mode = selectedSaveMode();
   const copy = mode === "copy";

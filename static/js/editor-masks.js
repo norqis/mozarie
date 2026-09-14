@@ -90,7 +90,7 @@ async function commitCandidatePadding() {
   if (!session || session.committing) return false;
   const value = validateCandidatePadding();
   if (value === null) { $("#candidatePaddingInput").focus(); return false; }
-  if (session.imageId !== state.currentId || state.projectReadOnly || isBusy() || state.importing || currentImageActionPending() || candidateControlLocked(state.currentId) || state.candidateBatchPending.has(state.currentId)) {
+  if (session.imageId !== state.currentId || !isProcessableImage(currentRecord()) || state.projectReadOnly || isBusy() || state.importing || currentImageActionPending() || candidateControlLocked(state.currentId) || state.candidateBatchPending.has(state.currentId)) {
     closeCandidatePadding({ restoreFocus: true }); return false;
   }
   if (session.mode === "batch") return commitBatchCandidatePadding(session, value);
@@ -191,7 +191,7 @@ function renderCandidates() {
   const excludeList = $("#exclusionList");
   applyList.textContent = ""; excludeList.textContent = "";
   if (!state.currentId) { syncCandidateDisplayButtons(); updateCandidateBatchButtons(false); return; }
-  const candidateLocked = candidateControlLocked(state.currentId) || currentImageActionPending();
+  const candidateLocked = !isProcessableImage(currentRecord()) || candidateControlLocked(state.currentId) || currentImageActionPending();
   const presence = manualLayerPresence();
   if (!state.candidates.length && !state.manualMaskPresent && !presence.hasManualExclude && !presence.hasManualExclusionErase) {
     const empty = document.createElement("p"); empty.className = "candidate-empty"; empty.textContent = t("candidates.none"); applyList.append(empty); syncCandidateDisplayButtons(presence); updateCandidateBatchButtons(undefined, undefined, presence); return;
@@ -621,7 +621,7 @@ async function batchCandidateOperation(spec) {
 }
 
 async function addBoundaryCandidate() {
-  if (catalogStagingEditsActive() || !canDetectBoundary()) return;
+  if (catalogStagingEditsActive() || !isProcessableImage(currentRecord()) || !canDetectBoundary()) return;
   const imageId = state.currentId;
   const viewGeneration = state.imageGeneration;
   const requests = boundaryRequests();
@@ -819,7 +819,7 @@ function paintStrokePath(points, tool, size) {
 }
 
 function fillAt(point, tool = state.tool) {
-  if (!state.currentImage) return;
+  if (!state.currentImage || !isProcessableImage(currentRecord())) return;
   enableManualLayerForTool(tool);
   const width = originalCanvas.width; const height = originalCanvas.height;
   const pixels = originalCtx.getImageData(0, 0, width, height).data;
@@ -890,6 +890,7 @@ function enableManualLayerForTool(tool) {
 }
 
 function beginManualStroke(point) {
+  if (!isProcessableImage(currentRecord())) return;
   enableManualLayerForTool(state.tool);
   state.activeStroke = { tool: state.tool, size: Number($("#brushSize").value), points: [{ ...point }], paintedPointCount: 1 };
   state.mosaicPending = true;
@@ -972,7 +973,7 @@ function completeManualStroke() {
   state.manualStrokePaintFrame = 0;
   paintPendingManualStroke();
   state.activeStroke = null;
-  if (!stroke?.points?.length) return;
+  if (!stroke?.points?.length || !isProcessableImage(currentRecord())) return;
   if (!state.project?.id) {
     state.history.splice(state.historyIndex);
     state.history.push(stroke);
@@ -1006,7 +1007,7 @@ async function restoreProjectHistory(direction) {
   if (catalogStagingEditsActive()) return;
   const imageId = state.currentId;
   const generation = state.imageGeneration;
-  if (!state.project?.id || !imageId || state.projectReadOnly || state.projectHistoryBusy || isBusy() || state.importing || isGestureActive() || currentImageActionPending()) return;
+  if (!state.project?.id || !isProcessableImage(currentRecord()) || !imageId || state.projectReadOnly || state.projectHistoryBusy || isBusy() || state.importing || isGestureActive() || currentImageActionPending()) return;
   const history = state.projectHistory.get(imageId) || {};
   if ((direction === "undo" && !history.canUndo) || (direction === "redo" && !history.canRedo)) return;
   state.projectHistoryBusy = true; updateHistoryButtons();
@@ -1060,7 +1061,7 @@ async function syncLocalTransformFromHistory(imageId, generation, previousIndex)
 function restoreSnapshot(index) {
   if (catalogStagingEditsActive()) return;
   if (state.project?.id) { void restoreProjectHistory(index < state.historyIndex ? "undo" : "redo"); return; }
-  if (isBusy() || state.importing || isGestureActive() || currentImageActionPending() || index < 0 || index > state.history.length) return;
+  if (!isProcessableImage(currentRecord()) || isBusy() || state.importing || isGestureActive() || currentImageActionPending() || index < 0 || index > state.history.length) return;
   if (index === state.historyIndex) return;
   const imageId = state.currentId;
   const generation = state.imageGeneration;

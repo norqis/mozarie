@@ -248,6 +248,8 @@ class JobsMixin:
                 raise ClientError("別の処理が進行中です。", "operation_in_progress")
             if expected_catalog_generation is not None and self.catalog_generation != expected_catalog_generation:
                 raise ClientError("画像一覧が更新されたため、もう一度実行してください。", "catalog_changed")
+            for record in records:
+                self._assert_image_editable(record.image_id)
             self.job_generation += 1
             job_generation = self.job_generation
             catalog_generation = self.catalog_generation

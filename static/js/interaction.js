@@ -123,6 +123,8 @@ function resetCurrentDraft() {
 }
 
 async function clearMasks(imageIds, titleKey, messageKey, expectedImageId = null, expectedGeneration = null) {
+  const ids = new Set(processableImages().map((image) => image.id));
+  imageIds = [...new Set(imageIds)].filter((imageId) => ids.has(imageId));
   if (!imageIds.length || isBusy() || state.importing || catalogStagingEditsActive() || currentImageActionPending()) return;
   if (!await confirmAction(t(titleKey, { count: imageIds.length }), t(messageKey, { count: imageIds.length }), "clearMasks")) return;
   if (expectedImageId && (state.currentId !== expectedImageId || !isCurrentGeneration(expectedGeneration) || currentImageActionPending())) return;
@@ -325,8 +327,8 @@ async function runSelectionAction(action) {
     finally { state.catalogMutation = false; updateActionButtons(); }
     return;
   }
-  if (action === "detect") return openDetectionDialog(ids);
-  if (action === "clear") return clearMasks(ids, "confirm.clearAllMasks.title", "confirm.clearAllMasks.message");
+  if (action === "detect") return openDetectionDialog(images.filter(isProcessableImage).map((image) => image.id));
+  if (action === "clear") return clearMasks(images.filter(isProcessableImage).map((image) => image.id), "confirm.clearAllMasks.title", "confirm.clearAllMasks.message");
   if (action === "remove") {
     if (!await confirmAction(t("confirm.removeImages.title"), t("confirm.removeImages.message", { count: ids.length }), "removeImage")) return;
     const epoch = beginCatalogEpoch(); state.catalogMutation = true; updateActionButtons();

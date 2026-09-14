@@ -132,7 +132,7 @@ async function restoreBrowserProjectSourcesForCurrentCatalog() {
 
 function syncFlipControls() {
   const record = currentRecord();
-  const disabled = !record || !state.currentImage || state.transformPending || state.projectReadOnly || isBusy() || state.importing || currentImageActionPending() || currentRecord()?.sourceDimensionsChanged;
+  const disabled = !isProcessableImage(record) || !state.currentImage || state.transformPending || state.projectReadOnly || isBusy() || state.importing || currentImageActionPending() || currentRecord()?.sourceDimensionsChanged;
   for (const [id, value] of [["#flipHorizontalButton", record?.flipH === true], ["#flipVerticalButton", record?.flipV === true]]) {
     const button = $(id); if (!button) continue;
     button.disabled = disabled;
@@ -145,7 +145,7 @@ async function toggleImageFlip(axis) {
   const record = currentRecord();
   const imageId = state.currentId;
   const generation = state.imageGeneration;
-  if (!record || !imageId || !state.currentImage || state.transformPending || state.projectReadOnly || isBusy() || state.importing || currentImageActionPending() || record.sourceDimensionsChanged) return;
+  if (!isProcessableImage(record) || !imageId || !state.currentImage || state.transformPending || state.projectReadOnly || isBusy() || state.importing || currentImageActionPending() || record.sourceDimensionsChanged) return;
   state.transformPending = true; updateActionButtons();
   try {
     await flushWorkspaceDraft(imageId);
@@ -846,16 +846,16 @@ function bindEvents() {
   $("#folderPath").addEventListener("keydown", (event) => { if (event.key === "Enter") loadFolder(); });
   $("#loadFolderButton").addEventListener("click", loadFolder);
   const detectAll = () => {
-    if (!activeDetection()) openDetectionDialog(state.images.map((image) => image.id));
+    if (!activeDetection()) openDetectionDialog(processableImages().map((image) => image.id));
   };
   $("#detectAllButton").addEventListener("click", detectAll);
   document.querySelectorAll("#dialogTargetPenis, #dialogTargetPussy").forEach((input) => input.addEventListener("change", () => validateDetectionTargets(detectionTargets("dialogTarget"), $("#detectTargetValidation"))));
-  $("#detectCurrentButton").addEventListener("click", () => { if (!currentImageActionPending() && state.currentId) void runDetection([state.currentId], detectionConfidence(), 1, detectionTargets()); });
+  $("#detectCurrentButton").addEventListener("click", () => { const image = currentRecord(); if (!currentImageActionPending() && isProcessableImage(image)) void runDetection([image.id], detectionConfidence(), 1, detectionTargets()); });
   $("#saveAllButton").addEventListener("click", saveAll); $("#saveButton").addEventListener("click", saveCurrent); $("#singleViewButton").addEventListener("click", () => setDisplayMode("single")); $("#compareViewButton").addEventListener("click", () => setDisplayMode("compare")); $("#fitButton").addEventListener("click", () => { if (!isBusy() && !state.importing) fitImage(); });
   $("#flipHorizontalButton").addEventListener("click", () => { void toggleImageFlip("horizontal"); });
   $("#flipVerticalButton").addEventListener("click", () => { void toggleImageFlip("vertical"); });
-  $("#downloadCurrentMosaicMask").addEventListener("click", () => { const imageId = state.currentId; if (!currentImageActionPending() && imageId) void downloadProjectArtifact(`/api/project/mask/${encodeURIComponent(imageId)}/mosaic`, "mosaic-mask.png", imageId, state.imageGeneration); });
-  $("#downloadCurrentExcludeMask").addEventListener("click", () => { const imageId = state.currentId; if (!currentImageActionPending() && imageId) void downloadProjectArtifact(`/api/project/mask/${encodeURIComponent(imageId)}/exclude`, "exclude-mask.png", imageId, state.imageGeneration); });
+  $("#downloadCurrentMosaicMask").addEventListener("click", () => { const image = currentRecord(); if (!currentImageActionPending() && isProcessableImage(image)) void downloadProjectArtifact(`/api/project/mask/${encodeURIComponent(image.id)}/mosaic`, "mosaic-mask.png", image.id, state.imageGeneration); });
+  $("#downloadCurrentExcludeMask").addEventListener("click", () => { const image = currentRecord(); if (!currentImageActionPending() && isProcessableImage(image)) void downloadProjectArtifact(`/api/project/mask/${encodeURIComponent(image.id)}/exclude`, "exclude-mask.png", image.id, state.imageGeneration); });
   $("#bucketTolerance").addEventListener("input", (event) => setFillColorTolerance(event.currentTarget.value));
   $("#bucketTolerance").addEventListener("change", () => { void saveFillColorTolerance(); });
   $("#bucketToleranceClose").addEventListener("click", () => closeFillToleranceControl({ focus: true }));
@@ -925,8 +925,8 @@ function bindEvents() {
     event.preventDefault(); updateCompareSplitter(); render(); updateBrushCursor(); persistCompareSplit();
   });
   $("#removeCurrentImageButton").addEventListener("click", () => { const image = currentRecord(); if (!currentImageActionPending() && image) void setHidden(image, !isHidden(image)); });
-  $("#clearCurrentMasksButton").addEventListener("click", () => { const imageId = state.currentId; if (!currentImageActionPending() && imageId) void clearMasks([imageId], "confirm.clearCurrent.title", "confirm.clearCurrent.message", imageId, state.imageGeneration); });
-  $("#clearAllMasksButton").addEventListener("click", () => { closeBatchMoreMenus(); void clearMasks(state.images.map((image) => image.id), "confirm.clearAllMasks.title", "confirm.clearAllMasks.message"); });
+  $("#clearCurrentMasksButton").addEventListener("click", () => { const image = currentRecord(); if (!currentImageActionPending() && isProcessableImage(image)) void clearMasks([image.id], "confirm.clearCurrent.title", "confirm.clearCurrent.message", image.id, state.imageGeneration); });
+  $("#clearAllMasksButton").addEventListener("click", () => { closeBatchMoreMenus(); void clearMasks(processableImages().map((image) => image.id), "confirm.clearAllMasks.title", "confirm.clearAllMasks.message"); });
   $("#clearCatalogButton").addEventListener("click", () => { closeBatchMoreMenus(); void clearCatalog(); });
   const positionFilterPopover = (menu, button) => {
     const margin = 8;
