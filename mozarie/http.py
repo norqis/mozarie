@@ -222,7 +222,11 @@ class MosaicHandler(BaseHTTPRequestHandler):
         if raw_project is None: raw_project = ""
         if not isinstance(raw_project, str) or raw_generation is None:
             raise ClientError("プロジェクト一覧の版番号がありません。再読み込みしてください。", "stale_catalog")
-        if isinstance(raw_generation, str) and raw_generation.isdigit(): raw_generation = int(raw_generation)
+        if isinstance(raw_generation, str) and raw_generation.isdigit():
+            try:
+                raw_generation = int(raw_generation)
+            except ValueError as exc:
+                raise ClientError("プロジェクト一覧の版番号が正しくありません。", "input_invalid") from exc
         if isinstance(raw_generation, bool) or not isinstance(raw_generation, int) or raw_generation < 0:
             raise ClientError("プロジェクト一覧の版番号が正しくありません。", "input_invalid")
         return (raw_project or None, raw_generation)
@@ -398,6 +402,11 @@ class MosaicHandler(BaseHTTPRequestHandler):
                         or not raw_mtime.isdigit() or not raw_size.isdigit()):
                     self._reject_unread_request(ClientError("画像の更新情報が正しくありません。", "input_invalid"))
                 try:
+                    mtime_ns = int(raw_mtime) * 1_000_000
+                    size_bytes = int(raw_size)
+                except ValueError as exc:
+                    self._reject_unread_request(ClientError("画像の更新情報が正しくありません。", "input_invalid"))
+                try:
                     expected_project_id, expected_catalog_generation = self._catalog_expectation()
                 except ClientError as exc:
                     self._reject_unread_request(exc)
@@ -430,8 +439,8 @@ class MosaicHandler(BaseHTTPRequestHandler):
                                 "source_identity": source_identity or None,
                                 "source_kind": source_kind,
                                 "intent": import_intent,
-                                "mtime_ns": int(raw_mtime) * 1_000_000,
-                                "size_bytes": int(raw_size),
+                                "mtime_ns": mtime_ns,
+                                "size_bytes": size_bytes,
                             }
                             _images, imported = STATE.import_image_file_for_api(staged_path, **import_args)
                         finally:
