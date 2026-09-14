@@ -649,12 +649,19 @@ function selectedImages() {
   return state.images.filter((image) => state.selectedImageIds.has(image.id) && (!visibleIds || visibleIds.has(image.id)));
 }
 function clearBatchSelection() { state.selectedImageIds.clear(); state.selectionAnchorId = null; }
+function updateSelectionProcessActions() {
+  const mutationLocked = state.projectReadOnly || Boolean(currentRecord()?.sourceDimensionsChanged) || state.projectOperationPending;
+  const disabled = isBusy() || state.importing || mutationLocked || catalogStagingEditsActive()
+    || !selectedImages().some(isProcessableImage);
+  for (const button of document.querySelectorAll('[data-selection-action="detect"], [data-selection-action="clear"]')) button.disabled = disabled;
+}
 function updateSelectionActionBar() {
   const count = state.selectedImageIds.size;
   $("#batchModeButton").setAttribute("aria-pressed", String(state.batchMode));
   $("#overviewSelectionBar").hidden = !state.batchMode;
   $("#selectionCount").textContent = t("selection.count", { count });
   $("#selectionActionsButton").disabled = count === 0;
+  updateSelectionProcessActions();
 }
 function selectCatalogImage(imageId) {
   if (!state.images.some((image) => image.id === imageId)) return;
@@ -778,13 +785,10 @@ function updateActionButtons() {
     control.disabled = true;
   }
   updateCandidateBatchButtons(hasImage, candidateControlsLocked || catalogStaging, presence, candidateViewLocked || catalogStaging);
-  const hasProcessableSelection = selectedImages().some(isProcessableImage);
+  updateSelectionProcessActions();
   for (const button of document.querySelectorAll("[data-selection-action]")) {
     if (["hide", "show", "reviewed", "unreviewed"].includes(button.dataset.selectionAction)) continue;
-    if (["detect", "clear"].includes(button.dataset.selectionAction)) {
-      button.disabled = busyLocked || mutationLocked || catalogStaging || !hasProcessableSelection;
-      continue;
-    }
+    if (["detect", "clear"].includes(button.dataset.selectionAction)) continue;
     if (catalogStaging && !button.disabled) { button.dataset.disabledByCatalogStaging = "true"; button.disabled = true; }
     if (!catalogStaging && button.dataset.disabledByCatalogStaging === "true") { button.disabled = false; delete button.dataset.disabledByCatalogStaging; }
   }

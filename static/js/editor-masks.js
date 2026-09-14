@@ -192,6 +192,9 @@ function renderCandidates() {
   applyList.textContent = ""; excludeList.textContent = "";
   if (!state.currentId) { syncCandidateDisplayButtons(); updateCandidateBatchButtons(false); return; }
   const candidateLocked = !isProcessableImage(currentRecord()) || candidateControlLocked(state.currentId) || currentImageActionPending();
+  const candidateBatchPending = state.candidateBatchPending.has(state.currentId);
+  const candidateViewLocked = candidateControlLocked(state.currentId) || currentImageActionPending() || isBusy() || state.importing || candidateBatchPending || catalogStagingEditsActive();
+  const candidateMutationLocked = candidateLocked || state.projectReadOnly || currentRecord()?.sourceDimensionsChanged || candidateViewLocked;
   const presence = manualLayerPresence();
   if (!state.candidates.length && !state.manualMaskPresent && !presence.hasManualExclude && !presence.hasManualExclusionErase) {
     const empty = document.createElement("p"); empty.className = "candidate-empty"; empty.textContent = t("candidates.none"); applyList.append(empty); syncCandidateDisplayButtons(presence); updateCandidateBatchButtons(undefined, undefined, presence); return;
@@ -322,7 +325,7 @@ function renderCandidates() {
     (role === "apply" ? applyList : excludeList).append(row);
   }
   appendEmpty(applyList); appendEmpty(excludeList);
-  syncCandidateDisplayButtons(presence); updateCandidateBatchButtons(undefined, undefined, presence, candidateLocked || isBusy() || state.importing || state.candidateBatchPending.has(state.currentId));
+  syncCandidateDisplayButtons(presence); updateCandidateBatchButtons(undefined, candidateMutationLocked, presence, candidateViewLocked);
 }
 
 function candidateDisplayMode(id) {
