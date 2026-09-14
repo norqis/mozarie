@@ -271,8 +271,15 @@ def _migrate_legacy_shortcuts(settings: Any) -> Any:
     if (not isinstance(bindings, dict) or ("actions" in shortcuts and not isinstance(actions, dict))
             or "removeImage" in bindings or "Delete" not in bindings.values()):
         return settings
+    used_bindings = {str(binding).strip() for binding in bindings.values()}
     fallbacks = ("Ctrl+Delete", "Shift+Delete", "Alt+Delete", "Ctrl+Shift+Delete", "Ctrl+Alt+Delete", "Shift+Alt+Delete", "Ctrl+Shift+Alt+Delete")
-    fallback = next(binding for binding in fallbacks if binding not in bindings.values())
+    fallback = next((binding for binding in fallbacks if binding not in used_bindings), None)
+    if fallback is None:
+        fallback = "Ctrl+Alt+Shift+Delete (legacy disabled)"
+        suffix = 2
+        while fallback in used_bindings:
+            fallback = f"Ctrl+Alt+Shift+Delete (legacy disabled {suffix})"
+            suffix += 1
     migrated = copy.deepcopy(settings)
     migrated_shortcuts = migrated["shortcuts"]
     migrated_shortcuts["bindings"] = {**bindings, "removeImage": fallback}
