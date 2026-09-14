@@ -742,11 +742,13 @@ function handleEditorKeydown(event) {
 }
 
 function navigationShortcutAction(event) {
-  if (isBusy() || state.importing || isGestureActive() || !state.navigationShortcutsEnabled || isEditableTarget(document.activeElement) || hasOpenDialog()) return null;
+  if (isBusy() || state.importing || isGestureActive() || !state.navigationShortcutsEnabled || hasOpenDialog()) return null;
   const binding = shortcutFromEvent(event);
   const bindings = state.settings?.shortcuts?.bindings || { previous: "ArrowLeft", next: "ArrowRight", previousVisible: "ArrowUp", nextVisible: "ArrowDown", first: "Home", last: "End", reviewAndNext: "Enter", removeImage: "Delete", toggleOverview: "G", undo: "Ctrl+Z", redo: "Ctrl+Shift+Z" };
   const actionForBinding = Object.entries(bindings).find(([, value]) => value === binding)?.[0];
   if (!actionForBinding || state.settings?.shortcuts?.actions?.[actionForBinding] === false) return null;
+  const currentGalleryItem = document.activeElement?.matches("button.gallery-item.current") && document.activeElement.dataset.id === state.currentId;
+  if (isEditableTarget(document.activeElement) && !(actionForBinding === "removeImage" && currentGalleryItem)) return null;
   if (actionForBinding === "toggleOverview") return "toggleOverview";
   if (state.viewMode !== "edit") return null;
   if (actionForBinding === "removeImage" && event.repeat) return "removeImageRepeat";

@@ -268,10 +268,11 @@ def _migrate_legacy_shortcuts(settings: Any) -> Any:
         return settings
     bindings = shortcuts.get("bindings")
     actions = shortcuts.get("actions")
-    if (not isinstance(bindings, dict) or ("actions" in shortcuts and not isinstance(actions, dict))
-            or "removeImage" in bindings or "Delete" not in bindings.values()):
+    if not isinstance(bindings, dict) or ("actions" in shortcuts and not isinstance(actions, dict)):
         return settings
     used_bindings = {str(binding).strip() for binding in bindings.values()}
+    if "removeImage" in bindings or "Delete" not in used_bindings:
+        return settings
     fallbacks = ("Ctrl+Delete", "Shift+Delete", "Alt+Delete", "Ctrl+Shift+Delete", "Ctrl+Alt+Delete", "Shift+Alt+Delete", "Ctrl+Shift+Alt+Delete")
     fallback = next((binding for binding in fallbacks if binding not in used_bindings), None)
     if fallback is None:

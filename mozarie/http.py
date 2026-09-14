@@ -156,6 +156,8 @@ class MosaicHandler(BaseHTTPRequestHandler):
         raw_length = lengths[0]
         if not raw_length or not raw_length.isascii() or not raw_length.isdecimal():
             self._reject_unread_request(ClientError("リクエストサイズが不正です。", "input_invalid"))
+        if len(raw_length) > len(str(MAX_BODY_BYTES)):
+            self._reject_unread_request(ClientError("リクエストサイズが正しくありません。", "input_invalid"))
         content_length = int(raw_length)
         if content_length > MAX_BODY_BYTES or (required and content_length <= 0):
             self._reject_unread_request(ClientError("リクエストサイズが正しくありません。", "input_invalid"))
