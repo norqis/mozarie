@@ -147,8 +147,11 @@ function renderCatalogWindow(windowState) {
   const mounted = new Set(windowState.images.slice(first, last).map((image) => image.id));
   for (const [id, item] of nodes) if (!mounted.has(id)) { forgetThumbnail(item.querySelector("img")); item.parentNode.remove(); nodes.delete(id); }
   for (const [row, rowNode] of windowState.rows) if (row < firstRow || row >= lastRow) { rowNode.remove(); windowState.rows.delete(row); }
+  let previousRow = spacer;
   for (let row = firstRow; row < lastRow; row += 1) {
     const rowNode = catalogRow(windowState, row, layout); const rowStart = row * layout.columns;
+    if (rowNode.previousElementSibling !== previousRow) container.insertBefore(rowNode, previousRow.nextElementSibling);
+    previousRow = rowNode;
     for (let index = rowStart; index < Math.min(windowState.images.length, rowStart + layout.columns); index += 1) setCatalogNode(windowState, windowState.images[index], index, layout, rowNode);
   }
   for (const item of nodes.values()) item.style.visibility = "";
