@@ -248,7 +248,7 @@ function invalidateDeletedPendingImage(imageIds) {
 async function restoreDeletionSelection(snapshot, imageIds) {
   const availableIds = new Set(state.images.map((image) => image.id));
   const removedIds = new Set([...imageIds].filter((imageId) => !availableIds.has(imageId)));
-  const target = removedIds.size
+  const target = snapshot.removesSelection && removedIds.size
     ? nextVisibleImage(snapshot.visibleImages, snapshot.anchorImageId, { excludedImageIds: removedIds, fallback: true })
     : null;
   const imageId = [target?.id, snapshot.pendingImageId, snapshot.currentImageId].find((id) => availableIds.has(id));
