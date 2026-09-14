@@ -353,7 +353,6 @@ async function reviewAndMoveNext() {
   }, { lockCandidateControls: true });
   if (!reviewed) return null;
   if (state.currentId !== currentId) return target;
-  if (imageMatchesGalleryFilter(current)) return current;
   if (target && state.images.some((image) => image.id === target.id)) {
     await selectImage(target.id);
     return target;
