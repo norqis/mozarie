@@ -414,6 +414,9 @@ class MosaicHandler(BaseHTTPRequestHandler):
                     STATE.begin_import_transfer(import_session_id, expected_project_id, expected_catalog_generation)
                 except ClientError as exc:
                     self._reject_unread_request(exc)
+                except Exception:
+                    self.close_connection = True
+                    raise
                 response = None
                 try:
                     with STATE.import_staging_gate:
@@ -772,7 +775,7 @@ class MosaicHandler(BaseHTTPRequestHandler):
             if len(raw) != content_length:
                 self._reject_unread_request(ClientError("リクエストを最後まで読み込めません。", "input_invalid"))
             payload = json.loads(raw.decode("utf-8"))
-        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        except ValueError as exc:
             raise ClientError("JSONを読み込めません。", "input_invalid") from exc
         if not isinstance(payload, dict):
             raise ClientError("JSONオブジェクトが必要です。", "input_invalid")
@@ -784,10 +787,10 @@ class MosaicHandler(BaseHTTPRequestHandler):
         # Browser bytes belong with their final session import, not the
         # disposable render-cache volume.  This also keeps the upload and its
         # inspected image on one filesystem.
-        staging_dir = STATE._ensure_session()
         temporary_path: Path | None = None
         remaining = content_length
         try:
+            staging_dir = STATE._ensure_session()
             with tempfile.NamedTemporaryFile(dir=staging_dir, suffix=".upload.tmp", delete=False) as handle:
                 temporary_path = Path(handle.name)
                 while remaining:
@@ -800,6 +803,9 @@ class MosaicHandler(BaseHTTPRequestHandler):
             result = temporary_path
             temporary_path = None
             return result
+        except Exception:
+            self.close_connection = True
+            raise
         finally:
             if temporary_path is not None:
                 temporary_path.unlink(missing_ok=True)
