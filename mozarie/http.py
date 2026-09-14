@@ -142,6 +142,25 @@ class MosaicHandler(BaseHTTPRequestHandler):
         self.close_connection = True
         raise error
 
+    def _request_body_length(self, *, required: bool = False) -> int:
+        """Validate the only request framing this HTTP/1.1 server accepts."""
+        if self.headers.get_all("Transfer-Encoding"):
+            self._reject_unread_request(ClientError("リクエスト形式が正しくありません。", "input_invalid"))
+        lengths = self.headers.get_all("Content-Length", [])
+        if not lengths:
+            if required:
+                self._reject_unread_request(ClientError("リクエストサイズが不正です。", "input_invalid"))
+            return 0
+        if len(lengths) != 1:
+            self._reject_unread_request(ClientError("リクエストサイズが不正です。", "input_invalid"))
+        raw_length = lengths[0]
+        if not raw_length or not raw_length.isascii() or not raw_length.isdecimal():
+            self._reject_unread_request(ClientError("リクエストサイズが不正です。", "input_invalid"))
+        content_length = int(raw_length)
+        if content_length > MAX_BODY_BYTES or (required and content_length <= 0):
+            self._reject_unread_request(ClientError("リクエストサイズが正しくありません。", "input_invalid"))
+        return content_length
+
     def _require_local_host(self) -> str:
         host = self.headers.get("Host", "")
         expected_host = f"127.0.0.1:{self.server.server_port}"
@@ -220,6 +239,8 @@ class MosaicHandler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:  # noqa: N802
         try:
             self._require_local_host()
+            if self._request_body_length() > 0:
+                self._reject_unread_request(ClientError("GETリクエストに本文は指定できません。", "input_invalid"))
             parsed = urlparse(self.path)
             path = unquote(parsed.path)
             if STATE is None:
@@ -359,6 +380,7 @@ class MosaicHandler(BaseHTTPRequestHandler):
                 return
             if path == "/api/import/file":
                 self._require_binary_import_request()
+                content_length = self._request_body_length(required=True)
                 name = unquote(self.headers.get("X-Mozarie-Name", ""))
                 relative_path = unquote(self.headers.get("X-Mozarie-Relative-Path", ""))
                 client_key = unquote(self.headers.get("X-Mozarie-Client-Key", ""))
@@ -372,8 +394,11 @@ class MosaicHandler(BaseHTTPRequestHandler):
                         or source_kind not in {"browser-files", "browser-directory"}
                         or import_intent not in {"add", "restore"}
                         or not raw_mtime.isdigit() or not raw_size.isdigit()):
-                    raise ClientError("画像の更新情報が正しくありません。", "input_invalid")
-                expected_project_id, expected_catalog_generation = self._catalog_expectation()
+                    self._reject_unread_request(ClientError("画像の更新情報が正しくありません。", "input_invalid"))
+                try:
+                    expected_project_id, expected_catalog_generation = self._catalog_expectation()
+                except ClientError as exc:
+                    self._reject_unread_request(exc)
                 try:
                     STATE.begin_import_transfer(import_session_id, expected_project_id, expected_catalog_generation)
                 except ClientError as exc:
@@ -381,7 +406,7 @@ class MosaicHandler(BaseHTTPRequestHandler):
                 response = None
                 try:
                     with STATE.import_staging_gate:
-                        staged_path = self._read_binary_body_to_file()
+                        staged_path = self._read_binary_body_to_file(content_length)
                         requested_catalog = unquote(self.headers.get("X-Mozarie-Catalog-Id", ""))
                         try:
                             # Keep implicit API callers from splitting a
@@ -677,15 +702,21 @@ class MosaicHandler(BaseHTTPRequestHandler):
     def do_DELETE(self) -> None:  # noqa: N802
         try:
             path = unquote(urlparse(self.path).path)
+            content_length = self._request_body_length()
             if STATE is None:
                 self._require_local_host()
+                self.close_connection = True
                 if _is_api_path(path):
                     self._workspace_recreate_required()
                 else:
                     self._client_error(ClientError("ページが見つかりません。", "api_not_found"), HTTPStatus.NOT_FOUND)
                 return
             self._require_mutation_request()
-            expected_project_id, expected_catalog_generation = self._catalog_expectation()
+            payload: dict[str, Any] | None = None
+            if content_length:
+                self._require_json_request()
+                payload = self._read_json_body(content_length)
+            expected_project_id, expected_catalog_generation = self._catalog_expectation(payload)
             if path.startswith("/api/catalog/image/"):
                 image_id = path.removeprefix("/api/catalog/image/")
                 self._json(self._catalog_mutation(expected_project_id, expected_catalog_generation,
@@ -722,28 +753,23 @@ class MosaicHandler(BaseHTTPRequestHandler):
             LOGGER.exception("DELETE リクエストの処理に失敗: %s", self.path)
             self._client_error(exc, HTTPStatus.INTERNAL_SERVER_ERROR, "internal_error")
 
-    def _read_json_body(self) -> dict[str, Any]:
-        raw_length = self.headers.get("Content-Length")
-        if raw_length is None or not raw_length.isdigit():
-            raise ClientError("リクエストサイズが不正です。", "input_invalid")
-        content_length = int(raw_length)
-        if content_length <= 0 or content_length > MAX_BODY_BYTES:
-            raise ClientError("リクエストサイズが正しくありません。", "input_invalid")
+    def _read_json_body(self, content_length: int | None = None) -> dict[str, Any]:
+        if content_length is None:
+            content_length = self._request_body_length(required=True)
         try:
-            payload = json.loads(self.rfile.read(content_length).decode("utf-8"))
+            raw = self.rfile.read(content_length)
+            if len(raw) != content_length:
+                self._reject_unread_request(ClientError("リクエストを最後まで読み込めません。", "input_invalid"))
+            payload = json.loads(raw.decode("utf-8"))
         except (UnicodeDecodeError, json.JSONDecodeError) as exc:
             raise ClientError("JSONを読み込めません。", "input_invalid") from exc
         if not isinstance(payload, dict):
             raise ClientError("JSONオブジェクトが必要です。", "input_invalid")
         return payload
 
-    def _read_binary_body_to_file(self) -> Path:
-        raw_length = self.headers.get("Content-Length")
-        if raw_length is None or not raw_length.isdigit():
-            raise ClientError("リクエストサイズが不正です。", "input_invalid")
-        content_length = int(raw_length)
-        if content_length <= 0 or content_length > MAX_BODY_BYTES:
-            raise ClientError("リクエストサイズが正しくありません。", "input_invalid")
+    def _read_binary_body_to_file(self, content_length: int | None = None) -> Path:
+        if content_length is None:
+            content_length = self._request_body_length(required=True)
         # Browser bytes belong with their final session import, not the
         # disposable render-cache volume.  This also keeps the upload and its
         # inspected image on one filesystem.
@@ -756,7 +782,7 @@ class MosaicHandler(BaseHTTPRequestHandler):
                 while remaining:
                     chunk = self.rfile.read(min(IO_CHUNK_BYTES, remaining))
                     if not chunk:
-                        raise ClientError("画像データを最後まで読み込めません。", "image_read_failed")
+                        self._reject_unread_request(ClientError("画像データを最後まで読み込めません。", "image_read_failed"))
                     handle.write(chunk)
                     remaining -= len(chunk)
                 handle.flush()

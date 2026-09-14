@@ -435,16 +435,18 @@ async function catalogApi(path, payload = {}, options = {}) {
   const expectedCatalogGeneration = state.serverCatalogGeneration;
   const requestEpoch = state.catalogEpoch;
   try {
-    return catalogResponse(await api(path, {
+    const request = {
       ...requestOptions,
       resyncOnStale: false,
-      body: JSON.stringify(catalogExpectation(payload)),
       headers: {
         "X-Mozarie-Expected-Project-Id": state.project?.id || "",
         ...(Number.isSafeInteger(expectedCatalogGeneration) ? { "X-Mozarie-Expected-Catalog-Generation": String(expectedCatalogGeneration) } : {}),
         ...(requestOptions.headers || {}),
       },
-    }));
+    };
+    if ((requestOptions.method || "POST").toUpperCase() === "DELETE") delete request.body;
+    else request.body = JSON.stringify(catalogExpectation(payload));
+    return catalogResponse(await api(path, request));
   } catch (error) {
     const ambiguous = catalogFailureMayHaveCommitted(error);
     if (resyncOnFailure && ambiguous && !error.catalogResynced && error?.name !== "AbortError") {
