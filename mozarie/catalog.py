@@ -55,6 +55,10 @@ class CatalogMixin:
             if record.hidden:
                 raise ClientError("非表示の画像は処理できません。再表示してから実行してください。", "image_hidden")
 
+    def _assert_images_processable(self, image_ids: list[str]) -> None:
+        for image_id in image_ids:
+            self._assert_image_processable(image_id)
+
     def _assert_image_editable(self, image_id: str) -> None:
         with self.lock:
             self._assert_catalog_mutable()
@@ -1166,6 +1170,14 @@ class CatalogMixin:
             if receipt.completed_at < cutoff:
                 self.browser_save_receipts.pop(token, None)
 
+    def _has_active_browser_save_for_image_unchecked(self, image_id: str) -> bool:
+        cutoff = time.monotonic() - SAVE_TOKEN_TTL_SECONDS
+        return any(
+            details.image_id == image_id
+            and (token in self.browser_save_claims or details.issued_at >= cutoff)
+            for token, details in self.browser_save_tokens.items()
+        )
+
     def cleanup_expired_browser_save_tokens(self) -> None:
         """Cheap polling-path expiry: detach under lock, unlink afterwards."""
         cutoff = time.monotonic() - SAVE_TOKEN_TTL_SECONDS
@@ -1729,7 +1741,10 @@ class CatalogMixin:
                 record = self.images.get(image_id)
                 if record is None:
                     raise ClientError("画像が見つかりません。", "image_not_found")
-                if hidden is not None and image_id in self.job.image_ids and self.job.state in {"running", "pausing", "paused"}:
+                if hidden is True and (
+                    image_id in self.job.image_ids and self.job.state in {"running", "pausing", "paused"}
+                    or self._has_active_browser_save_for_image_unchecked(image_id)
+                ):
                     raise ClientError("処理対象の非表示は処理完了後に変更してください。", "operation_in_progress")
                 # The state lock is the publication boundary. Do not let a stale
                 # request write an old project's SQLite row after a switch.
@@ -1758,7 +1773,10 @@ class CatalogMixin:
                 records = [self.images.get(image_id) for image_id in image_ids]
                 if any(record is None for record in records):
                     raise ClientError("画像が見つかりません。", "image_not_found")
-                if hidden is not None and any(image_id in self.job.image_ids for image_id in image_ids) and self.job.state in {"running", "pausing", "paused"}:
+                if hidden is True and (
+                    any(image_id in self.job.image_ids for image_id in image_ids) and self.job.state in {"running", "pausing", "paused"}
+                    or any(self._has_active_browser_save_for_image_unchecked(image_id) for image_id in image_ids)
+                ):
                     raise ClientError("処理対象の非表示は処理完了後に変更してください。", "operation_in_progress")
                 if self.catalog_id is not None:
                     self.workspace_store.set_image_flags_bulk(image_ids, hidden=hidden, reviewed=reviewed)
@@ -1848,7 +1866,10 @@ class CatalogMixin:
                 self._assert_image_editable(image_id)
                 catalog_id = self.catalog_id
                 catalog_generation = self.catalog_generation
-                changed_ids = self.workspace_store.restore_history(image_id, direction)
+                changed_ids = self.workspace_store.restore_history(
+                    image_id, direction,
+                    member_guard=self._assert_images_processable,
+                )
             with self.lock:
                 record_ids = [changed_id for changed_id in changed_ids if changed_id in self.images]
             locks = [(changed_id, self.image_io_lock(changed_id)) for changed_id in record_ids]

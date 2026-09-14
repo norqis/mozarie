@@ -149,6 +149,7 @@ class SavingMixin:
             # not block requests for other images.
             with image_lock:
                 with self.lock:
+                    self._assert_image_editable(image_id)
                     current_record = self.images.get(image_id)
                     if current_record is None or current_record.path != record.path:
                         raise ClientError("画像が見つかりません。フォルダを再読込してください。", "image_not_found")
@@ -240,6 +241,7 @@ class SavingMixin:
                         handle.flush()
 
                 with self.lock:
+                    self._assert_image_editable(image_id)
                     _assert_source_stat_matches(record, source_fingerprint)
                     if (
                         self.images.get(image_id) is None

@@ -629,9 +629,18 @@ function preserveCatalogScroll(renderCatalogs, positions = null) {
 }
 function setHidden(image, hidden) {
   const scroll = state.contextMenuScroll;
-  return saveWorkspaceFlag(image, "hidden", hidden, () => {
-    if (!state.images.some((item) => item.id === image.id)) return;
-    preserveCatalogScroll(renderCatalogViews, scroll); updateSelectionActionBar(); updateNavigationControls(); updateActionButtons();
+  if (!image) return Promise.resolve(false);
+  return queueImageMutation(image.id, async () => {
+    // Non-displayable images reject later manual saves. Persist the current
+    // drawing before publishing the hidden flag so hiding never drops it.
+    if (hidden) await flushWorkspaceDraft(image.id);
+    return saveWorkspaceFlagNow(image, "hidden", hidden, () => {
+      if (!state.images.some((item) => item.id === image.id)) return;
+      preserveCatalogScroll(renderCatalogViews, scroll); updateSelectionActionBar(); updateNavigationControls(); updateActionButtons();
+    });
+  }, { lockCandidateControls: true }).catch((error) => {
+    showUserError(error);
+    return false;
   });
 }
 function clearStoredCatalogState() { state.reviewedImageIds.clear(); state.hiddenImageIds.clear(); }
@@ -769,8 +778,13 @@ function updateActionButtons() {
     control.disabled = true;
   }
   updateCandidateBatchButtons(hasImage, candidateControlsLocked || catalogStaging, presence, candidateViewLocked || catalogStaging);
+  const hasProcessableSelection = selectedImages().some(isProcessableImage);
   for (const button of document.querySelectorAll("[data-selection-action]")) {
     if (["hide", "show", "reviewed", "unreviewed"].includes(button.dataset.selectionAction)) continue;
+    if (["detect", "clear"].includes(button.dataset.selectionAction)) {
+      button.disabled = busyLocked || mutationLocked || catalogStaging || !hasProcessableSelection;
+      continue;
+    }
     if (catalogStaging && !button.disabled) { button.dataset.disabledByCatalogStaging = "true"; button.disabled = true; }
     if (!catalogStaging && button.dataset.disabledByCatalogStaging === "true") { button.disabled = false; delete button.dataset.disabledByCatalogStaging; }
   }

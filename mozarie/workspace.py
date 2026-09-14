@@ -17,7 +17,7 @@ import threading
 import time
 import uuid
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from PIL import Image, UnidentifiedImageError
 import numpy as np
@@ -1842,7 +1842,7 @@ class WorkspaceStore:
             can_redo = group_ready(redo_entry, "redo")
         return {"canUndo": can_undo, "canRedo": can_redo}
 
-    def restore_history(self, image_id: str, direction: str) -> list[str]:
+    def restore_history(self, image_id: str, direction: str, member_guard: Callable[[list[str]], None] | None = None) -> list[str]:
         if direction not in {"undo", "redo"}:
             raise ValueError("invalid history direction")
         with self._lock, self._connect() as db:
@@ -1871,6 +1871,8 @@ class WorkspaceStore:
                             expected = int(previous["entry_id"]) if previous else 0
                         if cursor_id != expected:
                             db.execute("COMMIT"); return []
+                if member_guard is not None:
+                    member_guard([str(member["image_id"]) for member in entries])
                 changed: list[str] = []
                 for member in entries:
                     state = json.loads(str(member["before_json"] if direction == "undo" else member["after_json"]))

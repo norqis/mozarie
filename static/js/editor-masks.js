@@ -721,7 +721,7 @@ function copyCanvas(source, target) {
 }
 
 function updateHistoryButtons() {
-  const locked = currentImageActionPending() || isBusy() || state.importing;
+  const locked = !isProcessableImage(currentRecord()) || currentImageActionPending() || isBusy() || state.importing;
   if (state.project?.id) {
     const history = state.projectHistory.get(state.currentId) || {};
     $("#undoButton").disabled = locked || state.projectReadOnly || state.projectHistoryBusy || history.canUndo !== true;
