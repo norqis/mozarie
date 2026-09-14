@@ -106,7 +106,8 @@ function setCatalogNode(windowState, image, index, layout, rowNode) {
     else if (event.key === "ContextMenu" || (event.key === "F10" && event.shiftKey)) { event.preventDefault?.(); event.stopPropagation?.(); openCatalogContextMenu(event, image.id); }
     else { const targetIndex = catalogMoveIndex(windowState, index, event); if (targetIndex >= 0) { event.preventDefault?.(); event.stopPropagation?.(); focusCatalogIndex(windowState, targetIndex, event); } }
   };
-  if (cell.parentNode !== rowNode) rowNode.append(cell);
+  const expectedCell = rowNode.children[column];
+  if (expectedCell !== cell) rowNode.insertBefore(cell, expectedCell || null);
 }
 
 function catalogMoveIndex(windowState, index, event) {
