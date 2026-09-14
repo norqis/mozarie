@@ -222,6 +222,8 @@ function nextGalleryFilteredImage(imageId, options = {}) { return nextVisibleIma
 function clearCurrentImageSelection() {
   state.currentId = null; state.currentImage = null; state.pendingImageId = null; state.pendingImageKey = null; state.pendingCandidateKey = null;
   state.candidates = []; state.candidateImages = new Map(); clearEditor();
+  updateGalleryCurrent();
+  if (state.viewMode === "overview") renderOverview();
 }
 
 function updateGalleryCurrent() {

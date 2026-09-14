@@ -228,6 +228,33 @@ function clearReviewForRemovedImage(image) {
   state.reviewedImageIds.delete(image.id);
   state.hiddenImageIds.delete(image.id);
 }
+function deletionSelectionSnapshot(imageIds, visibleImages) {
+  const pendingImageId = state.pendingImageId;
+  const currentImageId = state.currentId;
+  return {
+    currentImageId,
+    pendingImageId,
+    visibleImages,
+    anchorImageId: imageIds.has(pendingImageId) ? pendingImageId : currentImageId,
+    removesSelection: imageIds.has(currentImageId) || imageIds.has(pendingImageId),
+  };
+}
+function invalidateDeletedPendingImage(imageIds) {
+  if (!imageIds.has(state.pendingImageId)) return;
+  ++state.imageGeneration;
+  state.pendingImageId = null; state.pendingImageKey = null; state.pendingCandidateKey = null;
+  updateActionButtons();
+}
+async function restoreDeletionSelection(snapshot, imageIds) {
+  const availableIds = new Set(state.images.map((image) => image.id));
+  const removedIds = new Set([...imageIds].filter((imageId) => !availableIds.has(imageId)));
+  const target = removedIds.size
+    ? nextVisibleImage(snapshot.visibleImages, snapshot.anchorImageId, { excludedImageIds: removedIds, fallback: true })
+    : null;
+  const imageId = [target?.id, snapshot.pendingImageId, snapshot.currentImageId].find((id) => availableIds.has(id));
+  if (imageId) await selectImage(imageId, true, { saveCurrentDraft: false });
+  else clearCurrentImageSelection();
+}
 async function removeImageFromCatalog(imageId = state.contextMenuImageId) {
   if (!imageId || isBusy() || state.importing || catalogStagingEditsActive()) return;
   const image = state.images.find((item) => item.id === imageId);
@@ -235,11 +262,10 @@ async function removeImageFromCatalog(imageId = state.contextMenuImageId) {
   if (!await confirmAction(t("confirm.removeImage.title"), t("confirm.removeImage.message"), "removeImage")) return;
 
   closeCatalogContextMenu();
-  const nextImageId = nextGalleryFilteredImage(imageId, { fallback: true });
-  const removingCurrent = state.currentId === imageId || state.pendingImageId === imageId;
-  let selectAfterTransition = false;
+  const imageIds = new Set([imageId]);
+  const selection = deletionSelectionSnapshot(imageIds, galleryFilteredImages());
   state.catalogMutation = true;
-  ++state.imageGeneration;
+  invalidateDeletedPendingImage(imageIds);
   updateActionButtons();
   const projectId = state.project?.id || null;
   const cleanupIntent = projectId ? await rememberProjectImageSourceCleanup(projectId, imageId) : null;
@@ -262,11 +288,10 @@ async function removeImageFromCatalog(imageId = state.contextMenuImageId) {
       state.maskStatus.delete(imageId);
       pruneSourceAccess();
       clearReviewForRemovedImage(image);
-      if (removingCurrent) clearCurrentImageSelection();
+      if (selection.removesSelection) clearCurrentImageSelection();
       renderCatalogViews(); updateSelectionActionBar();
-      selectAfterTransition = removingCurrent && Boolean(nextImageId) && state.images.some((item) => item.id === nextImageId);
     });
-    if (selectAfterTransition) await selectImage(nextImageId, true, { saveCurrentDraft: false });
+    if (selection.removesSelection) await restoreDeletionSelection(selection, imageIds);
     else { updateNavigationControls(); updateActionButtons(); clearStatus(); }
   } catch (error) {
     if (cleanupIntent && Number.isInteger(error?.status) && error.status >= 400 && error.status < 500) {
@@ -275,6 +300,7 @@ async function removeImageFromCatalog(imageId = state.contextMenuImageId) {
       && await forgetProjectImageSources(projectId, [imageId])) {
       await clearProjectSourceCleanup({ intentIds: [cleanupIntent] });
     }
+    await restoreDeletionSelection(selection, imageIds);
     showUserError(error);
   }
   finally { state.catalogMutation = false; updateActionButtons(); }
@@ -305,11 +331,9 @@ async function runSelectionAction(action) {
   if (action === "remove") {
     if (!await confirmAction(t("confirm.removeImages.title"), t("confirm.removeImages.message", { count: ids.length }), "removeImage")) return;
     const epoch = beginCatalogEpoch(); state.catalogMutation = true; updateActionButtons();
-    const removingPending = ids.includes(state.pendingImageId);
-    const removingCurrent = ids.includes(state.currentId) || removingPending;
-    const currentImageId = removingPending ? state.pendingImageId : state.currentId;
-    const nextImageId = removingCurrent ? nextVisibleImage(overviewImages(), currentImageId, { excludedImageIds: new Set(ids), fallback: true }) : null;
-    ++state.imageGeneration;
+    const imageIds = new Set(ids);
+    const selection = deletionSelectionSnapshot(imageIds, overviewImages());
+    invalidateDeletedPendingImage(imageIds);
     const projectId = state.project?.id || null;
     let cleanupIntents = new Map();
     try {
@@ -330,11 +354,10 @@ async function runSelectionAction(action) {
       }
       loadReviewedPaths();
       pruneSourceAccess();
-      if (removingCurrent) clearCurrentImageSelection();
+      if (selection.removesSelection) clearCurrentImageSelection();
       state.batchMode = false; clearBatchSelection(); updateSelectionActionBar();
       renderCatalogViews();
-      if (removingCurrent && nextImageId && state.images.some((image) => image.id === nextImageId)) await selectImage(nextImageId, true, { saveCurrentDraft: false });
-      else if (removingCurrent) { updateNavigationControls(); updateActionButtons(); clearStatus(); }
+      if (selection.removesSelection) await restoreDeletionSelection(selection, imageIds);
     } catch (error) {
       if (Number.isInteger(error?.status) && error.status >= 400 && error.status < 500) {
         await clearProjectSourceCleanup({ intentIds: [...cleanupIntents.values()].filter(Boolean) });
@@ -344,6 +367,7 @@ async function runSelectionAction(action) {
           await clearProjectSourceCleanup({ intentIds: removed.map((imageId) => cleanupIntents.get(imageId)).filter(Boolean) });
         }
       }
+      await restoreDeletionSelection(selection, imageIds);
       if (isCurrentCatalogEpoch(epoch)) showUserError(error);
     }
     finally { state.catalogMutation = false; updateActionButtons(); }
