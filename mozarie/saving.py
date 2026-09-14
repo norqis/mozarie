@@ -100,6 +100,8 @@ class SavingMixin:
         with self.lock:
             if any(self.images.get(record.image_id) is not record for record in records):
                 raise ClientError("画像一覧が変更されました。保存をやり直してください。", "save_state_changed")
+            for record in records:
+                self._assert_image_editable(record.image_id)
             return [
                 {
                     "imageId": record.image_id,

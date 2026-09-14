@@ -177,19 +177,22 @@ class JobsMixin:
     def _records_for_ids(self, image_ids: list[str]) -> list[ImageRecord]:
         if not isinstance(image_ids, list):
             raise ClientError("画像の選択が正しくありません。", "input_invalid")
-        source_ids = image_ids or self.order
+        with self.lock:
+            source_ids = image_ids or [image_id for image_id in self.order if not self.images[image_id].hidden]
         if len({str(image_id) for image_id in source_ids}) != len(source_ids):
             raise ClientError("同じ画像を複数回指定できません。", "input_invalid")
         records = [self.image_for_id(str(image_id)) for image_id in source_ids]
         if not records:
             raise ClientError("処理する画像がありません。", "image_not_found")
+        for record in records:
+            self._assert_image_processable(record.image_id)
         return records
 
     def _records_for_ids_with_catalog(self, image_ids: list[str]) -> tuple[list[ImageRecord], int]:
         if not isinstance(image_ids, list):
             raise ClientError("画像の選択が正しくありません。", "input_invalid")
         with self.lock:
-            source_ids = image_ids or list(self.order)
+            source_ids = image_ids or [image_id for image_id in self.order if not self.images[image_id].hidden]
             if len({str(image_id) for image_id in source_ids}) != len(source_ids):
                 raise ClientError("同じ画像を複数回指定できません。", "input_invalid")
             records = [self.images.get(str(image_id)) for image_id in source_ids]
@@ -199,6 +202,8 @@ class JobsMixin:
         if not records or any(record is None for record in records):
             raise ClientError("処理する画像がありません。", "image_not_found")
         verified_records = [record for record in records if record is not None]
+        for record in verified_records:
+            self._assert_image_processable(record.image_id)
         for record in verified_records:
             try:
                 allowed_root = self._allowed_root_for_record(record, root, session_imports_dir)

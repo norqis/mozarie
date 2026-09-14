@@ -47,14 +47,18 @@ class CatalogMixin:
         with self.lock:
             self._assert_catalog_expectation(expected_project_id, expected_catalog_generation)
 
-    def _assert_image_editable(self, image_id: str) -> None:
+    def _assert_image_processable(self, image_id: str) -> None:
         with self.lock:
-            self._assert_catalog_mutable()
             record = self.images.get(image_id)
             if record is None:
                 raise ClientError("画像が見つかりません。", "image_not_found")
             if record.hidden:
                 raise ClientError("非表示の画像は処理できません。再表示してから実行してください。", "image_hidden")
+
+    def _assert_image_editable(self, image_id: str) -> None:
+        with self.lock:
+            self._assert_catalog_mutable()
+            self._assert_image_processable(image_id)
             if image_id in self.source_mismatches:
                 raise ClientError("元画像が変更されています。変更確認を完了してから編集してください。", "source_mismatch")
 
@@ -731,7 +735,7 @@ class CatalogMixin:
         """Return original-size grayscale project masks; never touches source files."""
         if kind not in {"mosaic", "exclude"}:
             raise ClientError("マスク種別が正しくありません。", "input_invalid")
-        self._assert_image_editable(image_id)
+        self._assert_image_processable(image_id)
         record = self.image_snapshot(image_id)
         return self._export_workspace_mask(image_id, kind, record.width, record.height)
 
