@@ -239,8 +239,8 @@ function deletionSelectionSnapshot(imageIds, visibleImages) {
     removesSelection: imageIds.has(currentImageId) || imageIds.has(pendingImageId),
   };
 }
-function invalidateDeletedPendingImage(imageIds) {
-  if (!imageIds.has(state.pendingImageId)) return;
+function invalidatePendingImage() {
+  if (!state.pendingImageId) return;
   ++state.imageGeneration;
   state.pendingImageId = null; state.pendingImageKey = null; state.pendingCandidateKey = null;
   updateActionButtons();
@@ -265,7 +265,7 @@ async function removeImageFromCatalog(imageId = state.contextMenuImageId) {
   const imageIds = new Set([imageId]);
   const selection = deletionSelectionSnapshot(imageIds, galleryFilteredImages());
   state.catalogMutation = true;
-  invalidateDeletedPendingImage(imageIds);
+  invalidatePendingImage();
   updateActionButtons();
   const projectId = state.project?.id || null;
   const cleanupIntent = projectId ? await rememberProjectImageSourceCleanup(projectId, imageId) : null;
@@ -291,8 +291,7 @@ async function removeImageFromCatalog(imageId = state.contextMenuImageId) {
       if (selection.removesSelection) clearCurrentImageSelection();
       renderCatalogViews(); updateSelectionActionBar();
     });
-    if (selection.removesSelection) await restoreDeletionSelection(selection, imageIds);
-    else { updateNavigationControls(); updateActionButtons(); clearStatus(); }
+    await restoreDeletionSelection(selection, imageIds);
   } catch (error) {
     if (cleanupIntent && Number.isInteger(error?.status) && error.status >= 400 && error.status < 500) {
       await clearProjectSourceCleanup({ intentIds: [cleanupIntent] });
@@ -333,7 +332,7 @@ async function runSelectionAction(action) {
     const epoch = beginCatalogEpoch(); state.catalogMutation = true; updateActionButtons();
     const imageIds = new Set(ids);
     const selection = deletionSelectionSnapshot(imageIds, overviewImages());
-    invalidateDeletedPendingImage(imageIds);
+    invalidatePendingImage();
     const projectId = state.project?.id || null;
     let cleanupIntents = new Map();
     try {
@@ -357,7 +356,7 @@ async function runSelectionAction(action) {
       if (selection.removesSelection) clearCurrentImageSelection();
       state.batchMode = false; clearBatchSelection(); updateSelectionActionBar();
       renderCatalogViews();
-      if (selection.removesSelection) await restoreDeletionSelection(selection, imageIds);
+      await restoreDeletionSelection(selection, imageIds);
     } catch (error) {
       if (Number.isInteger(error?.status) && error.status >= 400 && error.status < 500) {
         await clearProjectSourceCleanup({ intentIds: [...cleanupIntents.values()].filter(Boolean) });
