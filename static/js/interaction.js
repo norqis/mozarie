@@ -228,6 +228,10 @@ function clearReviewForRemovedImage(image) {
   state.reviewedImageIds.delete(image.id);
   state.hiddenImageIds.delete(image.id);
 }
+function clearRemovedCurrentImage() {
+  state.currentId = null; state.currentImage = null; state.pendingImageId = null; state.pendingImageKey = null; state.pendingCandidateKey = null;
+  state.candidates = []; state.candidateImages = new Map(); clearEditor();
+}
 
 async function removeImageFromCatalog(imageId = state.contextMenuImageId) {
   if (!imageId || isBusy() || state.importing || catalogStagingEditsActive()) return;
@@ -236,9 +240,9 @@ async function removeImageFromCatalog(imageId = state.contextMenuImageId) {
   if (!await confirmAction(t("confirm.removeImage.title"), t("confirm.removeImage.message"), "removeImage")) return;
 
   closeCatalogContextMenu();
-  const index = state.images.findIndex((item) => item.id === imageId);
-  const nextImageId = state.images[index + 1]?.id || state.images[index - 1]?.id || null;
+  const nextImageId = nextGalleryFilteredImage(imageId, { fallback: true });
   const removingCurrent = state.currentId === imageId || state.pendingImageId === imageId;
+  let selectAfterTransition = false;
   state.catalogMutation = true;
   ++state.imageGeneration;
   updateActionButtons();
@@ -263,18 +267,12 @@ async function removeImageFromCatalog(imageId = state.contextMenuImageId) {
       state.maskStatus.delete(imageId);
       pruneSourceAccess();
       clearReviewForRemovedImage(image);
-      if (removingCurrent) {
-        state.currentId = null; state.currentImage = null; state.pendingImageId = null; state.pendingImageKey = null; state.pendingCandidateKey = null;
-        state.candidates = []; state.candidateImages = new Map(); clearEditor();
-      }
+      if (removingCurrent) clearRemovedCurrentImage();
       renderCatalogViews(); updateSelectionActionBar();
-      if (removingCurrent && nextImageId && state.images.some((item) => item.id === nextImageId)) {
-        await selectImage(nextImageId, true, { saveCurrentDraft: false });
-      } else {
-        updateNavigationControls(); updateActionButtons();
-        clearStatus();
-      }
+      selectAfterTransition = removingCurrent && Boolean(nextImageId) && state.images.some((item) => item.id === nextImageId);
     });
+    if (selectAfterTransition) await selectImage(nextImageId, true, { saveCurrentDraft: false });
+    else { updateNavigationControls(); updateActionButtons(); clearStatus(); }
   } catch (error) {
     if (cleanupIntent && Number.isInteger(error?.status) && error.status >= 400 && error.status < 500) {
       await clearProjectSourceCleanup({ intentIds: [cleanupIntent] });
@@ -312,6 +310,9 @@ async function runSelectionAction(action) {
   if (action === "remove") {
     if (!await confirmAction(t("confirm.removeImages.title"), t("confirm.removeImages.message", { count: ids.length }), "removeImage")) return;
     const epoch = beginCatalogEpoch(); state.catalogMutation = true; updateActionButtons();
+    const removingCurrent = ids.includes(state.currentId) || ids.includes(state.pendingImageId);
+    const currentImageId = state.currentId || state.pendingImageId;
+    const nextImageId = removingCurrent ? nextVisibleImage(overviewImages(), currentImageId, { excludedImageIds: new Set(ids), fallback: true }) : null;
     const projectId = state.project?.id || null;
     let cleanupIntents = new Map();
     try {
@@ -332,8 +333,11 @@ async function runSelectionAction(action) {
       }
       loadReviewedPaths();
       pruneSourceAccess();
+      if (removingCurrent) clearRemovedCurrentImage();
       state.batchMode = false; clearBatchSelection(); updateSelectionActionBar();
       renderCatalogViews();
+      if (removingCurrent && nextImageId && state.images.some((image) => image.id === nextImageId)) await selectImage(nextImageId, true, { saveCurrentDraft: false });
+      else if (removingCurrent) { updateNavigationControls(); updateActionButtons(); clearStatus(); }
     } catch (error) {
       if (Number.isInteger(error?.status) && error.status >= 400 && error.status < 500) {
         await clearProjectSourceCleanup({ intentIds: [...cleanupIntents.values()].filter(Boolean) });
@@ -738,8 +742,8 @@ function handleNavigationKeydown(event) {
   else if (action === "next") moveCurrentBy(1);
   else if (action === "previousVisible") moveCurrentBy(-1);
   else if (action === "nextVisible") moveCurrentBy(1);
-  else if (action === "first" && state.images[0]) void selectImage(state.images[0].id);
-  else if (action === "last" && state.images.at(-1)) void selectImage(state.images.at(-1).id);
+  else if (action === "first" && galleryFilteredImages()[0]) void selectImage(galleryFilteredImages()[0].id);
+  else if (action === "last" && galleryFilteredImages().at(-1)) void selectImage(galleryFilteredImages().at(-1).id);
   else if (action === "reviewAndNext") void reviewAndMoveNext();
   else if (action === "undo") void restoreSnapshot(state.historyIndex - 1);
   else if (action === "redo") void restoreSnapshot(state.historyIndex + 1);

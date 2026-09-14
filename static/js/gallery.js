@@ -211,6 +211,14 @@ function imageMatchesStateFilter(image, filters) {
 function imageMatchesGalleryFilter(image) {
   return imageMatchesStateFilter(image, state.galleryFilter);
 }
+function galleryFilteredImages() { return state.images.filter(imageMatchesGalleryFilter); }
+function nextVisibleImage(images, imageId, { excludedImageIds = new Set(), fallback = false } = {}) {
+  const index = images.findIndex((image) => image.id === imageId);
+  const next = images.slice(index < 0 ? 0 : index + 1).find((image) => !excludedImageIds.has(image.id));
+  if (next || index < 0 || !fallback) return next || null;
+  return images.slice(0, index).reverse().find((image) => !excludedImageIds.has(image.id)) || null;
+}
+function nextGalleryFilteredImage(imageId, options = {}) { return nextVisibleImage(galleryFilteredImages(), imageId, options); }
 
 function updateGalleryCurrent() {
   for (const item of state.galleryNodes.values()) {
@@ -241,6 +249,13 @@ function overviewImages() {
     if (folder && path !== folder && !path.startsWith(`${folder}/`)) return false;
     return !query || path.toLowerCase().includes(query);
   });
+}
+function reconcileOverviewSelection(visibleImages = overviewImages()) {
+  if (!state.batchMode) return;
+  const visibleIds = new Set(visibleImages.map((image) => image.id));
+  state.selectedImageIds = new Set([...state.selectedImageIds].filter((imageId) => visibleIds.has(imageId)));
+  if (!visibleIds.has(state.selectionAnchorId)) state.selectionAnchorId = null;
+  updateSelectionActionBar();
 }
 function syncOverviewFolders() {
   const select = $("#overviewFolder");
@@ -280,6 +295,7 @@ function renderOverview(force = false) {
   if (!grid) return;
   syncOverviewFolders();
   const visibleImages = overviewImages();
+  reconcileOverviewSelection(visibleImages);
   $("#overviewCount").textContent = t("overview.count", { visible: visibleImages.length, total: state.images.length });
   document.querySelectorAll("[data-overview-filter]").forEach((input) => { input.checked = state.overviewFilter.has(input.dataset.overviewFilter); });
   updateFilterMenuButtons();
@@ -315,7 +331,7 @@ function setViewMode(mode, refreshGallery = true) {
 }
 function moveCurrentBy(offset) {
   if (isGestureActive()) return;
-  const visible = state.images.filter((image) => !isHidden(image)); const index = visible.findIndex((image) => image.id === state.currentId);
+  const visible = galleryFilteredImages(); const index = visible.findIndex((image) => image.id === state.currentId);
   const target = visible[index + offset];
   if (target) void selectImage(target.id);
 }
@@ -323,9 +339,7 @@ async function reviewAndMoveNext() {
   const current = currentRecord();
   if (isGestureActive() || currentImageActionPending() || !current) return null;
   const currentId = current.id;
-  const filteredImages = state.images.filter(imageMatchesGalleryFilter);
-  const currentIndex = filteredImages.findIndex((image) => image.id === currentId);
-  const target = currentIndex < 0 ? filteredImages[0] || null : filteredImages[currentIndex + 1] || null;
+  const target = nextGalleryFilteredImage(currentId);
   const reviewed = await queueImageMutation(currentId, async () => {
     const scroll = state.contextMenuScroll;
     return saveWorkspaceFlagNow(current, "reviewed", true, () => {
@@ -341,7 +355,7 @@ async function hideAndMoveNext() {
   const current = currentRecord();
   if (!current) return;
   const currentId = current.id;
-  const target = state.images.slice(imageIndex(currentId) + 1).find((image) => !isHidden(image)) || null;
+  const target = nextGalleryFilteredImage(currentId, { fallback: true });
   if (!await setHidden(current, true)) return;
   if (target && state.currentId === currentId) await selectImage(target.id);
 }
@@ -350,8 +364,9 @@ async function runNavigationAction(action) {
   focusCanvas();
 }
 function updateNavigationControls() {
-  const index = imageIndex();
-  const position = index < 0 ? "- / -" : `${index + 1} / ${state.images.length}`;
+  const visibleImages = galleryFilteredImages();
+  const index = visibleImages.findIndex((image) => image.id === state.currentId);
+  const position = index < 0 ? `- / ${visibleImages.length}` : `${index + 1} / ${visibleImages.length}`;
   $("#imagePosition").textContent = position;
   const status = $("#reviewStatus");
   const record = currentRecord();

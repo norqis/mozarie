@@ -846,7 +846,7 @@ function bindEvents() {
   $("#folderPath").addEventListener("keydown", (event) => { if (event.key === "Enter") loadFolder(); });
   $("#loadFolderButton").addEventListener("click", loadFolder);
   const detectAll = () => {
-    if (!activeDetection()) openDetectionDialog(state.images.filter((image) => !isHidden(image)).map((image) => image.id));
+    if (!activeDetection()) openDetectionDialog(state.images.map((image) => image.id));
   };
   $("#detectAllButton").addEventListener("click", detectAll);
   document.querySelectorAll("#dialogTargetPenis, #dialogTargetPussy").forEach((input) => input.addEventListener("change", () => validateDetectionTargets(detectionTargets("dialogTarget"), $("#detectTargetValidation"))));
@@ -980,15 +980,16 @@ function bindEvents() {
   document.querySelectorAll("[data-overview-filter]").forEach((input) => input.addEventListener("change", () => {
     if (isBusy() || state.importing) return;
     state.overviewFilter = new Set([...document.querySelectorAll("[data-overview-filter]:checked")].map((item) => item.dataset.overviewFilter));
+    reconcileOverviewSelection();
     renderOverview();
   }));
   let overviewQueryTimer = null;
   $("#overviewQuery").addEventListener("input", (event) => {
     state.overviewQuery = event.target.value;
     clearTimeout(overviewQueryTimer);
-    overviewQueryTimer = setTimeout(() => renderOverview(), 120);
+    overviewQueryTimer = setTimeout(() => { reconcileOverviewSelection(); renderOverview(); }, 120);
   });
-  $("#overviewFolder").addEventListener("change", (event) => { state.overviewFolder = event.target.value; renderOverview(); });
+  $("#overviewFolder").addEventListener("change", (event) => { state.overviewFolder = event.target.value; reconcileOverviewSelection(); renderOverview(); });
   $("#brushTool").addEventListener("click", () => setTool("brush")); $("#mosaicEraserTool").addEventListener("click", () => setTool("mosaic_eraser")); $("#eraserTool").addEventListener("click", () => setTool("eraser"));
   $("#excludeEraserTool").addEventListener("click", () => setTool("exclude_eraser"));
   $("#boundaryTool").addEventListener("click", () => {

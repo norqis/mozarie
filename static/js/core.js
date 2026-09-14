@@ -630,7 +630,10 @@ function setHidden(image, hidden) {
   });
 }
 function clearStoredCatalogState() { state.reviewedImageIds.clear(); state.hiddenImageIds.clear(); }
-function selectedImages() { return state.images.filter((image) => state.selectedImageIds.has(image.id)); }
+function selectedImages() {
+  const visibleIds = state.batchMode ? new Set(overviewImages().map((image) => image.id)) : null;
+  return state.images.filter((image) => state.selectedImageIds.has(image.id) && (!visibleIds || visibleIds.has(image.id)));
+}
 function clearBatchSelection() { state.selectedImageIds.clear(); state.selectionAnchorId = null; }
 function updateSelectionActionBar() {
   const count = state.selectedImageIds.size;
@@ -739,8 +742,10 @@ function updateActionButtons() {
   $("#applyStartButton").disabled = busyLocked || mutationLocked || catalogStaging || mutatingCandidates || state.applyTargetIds.length === 0
     || Boolean(applyRestrictionMessage()) || (selectedSaveMode() === "copy" && !state.outputDirectoryHandle);
   $("#overviewButton").disabled = busyLocked || state.images.length === 0;
-  $("#previousImageButton").disabled = busyLocked || switchingImages || imageIndex() <= 0;
-  $("#nextImageButton").disabled = busyLocked || switchingImages || imageIndex() < 0 || imageIndex() >= state.images.length - 1;
+  const visibleImages = galleryFilteredImages();
+  const visibleIndex = visibleImages.findIndex((image) => image.id === state.currentId);
+  $("#previousImageButton").disabled = busyLocked || switchingImages || visibleIndex <= 0;
+  $("#nextImageButton").disabled = busyLocked || switchingImages || visibleIndex >= visibleImages.length - 1;
   $("#reviewAndNextButton").disabled = busyLocked || mutationLocked || switchingImages || !hasImage;
   $("#removeAndNextButton").disabled = busyLocked || mutationLocked || catalogStaging || switchingImages || !hasImage;
   $("#hideAndNextButton").disabled = busyLocked || mutationLocked || switchingImages || !hasImage;
