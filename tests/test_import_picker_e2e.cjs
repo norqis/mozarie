@@ -2017,6 +2017,17 @@ async function runControlLedger(page, fixtureUrl, contracts, finishCancel, holdS
     }), [statusSelector, startSelector]);
     assert.deepEqual(result, { path: "G:\\fixture-output", picking: false, status: "G:\\fixture-output", startEnabled: true, errorOpen: false }, `${control} stores and displays the selected absolute server output path`);
   };
+  const assertManualOutputDirectoryCommit = async (before, control, expected) => {
+    await page.waitForFunction((count) => window.__ledgerApi.slice(count).some((request) => request.method === "POST" && new URL(request.url, location.href).pathname === "/api/settings" && new URL(request.url, location.href).search === "?status=0"), before.api.length);
+    await page.waitForFunction((directory) => !state.outputDirectoryCommitPending
+      && state.settings?.saving?.default_output_directory === directory
+      && ["#settingsDefaultOutputDirectory", "#applyOutputDirectoryStatus", "#singleSaveOutputDirectoryStatus"].every((selector) => document.querySelector(selector)?.value === directory), expected.value);
+    const after = await snapshot();
+    const requests = after.api.slice(before.api.length).filter((request) => request.method === "POST"
+      && new URL(request.url, fixtureUrl).pathname === "/api/settings" && new URL(request.url, fixtureUrl).search === "?status=0");
+    assert.equal(requests.length, 1, `${control} sends one settings-only output-directory request`);
+    assert.deepEqual(JSON.parse(requests[0].body), { saving: { default_output_directory: expected.value } }, `${control} persists only the entered output directory`);
+  };
   const dialog = (id, expected, control) => async (before, after) => {
     if (after.dialogs[id] !== expected) await page.waitForFunction(([dialogId, open]) => document.querySelector(`#${dialogId}`)?.open === open, [id, expected]);
     const settled = await snapshot();
@@ -2170,6 +2181,7 @@ async function runControlLedger(page, fixtureUrl, contracts, finishCancel, holdS
     clickPredicates[id] = (before, after) => assert.equal(after.controls[id].selected, "true", `${id} must select its settings tab`);
   }
   const inputPredicate = (id, before, after, expected) => {
+    if (id === "applyOutputDirectoryStatus" || id === "singleSaveOutputDirectoryStatus") return assertManualOutputDirectoryCommit(before, id, expected);
     const beforeValue = before.controls[id]; const afterValue = after.controls[id];
     if (id === "confirmRemoveImage") {
       assert.equal(afterValue.disabled && afterValue.checked, true, "confirmRemoveImage remains an always-on source-deletion warning");
@@ -2536,6 +2548,7 @@ async function runControlLedger(page, fixtureUrl, contracts, finishCancel, holdS
   await page.waitForFunction(() => !document.querySelector("#saveButton").disabled);
   await click("saveButton");
   for (const [id, value] of [["singleSaveCopyMode", true], ["singleSaveSuffix", "_ledger"], ["singleSaveDeleteOriginal", true]]) await input(id, value);
+  await input("singleSaveOutputDirectoryStatus", "G:\\manual-single-output");
   await click("singleSaveChooseOutputDirectoryButton");
   await input("singleSaveOverwriteMode", true);
   // Keep the public save operation observable.  A fast fixture response can
@@ -2551,6 +2564,7 @@ async function runControlLedger(page, fixtureUrl, contracts, finishCancel, holdS
   await page.waitForFunction(() => !document.querySelector("#saveAllButton").disabled);
   await click("saveAllButton");
   for (const [id, value] of [["applyTargetMode", "masked"], ["applyCopyMode", true], ["applySuffix", "_ledger"], ["deleteOriginal", true], ["applyDivisor", "102"]]) await input(id, value);
+  await input("applyOutputDirectoryStatus", "G:\\manual-apply-output");
   await click("chooseOutputDirectoryButton");
   await page.waitForFunction(() => !state.outputDirectoryPicking);
   if (await page.locator("#errorDialog").evaluate((dialog) => dialog.open)) await page.locator("#errorDialogClose").click();
