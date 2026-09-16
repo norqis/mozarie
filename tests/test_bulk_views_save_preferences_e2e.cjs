@@ -26,17 +26,6 @@ async function main() {
         const body = init.body || "";
         window.__bulkSaveApi.push({ url, method, body });
         const response = await originalFetch(...args);
-        // The reusable fixture predates catalog generations.  The production
-        // remove route returns the minimal mutation snapshot, including its
-        // new generation, so provide that external response rather than
-        // stubbing a product handler or its removal logic.
-        if (url.includes("/api/catalog/remove") && response.ok) {
-          const data = await response.json();
-          return new Response(JSON.stringify({
-            ...data,
-            catalogGeneration: (state.serverCatalogGeneration || 0) + 1,
-          }), { status: 200, headers: { "Content-Type": "application/json" } });
-        }
         return response;
       };
     });
@@ -46,7 +35,9 @@ async function main() {
     await waitForEditor(page, "sample");
     await page.evaluate(async () => {
       const root = await navigator.storage.getDirectory();
-      const sourceBytes = Uint8Array.from(atob("iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAEElEQVR4nGP8zwACTGCSAQANHQEDgslx/wAAAABJRU5ErkJggg=="), (byte) => byte.charCodeAt(0));
+      const sourceCanvas = document.createElement("canvas"); sourceCanvas.width = sourceCanvas.height = 2;
+      const sourceContext = sourceCanvas.getContext("2d"); sourceContext.fillStyle = "#010203"; sourceContext.fillRect(0, 0, 2, 2);
+      const sourceBytes = new Uint8Array(await (await new Promise((resolve) => sourceCanvas.toBlob(resolve, "image/png"))).arrayBuffer());
       const removedFileHandle = await root.getFileHandle("removed-source.png", { create: true });
       const removedWriter = await removedFileHandle.createWritable();
       await removedWriter.write(sourceBytes);
@@ -154,13 +145,28 @@ async function main() {
     await page.locator("#singleSaveOverwriteMode").check();
     await page.locator("#singleSaveRemoveSaved").uncheck();
     await page.locator("#singleSaveOutputFormat").selectOption("original");
+    await page.evaluate(() => { state.settings.confirmations.overwriteSource = true; });
+    const commitsBeforeOverwrite = fixture.saveRequests.filter((request) => request.path === "/api/save/commit").length;
     await page.locator("#singleSaveStartButton").click();
-    await page.waitForFunction(() => !state.saving, null, { timeout: 8000 });
+    await page.waitForFunction(() => $("#confirmDialog").open);
+    await page.locator("#confirmAccept").click();
+    await page.waitForFunction(() => !state.saving && !state.saveStarting && !$("#confirmDialog").open, null, { timeout: 8000 });
+    assert.equal(await page.locator("#errorDialog").evaluate((dialog) => dialog.open), false, "overwrite must not leave an error dialog open");
+    assert.equal(fixture.saveRequests.filter((request) => request.path === "/api/save/commit").length, commitsBeforeOverwrite + 1, "overwrite reaches the durable commit before its source bytes are observed");
     assert.equal(await page.evaluate(async () => {
       const bytes = new Uint8Array(await (await state.sourceAccess.get("sample-two").fileHandle.getFile()).arrayBuffer());
-      return bytes.length > 8 && [137, 80, 78, 71, 13, 10, 26, 10].every((value, index) => bytes[index] === value);
+      return bytes.length > 8 && [137, 80, 78, 71, 13, 10, 26, 10].every((value, index) => bytes[index] === value)
+        && JSON.stringify([...bytes]) !== JSON.stringify(window.__remainingSourceBytes);
     }), true, "the surviving real OPFS file handle remains usable for an actual PNG overwrite save");
     assert.deepEqual(fixture.catalogImageIds(), ["sample-two"], "overwrite with remove-after-save off leaves the catalog entry in place");
+    await page.locator("#singleSaveCloseButton").click();
+    await page.locator("#saveButton").click();
+    await page.waitForFunction(() => $("#singleSaveDialog").open);
+    assert.deepEqual(await page.evaluate(() => ({
+      mode: document.querySelector('input[name="singleSaveMode"]:checked').value,
+      format: $("#singleSaveOutputFormat").value,
+      remove: $("#singleSaveRemoveSaved").checked,
+    })), { mode: "overwrite", format: "original", remove: false }, "successful overwrite retains the next save dialog's choices");
     const removeRequest = await page.evaluate(() => window.__bulkSaveApi.find((request) => request.url.includes("/api/catalog/remove")));
     assert.match(removeRequest.body, /"expectedCatalogGeneration"/, "catalog removal carries the selected catalog generation");
   } finally {

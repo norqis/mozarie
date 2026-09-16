@@ -361,8 +361,9 @@ function startFixtureServer() {
       catalogRemoveRequests.push(imageIds);
       const removedImageIds = catalog.filter((image) => imageIds.includes(image.id)).map((image) => image.id);
       catalog = catalog.filter((image) => !imageIds.includes(image.id));
+      if (removedImageIds.length) catalogGeneration += 1;
       response.writeHead(200, { "Content-Type": "application/json" });
-      response.end(JSON.stringify({ images: catalog, removedImageIds }));
+      response.end(JSON.stringify({ images: catalog, removedImageIds, catalogGeneration }));
       return;
     }
     if (requestPath.startsWith("/api/catalog/image/") && request.method === "DELETE") {
