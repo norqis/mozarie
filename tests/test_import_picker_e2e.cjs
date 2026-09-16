@@ -3561,6 +3561,7 @@ async function main() {
     await page.keyboard.press("Escape");
     await page.waitForFunction(() => !document.querySelector("#errorDialog").open);
     assert.equal(await page.locator("#settingsDialog").evaluate((dialog) => dialog.open), true, "Escape closes only the error dialog");
+    await page.waitForFunction(() => document.activeElement?.id === "settingsSaveButton");
     assert.equal(await page.evaluate(() => document.activeElement.id), "settingsSaveButton", "closing the error dialog restores focus to its action");
     assert.equal(await page.locator(".help-button").evaluateAll((buttons) => buttons.every((button) => {
       const rect = button.getBoundingClientRect(); return rect.width === 28 && rect.height === 28;
