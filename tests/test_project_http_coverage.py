@@ -12,6 +12,7 @@ from __future__ import annotations
 import http.client
 import io
 import json
+import base64
 import contextlib
 import shutil
 import tempfile
@@ -27,6 +28,7 @@ from PIL import Image
 
 import mozarie.http as http_module
 import mozarie.state as state_module
+from mozarie.core import Candidate
 from mozarie.http import MosaicHandler
 from mozarie.state import StudioState
 
@@ -138,7 +140,12 @@ class ProjectHttpCoverageTests(unittest.TestCase):
         self.assertIn("workspaceRecovery.confirm", translations)
 
     def test_project_mask_png_zip_and_cleanup(self) -> None:
+        Image.new("RGB", (12, 8), "black").save(self.source_dir / "hidden.png")
         project_id, image_id = self.create_and_load()
+        image_id = next(image["id"] for image in self.state.list_images() if image["relativePath"] == "source.png")
+        hidden_id = next(image["id"] for image in self.state.list_images() if image["relativePath"] == "hidden.png")
+        status, _headers, body = self.request("POST", f"/api/workspace/image/{hidden_id}", {"hidden": True}, authorized=True)
+        self.assertEqual(status, 200, body.decode("utf-8"))
         for kind in ("mosaic", "exclude"):
             status, headers, body = self.request("GET", f"/api/project/mask/{image_id}/{kind}")
             self.assertEqual(status, 200)
@@ -168,6 +175,7 @@ class ProjectHttpCoverageTests(unittest.TestCase):
                     names = archive.namelist()
                     self.assertEqual(len(names), 1)
                     self.assertTrue(names[0].endswith(f"/source.png.{kind}.png"))
+                    self.assertFalse(any("hidden.png" in name for name in names))
                     with Image.open(io.BytesIO(archive.read(names[0]))) as mask:
                         self.assertEqual(mask.size, (12, 8))
         # The final response byte reaches the client just before the handler's
@@ -190,6 +198,74 @@ class ProjectHttpCoverageTests(unittest.TestCase):
         status, _headers, body = self.request("GET", "/api/project/mask/missing/mosaic")
         self.assertEqual(status, 400)
         self.assertEqual(json.loads(body)["error_code"], "image_not_found")
+
+    def test_project_switch_restores_only_its_durable_candidate_manual_history_and_flags(self) -> None:
+        project_a, image_a = self.create_and_load("A")
+        mask_path = self.state.cache_dir / image_a / "candidate.png"
+        mask_path.parent.mkdir(parents=True, exist_ok=True)
+        Image.new("L", (12, 8), 255).save(mask_path)
+        self.state.candidates[image_a] = [Candidate("a-candidate", "penis", 0.9, mask_path)]
+        with self.state.image_io_lock(image_a):
+            with self.state.lock:
+                self.state._commit_candidate_snapshot(image_a, self.state.candidates[image_a], replace=True)
+        raw_mask = io.BytesIO(); Image.new("L", (12, 8), 255).save(raw_mask, format="PNG")
+        self.state.save_manual_workspace(image_a, {
+            "add": "data:image/png;base64," + base64.b64encode(raw_mask.getvalue()).decode("ascii"),
+            "exclusion": "", "exclusionErase": "", "removedCandidateIds": [],
+            "candidateRevision": self.state._candidate_revision(image_a), "hasEffectiveMask": True,
+        })
+        status, _headers, body = self.request("POST", f"/api/workspace/image/{image_a}", {"hidden": True, "reviewed": True}, authorized=True)
+        self.assertEqual(status, 200, body.decode("utf-8"))
+
+        source_b = self.root / "images-b"; source_b.mkdir()
+        Image.new("RGB", (12, 8), "blue").save(source_b / "b.png")
+        status, _headers, body = self.request("POST", "/api/projects", {"name": "B"}, authorized=True)
+        self.assertEqual(status, 200, body.decode("utf-8")); project_b = json.loads(body)["project"]["id"]
+        status, _headers, body = self.request("POST", "/api/folder", {"path": str(source_b)}, authorized=True)
+        self.assertEqual(status, 200, body.decode("utf-8")); image_b = json.loads(body)["images"][0]["id"]
+        self.assertNotEqual(image_a, image_b)
+        status, _headers, body = self.request("GET", f"/api/candidates/{image_b}")
+        self.assertEqual(status, 200); self.assertEqual(json.loads(body)["candidates"], [])
+        status, _headers, body = self.request("GET", f"/api/workspace/manual/{image_b}")
+        self.assertEqual(status, 200); self.assertIsNone(json.loads(body)["draft"])
+        status, _headers, body = self.request("GET", f"/api/project/history/{image_b}")
+        self.assertEqual(status, 200); self.assertEqual(json.loads(body), {"canUndo": False, "canRedo": False})
+
+        status, _headers, body = self.request("POST", "/api/project/open", {"projectId": project_a}, authorized=True)
+        self.assertEqual(status, 200, body.decode("utf-8")); self.assertEqual([image["id"] for image in json.loads(body)["images"]], [image_a])
+        status, _headers, body = self.request("GET", f"/api/candidates/{image_a}")
+        self.assertEqual(status, 200); self.assertEqual([candidate["id"] for candidate in json.loads(body)["candidates"]], ["a-candidate"])
+        status, _headers, body = self.request("GET", f"/api/workspace/manual/{image_a}")
+        self.assertEqual(status, 200); self.assertTrue(json.loads(body)["draft"]["add"].startswith("data:image/png;base64,"))
+        status, _headers, body = self.request("GET", f"/api/project/history/{image_a}")
+        self.assertEqual(status, 200); self.assertTrue(json.loads(body)["canUndo"])
+        status, _headers, body = self.request("GET", "/api/images")
+        self.assertEqual(status, 200); self.assertEqual([(image["id"], image["hidden"], image["reviewed"]) for image in json.loads(body)["images"]], [(image_a, True, True)])
+        self.assertNotEqual(project_a, project_b)
+
+    def test_hidden_history_undo_redo_restores_processing_eligibility(self) -> None:
+        _project_id, image_id = self.create_and_load()
+        status, _headers, body = self.request("POST", f"/api/workspace/image/{image_id}", {"hidden": True}, authorized=True)
+        self.assertEqual(status, 200, body.decode("utf-8"))
+        status, _headers, body = self.request("GET", "/api/images")
+        self.assertEqual(status, 200); self.assertTrue(json.loads(body)["images"][0]["hidden"])
+        status, _headers, body = self.request("POST", f"/api/workspace/manual/{image_id}/begin", {"sessionId": "00000000-0000-4000-8000-000000000301", "dirtyLayers": ["add"]}, authorized=True)
+        self.assertEqual(status, 400); self.assertEqual(json.loads(body)["error_code"], "image_hidden")
+        status, _headers, body = self.request("POST", f"/api/project/history/{image_id}/undo", {}, authorized=True)
+        self.assertEqual(status, 200, body.decode("utf-8")); self.assertEqual(json.loads(body)["changedImageIds"], [image_id])
+        status, _headers, body = self.request("GET", "/api/images")
+        self.assertEqual(status, 200); self.assertFalse(json.loads(body)["images"][0]["hidden"])
+        session_id = "00000000-0000-4000-8000-000000000302"
+        status, _headers, body = self.request("POST", f"/api/workspace/manual/{image_id}/begin", {"sessionId": session_id, "dirtyLayers": ["add"]}, authorized=True)
+        self.assertEqual(status, 200, body.decode("utf-8"))
+        status, _headers, body = self.request("POST", f"/api/workspace/manual/{image_id}/cancel", {"sessionId": session_id}, authorized=True)
+        self.assertEqual(status, 200, body.decode("utf-8"))
+        status, _headers, body = self.request("POST", f"/api/project/history/{image_id}/redo", {}, authorized=True)
+        self.assertEqual(status, 200, body.decode("utf-8")); self.assertEqual(json.loads(body)["changedImageIds"], [image_id])
+        status, _headers, body = self.request("GET", "/api/images")
+        self.assertEqual(status, 200); self.assertTrue(json.loads(body)["images"][0]["hidden"])
+        status, _headers, body = self.request("POST", f"/api/workspace/manual/{image_id}/begin", {"sessionId": "00000000-0000-4000-8000-000000000303", "dirtyLayers": ["add"]}, authorized=True)
+        self.assertEqual(status, 400); self.assertEqual(json.loads(body)["error_code"], "image_hidden")
 
     def test_startup_removes_a_stale_mask_zip_from_a_process_cache(self) -> None:
         stale_cache = self.root / "process-stale"

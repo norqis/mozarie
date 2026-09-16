@@ -7988,19 +7988,18 @@ class MozarieTests(unittest.TestCase):
             enumeration_finished = threading.Event()
             original_inspect = catalog_module.inspect_import_image
 
-            def staged_rglob(path, pattern):
+            def staged_walk(path, *, onerror):
                 self.assertTrue(path.samefile(root))
-                self.assertEqual(pattern, "*")
-                yield root / "first.png"
+                yield str(root), [], ["first.png"]
                 self.assertTrue(inspection_started.wait(1), "inspection must begin while enumeration is blocked")
-                yield root / "second.png"
+                yield str(root), [], ["second.png"]
                 enumeration_finished.set()
 
             def tracked_inspect(path, suffix):
                 inspection_started.set()
                 return original_inspect(path, suffix)
 
-            with patch.object(Path, "rglob", autospec=True, side_effect=staged_rglob), \
+            with patch.object(catalog_module.os, "walk", autospec=True, side_effect=staged_walk), \
                     patch.object(catalog_module, "inspect_import_image", side_effect=tracked_inspect):
                 records = state.set_root(str(root))
 
@@ -8113,17 +8112,17 @@ class MozarieTests(unittest.TestCase):
             enumerated = []
             original_inspect = catalog_module.inspect_import_image
 
-            def tracked_rglob(path, pattern):
+            def tracked_walk(path, *, onerror):
                 self.assertTrue(path.samefile(root))
                 for name in names:
                     enumerated.append(name)
-                    yield root / name
+                    yield str(root), [], [name]
 
             def stop_during_first_inspection(path, suffix):
                 state.shutdown_requested.set()
                 return original_inspect(path, suffix)
 
-            with patch.object(Path, "rglob", autospec=True, side_effect=tracked_rglob), \
+            with patch.object(catalog_module.os, "walk", autospec=True, side_effect=tracked_walk), \
                     patch.object(catalog_module, "inspect_import_image", side_effect=stop_during_first_inspection):
                 with self.assertRaises(ClientError) as cancelled:
                     state.set_root(str(root))

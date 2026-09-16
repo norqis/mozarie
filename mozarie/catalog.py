@@ -466,6 +466,7 @@ class CatalogMixin:
         path_queue: Queue[Path | None] = Queue(maxsize=worker_count * 2)
         worker_failure = threading.Event()
         worker_errors: list[Exception] = []
+        scan_interrupted = False
 
         def record_skip(reason: str, path: Path) -> None:
             try:
@@ -541,31 +542,43 @@ class CatalogMixin:
             workers.append(worker)
             worker.start()
 
+        def on_walk_error(exc: OSError) -> None:
+            nonlocal scan_interrupted
+            # Path.rglob suppresses scan errors on newer Python releases.
+            # os.walk exposes them through this callback, so do not silently
+            # replace a catalogue with an incomplete prefix.
+            scan_interrupted = True
+            record_skip("scan_unreadable", Path(exc.filename) if exc.filename else root)
+
         try:
-            for path in root.rglob("*"):
-                if self.shutdown_requested.is_set():
+            for directory, _directories, filenames in os.walk(root, onerror=on_walk_error):
+                if self.shutdown_requested.is_set() or scan_interrupted:
                     break
-                try:
-                    if not path.is_file() or path.suffix.lower() not in IMAGE_SUFFIXES:
+                for filename in filenames:
+                    path = Path(directory) / filename
+                    try:
+                        if path.suffix.lower() not in IMAGE_SUFFIXES:
+                            continue
+                    except OSError:
+                        record_skip("scan_unreadable", path)
                         continue
-                except OSError:
-                    record_skip("scan_unreadable", path)
-                    continue
-                with candidate_count_lock:
-                    candidate_count += 1
-                # Do not start idle threads for a tiny folder. The active
-                # pool grows only to the number of discovered images and the
-                # caller's configured parallelism.
-                if len(workers) < worker_count:
-                    start_scan_worker()
-                while True:
+                    with candidate_count_lock:
+                        candidate_count += 1
+                    # Do not start idle threads for a tiny folder. The active
+                    # pool grows only to the number of discovered images and the
+                    # caller's configured parallelism.
+                    if len(workers) < worker_count:
+                        start_scan_worker()
+                    while True:
+                        if self.shutdown_requested.is_set() or worker_failure.is_set():
+                            break
+                        try:
+                            path_queue.put(path, timeout=0.05)
+                            break
+                        except Full:
+                            continue
                     if self.shutdown_requested.is_set() or worker_failure.is_set():
                         break
-                    try:
-                        path_queue.put(path, timeout=0.05)
-                        break
-                    except Full:
-                        continue
                 if self.shutdown_requested.is_set() or worker_failure.is_set():
                     break
         finally:
@@ -607,6 +620,8 @@ class CatalogMixin:
             )
         if not candidate_count:
             raise ClientError("指定フォルダーに対応画像がありません。", "image_read_failed")
+        if scan_interrupted:
+            raise ClientError("指定フォルダーを最後まで読み込めませんでした。", "image_read_failed", {"failures": scan_failures})
         if not records:
             raise ClientError("指定フォルダーの対応画像を読み込めませんでした。", "image_read_failed", {"failures": scan_failures})
         # A fresh unnamed folder becomes durable only after every source image

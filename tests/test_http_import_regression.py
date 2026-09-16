@@ -14,7 +14,7 @@ import unittest
 from unittest.mock import Mock, patch
 from http import HTTPStatus
 
-from PIL import Image
+from PIL import Image, PngImagePlugin
 
 from mozarie import catalog as catalog_module
 from mozarie import http as http_module
@@ -88,6 +88,43 @@ class FolderLoadLoggingContractTests(unittest.TestCase):
             {"relativePath": "changed.png", "reason": "scan_changed"},
             {"relativePath": "corrupt.png", "reason": "image_read_failed"},
         ])
+
+    def test_folder_scan_keeps_large_ztxt_itxt_pngs_when_a_corrupt_png_is_present(self) -> None:
+        folder = self.root / "mixed-large-text"; folder.mkdir()
+        ztxt = PngImagePlugin.PngInfo(); ztxt.add_text("workflow", "z" * 1_200_000, zip=True)
+        itxt = PngImagePlugin.PngInfo(); itxt.add_itxt("workflow", "i" * 1_200_000, lang="ja", tkey="workflow", zip=True)
+        Image.new("RGB", (8, 8), "white").save(folder / "large-ztxt.png", pnginfo=ztxt)
+        Image.new("RGB", (8, 8), "black").save(folder / "large-itxt.png", pnginfo=itxt)
+        (folder / "corrupt.png").write_bytes(b"not a PNG")
+        state = self.new_state(); state.settings["importing"]["parallelism"] = 1
+
+        images = state.set_root(str(folder))
+
+        self.assertEqual([image["relativePath"] for image in images], ["large-itxt.png", "large-ztxt.png"])
+        self.assertEqual(state.last_folder_scan_failures, [{"relativePath": "corrupt.png", "reason": "image_read_failed"}])
+        self.assertIn(b"zTXt", (folder / "large-ztxt.png").read_bytes())
+        self.assertIn(b"iTXt", (folder / "large-itxt.png").read_bytes())
+
+    def test_folder_scan_keeps_the_previous_catalog_when_rglob_loses_access(self) -> None:
+        previous = self.root / "previous"; previous.mkdir(); self.write_png(previous / "previous.png")
+        folder = self.root / "permission-loss"; folder.mkdir(); self.write_png(folder / "kept.png")
+        state = self.new_state(); state.settings["importing"]["parallelism"] = 1
+        state.set_root(str(previous)); before = state.catalog_snapshot()
+        native_walk = catalog_module.os.walk
+
+        def walk_then_permission_loss(path: Path, *, onerror):
+            if path == folder:
+                yield str(folder), [], ["kept.png"]
+                onerror(PermissionError(13, "access denied", str(folder / "locked")))
+                return
+            yield from native_walk(path, onerror=onerror)
+
+        with patch.object(catalog_module.os, "walk", walk_then_permission_loss), self.assertRaisesRegex(ClientError, "最後まで") as raised:
+            state.set_root(str(folder))
+
+        self.assertEqual(raised.exception.error_code, "image_read_failed")
+        self.assertEqual(raised.exception.params, {"failures": [{"relativePath": "locked", "reason": "scan_unreadable"}]})
+        self.assertEqual(state.catalog_snapshot(), before)
 
     def test_empty_and_unreadable_folders_keep_the_previous_catalog(self) -> None:
         previous = self.root / "previous"
