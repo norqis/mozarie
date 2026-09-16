@@ -2127,7 +2127,7 @@ async function runControlLedger(page, fixtureUrl, contracts, finishCancel, holdS
         current: state.currentId, imageIds: state.images.map((image) => image.id), images: state.images.map((image) => ({ id: image.id, relativePath: image.relativePath, reviewed: image.reviewed, hidden: image.hidden })), selectedImageIds: [...state.selectedImageIds].sort(), batchMode: state.batchMode,
         galleryFilter: state.galleryFilter, overviewFilter: state.overviewFilter, overviewQuery: state.overviewQuery, overviewFolder: state.overviewFolder, hiddenCount: state.hiddenImageIds.size,
         candidateDisplay: [...state.blinkCandidateIds || []].sort(), candidateDisplayModes: [...state.blinkModes || []].sort(),
-        catalogGeneration: state.serverCatalogGeneration, contextMenuImageId: state.contextMenuImageId, renameImageId: state.renameImage?.imageId || null,
+        catalogGeneration: state.serverCatalogGeneration, projectId: state.project?.id || null, contextMenuImageId: state.contextMenuImageId, renameImageId: state.renameImage?.imageId || null,
       },
       canvasHash,
       candidateControls: [...document.querySelectorAll("[data-candidate-batch], [data-candidate-display-toggle], [data-candidate-effective-toggle]")]
@@ -2321,10 +2321,11 @@ async function runControlLedger(page, fixtureUrl, contracts, finishCancel, holdS
         && new URL(request.url, fixtureUrl).pathname === "/api/catalog/rename");
       assert.equal(requests.length, 1, "renameImageConfirm sends one rename request");
       const payload = JSON.parse(String(requests[0].body));
-      assert.deepEqual(Object.keys(payload).sort(), ["browserRenamed", "expectedCatalogGeneration", "filename", "imageId"], "renameImageConfirm submits exactly the four supported payload fields");
+      assert.deepEqual(Object.keys(payload).sort(), ["browserRenamed", "expectedCatalogGeneration", "expectedProjectId", "filename", "imageId"], "renameImageConfirm submits exactly the five supported payload fields");
       assert.equal(payload.imageId, before.state.renameImageId, "renameImageConfirm submits the right-clicked image ID");
       assert.equal(payload.filename, filename, "renameImageConfirm submits the entered filename");
       assert.equal(payload.browserRenamed, false, "renameImageConfirm declares that the native source was not pre-moved in the browser");
+      assert.equal(payload.expectedProjectId, before.state.projectId, "renameImageConfirm submits the active project identity");
       assert.equal(payload.expectedCatalogGeneration, before.state.catalogGeneration, "renameImageConfirm submits the current catalog generation");
       assert.equal(settled.state.images.find((image) => image.id === before.state.renameImageId)?.relativePath, filename, "renameImageConfirm updates the catalog path after the server commit");
     },
