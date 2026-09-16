@@ -39,6 +39,7 @@ import mozarie.state as state_module  # noqa: E402
 import mozarie.catalog as catalog_module  # noqa: E402
 import mozarie.detection as detection_module  # noqa: E402
 import mozarie.jobs as jobs_module  # noqa: E402
+import mozarie.save_journal as save_journal_module  # noqa: E402
 import mozarie.saving as saving_module  # noqa: E402
 import updater  # noqa: E402
 from mozarie.core import (  # noqa: E402
@@ -7621,14 +7622,23 @@ class MozarieTests(unittest.TestCase):
             revision = state._touch_candidates(image_id)
 
             output_bytes = 0
-            for _index in range(400):
-                rendered = state.render_browser_save(image_id, revision, 100, None, copy_to_browser=True)
-                output_bytes += len(self.browser_render_bytes(rendered))
-                self.assertIsNone(rendered.output_path)
-                self.assertIsNone(state.browser_save_tokens[rendered.save_token].rendered_path)
-                assert rendered.response_path is not None
-                rendered.response_path.unlink()
-                self.assertTrue(state.commit_browser_save(image_id, revision, rendered.save_token, "keep")["cleared"])
+            original_connect = sqlite3.connect
+
+            def connect_with_test_journal_sync_disabled(database, *args, **kwargs):
+                db = original_connect(database, *args, **kwargs)
+                if database == state.save_journal.path:
+                    db.execute("PRAGMA synchronous=OFF")
+                return db
+
+            with patch.object(save_journal_module.sqlite3, "connect", side_effect=connect_with_test_journal_sync_disabled):
+                for _index in range(400):
+                    rendered = state.render_browser_save(image_id, revision, 100, None, copy_to_browser=True)
+                    output_bytes += len(self.browser_render_bytes(rendered))
+                    self.assertIsNone(rendered.output_path)
+                    self.assertIsNone(state.browser_save_tokens[rendered.save_token].rendered_path)
+                    assert rendered.response_path is not None
+                    rendered.response_path.unlink()
+                    self.assertTrue(state.commit_browser_save(image_id, revision, rendered.save_token, "keep")["cleared"])
 
             self.assertGreater(output_bytes, 0)
             self.assertEqual(list((state.cache_dir / "browser-save").glob("*")), [])

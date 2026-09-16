@@ -54,7 +54,7 @@ def main(argv: list[str] | None = None) -> int:
         ordered, selected = selected_tests(discovered, args.shard_index, args.shard_total)
         manifest["discovered"] = [test.id() for test in ordered]
         manifest["selected"] = [test.id() for test in selected]
-        result = unittest.TextTestRunner(verbosity=1).run(unittest.TestSuite(selected))
+        result = unittest.TextTestRunner(verbosity=2).run(unittest.TestSuite(selected))
         manifest["testsRun"] = result.testsRun
         manifest["skipped"] = len(result.skipped)
         manifest["status"] = "passed" if result.wasSuccessful() else "failed"

@@ -1264,7 +1264,7 @@ class UpdaterTests(unittest.TestCase):
                     ).strip()
                     if Path(selected).is_file():
                         runtime_python = selected
-            subprocess.run([runtime_python, "-m", "venv", str(venv)], check=True)
+            subprocess.run([runtime_python, "-m", "venv", "--without-pip", str(venv)], check=True)
             (venv / ".mozarie-ready").write_text("ready\n", encoding="utf-8")
             for marker in (None, "{not-json"):
                 marker_path = venv / ".mozarie-runtime.json"
