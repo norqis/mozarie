@@ -489,6 +489,15 @@ def _apply_mosaic_to_image(image: Image.Image, mask: np.ndarray, block_size: int
     return Image.fromarray(output)
 
 
+def mask_alpha_or_luma(image: Image.Image) -> np.ndarray:
+    """Return the alpha channel for transparent masks, otherwise grayscale."""
+    if image.mode in {"RGBA", "LA"}:
+        return np.asarray(image.getchannel("A"), dtype=np.uint8)
+    if image.mode in {"L", "1"}:
+        return np.asarray(image.convert("L"), dtype=np.uint8)
+    raise ValueError("The mask must include an alpha channel or be grayscale.")
+
+
 def _decode_mask(data: str | bytes, width: int, height: int) -> np.ndarray:
     """Decode a browser data URL or a staged, trusted PNG layer.
 
@@ -509,11 +518,10 @@ def _decode_mask(data: str | bytes, width: int, height: int) -> np.ndarray:
                 raise ClientError("The mask must be a PNG image.", "input_invalid")
             if image.size != (width, height):
                 raise ClientError("編集マスクのサイズが元画像と一致しません。", "input_invalid")
-            if image.mode in {"RGBA", "LA"}:
-                return np.asarray(image.getchannel("A"), dtype=np.uint8)
-            if image.mode in {"L", "1"}:
-                return np.asarray(image.convert("L"), dtype=np.uint8)
-            raise ClientError("The mask must include an alpha channel or be grayscale.", "input_invalid")
+            try:
+                return mask_alpha_or_luma(image)
+            except ValueError as exc:
+                raise ClientError(str(exc), "input_invalid") from exc
     except MemoryError as exc:
         raise ClientError("編集マスクを読み込めません。使用可能なメモリを確認してください。", "input_invalid") from exc
     except (OSError, UnidentifiedImageError) as exc:
@@ -692,12 +700,38 @@ def render_with_mask(record: ImageRecord, mask: np.ndarray, block_size: int) -> 
 
 
 class SourceReplaceStage:
-    def __init__(self, record: ImageRecord, backup_path: Path, original_record: ImageRecord) -> None:
+    def __init__(self, record: ImageRecord, backup_path: Path, original_record: ImageRecord,
+                 replacement_fingerprint: tuple[int, int] | None = None,
+                 replacement_identity: str | None = None) -> None:
         self.record = record
         self.backup_path = backup_path
         self.original_record = original_record
+        self.replacement_fingerprint = replacement_fingerprint
+        self.replacement_identity = replacement_identity
 
     def rollback(self) -> None:
+        if self.record.path != self.original_record.path:
+            if self.original_record.path.exists():
+                raise OSError("original source path was recreated")
+            if self.record.path.exists() and (
+                self.replacement_fingerprint is None
+                or not SaveJournal._unlink(
+                    str(self.record.path), *self.replacement_fingerprint, self.replacement_identity,
+                    require_identity=True,
+                )
+            ):
+                raise OSError("converted destination was replaced")
+            if self.backup_path.exists():
+                os.replace(self.backup_path, self.original_record.path)
+                _sync_directory(self.original_record.path.parent)
+            self.record.path = self.original_record.path
+            self.record.relative_path = self.original_record.relative_path
+            self.record.mtime_ns = self.original_record.mtime_ns
+            self.record.size_bytes = self.original_record.size_bytes
+            self.record.asset_mtime_ns = self.original_record.asset_mtime_ns
+            self.record.asset_size_bytes = self.original_record.asset_size_bytes
+            self.record.asset_revision = self.original_record.asset_revision
+            return
         if self.backup_path.exists():
             os.replace(self.backup_path, self.record.path)
             _sync_directory(self.record.path.parent)
@@ -787,6 +821,70 @@ def _stage_record_replacement(
     finally:
         if temporary_path is not None:
             temporary_path.unlink(missing_ok=True)
+
+
+def _stage_record_format_replacement(
+    record: ImageRecord,
+    rendered_path: Path,
+    expected_source_fingerprint: tuple[int, int],
+    destination: Path,
+    publish: Callable[[Path, Path, tuple[int, int]], tuple[str | None, tuple[int, int]] | None],
+    destination_ready: Callable[[Path, tuple[int, int], str | None], None],
+    backup_ready: Callable[[Path, tuple[int, int], str | None, str | None, tuple[int, int], str | None], None] | None = None,
+) -> SourceReplaceStage:
+    """Publish a converted image under its matching extension and retain the old source for rollback."""
+    original_record = replace(record)
+    original_stat = record.path.stat()
+    if destination == record.path:
+        raise FileExistsError(destination)
+    temporary_path: Path | None = None
+    backup_path = record.path.with_name(f".{record.path.name}.mozarie-backup-{uuid.uuid4().hex}")
+    backup_registered = False
+    try:
+        with tempfile.NamedTemporaryFile(dir=destination.parent, suffix=f"{destination.suffix}.mozarie.tmp", delete=False) as handle:
+            temporary_path = Path(handle.name)
+            with rendered_path.open("rb") as rendered:
+                while chunk := rendered.read(IO_CHUNK_BYTES):
+                    handle.write(chunk)
+            handle.flush(); os.fsync(handle.fileno())
+        _assert_source_stat_matches(record, expected_source_fingerprint)
+        if record.source_kind == "filesystem":
+            try:
+                os.utime(temporary_path, ns=(original_stat.st_atime_ns, original_stat.st_mtime_ns))
+            except OSError:
+                LOGGER.warning("Saved image timestamp could not be restored: %s", destination)
+        shutil.copy2(record.path, backup_path)
+        _assert_source_stat_matches(record, expected_source_fingerprint)
+        backup_stat = backup_path.stat(); temporary_stat = temporary_path.stat(); source_stat = record.path.stat()
+        if backup_ready is not None:
+            backup_ready(
+                backup_path, (backup_stat.st_mtime_ns, backup_stat.st_size), SaveJournal.file_identity(backup_path, backup_stat),
+                SaveJournal.file_identity(record.path, source_stat),
+                (temporary_stat.st_mtime_ns, temporary_stat.st_size), SaveJournal.file_identity(temporary_path, temporary_stat),
+            )
+        backup_registered = True
+        temporary_stat = temporary_path.stat()
+        publication = publish(temporary_path, destination, (temporary_stat.st_mtime_ns, temporary_stat.st_size))
+        if publication is None:
+            raise FileExistsError(destination)
+        replacement_identity, replacement_fingerprint = publication
+        destination_ready(destination, replacement_fingerprint, replacement_identity)
+        temporary_path.unlink(missing_ok=True); temporary_path = None
+        _assert_source_stat_matches(record, expected_source_fingerprint)
+        record.path.unlink()
+        stat = destination.stat()
+        record.path = destination
+        record.relative_path = Path(record.relative_path).with_suffix(destination.suffix).as_posix()
+        record.set_asset_fingerprint(stat.st_mtime_ns, stat.st_size)
+        if record.source_kind == "filesystem":
+            record.mtime_ns = stat.st_mtime_ns; record.size_bytes = stat.st_size
+        _sync_directory(destination.parent)
+        return SourceReplaceStage(record, backup_path, original_record, replacement_fingerprint, replacement_identity)
+    finally:
+        if temporary_path is not None:
+            temporary_path.unlink(missing_ok=True)
+        if not backup_registered:
+            _remove_incomplete_backup(backup_path)
 
 
 def _replace_record_with_rendered_output(record: ImageRecord, rendered_path: Path, expected_source_fingerprint: tuple[int, int]) -> None:

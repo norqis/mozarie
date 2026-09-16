@@ -21,7 +21,7 @@ from .core import (
 )
 from .config import SettingsError, validate_output_directory_ready
 from .image_io import (
-    _assert_source_stat_matches, _stage_record_replacement, _stage_save_with_mask, calculate_block_size, open_image, read_stable_source_bytes, render_with_mask, render_output, output_format_matches_source,
+    _assert_source_stat_matches, _stage_record_replacement, _stage_record_format_replacement, _stage_save_with_mask, calculate_block_size, mask_alpha_or_luma, open_image, read_stable_source_bytes, render_with_mask, render_output, output_format_matches_source,
     decode_draft_masks, draft_manual_exclusion_forced, save_with_mask,
     unique_session_import_destination, write_rendered_copy,
 )
@@ -384,7 +384,7 @@ class SavingMixin:
                         try:
                             self.materialize_candidate_mask(candidate, image_id)
                             with open_image(candidate.mask_path) as mask_image:
-                                candidate_mask = expand_mask(np.asarray(mask_image.convert("L"), dtype=np.uint8), candidate.expand_px)
+                                candidate_mask = expand_mask(mask_alpha_or_luma(mask_image), candidate.expand_px)
                         except FileNotFoundError as exc:
                             with self.lock:
                                 if self.images.get(image_id) is not None:
@@ -508,6 +508,7 @@ class SavingMixin:
         quarantine_path: Path | None = None
         published_output: tuple[Path, tuple[int, int], str | None] | None = None
         source_delete_pending = False
+        format_replaced = False
 
         def token_allows_action(details: BrowserSaveToken) -> bool:
             if details.no_effect:
@@ -566,8 +567,6 @@ class SavingMixin:
                             or token_details.flip_horizontal != record.flip_horizontal or token_details.flip_vertical != record.flip_vertical
                             or token_details.source_flip_horizontal != record.source_flip_horizontal or token_details.source_flip_vertical != record.source_flip_vertical):
                         raise ClientError("反転状態が変更されました。保存をやり直してください。", "save_state_changed")
-                    if source_action == "overwrite" and not output_format_matches_source(record, token_details.output_format):
-                        raise ClientError("形式変換はコピー保存で行ってください。", "input_invalid")
                     if not token_allows_action(token_details):
                         raise ClientError("保存確認トークンと元画像の処理が一致しません。保存をやり直してください。", "save_state_changed")
                     catalog_invalid = token_details.catalog_generation != self.catalog_generation or record is None
@@ -620,14 +619,32 @@ class SavingMixin:
                         self.save_journal.published(save_token, destination_fingerprint, identity)
                     if source_action == "overwrite":
                         assert token_details.rendered_path is not None
-                        _stage_record_replacement(
-                            record_snapshot, token_details.rendered_path, token_details.source_fingerprint,
-                            lambda backup, backup_fingerprint, backup_identity, source_identity, replacement_fingerprint, replacement_identity:
-                                self.save_journal.replacement_backup(
-                                    save_token, record_snapshot.path, backup, backup_fingerprint, backup_identity,
-                                    source_identity, replacement_fingerprint, replacement_identity,
+                        if not output_format_matches_source(record_snapshot, token_details.output_format):
+                            destination = record_snapshot.path.with_suffix(".jpg" if token_details.output_format == "jpg" else ".png")
+                            _stage_record_format_replacement(
+                                record_snapshot, token_details.rendered_path, token_details.source_fingerprint, destination,
+                                lambda staged, final_path, staged_fingerprint:
+                                    self._publish_staged_copy(save_token, staged, final_path, staged_fingerprint),
+                                lambda final_path, fingerprint, identity: (
+                                    self.save_journal.destination(save_token, final_path),
+                                    self.save_journal.published(save_token, fingerprint, identity),
                                 ),
-                        )
+                                lambda backup, backup_fingerprint, backup_identity, source_identity, replacement_fingerprint, replacement_identity:
+                                    self.save_journal.replacement_backup(
+                                        save_token, record_snapshot.path, backup, backup_fingerprint, backup_identity,
+                                        source_identity, replacement_fingerprint, replacement_identity,
+                                    ),
+                            )
+                            format_replaced = True
+                        else:
+                            _stage_record_replacement(
+                                record_snapshot, token_details.rendered_path, token_details.source_fingerprint,
+                                lambda backup, backup_fingerprint, backup_identity, source_identity, replacement_fingerprint, replacement_identity:
+                                    self.save_journal.replacement_backup(
+                                        save_token, record_snapshot.path, backup, backup_fingerprint, backup_identity,
+                                        source_identity, replacement_fingerprint, replacement_identity,
+                                    ),
+                            )
                     else:
                         self._assert_record_stat_matches(record_snapshot)
                     if source_action == "deleted":
@@ -693,6 +710,7 @@ class SavingMixin:
                             image_id,
                             mtime_ns=persisted_mtime if source_action == "overwrite" else None,
                             size_bytes=persisted_size if source_action == "overwrite" else None,
+                            relative_path=record_snapshot.relative_path if source_action == "overwrite" and format_replaced else None,
                             clear_workspace=deleted,
                             delete_image=deleted,
                             source_flip_horizontal=record_snapshot.flip_horizontal if source_action == "overwrite" else None,
@@ -727,6 +745,8 @@ class SavingMixin:
                     if record is None:
                         raise ClientError("画像一覧が変更されました。保存をやり直してください。", "save_state_changed")
                     if source_action == "overwrite":
+                        record.path = record_snapshot.path
+                        record.relative_path = record_snapshot.relative_path
                         record.source_flip_horizontal = record.flip_horizontal; record.source_flip_vertical = record.flip_vertical
                         record.transform_revision += 1
                         record.set_asset_fingerprint(*record_snapshot.asset_fingerprint())
@@ -912,10 +932,13 @@ class SavingMixin:
                     save_token: str | None = None
                     durable_apply_receipt: dict[str, Any] | None = None
                     source_before: ImageRecord | None = None
+                    format_replaced = False
 
                     def restore_source_record() -> None:
                         if source_before is None:
                             return
+                        record.path = source_before.path
+                        record.relative_path = source_before.relative_path
                         record.mtime_ns = source_before.mtime_ns
                         record.size_bytes = source_before.size_bytes
                         record.asset_mtime_ns = source_before.asset_mtime_ns
@@ -924,6 +947,13 @@ class SavingMixin:
 
                     def rollback_apply_source() -> None:
                         assert save_token is not None
+                        if source_before is None:
+                            # Copy outputs have no source-side mutation to
+                            # restore.  A foreign replacement may deliberately
+                            # keep its journal row pending, but must not turn
+                            # the original image into a recovery failure.
+                            self.save_journal.cleanup(save_token)
+                            return
                         if self.save_journal.cleanup(save_token):
                             restore_source_record()
                             return
@@ -949,8 +979,6 @@ class SavingMixin:
                             "元画像の復元を保留しました。外部の変更を確認してMozarieを再起動してください。",
                             "save_recovery_pending",
                         )
-                    if not output_format_matches_source(record, output_format) and not copy_to_default:
-                        raise ClientError("形式変換はコピー保存で行ってください。", "input_invalid")
                     if no_effect:
                         output = read_stable_source_bytes(record, source_fingerprint); output_suffix = record.path.suffix.lower()
                     else:
@@ -958,35 +986,73 @@ class SavingMixin:
                     target_record = replace(record, path=record.path.with_suffix(output_suffix))
                     output_path = self._reserve_output_destination(target_record, suffix, output_directory) if copy_to_default else record.path
                     if copy_to_default:
+                        output_path.parent.mkdir(parents=True, exist_ok=True)
+                    rendered_dir = (output_path.parent / ".mozarie-staging") if copy_to_default else (self.cache_dir / "apply-render")
+                    rendered_dir.mkdir(parents=True, exist_ok=True)
+                    with tempfile.NamedTemporaryFile(dir=rendered_dir, suffix=output_suffix, delete=False) as handle:
+                        stage_path = Path(handle.name); handle.write(output); handle.flush()
+                    save_token = f"apply-{uuid.uuid4().hex}"
+                    stage_stat = stage_path.stat()
+                    self.save_journal.reserve(save_token, record.image_id, record.asset_revision, output_path if copy_to_default else None, stage_path)
+                    self.save_journal.update_stage(save_token, stage_path, (stage_stat.st_mtime_ns, stage_stat.st_size))
+                    if copy_to_default:
                         try:
-                            write_rendered_copy(output_path, output)
-                        finally:
+                            publication = self._publish_staged_copy(save_token, stage_path, output_path, (stage_stat.st_mtime_ns, stage_stat.st_size))
+                            if publication is None:
+                                output_path = self._reassign_output_destination(output_path)
+                                self.save_journal.destination(save_token, output_path)
+                                publication = self._publish_staged_copy(save_token, stage_path, output_path, (stage_stat.st_mtime_ns, stage_stat.st_size))
+                            if publication is None:
+                                raise ClientError("同名ファイルが追加されました。保存をやり直してください。", "save_state_changed")
+                            identity, destination_fingerprint = publication
+                            if identity is None or self._file_identity(output_path, output_path.stat()) != identity:
+                                raise ClientError("保存先の出力が変更されました。保存をやり直してください。", "save_state_changed")
+                            self.save_journal.published(save_token, destination_fingerprint, identity)
+                        except Exception:
+                            rollback_apply_source()
                             self._release_output_destination(output_path)
+                            raise
+                        finally:
+                            stage_path.unlink(missing_ok=True)
                     else:
                         if not no_effect:
-                            rendered_dir = self.cache_dir / "apply-render"; rendered_dir.mkdir(parents=True, exist_ok=True)
-                            with tempfile.NamedTemporaryFile(dir=rendered_dir, suffix=output_suffix, delete=False) as handle:
-                                stage_path = Path(handle.name); handle.write(output); handle.flush()
                             source_before = replace(record)
-                            save_token = f"apply-{uuid.uuid4().hex}"
-                            stage_stat = stage_path.stat()
-                            self.save_journal.reserve(save_token, record.image_id, record.asset_revision, None, stage_path)
-                            self.save_journal.update_stage(save_token, stage_path, (stage_stat.st_mtime_ns, stage_stat.st_size))
                             try:
-                                _stage_record_replacement(
-                                    record, stage_path, source_fingerprint,
-                                    lambda backup, backup_fingerprint, backup_identity, source_identity, replacement_fingerprint, replacement_identity:
-                                        self.save_journal.replacement_backup(
-                                            save_token, record.path, backup, backup_fingerprint, backup_identity,
-                                            source_identity, replacement_fingerprint, replacement_identity,
+                                if output_format_matches_source(record, output_format):
+                                    _stage_record_replacement(
+                                        record, stage_path, source_fingerprint,
+                                        lambda backup, backup_fingerprint, backup_identity, source_identity, replacement_fingerprint, replacement_identity:
+                                            self.save_journal.replacement_backup(
+                                                save_token, record.path, backup, backup_fingerprint, backup_identity,
+                                                source_identity, replacement_fingerprint, replacement_identity,
+                                            ),
+                                    )
+                                else:
+                                    destination = record.path.with_suffix(output_suffix)
+                                    _stage_record_format_replacement(
+                                        record, stage_path, source_fingerprint, destination,
+                                        lambda staged, final_path, staged_fingerprint:
+                                            self._publish_staged_copy(save_token, staged, final_path, staged_fingerprint),
+                                        lambda final_path, fingerprint, identity: (
+                                            self.save_journal.destination(save_token, final_path),
+                                            self.save_journal.published(save_token, fingerprint, identity),
                                         ),
-                                )
+                                        lambda backup, backup_fingerprint, backup_identity, source_identity, replacement_fingerprint, replacement_identity:
+                                            self.save_journal.replacement_backup(
+                                                save_token, record.path, backup, backup_fingerprint, backup_identity,
+                                                source_identity, replacement_fingerprint, replacement_identity,
+                                            ),
+                                    )
+                                    format_replaced = True
+                                    output_path = record.path
                             except Exception:
                                 rollback_apply_source()
                                 raise
                             finally:
                                 stage_path.unlink(missing_ok=True)
                             output_stat = record.path.stat()
+                        else:
+                            stage_path.unlink(missing_ok=True)
                     # Files are fully written before the state mutation. Saving
                     # never clears candidates or manual workspace.
                     workspace_committed = False
@@ -1001,14 +1067,15 @@ class SavingMixin:
                             if save_token is not None:
                                 durable_apply_receipt = {
                                     "token": save_token, "kind": "apply", "imageId": record.image_id,
-                                    "revision": record.asset_revision, "sourceAction": "overwrite",
+                                    "revision": record.asset_revision, "sourceAction": "keep" if copy_to_default else "overwrite",
                                     "cleared": False, "stale": False, "deleted": False,
-                                    "catalogGeneration": self.catalog_generation, "outputPath": str(record.path),
+                                    "catalogGeneration": self.catalog_generation, "outputPath": str(output_path),
                                 }
                             self.workspace_store.commit_save(
                                 record.image_id,
                                 mtime_ns=None if copy_to_default or no_effect else output_stat.st_mtime_ns,
                                 size_bytes=None if copy_to_default or no_effect else output_stat.st_size,
+                                relative_path=record.relative_path if format_replaced else None,
                                 clear_workspace=False,
                                 source_flip_horizontal=record.flip_horizontal if not copy_to_default and not no_effect else None,
                                 source_flip_vertical=record.flip_vertical if not copy_to_default and not no_effect else None,
@@ -1017,6 +1084,8 @@ class SavingMixin:
                             workspace_committed = True
                             if not copy_to_default and not no_effect:
                                 live_record = self.images[record.image_id]
+                                live_record.path = record.path
+                                live_record.relative_path = record.relative_path
                                 live_record.mtime_ns = output_stat.st_mtime_ns
                                 live_record.size_bytes = output_stat.st_size
                                 live_record.set_asset_fingerprint(*record.asset_fingerprint())
@@ -1033,10 +1102,8 @@ class SavingMixin:
                     except Exception:
                         if save_token is not None and not workspace_committed:
                             rollback_apply_source()
-                        # A copy is not committed until its workspace update
-                        # succeeds.  Remove it so retry keeps the same name.
                         if copy_to_default:
-                            output_path.unlink(missing_ok=True)
+                            self._release_output_destination(output_path)
                         raise
                     if save_token is not None and durable_apply_receipt is not None:
                         try:
@@ -1046,6 +1113,8 @@ class SavingMixin:
                             LOGGER.warning("保存ジャーナルの後処理を保留しました: %s", exc)
                         for thumbnail_path in (self.cache_dir / "thumbnails").glob(f"{record.image_id}-*.jpg"):
                             thumbnail_path.unlink(missing_ok=True)
+                    if copy_to_default:
+                        self._release_output_destination(output_path)
                     if not no_effect:
                         self.invalidate_sam_image(record.image_id)
                     self._set_job_current(record.relative_path, job_generation, catalog_generation)

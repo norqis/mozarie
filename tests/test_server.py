@@ -2945,7 +2945,6 @@ class MozarieTests(unittest.TestCase):
             completion_lock = threading.Lock()
             record_indexes = {record.image_id: index for index, record in enumerate(records)}
             output_paths = {record.image_id: root / "copies" / f"{index}.png" for index, record in enumerate(records)}
-            written_paths: list[Path] = []
 
             def render_in_inverse_order(record, _mask, _block_size, *_args, **_kwargs):
                 index = record_indexes[record.image_id]
@@ -2970,9 +2969,6 @@ class MozarieTests(unittest.TestCase):
                         completion_order.append(index)
                 return f"rendered-{index}".encode("ascii"), ".png", "image/png"
 
-            def capture_copy(destination, _output):
-                written_paths.append(destination)
-
             def output_destination(record, _suffix, _reserved):
                 return output_paths[record.image_id]
 
@@ -2982,8 +2978,7 @@ class MozarieTests(unittest.TestCase):
                 kwargs={"copy_to_default": True, "saving_parallelism": 2},
             )
             with patch.object(state, "_reserve_output_destination", side_effect=lambda record, suffix, _directory: output_destination(record, suffix, state.reserved_output_paths)), \
-                 patch.object(saving_module, "render_output", side_effect=render_in_inverse_order), \
-                 patch.object(saving_module, "write_rendered_copy", side_effect=capture_copy):
+                 patch.object(saving_module, "render_output", side_effect=render_in_inverse_order):
                 thread.start()
                 self.assertTrue(two_workers_started.wait(2))
                 self.assertEqual(set(started), {0, 1})
@@ -2997,7 +2992,8 @@ class MozarieTests(unittest.TestCase):
             self.assertEqual(state.job.state, "complete")
             self.assertEqual(state.job.completed_image_ids, image_ids)
             self.assertEqual(state.job.outputs, [str(output_paths[record.image_id]) for record in records])
-            self.assertEqual(set(written_paths), set(output_paths.values()))
+            self.assertEqual({Path(path) for path in state.job.outputs}, set(output_paths.values()))
+            self.assertTrue(all(path.is_file() for path in output_paths.values()))
 
     def test_parallel_apply_failure_stops_workers_from_claiming_more_records(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -6087,20 +6083,18 @@ class MozarieTests(unittest.TestCase):
             records = [state.image_for_id(image_id) for image_id in (first_id, second_id)]
             state.job = core_module.Job(started_at=time.time(), kind="apply", state="running", total=2, image_ids=(first_id, second_id))
             output = root / "output.png"
-            written: list[Path] = []
-
             def colliding_destination(_record, _suffix, reserved):
                 return output if output not in reserved else root / "output_2.png"
 
-            with patch.object(state, "_reserve_output_destination", side_effect=lambda record, suffix, _directory: colliding_destination(record, suffix, state.reserved_output_paths)), \
-                 patch.object(saving_module, "write_rendered_copy", side_effect=lambda path, _data: written.append(path)):
+            with patch.object(state, "_reserve_output_destination", side_effect=lambda record, suffix, _directory: colliding_destination(record, suffix, state.reserved_output_paths)):
                 state._apply_worker(
                     records, 100, {first_id: np.zeros((16, 16), dtype=np.uint8), second_id: self._mask(16, 16)},
                     copy_to_default=True, saving_parallelism=2,
                 )
 
-            self.assertEqual(state.job.outputs, [str(output), str(output)])
-            self.assertEqual(written, [output, output])
+            self.assertEqual(state.job.outputs[0], str(output))
+            self.assertNotEqual(state.job.outputs[0], state.job.outputs[1])
+            self.assertTrue(all(Path(path).is_file() for path in state.job.outputs))
 
     def test_copy_save_mask_failure_releases_later_destination_reservation(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -8544,13 +8538,13 @@ image_io._stage_record_replacement(record, rendered, (source.stat().st_mtime_ns,
             candidate = Candidate("candidate", "penis", 0.9, mask_path)
             state.candidates[record.image_id] = [candidate]
             revision = state._touch_candidates(record.image_id)
+            state.job = core_module.Job(started_at=time.time(), kind="apply", state="running", total=1, image_ids=(record.image_id,))
 
-            with patch.object(saving_module, "render_output", wraps=saving_module.render_output) as render, \
-                 patch.object(saving_module, "write_rendered_copy") as write_copy:
+            with patch.object(saving_module, "render_output", wraps=saving_module.render_output) as render:
                 state._apply_worker([record], 100, {record.image_id: self._mask(16, 16)}, copy_to_default=True)
-            write_copy.assert_called_once()
             self.assertEqual(render.call_count, 1)
             self.assertEqual(source.read_bytes(), source_bytes)
+            self.assertTrue(Path(state.job.outputs[0]).is_file())
             self.assertEqual(state.candidates[record.image_id], [candidate])
             self.assertEqual(state._candidate_revision(record.image_id), revision)
             self.assertTrue(mask_path.is_file())
@@ -8577,6 +8571,60 @@ image_io._stage_record_replacement(record, rendered, (source.stat().st_mtime_ns,
             self.assertEqual(state.candidates[image_id], [candidate])
             self.assertTrue(mask_path.is_file())
             self.assertEqual(list(output.rglob("*.png")), [])
+            self.assertEqual(state._candidate_revision(image_id), revision)
+
+    def test_background_copy_reassigns_when_an_external_file_appears_after_reservation(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); source = root / "source.png"; output = root / "copies"; output.mkdir()
+            Image.new("RGB", (16, 16), "white").save(source)
+            state = self.new_state(); image_id = state.set_root(str(root))[0]["id"]
+            record = state.image_for_id(image_id)
+            state.job = core_module.Job(started_at=time.time(), kind="apply", state="running", total=1, image_ids=(image_id,))
+            original_publish = state._publish_staged_copy
+            foreign = b"external file created after reservation"
+            appeared = False
+
+            def publish_after_external_reservation(token, staged, destination, fingerprint):
+                nonlocal appeared
+                self.assertEqual(staged.parent, destination.parent / ".mozarie-staging")
+                if not appeared:
+                    appeared = True
+                    destination.write_bytes(foreign)
+                return original_publish(token, staged, destination, fingerprint)
+
+            with patch.object(state, "_publish_staged_copy", side_effect=publish_after_external_reservation):
+                state._apply_worker([record], 100, {image_id: self._mask(16, 16)}, copy_to_default=True, output_directory=output)
+
+            original_destination = output / "source_censored.png"
+            self.assertEqual(state.job.state, "complete")
+            self.assertEqual(original_destination.read_bytes(), foreign)
+            self.assertNotEqual(Path(state.job.outputs[0]), original_destination)
+            self.assertTrue(Path(state.job.outputs[0]).is_file())
+
+    def test_background_copy_database_failure_preserves_an_external_output_replacement(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); source = root / "source.png"; output = root / "copies"; output.mkdir()
+            Image.new("RGB", (16, 16), "white").save(source)
+            state = self.new_state(); image_id = state.set_root(str(root))[0]["id"]
+            record = state.image_for_id(image_id)
+            candidate_path = state.cache_dir / image_id / "candidate.png"; candidate_path.parent.mkdir(parents=True, exist_ok=True)
+            Image.fromarray(self._mask(16, 16)).save(candidate_path)
+            candidate = Candidate("candidate", "penis", .9, candidate_path)
+            state.candidates[image_id] = [candidate]; revision = state._touch_candidates(image_id)
+            foreign = b"external replacement before database failure"
+
+            def fail_after_external_replacement(*_args, **_kwargs):
+                published = next(output.rglob("*.png"))
+                published.unlink(); published.write_bytes(foreign)
+                raise OSError("database locked")
+
+            with patch.object(state.workspace_store, "commit_save", side_effect=fail_after_external_replacement):
+                state._apply_worker([record], 100, {image_id: self._mask(16, 16)}, copy_to_default=True, output_directory=output)
+
+            self.assertEqual(state.job.state, "error")
+            self.assertEqual(next(output.rglob("*.png")).read_bytes(), foreign)
+            self.assertEqual(state.candidates[image_id], [candidate])
+            self.assertTrue(candidate_path.is_file())
             self.assertEqual(state._candidate_revision(image_id), revision)
 
     def test_background_overwrite_database_failure_restores_the_journaled_source(self):
@@ -8657,6 +8705,28 @@ image_io._stage_record_replacement(record, rendered, (source.stat().st_mtime_ns,
             state.shutdown()
             recovered = self.new_state()
             self.assertFalse(Path(str(row["quarantine"])).exists())
+            self.assertIsNone(recovered.save_journal.row(token))
+            self.assertEqual(recovered.workspace_store.apply_save_receipts(), [])
+
+    def test_background_copy_receipt_recovers_the_private_stage_at_startup_without_removing_output(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); source = root / "source.png"; output = root / "copies"; output.mkdir()
+            Image.new("RGB", (16, 16), "white").save(source)
+            state = self.new_state(); image_id = state.set_root(directory)[0]["id"]
+            record = replace(state.image_for_id(image_id))
+            state.job = core_module.Job(started_at=time.time(), kind="apply", state="running", total=1, image_ids=(image_id,))
+
+            with patch.object(state.save_journal, "recover_token", side_effect=sqlite3.OperationalError("journal locked")):
+                state._apply_worker([record], 100, {image_id: self._mask(16, 16)}, copy_to_default=True, output_directory=output)
+
+            self.assertEqual(state.job.state, "complete")
+            receipt = state.workspace_store.apply_save_receipts()[0]; token = str(receipt["token"])
+            saved = Path(str(receipt["outputPath"])); row = state.save_journal.row(token)
+            self.assertTrue(saved.is_file())
+            self.assertFalse(Path(str(row["staged"])).exists())
+            state.shutdown()
+            recovered = self.new_state()
+            self.assertTrue(saved.is_file())
             self.assertIsNone(recovered.save_journal.row(token))
             self.assertEqual(recovered.workspace_store.apply_save_receipts(), [])
 

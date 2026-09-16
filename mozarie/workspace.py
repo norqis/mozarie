@@ -1579,6 +1579,7 @@ class WorkspaceStore:
                 raise
 
     def commit_save(self, image_id: str, *, mtime_ns: int | None = None, size_bytes: int | None = None,
+                    relative_path: str | None = None,
                     candidate_revision: int | None = None,
                     clear_workspace: bool, delete_image: bool = False,
                     source_flip_horizontal: bool | None = None, source_flip_vertical: bool | None = None,
@@ -1592,7 +1593,10 @@ class WorkspaceStore:
                 if delete_image:
                     db.execute("DELETE FROM images WHERE image_id=?", (image_id,))
                 elif mtime_ns is not None and size_bytes is not None:
-                    db.execute("UPDATE images SET mtime_ns=?,size_bytes=?,updated_at=? WHERE image_id=?", (mtime_ns, size_bytes, time.time_ns(), image_id))
+                    if relative_path is None:
+                        db.execute("UPDATE images SET mtime_ns=?,size_bytes=?,updated_at=? WHERE image_id=?", (mtime_ns, size_bytes, time.time_ns(), image_id))
+                    else:
+                        db.execute("UPDATE images SET relative_path=?,mtime_ns=?,size_bytes=?,updated_at=? WHERE image_id=?", (relative_path, mtime_ns, size_bytes, time.time_ns(), image_id))
                 if candidate_revision is not None and not delete_image:
                     db.execute("UPDATE images SET candidate_revision=?,reviewed=0,updated_at=? WHERE image_id=?", (candidate_revision, time.time_ns(), image_id))
                 if source_flip_horizontal is not None and source_flip_vertical is not None and not delete_image:
