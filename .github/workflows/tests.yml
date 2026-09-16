@@ -68,7 +68,7 @@ jobs:
         with:
           node-version: '22'
       - run: python -m venv .venv-test
-      - run: .\.venv-test\Scripts\python.exe -m pip install -r requirements-test.txt
+      - run: .\.venv-test\Scripts\python.exe -m pip install "coverage>=7.10,<8"
       - if: always()
         uses: actions/download-artifact@v7
         with:
