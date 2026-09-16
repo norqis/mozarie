@@ -343,7 +343,15 @@ class JobsSavingCoverageTests(unittest.TestCase):
             cleanup_started.set()
             self.assertTrue(allow_cleanup.wait(THREAD_TIMEOUT))
 
-        cleanup = threading.Thread(target=state._release_gpu_job_memory)
+        cleanup_result: dict[str, BaseException] = {}
+
+        def cleanup_memory() -> None:
+            try:
+                state._release_gpu_job_memory()
+            except BaseException as exc:
+                cleanup_result["error"] = exc
+
+        cleanup = threading.Thread(target=cleanup_memory)
 
         def update_settings():
             settings_attempted.set()
@@ -372,6 +380,7 @@ class JobsSavingCoverageTests(unittest.TestCase):
                 join_threads(cleanup, settings, boundary)
         self.assertTrue(settings_entered.is_set())
         self.assertTrue(boundary_entered.is_set())
+        self.assertNotIn("error", cleanup_result)
 
     def test_job_races_and_remaining_worker_branches(self) -> None:
         state = self.make_jobs()
