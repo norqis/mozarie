@@ -22,6 +22,7 @@ from unittest.mock import patch
 from PIL import Image
 from PIL.PngImagePlugin import PngInfo
 
+from mozarie.catalog import CatalogMixin
 from mozarie.workspace import WorkspaceOpenError, WorkspaceStore, _chunks
 
 
@@ -302,12 +303,84 @@ class ProjectWorkspaceCoverageTests(unittest.TestCase):
             self.assertEqual(set(delta["manual"]), {"add"})
             self.assertEqual(delta["manual"]["add"]["box"], [3, 4, 1, 1])
             self.assertEqual(store.restore_history(image_id, "undo"), [image_id])
-            self.assertEqual(store.manual(image_id, lambda value: value)["add"], base)
+            self.assertEqual(store.manual(image_id, lambda value: value)["add"], WorkspaceStore._encode_png_mask(base))
             self.assertEqual(store.restore_history(image_id, "redo"), [image_id])
-            self.assertEqual(store.manual(image_id, lambda value: value)["add"], changed)
+            self.assertEqual(store.manual(image_id, lambda value: value)["add"], WorkspaceStore._encode_png_mask(changed))
             reopened = WorkspaceStore(root)
             restored = reopened.manual(image_id, lambda value: value)
-            self.assertEqual((restored["add"], restored["exclusion"], restored["exclusionErase"]), (changed, base, base))
+            self.assertEqual((restored["add"], restored["exclusion"], restored["exclusionErase"]), (WorkspaceStore._encode_png_mask(changed), base, base))
+
+    def test_manual_history_preserves_three_alpha_layers_as_isolated_canonical_masks(self):
+        def alpha_mask(size: tuple[int, int], point: tuple[int, int]) -> bytes:
+            image = Image.new("RGBA", size, (255, 255, 255, 0)); image.putpixel(point, (255, 255, 255, 255))
+            output = io.BytesIO(); image.save(output, format="PNG"); return output.getvalue()
+
+        def assert_mask(raw: bytes | None, size: tuple[int, int], point: tuple[int, int] | None) -> None:
+            if point is None:
+                if raw is None: return
+                with Image.open(io.BytesIO(raw)) as image:
+                    self.assertEqual(sum(pixel[3] > 0 for pixel in image.convert("RGBA").getdata()), 0)
+                return
+            self.assertIsNotNone(raw)
+            with Image.open(io.BytesIO(raw)) as image:
+                self.assertEqual(image.mode, "RGBA")
+                self.assertEqual(image.size, size)
+                self.assertTrue(all(pixel[:3] == (255, 255, 255) for pixel in image.getdata()))
+                self.assertEqual(image.getpixel(point), (255, 255, 255, 255))
+                self.assertEqual(sum(pixel[3] > 0 for pixel in image.getdata()), 1)
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); store, _, image_id = self.store_image(root)
+            size = (8, 7); points = {"add": (1, 1), "exclusion": (5, 2), "exclusionErase": (2, 5)}
+            layers = {name: alpha_mask(size, point) for name, point in points.items()}
+            payload = {"add": None, "exclusion": None, "exclusionErase": None, "removedCandidateIds": [], "hasEffectiveMask": False}
+            for name in ("add", "exclusion", "exclusionErase"):
+                payload = {**payload, name: layers[name]}
+                store.save_manual(image_id, payload, lambda value: value)
+            db = sqlite3.connect(store.path)
+            try:
+                deltas = [json.loads(row[0])["manual"] for row in db.execute(
+                    "SELECT delta_json FROM history_entries WHERE image_id=? ORDER BY entry_id", (image_id,)
+                )]
+            finally:
+                db.close()
+            self.assertEqual([list(delta) for delta in deltas], [["add"], ["exclusion"], ["erase"]])
+            self.assertEqual([next(iter(delta.values()))["box"] for delta in deltas], [[1, 1, 1, 1], [5, 2, 1, 1], [2, 5, 1, 1]])
+
+            expected = [points[name] for name in ("add", "exclusion", "exclusionErase")]
+            for direction, indices in (("undo", (2, 1, 0)), ("redo", (0, 1, 2))):
+                if direction == "redo": expected = [None, None, None]
+                for index in indices:
+                    self.assertEqual(store.restore_history(image_id, direction), [image_id])
+                    expected[index] = None if direction == "undo" else points[("add", "exclusion", "exclusionErase")[index]]
+                    manual = store.manual(image_id, lambda value: value)
+                    if manual is None:
+                        self.assertEqual(expected, [None, None, None])
+                        continue
+                    for layer_index, name in enumerate(("add", "exclusion", "exclusionErase")):
+                        with self.subTest(direction=direction, restored=name, layer=("add", "exclusion", "exclusionErase")[layer_index]):
+                            assert_mask(manual[name], size, expected[layer_index])
+
+    def test_manual_api_normalizes_legacy_grayscale_masks_without_database_migration(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); store, _, image_id = self.store_image(root)
+            legacy = Image.new("L", (4, 3), 0); legacy.putpixel((2, 1), 255)
+            output = io.BytesIO(); legacy.save(output, format="PNG"); raw = output.getvalue()
+            store.save_manual(image_id, {"add": raw, "exclusion": None, "exclusionErase": None,
+                                         "removedCandidateIds": [], "hasEffectiveMask": True}, lambda value: value)
+            exposed = store.manual(image_id, CatalogMixin._encode_workspace_mask)["add"]
+            self.assertTrue(exposed.startswith("data:image/png;base64,"))
+            encoded = base64.b64decode(exposed.split(",", 1)[1])
+            with Image.open(io.BytesIO(encoded)) as image:
+                self.assertEqual(image.mode, "RGBA")
+                self.assertEqual(image.getpixel((2, 1)), (255, 255, 255, 255))
+                self.assertTrue(all(pixel[:3] == (255, 255, 255) for pixel in image.getdata()))
+                self.assertEqual(sum(pixel[3] > 0 for pixel in image.getdata()), 1)
+            db = sqlite3.connect(store.path)
+            try:
+                self.assertEqual(db.execute("SELECT add_png FROM manual_edits WHERE image_id=?", (image_id,)).fetchone()[0], raw)
+            finally:
+                db.close()
 
     def test_history_delta_validation_gc_groups_and_atomicity(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -320,7 +393,7 @@ class ProjectWorkspaceCoverageTests(unittest.TestCase):
             image = Image.open(io.BytesIO(two)); image.putpixel((1, 1), 255); data = io.BytesIO(); image.save(data, format="PNG"); two = data.getvalue()
             change = WorkspaceStore._manual_xor(one, two)
             self.assertIsNotNone(change)
-            self.assertEqual(WorkspaceStore._apply_manual_xor(one, change, forward=True), two)
+            self.assertEqual(WorkspaceStore._apply_manual_xor(one, change, forward=True), WorkspaceStore._encode_png_mask(two))
             self.assertIsNone(WorkspaceStore._apply_manual_xor(one, {"existsBefore": False, "existsAfter": False, "box": None}, forward=True))
             for malformed in ({"existsAfter": True, "existsBefore": False, "box": [0]}, {"existsAfter": True, "existsBefore": False, "box": [9, 0, 1, 1], "size": [4, 4], "png": WorkspaceStore._pack_blob(self.png())}):
                 with self.subTest(malformed=malformed), self.assertRaisesRegex(ValueError, "history"):
@@ -706,8 +779,8 @@ class ProjectWorkspaceCoverageTests(unittest.TestCase):
         stream = io.BytesIO(); changed_image.save(stream, format="PNG"); changed = stream.getvalue()
         delta = WorkspaceStore._manual_xor(empty, changed, (2, 3, 3, 4))
         self.assertEqual(delta and delta["box"], [2, 3, 1, 1])
-        self.assertEqual(WorkspaceStore._apply_manual_xor(empty, delta or {}, forward=True), changed)
-        self.assertEqual(WorkspaceStore._apply_manual_xor(changed, delta or {}, forward=False), empty)
+        self.assertEqual(WorkspaceStore._apply_manual_xor(empty, delta or {}, forward=True), WorkspaceStore._encode_png_mask(changed))
+        self.assertEqual(WorkspaceStore._apply_manual_xor(changed, delta or {}, forward=False), WorkspaceStore._encode_png_mask(empty))
         with self.assertRaisesRegex(ValueError, "dirty region"):
             WorkspaceStore._manual_xor(empty, changed, (0, 0, 6, 1))
 

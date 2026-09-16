@@ -380,6 +380,18 @@ class WorkspaceStore:
         raise ValueError("workspace mask has no alpha or grayscale channel")
 
     @classmethod
+    def _encode_png_mask(cls, raw: bytes | None) -> bytes | None:
+        """Return the browser's canonical transparent-white binary PNG mask."""
+        alpha = cls._decode_png_mask(raw)
+        if alpha is None:
+            return None
+        image = Image.new("RGBA", alpha.size, (255, 255, 255, 0))
+        image.putalpha(alpha)
+        output = io.BytesIO()
+        image.save(output, format="PNG")
+        return output.getvalue()
+
+    @classmethod
     def _require_png_mask(cls, raw: bytes | None) -> None:
         if raw is not None:
             cls._decode_png_mask(raw)
@@ -2100,15 +2112,15 @@ class WorkspaceStore:
     def _history_json(state: dict[str, Any]) -> str:
         return json.dumps(WorkspaceStore._history_public_state(state), ensure_ascii=False, separators=(",", ":"), sort_keys=True)
 
-    @staticmethod
-    def _manual_xor(before: bytes | None, after: bytes | None, roi: tuple[int, int, int, int] | None = None) -> dict[str, Any] | None:
+    @classmethod
+    def _manual_xor(cls, before: bytes | None, after: bytes | None, roi: tuple[int, int, int, int] | None = None) -> dict[str, Any] | None:
         """Encode only the changed rectangle of a binary manual layer."""
         if before is None and after is None: return None
         if before == after: return None
         try:
-            source = before if before is not None else after
+            source = cls._decode_png_mask(before if before is not None else after)
             assert source is not None
-            with open_image(io.BytesIO(source)) as image: width, height = image.size
+            width, height = source.size
             if roi is None:
                 left, top, right, bottom = 0, 0, width, height
             else:
@@ -2117,10 +2129,11 @@ class WorkspaceStore:
                     raise ValueError("workspace manual dirty region is invalid")
             def pixels(raw: bytes | None) -> np.ndarray:
                 if raw is None: return np.zeros((bottom - top, right - left), dtype=np.uint8)
-                with open_image(io.BytesIO(raw)) as image:
-                    if image.size != (width, height):
-                        raise ValueError("workspace manual mask dimensions are invalid")
-                    return np.asarray(image.crop((left, top, right, bottom)).convert("L"), dtype=np.uint8) > 0
+                image = cls._decode_png_mask(raw)
+                assert image is not None
+                if image.size != (width, height):
+                    raise ValueError("workspace manual mask dimensions are invalid")
+                return np.asarray(image.crop((left, top, right, bottom)), dtype=np.uint8) > 0
             changed = np.logical_xor(pixels(before), pixels(after))
             ys, xs = np.where(changed)
             if not len(xs): return {"existsBefore": before is not None, "existsAfter": after is not None, "box": None}
@@ -2137,8 +2150,8 @@ class WorkspaceStore:
         old = before.get("_manual_raw") or {}; new = after.get("_manual_raw") or {}
         return {key: value for key in ("add", "exclusion", "erase") if (value := cls._manual_xor(old.get(key), new.get(key), (rois or {}).get(key))) is not None}
 
-    @staticmethod
-    def _apply_manual_xor(raw: bytes | None, change: dict[str, Any], *, forward: bool) -> bytes | None:
+    @classmethod
+    def _apply_manual_xor(cls, raw: bytes | None, change: dict[str, Any], *, forward: bool) -> bytes | None:
         target_exists = bool(change["existsAfter"] if forward else change["existsBefore"])
         box = change.get("box")
         if box is None: return raw if target_exists else None
@@ -2153,19 +2166,24 @@ class WorkspaceStore:
         try:
             if raw is None: canvas = np.zeros((height, width), dtype=np.uint8)
             else:
-                with open_image(io.BytesIO(raw)) as image:
-                    if image.size != (width, height):
-                        raise ValueError("workspace history is invalid")
-                    canvas = (np.asarray(image.convert("L"), dtype=np.uint8) > 0).astype(np.uint8) * 255
-            delta = WorkspaceStore._unpack_blob(encoded)
-            WorkspaceStore._require_png_mask(delta)
+                image = cls._decode_png_mask(raw)
+                assert image is not None
+                if image.size != (width, height):
+                    raise ValueError("workspace history is invalid")
+                canvas = (np.asarray(image, dtype=np.uint8) > 0).astype(np.uint8) * 255
+            delta = cls._unpack_blob(encoded)
+            cls._require_png_mask(delta)
             assert delta is not None
-            with open_image(io.BytesIO(delta)) as image: region = (np.asarray(image.convert("L"), dtype=np.uint8) > 0)
+            image = cls._decode_png_mask(delta)
+            assert image is not None
+            region = np.asarray(image, dtype=np.uint8) > 0
             if region.shape != (box_height, box_width):
                 raise ValueError("workspace history is invalid")
             canvas[top:top + box_height, left:left + box_width] ^= region.astype(np.uint8) * 255
             if not target_exists: return None
-            output = io.BytesIO(); Image.fromarray(canvas).save(output, format="PNG"); return output.getvalue()
+            image = Image.new("RGBA", (width, height), (255, 255, 255, 0))
+            image.putalpha(Image.fromarray(canvas))
+            output = io.BytesIO(); image.save(output, format="PNG"); return output.getvalue()
         except (MemoryError, OSError, UnidentifiedImageError) as exc:
             raise ValueError("workspace history mask cannot be decoded") from exc
 

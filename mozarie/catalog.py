@@ -2513,7 +2513,8 @@ class CatalogMixin:
 
     @staticmethod
     def _encode_workspace_mask(value: bytes | None) -> str:
-        return "" if not value else f"data:image/png;base64,{base64.b64encode(value).decode('ascii')}"
+        canonical = WorkspaceStore._encode_png_mask(value)
+        return "" if canonical is None else f"data:image/png;base64,{base64.b64encode(canonical).decode('ascii')}"
 
     def save_manual_workspace(self, image_id: str, payload: dict[str, Any]) -> None:
         self.image_for_id(image_id)
