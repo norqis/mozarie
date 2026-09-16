@@ -338,7 +338,11 @@ class CatalogMixin:
                 self._publish_job_snapshot_unchecked()
                 self.catalog_generation += 1
                 self._cancel_manual_uploads_unchecked("画像一覧を切り替えました")
-                session = self._detach_session_unchecked()
+                keep_session = self.session_imports_dir is not None and any(
+                    record.source_kind == "session" and record.path.is_relative_to(self.session_imports_dir)
+                    for record in records
+                )
+                session = (None, None) if keep_session else self._detach_session_unchecked()
             self._clear_cache()
             if prehydrated is None:
                 # Cache cleanup intentionally happens before masks are materialised.
@@ -710,7 +714,10 @@ class CatalogMixin:
             records = retained + records
             records.sort(key=lambda record: (record.relative_path.casefold(), record.relative_path, record.image_id))
         try:
-            prehydrated = self._stage_workspace_candidates(records) if catalog_id is not None and prehydrated is None else prehydrated
+            if catalog_id is not None and (
+                prehydrated is None or set(prehydrated) != {record.image_id for record in records}
+            ):
+                prehydrated = self._stage_workspace_candidates(records)
             publish_sources = self.workspace_store.project_sources(catalog_id) if catalog_id is not None else []
         except Exception:
             if created_projectless_id is not None:
