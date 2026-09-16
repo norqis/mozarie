@@ -2,7 +2,9 @@ self.onmessage = ({ data }) => {
   const { pixels, width, height, x, y, tolerance } = data;
   const rgba = new Uint8ClampedArray(pixels); const seedOffset = (y * width + x) * 4;
   const seed = [rgba[seedOffset], rgba[seedOffset + 1], rgba[seedOffset + 2]]; const seen = new Uint8Array(width * height); const spans = [];
-  const matches = (index) => { const offset = index * 4; return Math.max(Math.abs(rgba[offset] - seed[0]), Math.abs(rgba[offset + 1] - seed[1]), Math.abs(rgba[offset + 2] - seed[2])) <= tolerance; };
+  // Canvas color data can retain RGB values where alpha is zero. Those pixels
+  // are not part of the visible image and must never connect two visible runs.
+  const matches = (index) => { const offset = index * 4; return rgba[offset + 3] > 0 && Math.max(Math.abs(rgba[offset] - seed[0]), Math.abs(rgba[offset + 1] - seed[1]), Math.abs(rgba[offset + 2] - seed[2])) <= tolerance; };
   const claimRun = (row, column) => {
     const start = row * width + column;
     if (seen[start] || !matches(start)) return null;

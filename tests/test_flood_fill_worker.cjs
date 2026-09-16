@@ -25,4 +25,14 @@ const horizontal = new Uint8ClampedArray([
 ]);
 self.onmessage({ data: { pixels: horizontal.buffer, width: 3, height: 1, x: 1, y: 0, tolerance: 0 } });
 assert.deepEqual([...response.spans], [0, 0, 3], "a centered seed expands in both directions across its row");
+
+const transparentGap = new Uint8ClampedArray([
+  50, 60, 70, 255, 50, 60, 70, 1, 50, 60, 70, 0, 50, 60, 70, 255, 50, 60, 70, 255,
+]);
+self.onmessage({ data: { pixels: transparentGap.buffer, width: 5, height: 1, x: 0, y: 0, tolerance: 0 } });
+assert.deepEqual([...response.spans], [0, 0, 2], "transparent pixels do not join visible pixels with the same retained RGB values");
+
+const transparentSeed = new Uint8ClampedArray([50, 60, 70, 0]);
+self.onmessage({ data: { pixels: transparentSeed.buffer, width: 1, height: 1, x: 0, y: 0, tolerance: 0 } });
+assert.deepEqual([...response.spans], [], "a transparent seed does not create a fill span");
 console.log("test_flood_fill_worker: passed");
