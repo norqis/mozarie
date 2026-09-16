@@ -55,10 +55,19 @@ from mozarie.image_io import (  # noqa: E402
     calculate_block_size, save_with_mask, _apply_mosaic_to_image, _decode_mask,
     _default_output_destination, render_with_mask,
 )
+
 from mozarie.http import MosaicHandler, _read_mosaic_divisor, _read_detection_parallelism, _read_save_suffix  # noqa: E402
 from mozarie.save_journal import SaveJournal  # noqa: E402
 from mozarie.state import DetectionModels, StudioState  # noqa: E402
 from server import _open_browser, _schedule_browser_open  # noqa: E402
+
+THREAD_TIMEOUT = 30
+
+
+def join_thread(thread: threading.Thread) -> None:
+    thread.join(THREAD_TIMEOUT)
+    if thread.is_alive():
+        raise AssertionError(f"thread did not finish: {thread.name}")
 
 
 class _MetaDevice:
@@ -7066,33 +7075,68 @@ class MozarieTests(unittest.TestCase):
             _output, _record, rendered_revision, token = state.render_browser_save(image_id, revision, 100, None)
             fingerprint_started = threading.Event()
             release = threading.Event()
+            clear_attempted = threading.Event()
             clear_done = threading.Event()
+            commit_done = threading.Event()
             commit_result = {}
+            clear_result = {}
             original_replace = saving_module._stage_record_replacement
+            original_import_lock = state.import_lock
+            clearer_context = threading.local()
+
+            class ObservedImportLock:
+                def __enter__(self):
+                    if getattr(clearer_context, "active", False): clear_attempted.set()
+                    return original_import_lock.__enter__()
+
+                def __exit__(self, *args):
+                    return original_import_lock.__exit__(*args)
+
+                def __getattr__(self, name):
+                    return getattr(original_import_lock, name)
 
             def delayed_replace(record, rendered_path, fingerprint, backup_ready=None):
                 fingerprint_started.set()
-                self.assertTrue(release.wait(2))
+                self.assertTrue(release.wait(THREAD_TIMEOUT))
                 return original_replace(record, rendered_path, fingerprint, backup_ready)
 
-            with patch.object(saving_module, "_stage_record_replacement", side_effect=delayed_replace):
-                commit = threading.Thread(
-                    target=lambda: commit_result.setdefault(
-                        "value", state.commit_browser_save(image_id, rendered_revision, token, "overwrite")
-                    )
-                )
-                commit.start()
-                self.assertTrue(fingerprint_started.wait(2))
-                clearer = threading.Thread(target=lambda: (state.clear_catalog(), clear_done.set()))
-                clearer.start()
-                self.assertFalse(clear_done.is_set())
-                release.set()
-                commit.join(3)
-                clearer.join(3)
+            def run_commit():
+                try:
+                    commit_result["value"] = state.commit_browser_save(image_id, rendered_revision, token, "overwrite")
+                finally:
+                    commit_done.set()
 
-            self.assertFalse(commit.is_alive())
+            def clear_catalog():
+                clearer_context.active = True
+                try:
+                    clear_result["generation"] = state.clear_catalog()
+                finally:
+                    clear_done.set()
+
+            state.import_lock = ObservedImportLock()
+            try:
+                with patch.object(saving_module, "_stage_record_replacement", side_effect=delayed_replace):
+                    commit = threading.Thread(target=run_commit)
+                    clearer = threading.Thread(target=clear_catalog)
+                    try:
+                        commit.start()
+                        self.assertTrue(fingerprint_started.wait(THREAD_TIMEOUT))
+                        clearer.start()
+                        self.assertTrue(clear_attempted.wait(THREAD_TIMEOUT))
+                        self.assertFalse(clear_done.is_set())
+                        release.set()
+                        self.assertTrue(commit_done.wait(THREAD_TIMEOUT), "browser save commit did not finish")
+                        self.assertTrue(clear_done.wait(THREAD_TIMEOUT), "catalog clear did not finish")
+                    finally:
+                        release.set()
+                        join_thread(commit)
+                        join_thread(clearer)
+            finally:
+                state.import_lock = original_import_lock
+
             self.assertTrue(commit_result["value"]["cleared"])
             self.assertTrue(clear_done.is_set())
+            self.assertEqual(clear_result["generation"], state.catalog_generation)
             self.assertEqual(state.list_images(), [])
 
     def test_browser_save_session_overwrite_synchronizes_the_session_image(self):

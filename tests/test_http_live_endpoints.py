@@ -28,6 +28,8 @@ from mozarie.runtime_types import DetectionModels
 from mozarie.http import MosaicHandler
 from mozarie.state import StudioState
 
+THREAD_TIMEOUT = 30
+
 
 class LiveHttpEndpointTests(unittest.TestCase):
     def setUp(self) -> None:
@@ -706,17 +708,21 @@ class LiveHttpEndpointTests(unittest.TestCase):
         entered = threading.Event(); release = threading.Event(); result: dict[str, object] = {}
         original = self.state.workspace_store.set_image_flags
         def delayed(*args, **kwargs):
-            entered.set(); self.assertTrue(release.wait(2)); return original(*args, **kwargs)
+            entered.set(); self.assertTrue(release.wait(THREAD_TIMEOUT)); return original(*args, **kwargs)
         def flag_request() -> None:
             result["response"] = self.request("POST", f"/api/workspace/image/{image_id}", {"hidden": True}, authorized=True)
         with patch.object(self.state.workspace_store, "set_image_flags", side_effect=delayed):
-            worker = threading.Thread(target=flag_request); worker.start()
-            self.assertTrue(entered.wait(1))
-            # The write holds the catalogue transition until SQLite confirms it.
-            # Release it before reading state so the test verifies the durable
-            # transition rather than relying on an implementation-specific lock order.
-            release.set()
-            worker.join(2)
+            worker = threading.Thread(target=flag_request)
+            try:
+                worker.start()
+                self.assertTrue(entered.wait(THREAD_TIMEOUT))
+                # The write holds the catalogue transition until SQLite confirms it.
+                # Release it before reading state so the test verifies the durable
+                # transition rather than relying on an implementation-specific lock order.
+                release.set()
+            finally:
+                release.set()
+                worker.join(THREAD_TIMEOUT)
             self.assertFalse(worker.is_alive())
             status, _headers, body = self.request("GET", "/api/job")
             self.assertEqual(status, 200)

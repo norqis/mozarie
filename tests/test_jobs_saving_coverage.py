@@ -19,6 +19,8 @@ import mozarie.jobs as jobs_module
 from mozarie.jobs import JobsMixin
 from mozarie.saving import SavingMixin
 
+THREAD_TIMEOUT = 30
+
 
 class JobsSavingCoverageTests(unittest.TestCase):
     def make_jobs(self) -> JobsMixin:
@@ -266,7 +268,8 @@ class JobsSavingCoverageTests(unittest.TestCase):
                 with patch.object(state, "_release_gpu_job_memory") as release:
                     state._start_job(kind, [record], worker)
                     assert state.worker_thread is not None
-                    state.worker_thread.join(2)
+                    state.worker_thread.join(THREAD_TIMEOUT)
+                    self.assertFalse(state.worker_thread.is_alive())
                 release.assert_called_once_with()
                 if terminal == "oom":
                     self.assertEqual(retained_tracebacks, [None])
@@ -309,6 +312,8 @@ class JobsSavingCoverageTests(unittest.TestCase):
         state = self.make_jobs()
         cleanup_started = threading.Event()
         allow_cleanup = threading.Event()
+        settings_attempted = threading.Event()
+        boundary_attempted = threading.Event()
         settings_entered = threading.Event()
         boundary_entered = threading.Event()
 
@@ -327,28 +332,37 @@ class JobsSavingCoverageTests(unittest.TestCase):
 
         def release_cache(**_kwargs):
             cleanup_started.set()
-            self.assertTrue(allow_cleanup.wait(2))
+            self.assertTrue(allow_cleanup.wait(THREAD_TIMEOUT))
 
         cleanup = threading.Thread(target=state._release_gpu_job_memory)
 
         def update_settings():
+            settings_attempted.set()
             with state.inference_lock:
                 settings_entered.set()
 
         def run_boundary_inference():
+            boundary_attempted.set()
             with state.inference_lock:
                 boundary_entered.set()
 
         with patch.object(state, "_release_gpu_cache", side_effect=release_cache):
             cleanup.start()
-            self.assertTrue(cleanup_started.wait(2))
+            self.assertTrue(cleanup_started.wait(THREAD_TIMEOUT))
             settings = threading.Thread(target=update_settings)
             boundary = threading.Thread(target=run_boundary_inference)
-            settings.start(); boundary.start()
-            self.assertFalse(settings_entered.wait(.1))
-            self.assertFalse(boundary_entered.wait(.1))
-            allow_cleanup.set()
-            cleanup.join(2); settings.join(2); boundary.join(2)
+            try:
+                settings.start(); boundary.start()
+                self.assertTrue(settings_attempted.wait(THREAD_TIMEOUT))
+                self.assertTrue(boundary_attempted.wait(THREAD_TIMEOUT))
+                self.assertFalse(settings_entered.wait(.1))
+                self.assertFalse(boundary_entered.wait(.1))
+                allow_cleanup.set()
+            finally:
+                allow_cleanup.set()
+                for thread in (cleanup, settings, boundary):
+                    thread.join(THREAD_TIMEOUT)
+                    self.assertFalse(thread.is_alive())
         self.assertFalse(cleanup.is_alive())
         self.assertTrue(settings_entered.is_set())
         self.assertTrue(boundary_entered.is_set())
