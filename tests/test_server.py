@@ -1213,13 +1213,11 @@ class MozarieTests(unittest.TestCase):
         unchanged_invalid = copy.deepcopy(state.settings)
         unchanged_invalid["models"].update({"provider": "gpu", "gpu_device": 1})
         state.settings = unchanged_invalid
-        with patch.object(state_module, "onnx_execution_status", return_value=("cuda", True)), \
-             patch.object(state_module, "torch_module", return_value=types.SimpleNamespace(cuda=cuda)), \
-             patch.object(state.settings_store, "save") as save, \
-             self.assertRaisesRegex(ClientError, "選択したGPU") as raised:
+        with patch.object(state, "_require_supported_gpu", side_effect=AssertionError("unchanged GPU must not be probed")) as probe, \
+             patch.object(state.settings_store, "save", return_value=unchanged_invalid) as save:
             state.update_settings(unchanged_invalid)
-        self.assertEqual(raised.exception.error_code, "gpu_unsupported")
-        save.assert_not_called()
+        probe.assert_not_called()
+        save.assert_called_once_with(unchanged_invalid)
 
     def test_settings_status_rejects_a_gpu_when_onnx_exports_only_cpu(self):
         cuda = types.SimpleNamespace(
