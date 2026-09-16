@@ -908,24 +908,21 @@ class SavingMixin:
                 with self.image_io_lock(record.image_id):
                     self._set_job_current(record.relative_path, job_generation, catalog_generation)
                     draft_or_mask = drafts_or_masks.get(record.image_id)
-                    try:
-                        if isinstance(draft_or_mask, np.ndarray):
-                            mask = draft_or_mask
-                        else:
-                            if draft_or_mask is None:
-                                draft_or_mask = self.workspace_store.manual(record.image_id, self._encode_workspace_mask)
-                            draft_masks = decode_draft_masks(draft_or_mask, record.width, record.height)
-                            manual_exclude_forced = draft_manual_exclusion_forced(
-                                draft_or_mask, self.settings["detection"].get("exclude_forced_default", True),
-                            )
-                            removed_candidate_ids = {str(value) for value in draft_or_mask.get("removedCandidateIds", [])} if isinstance(draft_or_mask, dict) else set()
-                            mask = self.combined_candidate_mask(
-                                record.image_id, draft_masks,
-                                manual_exclude_forced=manual_exclude_forced,
-                                removed_candidate_ids=removed_candidate_ids,
-                            )
-                    except OSError:
-                        raise
+                    if isinstance(draft_or_mask, np.ndarray):
+                        mask = draft_or_mask
+                    else:
+                        if draft_or_mask is None:
+                            draft_or_mask = self.workspace_store.manual(record.image_id, self._encode_workspace_mask)
+                        draft_masks = decode_draft_masks(draft_or_mask, record.width, record.height)
+                        manual_exclude_forced = draft_manual_exclusion_forced(
+                            draft_or_mask, self.settings["detection"].get("exclude_forced_default", True),
+                        )
+                        removed_candidate_ids = {str(value) for value in draft_or_mask.get("removedCandidateIds", [])} if isinstance(draft_or_mask, dict) else set()
+                        mask = self.combined_candidate_mask(
+                            record.image_id, draft_masks,
+                            manual_exclude_forced=manual_exclude_forced,
+                            removed_candidate_ids=removed_candidate_ids,
+                        )
                     no_effect = (mask is None or not np.any(mask)) and output_format_matches_source(record, output_format) and keep_metadata and \
                         record.flip_horizontal == record.source_flip_horizontal and record.flip_vertical == record.source_flip_vertical
                     source_fingerprint = record.asset_fingerprint()
@@ -993,7 +990,7 @@ class SavingMixin:
                     try:
                         with tempfile.NamedTemporaryFile(dir=rendered_dir, suffix=output_suffix, delete=False) as handle:
                             stage_path = Path(handle.name); handle.write(output); handle.flush(); os.fsync(handle.fileno())
-                    except Exception:
+                    except OSError:
                         if stage_path is not None:
                             stage_path.unlink(missing_ok=True)
                         raise

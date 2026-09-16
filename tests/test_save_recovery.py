@@ -50,6 +50,24 @@ class SaveRecoveryTests(unittest.TestCase):
                                    source_identity, (replacement_stat.st_mtime_ns, replacement_stat.st_size), replacement_identity)
         return journal, source, backup
 
+    def _format_replacement_backup(self, root: Path, token: str, image_id: str = "image") -> tuple[SaveJournal, Path, Path, Path]:
+        """Model a PNG→JPG publish after the old path has been deleted."""
+        source = root / "source.png"; destination = root / "source.jpg"
+        source.write_bytes(b"original-png")
+        source_stat = source.stat(); source_identity = SaveJournal.file_identity(source, source_stat)
+        backup = root / ".source.png.mozarie-backup-token"; shutil.copy2(source, backup)
+        backup_stat = backup.stat(); backup_identity = SaveJournal.file_identity(backup, backup_stat)
+        destination.write_bytes(b"rendered-jpeg")
+        destination_stat = destination.stat(); destination_identity = SaveJournal.file_identity(destination, destination_stat)
+        journal = SaveJournal(root)
+        journal.reserve(token, image_id, 1, None, None)
+        journal.replacement_backup(token, source, backup, (backup_stat.st_mtime_ns, backup_stat.st_size), backup_identity,
+                                   source_identity, (destination_stat.st_mtime_ns, destination_stat.st_size), destination_identity)
+        journal.destination(token, destination)
+        journal.published(token, (destination_stat.st_mtime_ns, destination_stat.st_size), destination_identity)
+        source.unlink()
+        return journal, source, destination, backup
+
     def test_workspace_receipt_is_durable(self):
         with tempfile.TemporaryDirectory() as raw:
             store = WorkspaceStore(Path(raw))
@@ -89,6 +107,44 @@ class SaveRecoveryTests(unittest.TestCase):
             self.assertEqual(source.read_bytes(), b"external")
             self.assertTrue(backup.exists())
             self.assertEqual(journal.row("external")["state"], "cleanup_pending")
+
+    @unittest.skipUnless(os.name == "nt", "Windows conversion recovery contract")
+    def test_format_replacement_startup_rollback_restores_the_old_path_and_removes_the_new_path(self):
+        with tempfile.TemporaryDirectory() as raw:
+            journal, source, destination, backup = self._format_replacement_backup(Path(raw), "format-rollback")
+            journal.recover()
+            self.assertEqual(source.read_bytes(), b"original-png")
+            self.assertFalse(destination.exists())
+            self.assertFalse(backup.exists())
+            self.assertIsNone(journal.row("format-rollback"))
+
+    @unittest.skipUnless(os.name == "nt", "Windows conversion recovery contract")
+    def test_format_replacement_startup_commit_keeps_new_path_and_durable_catalogue_path(self):
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw); store = WorkspaceStore(root / "workspace")
+            catalog = str(store.create_project("Format recovery")["id"])
+            source = root / "source.png"; source.write_bytes(b"original-png")
+            source_stat = source.stat()
+            image_id = str(store.reconcile_images(catalog, [types.SimpleNamespace(
+                relative_path="source.png", size_bytes=source_stat.st_size, mtime_ns=source_stat.st_mtime_ns, width=4, height=4,
+            )])["source.png"]["image_id"])
+            journal, source, destination, backup = self._format_replacement_backup(root, "format-commit", image_id)
+            destination_stat = destination.stat()
+            save_receipt = {
+                "token": "format-commit", "imageId": image_id, "revision": 1,
+                "sourceAction": "overwrite", "cleared": False, "stale": False,
+                "deleted": False, "catalogGeneration": 1, "outputPath": str(destination),
+            }
+            store.commit_save(
+                image_id, mtime_ns=destination_stat.st_mtime_ns, size_bytes=destination_stat.st_size,
+                relative_path="source.jpg", clear_workspace=False, save_receipt=save_receipt,
+            )
+            journal.recover(store.browser_save_receipt)
+            self.assertFalse(source.exists())
+            self.assertEqual(destination.read_bytes(), b"rendered-jpeg")
+            self.assertFalse(backup.exists())
+            self.assertEqual(store.project_image(image_id)["relativePath"], "source.jpg")
+            self.assertEqual(journal.row("format-commit")["state"], "committed")
 
     def test_cleanup_keeps_an_unowned_final(self):
         with tempfile.TemporaryDirectory() as raw:
