@@ -1080,7 +1080,13 @@ class CatalogMixin:
             with open_image(io.BytesIO(raw)) as image:
                 if image.format != "PNG" or image.size != (width, height):
                     raise ValueError("workspace mask is invalid")
-                return np.asarray(image.convert("L"), dtype=np.uint8)
+                if image.mode in {"RGBA", "LA"}:
+                    channel = image.getchannel("A")
+                elif image.mode in {"L", "1"}:
+                    channel = image.convert("L")
+                else:
+                    raise ValueError("workspace mask has no alpha or grayscale channel")
+                return np.asarray(channel.point(lambda value: 255 if value else 0), dtype=np.uint8)
         except (OSError, ValueError) as exc:
             raise ClientError("保存済みマスクが正しくありません。", "workspace_write_failed") from exc
 
