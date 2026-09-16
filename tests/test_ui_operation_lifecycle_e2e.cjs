@@ -36,16 +36,16 @@ async function seedCandidateUi(page) {
     const mask = document.createElement("canvas");
     mask.width = image.width; mask.height = image.height;
     mask.getContext("2d").fillRect(12, 12, 24, 24);
-    state.candidates = [{
-      id: "lifecycle-candidate", role: "apply", enabled: true, forced: false, expandPx: 0,
-      labelToken: "penis", source: "target", refinement: null, confidence: 0.9, color: "#ff3d4d",
-    }];
-    state.candidateImages = new Map([["lifecycle-candidate", mask]]);
+    state.candidates = [
+      { id: "lifecycle-candidate", role: "apply", enabled: true, forced: false, expandPx: 0, labelToken: "penis", source: "target", refinement: null, confidence: 0.9, color: "#ff3d4d" },
+      { id: "lifecycle-exclude", role: "exclude", enabled: true, forced: true, expandPx: 0, labelToken: "hand", source: "hand_exclusion", refinement: null, confidence: 0.8, color: "#28d3ff" },
+    ];
+    state.candidateImages = new Map([["lifecycle-candidate", mask], ["lifecycle-exclude", mask]]);
     state.removedCandidateIds.clear();
-    image.candidateCount = 1; image.enabledCandidateCount = 1; image.candidateRevision = 1;
+    image.candidateCount = 2; image.enabledCandidateCount = 1; image.candidateRevision = 1;
     state.maskStatus.set(image.id, true);
     state.settings.confirmations.clearMasks = false;
-    renderCandidates(); updateActionButtons();
+    resetHistoryToCurrentManualMask(); renderCandidates(); updateActionButtons();
   });
   await page.waitForFunction(() => document.querySelector(".candidate-row .candidate-toggle") && !document.querySelector("#clearCurrentMasksButton").disabled);
 }
@@ -81,6 +81,18 @@ async function assertSettled(page, label, available = ["#detectCurrentButton", "
   await page.waitForFunction(() => !isBusy());
   assert.equal(await page.locator("[data-disabled-by-lock]").count(), 0, `${label}: no busy-lock marker remains after the operation settles`);
   for (const selector of available) assert.equal(await page.locator(selector).isDisabled(), false, `${label}: ${selector} is enabled again`);
+}
+
+async function assertCandidateControlsEnabledAfterSettle(page, label) {
+  for (const selector of [
+    ".candidate-row .candidate-toggle", ".candidate-row .candidate-forced", ".candidate-row .candidate-delete",
+    ".candidate-row .candidate-display-toggle", ".candidate-row .candidate-effective-toggle", ".candidate-row .candidate-padding-button",
+    "[data-candidate-batch]", "[data-candidate-display-toggle]", "[data-candidate-effective-toggle]", "[data-candidate-padding-batch]",
+  ]) {
+    const controls = page.locator(selector);
+    assert.ok(await controls.count() > 0, `${label}: ${selector} is still generated after the product operation finalizes`);
+    assert.equal(await controls.evaluateAll((nodes) => nodes.every((node) => !node.disabled)), true, `${label}: ${selector} is enabled after the product operation finalizes without a forced rerender`);
+  }
 }
 
 async function renderProjectActionsWhileBusy(page, label) {
@@ -140,6 +152,14 @@ test("clear masks keeps rerendered controls locked and releases them after succe
     failureGate.release({ status: 500, contentType: "application/json", body: JSON.stringify({ error_code: "internal_error" }) });
     await assertSettled(page, "clear failure", ["#clearCurrentMasksButton", "#detectCurrentButton", "#saveButton"]);
     await page.locator("#errorDialogClose").click();
+    await assertCandidateControlsEnabledAfterSettle(page, "clear failure");
+    const candidateRow = page.locator('[data-candidate-blink-id="lifecycle-candidate"]');
+    await candidateRow.locator(".candidate-delete").click();
+    await page.waitForFunction(() => state.removedCandidateIds.has("lifecycle-candidate"));
+    await page.locator("#undoButton").click();
+    await page.waitForFunction(() => !state.removedCandidateIds.has("lifecycle-candidate") && document.querySelector('[data-candidate-blink-id="lifecycle-candidate"] .candidate-delete'));
+    await candidateRow.locator(".candidate-delete").click();
+    await page.waitForFunction(() => state.removedCandidateIds.has("lifecycle-candidate"));
     await page.unroute("**/api/masks/clear");
     await page.locator("#clearCurrentMasksButton").click();
     await page.waitForFunction(() => !state.masksClearing);
@@ -227,8 +247,13 @@ test("boundary, fill, transform, undo, and redo recover from pending work withou
     await page.waitForFunction(() => state.fillPending && window.__heldFillWorker);
     await rerenderCandidateUi(page);
     await assertNativeControlsLocked(page, "fill worker");
-    await page.evaluate(() => window.__heldFillWorker.onmessage({ data: { spans: [[0, 0, 2]] } }));
+    await page.evaluate(() => window.__heldFillWorker.onmessage({ data: { spans: [0, 0, 2] } }));
     await assertSettled(page, "fill worker");
+    assert.deepEqual(await page.evaluate(() => ({
+      filledAlpha: addCtx.getImageData(0, 0, 1, 1).data[3] > 0,
+      untouchedAlpha: addCtx.getImageData(80, 60, 1, 1).data[3],
+      history: state.history.at(-1) && { tool: state.history.at(-1).tool, spans: state.history.at(-1).spans },
+    })), { filledAlpha: true, untouchedAlpha: 0, history: { tool: "bucket", spans: [0, 0, 2] } }, "the real fill completion paints only the returned span and records that span for undo");
 
     const transformGate = await installResponseGate(page, "**/api/images/sample/transform");
     await page.locator("#flipHorizontalButton").click();
@@ -238,6 +263,7 @@ test("boundary, fill, transform, undo, and redo recover from pending work withou
     transformGate.release({ status: 500, contentType: "application/json", body: JSON.stringify({ error_code: "internal_error" }) });
     await assertSettled(page, "transform failure");
     await page.locator("#errorDialogClose").click();
+    await assertCandidateControlsEnabledAfterSettle(page, "transform failure");
 
     await page.unroute("**/api/images/sample/transform");
     await page.locator("#flipVerticalButton").click();
