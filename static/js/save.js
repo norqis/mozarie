@@ -17,6 +17,13 @@ function selectedSaveMode() { return document.querySelector('input[name="batchSa
 function selectedApplyOutputFormat() { return $("#applyOutputFormat").value; }
 function selectedSingleOutputFormat() { return $("#singleSaveOutputFormat").value; }
 function preserveDirectoryStructure() { return state.settings?.saving?.preserve_directory_structure !== false; }
+function mergeSavingSettings(response, fields) {
+  const saving = response?.settings?.saving;
+  if (!saving || !state.settings?.saving) return;
+  for (const field of fields) {
+    if (Object.prototype.hasOwnProperty.call(saving, field)) state.settings.saving[field] = saving[field];
+  }
+}
 function renderDirectoryStructurePreference() {
   const preserve = preserveDirectoryStructure();
   $("#applyPreserveDirectoryStructure").checked = preserve;
@@ -37,7 +44,7 @@ async function saveDirectoryStructurePreference(input) {
   try {
     const response = await save;
     if (version === directoryStructurePreferenceVersion) {
-      state.settings = response.settings; renderDirectoryStructurePreference();
+      mergeSavingSettings(response, ["preserve_directory_structure"]); renderDirectoryStructurePreference();
     }
     return true;
   }
@@ -532,7 +539,7 @@ async function commitOutputDirectory(input) {
   syncApplyMode(); if (state.singleSave) syncSingleSaveMode(); updateActionButtons();
   try {
     const data = await api("/api/settings?status=0", { method: "POST", body: JSON.stringify({ saving: { default_output_directory: directory } }) });
-    state.settings = data.settings;
+    mergeSavingSettings(data, ["default_output_directory"]);
     renderOutputDirectory();
     return true;
   } catch (error) {
@@ -573,7 +580,7 @@ async function pickOutputDirectory() {
       method: "POST", body: JSON.stringify({ currentPath: state.settings?.saving?.default_output_directory || "" }),
     }).then((data) => {
         if (data.cancelled) return null;
-        state.settings = data.settings;
+        mergeSavingSettings(data, ["default_output_directory"]);
         // The picker persists only the output directory.  Re-rendering the
         // whole settings form here would discard edits the user has not saved.
         renderOutputDirectory();

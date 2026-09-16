@@ -65,6 +65,23 @@ class RecursiveSaveTests(unittest.TestCase):
                     state.start_apply(["one", "two"], 10, {}, copy_to_default=True, output_format="jpg", suffix="_done", keep_metadata=False)
             ready.assert_not_called(); state._start_job.assert_not_called()
 
+    def test_flatten_publish_race_never_reassigns_the_final_name(self):
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw); source = root / "source.png"; Image.new("RGB", (8, 8), "white").save(source)
+            app_dir = root / "app"; shutil.copytree(Path(__file__).resolve().parents[1] / "config", app_dir / "config")
+            with patch.object(state_module, "APP_DIR", app_dir):
+                state = StudioState(root / "cache", root / "sessions")
+            try:
+                state.settings["models"]["provider"] = "cpu"
+                record = state.image_for_id(state.set_root(str(root))[0]["id"])
+                output = root / "output"; state.settings["saving"].update({"default_output_directory": str(output), "preserve_directory_structure": False})
+                with patch.object(state, "_publish_staged_copy", return_value=None), patch.object(state, "_reassign_output_destination") as reassign:
+                    state._apply_worker([record], 10, {}, copy_to_default=True, output_directory=output, preserve_directory_structure=False)
+                reassign.assert_not_called()
+                self.assertEqual(state.job.state, "error")
+            finally:
+                state.shutdown()
+
 
 class WorkspaceRenameTests(unittest.TestCase):
     def test_nested_native_roots_retarget_one_actual_file_without_new_ids(self):
@@ -172,6 +189,10 @@ class StudioStateNativeRenameTests(unittest.TestCase):
         self.assertEqual([candidate["id"] for candidate in reopened.list_candidates(image_id)], ["candidate"])
         self.assertTrue(reopened.manual_workspace(image_id)["add"])
         self.assertTrue(reopened.project_history_status(image_id)["canUndo"])
+        self.assertIn(image_id, reopened.restore_project_history(image_id, "undo")["changedImageIds"])
+        self.assertEqual(reopened.image_for_id(image_id).relative_path, "nested/renamed.png")
+        self.assertIn(image_id, reopened.restore_project_history(image_id, "redo")["changedImageIds"])
+        self.assertEqual(reopened.image_for_id(image_id).relative_path, "nested/renamed.png")
 
     def test_native_rename_database_failure_restores_source_and_keeps_ids(self):
         state, _project_id, image_id = self._loaded_state()

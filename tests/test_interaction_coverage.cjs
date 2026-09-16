@@ -75,6 +75,7 @@ const document = {
 };
 const context = {
   codedError(code) { const error = new Error(code); error.code = code; return error; },
+  userErrorCode(error) { return error?.code || "internal_error"; },
   responseError(response, payload) { const error = new Error(); error.status = response.status; error.code = typeof payload?.error_code === "string" ? payload.error_code : (response.status === 404 ? "api_not_found" : "internal_error"); error.params = payload?.params || {}; return error; },
   console, Promise, Set, Map, Array, Object, Math, Number, Boolean, String, Error,
   AbortController, DOMException, setTimeout, clearTimeout, encodeURIComponent, crypto: { randomUUID: () => `key-${++unique}` },
@@ -84,6 +85,8 @@ const context = {
   addCtx: { clearRect() {} }, exclusionCtx: { clearRect() {} }, exclusionEraseCtx: { clearRect() {} },
   t: (key, data = {}) => `${key}${data.value ?? data.count ?? ""}`,
   sourceAccessFor: (imageId) => state.sourceAccess.get(imageId) || null,
+  ensureHandlePermission: async () => {}, flushWorkspaceDraft: async () => {},
+  catalogApi: async () => ({}),
   isBusy: () => busy, catalogStagingEditsActive: () => false, currentImageActionPending: () => Boolean(state.pendingImageId), canRemoveCurrentImage: () => true, isProcessableImage: () => true, processableImages: (records = state.images) => records, galleryFilteredImages: () => state.images, overviewImages: () => state.images, closeBoundaryModeMenu: undefined,
   clearBoundaryInteraction: () => calls.push(["clearBoundaryInteraction"]), clearBoundaryConstruction: () => calls.push(["clearBoundaryConstruction"]),
   updateBoundaryActions: () => calls.push(["boundaryActions"]), updateBrushCursor: () => {}, render: () => calls.push(["render"]), flushRender: () => calls.push(["flushRender"]), flushMaskComposition: () => calls.push(["flushMaskComposition"]), clearCandidateBlink: () => calls.push(["clearCandidateBlink"]), focusCanvas: () => calls.push(["canvas"]), focusElement: (value) => { document.activeElement = value; },
@@ -120,7 +123,7 @@ const context = {
 const interactionPath = path.join(__dirname, "..", "static", "js", "interaction.js");
 const source = fs.readFileSync(interactionPath, "utf8");
 vm.runInNewContext(source, context, { filename: interactionPath });
-vm.runInNewContext("globalThis.interactionTest={setTool,setBoundaryModeMenuOpen,closeBoundaryModeMenu,updateBrushSize,updateBlockSizeDisplay,rememberFillToleranceTrigger,confirmAction,confirmationRequired,beginBrowserDeletePermissionRequests,preflightBrowserSourceDelete,resetCurrentDraft,clearMasks,clearCatalog,closeCatalogContextMenu,positionCatalogContextMenu,openCatalogContextMenu,copyContextMenuImagePath,clearReviewForRemovedImage,removeImageFromCatalog,runSelectionAction,droppedFile,directFilesFromDrop,isSupportedImageFile,newClientKey,pruneSourceAccess,rememberImportedSource,importFiles,importSingleFile,beginImportSession,remapImportedImageIds,finishImportSession,waitForImportSession,importHandleEntries,importFileHandles,importDirectoryHandle,importProjectDirectoryHandle,importProjectFileHandles,pickImageFiles,pickImageDirectory,importDroppedFiles,setGalleryDropOverlay,handleEditorKeydown,navigationShortcutAction,handleNavigationKeydown,handleWindowKeydown};", context, { filename: "test-interaction-exports.js" });
+vm.runInNewContext("globalThis.interactionTest={setTool,setBoundaryModeMenuOpen,closeBoundaryModeMenu,updateBrushSize,updateBlockSizeDisplay,rememberFillToleranceTrigger,confirmAction,confirmationRequired,beginBrowserDeletePermissionRequests,preflightBrowserSourceDelete,resetCurrentDraft,clearMasks,clearCatalog,closeCatalogContextMenu,positionCatalogContextMenu,openCatalogContextMenu,submitRenameImage,copyContextMenuImagePath,clearReviewForRemovedImage,removeImageFromCatalog,runSelectionAction,droppedFile,directFilesFromDrop,isSupportedImageFile,newClientKey,pruneSourceAccess,rememberImportedSource,importFiles,importSingleFile,beginImportSession,remapImportedImageIds,finishImportSession,waitForImportSession,importHandleEntries,importFileHandles,importDirectoryHandle,importProjectDirectoryHandle,importProjectFileHandles,pickImageFiles,pickImageDirectory,importDroppedFiles,setGalleryDropOverlay,handleEditorKeydown,navigationShortcutAction,handleNavigationKeydown,handleWindowKeydown};", context, { filename: "test-interaction-exports.js" });
 
 const test = context.interactionTest;
 const event = (binding, type = "keydown") => ({ binding, type, currentTarget: element("#origin"), clientX: 30, clientY: 40, preventDefault() { this.prevented = true; }, stopPropagation() { this.stopped = true; } });
@@ -207,6 +210,30 @@ nodeTest("interaction and catalog mutation controls", async () => {
   assert.equal(element("#renameImageMenuItem").disabled, true, "an FSA source without move support cannot report a pseudo rename success");
   assert.equal(element("#renameImageMenuItem").textContent, "context.rename", "unsupported FSA sources still present the Rename action");
   assert.equal(element("#renameImageMenuItem").title, "context.renameUnavailableHelp", "unsupported FSA sources explain the native reconnect path");
+  const originalApiForRename = context.api; const originalCatalogApi = context.catalogApi;
+  async function responseLostRename(authoritativeName) {
+    const browserImage = { id: "browser", relativePath: "source.png", sourceKind: "session" };
+    let handleName = "source.png"; const moves = [];
+    const handle = { get name() { return handleName; }, async move(_parent, next) { moves.push(next); handleName = next; }, async getFile() { return { name: handleName, size: 1, lastModified: 1 }; } };
+    state.images = images = [browserImage]; state.renameImage = { imageId: browserImage.id, invoker: pointerTarget }; state.renamePending = false;
+    state.sourceAccess.set(browserImage.id, { fileHandle: handle, parentHandle: {}, name: handleName, size: 1, lastModified: 1 });
+    element("#renameImageFilename").value = "renamed.png";
+    context.catalogApi = async () => { throw Object.assign(new Error("response lost"), { code: "internal_error" }); };
+    context.api = async (url) => url === "/api/images" ? (authoritativeName === undefined ? null : { images: [{ ...browserImage, relativePath: authoritativeName }] }) : {};
+    await test.submitRenameImage({ preventDefault() {} });
+    return { moves, access: state.sourceAccess.get(browserImage.id), pending: state.renamePending };
+  }
+  const committedRename = await responseLostRename("renamed.png");
+  assert.deepEqual(committedRename.moves, ["renamed.png"], "a lost response with authoritative renamed state never rolls the FSA file back");
+  assert.equal(committedRename.access.name, "renamed.png", "the live FSA access snapshot keeps the authoritative renamed name");
+  const rejectedRename = await responseLostRename("source.png");
+  assert.deepEqual(rejectedRename.moves, ["renamed.png", "source.png"], "a lost response with authoritative old state restores the FSA file");
+  assert.equal(rejectedRename.access.name, "source.png", "the restored FSA access snapshot returns to the old name");
+  const unknownRename = await responseLostRename(undefined);
+  assert.deepEqual(unknownRename.moves, ["renamed.png"], "a lost response without an authoritative image never guesses that the FSA rename should be reversed");
+  assert.equal(unknownRename.access.name, "renamed.png", "an unknown response leaves the physical FSA name available for reconnect recovery");
+  assert.equal(unknownRename.pending, false, "an unknown rename response releases the pending lock for recovery guidance");
+  context.api = originalApiForRename; context.catalogApi = originalCatalogApi;
   state.images = images = [{ id: "one", sourcePath: "C:/one.png", sourceKind: "filesystem" }, { id: "two", sourceKind: "filesystem" }]; state.currentId = "one"; state.currentImage = images[0];
   test.openCatalogContextMenu(event("", "contextmenu"), "one"); await test.copyContextMenuImagePath();
   context.navigator.clipboard.writeText = async () => { throw new Error("denied"); };

@@ -1244,7 +1244,11 @@ function bindEvents() {
   $("#renameImageForm").addEventListener("submit", submitRenameImage);
   $("#renameImageCancel").addEventListener("click", () => $("#renameImageDialog").close());
   $("#renameImageDialog").addEventListener("cancel", (event) => { if (state.renamePending) event.preventDefault(); });
-  $("#renameImageDialog").addEventListener("close", () => { if (state.renamePending) return; const invoker = state.renameImage?.invoker; state.renameImage = null; focusElement(invoker); });
+  $("#renameImageDialog").addEventListener("close", () => {
+    const dialog = $("#renameImageDialog");
+    if (state.renamePending || dialog.open) return;
+    const invoker = state.renameImage?.invoker; state.renameImage = null; focusElement(invoker);
+  });
   $("#gallery").addEventListener("dragenter", (event) => {
     if (!event.dataTransfer?.types?.includes("Files")) return;
     event.preventDefault(); setGalleryDropOverlay(true);

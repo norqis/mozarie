@@ -249,14 +249,14 @@ async function galleryInteractions() {
 
 function makeSaveRuntime() {
   const nodes = new Map();
-  const ids = ["#applyResult", "#applyStartButton", "#applyCopyMode", "#deleteOriginal", "#applyRemoveSaved", "#applySuffix", "#applyTargetMode", "#applyTargetCount", "#applyDivisor", "#divisor", "#applySuffixRow", "#deleteOriginalRow", "#applyOutputDirectoryRow", "#chooseOutputDirectoryButton", "#applyOutputDirectoryStatus", "#applyTemporarySourceNote", "#applyOverwriteMode", "#applyOverwriteRow", "#applyOutputFormat", "#applyKeepMetadata", "#applyFormatNote", "#settingsDefaultOutputDirectory", "#settingsChooseOutputDirectory", "#applyProgress", "#applyCurrentName", "#applyProgressText", "#applyPauseButton", "#applyCancelButton", "#applyCloseButton", "#applySettings", "#applyProgressPanel", "#applyDialog", "#singleSaveTarget", "#singleSaveOutputDirectoryStatus", "#singleSaveResult", "#singleSaveSuffixRow", "#singleSaveDeleteOriginalRow", "#singleSaveOutputDirectoryRow", "#singleSaveOverwriteMode", "#singleSaveOverwriteRow", "#singleSaveDeleteOriginal", "#singleSaveRemoveSaved", "#singleSaveChooseOutputDirectoryButton", "#singleSaveStartButton", "#singleSaveSettings", "#singleSaveCopyMode", "#singleSaveSuffix", "#singleSaveOutputFormat", "#singleSaveKeepMetadata", "#singleSaveFormatNote", "#singleSaveDialog"];
+  const ids = ["#applyResult", "#applyStartButton", "#applyCopyMode", "#deleteOriginal", "#applyRemoveSaved", "#applySuffix", "#applyTargetMode", "#applyTargetCount", "#applyDivisor", "#divisor", "#applySuffixRow", "#deleteOriginalRow", "#applyOutputDirectoryRow", "#applyPreserveDirectoryStructureRow", "#chooseOutputDirectoryButton", "#applyOutputDirectoryStatus", "#applyPreserveDirectoryStructure", "#applyTemporarySourceNote", "#applyOverwriteMode", "#applyOverwriteRow", "#applyOutputFormat", "#applyKeepMetadata", "#applyFormatNote", "#settingsDefaultOutputDirectory", "#settingsChooseOutputDirectory", "#applyProgress", "#applyCurrentName", "#applyProgressText", "#applyPauseButton", "#applyCancelButton", "#applyCloseButton", "#applySettings", "#applyProgressPanel", "#applyDialog", "#singleSaveTarget", "#singleSaveOutputDirectoryStatus", "#singleSavePreserveDirectoryStructure", "#singleSaveResult", "#singleSaveSuffixRow", "#singleSaveDeleteOriginalRow", "#singleSaveOutputDirectoryRow", "#singleSavePreserveDirectoryStructureRow", "#singleSaveOverwriteMode", "#singleSaveOverwriteRow", "#singleSaveDeleteOriginal", "#singleSaveRemoveSaved", "#singleSaveChooseOutputDirectoryButton", "#singleSaveStartButton", "#singleSaveSettings", "#singleSaveCopyMode", "#singleSaveSuffix", "#singleSaveOutputFormat", "#singleSaveKeepMetadata", "#singleSaveFormatNote", "#singleSaveDialog"];
   for (const id of ids) nodes.set(id, element());
   nodes.get("#applyTargetMode").value = "masked"; nodes.get("#applyDivisor").value = "16"; nodes.get("#divisor").value = "16"; nodes.get("#applySuffix").value = "_m";
   const saveMode = element(); saveMode.value = "copy"; const singleSaveMode = element(); singleSaveMode.value = "copy";
   const errors = []; const calls = []; const requests = [];
   const state = {
     sourceAccess: new Map(), applyTargetIds: ["file"], images: [{ id: "file", sourceKind: "filesystem", relativePath: "file.png" }, { id: "session", sourceKind: "session", relativePath: "session.png" }],
-    settings: { saving: { default_output_directory: "G:/out", parallelism: 1 }, detection: { exclude_forced_default: true }, confirmations: { overwriteSource: false, deleteSourceAfterCopy: false } }, drafts: new Map(), maskStatus: new Map(), selectedImageIds: new Set(), candidateUpdateChains: new Map(),
+    settings: { saving: { default_output_directory: "G:/out", parallelism: 1, preserve_directory_structure: true }, detection: { exclude_forced_default: true }, confirmations: { overwriteSource: false, deleteSourceAfterCopy: false } }, drafts: new Map(), maskStatus: new Map(), selectedImageIds: new Set(), candidateUpdateChains: new Map(),
     applyRunning: false, saveStarting: false, outputDirectoryPicking: false, importing: false, saving: false, currentId: null, candidates: [], prefetchQueue: [], catalogEpoch: 1, imageGeneration: 0, pageLoadedAt: 1, job: { kind: "idle", state: "idle" }, projectHistory: new Map(), workspaceDraftChains: new Map(), workspaceDraftTimers: new Map(), workspaceMutationErrors: new Map(), workspaceFlagPending: new Map(), draftSaveChains: new Map(),
   };
   let handler = async (url) => {
@@ -288,7 +288,7 @@ function makeSaveRuntime() {
   context.confirmed = true;
   const source = fs.readFileSync(path.join(jsRoot, "save.js"), "utf8");
   vm.runInNewContext(source, context, { filename: path.join(jsRoot, "save.js") });
-  vm.runInNewContext("globalThis.__saveTest = { setApplyResult, showApplyError, isTerminalApply, selectedSaveMode, sourceAccessFor, sourceCanOverwrite, sourceCanDelete, applyTargetsSupport, applyRestrictionMessage, syncApplyMode, refreshApplyTargets, openApplyDialog, selectedSingleSaveMode, setSingleSaveResult, syncSingleSaveMode, openSingleSaveDialog, chooseSingleOutputDirectory, renderSingleSave, startSingleSave, draftPayload, renderOutputDirectory, commitOutputDirectory, setOutputDirectoryPickerBusy, pickOutputDirectory, reserveSaveRender, renderDefaultCopy, renderStreamedSave, chooseOutputDirectory, waitForBrowserSave, showBrowserSaveProgress, reconcileStoredMaskStatuses, reconcileBrowserSaveState, ensureHandlePermission, ensureSaveSources, writeSourceHandle, snapshotSourceHandle, restoreSourceHandle, runBrowserSave, commitBrowserSaveWithRetry, cancelBrowserSave, acknowledgePendingBrowserSave, isDefinitiveCommitRejection, startApplyFromDialog, finishSaveStart, controlApply, showRunningApply, finishApplyJob, isTerminalDetection, finishDetectionJob, pollJob, scheduleJobPoll };", context, { filename: "test-save-exports.js" });
+  vm.runInNewContext("globalThis.__saveTest = { setApplyResult, showApplyError, isTerminalApply, selectedSaveMode, sourceAccessFor, sourceCanOverwrite, sourceCanDelete, applyTargetsSupport, applyRestrictionMessage, syncApplyMode, refreshApplyTargets, openApplyDialog, selectedSingleSaveMode, setSingleSaveResult, syncSingleSaveMode, openSingleSaveDialog, chooseSingleOutputDirectory, renderSingleSave, startSingleSave, draftPayload, renderOutputDirectory, commitOutputDirectory, saveDirectoryStructurePreference, setOutputDirectoryPickerBusy, pickOutputDirectory, reserveSaveRender, renderDefaultCopy, renderStreamedSave, chooseOutputDirectory, waitForBrowserSave, showBrowserSaveProgress, reconcileStoredMaskStatuses, reconcileBrowserSaveState, ensureHandlePermission, ensureSaveSources, writeSourceHandle, snapshotSourceHandle, restoreSourceHandle, runBrowserSave, commitBrowserSaveWithRetry, cancelBrowserSave, acknowledgePendingBrowserSave, isDefinitiveCommitRejection, startApplyFromDialog, finishSaveStart, controlApply, showRunningApply, finishApplyJob, isTerminalDetection, finishDetectionJob, pollJob, scheduleJobPoll };", context, { filename: "test-save-exports.js" });
   return { ...context.__saveTest, calls, context, errors, nodes, requests, saveMode, singleSaveMode, state, setHandler(fn) { handler = fn; } };
 }
 
@@ -347,6 +347,38 @@ async function saveInteractions() {
   assert.equal(runtime.nodes.get("#applyOutputDirectoryStatus").value, "G:/manual");
   assert.equal(runtime.nodes.get("#singleSaveOutputDirectoryStatus").value, "G:/manual");
   assert.equal(runtime.nodes.get("#applyOutputDirectoryStatus").disabled, false);
+  const pendingSettings = [];
+  runtime.setHandler((url, options) => {
+    if (url !== "/api/settings?status=0") return {};
+    return new Promise((resolve) => pendingSettings.push({ payload: JSON.parse(options.body), resolve }));
+  });
+  runtime.nodes.get("#applyPreserveDirectoryStructure").checked = false;
+  const structureBeforeDirectory = runtime.saveDirectoryStructurePreference(runtime.nodes.get("#applyPreserveDirectoryStructure"));
+  await Promise.resolve(); await Promise.resolve();
+  runtime.nodes.get("#applyOutputDirectoryStatus").value = "G:/directory-first";
+  const directoryAfterStructure = runtime.commitOutputDirectory(runtime.nodes.get("#applyOutputDirectoryStatus"));
+  await Promise.resolve();
+  const firstStructure = pendingSettings.find((request) => request.payload.saving.preserve_directory_structure === false);
+  const firstDirectory = pendingSettings.find((request) => request.payload.saving.default_output_directory === "G:/directory-first");
+  firstDirectory.resolve({ settings: { saving: { default_output_directory: "G:/directory-first", preserve_directory_structure: true } } });
+  await directoryAfterStructure;
+  firstStructure.resolve({ settings: { saving: { default_output_directory: "G:/manual", preserve_directory_structure: false } } });
+  await structureBeforeDirectory;
+  assert.deepEqual(state.settings.saving, { default_output_directory: "G:/directory-first", parallelism: 1, preserve_directory_structure: false }, "a late structure reply cannot replace a newly committed output directory");
+  pendingSettings.length = 0;
+  runtime.nodes.get("#applyPreserveDirectoryStructure").checked = true;
+  const structureAfterDirectory = runtime.saveDirectoryStructurePreference(runtime.nodes.get("#applyPreserveDirectoryStructure"));
+  await Promise.resolve(); await Promise.resolve();
+  runtime.nodes.get("#applyOutputDirectoryStatus").value = "G:/directory-last";
+  const directoryBeforeStructure = runtime.commitOutputDirectory(runtime.nodes.get("#applyOutputDirectoryStatus"));
+  await Promise.resolve();
+  const secondStructure = pendingSettings.find((request) => request.payload.saving.preserve_directory_structure === true);
+  const secondDirectory = pendingSettings.find((request) => request.payload.saving.default_output_directory === "G:/directory-last");
+  secondStructure.resolve({ settings: { saving: { default_output_directory: "G:/directory-first", preserve_directory_structure: true } } });
+  await structureAfterDirectory;
+  secondDirectory.resolve({ settings: { saving: { default_output_directory: "G:/directory-last", preserve_directory_structure: false } } });
+  await directoryBeforeStructure;
+  assert.deepEqual(state.settings.saving, { default_output_directory: "G:/directory-last", parallelism: 1, preserve_directory_structure: true }, "a late directory reply cannot replace a newly committed structure preference");
   runtime.nodes.get("#singleSaveOutputDirectoryStatus").value = "G:/reject";
   runtime.setHandler(async (url) => { if (url === "/api/settings?status=0") { const error = new Error("reject"); error.code = "output_folder_unavailable"; throw error; } return {}; });
   assert.equal(await runtime.commitOutputDirectory(runtime.nodes.get("#singleSaveOutputDirectoryStatus")), false);
@@ -369,7 +401,7 @@ async function saveInteractions() {
   runtime.context.busy = true; await runtime.openApplyDialog(); runtime.context.busy = false; runtime.context.flushError = new Error("draft failed"); await runtime.openApplyDialog(); runtime.context.flushError = null;
   state.applyTargetIds = []; await runtime.openApplyDialog([]); state.applyTargetIds = ["file"]; await runtime.openApplyDialog({ initialMode: "masked" }); assert.equal(runtime.nodes.get("#applyDialog").open, true);
   state.drafts.set("file", { add: "add", exclusion: "x", exclusionErase: "erase", manualEnabled: false, manualExclusionEnabled: false, manualExclusionEraseEnabled: false, removedCandidateIds: ["old"] }); assert.deepEqual(JSON.parse(JSON.stringify(runtime.draftPayload(["file", "missing"]))), { file: { add: "", exclusion: "", exclusionErase: "", manualExclusionForced: true, removedCandidateIds: ["old"] } });
-  runtime.renderOutputDirectory(); assert.equal(runtime.nodes.get("#settingsDefaultOutputDirectory").value, "G:/manual"); runtime.setOutputDirectoryPickerBusy(true); assert.equal(state.outputDirectoryPicking, true); runtime.setOutputDirectoryPickerBusy(false);
+  runtime.renderOutputDirectory(); assert.equal(runtime.nodes.get("#settingsDefaultOutputDirectory").value, "G:/directory-last"); runtime.setOutputDirectoryPickerBusy(true); assert.equal(state.outputDirectoryPicking, true); runtime.setOutputDirectoryPickerBusy(false);
 
   runtime.setHandler(async (url) => url === "/api/output-directory/pick" ? { cancelled: false, path: "G:/picked-again", settings: { saving: { default_output_directory: "G:/picked-again" } } } : {});
   const picked = await runtime.pickOutputDirectory(); assert.equal(picked, "G:/picked-again"); assert.equal(state.settings.saving.default_output_directory, "G:/picked-again"); await runtime.chooseOutputDirectory();

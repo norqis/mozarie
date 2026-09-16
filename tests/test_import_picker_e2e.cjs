@@ -143,6 +143,7 @@ function startFixtureServer() {
   let sourceDeleteCommitFailureIds = new Set();
   const pendingSourceDeleteClaims = [];
   const saveRequests = [];
+  const renameRequests = [];
   let holdSaveRender = false;
   const pendingSaveRenders = [];
   const catalogRemoveRequests = [];
@@ -178,7 +179,7 @@ function startFixtureServer() {
     detection: { mode: "standard", fluid_exclusion_enabled: true, exclude_forced_default: true, threshold: 0.5, parallelism: 2, default_candidate_padding_px: 3, targets: ["penis", "pussy"] },
     shortcuts: {
       enabled: true,
-      bindings: { previous: "ArrowLeft", next: "ArrowRight", previousVisible: "ArrowUp", nextVisible: "ArrowDown", first: "Home", last: "End", reviewAndNext: "Enter", removeImage: "Delete", toggleOverview: "G", undo: "Ctrl+Z", redo: "Ctrl+Shift+Z" },
+      bindings: { previous: "ArrowLeft", next: "ArrowRight", previousVisible: "ArrowUp", nextVisible: "ArrowDown", first: "Home", last: "End", reviewAndNext: "Enter", removeImage: "Delete", toggleOverview: "G", undo: "Ctrl+Z", redo: "Ctrl+Shift+Z", renameImage: "F2" },
       actions: {},
     }, confirmations: {},
   };
@@ -372,6 +373,16 @@ function startFixtureServer() {
       const images = catalog.filter((image) => image.id !== imageId);
       response.writeHead(200, { "Content-Type": "application/json" });
       response.end(JSON.stringify({ images, removedImageIds }));
+      return;
+    }
+    if (requestPath === "/api/catalog/rename" && request.method === "POST") {
+      let body = ""; for await (const chunk of request) body += chunk;
+      const payload = JSON.parse(body); const image = catalog.find((entry) => entry.id === payload.imageId);
+      if (!image) { response.writeHead(404, { "Content-Type": "application/json" }); response.end(JSON.stringify({ error_code: "image_not_found" })); return; }
+      const prefix = image.relativePath.includes("/") ? `${image.relativePath.split("/").slice(0, -1).join("/")}/` : "";
+      image.relativePath = `${prefix}${payload.filename}`;
+      catalogGeneration += 1; renameRequests.push(payload);
+      response.writeHead(200, { "Content-Type": "application/json" }); response.end(JSON.stringify({ images: catalog, catalogGeneration }));
       return;
     }
     if (requestPath === "/api/save/prepare" && request.method === "POST") {
@@ -654,7 +665,7 @@ function startFixtureServer() {
     server.listen(0, "127.0.0.1", () => {
       server.off("error", reject);
       const { port } = server.address();
-      resolve({ server, url: `http://127.0.0.1:${port}`, detectRequests, applyRequests, saveRequests, catalogRemoveRequests, folderRequests, setFolderImportFailures: (failures) => { folderImportFailures = structuredClone(failures); }, catalogImageIds: () => catalog.map((image) => image.id), sourceDeleteRequests, sourceDeleteOperations: () => structuredClone([...sourceDeletes.entries()]), setSourceDeleteOperation: (token, operation) => sourceDeletes.set(token, structuredClone(operation)), setSourceDeleteCommitFailureIds: (imageIds) => { sourceDeleteCommitFailureIds = new Set(imageIds); }, holdSourceDeleteClaim: (value) => { holdSourceDeleteClaim = value; }, releaseSourceDeleteClaims: () => { holdSourceDeleteClaim = false; pendingSourceDeleteClaims.splice(0).forEach((resume) => resume()); }, settingsRequests, settingsActions, settingsStatusRequests, waitForSettingsStatusRequests: (count) => settingsStatusRequests.length >= count ? Promise.resolve() : new Promise((resolve) => settingsStatusWaiters.push({ count, resolve })), updateRequests, modelPickerRequests, modelDownloadRequests, modelDownloadJobs: () => modelDownloadJobs, modelDownloadPolls: () => modelDownloadPolls, cancelRequests: () => cancelRequests, holdDetection: (value) => { holdDetection = value; }, holdSaveRender: (value) => { holdSaveRender = value; }, releaseSaveRenders: () => { holdSaveRender = false; pendingSaveRenders.splice(0).forEach((resume) => resume()); }, failCancel: (value) => { cancelShouldFail = value; }, failNextSettingsSave: () => { failNextSettingsSave = true; }, failModelDownloadStatus: (value) => { failModelDownloadStatus = value; }, resetModelDownload: () => { modelDownloadJob = { state: "idle", paths: {} }; }, resetScenario: () => { catalog = structuredClone(initialCatalog); catalogGeneration += 1; saveTokens.clear(); sourceDeletes.clear(); sourceDeleteRequests.length = 0; pendingSourceDeleteClaims.splice(0).forEach((resume) => resume()); holdSourceDeleteClaim = false; sourceDeleteCommitFailureIds = new Set(); saveRequests.length = 0; catalogRemoveRequests.length = 0; folderRequests.length = 0; folderImportFailures = []; currentJob = { kind: "idle", state: "idle" }; }, setCatalog: (images) => { catalog = structuredClone(images); }, setDefaultOutputDirectory: (value) => { settings.saving.default_output_directory = value; }, resetJob: () => { currentJob = { kind: "idle", state: "idle" }; }, finishCancel: () => { currentJob = { ...currentJob, state: "cancelled", current: "" }; }, finishApply: () => { currentJob = { ...currentJob, state: "complete", completed: currentJob.total, current: "", completedImageIds: currentJob.imageIds }; }, setUpdateAvailable: (value) => { updateAvailable = value; }, deferFullSettings: () => { deferFullSettings = true; }, releaseNextFullSettings: () => { pendingFullSettings.shift()?.(); }, releaseFullSettings: () => { deferFullSettings = false; pendingFullSettings.splice(0).forEach((reply) => reply()); }, deferUpdateStatus: () => { deferUpdateStatus = true; }, releaseUpdateStatus: () => { deferUpdateStatus = false; pendingUpdateStatus.splice(0).forEach((reply) => reply()); } });
+      resolve({ server, url: `http://127.0.0.1:${port}`, detectRequests, applyRequests, saveRequests, renameRequests, catalogRemoveRequests, folderRequests, setFolderImportFailures: (failures) => { folderImportFailures = structuredClone(failures); }, catalogImageIds: () => catalog.map((image) => image.id), sourceDeleteRequests, sourceDeleteOperations: () => structuredClone([...sourceDeletes.entries()]), setSourceDeleteOperation: (token, operation) => sourceDeletes.set(token, structuredClone(operation)), setSourceDeleteCommitFailureIds: (imageIds) => { sourceDeleteCommitFailureIds = new Set(imageIds); }, holdSourceDeleteClaim: (value) => { holdSourceDeleteClaim = value; }, releaseSourceDeleteClaims: () => { holdSourceDeleteClaim = false; pendingSourceDeleteClaims.splice(0).forEach((resume) => resume()); }, settingsRequests, settingsActions, settingsStatusRequests, waitForSettingsStatusRequests: (count) => settingsStatusRequests.length >= count ? Promise.resolve() : new Promise((resolve) => settingsStatusWaiters.push({ count, resolve })), updateRequests, modelPickerRequests, modelDownloadRequests, modelDownloadJobs: () => modelDownloadJobs, modelDownloadPolls: () => modelDownloadPolls, cancelRequests: () => cancelRequests, holdDetection: (value) => { holdDetection = value; }, holdSaveRender: (value) => { holdSaveRender = value; }, releaseSaveRenders: () => { holdSaveRender = false; pendingSaveRenders.splice(0).forEach((resume) => resume()); }, failCancel: (value) => { cancelShouldFail = value; }, failNextSettingsSave: () => { failNextSettingsSave = true; }, failModelDownloadStatus: (value) => { failModelDownloadStatus = value; }, resetModelDownload: () => { modelDownloadJob = { state: "idle", paths: {} }; }, resetScenario: () => { catalog = structuredClone(initialCatalog); catalogGeneration += 1; saveTokens.clear(); sourceDeletes.clear(); sourceDeleteRequests.length = 0; pendingSourceDeleteClaims.splice(0).forEach((resume) => resume()); holdSourceDeleteClaim = false; sourceDeleteCommitFailureIds = new Set(); saveRequests.length = 0; renameRequests.length = 0; catalogRemoveRequests.length = 0; folderRequests.length = 0; folderImportFailures = []; currentJob = { kind: "idle", state: "idle" }; }, setCatalog: (images) => { catalog = structuredClone(images); }, setDefaultOutputDirectory: (value) => { settings.saving.default_output_directory = value; }, resetJob: () => { currentJob = { kind: "idle", state: "idle" }; }, finishCancel: () => { currentJob = { ...currentJob, state: "cancelled", current: "" }; }, finishApply: () => { currentJob = { ...currentJob, state: "complete", completed: currentJob.total, current: "", completedImageIds: currentJob.imageIds }; }, setUpdateAvailable: (value) => { updateAvailable = value; }, deferFullSettings: () => { deferFullSettings = true; }, releaseNextFullSettings: () => { pendingFullSettings.shift()?.(); }, releaseFullSettings: () => { deferFullSettings = false; pendingFullSettings.splice(0).forEach((reply) => reply()); }, deferUpdateStatus: () => { deferUpdateStatus = true; }, releaseUpdateStatus: () => { deferUpdateStatus = false; pendingUpdateStatus.splice(0).forEach((reply) => reply()); } });
     });
   });
 }
@@ -1882,6 +1893,8 @@ async function runExhaustiveAddedScenarios(page, fixtureUrl, resetScenario) {
   };
   await setupFixture();
   const errorCodes = await page.evaluate(() => Object.keys(USER_ERROR_CODES));
+  const renameErrorCodes = ["output_name_conflict", "rename_conflict", "rename_case_only_unsupported", "rename_extension_unsupported"];
+  assert.deepEqual(await page.evaluate((codes) => Object.fromEntries(codes.map((code) => [code, userErrorCode({ code })])), renameErrorCodes), Object.fromEntries(renameErrorCodes.map((code) => [code, code])), "save and rename conflicts reach their dedicated user-error dialogs");
   for (const language of ["ja", "en"]) {
     await page.evaluate((locale) => loadTranslations(locale), language);
     for (const code of errorCodes) {
@@ -2816,7 +2829,7 @@ async function main() {
   let server;
   let browser;
   let fixtureUrl;
-  let detectRequests, applyRequests, saveRequests, catalogRemoveRequests, folderRequests, modelPickerRequests, modelDownloadRequests, modelDownloadJobs, modelDownloadPolls, resetScenario, setFolderImportFailures, setCatalog, setDefaultOutputDirectory, resetJob, finishCancel, finishApply, setUpdateAvailable;
+  let detectRequests, applyRequests, saveRequests, renameRequests, catalogRemoveRequests, folderRequests, modelPickerRequests, modelDownloadRequests, modelDownloadJobs, modelDownloadPolls, resetScenario, setFolderImportFailures, setCatalog, setDefaultOutputDirectory, resetJob, finishCancel, finishApply, setUpdateAvailable;
   let settingsRequests, waitForSettingsStatusRequests;
   let settingsActions;
   let settingsStatusRequests;
@@ -2826,7 +2839,7 @@ async function main() {
   let releaseNextFullSettings, releaseFullSettings;
   let deferUpdateStatus, releaseUpdateStatus;
   try {
-    ({ server, url: fixtureUrl, detectRequests, applyRequests, saveRequests, catalogRemoveRequests, folderRequests, setFolderImportFailures, settingsRequests, settingsActions, settingsStatusRequests, waitForSettingsStatusRequests, updateRequests, modelPickerRequests, modelDownloadRequests, modelDownloadJobs, modelDownloadPolls, cancelRequests, holdDetection, holdSaveRender, releaseSaveRenders, failCancel, failNextSettingsSave, failModelDownloadStatus, resetModelDownload, resetScenario, setCatalog, setDefaultOutputDirectory, resetJob, finishCancel, finishApply, setUpdateAvailable, deferFullSettings, releaseNextFullSettings, releaseFullSettings, deferUpdateStatus, releaseUpdateStatus } = await startFixtureServer());
+    ({ server, url: fixtureUrl, detectRequests, applyRequests, saveRequests, renameRequests, catalogRemoveRequests, folderRequests, setFolderImportFailures, settingsRequests, settingsActions, settingsStatusRequests, waitForSettingsStatusRequests, updateRequests, modelPickerRequests, modelDownloadRequests, modelDownloadJobs, modelDownloadPolls, cancelRequests, holdDetection, holdSaveRender, releaseSaveRenders, failCancel, failNextSettingsSave, failModelDownloadStatus, resetModelDownload, resetScenario, setCatalog, setDefaultOutputDirectory, resetJob, finishCancel, finishApply, setUpdateAvailable, deferFullSettings, releaseNextFullSettings, releaseFullSettings, deferUpdateStatus, releaseUpdateStatus } = await startFixtureServer());
     browser = await chromium.launch();
     // A real unsupported-browser bootstrap must stop before any API request or
     // editor binding. This covers the user-visible File System Access contract.
@@ -3467,7 +3480,7 @@ async function main() {
       const rect = button.getBoundingClientRect(); return rect.width === 28 && rect.height === 28;
     })), true, "all model help buttons, including SAM type, share the compact 28px target");
     await page.locator("#settingsTabShortcuts").click();
-    assert.equal(await page.locator("#shortcutBindings > .form-row").evaluateAll((rows) => rows.length === 11 && rows.every((row) => {
+    assert.equal(await page.locator("#shortcutBindings > .form-row").evaluateAll((rows) => rows.length === 12 && rows.every((row) => {
       const children = [...row.children];
       return children.length === 3 && children.every((child) => Math.abs((child.getBoundingClientRect().y + child.getBoundingClientRect().height / 2) - (row.getBoundingClientRect().y + row.getBoundingClientRect().height / 2)) < 2);
     })), true, "all shortcut bindings keep one three-column row");
@@ -3683,7 +3696,7 @@ async function main() {
     assert.ok(settingsResultBox && resetBox && resetBox.x - (settingsResultBox.x + settingsResultBox.width) <= 12, "settings result stays beside Reset");
     assert.deepEqual(settingsActions.at(-1), { path: "/api/settings/reset", method: "POST" }, "the compact reset button reaches its dedicated API route");
     const shortcutsAfterReset = await page.locator("[data-shortcut-action]").evaluateAll((inputs) => inputs.map((input) => input.value));
-    assert.equal(shortcutsAfterReset.length, 11, "reset restores every shortcut binding before compact save");
+    assert.equal(shortcutsAfterReset.length, 12, "reset restores every shortcut binding before compact save");
     assert.equal(shortcutsAfterReset.every(Boolean) && new Set(shortcutsAfterReset).size === shortcutsAfterReset.length, true, "reset restores valid unique shortcut bindings before compact save");
     const savesBeforeCompactSave = settingsActions.filter((action) => action.path === "/api/settings" && action.method === "POST").length;
     await page.locator("#settingsSaveButton").click();
@@ -3980,6 +3993,29 @@ async function main() {
     assert.equal(await page.locator("#connectionStatus").textContent(), "パスをコピーしました。", "successful copying reports a localized status");
     assert.equal(await page.evaluate(async () => { await loadTranslations("en"); return t("status.pathCopied"); }), "Path copied.", "copy success has an English status");
     await page.evaluate(() => loadTranslations("ja"));
+    await page.locator('.gallery-item[data-id="sample"]').click({ button: "right" });
+    await page.locator("#renameImageMenuItem").click();
+    await page.waitForFunction(() => document.querySelector("#renameImageDialog").open);
+    await page.locator("#renameImageCancel").click();
+    await page.waitForFunction(() => !document.querySelector("#renameImageDialog").open);
+    const reopenedRename = await page.evaluate(async () => {
+      const dialog = document.querySelector("#renameImageDialog"); const card = document.querySelector('.gallery-item[data-id="sample"]');
+      card.focus(); window.dispatchEvent(new KeyboardEvent("keydown", { key: "F2", bubbles: true, cancelable: true }));
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      queueMicrotask(() => dialog.dispatchEvent(new Event("close")));
+      await Promise.resolve();
+      return { open: dialog.open, imageId: state.renameImage?.imageId };
+    });
+    assert.deepEqual(reopenedRename, { open: true, imageId: "sample" }, "a queued close from Cancel does not clear the F2 reopened rename target");
+    await page.locator("#renameImageFilename").fill("sample-f2.png");
+    await page.locator("#renameImageConfirm").click();
+    await page.waitForFunction(() => !document.querySelector("#renameImageDialog").open && state.images.find((image) => image.id === "sample")?.relativePath === "sample-f2.png");
+    assert.equal(renameRequests.length, 1, "Cancel then F2 reopen sends one native rename request");
+    assert.equal(renameRequests[0].imageId, "sample"); assert.equal(renameRequests[0].filename, "sample-f2.png");
+    assert.equal(renameRequests[0].browserRenamed, false); assert.equal(renameRequests[0].expectedCatalogGeneration, 1);
+    resetScenario();
+    await page.goto(fixtureUrl, { waitUntil: "domcontentloaded" });
+    await waitForFixtureReady(page);
     await page.locator('.gallery-item[data-id="sample-two"]').click({ button: "right" });
     await page.waitForFunction(() => document.querySelector("#catalogContextMenu").matches(":popover-open"));
     await page.waitForFunction(() => state.contextMenuImageId === "sample-two");
@@ -4108,7 +4144,7 @@ async function main() {
     assert.deepEqual(await page.evaluate(() => [...state.selectedImageIds].sort()), ["sample", "sample-two"], "opening a context menu leaves the batch selection unchanged");
     assert.equal(await page.locator("#copyImagePathMenuItem").isVisible(), true, "filesystem overview cards expose Copy path");
     await page.locator("#copyImagePathMenuItem").click();
-    assert.deepEqual(await page.evaluate(() => window.__copiedPaths), ["G:\\画像 フォルダー\\sample image.png", "G:\\画像 フォルダー\\sample image.png"], "overview copies only the context-menu image");
+    assert.deepEqual(await page.evaluate(() => window.__copiedPaths), ["G:\\画像 フォルダー\\sample image.png"], "overview copies only the context-menu image");
     await page.evaluate(() => { window.__clipboardFail = true; });
     await page.locator('.overview-item[data-id="sample"]').click({ button: "right" });
     await page.locator("#copyImagePathMenuItem").click();
