@@ -82,6 +82,7 @@ const context = {
   canvas: { style: {} }, addCanvas: { width: 4, height: 4 }, exclusionCanvas: { width: 4, height: 4 }, exclusionEraseCanvas: { width: 4, height: 4 },
   addCtx: { clearRect() {} }, exclusionCtx: { clearRect() {} }, exclusionEraseCtx: { clearRect() {} },
   t: (key, data = {}) => `${key}${data.value ?? data.count ?? ""}`,
+  sourceAccessFor: (imageId) => state.sourceAccess.get(imageId) || null,
   isBusy: () => busy, catalogStagingEditsActive: () => false, currentImageActionPending: () => Boolean(state.pendingImageId), canRemoveCurrentImage: () => true, isProcessableImage: () => true, processableImages: (records = state.images) => records, galleryFilteredImages: () => state.images, overviewImages: () => state.images, closeBoundaryModeMenu: undefined,
   clearBoundaryInteraction: () => calls.push(["clearBoundaryInteraction"]), clearBoundaryConstruction: () => calls.push(["clearBoundaryConstruction"]),
   updateBoundaryActions: () => calls.push(["boundaryActions"]), updateBrushCursor: () => {}, render: () => calls.push(["render"]), flushRender: () => calls.push(["flushRender"]), flushMaskComposition: () => calls.push(["flushMaskComposition"]), clearCandidateBlink: () => calls.push(["clearCandidateBlink"]), focusCanvas: () => calls.push(["canvas"]), focusElement: (value) => { document.activeElement = value; },
@@ -118,7 +119,7 @@ const context = {
 const interactionPath = path.join(__dirname, "..", "static", "js", "interaction.js");
 const source = fs.readFileSync(interactionPath, "utf8");
 vm.runInNewContext(source, context, { filename: interactionPath });
-vm.runInNewContext("globalThis.interactionTest={setTool,setBoundaryModeMenuOpen,closeBoundaryModeMenu,updateBrushSize,updateBlockSizeDisplay,rememberFillToleranceTrigger,confirmAction,confirmationRequired,resetCurrentDraft,clearMasks,clearCatalog,closeCatalogContextMenu,positionCatalogContextMenu,openCatalogContextMenu,copyContextMenuImagePath,clearReviewForRemovedImage,removeImageFromCatalog,runSelectionAction,droppedFile,directFilesFromDrop,isSupportedImageFile,newClientKey,pruneSourceAccess,rememberImportedSource,importFiles,importSingleFile,beginImportSession,remapImportedImageIds,finishImportSession,waitForImportSession,importHandleEntries,importFileHandles,importDirectoryHandle,importProjectDirectoryHandle,importProjectFileHandles,pickImageFiles,pickImageDirectory,importDroppedFiles,setGalleryDropOverlay,handleEditorKeydown,navigationShortcutAction,handleNavigationKeydown,handleWindowKeydown};", context, { filename: "test-interaction-exports.js" });
+vm.runInNewContext("globalThis.interactionTest={setTool,setBoundaryModeMenuOpen,closeBoundaryModeMenu,updateBrushSize,updateBlockSizeDisplay,rememberFillToleranceTrigger,confirmAction,confirmationRequired,beginBrowserDeletePermissionRequests,preflightBrowserSourceDelete,resetCurrentDraft,clearMasks,clearCatalog,closeCatalogContextMenu,positionCatalogContextMenu,openCatalogContextMenu,copyContextMenuImagePath,clearReviewForRemovedImage,removeImageFromCatalog,runSelectionAction,droppedFile,directFilesFromDrop,isSupportedImageFile,newClientKey,pruneSourceAccess,rememberImportedSource,importFiles,importSingleFile,beginImportSession,remapImportedImageIds,finishImportSession,waitForImportSession,importHandleEntries,importFileHandles,importDirectoryHandle,importProjectDirectoryHandle,importProjectFileHandles,pickImageFiles,pickImageDirectory,importDroppedFiles,setGalleryDropOverlay,handleEditorKeydown,navigationShortcutAction,handleNavigationKeydown,handleWindowKeydown};", context, { filename: "test-interaction-exports.js" });
 
 const test = context.interactionTest;
 const event = (binding, type = "keydown") => ({ binding, type, currentTarget: element("#origin"), clientX: 30, clientY: 40, preventDefault() { this.prevented = true; }, stopPropagation() { this.stopped = true; } });
@@ -152,6 +153,24 @@ nodeTest("interaction and catalog mutation controls", async () => {
   element("#confirmNeverShow").checked = true;
   assert.equal(await test.confirmAction("title", "message", "candidateDelete"), true);
   assert.equal(test.confirmationRequired("candidateDelete"), false);
+  let skippedDeletePermissionRequests = 0;
+  state.settings.confirmations.removeImage = false;
+  const skippedDeleteConfirmation = test.confirmAction("title", "message", "removeImage", () => { skippedDeletePermissionRequests += 1; });
+  assert.equal(skippedDeletePermissionRequests, 1, "skipping the source-delete dialog runs its permission callback in the originating turn exactly once");
+  assert.equal(await skippedDeleteConfirmation, true);
+  assert.equal(element("#confirmNeverShow").closest("label").hidden, false, "source deletion retains the shared next-time confirmation choice");
+  let permissionRequests = 0;
+  const browserDeleteImage = { id: "permission-denied", sourceKind: "session", sizeBytes: 1, mtimeNs: 1_000_000 };
+  state.sourceAccess.set(browserDeleteImage.id, {
+    name: "permission-denied.png", fileHandle: { name: "permission-denied.png" },
+    parentHandle: { requestPermission() { permissionRequests += 1; return "denied"; } },
+  });
+  let resolvePermissions;
+  const deniedDeleteConfirmation = test.confirmAction("title", "message", "removeImage", () => { resolvePermissions = test.beginBrowserDeletePermissionRequests([browserDeleteImage]); });
+  assert.equal(permissionRequests, 1, "skipped source deletion requests browser permission once before yielding control");
+  assert.equal(await deniedDeleteConfirmation, true);
+  const denied = await resolvePermissions();
+  assert.deepEqual(JSON.parse(JSON.stringify(denied)), [{ imageId: "permission-denied", reason: "source_permission_denied" }], "a denied skipped-dialog permission keeps the browser source out of the delete preflight");
   state.settings.confirmations.candidateDelete = true; element("#confirmNeverShow").checked = true;
   assert.equal(await test.confirmAction("title", "message", "candidateDelete"), true);
   state.settings.confirmations.candidateDelete = true; element("#confirmNeverShow").checked = false; element("#confirmDialog").returnValue = "";

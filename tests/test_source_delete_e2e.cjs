@@ -56,6 +56,60 @@ test("Delete shortcut keeps a durable source-delete intent through claim and ack
   }
 });
 
+test("source-delete confirmation can be skipped, restored in settings, and cancelled without changing the preference", { timeout: 60000 }, async () => {
+  const fixture = await startFixtureServer();
+  const browser = await chromium.launch({ headless: true });
+  let context; let page; const pageErrors = [];
+  const selectSample = async () => {
+    await page.locator('.gallery-item[data-id="sample"]').click();
+    await page.waitForFunction(() => state.currentId === "sample" && state.currentImage);
+  };
+  try {
+    ({ context, page } = await freshPage(browser, fixture));
+    page.on("pageerror", (error) => { pageErrors.push(error.message); });
+    await selectSample();
+    await page.locator("#removeAndNextButton").click();
+    await page.waitForFunction(() => $("#confirmDialog").open);
+    await page.locator("#confirmNeverShow").check();
+    await page.locator("#confirmAccept").click();
+    await page.waitForFunction(() => !state.images.some((image) => image.id === "sample") && state.settings.confirmations.removeImage === false);
+    assert.equal(fixture.settingsActions.filter((action) => action.path === "/api/settings").length, 1, "accepting next-time suppression persists only the source-delete preference");
+
+    fixture.resetScenario();
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await page.waitForFunction(() => state.settings.confirmations.removeImage === false);
+    await selectSample();
+    await page.locator("#removeAndNextButton").click();
+    await page.waitForFunction(() => !state.images.some((image) => image.id === "sample"));
+    assert.equal(await page.locator("#confirmDialog").evaluate((dialog) => dialog.open), false, "the persisted preference skips the next source-delete modal after reload");
+    assert.equal(await page.locator("#errorDialog").evaluate((dialog) => dialog.open), false, "skipping the modal completes source deletion without an error dialog");
+
+    await page.locator("#settingsButton").click();
+    await page.locator("#settingsTabConfirm").click();
+    await page.locator("#confirmRemoveImage").check();
+    await page.locator("#settingsSaveButton").click();
+    await page.waitForFunction(() => state.settings.confirmations.removeImage === true);
+    fixture.resetScenario();
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await selectSample();
+    await page.locator("#removeAndNextButton").click();
+    await page.waitForFunction(() => $("#confirmDialog").open);
+    const settingsWritesBeforeCancel = fixture.settingsActions.length;
+    await page.locator("#confirmNeverShow").check();
+    await page.locator("#confirmCancel").click();
+    await page.waitForFunction(() => !$("#confirmDialog").open);
+    assert.equal(fixture.settingsActions.length, settingsWritesBeforeCancel, "cancelling a checked source-delete dialog does not persist suppression");
+    assert.equal(await page.evaluate(() => state.settings.confirmations.removeImage), true, "cancelling leaves source-delete confirmation enabled");
+    assert.equal(await page.evaluate(() => state.images.some((image) => image.id === "sample")), true, "cancelling keeps the source image listed");
+    assert.equal(await page.locator("#errorDialog").evaluate((dialog) => dialog.open), false, "cancelling the modal leaves no error dialog");
+    assert.deepEqual(pageErrors, [], "source-delete confirmation transitions produce no page errors");
+  } finally {
+    await context?.close();
+    await browser.close();
+    await closeServer(fixture.server);
+  }
+});
+
 test("unknown browser-source deletion remains recoverable instead of silently committing or cancelling", { timeout: 60000 }, async () => {
   const fixture = await startFixtureServer();
   const browser = await chromium.launch({ headless: true });

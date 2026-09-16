@@ -87,14 +87,14 @@ function updateBlockSizeDisplay() {
 }
 
 function confirmAction(title, message, key = null, onConfirm = null) {
-  const alwaysConfirm = key === "sourceDelete";
-  if (alwaysConfirm) key = null;
   const newConfirmation = new Set(["candidateDelete", "candidateRoleDelete", "overwriteSource", "deleteSourceAfterCopy"]);
-  if (key && (newConfirmation.has(key) ? state.settings?.confirmations?.[key] !== true : state.settings?.confirmations?.[key] === false)) return Promise.resolve(true);
+  const accept = () => { try { onConfirm?.(); } catch { /* The caller turns a failed preflight into a normal per-image failure. */ } };
+  if (key && (newConfirmation.has(key) ? state.settings?.confirmations?.[key] !== true : state.settings?.confirmations?.[key] === false)) {
+    accept(); return Promise.resolve(true);
+  }
   const dialog = $("#confirmDialog");
   $("#confirmTitle").textContent = title;
   $("#confirmMessage").textContent = message;
-  $("#confirmNeverShow").closest("label").hidden = alwaysConfirm;
   return new Promise((resolve) => {
     const finish = () => {
       $("#confirmAccept").removeEventListener("click", accept);
@@ -105,9 +105,8 @@ function confirmAction(title, message, key = null, onConfirm = null) {
           state.settings = data.settings;
         }).catch(() => {});
       }
-      $("#confirmNeverShow").checked = false; $("#confirmNeverShow").closest("label").hidden = false; resolve(accepted);
+      $("#confirmNeverShow").checked = false; resolve(accepted);
     };
-    const accept = () => { try { onConfirm?.(); } catch { /* The caller turns a failed preflight into a normal per-image failure. */ } };
     $("#confirmAccept").addEventListener("click", accept, { once: true });
     dialog.addEventListener("close", finish, { once: true });
     showModalFromInvoker(dialog);
@@ -483,7 +482,7 @@ async function permanentlyDeleteImages(images, visibleImages) {
   const title = ids.length === 1 ? t("confirm.removeImage.title") : t("confirm.removeImages.title");
   const message = ids.length === 1 ? t("confirm.removeImage.message") : t("confirm.removeImages.message", { count: ids.length });
   let resolveBrowserPermissions = null;
-  if (!await confirmAction(title, message, "sourceDelete", () => { resolveBrowserPermissions = beginBrowserDeletePermissionRequests(images); })) return;
+  if (!await confirmAction(title, message, "removeImage", () => { resolveBrowserPermissions = beginBrowserDeletePermissionRequests(images); })) return;
   const imageIds = new Set(ids);
   const selection = deletionSelectionSnapshot(imageIds, visibleImages);
   const token = crypto.randomUUID();

@@ -452,7 +452,7 @@
   "confirm.neverShow": "Do not show again",
   "confirm.clearMasks": "Clear mosaic",
   "confirm.clearCatalog": "Clear list",
-  "confirm.removeImage": "Delete source image (always confirm)",
+  "confirm.removeImage": "Delete source image",
   "settings.gpu": "GPU",
   "settings.gpuLoading": "Loading…",
   "settings.confirmations": "Confirmations",

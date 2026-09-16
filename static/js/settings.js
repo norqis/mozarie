@@ -233,7 +233,7 @@ function setSettingsForm(settings, status = null) {
   syncDetectionActions();
   $("#confirmClearMasks").checked = settings.confirmations?.clearMasks !== false;
   $("#confirmClearCatalog").checked = settings.confirmations?.clearCatalog !== false;
-  $("#confirmRemoveImage").checked = true;
+  $("#confirmRemoveImage").checked = settings.confirmations?.removeImage !== false;
   $("#confirmCandidateDelete").checked = settings.confirmations?.candidateDelete !== false;
   $("#confirmCandidateRoleDelete").checked = settings.confirmations?.candidateRoleDelete !== false;
   $("#confirmOverwriteSource").checked = settings.confirmations?.overwriteSource !== false;
@@ -327,7 +327,7 @@ function settingsPayload() {
     },
     shortcuts: { enabled: $("#settingsShortcutsEnabled").checked, bindings: shortcutBindingsPayload(), actions: shortcutActionsPayload() },
     editing: { fill_color_tolerance: state.settings.editing.fill_color_tolerance },
-    confirmations: { clearMasks: $("#confirmClearMasks").checked, clearCatalog: $("#confirmClearCatalog").checked, removeImage: true, candidateDelete: $("#confirmCandidateDelete").checked, candidateRoleDelete: $("#confirmCandidateRoleDelete").checked, overwriteSource: $("#confirmOverwriteSource").checked, deleteSourceAfterCopy: $("#confirmDeleteSourceAfterCopy").checked },
+    confirmations: { clearMasks: $("#confirmClearMasks").checked, clearCatalog: $("#confirmClearCatalog").checked, removeImage: $("#confirmRemoveImage").checked, candidateDelete: $("#confirmCandidateDelete").checked, candidateRoleDelete: $("#confirmCandidateRoleDelete").checked, overwriteSource: $("#confirmOverwriteSource").checked, deleteSourceAfterCopy: $("#confirmDeleteSourceAfterCopy").checked },
   };
 }
 

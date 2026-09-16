@@ -2281,10 +2281,6 @@ async function runControlLedger(page, fixtureUrl, contracts, finishCancel, holdS
   const inputPredicate = (id, before, after, expected) => {
     if (id === "applyOutputDirectoryStatus" || id === "singleSaveOutputDirectoryStatus") return assertManualOutputDirectoryCommit(before, id, expected);
     const beforeValue = before.controls[id]; const afterValue = after.controls[id];
-    if (id === "confirmRemoveImage") {
-      assert.equal(afterValue.disabled && afterValue.checked, true, "confirmRemoveImage remains an always-on source-deletion warning");
-      return;
-    }
     assert.notDeepEqual(afterValue, beforeValue, `${id} must produce an observable value/checked transition`);
     if (expected.check !== undefined) assert.equal(afterValue.checked, expected.check, `${id} must apply the requested checked value`);
     else assert.equal(afterValue.value, expected.value, `${id} must apply the requested value`);

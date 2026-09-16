@@ -79,7 +79,7 @@ const context = {
   confirmAction: async () => true,
 };
 vm.runInNewContext(source, context, { filename: settingsPath });
-vm.runInNewContext("globalThis.settingsTest={renderModelStatus,renderSamVariantStatuses,selectedSamType,selectSamVariant,selectSettingsTab,moveSettingsTab,setToolRailTabStop,renderSettingsStatus,setSettingsForm,openSettings,saveSettings,resetSettings,chooseSettingsOutputDirectory,chooseSettingsModelFile,handleToolRailKeydown,modelDownloadInput,renderModelDownload,refreshModelDownload,refreshSettingsStatus,showUnsupportedModelDownload,modelDownloadConfirmation,startModelDownload,beginModelDownload,cancelModelDownload,checkForUpdate,startUpdate,samTypeFromPath,shortcutFromEvent,gpuMemoryLabel,modelCardEnabled,setHandSegmentationAvailable,setPrecisionDetectionEnabled,setFluidExclusionEnabled,setFillColorTolerance,saveFillColorTolerance,isWindowsAbsoluteSettingsPath,validateAbsoluteSettingsPaths};", context, { filename: "test-settings-exports.js" });
+vm.runInNewContext("globalThis.settingsTest={renderModelStatus,renderSamVariantStatuses,selectedSamType,selectSamVariant,selectSettingsTab,moveSettingsTab,setToolRailTabStop,renderSettingsStatus,setSettingsForm,settingsPayload,openSettings,saveSettings,resetSettings,chooseSettingsOutputDirectory,chooseSettingsModelFile,handleToolRailKeydown,modelDownloadInput,renderModelDownload,refreshModelDownload,refreshSettingsStatus,showUnsupportedModelDownload,modelDownloadConfirmation,startModelDownload,beginModelDownload,cancelModelDownload,checkForUpdate,startUpdate,samTypeFromPath,shortcutFromEvent,gpuMemoryLabel,modelCardEnabled,setHandSegmentationAvailable,setPrecisionDetectionEnabled,setFluidExclusionEnabled,setFillColorTolerance,saveFillColorTolerance,isWindowsAbsoluteSettingsPath,validateAbsoluteSettingsPaths};", context, { filename: "test-settings-exports.js" });
 
 nodeTest("settings, model pickers, and download state", async () => {
   assert.equal(context.settingsTest.shortcutFromEvent({ ctrlKey: true, metaKey: false, shiftKey: true, altKey: true, key: "a" }), "Ctrl+Shift+Alt+A", "shortcut capture normalizes modifiers and single letters");
@@ -282,6 +282,10 @@ nodeTest("settings, model pickers, and download state", async () => {
   context.settingsTest.renderSettingsStatus(null);
   const defaultSettings = { general: { language: "ja", open_browser: false, port: 8766, shortcuts_enabled: true }, models: { provider: "gpu", gpu_device: 0, target_segmentation: "", ntd11: "", ntd11_enabled: false, sensitive: "", sensitive_enabled: false, hand_detection: "", hand_detection_enabled: false, hand_segmentation_enabled: false, sam_checkpoints: {}, sam_model_type: "vit_b" }, display: { apply_color: "", exclude_color: "", overlay_opacity: 0, mosaic_preview: false }, importing: {}, editing: { fill_color_tolerance: 20 }, saving: {}, detection: { mode: "standard", fluid_exclusion_enabled: false, exclude_forced_default: true, threshold: .5, targets: [] }, shortcuts: {}, confirmations: {} };
   context.settingsTest.setSettingsForm(defaultSettings, { models: {}, gpus: [] });
+  assert.equal(element("#confirmRemoveImage").checked, true, "the source-delete confirmation defaults to enabled");
+  defaultSettings.confirmations.removeImage = false; context.settingsTest.setSettingsForm(defaultSettings, { models: {}, gpus: [] });
+  assert.equal(element("#confirmRemoveImage").checked, false, "a saved source-delete preference restores as disabled");
+  assert.equal(context.settingsTest.settingsPayload().confirmations.removeImage, false, "saving settings preserves the explicit source-delete confirmation preference");
   assert.equal(element("#settingsImportParallelism").value, "3", "empty import settings use their public default");
   assert.equal(element("#detectParallelism").value, "2", "empty detection settings use their public default");
   assert.equal(element("#bucketTolerance").value, "20", "the fill tolerance reflects the persisted editing setting");
