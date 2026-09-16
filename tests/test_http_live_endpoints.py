@@ -134,7 +134,7 @@ class LiveHttpEndpointTests(unittest.TestCase):
             status, _headers, body = self.request(
                 "POST", "/api/output-directory/pick", {"currentPath": str(output)}, authorized=True,
             )
-        self.assertEqual(status, 200, body.decode("utf-8") if status != 200 else "")
+        self.assertEqual(status, 200, body.decode("utf-8"))
         payload = json.loads(body)
         self.assertEqual(payload["path"], str(output.resolve()))
         self.assertEqual(payload["settings"]["saving"]["default_output_directory"], str(output.resolve()))
@@ -221,7 +221,7 @@ class LiveHttpEndpointTests(unittest.TestCase):
         status, _headers, body = self.request(
             "POST", "/api/import/start", {"sessionId": session_id}, authorized=True,
         )
-        self.assertEqual(status, 200, body.decode("utf-8"))
+        self.assertEqual(status, 200, body.decode("utf-8") if status != 200 else "")
 
         encoded = io.BytesIO()
         Image.new("RGB", (9, 7), "white").save(encoded, format="PNG")
