@@ -662,7 +662,6 @@ async function removeSavedCatalogEntries(imageIds, catalogEpoch, selection) {
   if (removed.has(state.contextMenuImageId)) {
     state.contextMenuImageId = null; state.contextMenuOrigin = null; state.contextMenuScroll = null;
   }
-  discardRemovedBrowserSaveState();
   reconcileBrowserSaveState();
   if (selection && removedImageIds.length) await restoreDeletionSelection(selection, new Set(removedImageIds));
   return true;
