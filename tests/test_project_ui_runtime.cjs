@@ -59,7 +59,7 @@ const context = {
   waitForCandidateMutations: async () => calls.push(["wait"]), flushAllImageMutations: async () => calls.push(["image-flush"]), flushAllWorkspaceMutations: async () => calls.push(["flush"]),
   resetCatalog(images) { state.images = images; state.currentId = null; state.selectedImageIds.clear(); calls.push(["reset", images.length]); }, applyProjectSnapshot(snapshot) { state.project = snapshot.project || state.project; state.projectReadOnly = snapshot.readOnly === true || state.project?.status === "completed"; calls.push(["snapshot"]); }, renderCatalogViews() { calls.push(["render"]); },
   updateActionButtons() { calls.push(["actions"]); }, rememberProjectSource: async () => "source", rememberProjectSourceCleanup: async () => "cleanup", forgetProjectSources: async (id) => calls.push(["forget", id]), loadFolder: async () => calls.push(["loadFolder"]),
-  rememberedProjectSources: async () => ({ files: [], directories: [] }), matchingProjectDirectorySources: async () => [], ensureProjectSourcePermission: async () => true,
+  rememberedProjectSources: async () => ({ files: [], directories: [] }), matchingProjectDirectorySources: async () => [], ensureProjectSourcePermission: async () => true, requestProjectSourcePermission: async () => true,
   importProjectDirectoryHandle: async (_handle, _project, sourceId) => calls.push(["directory", sourceId]), importProjectFileHandles: async (sources) => { calls.push(["files", sources.length]); return []; },
   confirmAction: async () => true, fetch: async (url) => { calls.push(["fetch", url]); return { ok: true, blob: async () => new Blob(["mask"]) }; }, responseError: () => new Error("download failed"),
   api: async (url, options = {}) => {
@@ -87,7 +87,7 @@ context.canvas = new Element("canvas"); context.stage = new Element("stage"); co
 
 const appPath = path.join(__dirname, "..", "static", "js", "app.js");
 vm.runInNewContext(fs.readFileSync(appPath, "utf8"), context, { filename: appPath });
-vm.runInNewContext("globalThis.projectTest={projectTitle,projectDate,projectSource,renderProjectCurrent,openProjectNameDialog,showProjectList,showSourceMismatches,openProject,downloadProjectArtifact,resumeCurrentProject,openSameSourceDialog,openProjectDeleteDialog,deleteProject,bindEvents,setPendingBrowserProjectSources:(sources)=>{ pendingBrowserProjectSources=sources; },pendingBrowserProjectSources:()=>pendingBrowserProjectSources};", context, { filename: "project-ui-exports.js" });
+vm.runInNewContext("globalThis.projectTest={projectTitle,projectDate,projectSource,renderProjectCurrent,renderNativeRelinkDialog,showSameSourceDialog,openProjectNameDialog,showProjectList,showSourceMismatches,openProject,downloadProjectArtifact,resumeCurrentProject,openSameSourceDialog,openProjectDeleteDialog,deleteProject,bindEvents,setPendingBrowserProjectSources:(sources)=>{ pendingBrowserProjectSources=sources; },pendingBrowserProjectSources:()=>pendingBrowserProjectSources};", context, { filename: "project-ui-exports.js" });
 const test = context.projectTest;
 
 nodeTest("project dialogs, source recovery, and project switching", async () => {
@@ -167,6 +167,21 @@ nodeTest("project dialogs, source recovery, and project switching", async () => 
   assert.equal(test.pendingBrowserProjectSources().length, 1, "a failed project open keeps pending browser-source recovery state");
   test.renderProjectCurrent();
   assert.equal(element("#projectBrowserRestore").hidden, false, "a failed project open keeps its recovery UI visible");
+  const restoreButton = element("#projectBrowserRestoreList").children[0].children[0];
+  assert.equal(restoreButton.disabled, false, "a retained browser source recovery action is enabled when no project operation is pending");
+  restoreButton.listeners.get("click")(); await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(test.pendingBrowserProjectSources().length, 0, "a browser source recovery action removes only its restored pending source");
+  state.missingNativeSources = [
+    { id: "native-a", displayName: "A", nativePath: "C:/old-a", kind: "native-folder", exists: false },
+    { id: "native-b", displayName: "B", nativePath: "C:/old-b", kind: "native-folder", exists: false },
+  ];
+  test.renderNativeRelinkDialog();
+  const nativeSecond = element("#nativeRelinkSources").children[1].children[0];
+  await nativeSecond.listeners.get("click")();
+  assert.equal(element("#nativeRelinkPath").value, "C:/old-b", "a native relink list choice selects that source's retained path");
+  test.showSameSourceDialog([projects[0], projects[2]], { path: "C:/alpha/" });
+  const sameSourceSecond = element("#sameSourceList").children[1].children[0];
+  await sameSourceSecond.listeners.get("click")();
   context.api = async (url, options = {}) => {
     calls.push(["api", url, options.method]);
     if (url === "/api/project/mismatches" && options.method !== "POST") return { images: [{ id: "changed", relativePath: "changed.png", dimensionsChanged: true }] };
@@ -222,5 +237,16 @@ nodeTest("project dialogs, source recovery, and project switching", async () => 
   assert.equal(calls.filter(([kind, url]) => kind === "api" && url === "/api/project/mismatches").length, mismatchPostsBefore + 1, "a second mismatch submit cannot start a competing catalog mutation");
   context.flushAllImageMutations = async () => calls.push(["image-flush"]);
   await fire("#sourceMismatchCancel");
-  await fire("#sameSourceOpen"); await fire("#sameSourceSeparate"); await fire("#sameSourceCancel");
+  let sameSourceOpenedProjectId = "";
+  const apiBeforeSameSourceOpen = context.api;
+  context.api = async (url, options = {}) => {
+    if (url === "/api/project/open") {
+      sameSourceOpenedProjectId = JSON.parse(options.body).projectId;
+      return { project: projects[2], images: [], needsSource: false };
+    }
+    return apiBeforeSameSourceOpen(url, options);
+  };
+  await fire("#sameSourceOpen");
+  assert.equal(sameSourceOpenedProjectId, "separate", "a same-source list choice directs Open to its selected project");
+  await fire("#sameSourceSeparate"); await fire("#sameSourceCancel");
 });

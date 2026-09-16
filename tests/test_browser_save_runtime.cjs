@@ -900,6 +900,116 @@ async function runFormattedHandleOverwriteCase() {
   assert.deepEqual(removed, ['source.png'], 'a browser PNG overwrite removes the old source only after the JPG save commits');
   assert.equal(access.name, 'source.jpg', 'the live browser source handle follows the renamed output');
   assert.equal(files.has('source.jpg'), true, 'the renamed browser source remains available after commit');
+  assert.equal((await parentHandle.getFileHandle('source.jpg')).name, 'source.jpg', 'a project-directory rescan can reopen the renamed browser source');
+}
+
+function formattedSourceFixture({ sourceName = 'source.png', failWrite = false, failOldRemove = false } = {}) {
+  const files = new Map([[sourceName, sourceBlob(sourceName, 12, 34)]]);
+  const handles = new Map(); const removed = [];
+  const handleFor = (name) => {
+    if (!handles.has(name)) handles.set(name, {
+      name,
+      async getFile() { return files.get(name); },
+      async createWritable() {
+        const bytes = [];
+        return {
+          async write(chunk) { if (failWrite && name !== sourceName) throw new Error('target write failed'); bytes.push(...new Uint8Array(chunk)); },
+          async close() { files.set(name, sourceBlob(name, bytes.length, 35)); },
+          async abort() {},
+        };
+      },
+    });
+    return handles.get(name);
+  };
+  const parentHandle = {
+    async getFileHandle(name, options = {}) {
+      if (!files.has(name) && !options.create) throw new DOMException('missing', 'NotFoundError');
+      if (!files.has(name)) files.set(name, sourceBlob(name, 0, 34));
+      return handleFor(name);
+    },
+    async removeEntry(name) {
+      removed.push(name);
+      if (failOldRemove && name === sourceName) throw new Error('old source removal failed');
+      files.delete(name);
+    },
+  };
+  return { files, handleFor, parentHandle, removed };
+}
+
+function configureFormattedOverwrite(runtime, fixture, sourceName, format) {
+  const image = { id: 'image-1', sourceKind: 'session', relativePath: `nested/${sourceName}`, width: 32, height: 32, candidateCount: 1, enabledCandidateCount: 1 };
+  const access = { fileHandle: fixture.handleFor(sourceName), parentHandle: fixture.parentHandle, name: sourceName, relativePath: `nested/${sourceName}`, size: 12, lastModified: 34 };
+  runtime.state.images = [image];
+  runtime.state.sourceAccess.set(image.id, access);
+  runtime.element('#applyOutputFormat').value = format;
+  return { image, access };
+}
+
+async function runFormattedHandleWriteFailureCase() {
+  const fixture = formattedSourceFixture({ failWrite: true });
+  const runtime = createRuntime({ commit: () => jsonResponse({ cleared: true, stale: false, images: [] }) });
+  configureFormattedOverwrite(runtime, fixture, 'source.png', 'jpg');
+  await assert.rejects(runtime.runBrowserSave(['image-1'], '_censored', false, 'overwrite'));
+  assert.equal(fixture.files.has('source.png'), true, 'a target write failure keeps the original browser source');
+  assert.equal(fixture.files.has('source.jpg'), false, 'a target write failure removes the partial renamed file');
+  assert.equal(runtime.requests.some((request) => request.path === '/api/save/commit'), false, 'a target write failure never commits the rename');
+}
+
+async function runFormattedHandleCommitRejectionCase() {
+  const fixture = formattedSourceFixture();
+  const runtime = createRuntime({ commit: () => jsonResponse({ error: 'commit rejected' }, 400) });
+  configureFormattedOverwrite(runtime, fixture, 'source.png', 'jpg');
+  await assert.rejects(runtime.runBrowserSave(['image-1'], '_censored', false, 'overwrite'), (error) => error.code === 'internal_error');
+  assert.equal(fixture.files.has('source.png'), true, 'a rejected commit preserves the original browser source');
+  assert.equal(fixture.files.has('source.jpg'), false, 'a rejected commit removes the uncommitted renamed file');
+}
+
+async function runFormattedHandleOldRemoveFailureCase() {
+  const fixture = formattedSourceFixture({ sourceName: 'source.jpg', failOldRemove: true });
+  const runtime = createRuntime({ commit: () => jsonResponse({ cleared: true, stale: false, images: [] }) });
+  const { access } = configureFormattedOverwrite(runtime, fixture, 'source.jpg', 'png');
+  await assert.rejects(runtime.runBrowserSave(['image-1'], '_censored', false, 'overwrite'));
+  assert.equal(runtime.requests.filter((request) => request.path === '/api/save/commit').length, 1, 'the database commit completes before retiring the old browser source');
+  assert.equal(fixture.files.has('source.jpg'), true, 'a failed old-source removal leaves the old file available for manual cleanup');
+  assert.equal(fixture.files.has('source.png'), true, 'the committed renamed browser source remains available');
+  const live = runtime.state.sourceAccess.get('image-1');
+  assert.equal(live.name, 'source.png', 'the live access record follows the committed renamed source after old-file cleanup fails');
+  assert.equal(live.relativePath, 'nested/source.png', 'the live relative path follows the committed renamed source after old-file cleanup fails');
+  assert.equal(access.name, 'source.png', 'the original live access object is updated before old-file cleanup reports its failure');
+}
+
+async function runSingleFormattedHandleOverwriteCase() {
+  const fixture = formattedSourceFixture({ sourceName: 'single.jpg' });
+  const image = { id: 'image-1', sourceKind: 'session', relativePath: 'nested/single.jpg', width: 32, height: 32, candidateCount: 1, enabledCandidateCount: 1, reviewed: false, hidden: false };
+  const runtime = createRuntime({ initialImages: [image], commit: () => jsonResponse({ cleared: true, stale: false, images: [] }) });
+  const access = { fileHandle: fixture.handleFor('single.jpg'), parentHandle: fixture.parentHandle, name: 'single.jpg', relativePath: 'nested/single.jpg', size: 12, lastModified: 34 };
+  runtime.state.sourceAccess.set(image.id, access);
+  runtime.state.currentId = image.id; runtime.state.currentImage = image;
+  runtime.state.singleSave = { imageId: image.id, generation: runtime.state.imageGeneration, divisor: 100, draft: null };
+  runtime.element('input[name="singleSaveMode"]:checked').value = 'overwrite';
+  runtime.element('#singleSaveOutputFormat').value = 'png';
+  await runtime.startSingleSave({ preventDefault() {} });
+  assert.deepEqual(fixture.removed, ['single.jpg'], 'single overwrite retires the old JPG only after committing its PNG replacement');
+  assert.equal(access.name, 'single.png', 'single overwrite updates its live browser access to the PNG replacement');
+  assert.equal(fixture.files.has('single.png'), true, 'single overwrite retains the committed PNG replacement');
+}
+
+async function runJpegFormattedHandlePreservationCase() {
+  const sourceFile = sourceBlob('source.jpeg', 12, 34); let writes = 0;
+  const sourceHandle = {
+    name: sourceFile.name,
+    async getFile() { return sourceFile; },
+    async createWritable() { return { async write() { writes += 1; }, async close() {}, async abort() {} }; },
+  };
+  const runtime = createRuntime({ commit: () => jsonResponse({ cleared: true, stale: false, images: [] }) });
+  runtime.state.images = [{ id: 'image-1', sourceKind: 'session', relativePath: 'nested/source.jpeg', width: 32, height: 32, candidateCount: 1, enabledCandidateCount: 1 }];
+  const access = { fileHandle: sourceHandle, name: sourceFile.name, relativePath: 'nested/source.jpeg', size: sourceFile.size, lastModified: sourceFile.lastModified };
+  runtime.state.sourceAccess.set('image-1', access);
+  runtime.element('#applyOutputFormat').value = 'jpg';
+  await runtime.runBrowserSave(['image-1'], '_censored', false, 'overwrite');
+  assert.equal(writes, 1, 'JPEG to JPG overwrites the existing browser handle without a rename');
+  assert.equal(access.name, 'source.jpeg', 'JPEG to JPG preserves the original .jpeg source name');
+  assert.equal(access.relativePath, 'nested/source.jpeg', 'JPEG to JPG preserves the original project relative path');
 }
 
 async function runFormattedHandleCollisionCase() {
@@ -1237,6 +1347,11 @@ nodeTest("browser save runtime contracts", async () => {
   await runHandleOverwriteCase();
   await runFormattedHandleOverwriteCase();
   await runFormattedHandleCollisionCase();
+  await runFormattedHandleWriteFailureCase();
+  await runFormattedHandleCommitRejectionCase();
+  await runFormattedHandleOldRemoveFailureCase();
+  await runSingleFormattedHandleOverwriteCase();
+  await runJpegFormattedHandlePreservationCase();
   await runHandleOverwriteChangedDuringRenderCase();
   await runRepeatedHandleOverwriteCase();
   await runHandleDeleteAfterCopyCase();

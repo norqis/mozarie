@@ -935,8 +935,11 @@ async function runBrowserSave(imageIds, suffix, deleteOriginal, mode = "copy") {
               }
               commitStarted = true;
               const committed = await commitBrowserSaveWithRetry({ imageId: entry.imageId, candidateRevision: entry.candidateRevision, deleteOriginal: inputs.deleteOriginal, sourceAction, saveToken, ...sourceCommitMetadata(sourceRename?.replacement || access) });
-              await finishFormattedSourceRename(access, sourceRename);
+              // The server has committed the new relative path. Keep the live
+              // directory handle aligned even if retiring the old name fails.
               const liveAccess = sourceAccessFor(entry.imageId);
+              if (sourceRename && liveAccess) Object.assign(liveAccess, sourceRename.replacement);
+              await finishFormattedSourceRename(access, sourceRename);
               if (liveAccess) Object.assign(liveAccess, access);
               return finishBrowserSaveEntry(committed, entry, save, sourceAction);
             } catch (error) {

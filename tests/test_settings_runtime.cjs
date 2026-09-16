@@ -31,6 +31,7 @@ const samOutputs = ["missing", "type_mismatch", "invalid_format"].map((reason) =
   output.closest = () => ({ classList: { remove() {}, toggle() {} } });
   return output;
 });
+element("#settingsDialog").querySelectorAll = () => [...elements.values()].filter((node) => node.id !== "#settingsDialog");
 const modelPickers = ["sam_checkpoint", "target_segmentation"].map((key) => {
   const button = element(`picker-${key}`); button.dataset.modelPicker = key; button.dataset.modelInput = key === "sam_checkpoint" ? "settingsSamModel" : "settingsTargetModel";
   return button;
@@ -162,6 +163,7 @@ nodeTest("settings, model pickers, and download state", async () => {
   assert.equal(tabs[1].classList.contains("active"), true, "a model path error opens the Models settings tab");
   assert.equal(element("#settingsResult").textContent, "settings.absolutePathRequired:settings.targetModel", "the inline error tells the user that the named field needs an absolute path");
   element("#settingsTargetModel").value = "G:\\models\\target.onnx";
+  for (const id of ["#settingsSaveButton", "#settingsResetButton", "#settingsLanguage", "#settingsCloseButton"]) element(id);
   let releaseSettingsReset;
   context.api = async () => new Promise((resolve) => { releaseSettingsReset = resolve; });
   const pendingSettingsReset = context.settingsTest.resetSettings();
@@ -169,11 +171,15 @@ nodeTest("settings, model pickers, and download state", async () => {
   const blockedSettingsSave = context.settingsTest.saveSettings({ preventDefault() {} });
   assert.equal(element("#settingsSaveButton").disabled, true, "a pending settings save disables its submit action");
   assert.equal(element("#settingsResetButton").disabled, true, "a pending settings save also blocks reset from racing its response");
+  assert.equal(element("#settingsLanguage").disabled, true, "a pending settings mutation locks the rest of the editable form");
+  assert.equal(element("#settingsCloseButton").disabled, true, "a pending settings mutation prevents closing the form while its response can replace fields");
   context.api = async () => ({ settings: { general: { language: "ja", shortcuts_enabled: true }, display: { mosaic_preview: true } }, version: "v1", status: { models: {}, gpus: [] } });
   releaseSettingsReset({ settings: { general: { language: "ja", shortcuts_enabled: true }, display: { mosaic_preview: true } }, version: "v1" });
   await pendingSettingsReset; await blockedSettingsSave;
   assert.equal(element("#settingsSaveButton").disabled, false, "settings controls are restored after a successful save");
   assert.equal(element("#settingsResetButton").disabled, false, "reset becomes available after the pending save settles");
+  assert.equal(element("#settingsLanguage").disabled, false, "successful settings completion restores editable fields");
+  assert.equal(element("#settingsCloseButton").disabled, false, "successful settings completion restores the close action");
   element("#settingsDefaultOutputDirectory").value = "relative-output";
   await context.settingsTest.saveSettings({ preventDefault() {} });
   assert.equal(element("#settingsDefaultOutputDirectory").getAttribute("aria-invalid"), "true", "the relative output folder field is marked invalid");

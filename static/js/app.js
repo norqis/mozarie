@@ -170,7 +170,7 @@ async function toggleImageFlip(axis) {
   } catch (error) {
     showUserError(error, axis === "horizontal" ? $("#flipHorizontalButton") : $("#flipVerticalButton"));
   } finally {
-    state.transformPending = false; updateActionButtons();
+    state.transformPending = false; renderCandidates(); updateActionButtons();
   }
 }
 

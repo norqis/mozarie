@@ -404,9 +404,16 @@ async function openSettings() {
 }
 
 let settingsMutationPending = false;
+let settingsMutationDisabled = null;
 function syncSettingsMutationControls() {
-  $("#settingsSaveButton").disabled = settingsMutationPending;
-  $("#settingsResetButton").disabled = settingsMutationPending;
+  const controls = [...$("#settingsDialog").querySelectorAll("input, select, textarea, button")];
+  if (settingsMutationPending) {
+    settingsMutationDisabled ||= new Map(controls.map((control) => [control, control.disabled]));
+    controls.forEach((control) => { control.disabled = true; });
+    return;
+  }
+  settingsMutationDisabled?.forEach((disabled, control) => { control.disabled = disabled; });
+  settingsMutationDisabled = null;
 }
 
 async function saveSettings(event) {
@@ -417,7 +424,7 @@ async function saveSettings(event) {
     result.textContent = t("error.detectionTargetsRequired"); result.classList.add("error"); return;
   }
   if (!validateAbsoluteSettingsPaths()) return;
-  settingsMutationPending = true; syncSettingsMutationControls();
+  settingsMutationPending = true; syncSettingsMutationControls(); let saved = false;
   try {
     const data = await api("/api/settings?status=0", { method: "POST", body: JSON.stringify(settingsPayload()) });
     const languageChanged = state.settings?.general?.language !== data.settings.general.language;
@@ -428,17 +435,20 @@ async function saveSettings(event) {
     if (languageChanged) await loadTranslations();
     result.textContent = t("settings.saved");
     void refreshSettingsStatus();
+    saved = true;
   } catch (error) {
     settingsMutationPending = false; syncSettingsMutationControls();
     showUserError(error, $("#settingsSaveButton"));
+  } finally {
+    settingsMutationPending = false; syncSettingsMutationControls();
+    if (saved) setSettingsForm(state.settings, state.settingsStatus);
   }
-  finally { settingsMutationPending = false; syncSettingsMutationControls(); }
 }
 
 async function resetSettings() {
   if (settingsMutationPending) return;
   const result = $("#settingsResult"); result.textContent = ""; result.classList.remove("error");
-  settingsMutationPending = true; syncSettingsMutationControls();
+  settingsMutationPending = true; syncSettingsMutationControls(); let reset = false;
   try {
     const data = await api("/api/settings/reset?status=0", { method: "POST", body: JSON.stringify({}) });
     setSettingsForm(data.settings);
@@ -448,11 +458,14 @@ async function resetSettings() {
     await loadTranslations();
     result.textContent = t("settings.resetDone");
     void refreshSettingsStatus();
+    reset = true;
   } catch (error) {
     settingsMutationPending = false; syncSettingsMutationControls();
     showUserError(error, $("#settingsResetButton"));
+  } finally {
+    settingsMutationPending = false; syncSettingsMutationControls();
+    if (reset) setSettingsForm(state.settings, state.settingsStatus);
   }
-  finally { settingsMutationPending = false; syncSettingsMutationControls(); }
 }
 
 async function chooseSettingsOutputDirectory() {
