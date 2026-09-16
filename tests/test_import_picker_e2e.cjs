@@ -1330,7 +1330,7 @@ async function runDynamicProjectAndShortcutScenario(browser, fixtureUrl, setting
     const shortcutSaveStart = settingsPayloads.length;
     await page.locator("#settingsSaveButton").click();
     await page.waitForFunction(() => document.querySelector("#settingsResult").textContent === "設定を保存しました。");
-    assert.deepEqual(settingsPayloads.slice(shortcutSaveStart).filter((payload) => payload.search === "").map((payload) => payload.body.shortcuts), [{ enabled: true, bindings: shortcutBindings, actions: shortcutActions }], "saving shortcut settings posts all twelve exact bindings and enabled actions");
+    assert.deepEqual(settingsPayloads.slice(shortcutSaveStart).filter((payload) => payload.search === "?status=0").map((payload) => payload.body.shortcuts), [{ enabled: true, bindings: shortcutBindings, actions: shortcutActions }], "saving shortcut settings posts all twelve exact bindings and enabled actions");
     assert.deepEqual(await page.evaluate(() => state.settings.shortcuts), { enabled: true, bindings: shortcutBindings, actions: shortcutActions }, "saving shortcut settings updates the live twelve-action shortcut state");
     await page.locator("#settingsCloseButton").click();
     const renameCard = page.locator('.gallery-item[data-id="sample"]');
@@ -1342,13 +1342,13 @@ async function runDynamicProjectAndShortcutScenario(browser, fixtureUrl, setting
     await page.locator('[data-shortcut-enabled="renameImage"]').uncheck();
     const renameDisabledSaveStart = settingsPayloads.length;
     await page.locator("#settingsSaveButton").click(); await page.waitForFunction(() => document.querySelector("#settingsResult").textContent === "設定を保存しました。");
-    assert.deepEqual(settingsPayloads.slice(renameDisabledSaveStart).filter((payload) => payload.search === "").map((payload) => payload.body.shortcuts.actions.renameImage), [false], "saving the disabled rename action posts its exact action state");
+    assert.deepEqual(settingsPayloads.slice(renameDisabledSaveStart).filter((payload) => payload.search === "?status=0").map((payload) => payload.body.shortcuts.actions.renameImage), [false], "saving the disabled rename action posts its exact action state");
     await page.locator("#settingsCloseButton").click(); await renameCard.focus(); await page.keyboard.press(playwrightShortcut(shortcutBindings.renameImage));
     assert.equal(await page.locator("#renameImageDialog").evaluate((dialog) => dialog.open), false, "a disabled custom rename shortcut does not open the dialog");
     await page.locator("#settingsButton").click(); await page.locator("#settingsTabShortcuts").click(); await page.locator('[data-shortcut-enabled="renameImage"]').check();
     const renameEnabledSaveStart = settingsPayloads.length;
     await page.locator("#settingsSaveButton").click(); await page.waitForFunction(() => document.querySelector("#settingsResult").textContent === "設定を保存しました。");
-    assert.deepEqual(settingsPayloads.slice(renameEnabledSaveStart).filter((payload) => payload.search === "").map((payload) => payload.body.shortcuts.actions.renameImage), [true], "saving the re-enabled rename action posts its exact action state");
+    assert.deepEqual(settingsPayloads.slice(renameEnabledSaveStart).filter((payload) => payload.search === "?status=0").map((payload) => payload.body.shortcuts.actions.renameImage), [true], "saving the re-enabled rename action posts its exact action state");
     await page.locator("#settingsCloseButton").click(); await renameCard.focus(); await page.keyboard.press(playwrightShortcut(shortcutBindings.renameImage));
     await page.waitForFunction(() => document.querySelector("#renameImageDialog").open && state.renameImage?.imageId === "sample");
     await page.locator("#renameImageCancel").click();
