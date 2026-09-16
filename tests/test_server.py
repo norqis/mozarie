@@ -5185,6 +5185,9 @@ class MozarieTests(unittest.TestCase):
             state = self.new_state()
             state.settings["models"]["provider"] = "cpu"
             first_id = state.set_root(str(first_root))[0]["id"]
+            first_workspace_store = state.workspace_store
+            with first_workspace_store._connect() as db:
+                history_group_count = db.execute("SELECT COUNT(*) FROM history_groups").fetchone()[0]
             original_start_job = state._start_job
 
             def switch_then_start(*args, **kwargs):
@@ -5197,6 +5200,29 @@ class MozarieTests(unittest.TestCase):
 
             self.assertEqual(state.root, second_root.resolve())
             self.assertEqual(state.job.state, "idle")
+            with first_workspace_store._connect() as db:
+                self.assertEqual(db.execute("SELECT COUNT(*) FROM history_groups WHERE status='building'").fetchone()[0], 0)
+                self.assertEqual(db.execute("SELECT COUNT(*) FROM history_groups").fetchone()[0], history_group_count)
+
+    def test_detection_start_job_failure_removes_its_empty_history_group(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "source.png"
+            Image.new("RGB", (16, 16), "white").save(source)
+            state = self.new_state()
+            state.settings["models"]["provider"] = "cpu"
+            image_id = state.set_root(directory)[0]["id"]
+            self.persist_project(state, "detection-start-failure")
+            with state.workspace_store._connect() as db:
+                history_group_count = db.execute("SELECT COUNT(*) FROM history_groups").fetchone()[0]
+
+            with patch.object(state, "_start_job", side_effect=ClientError("処理中です。", "operation_in_progress")):
+                with self.assertRaisesRegex(ClientError, "処理中です"):
+                    state.start_detection([image_id])
+
+            self.assertEqual(state.job.state, "idle")
+            with state.workspace_store._connect() as db:
+                self.assertEqual(db.execute("SELECT COUNT(*) FROM history_groups WHERE status='building'").fetchone()[0], 0)
+                self.assertEqual(db.execute("SELECT COUNT(*) FROM history_groups").fetchone()[0], history_group_count)
 
     def test_apply_start_rejects_a_catalog_switch_without_touching_old_source(self):
         with tempfile.TemporaryDirectory() as directory:

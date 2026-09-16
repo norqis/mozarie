@@ -381,6 +381,12 @@ class ProjectWorkspaceCoverageTests(unittest.TestCase):
                 self.assertEqual(db.execute("SELECT add_png FROM manual_edits WHERE image_id=?", (image_id,)).fetchone()[0], raw)
             finally:
                 db.close()
+            rgba = Image.new("RGBA", (4, 3), (255, 255, 255, 0)); rgba.putpixel((1, 2), (255, 255, 255, 255))
+            output = io.BytesIO(); rgba.save(output, format="PNG"); current = output.getvalue()
+            store.save_manual(image_id, {"add": current, "exclusion": None, "exclusionErase": None,
+                                         "removedCandidateIds": [], "hasEffectiveMask": True}, lambda value: value)
+            self.assertEqual(store.manual(image_id, CatalogMixin._encode_workspace_mask)["add"],
+                             f"data:image/png;base64,{base64.b64encode(current).decode('ascii')}")
 
     def test_history_delta_validation_gc_groups_and_atomicity(self):
         with tempfile.TemporaryDirectory() as directory:

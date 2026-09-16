@@ -317,8 +317,10 @@ function showProcessing(processing) {
   $("#processingProgress").value = Math.min($("#processingProgress").max, Number(progress) || 0);
   $("#processingProgressText").textContent = progressText(current);
   const cancelling = Boolean(current.cancelRequested || state.detectCancelRequested || state.importSession?.cancelled);
+  const detectionPublicationPending = current.kind === "detect" && current.state === "running"
+    && Number(current.processed) >= Number(current.total);
   $("#processingPauseButton").textContent = t(current.state === "paused" ? "apply.resume" : "apply.pause");
-  $("#processingPauseButton").disabled = current.state === "pausing" || cancelling;
+  $("#processingPauseButton").disabled = current.state === "pausing" || cancelling || detectionPublicationPending;
   $("#processingCancelButton").disabled = cancelling;
   showModalFromInvoker(modal);
 }

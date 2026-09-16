@@ -2513,8 +2513,14 @@ class CatalogMixin:
 
     @staticmethod
     def _encode_workspace_mask(value: bytes | None) -> str:
-        canonical = WorkspaceStore._encode_png_mask(value)
-        return "" if canonical is None else f"data:image/png;base64,{base64.b64encode(canonical).decode('ascii')}"
+        if value is None:
+            return ""
+        # WorkspaceStore.manual has already opened and validated this PNG. The
+        # browser writes its masks as RGBA, so preserve that common 4K path
+        # without a second Pillow decode/encode; legacy grayscale forms still
+        # pass through the canonical alpha encoder.
+        canonical = value if len(value) >= 26 and value[12:16] == b"IHDR" and value[25] == 6 else WorkspaceStore._encode_png_mask(value)
+        return f"data:image/png;base64,{base64.b64encode(canonical).decode('ascii')}"
 
     def save_manual_workspace(self, image_id: str, payload: dict[str, Any]) -> None:
         self.image_for_id(image_id)

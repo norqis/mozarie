@@ -158,34 +158,40 @@ class DetectionMixin:
             # Every successfully published result belongs to one undo group.
             # Candidates remain staged until every target is ready, then the
             # group is published as one SQLite transaction.
-            self._detection_history_group = self.workspace_store.begin_history_group()
-            # Capture every per-run option before the worker starts.  A saved
-            # settings change must never alter only the latter images of one
-            # detection run.
-            detection = self.settings["detection"]
-            detection_options = {
-                "mode": str(detection["mode"]),
-                "fluid_exclusion_enabled": bool(detection["fluid_exclusion_enabled"]),
-                "fluid_color_fill": fluid_color_fill if fluid_color_fill is not None else (
-                    bool(detection["fluid_color_fill_enabled"]),
-                    int(detection["fluid_color_fill_tolerance"]),
-                ),
-                "default_padding": int(detection["default_candidate_padding_px"]),
-                "default_exclude_padding": int(detection["default_exclude_candidate_padding_px"]),
-            }
-            LOGGER.info(
-                "自動検出開始: 対象=%d件 精液候補の色拡張=%s 許容範囲=%d",
-                len(records),
-                "ON" if detection_options["fluid_color_fill"][0] else "OFF",
-                detection_options["fluid_color_fill"][1],
-            )
-            args: tuple[Any, ...] = (
-                confidence,
-                _read_detection_parallelism(parallelism),
-                targets,
-                detection_options,
-            )
-            self._start_job("detect", records, self._detect_worker, *args, expected_catalog_generation=catalog_generation)
+            history_store = self.workspace_store
+            history_group = history_store.begin_history_group()
+            try:
+                # Capture every per-run option before the worker starts.  A saved
+                # settings change must never alter only the latter images of one
+                # detection run.
+                detection = self.settings["detection"]
+                detection_options = {
+                    "mode": str(detection["mode"]),
+                    "fluid_exclusion_enabled": bool(detection["fluid_exclusion_enabled"]),
+                    "fluid_color_fill": fluid_color_fill if fluid_color_fill is not None else (
+                        bool(detection["fluid_color_fill_enabled"]),
+                        int(detection["fluid_color_fill_tolerance"]),
+                    ),
+                    "default_padding": int(detection["default_candidate_padding_px"]),
+                    "default_exclude_padding": int(detection["default_exclude_candidate_padding_px"]),
+                }
+                LOGGER.info(
+                    "自動検出開始: 対象=%d件 精液候補の色拡張=%s 許容範囲=%d",
+                    len(records),
+                    "ON" if detection_options["fluid_color_fill"][0] else "OFF",
+                    detection_options["fluid_color_fill"][1],
+                )
+                args: tuple[Any, ...] = (
+                    confidence,
+                    _read_detection_parallelism(parallelism),
+                    targets,
+                    detection_options,
+                    history_group,
+                )
+                self._start_job("detect", records, self._detect_worker, *args, expected_catalog_generation=catalog_generation)
+            except Exception:
+                history_store.finish_history_group(history_group, failed=True)
+                raise
 
 
     def _load_detection_models(self) -> DetectionModels:
@@ -289,6 +295,7 @@ class DetectionMixin:
         parallelism: int = 2,
         target_classes: set[str] | None = None,
         detection_options: dict[str, Any] | None = None,
+        history_group: str | None = None,
         *,
         control: JobControl | None = None,
         job_generation: int | None = None,
@@ -325,13 +332,11 @@ class DetectionMixin:
             self._set_job_parallelism(worker_count, job_generation, catalog_generation)
             self._wait_while_paused(control, job_generation, catalog_generation)
             if control is not None and (control.cancel_requested.is_set() or control.failed.is_set()):
-                group_id = getattr(self, "_detection_history_group", None)
-                if group_id: self.workspace_store.finish_history_group(group_id, failed=True)
+                if history_group: self.workspace_store.finish_history_group(history_group, failed=True)
                 self._cancel_job(job_generation, catalog_generation)
                 return
             if not self._job_is_current(job_generation, catalog_generation):
-                group_id = getattr(self, "_detection_history_group", None)
-                if group_id: self.workspace_store.finish_history_group(group_id, failed=True)
+                if history_group: self.workspace_store.finish_history_group(history_group, failed=True)
                 return
             models = self._ensure_models()
             stage_lock = threading.Lock()
@@ -376,15 +381,13 @@ class DetectionMixin:
                 # Python reference before OOM recovery drops state-owned models.
                 if self._is_gpu_out_of_memory(failures[0][1]):
                     models = None
-                group_id = getattr(self, "_detection_history_group", None)
-                if group_id: self.workspace_store.finish_history_group(group_id, failed=True)
+                if history_group: self.workspace_store.finish_history_group(history_group, failed=True)
                 self._fail_job(failures[0][1], job_generation, catalog_generation)
                 for _index, _record, candidates in staged.values():
                     self._discard_candidates(candidates)
                 return
             if control is not None and control.cancel_requested.is_set():
-                group_id = getattr(self, "_detection_history_group", None)
-                if group_id: self.workspace_store.finish_history_group(group_id, failed=True)
+                if history_group: self.workspace_store.finish_history_group(history_group, failed=True)
                 self._cancel_job(job_generation, catalog_generation)
                 for _index, _record, candidates in staged.values():
                     self._discard_candidates(candidates)
@@ -451,7 +454,7 @@ class DetectionMixin:
                         self.job.publication_started = True
                         try:
                             pending = self.workspace_store.prepare_detection_states(
-                                states, history_group=getattr(self, "_detection_history_group", None),
+                                states, history_group=history_group,
                             )
                         except ValueError as exc:
                             if str(exc) == "workspace candidate revision changed":
@@ -484,9 +487,8 @@ class DetectionMixin:
             self._finish_job(job_generation, catalog_generation)
         except Exception as exc:  # A background job must not kill the HTTP server.
             models = None
-            group_id = getattr(self, "_detection_history_group", None)
             if not durable_published:
-                if group_id: self.workspace_store.finish_history_group(group_id, failed=True)
+                if history_group: self.workspace_store.finish_history_group(history_group, failed=True)
                 for _index, _record, candidates in staged.values():
                     self._discard_candidates(candidates)
             self._fail_job(exc, job_generation, catalog_generation)
