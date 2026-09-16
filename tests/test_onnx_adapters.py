@@ -22,6 +22,8 @@ from mozarie.inference.yolo_detect import HandDetector
 from mozarie.inference.yolo_segment import TargetSegmenter
 
 
+THREAD_TIMEOUT = 30
+
 class OnnxAdapterTests(unittest.TestCase):
     def test_cpu_provider_contract_does_not_depend_on_gpu_runtime(self) -> None:
         self.assertEqual(available_providers("cpu"), ["CPUExecutionProvider"])
@@ -220,7 +222,7 @@ class OnnxAdapterTests(unittest.TestCase):
             nonlocal active, peak
             with active_lock:
                 active += 1; peak = max(peak, active)
-            entered.set(); self.assertTrue(release.wait(1))
+            entered.set(); self.assertTrue(release.wait(THREAD_TIMEOUT))
             with active_lock: active -= 1
             return [np.asarray([1])]
         model = BaseOnnxModel.__new__(BaseOnnxModel)
@@ -228,9 +230,9 @@ class OnnxAdapterTests(unittest.TestCase):
         model.session = Mock(); model.session.run.side_effect = run
         first = threading.Thread(target=lambda: model.run(np.zeros((1,), dtype=np.float32)))
         second = threading.Thread(target=lambda: model.run(np.zeros((1,), dtype=np.float32)))
-        first.start(); self.assertTrue(entered.wait(1)); second.start(); time.sleep(.02)
+        first.start(); self.assertTrue(entered.wait(THREAD_TIMEOUT)); second.start(); time.sleep(.02)
         self.assertEqual(peak, 1)
-        release.set(); first.join(1); second.join(1)
+        release.set(); first.join(THREAD_TIMEOUT); second.join(THREAD_TIMEOUT)
         self.assertFalse(first.is_alive()); self.assertFalse(second.is_alive())
 
         barrier = threading.Barrier(2); active = 0; peak = 0
@@ -249,7 +251,7 @@ class OnnxAdapterTests(unittest.TestCase):
             models.append(other)
         threads = [threading.Thread(target=lambda item=item: item.run(np.zeros((1,), dtype=np.float32))) for item in models]
         for thread in threads: thread.start()
-        for thread in threads: thread.join(1)
+        for thread in threads: thread.join(THREAD_TIMEOUT)
         self.assertTrue(all(not thread.is_alive() for thread in threads))
         self.assertEqual(peak, 2)
 

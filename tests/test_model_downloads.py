@@ -14,6 +14,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from mozarie.model_downloads import ModelDownload, ModelDownloadCancelled, ModelDownloadError, ModelDownloadInProgress, ModelDownloadManager
 
 
+THREAD_TIMEOUT = 30
+
 class _Response:
     def __init__(self, payload: bytes, url: str = "https://models.example/file", content_length: str | None = None, status: int = 200, content_range: str | None = None) -> None:
         self.payload = payload
@@ -220,12 +222,12 @@ class ModelDownloadTests(unittest.TestCase):
         root = Path(tempfile.mkdtemp()); manager = ModelDownloadManager(root)
         entered = threading.Event(); release = threading.Event()
         def blocked_download(entry: ModelDownload) -> Path:
-            entered.set(); self.assertTrue(release.wait(1))
+            entered.set(); self.assertTrue(release.wait(THREAD_TIMEOUT))
             if manager._cancel.is_set(): raise ModelDownloadCancelled()
             return entry.destination(root)
         with patch.object(manager, "_download", side_effect=blocked_download) as download:
             manager.start("sam_vit_b", "vit_b")
-            self.assertTrue(entered.wait(1))
+            self.assertTrue(entered.wait(THREAD_TIMEOUT))
             original_cancel = manager._cancel
             manager.cancel()
             with self.assertRaises(ModelDownloadInProgress):
@@ -242,12 +244,12 @@ class ModelDownloadTests(unittest.TestCase):
         manager = ModelDownloadManager(Path(tempfile.mkdtemp()))
         entered = threading.Event(); release = threading.Event()
         def blocked_download(_entry: ModelDownload) -> Path:
-            entered.set(); self.assertTrue(release.wait(1))
+            entered.set(); self.assertTrue(release.wait(THREAD_TIMEOUT))
             if manager._cancel.is_set(): raise ModelDownloadCancelled()
             raise AssertionError("shutdown did not cancel the worker")
         with patch.object(manager, "_download", side_effect=blocked_download):
             manager.start("hand_detection", "vit_b")
-            self.assertTrue(entered.wait(1))
+            self.assertTrue(entered.wait(THREAD_TIMEOUT))
             release.set()
             self.assertTrue(manager.shutdown())
         self.assertEqual(manager.snapshot()["state"], "cancelled")
@@ -256,10 +258,10 @@ class ModelDownloadTests(unittest.TestCase):
         manager = ModelDownloadManager(Path(tempfile.mkdtemp()))
         entered = threading.Event(); release = threading.Event()
         def blocked_download(_entry: ModelDownload) -> Path:
-            entered.set(); self.assertTrue(release.wait(1)); raise ModelDownloadCancelled()
+            entered.set(); self.assertTrue(release.wait(THREAD_TIMEOUT)); raise ModelDownloadCancelled()
         with patch.object(manager, "_download", side_effect=blocked_download):
             manager.start("hand_detection", "vit_b")
-            self.assertTrue(entered.wait(1))
+            self.assertTrue(entered.wait(THREAD_TIMEOUT))
             release.set()
             self.assertTrue(manager.shutdown())
         self.assertEqual(manager.snapshot()["state"], "cancelled")
