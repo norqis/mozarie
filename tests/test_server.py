@@ -2969,6 +2969,7 @@ class MozarieTests(unittest.TestCase):
             rendezvous = threading.Barrier(2)
             two_workers_started = threading.Event()
             release = threading.Event()
+            worker_done = threading.Event()
             non_first_finished = threading.Event()
             started: list[int] = []
             completion_order: list[int] = []
@@ -2984,11 +2985,11 @@ class MozarieTests(unittest.TestCase):
                     if len(started) == 2:
                         two_workers_started.set()
                 if index in (0, 1):
-                    rendezvous.wait(timeout=2)
-                    if not release.wait(2):
+                    rendezvous.wait(timeout=10)
+                    if not release.wait(10):
                         raise RuntimeError("test did not release both workers")
                 if index == 0:
-                    if not non_first_finished.wait(2):
+                    if not non_first_finished.wait(10):
                         raise RuntimeError("later records did not finish")
                 else:
                     with completion_lock:
@@ -3003,22 +3004,30 @@ class MozarieTests(unittest.TestCase):
             def output_destination(record, _suffix, _reserved):
                 return output_paths[record.image_id]
 
+            def run_apply():
+                try:
+                    state._apply_worker(records, 100, masks, copy_to_default=True, saving_parallelism=2)
+                finally:
+                    worker_done.set()
+
             thread = threading.Thread(
-                target=state._apply_worker,
-                args=(records, 100, masks),
-                kwargs={"copy_to_default": True, "saving_parallelism": 2},
+                target=run_apply,
             )
             with patch.object(state, "_reserve_output_destination", side_effect=lambda record, suffix, _directory: output_destination(record, suffix, state.reserved_output_paths)), \
                  patch.object(saving_module, "render_output", side_effect=render_in_inverse_order):
-                thread.start()
-                self.assertTrue(two_workers_started.wait(2))
-                self.assertEqual(set(started), {0, 1})
-                self.assertEqual(state.job.completed_image_ids, ())
-                self.assertEqual(state.job.outputs, [])
-                release.set()
-                thread.join(2)
-
-            self.assertFalse(thread.is_alive())
+                try:
+                    thread.start()
+                    self.assertTrue(two_workers_started.wait(10))
+                    self.assertEqual(set(started), {0, 1})
+                    self.assertEqual(state.job.completed_image_ids, ())
+                    self.assertEqual(state.job.outputs, [])
+                    release.set()
+                    self.assertTrue(worker_done.wait(10), "parallel apply worker did not finish")
+                finally:
+                    release.set()
+                    rendezvous.abort()
+                    thread.join(10)
+                self.assertFalse(thread.is_alive())
             self.assertEqual(completion_order, [1, 2, 3, 0])
             self.assertEqual(state.job.state, "complete")
             self.assertEqual(state.job.completed_image_ids, image_ids)
