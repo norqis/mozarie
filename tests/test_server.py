@@ -5271,6 +5271,52 @@ class MozarieTests(unittest.TestCase):
                 self.assertEqual(db.execute("SELECT COUNT(*) FROM history_groups WHERE status='building'").fetchone()[0], 0)
                 self.assertEqual(db.execute("SELECT COUNT(*) FROM history_groups").fetchone()[0], history_group_count)
 
+    def test_thread_start_failure_releases_every_job_gate_and_allows_retry(self):
+        for kind in ("apply", "detect"):
+            with self.subTest(kind=kind), tempfile.TemporaryDirectory() as directory:
+                source = Path(directory) / "source.png"
+                Image.new("RGB", (4, 4), "white").save(source)
+                state = self.new_state()
+                cpu_settings = copy.deepcopy(state.settings)
+                cpu_settings["models"]["provider"] = "cpu"
+                state.settings = state.settings_store.save(cpu_settings)
+                image_id = state.set_root(directory)[0]["id"]
+                self.persist_project(state, f"thread-start-{kind}")
+
+                with patch("mozarie.jobs.threading.Thread.start", side_effect=RuntimeError("cannot start new thread")):
+                    with self.assertRaisesRegex(RuntimeError, "cannot start new thread"):
+                        if kind == "apply":
+                            state.start_apply([image_id], 100, {})
+                        else:
+                            state.start_detection([image_id])
+
+                self.assertEqual(state.job.state, "error")
+                self.assertEqual(state.job.error_code, "internal_error")
+                self.assertIsNone(state.worker_thread)
+                self.assertIsNone(state.job_control)
+                self.assertFalse(state._has_active_worker())
+                state.update_settings({"general": {"language": "en"}})
+                self.assertEqual(state.clear_masks([image_id]), 1)
+                image_id = state.set_root(directory)[0]["id"]
+
+                if kind == "apply":
+                    self.assertTrue(state.start_apply([image_id], 100, {}))
+                else:
+                    with patch.object(state, "_ensure_models", return_value=DetectionModels(target=object())), \
+                         patch.object(state, "_detect_image", return_value=[]):
+                        state.start_detection([image_id])
+                        assert state.worker_thread is not None
+                        state.worker_thread.join(2)
+                        self.assertFalse(state.worker_thread.is_alive())
+                        self.assertEqual(state.job.state, "complete")
+                    with state.workspace_store._connect() as db:
+                        self.assertEqual(db.execute("SELECT COUNT(*) FROM history_groups WHERE status='building'").fetchone()[0], 0)
+                    continue
+                assert state.worker_thread is not None
+                state.worker_thread.join(2)
+                self.assertFalse(state.worker_thread.is_alive())
+                self.assertEqual(state.job.state, "complete")
+
     def test_apply_start_rejects_a_catalog_switch_without_touching_old_source(self):
         with tempfile.TemporaryDirectory() as directory:
             first_root = Path(directory) / "first"
