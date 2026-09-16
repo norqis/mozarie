@@ -35,7 +35,7 @@ class FolderLoadLoggingContractTests(unittest.TestCase):
 
     def setUp(self) -> None:
         self._temporary_directory = tempfile.TemporaryDirectory()
-        self.root = Path(self._temporary_directory.name)
+        self.root = Path(self._temporary_directory.name).resolve()
         self.app_dir = self.root / "app"
         shutil.copytree(Path(__file__).parents[1] / "config", self.app_dir / "config")
         self.states: list[StudioState] = []
