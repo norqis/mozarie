@@ -403,13 +403,21 @@ async function openSettings() {
   void refreshSettingsStatus();
 }
 
+let settingsMutationPending = false;
+function syncSettingsMutationControls() {
+  $("#settingsSaveButton").disabled = settingsMutationPending;
+  $("#settingsResetButton").disabled = settingsMutationPending;
+}
+
 async function saveSettings(event) {
   event.preventDefault();
+  if (settingsMutationPending) return;
   const result = $("#settingsResult"); result.textContent = ""; result.classList.remove("error");
   if (!validateDetectionTargets(detectionTargets())) {
     result.textContent = t("error.detectionTargetsRequired"); result.classList.add("error"); return;
   }
   if (!validateAbsoluteSettingsPaths()) return;
+  settingsMutationPending = true; syncSettingsMutationControls();
   try {
     const data = await api("/api/settings?status=0", { method: "POST", body: JSON.stringify(settingsPayload()) });
     const languageChanged = state.settings?.general?.language !== data.settings.general.language;
@@ -420,11 +428,17 @@ async function saveSettings(event) {
     if (languageChanged) await loadTranslations();
     result.textContent = t("settings.saved");
     void refreshSettingsStatus();
-  } catch (error) { showUserError(error, $("#settingsSaveButton")); }
+  } catch (error) {
+    settingsMutationPending = false; syncSettingsMutationControls();
+    showUserError(error, $("#settingsSaveButton"));
+  }
+  finally { settingsMutationPending = false; syncSettingsMutationControls(); }
 }
 
 async function resetSettings() {
+  if (settingsMutationPending) return;
   const result = $("#settingsResult"); result.textContent = ""; result.classList.remove("error");
+  settingsMutationPending = true; syncSettingsMutationControls();
   try {
     const data = await api("/api/settings/reset?status=0", { method: "POST", body: JSON.stringify({}) });
     setSettingsForm(data.settings);
@@ -434,7 +448,11 @@ async function resetSettings() {
     await loadTranslations();
     result.textContent = t("settings.resetDone");
     void refreshSettingsStatus();
-  } catch (error) { showUserError(error, $("#settingsResetButton")); }
+  } catch (error) {
+    settingsMutationPending = false; syncSettingsMutationControls();
+    showUserError(error, $("#settingsResetButton"));
+  }
+  finally { settingsMutationPending = false; syncSettingsMutationControls(); }
 }
 
 async function chooseSettingsOutputDirectory() {
@@ -470,6 +488,7 @@ async function chooseSettingsModelFile(button) {
     showUserError(error, button);
   } finally {
     buttons.forEach((item) => { item.disabled = false; });
+    setSamAvailable(Boolean($("#settingsPrecisionToggle").checked));
     setHandSegmentationAvailable(Boolean($(MODEL_TOGGLE_IDS.hand_detection).checked));
   }
 }
@@ -604,6 +623,7 @@ function startModelDownload(key) {
 async function beginModelDownload() {
   const key = pendingModelDownloadKey;
   if (!key) return;
+  let started = false;
   $("#modelDownloadStatus").textContent = ""; $("#modelDownloadStatus").classList.remove("error");
   $("#modelDownloadProgress").value = 0; $("#modelDownloadProgress").max = 1;
   $("#modelDownloadStart").hidden = true; $("#modelDownloadSecurity").hidden = true;
@@ -611,9 +631,16 @@ async function beginModelDownload() {
   try {
     const modelKey = key === "sam" ? `sam_${selectedSamType()}` : key;
     const job = await api("/api/model-download/start", { method: "POST", body: JSON.stringify({ modelKey, samType: selectedSamType() }) });
+    started = true;
     renderModelDownload(job);
     if (!modelDownloadPoll && ["running", "cancelling"].includes(job.state)) modelDownloadPoll = setInterval(() => { void refreshModelDownload(); }, 350);
   } catch (error) { showUserError(error, $("#modelDownloadStart")); }
+  finally {
+    if (!started && pendingModelDownloadKey === key) {
+      $("#modelDownloadStart").hidden = false; $("#modelDownloadSecurity").hidden = false;
+      modelDownloadStatusRefreshPending = false;
+    }
+  }
 }
 
 async function cancelModelDownload() {

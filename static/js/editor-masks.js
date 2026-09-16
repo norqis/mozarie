@@ -231,7 +231,7 @@ function renderCandidates() {
     button.disabled = disabled; button.setAttribute("aria-pressed", String(forced)); button.setAttribute("aria-label", text);
     button.textContent = text; button.addEventListener("click", onChange); return button;
   };
-  const makeDisplay = (id, role) => candidateDisplayToggle(id, role);
+  const makeDisplay = (id, role) => candidateDisplayToggle(id, role, candidateViewLocked);
   const makeExpandButton = (candidate, disabled, labelText) => {
     const button = document.createElement("button"); button.type = "button"; button.className = "candidate-padding-button";
     const value = candidate.expandPx || 0;
@@ -276,8 +276,8 @@ function renderCandidates() {
         state.manualExclusionForced = !state.manualExclusionForced; markMaskDirty(); saveDraft();
         setEditorUnreviewed(); recordHistoryOperation({ kind: "manualState" }); refreshCurrentReviewAndMask(); requestMosaicPreview(); renderCandidates(); render();
       }, candidateMutationLocked);
-      appendRow(row, label, enabled, [blink, candidateEffectiveToggle(blinkId, role), forced, remove]);
-    } else appendRow(row, label, enabled, [blink, candidateEffectiveToggle(blinkId, role), remove]);
+      appendRow(row, label, enabled, [blink, candidateEffectiveToggle(blinkId, role, candidateViewLocked), forced, remove]);
+    } else appendRow(row, label, enabled, [blink, candidateEffectiveToggle(blinkId, role, candidateViewLocked), remove]);
     list.append(row);
   };
   appendManual(applyList, "apply");
@@ -297,7 +297,7 @@ function renderCandidates() {
     const remove = document.createElement("button"); remove.type = "button"; remove.className = "candidate-delete"; remove.textContent = "×"; remove.disabled = candidateMutationLocked;
     remove.title = t("candidates.deleteManualExcludeErase"); remove.setAttribute("aria-label", remove.title);
     remove.addEventListener("click", deleteManualExclusionErase);
-    appendRow(row, label, enabled, [blink, candidateEffectiveToggle(blinkId, "exclude"), remove]); excludeList.append(row);
+    appendRow(row, label, enabled, [blink, candidateEffectiveToggle(blinkId, "exclude", candidateViewLocked), remove]); excludeList.append(row);
   }
   for (const candidate of state.candidates) {
     if (state.removedCandidateIds.has(candidate.id)) continue;
@@ -346,8 +346,8 @@ function renderCandidates() {
         if (updated) recordHistoryOperation({ kind: "candidateState", editorState });
         else if (updated === false) restoreCandidateMutationReview(imageId, catalogEpoch, record, generation, previousReviewed);
       }, deleting || candidateMutationLocked);
-      appendRow(row, label, enabled, [blink, candidateEffectiveToggle(candidate.id, role), makeExpandButton(candidate, deleting || candidateMutationLocked, labelText), forced, remove]);
-    } else appendRow(row, label, enabled, [blink, candidateEffectiveToggle(candidate.id, role), makeExpandButton(candidate, deleting || candidateMutationLocked, labelText), remove]);
+      appendRow(row, label, enabled, [blink, candidateEffectiveToggle(candidate.id, role, candidateViewLocked), makeExpandButton(candidate, deleting || candidateMutationLocked, labelText), forced, remove]);
+    } else appendRow(row, label, enabled, [blink, candidateEffectiveToggle(candidate.id, role, candidateViewLocked), makeExpandButton(candidate, deleting || candidateMutationLocked, labelText), remove]);
     (role === "apply" ? applyList : excludeList).append(row);
   }
   appendEmpty(applyList); appendEmpty(excludeList);
@@ -446,19 +446,19 @@ function toggleCandidateEffective(role) {
   setRoleCandidateDisplayMode(role, active ? "off" : "effective");
 }
 
-function candidateDisplayToggle(id, role = "apply") {
+function candidateDisplayToggle(id, role = "apply", disabled = false) {
   const button = document.createElement("button"); button.type = "button"; button.className = "candidate-display-toggle";
   button.dataset.candidateDisplayId = id;
-  button.textContent = t("candidates.show"); button.title = t("candidates.displayHelp"); button.setAttribute("aria-label", t("candidates.displayHelp")); button.setAttribute("aria-pressed", String(candidateDisplayMode(id) === "normal")); button.disabled = currentImageActionPending();
-  button.addEventListener("click", () => { if (!currentImageActionPending()) { clearRoleCandidateDisplayMode(role); setCandidateDisplayMode([id], candidateDisplayMode(id) === "normal" ? "off" : "normal"); } });
+  button.textContent = t("candidates.show"); button.title = t("candidates.displayHelp"); button.setAttribute("aria-label", t("candidates.displayHelp")); button.setAttribute("aria-pressed", String(candidateDisplayMode(id) === "normal")); button.disabled = disabled;
+  button.addEventListener("click", () => { if (!disabled && !currentImageActionPending()) { clearRoleCandidateDisplayMode(role); setCandidateDisplayMode([id], candidateDisplayMode(id) === "normal" ? "off" : "normal"); } });
   return button;
 }
 
-function candidateEffectiveToggle(id, role = "apply") {
+function candidateEffectiveToggle(id, role = "apply", disabled = false) {
   const button = document.createElement("button"); button.type = "button"; button.className = "candidate-effective-toggle";
   button.dataset.candidateEffectiveId = id;
-  button.textContent = t("candidates.applied"); button.title = t("candidates.displayEffective"); button.setAttribute("aria-label", t("candidates.displayEffective")); button.setAttribute("aria-pressed", String(candidateDisplayMode(id) === "effective")); button.disabled = currentImageActionPending();
-  button.addEventListener("click", () => { if (!currentImageActionPending()) { clearRoleCandidateDisplayMode(role); setCandidateDisplayMode([id], candidateDisplayMode(id) === "effective" ? "off" : "effective"); } });
+  button.textContent = t("candidates.applied"); button.title = t("candidates.displayEffective"); button.setAttribute("aria-label", t("candidates.displayEffective")); button.setAttribute("aria-pressed", String(candidateDisplayMode(id) === "effective")); button.disabled = disabled;
+  button.addEventListener("click", () => { if (!disabled && !currentImageActionPending()) { clearRoleCandidateDisplayMode(role); setCandidateDisplayMode([id], candidateDisplayMode(id) === "effective" ? "off" : "effective"); } });
   return button;
 }
 
@@ -746,7 +746,7 @@ async function addBoundaryCandidate() {
   } finally {
     state.boundaryPending = false;
     if (catalogChanged) renderCatalogViews();
-    updateBoundaryActions(); updateActionButtons();
+    renderCandidates(); updateBoundaryActions(); updateActionButtons();
   }
 }
 
@@ -1154,13 +1154,24 @@ function completeManualStroke() {
   updateHistoryButtons(); updateCandidateStatus(); refreshCurrentReviewAndMask(); requestMosaicPreview(stroke.dirtyRoi); renderCandidates();
 }
 
+function invalidateProjectHistoryRefresh(imageId) {
+  const tokens = state.projectHistoryRefreshTokens || (state.projectHistoryRefreshTokens = new Map());
+  tokens.set(imageId, (tokens.get(imageId) || 0) + 1);
+}
+
 async function refreshProjectHistory(imageId = state.currentId) {
   if (!hasDurableHistory() || !imageId) return;
+  const projectId = state.project?.id || null;
+  const catalogEpoch = state.catalogEpoch;
+  const tokens = state.projectHistoryRefreshTokens || (state.projectHistoryRefreshTokens = new Map());
+  const token = (tokens.get(imageId) || 0) + 1;
+  tokens.set(imageId, token);
   try {
     const history = await api(`/api/project/history/${encodeURIComponent(imageId)}`);
+    if (tokens.get(imageId) !== token || (state.project?.id || null) !== projectId || state.catalogEpoch !== catalogEpoch) return;
     state.projectHistory.set(imageId, { canUndo: history.canUndo === true, canRedo: history.canRedo === true });
     if (imageId === state.currentId) updateHistoryButtons();
-  } catch (error) { showUserError(error); }
+  } catch (error) { if (tokens.get(imageId) === token && (state.project?.id || null) === projectId && state.catalogEpoch === catalogEpoch) showUserError(error); }
 }
 
 function hasPendingProjectHistorySave(imageId = state.currentId) {
@@ -1192,6 +1203,7 @@ async function restoreProjectHistory(direction) {
   const selectedImageIds = new Set(state.selectedImageIds);
   const selectionAnchorId = state.selectionAnchorId;
   const batchMode = state.batchMode;
+  invalidateProjectHistoryRefresh(imageId);
   state.projectHistoryBusy = true; updateHistoryButtons();
   try {
     await queueImageMutation(imageId, async () => {
@@ -1207,6 +1219,7 @@ async function restoreProjectHistory(direction) {
         const record = state.images.find((image) => image.id === changedId);
         if (record && changedId === imageId && result.current) record.candidateRevision = Number(result.current.candidateRevision || 0);
       }
+      invalidateProjectHistoryRefresh(imageId);
       state.projectHistory.set(imageId, { canUndo: result.canUndo === true, canRedo: result.canRedo === true });
       const capturedProjectId = state.project?.id || null; const capturedCatalogGeneration = state.serverCatalogGeneration;
       const snapshot = await api("/api/images");
@@ -1228,7 +1241,7 @@ async function restoreProjectHistory(direction) {
       else if (state.currentId === imageId && isCurrentGeneration(generation) && !currentImageActionPending()) updateHistoryButtons();
     }, { lockCandidateControls: true });
   } catch (error) { showUserError(error); }
-  finally { state.projectHistoryBusy = false; updateActionButtons(); }
+  finally { state.projectHistoryBusy = false; renderCandidates(); updateActionButtons(); }
 }
 
 function localTransformForHistoryIndex(index, previousIndex) {
@@ -1328,7 +1341,7 @@ async function restoreSnapshot(index) {
     catch { state.historyIndex = previousHistoryIndex; rebuildManualMaskFromHistory(); renderCandidates(); render(); }
     showUserError(error);
   } finally {
-    state.historyRestoreBusy = false; updateHistoryButtons(); updateActionButtons();
+    state.historyRestoreBusy = false; renderCandidates(); updateHistoryButtons(); updateActionButtons();
   }
 }
 

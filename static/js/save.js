@@ -16,84 +16,76 @@ function isTerminalApply(job) {
 function selectedSaveMode() { return document.querySelector('input[name="batchSaveMode"]:checked').value; }
 function selectedApplyOutputFormat() { return $("#applyOutputFormat").value; }
 function selectedSingleOutputFormat() { return $("#singleSaveOutputFormat").value; }
-function sourceMatchesOutputFormat(image, format) {
-  if (format === "original") return true;
-  const extension = String(image?.relativePath || "").split(".").at(-1).toLowerCase();
-  return format === "png" ? extension === "png" : ["jpg", "jpeg"].includes(extension);
-}
-function formatRequiresCopy(imageIds, format) {
-  return format !== "original" && imageIds.some((imageId) => !sourceMatchesOutputFormat(state.images.find((image) => image.id === imageId), format));
-}
 function syncApplyOutputOptions() {
-  const format = selectedApplyOutputFormat(); const requiresCopy = formatRequiresCopy(state.applyTargetIds, format);
+  const format = selectedApplyOutputFormat();
   const metadata = $("#applyKeepMetadata"); const note = $("#applyFormatNote");
   metadata.disabled = format === "jpg" || state.applyRunning || state.saveStarting;
   if (format === "jpg") metadata.checked = false;
-  if (requiresCopy) $("#applyCopyMode").checked = true;
-  note.textContent = [format === "jpg" ? t("apply.jpgMetadataDisabled") : "", requiresCopy ? t("apply.formatRequiresCopy") : ""].filter(Boolean).join(" ");
+  note.textContent = format === "jpg" ? t("apply.jpgMetadataDisabled") : "";
   note.classList.toggle("save-option-warning", format === "jpg");
   note.hidden = !note.textContent;
-  $("#applyOverwriteMode").disabled = $("#applyOverwriteMode").disabled || requiresCopy;
+  $("#applyOverwriteMode").disabled = !applyTargetsSupport("overwrite", format) || state.applyRunning || state.saveStarting;
   $("#applyOverwriteRow").classList.toggle("muted", $("#applyOverwriteMode").disabled);
 }
 function syncSingleOutputOptions() {
   const save = state.singleSave; const format = selectedSingleOutputFormat();
-  const requiresCopy = formatRequiresCopy(save?.imageId ? [save.imageId] : [], format);
   const metadata = $("#singleSaveKeepMetadata"); const note = $("#singleSaveFormatNote");
   metadata.disabled = format === "jpg" || state.saving || state.saveStarting;
   if (format === "jpg") metadata.checked = false;
-  if (requiresCopy) $("#singleSaveCopyMode").checked = true;
-  note.textContent = [format === "jpg" ? t("apply.jpgMetadataDisabled") : "", requiresCopy ? t("apply.formatRequiresCopy") : ""].filter(Boolean).join(" ");
+  note.textContent = format === "jpg" ? t("apply.jpgMetadataDisabled") : "";
   note.classList.toggle("save-option-warning", format === "jpg");
   note.hidden = !note.textContent;
-  $("#singleSaveOverwriteMode").disabled = $("#singleSaveOverwriteMode").disabled || requiresCopy;
+  $("#singleSaveOverwriteMode").disabled = !sourceCanOverwrite(state.images.find((image) => image.id === save?.imageId), format) || state.saving || state.saveStarting;
   $("#singleSaveOverwriteRow").classList.toggle("muted", $("#singleSaveOverwriteMode").disabled);
 }
 function sourceAccessFor(imageId) { return state.sourceAccess.get(imageId) || null; }
-function sourceCanOverwrite(image) { return image?.sourceKind === "filesystem" || Boolean(sourceAccessFor(image?.id)?.fileHandle); }
+function sourceCanOverwrite(image, format = "original") {
+  const access = sourceAccessFor(image?.id);
+  if (image?.sourceKind === "filesystem") return true;
+  return Boolean(access?.fileHandle) && (!renamedSourceFileName(image, access, format) || Boolean(access?.parentHandle));
+}
 function sourceCanDelete(image) {
   if (image?.sourceKind === "filesystem") return true;
   const access = sourceAccessFor(image?.id);
   return Boolean(access?.fileHandle && access.parentHandle);
 }
-function applyTargetsSupport(capability) {
+function applyTargetsSupport(capability, format = "original") {
   return state.applyTargetIds.every((imageId) => {
     const image = state.images.find((entry) => entry.id === imageId);
-    return capability === "overwrite" ? sourceCanOverwrite(image) : sourceCanDelete(image);
+    return capability === "overwrite" ? sourceCanOverwrite(image, format) : sourceCanDelete(image);
   });
 }
 function applyRestrictionMessage() {
-  const noOverwrite = state.applyTargetIds.filter((imageId) => !sourceCanOverwrite(state.images.find((image) => image.id === imageId)));
+  const noOverwrite = state.applyTargetIds.filter((imageId) => !sourceCanOverwrite(state.images.find((image) => image.id === imageId), selectedApplyOutputFormat()));
   const noDelete = state.applyTargetIds.filter((imageId) => !sourceCanDelete(state.images.find((image) => image.id === imageId)));
   if (selectedSaveMode() === "overwrite" && noOverwrite.length) return t("apply.overwriteUnavailable", { count: noOverwrite.length });
   if (selectedSaveMode() === "copy" && $("#deleteOriginal").checked && noDelete.length) return t("apply.deleteUnavailable", { count: noDelete.length });
-  if (selectedSaveMode() === "overwrite" && formatRequiresCopy(state.applyTargetIds, selectedApplyOutputFormat())) return t("apply.formatRequiresCopy");
   return "";
 }
 
 function syncApplyMode() {
-  if (formatRequiresCopy(state.applyTargetIds, selectedApplyOutputFormat())) $("#applyCopyMode").checked = true;
-  const canOverwrite = applyTargetsSupport("overwrite");
+  const canOverwrite = applyTargetsSupport("overwrite", selectedApplyOutputFormat());
   const canDelete = applyTargetsSupport("delete");
   const copying = selectedSaveMode() === "copy";
   $("#applySuffixRow").hidden = !copying;
   $("#deleteOriginalRow").hidden = !copying;
   $("#applyOutputDirectoryRow").hidden = !copying;
-  $("#applySuffix").disabled = state.applyRunning;
-  $("#applyTargetMode").disabled = state.applyRunning || state.saveStarting;
-  $("#chooseOutputDirectoryButton").disabled = state.outputDirectoryPicking || state.applyRunning || state.saveStarting;
-  $("#applyOutputDirectoryStatus").value = state.settings?.saving?.default_output_directory || t("apply.outputDirectoryUnset");
+  const outputDirectoryPending = state.outputDirectoryPicking || state.outputDirectoryCommitPending;
+  $("#applySuffix").disabled = state.applyRunning || outputDirectoryPending;
+  $("#applyTargetMode").disabled = state.applyRunning || state.saveStarting || outputDirectoryPending;
+  $("#chooseOutputDirectoryButton").disabled = outputDirectoryPending || state.applyRunning || state.saveStarting;
+  $("#applyOutputDirectoryStatus").disabled = outputDirectoryPending || state.applyRunning || state.saveStarting;
   $("#deleteOriginal").disabled = !canDelete || state.applyRunning;
   if (!canDelete) $("#deleteOriginal").checked = false;
   $("#applyOverwriteMode").disabled = !canOverwrite || state.applyRunning;
   $("#applyOverwriteRow").classList.toggle("muted", !canOverwrite);
   const restriction = applyRestrictionMessage();
   const capabilityNote = !canOverwrite
-    ? t("apply.overwriteUnavailable", { count: state.applyTargetIds.filter((imageId) => !sourceCanOverwrite(state.images.find((image) => image.id === imageId))).length })
+    ? t("apply.overwriteUnavailable", { count: state.applyTargetIds.filter((imageId) => !sourceCanOverwrite(state.images.find((image) => image.id === imageId), selectedApplyOutputFormat())).length })
     : (!canDelete ? t("apply.deleteUnavailable", { count: state.applyTargetIds.filter((imageId) => !sourceCanDelete(state.images.find((image) => image.id === imageId))).length }) : "");
   $("#applyTemporarySourceNote").textContent = restriction || capabilityNote || t("apply.handleSource");
   $("#applyTemporarySourceNote").hidden = !restriction && !capabilityNote;
-  $("#applyStartButton").disabled = Boolean(restriction) || state.applyRunning || state.saveStarting || state.applyTargetIds.length === 0 || (copying && !state.settings?.saving?.default_output_directory);
+  $("#applyStartButton").disabled = Boolean(restriction) || outputDirectoryPending || state.applyRunning || state.saveStarting || state.applyTargetIds.length === 0 || (copying && !state.settings?.saving?.default_output_directory);
   syncApplyOutputOptions();
 }
 
@@ -124,7 +116,7 @@ async function openApplyDialog(options = {}) {
   $("#applySettings").disabled = false;
   $("#applyOutputFormat").value = "original";
   $("#applyKeepMetadata").checked = true;
-  setApplyResult(""); syncApplyMode();
+  setApplyResult(""); renderOutputDirectory(); syncApplyMode();
   showModalFromInvoker($("#applyDialog"), invoker);
 }
 
@@ -135,9 +127,8 @@ function setSingleSaveResult(message, error = false) {
 function syncSingleSaveMode() {
   const save = state.singleSave;
   const image = state.images.find((entry) => entry.id === save?.imageId);
-  if (formatRequiresCopy(save?.imageId ? [save.imageId] : [], selectedSingleOutputFormat())) $("#singleSaveCopyMode").checked = true;
   const copying = selectedSingleSaveMode() === "copy";
-  const canOverwrite = sourceCanOverwrite(image);
+  const canOverwrite = sourceCanOverwrite(image, selectedSingleOutputFormat());
   const canDelete = sourceCanDelete(image);
   $("#singleSaveSuffixRow").hidden = !copying;
   $("#singleSaveDeleteOriginalRow").hidden = !copying;
@@ -146,10 +137,11 @@ function syncSingleSaveMode() {
   $("#singleSaveOverwriteRow").classList.toggle("muted", !canOverwrite);
   $("#singleSaveDeleteOriginal").disabled = !canDelete || state.saving || state.saveStarting;
   if (!canDelete) $("#singleSaveDeleteOriginal").checked = false;
-  $("#singleSaveChooseOutputDirectoryButton").disabled = state.outputDirectoryPicking || state.saving || state.saveStarting;
-  $("#singleSaveStartButton").disabled = state.saving || state.saveStarting || !isProcessableImage(image) || (copying && !state.settings?.saving?.default_output_directory) || (!copying && !canOverwrite);
-  $("#singleSaveSettings").disabled = state.saving || state.saveStarting;
-  renderOutputDirectory();
+  const outputDirectoryPending = state.outputDirectoryPicking || state.outputDirectoryCommitPending;
+  $("#singleSaveChooseOutputDirectoryButton").disabled = outputDirectoryPending || state.saving || state.saveStarting;
+  $("#singleSaveOutputDirectoryStatus").disabled = outputDirectoryPending || state.saving || state.saveStarting;
+  $("#singleSaveStartButton").disabled = outputDirectoryPending || state.saving || state.saveStarting || !isProcessableImage(image) || (copying && !state.settings?.saving?.default_output_directory) || (!copying && !canOverwrite);
+  $("#singleSaveSettings").disabled = outputDirectoryPending || state.saving || state.saveStarting;
   syncSingleOutputOptions();
 }
 
@@ -170,12 +162,13 @@ async function openSingleSaveDialog(imageId = state.currentId) {
   $("#singleSaveOutputFormat").value = "original";
   $("#singleSaveKeepMetadata").checked = true;
   setSingleSaveResult("");
+  renderOutputDirectory();
   syncSingleSaveMode();
   showModalFromInvoker($("#singleSaveDialog"), invoker);
 }
 
 async function chooseSingleOutputDirectory() {
-  if (state.saving || state.saveStarting) return;
+  if (state.saving || state.saveStarting || state.outputDirectoryCommitPending) return;
   try { await pickOutputDirectory(); setSingleSaveResult(""); }
   catch (error) { if (error?.name !== "AbortError") { setSingleSaveResult(t(`errorCode.${userErrorCode(error)}`), true); showUserError(error, $("#singleSaveChooseOutputDirectoryButton")); } }
   syncSingleSaveMode();
@@ -322,6 +315,9 @@ async function startSingleSave(event) {
   if (!save || !isProcessableImage(image) || state.saving || state.saveStarting || isBusy() || state.importing || catalogStagingEditsActive() || currentImageActionPending()
     || state.currentId !== save.imageId || !isCurrentGeneration(save.generation) || !state.currentImage || state.projectReadOnly || image.sourceDimensionsChanged) return;
   const mode = selectedSingleSaveMode(); const copying = mode === "copy";
+  const outputDirectory = $("#singleSaveOutputDirectoryStatus");
+  if (copying && outputDirectory.value.trim() !== (state.settings?.saving?.default_output_directory || "") && !await commitOutputDirectory(outputDirectory)) return;
+  if (state.saving || state.saveStarting || isBusy()) return;
   const deleteOriginal = copying && $("#singleSaveDeleteOriginal").checked;
   const suffix = $("#singleSaveSuffix").value;
   const format = selectedSingleOutputFormat(); const keepMetadata = $("#singleSaveKeepMetadata").checked;
@@ -333,7 +329,7 @@ async function startSingleSave(event) {
     if (!copying && !await confirmAction(t("confirm.overwriteSource.title"), t("confirm.overwriteSource.message"), "overwriteSource")) return;
     if (deleteOriginal && !await confirmAction(t("confirm.deleteSourceAfterCopy.title"), t("confirm.deleteSourceAfterCopy.message"), "deleteSourceAfterCopy")) return;
     state.saving = true; updateActionButtons(); syncSingleSaveMode(); setSingleSaveResult("");
-    let entry; let saveToken = ""; let output = null; let sourceSnapshot = null; let cleanupIntent = null; let browserSourceDelete = null;
+    let entry; let saveToken = ""; let output = null; let sourceSnapshot = null; let sourceRename = null; let cleanupIntent = null; let browserSourceDelete = null;
     const cleanupProjectId = state.project?.id || null;
     try {
     await flushWorkspaceDraft(save.imageId);
@@ -364,16 +360,20 @@ async function startSingleSave(event) {
         if (noEffect) await ensureHandlePermission(access, false);
         else {
           await ensureHandlePermission(access, true);
-          sourceSnapshot = await snapshotSourceHandle(access);
-          if (!(sourceSnapshot instanceof Blob)) throw codedError("source_restore_failed");
-          await writeSourceHandle(access, response);
+          if (renamedSourceFileName(image, access, format)) sourceRename = await writeFormattedSourceHandle(access, image, format, response);
+          else {
+            sourceSnapshot = await snapshotSourceHandle(access);
+            if (!(sourceSnapshot instanceof Blob)) throw codedError("source_restore_failed");
+            await writeSourceHandle(access, response);
+          }
           await ensureHandlePermission(access, false);
         }
       }
       if (sourceAction === "deleted" && cleanupProjectId) cleanupIntent = await rememberProjectImageSourceCleanup(cleanupProjectId, save.imageId);
       if (sourceAction === "deleted") updatePendingSaveAction(saveToken, "deleted");
       commitStarted = true;
-      committed = await commitBrowserSaveWithRetry({ imageId: save.imageId, candidateRevision: entry.candidateRevision, saveToken, sourceAction, ...(sourceAction === "overwrite" && access?.fileHandle ? sourceCommitMetadata(access) : {}) });
+      committed = await commitBrowserSaveWithRetry({ imageId: save.imageId, candidateRevision: entry.candidateRevision, saveToken, sourceAction, ...(sourceAction === "overwrite" && access?.fileHandle ? sourceCommitMetadata(sourceRename?.replacement || access) : {}) });
+      await finishFormattedSourceRename(access, sourceRename);
       if (committed.sourceDeletePending) browserSourceDelete = { deleted: false, retryable: false };
       if (copying && committed.outputPath) output = committed.outputPath;
       if (copying && deleteOriginal && access?.fileHandle) browserSourceDelete = await deleteCopiedBrowserSource(image, saveToken);
@@ -382,11 +382,12 @@ async function startSingleSave(event) {
       const reconcile = !commitStarted || isDefinitiveCommitRejection(error) || error.saveState === "pending";
       if (reconcile) {
         await cancelBrowserSave(entry, saveToken);
-        if (sourceSnapshot !== null) await restoreSourceHandle(access, sourceSnapshot, deleteOriginal);
+        if (sourceRename) await discardFormattedSourceRename(access, sourceRename);
+        else if (sourceSnapshot !== null) await restoreSourceHandle(access, sourceSnapshot, deleteOriginal);
       }
       throw error;
     } finally {
-      sourceSnapshot = null;
+      sourceSnapshot = null; sourceRename = null;
     }
     // A copy that retains its source does not change the catalogue. Avoid the
     // expensive image reload (and forced editor reload) in that common path.
@@ -426,13 +427,13 @@ async function startSingleSave(event) {
       if (cleanupIntent && isDefinitiveCommitRejection(error)) await clearProjectSourceCleanup({ intentIds: [cleanupIntent] });
       setSingleSaveResult(t(`errorCode.${userErrorCode(error)}`), true); showUserError(error, $("#singleSaveStartButton"));
     } finally {
-      state.saving = false; updateActionButtons(); syncSingleSaveMode();
+      state.saving = false; renderCandidates(); updateActionButtons(); syncSingleSaveMode();
     }
   } catch (error) {
     setSingleSaveResult(t(`errorCode.${userErrorCode(error)}`), true);
     showUserError(error, $("#singleSaveStartButton"));
   } finally {
-    state.saveStarting = false; updateActionButtons(); syncSingleSaveMode();
+    state.saveStarting = false; renderCandidates(); updateActionButtons(); syncSingleSaveMode();
   }
 }
 
@@ -454,9 +455,35 @@ function draftPayload(imageIds) {
 function renderOutputDirectory() {
   const configuredDirectory = state.settings?.saving?.default_output_directory || "";
   $("#settingsDefaultOutputDirectory").value = configuredDirectory;
-  $("#applyOutputDirectoryStatus").value = configuredDirectory || t("apply.outputDirectoryUnset");
-  $("#singleSaveOutputDirectoryStatus").textContent = configuredDirectory || t("apply.outputDirectoryUnset");
-  syncApplyMode();
+  $("#applyOutputDirectoryStatus").value = configuredDirectory;
+  $("#singleSaveOutputDirectoryStatus").value = configuredDirectory;
+  $("#applyOutputDirectoryStatus").placeholder = t("apply.outputDirectoryUnset");
+  $("#singleSaveOutputDirectoryStatus").placeholder = t("apply.outputDirectoryUnset");
+}
+
+async function commitOutputDirectory(input) {
+  if (state.outputDirectoryPicking || state.outputDirectoryCommitPending || state.applyRunning || state.saveStarting || state.saving) return false;
+  const directory = input.value.trim();
+  if (directory === (state.settings?.saving?.default_output_directory || "")) return true;
+  state.outputDirectoryCommitPending = true;
+  syncApplyMode(); if (state.singleSave) syncSingleSaveMode(); updateActionButtons();
+  try {
+    const data = await api("/api/settings?status=0", { method: "POST", body: JSON.stringify({ saving: { default_output_directory: directory } }) });
+    state.settings = data.settings;
+    renderOutputDirectory();
+    return true;
+  } catch (error) {
+    input.value = directory;
+    // The dialog keeps its invoker only while it is enabled, so release this
+    // narrow request lock before presenting a retryable settings error.
+    state.outputDirectoryCommitPending = false;
+    syncApplyMode(); if (state.singleSave) syncSingleSaveMode(); updateActionButtons();
+    showUserError(error, input);
+    return false;
+  } finally {
+    state.outputDirectoryCommitPending = false;
+    syncApplyMode(); if (state.singleSave) syncSingleSaveMode(); updateActionButtons();
+  }
 }
 
 let outputDirectoryPickRequest = null;
@@ -498,7 +525,7 @@ async function pickOutputDirectory() {
 }
 
 async function chooseOutputDirectory() {
-  if (state.applyRunning || state.saveStarting) return;
+  if (state.applyRunning || state.saveStarting || state.outputDirectoryCommitPending) return;
   try {
     if (!await pickOutputDirectory()) return;
     setApplyResult("");
@@ -547,6 +574,7 @@ function discardRemovedBrowserSaveState() {
   collectRemoved(state.draftSaveChains.keys());
   collectRemoved(state.workspaceDraftChains.keys());
   collectRemoved(state.workspaceDraftTimers.keys());
+  collectRemoved(state.workspaceDraftPending?.keys() || []);
   collectRemoved(state.workspaceMutationErrors.keys());
   collectRemoved(state.selectedImageIds);
   collectRemoved(state.applyCatalogSnapshot?.order || []);
@@ -554,12 +582,16 @@ function discardRemovedBrowserSaveState() {
   for (const [imageId, timer] of state.workspaceDraftTimers) {
     if (!remainingImageIds.has(imageId)) { clearTimeout(timer); state.workspaceDraftTimers.delete(imageId); }
   }
+  for (const [imageId, pending] of state.workspaceDraftPending || []) {
+    if (!remainingImageIds.has(imageId)) { pending.resolve(); state.workspaceDraftPending.delete(imageId); }
+  }
   for (const imageId of removedImageIds) {
     state.drafts.delete(imageId);
     state.projectHistory.delete(imageId);
     state.maskStatus.delete(imageId);
     state.draftSaveChains.delete(imageId);
     state.workspaceDraftChains.delete(imageId);
+    state.workspaceDraftPending?.delete(imageId);
     state.workspaceMutationErrors.delete(imageId);
     releaseImageCaches(imageId);
     releaseCandidateBundles(imageId);
@@ -635,13 +667,54 @@ async function writeSourceHandle(access, response) {
   catch (error) { try { await stream.abort?.(); } catch { /* Preserve the original whenever possible. */ } throw error; }
 }
 
+function renamedSourceFileName(image, access, format) {
+  if (format === "original") return "";
+  const name = access?.fileHandle?.name || access?.name || String(image?.relativePath || "").split("/").at(-1);
+  const extension = name.split(".").at(-1).toLowerCase();
+  const targetExtension = format === "jpg" ? "jpg" : "png";
+  if (!name || extension === targetExtension || (format === "jpg" && extension === "jpeg")) return "";
+  return `${name.slice(0, -(extension.length + 1))}.${targetExtension}`;
+}
+
+async function writeFormattedSourceHandle(access, image, format, response) {
+  const targetName = renamedSourceFileName(image, access, format);
+  if (!targetName) { await writeSourceHandle(access, response); return null; }
+  if (!access.parentHandle) throw codedError("source_action_unavailable");
+  try {
+    await access.parentHandle.getFileHandle(targetName);
+    throw codedError("save_write_failed");
+  } catch (error) {
+    if (typeof error?.code === "string" || error?.name !== "NotFoundError") throw error;
+  }
+  const targetHandle = await access.parentHandle.getFileHandle(targetName, { create: true });
+  const relativePath = access.relativePath ? `${access.relativePath.split("/").slice(0, -1).concat(targetName).filter(Boolean).join("/")}` : targetName;
+  const replacement = { ...access, fileHandle: targetHandle, name: targetName, relativePath };
+  try { await writeSourceHandle(replacement, response); }
+  catch (error) { try { await access.parentHandle.removeEntry(targetName); } catch {} throw error; }
+  return { previousName: access.fileHandle.name || access.name, replacement };
+}
+
+async function finishFormattedSourceRename(access, rename) {
+  if (!rename) return;
+  Object.assign(access, rename.replacement);
+  await access.parentHandle.removeEntry(rename.previousName);
+}
+
+async function discardFormattedSourceRename(access, rename) {
+  if (!rename) return;
+  try { await access.parentHandle.removeEntry(rename.replacement.fileHandle.name || rename.replacement.name); } catch {}
+}
+
 function sourceCommitMetadata(access) {
   return { sourceMtimeMs: Math.max(0, Number(access.lastModified || 0)), sourceSizeBytes: Math.max(0, Number(access.size || 0)) };
 }
 
 async function snapshotSourceHandle(access) {
   const file = await access.fileHandle.getFile();
-  return file instanceof Blob ? file.slice() : null;
+  if (!(file instanceof Blob) || typeof file.arrayBuffer !== "function") return null;
+  // File.slice() may retain a lazy link to the source. Read the bytes before
+  // any overwrite or deletion; access retains the exact source name.
+  return new Blob([await file.arrayBuffer()], { type: file.type });
 }
 
 async function restoreSourceHandle(access, snapshot, deleted) {
@@ -844,30 +917,35 @@ async function runBrowserSave(imageIds, suffix, deleteOriginal, mode = "copy") {
           const saveToken = binary.headers?.get("X-Mozarie-Save-Token") || "";
           const noEffect = binary.headers?.get("X-Mozarie-No-Effect") === "1";
           return serializeBrowserHandleMutation(async () => {
-            let sourceSnapshot = null;
+            let sourceSnapshot = null; let sourceRename = null;
             let commitStarted = false;
             try {
               if (!noEffect) {
                 await ensureHandlePermission(access, true);
-                sourceSnapshot = await snapshotSourceHandle(access);
-                if (!(sourceSnapshot instanceof Blob)) throw codedError("source_restore_failed");
-                await writeSourceHandle(access, binary);
+                if (renamedSourceFileName(sourceImage, access, inputs.format)) sourceRename = await writeFormattedSourceHandle(access, sourceImage, inputs.format, binary);
+                else {
+                  sourceSnapshot = await snapshotSourceHandle(access);
+                  if (!(sourceSnapshot instanceof Blob)) throw codedError("source_restore_failed");
+                  await writeSourceHandle(access, binary);
+                }
                 sourceAction = "overwrite";
               } else {
                 await ensureHandlePermission(access, false);
                 sourceAction = "keep";
               }
               commitStarted = true;
-              const committed = await commitBrowserSaveWithRetry({ imageId: entry.imageId, candidateRevision: entry.candidateRevision, deleteOriginal: inputs.deleteOriginal, sourceAction, saveToken, ...sourceCommitMetadata(access) });
+              const committed = await commitBrowserSaveWithRetry({ imageId: entry.imageId, candidateRevision: entry.candidateRevision, deleteOriginal: inputs.deleteOriginal, sourceAction, saveToken, ...sourceCommitMetadata(sourceRename?.replacement || access) });
+              await finishFormattedSourceRename(access, sourceRename);
               const liveAccess = sourceAccessFor(entry.imageId);
               if (liveAccess) Object.assign(liveAccess, access);
               return finishBrowserSaveEntry(committed, entry, save, sourceAction);
             } catch (error) {
               const reconcile = !commitStarted || isDefinitiveCommitRejection(error) || error.saveState === "pending";
               if (reconcile) await cancelBrowserSave(entry, saveToken);
-              if (sourceSnapshot !== null && reconcile) try { await restoreSourceHandle(access, sourceSnapshot, false); } catch { throw codedError("source_restore_failed"); }
+              if (sourceRename && reconcile) await discardFormattedSourceRename(access, sourceRename);
+              else if (sourceSnapshot !== null && reconcile) try { await restoreSourceHandle(access, sourceSnapshot, false); } catch { throw codedError("source_restore_failed"); }
               throw error;
-            } finally { sourceSnapshot = null; }
+            } finally { sourceSnapshot = null; sourceRename = null; }
           });
         } else if (sourceImage?.sourceKind === "filesystem") {
           let binary;
@@ -963,7 +1041,7 @@ async function runBrowserSave(imageIds, suffix, deleteOriginal, mode = "copy") {
       $("#applyPauseButton").hidden = true;
       $("#applyCancelButton").hidden = true;
       $("#applyCloseButton").hidden = false;
-      updateActionButtons();
+      renderCandidates(); updateActionButtons();
     }
   }
 }
@@ -1010,6 +1088,12 @@ function isDefinitiveCommitRejection(error) { return Number.isInteger(error?.sta
 
 async function startApplyFromDialog(event) {
   event.preventDefault();
+  if (state.saveStarting || state.saving || isBusy() || state.importing || catalogStagingEditsActive()) return;
+  const mode = selectedSaveMode();
+  const copy = mode === "copy";
+  const outputDirectory = $("#applyOutputDirectoryStatus");
+  if (copy && outputDirectory.value.trim() !== (state.settings?.saving?.default_output_directory || "") && !await commitOutputDirectory(outputDirectory)) return;
+  if (state.saveStarting || state.saving || isBusy()) return;
   const processableIds = new Set(processableImages().map((image) => image.id));
   const imageIds = state.applyTargetIds.filter((imageId) => processableIds.has(imageId));
   if (imageIds.length !== state.applyTargetIds.length) {
@@ -1018,8 +1102,6 @@ async function startApplyFromDialog(event) {
     syncApplyMode();
   }
   if (!imageIds.length || state.saveStarting || isBusy() || state.importing || catalogStagingEditsActive()) return;
-  const mode = selectedSaveMode();
-  const copy = mode === "copy";
   const suffix = $("#applySuffix").value;
   if (copy && !state.settings?.saving?.default_output_directory) { syncApplyMode(); return; }
   state.saveStarting = true;
@@ -1047,7 +1129,7 @@ async function startApplyFromDialog(event) {
       $("#applyPauseButton").hidden = true;
       $("#applyCancelButton").hidden = true;
       $("#applyCloseButton").hidden = false;
-      updateActionButtons();
+      renderCandidates(); updateActionButtons();
     }
   } finally {
     if (state.saveStarting) finishSaveStart();
@@ -1059,7 +1141,7 @@ function finishSaveStart() {
   state.saving = false;
   state.applyRunning = false;
   state.applyCatalogSnapshot = null;
-  updateActionButtons();
+  renderCandidates(); updateActionButtons();
 }
 
 async function controlApply(action) {
@@ -1127,7 +1209,7 @@ async function finishApplyJob(job) {
     if (job.state === "complete") setApplyResult(t("apply.complete", { completed: job.completed }));
     else if (job.state === "cancelled") setApplyResult(t("apply.cancelled", { completed: job.completed }));
     else showApplyError({ code: job.errorCode || "internal_error" });
-    updateActionButtons();
+    renderCandidates(); updateActionButtons();
     reconciled = true;
   } finally {
     if (reconciled && job.startedAt != null) state.handledApplyStartedAt = job.startedAt;

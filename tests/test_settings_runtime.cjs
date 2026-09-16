@@ -1,4 +1,5 @@
 const assert = require("node:assert/strict");
+const nodeTest = require("node:test");
 const fs = require("node:fs");
 const path = require("node:path");
 const vm = require("node:vm");
@@ -47,6 +48,7 @@ const context = {
       if (selector === "[data-settings-panel]") return panels;
       if (selector === "[data-sam-status]") return samOutputs;
       if (selector === "[data-model-picker]") return modelPickers;
+      if (selector === '#settingsSamVariants input, #settingsSamModel, [data-model-picker="sam_checkpoint"], [data-model-download="sam"]') return [modelPickers[0]];
       if (selector === "[data-shortcut-action]") return shortcutBindings;
       if (selector === "[data-shortcut-enabled]") return shortcutEnabled;
       return [];
@@ -78,7 +80,7 @@ const context = {
 vm.runInNewContext(source, context, { filename: settingsPath });
 vm.runInNewContext("globalThis.settingsTest={renderModelStatus,renderSamVariantStatuses,selectedSamType,selectSamVariant,selectSettingsTab,moveSettingsTab,setToolRailTabStop,renderSettingsStatus,setSettingsForm,openSettings,saveSettings,resetSettings,chooseSettingsOutputDirectory,chooseSettingsModelFile,handleToolRailKeydown,modelDownloadInput,renderModelDownload,refreshModelDownload,refreshSettingsStatus,showUnsupportedModelDownload,modelDownloadConfirmation,startModelDownload,beginModelDownload,cancelModelDownload,checkForUpdate,startUpdate,samTypeFromPath,shortcutFromEvent,gpuMemoryLabel,modelCardEnabled,setHandSegmentationAvailable,setPrecisionDetectionEnabled,setFluidExclusionEnabled,setFillColorTolerance,saveFillColorTolerance,isWindowsAbsoluteSettingsPath,validateAbsoluteSettingsPaths};", context, { filename: "test-settings-exports.js" });
 
-(async () => {
+nodeTest("settings, model pickers, and download state", async () => {
   assert.equal(context.settingsTest.shortcutFromEvent({ ctrlKey: true, metaKey: false, shiftKey: true, altKey: true, key: "a" }), "Ctrl+Shift+Alt+A", "shortcut capture normalizes modifiers and single letters");
   assert.equal(context.settingsTest.shortcutFromEvent({ ctrlKey: false, metaKey: true, shiftKey: false, altKey: false, key: "ArrowLeft" }), "Ctrl+ArrowLeft", "shortcut capture accepts the platform modifier for named keys");
   assert.equal(context.settingsTest.gpuMemoryLabel(0), "", "missing GPU memory is not rendered as a capacity");
@@ -160,6 +162,18 @@ vm.runInNewContext("globalThis.settingsTest={renderModelStatus,renderSamVariantS
   assert.equal(tabs[1].classList.contains("active"), true, "a model path error opens the Models settings tab");
   assert.equal(element("#settingsResult").textContent, "settings.absolutePathRequired:settings.targetModel", "the inline error tells the user that the named field needs an absolute path");
   element("#settingsTargetModel").value = "G:\\models\\target.onnx";
+  let releaseSettingsReset;
+  context.api = async () => new Promise((resolve) => { releaseSettingsReset = resolve; });
+  const pendingSettingsReset = context.settingsTest.resetSettings();
+  await Promise.resolve();
+  const blockedSettingsSave = context.settingsTest.saveSettings({ preventDefault() {} });
+  assert.equal(element("#settingsSaveButton").disabled, true, "a pending settings save disables its submit action");
+  assert.equal(element("#settingsResetButton").disabled, true, "a pending settings save also blocks reset from racing its response");
+  context.api = async () => ({ settings: { general: { language: "ja", shortcuts_enabled: true }, display: { mosaic_preview: true } }, version: "v1", status: { models: {}, gpus: [] } });
+  releaseSettingsReset({ settings: { general: { language: "ja", shortcuts_enabled: true }, display: { mosaic_preview: true } }, version: "v1" });
+  await pendingSettingsReset; await blockedSettingsSave;
+  assert.equal(element("#settingsSaveButton").disabled, false, "settings controls are restored after a successful save");
+  assert.equal(element("#settingsResetButton").disabled, false, "reset becomes available after the pending save settles");
   element("#settingsDefaultOutputDirectory").value = "relative-output";
   await context.settingsTest.saveSettings({ preventDefault() {} });
   assert.equal(element("#settingsDefaultOutputDirectory").getAttribute("aria-invalid"), "true", "the relative output folder field is marked invalid");
@@ -204,6 +218,10 @@ vm.runInNewContext("globalThis.settingsTest={renderModelStatus,renderSamVariantS
   context.api = async () => { throw new Error("picker failed"); };
   await context.settingsTest.chooseSettingsModelFile(modelPickers[1]);
   assert.equal(errors.at(-1)[0].message, "picker failed", "a model picker failure is surfaced with its invoking button");
+  context.settingsTest.setPrecisionDetectionEnabled(false);
+  await context.settingsTest.chooseSettingsModelFile(modelPickers[1]);
+  assert.equal(modelPickers[0].disabled, true, "model picker cleanup preserves a disabled SAM control when precision detection is unavailable");
+  context.settingsTest.setPrecisionDetectionEnabled(true);
 
   assert.equal(context.settingsTest.modelDownloadInput("hand_detection"), "#settingsHandModel", "downloaded hand models map to their settings input");
   assert.equal(context.settingsTest.modelDownloadInput("unknown"), undefined, "unknown downloaded model keys do not target an input");
@@ -361,6 +379,8 @@ vm.runInNewContext("globalThis.settingsTest={renderModelStatus,renderSamVariantS
   context.api = async () => { throw new Error("start failed"); };
   await context.settingsTest.beginModelDownload();
   assert.equal(errors.at(-1)[0].message, "start failed", "download start failures are actionable");
+  assert.equal(element("#modelDownloadStart").hidden, false, "a failed download start restores its retry action");
+  assert.equal(element("#modelDownloadSecurity").hidden, false, "a failed download start restores its confirmation details");
 
   element("#settingsDialog").open = true;
   context.modelsTabQuery = true;
@@ -388,5 +408,4 @@ vm.runInNewContext("globalThis.settingsTest={renderModelStatus,renderSamVariantS
   context.api = async (url) => { updateStarted = url === "/api/update/start"; return {}; };
   await context.settingsTest.startUpdate();
   assert.equal(updateStarted, true, "confirmed updates start the update request");
-  console.log("test_settings_runtime: passed");
-})().catch((error) => { console.error(error); process.exitCode = 1; });
+});

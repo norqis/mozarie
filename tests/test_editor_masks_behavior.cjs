@@ -1,4 +1,5 @@
 const assert = require("node:assert/strict");
+const nodeTest = require("node:test");
 const fs = require("node:fs");
 const path = require("node:path");
 const vm = require("node:vm");
@@ -18,7 +19,6 @@ function canvasContext(name) {
   return context;
 }
 
-const addCtx = canvasContext("add");
 function pixelLayer(context) {
   const pixels = new Set();
   let point = null; let path = [];
@@ -71,6 +71,7 @@ function pixelLayer(context) {
   return layer;
 }
 
+const addCtx = canvasContext("add");
 const exclusionCtx = canvasContext("exclude");
 const exclusionEraseCtx = canvasContext("excludeErase");
 const historyAddCtx = canvasContext("historyAdd");
@@ -321,7 +322,7 @@ assert.equal(test.buildCombinedMask(), "data:image/png;base64,mask");
 test.enableManualLayerForTool("exclude_eraser");
 assert.equal(state.manualExclusionEraseEnabled, true);
 
-(async () => {
+nodeTest("editor masks, fill, candidates, and history", async () => {
   await test.addBoundaryCandidate();
   assert.equal(state.boundaryDrafts.length, 0, "successful boundary detection consumes the submitted draft");
   assert.equal(state.images[0].candidateRevision, 8);
@@ -776,34 +777,33 @@ assert.equal(state.manualExclusionEraseEnabled, true);
   // The bucket tool runs through the worker result path, which records an
   // undoable fill and schedules the same persistence path as a brush stroke.
   resetCandidateState(); state.currentImage = { width: 100, height: 80 }; state.manualExclusionForced = false;
+  context.fillUiRefreshes.length = 0;
   test.fillAt({ x: -10, y: 400 }, "bucket");
   assert.equal(latestFillWorker.url, "/js/flood-fill-worker.js", "bucket fill uses the flood-fill worker");
   assert.deepEqual([latestFillWorker.payload.x, latestFillWorker.payload.y], [0, 79], "bucket fill clamps the requested pixel to image bounds");
+  assert.deepEqual(context.fillUiRefreshes, ["candidates", "actions"], "starting a fill immediately locks every candidate and action control");
   latestFillWorker.onmessage({ data: { spans: [2, 3, 7] } });
   assert.equal(state.fillPending, false, "worker completion clears the pending fill flag");
-  assert.deepEqual(context.fillUiRefreshes, ["candidates", "actions"], "starting a fill immediately locks every candidate and action control");
   assert.equal(state.history.at(-1).tool, "bucket", "worker completion adds an undoable bucket operation");
+  assert.deepEqual(context.fillUiRefreshes.slice(-2), ["candidates", "actions"], "fill completion immediately unlocks every candidate and action control");
+  state.manualEnabled = false; state.manualExclusionEnabled = false; state.manualExclusionEraseEnabled = false;
+  const emptyFillHistoryLength = state.history.length; context.fillUiRefreshes.length = 0;
+  test.fillAt({ x: 4, y: 4 }, "bucket");
+  latestFillWorker.onmessage({ data: { spans: [] } });
+  assert.equal(state.fillPending, false, "an empty fill result clears its pending state");
+  assert.deepEqual([state.manualEnabled, state.manualExclusionEnabled, state.manualExclusionEraseEnabled], [false, false, false], "an empty fill result does not enable a manual layer");
+  assert.equal(state.history.length, emptyFillHistoryLength, "an empty fill result does not create history");
+  assert.deepEqual(context.fillUiRefreshes, ["candidates", "actions", "candidates", "actions"], "an empty fill result only refreshes controls when it starts and settles");
+  context.fillUiRefreshes.length = 0;
   test.fillAt({ x: 4, y: 4 }, "bucket");
   latestFillWorker.onerror();
   assert.equal(state.fillPending, false, "worker errors clear the pending fill flag without retaining a worker");
+  assert.equal(state.manualEnabled, false, "a failed bucket fill does not change its manual layer state before any worker result");
+  assert.deepEqual(context.fillUiRefreshes, ["candidates", "actions", "candidates", "actions"], "fill errors refresh controls when they lock and unlock");
 
   state.activeStroke = { tool: "brush", points: [{ x: 1, y: 1 }] };
   test.cancelManualStroke();
   assert.equal(state.activeStroke, null, "cancelling an in-progress stroke restores the history-backed mask");
-  test.cancelBoundary();
-  assert.ok(events.includes("boundary-clear"), "cancelling boundary editing clears the active boundary interaction");
-  state.boundaryDrafts = [];
-  assert.equal(test.completedPolygonVertexAt({ x: 1, y: 1 }), null, "a point outside completed polygons has no editable vertex");
-
-  // The empty-state rows are meaningful UI states, not just rendering fallbacks.
-  resetLists(); state.candidates = []; state.manualMaskPresent = false; state.manualExclusionPresent = false; state.manualExclusionErasePresent = false; exclusionCtx.pixels = false; exclusionEraseCtx.pixels = false;
-  test.renderCandidateRows();
-  assert.equal(element("#candidateList").children[0].textContent, "candidates.none", "an empty apply list explains that no masks are available");
-  resetLists(); state.manualMaskPresent = true;
-  test.renderCandidateRows();
-  assert.equal(element("#exclusionList").children[0].textContent, "candidates.none", "an empty exclusion list remains explicit when only apply masks exist");
-
-  // Geometry helpers back the same pointer paths used by the single and
 
   // Project history intentionally does not rebuild local canvases.  A
   // cancelled live stroke therefore restores only its modified regions, in
@@ -837,6 +837,20 @@ assert.equal(state.manualExclusionEraseEnabled, true);
   assert.deepEqual([localAddPixels.has(4, 4), localAddPixels.has(40, 40)], [true, false], "local-history cancellation rebuilds the saved A pixel and removes the live B pixel");
   localAddPixels.restore(); localHistoryAddPixels.restore(); delete context.historyAddCanvas.__pixelLayer;
 
+  test.cancelBoundary();
+  assert.ok(events.includes("boundary-clear"), "cancelling boundary editing clears the active boundary interaction");
+  state.boundaryDrafts = [];
+  assert.equal(test.completedPolygonVertexAt({ x: 1, y: 1 }), null, "a point outside completed polygons has no editable vertex");
+
+  // The empty-state rows are meaningful UI states, not just rendering fallbacks.
+  resetLists(); state.candidates = []; state.manualMaskPresent = false; state.manualExclusionPresent = false; state.manualExclusionErasePresent = false; exclusionCtx.pixels = false; exclusionEraseCtx.pixels = false;
+  test.renderCandidateRows();
+  assert.equal(element("#candidateList").children[0].textContent, "candidates.none", "an empty apply list explains that no masks are available");
+  resetLists(); state.manualMaskPresent = true;
+  test.renderCandidateRows();
+  assert.equal(element("#exclusionList").children[0].textContent, "candidates.none", "an empty exclusion list remains explicit when only apply masks exist");
+
+  // Geometry helpers back the same pointer paths used by the single and
   // compare canvases.  Keep their coordinate and hit-testing limits explicit.
   assert.equal(test.escapeHtml(`<mask&\"'>`), "&lt;mask&amp;&quot;&#39;&gt;");
   state.currentImage = null;
@@ -956,34 +970,20 @@ assert.equal(state.manualExclusionEraseEnabled, true);
   resetCandidateState(); state.currentImage = { width: 100, height: 80 };
   element("#bucketTolerance").value = "0";
   state.images = [{ id: "image", assetVersion: "a" }];
+  state.manualEnabled = false; state.manualExclusionEnabled = false; state.manualExclusionEraseEnabled = false;
+  const staleFillHistoryLength = state.history.length; context.fillUiRefreshes.length = 0;
   test.fillAt({ x: 4, y: 4 }, "exclude_bucket");
   const staleWorker = latestFillWorker; state.currentId = "other";
   staleWorker.onmessage({ data: { spans: [1, 1, 3] } });
   assert.equal(state.fillPending, false, "a fill result from another image is discarded");
-  resetCandidateState(); state.currentImage = { width: 100, height: 80 };
-  const workerClass = context.Worker; context.Worker = function BrokenWorker() { throw new Error("worker unavailable"); };
-  test.fillAt({ x: 4, y: 4 }, "bucket");
-  assert.equal(state.fillPending, false, "a failed worker construction does not leave fill pending");
-  context.Worker = workerClass;
-  context.Worker = undefined;
-  test.fillAt({ x: 4, y: 4 }, "bucket");
-  assert.equal(state.fillPending, false, "an environment without workers reports the fill failure without changing mask state");
-  context.Worker = workerClass;
-  state.fillWorker = { terminate: () => events.push("old-fill-terminated") };
-  test.fillAt({ x: 4, y: 4 }, "bucket");
-  const replacedWorker = latestFillWorker; state.fillWorker = {};
-  replacedWorker.onmessage({ data: { spans: [1, 1, 3] } });
-  assert.equal(state.fillPending, true, "a replaced worker result cannot complete the newer fill request");
-  state.fillWorker = null; state.fillPending = false;
-
   assert.deepEqual([state.manualEnabled, state.manualExclusionEnabled, state.manualExclusionEraseEnabled], [false, false, false], "a stale fill result leaves every manual layer flag unchanged");
   assert.equal(state.history.length, staleFillHistoryLength, "a stale fill result does not create a history operation");
   assert.deepEqual(context.fillUiRefreshes, ["candidates", "actions", "candidates", "actions"], "a stale fill result only refreshes controls when its pending state clears");
-  // Empty/current-image guards are real UI states, especially while switching
-  // files.  They must not mutate masks or history.
-  resetCandidateState(); state.currentId = null;
-  test.renderCandidateRows();
-  assert.equal(element("#candidateList").textContent, "", "no current image clears candidate rows");
+  resetCandidateState(); state.currentImage = { width: 100, height: 80 };
+  const workerClass = context.Worker; context.Worker = function BrokenWorker() { throw new Error("worker unavailable"); };
+  state.manualEnabled = false; state.manualExclusionEnabled = false; state.manualExclusionEraseEnabled = false;
+  test.fillAt({ x: 4, y: 4 }, "bucket");
+  assert.equal(state.fillPending, false, "a failed worker construction does not leave fill pending");
   assert.deepEqual([state.manualEnabled, state.manualExclusionEnabled, state.manualExclusionEraseEnabled], [false, false, false], "worker construction failure leaves all manual-layer flags unchanged");
   assert.deepEqual(context.fillUiRefreshes.slice(-4), ["candidates", "actions", "candidates", "actions"], "worker construction failure unlocks every control after its initial lock");
   context.Worker = workerClass;
@@ -992,6 +992,25 @@ assert.equal(state.manualExclusionEraseEnabled, true);
   test.fillAt({ x: 4, y: 4 }, "bucket");
   assert.equal(state.fillPending, false, "a failed worker post does not leave fill pending");
   assert.deepEqual(context.fillUiRefreshes, ["candidates", "actions", "candidates", "actions"], "a failed worker post unlocks every control after its initial lock");
+  context.Worker = workerClass;
+  context.Worker = undefined;
+  state.manualEnabled = false; state.manualExclusionEnabled = false; state.manualExclusionEraseEnabled = false;
+  test.fillAt({ x: 4, y: 4 }, "bucket");
+  assert.equal(state.fillPending, false, "an environment without workers reports the fill failure without changing mask state");
+  assert.deepEqual([state.manualEnabled, state.manualExclusionEnabled, state.manualExclusionEraseEnabled], [false, false, false], "an unavailable worker leaves manual-layer flags unchanged");
+  context.Worker = workerClass;
+  state.fillWorker = { terminate: () => events.push("old-fill-terminated") };
+  test.fillAt({ x: 4, y: 4 }, "bucket");
+  const replacedWorker = latestFillWorker; state.fillWorker = {};
+  replacedWorker.onmessage({ data: { spans: [1, 1, 3] } });
+  assert.equal(state.fillPending, true, "a replaced worker result cannot complete the newer fill request");
+  state.fillWorker = null; state.fillPending = false;
+
+  // Empty/current-image guards are real UI states, especially while switching
+  // files.  They must not mutate masks or history.
+  resetCandidateState(); state.currentId = null;
+  test.renderCandidateRows();
+  assert.equal(element("#candidateList").textContent, "", "no current image clears candidate rows");
   state.currentId = "image"; state.manualMaskPresent = false; state.manualExclusionPresent = false; state.manualExclusionErasePresent = false; addCtx.pixels = false; exclusionCtx.pixels = false; exclusionEraseCtx.pixels = false;
   test.deleteManualMask(); test.deleteManualExclusion(); test.deleteManualExclusionErase();
   assert.equal(state.history.length, 0, "deleting absent manual masks is inert");
@@ -1163,6 +1182,17 @@ assert.equal(state.manualExclusionEraseEnabled, true);
   state.projectHistory.delete("image"); await test.restoreProjectHistory("undo");
   assert.equal(guardedHistoryRequests, 0, "an unknown history state waits for its normal status refresh instead of treating a shortcut as a mutation");
   assert.equal(state.projectHistoryBusy, false, "rejected history requests never leave the editor busy");
+
+  // Responses from repeated refreshes can arrive out of order.  The latest
+  // request owns the visible Undo/Redo availability for that image.
+  state.projectHistoryRefreshTokens = new Map(); state.projectHistory = new Map();
+  const deferredHistory = [];
+  context.api = () => new Promise((resolve) => deferredHistory.push(resolve));
+  const olderHistory = test.refreshProjectHistory("image");
+  const newerHistory = test.refreshProjectHistory("image");
+  deferredHistory[1]({ canUndo: false, canRedo: true }); await newerHistory;
+  deferredHistory[0]({ canUndo: true, canRedo: false }); await olderHistory;
+  assert.deepEqual({ ...state.projectHistory.get("image") }, { canUndo: false, canRedo: true }, "a late history response cannot overwrite the newer undo and redo state");
+
   state.project = null; state.projectHistory = new Map();
-  console.log("test_editor_masks_behavior: passed");
-})().catch((error) => { console.error(error); process.exitCode = 1; });
+});

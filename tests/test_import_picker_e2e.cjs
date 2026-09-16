@@ -1,4 +1,5 @@
 const assert = require("node:assert/strict");
+const nodeTest = require("node:test");
 const {
   controls: uiControlManifest,
   dynamicControls: uiDynamicControlManifest,
@@ -1947,7 +1948,7 @@ async function runControlLedger(page, fixtureUrl, contracts, finishCancel, holdS
   await page.locator("#saveButton").click();
   await page.waitForFunction(() => document.querySelector("#singleSaveDialog").open);
   assert.equal(await page.locator("#singleSaveStartButton").isDisabled(), true, "single save remains disabled until a server output path is selected");
-  assert.equal(await page.locator("#singleSaveOutputDirectoryStatus").textContent(), await page.evaluate(() => t("apply.outputDirectoryUnset")), "single save displays that no server output path is selected");
+  assert.equal(await page.locator("#singleSaveOutputDirectoryStatus").inputValue(), "", "single save keeps an empty editable path until the server output location is selected");
   await page.locator("#singleSaveCloseButton").click();
   await setupFixture();
 
@@ -4791,9 +4792,9 @@ async function main() {
       await browserSavePage.locator("#singleSaveChooseOutputDirectoryButton").click();
       await browserSavePage.waitForFunction(() => window.__serverOutputPicks.length === 1 && !state.outputDirectoryPicking
         && state.settings?.saving?.default_output_directory === "G:\\fixture-output"
-        && document.querySelector("#singleSaveOutputDirectoryStatus").textContent === "G:\\fixture-output"
+        && document.querySelector("#singleSaveOutputDirectoryStatus").value === "G:\\fixture-output"
         && !document.querySelector("#singleSaveStartButton").disabled);
-      assert.equal(await browserSavePage.locator("#singleSaveOutputDirectoryStatus").textContent(), "G:\\fixture-output", "the selected server output path is displayed in the single-save dialog");
+      assert.equal(await browserSavePage.locator("#singleSaveOutputDirectoryStatus").inputValue(), "G:\\fixture-output", "the selected server output path is displayed in the single-save dialog");
       await browserSavePage.locator("#singleSaveCopyMode").check();
       await browserSavePage.locator("#singleSaveSuffix").fill("_検証");
       await browserSavePage.locator("#singleSaveStartButton").click();
@@ -4806,7 +4807,7 @@ async function main() {
       await browserSavePage.locator("#singleSaveChooseOutputDirectoryButton").click();
       await browserSavePage.waitForFunction(() => window.__serverOutputPicks.length === 2 && !state.outputDirectoryPicking
         && state.settings?.saving?.default_output_directory === "G:\\fixture-output"
-        && document.querySelector("#singleSaveOutputDirectoryStatus").textContent === "G:\\fixture-output");
+        && document.querySelector("#singleSaveOutputDirectoryStatus").value === "G:\\fixture-output");
     } finally {
       await stopCoveredPage(browserSavePage, true);
     }
@@ -4826,10 +4827,7 @@ async function main() {
 }
 
 if (require.main === module) {
-  main().catch((error) => {
-    console.error(error);
-    process.exitCode = 1;
-  });
+  nodeTest("import picker browser coverage", { timeout: 120000 }, main);
 }
 
 module.exports = { closeServer, runCandidateBlinkScenario, startFixtureServer };

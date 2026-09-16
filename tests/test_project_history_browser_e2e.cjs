@@ -133,3 +133,165 @@ test("empty project history shortcuts do not fetch, lock, or change the current 
     await closeServer(fixture.server);
   }
 });
+
+test("history completion recreates every candidate control after success, no-op, and failure", { timeout: 60000 }, async () => {
+  const fixture = await startFixtureServer();
+  const browser = await chromium.launch();
+  let context; let page;
+  try {
+    context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+    page = await context.newPage();
+    await page.goto(fixture.url, { waitUntil: "domcontentloaded" });
+    await page.locator('.gallery-item[data-id="sample"]').click();
+    await page.waitForFunction(() => state.currentId === "sample" && state.currentImage);
+    await page.evaluate(() => {
+      state.project = { id: "fixture-project", status: "working" };
+      state.projectReadOnly = false; state.historyDurable = true;
+      state.candidates = [
+        { id: "apply", role: "apply", enabled: true, forced: false, expandPx: 1, labelToken: "penis", confidence: .9, color: "#fff" },
+        { id: "exclude", role: "exclude", enabled: true, forced: true, expandPx: 1, labelToken: "hand", confidence: .9, color: "#fff" },
+      ];
+      state.manualMaskPresent = true; state.manualExclusionPresent = true; state.manualExclusionErasePresent = true;
+      renderCandidates(); updateActionButtons();
+      window.__historyControls = () => [...document.querySelectorAll("#candidatePane .candidate-row button, #candidatePane [data-candidate-batch], #candidatePane [data-candidate-padding-batch]")]
+        .map((button) => ({ type: button.className || button.dataset.candidateBatch || button.dataset.candidatePaddingBatch, disabled: button.disabled }));
+      window.__nativeHistoryFetch = window.fetch;
+    });
+    const controlTypes = await page.evaluate(() => window.__historyControls().map((item) => item.type));
+    for (const required of ["candidate-toggle", "candidate-display-toggle", "candidate-effective-toggle", "candidate-forced", "candidate-padding-button", "candidate-delete"]) {
+      assert.ok(controlTypes.includes(required), `fixture includes ${required}`);
+    }
+    assert.ok(controlTypes.some((value) => value.includes("apply:toggle")), "fixture includes apply batch controls");
+    assert.ok(controlTypes.some((value) => value.includes("exclude:toggle")), "fixture includes exclusion batch controls");
+
+    await page.evaluate(() => {
+      const nativeFetch = window.__nativeHistoryFetch;
+      let release;
+      window.__releaseHistory = () => release?.();
+      window.fetch = async (input, init = {}) => {
+        const url = String(input?.url || input); const method = init.method || "GET";
+        if (url.includes("/api/project/history/sample") && method === "GET") return new Response(JSON.stringify({ canUndo: true, canRedo: false }), { headers: { "Content-Type": "application/json" } });
+        if (url.endsWith("/api/project/history/sample/undo")) return new Promise((resolve) => { release = () => resolve(new Response(JSON.stringify({ canUndo: false, canRedo: true, changedImageIds: ["other"] }), { headers: { "Content-Type": "application/json" } })); });
+        if (url.includes("/api/images") && method === "GET") {
+          const response = await nativeFetch(input, init); const snapshot = await response.json();
+          return new Response(JSON.stringify({ ...snapshot, project: state.project, readOnly: false, historyDurable: true }), { headers: { "Content-Type": "application/json" } });
+        }
+        return nativeFetch(input, init);
+      };
+      state.projectHistory = new Map([["sample", { canUndo: true, canRedo: false }]]);
+      void restoreProjectHistory("undo");
+    });
+    await page.waitForFunction(() => state.projectHistoryBusy === true);
+    assert.ok((await page.evaluate(() => window.__historyControls())).every((item) => item.disabled), "all dynamic rows and batch controls lock during restoration");
+    await page.evaluate(() => window.__releaseHistory());
+    await page.waitForFunction(() => state.projectHistoryBusy === false);
+    assert.ok((await page.evaluate(() => window.__historyControls())).every((item) => !item.disabled), "successful restoration unlocks recreated dynamic controls");
+
+    for (const mode of ["noop", "postFailure", "reloadFailure"]) {
+      await page.evaluate((outcome) => {
+        const nativeFetch = window.__nativeHistoryFetch;
+        window.fetch = async (input, init = {}) => {
+          const url = String(input?.url || input); const method = init.method || "GET";
+          if (url.includes("/api/project/history/sample") && method === "GET") return new Response(JSON.stringify({ canUndo: true, canRedo: false }), { headers: { "Content-Type": "application/json" } });
+          if (url.endsWith("/api/project/history/sample/undo")) {
+            if (outcome === "postFailure") return new Response(JSON.stringify({ error: { code: "workspace_write_failed" } }), { status: 500, headers: { "Content-Type": "application/json" } });
+            return new Response(JSON.stringify({ canUndo: false, canRedo: true, changedImageIds: outcome === "noop" ? [] : ["other"] }), { headers: { "Content-Type": "application/json" } });
+          }
+          if (url.includes("/api/images") && method === "GET" && outcome === "reloadFailure") return new Response(JSON.stringify({ error: { code: "workspace_write_failed" } }), { status: 500, headers: { "Content-Type": "application/json" } });
+          if (url.includes("/api/images") && method === "GET") {
+            const response = await nativeFetch(input, init); const snapshot = await response.json();
+            return new Response(JSON.stringify({ ...snapshot, project: state.project, readOnly: false, historyDurable: true }), { headers: { "Content-Type": "application/json" } });
+          }
+          return nativeFetch(input, init);
+        };
+        state.projectHistory = new Map([["sample", { canUndo: true, canRedo: false }]]);
+        void restoreProjectHistory("undo");
+      }, mode);
+      await page.waitForFunction(() => state.projectHistoryBusy === false);
+      assert.ok((await page.evaluate(() => window.__historyControls())).every((item) => !item.disabled), `${mode} restoration unlocks recreated dynamic controls`);
+    }
+  } finally {
+    await context?.close();
+    await browser.close();
+    fixture.server.closeAllConnections();
+    await closeServer(fixture.server);
+  }
+});
+
+test("manual output-directory commits lock every save entry point until the settings response settles", { timeout: 20000 }, async () => {
+  const fixture = await startFixtureServer();
+  const browser = await chromium.launch();
+  let context; let page;
+  try {
+    context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+    page = await context.newPage();
+    await page.goto(fixture.url, { waitUntil: "domcontentloaded" });
+    await page.locator('.gallery-item[data-id="sample"]').click();
+    await page.waitForFunction(() => state.currentId === "sample" && state.currentImage);
+    await page.evaluate(() => {
+      state.applyTargetIds = ["sample"];
+      document.querySelector("#applyCopyMode").checked = true;
+      window.__failManualOutputDirectoryCommit = false;
+      const nativeFetch = window.fetch;
+      window.fetch = async (input, init = {}) => {
+        const url = String(input?.url || input);
+        if (url === "/api/settings?status=0" && init.method === "POST") {
+          if (window.__failManualOutputDirectoryCommit) return new Response(JSON.stringify({ error_code: "invalid_settings" }), { status: 400, headers: { "Content-Type": "application/json" } });
+          const requestedDirectory = JSON.parse(init.body).saving.default_output_directory;
+          return new Promise((resolve) => {
+            window.__releaseOutputDirectoryCommit = () => resolve(new Response(JSON.stringify({
+              settings: { ...state.settings, saving: { ...state.settings.saving, default_output_directory: requestedDirectory } },
+            }), { headers: { "Content-Type": "application/json" } }));
+          });
+        }
+        return nativeFetch(input, init);
+      };
+    });
+    await page.locator("#saveAllButton").click();
+    await page.waitForFunction(() => document.querySelector("#applyDialog").open, null, { timeout: 3000 });
+    await page.locator("#applyOutputDirectoryStatus").fill("C:/manual-output");
+    await page.locator("#applyOutputDirectoryStatus").press("Enter");
+    await page.waitForFunction(() => state.outputDirectoryCommitPending === true, null, { timeout: 3000 });
+    for (const selector of [
+      "#applyOutputDirectoryStatus", "#singleSaveOutputDirectoryStatus", "#chooseOutputDirectoryButton", "#singleSaveChooseOutputDirectoryButton",
+      "#applyStartButton", "#singleSaveStartButton", "#saveAllButton", "#saveButton", "#settingsSaveButton", "#settingsResetButton",
+    ]) assert.equal(await page.locator(selector).isDisabled(), true, `${selector} stays disabled during the directory write`);
+    await page.evaluate(() => window.__releaseOutputDirectoryCommit());
+    await page.waitForFunction(() => state.outputDirectoryCommitPending === false, null, { timeout: 3000 });
+    assert.deepEqual(await page.evaluate(() => ({
+      settings: state.settings.saving.default_output_directory,
+      settingsInput: document.querySelector("#settingsDefaultOutputDirectory").value,
+      applyInput: document.querySelector("#applyOutputDirectoryStatus").value,
+      singleInput: document.querySelector("#singleSaveOutputDirectoryStatus").value,
+    })), {
+      settings: "C:/manual-output", settingsInput: "C:/manual-output", applyInput: "C:/manual-output", singleInput: "C:/manual-output",
+    }, "the canonical server path updates all three output-directory displays together");
+    for (const selector of ["#applyOutputDirectoryStatus", "#singleSaveOutputDirectoryStatus", "#chooseOutputDirectoryButton", "#singleSaveChooseOutputDirectoryButton", "#settingsSaveButton", "#settingsResetButton"]) {
+      assert.equal(await page.locator(selector).isDisabled(), false, `${selector} unlocks after the directory write`);
+    }
+    await page.evaluate(() => { window.__failManualOutputDirectoryCommit = true; });
+    await page.locator("#applyOutputDirectoryStatus").fill("relative-output");
+    await page.locator("#applyOutputDirectoryStatus").press("Enter");
+    await page.waitForFunction(() => document.querySelector("#errorDialog").open, null, { timeout: 3000 });
+    assert.equal(await page.locator("#applyOutputDirectoryStatus").inputValue(), "relative-output", "a rejected manual directory remains editable for correction");
+    await page.locator("#errorDialogClose").click();
+    await page.waitForFunction(() => document.activeElement === document.querySelector("#applyOutputDirectoryStatus"), null, { timeout: 3000 });
+    await page.evaluate(() => { window.__failManualOutputDirectoryCommit = false; });
+    await page.locator("#applyOutputDirectoryStatus").fill("C:/retry-output");
+    await page.locator("#applyOutputDirectoryStatus").press("Enter");
+    await page.waitForFunction(() => state.outputDirectoryCommitPending === true, null, { timeout: 3000 });
+    await page.evaluate(() => window.__releaseOutputDirectoryCommit());
+    await page.waitForFunction(() => state.settings.saving.default_output_directory === "C:/retry-output", null, { timeout: 3000 });
+    await page.evaluate(() => { runBrowserSave = async () => { window.__saveStartedAfterDirectoryCommit = true; }; });
+    await page.locator("#applyOutputDirectoryStatus").fill("C:/click-output");
+    await page.locator("#applyStartButton").click();
+    await page.waitForFunction(() => state.outputDirectoryCommitPending === true, null, { timeout: 3000 });
+    await page.evaluate(() => window.__releaseOutputDirectoryCommit());
+    await page.waitForFunction(() => window.__saveStartedAfterDirectoryCommit === true, null, { timeout: 3000 });
+  } finally {
+    await context?.close();
+    await browser.close();
+    fixture.server.closeAllConnections();
+    await closeServer(fixture.server);
+  }
+});

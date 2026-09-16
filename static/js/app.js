@@ -78,6 +78,8 @@ let projectDeleteId = "";
 let projectListProjects = new Map();
 let projectExportBusy = new Set();
 let projectListSort = { key: "updated", direction: "desc" };
+let sourceMismatchPending = false;
+let outputDirectorySaveClickInput = null;
 let projectListSortPending = false;
 let nativeRelinkSourceId = "";
 let nativeRelinkBusy = false;
@@ -432,9 +434,9 @@ async function openProject(project, resume = false) {
     await runCatalogTransition(async ({ epoch, signal }) => {
       await flushAllImageMutations();
       await flushAllWorkspaceMutations();
-      clearPendingBrowserProjectSources();
       const data = await catalogApi("/api/project/open", { projectId: project.id, resume }, { method: "POST", signal, resyncOnFailure: false });
       if (!isCurrentCatalogEpoch(epoch)) return;
+      clearPendingBrowserProjectSources();
       state.project = data.project; state.projectReadOnly = data.project?.status === "completed";
       resetCatalog(data.images || [], data.root || data.project?.sourceRoot || "");
       applyProjectSnapshot(data);
@@ -617,6 +619,7 @@ async function openSameSourceDialog(path) {
 }
 
 function bindEvents() {
+  window.addEventListener("pointerup", () => { outputDirectorySaveClickInput = null; });
   initCandidatePaddingPopover();
   document.querySelectorAll("dialog").forEach((dialog) => dialog.addEventListener("keydown", trapModalTab));
   $("#projectButton").addEventListener("click", () => { renderProjectCurrent(); showModalFromInvoker($("#projectDialog")); });
@@ -719,8 +722,25 @@ function bindEvents() {
     if (projectlessSave) state.projectlessDirectorySources.clear();
     $("#projectNameDialog").close(); if (mode === "new") { resetCatalog([], ""); state.missingNativeSources = []; } renderProjectCurrent();
   } catch (error) { showUserError(error); } finally { endProjectOperation(); } })(); });
-  $("#sourceMismatchCancel").addEventListener("click", () => $("#sourceMismatchDialog").close());
-  $("#sourceMismatchForm").addEventListener("submit", (event) => { event.preventDefault(); void (async () => { try { const ids = JSON.parse($("#sourceMismatchDialog").dataset.imageIds || "[]"); const clearWorkspace = $("#sourceMismatchClear").checked; await flushAllImageMutations(); await flushAllWorkspaceMutations(); const snapshot = await catalogApi("/api/project/mismatches", { imageIds: ids, clearMasks: clearWorkspace }, { method: "POST" }); await refreshWorkspaceImages(snapshot, ids, { clearWorkspace, resetWorkspace: true }); $("#sourceMismatchDialog").close(); } catch (error) { showUserError(error); } })(); });
+  const syncSourceMismatchControls = () => {
+    $("#sourceMismatchClear").disabled = sourceMismatchPending;
+    $("#sourceMismatchCancel").disabled = sourceMismatchPending;
+    $("#sourceMismatchConfirm").disabled = sourceMismatchPending;
+  };
+  $("#sourceMismatchCancel").addEventListener("click", () => { if (!sourceMismatchPending) $("#sourceMismatchDialog").close(); });
+  $("#sourceMismatchDialog").addEventListener("cancel", (event) => { if (sourceMismatchPending) event.preventDefault(); });
+  $("#sourceMismatchForm").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (sourceMismatchPending) return;
+    sourceMismatchPending = true; syncSourceMismatchControls();
+    try {
+      const ids = JSON.parse($("#sourceMismatchDialog").dataset.imageIds || "[]"); const clearWorkspace = $("#sourceMismatchClear").checked;
+      await flushAllImageMutations(); await flushAllWorkspaceMutations();
+      const snapshot = await catalogApi("/api/project/mismatches", { imageIds: ids, clearMasks: clearWorkspace }, { method: "POST" });
+      await refreshWorkspaceImages(snapshot, ids, { clearWorkspace, resetWorkspace: true }); $("#sourceMismatchDialog").close();
+    } catch (error) { showUserError(error); }
+    finally { sourceMismatchPending = false; syncSourceMismatchControls(); }
+  });
   $("#sameSourceCancel").addEventListener("click", () => { if (!sameSourceBusy) $("#sameSourceDialog").close(); });
   $("#sameSourceDialog").addEventListener("cancel", (event) => { if (sameSourceBusy) event.preventDefault(); });
   $("#sameSourceOpen").addEventListener("click", () => { const project = sameSourceProjects.find((item) => item.id === sameSourceSelectedProjectId) || sameSourceProjects[0]; $("#sameSourceDialog").close(); if (project) void openProject(project); });
@@ -1145,6 +1165,11 @@ function bindEvents() {
   setPaneCollapsed("inspector", false);
   $("#applyForm").addEventListener("submit", startApplyFromDialog);
   $("#chooseOutputDirectoryButton").addEventListener("click", chooseOutputDirectory);
+  $("#applyOutputDirectoryStatus").addEventListener("change", () => { if (outputDirectorySaveClickInput !== $("#applyOutputDirectoryStatus")) void commitOutputDirectory($("#applyOutputDirectoryStatus")); });
+  $("#applyOutputDirectoryStatus").addEventListener("keydown", (event) => { if (event.key === "Enter") { event.preventDefault(); void commitOutputDirectory($("#applyOutputDirectoryStatus")); } });
+  $("#applyStartButton").addEventListener("pointerdown", (event) => { if (event.button === 0 && document.activeElement === $("#applyOutputDirectoryStatus")) outputDirectorySaveClickInput = $("#applyOutputDirectoryStatus"); });
+  $("#applyStartButton").addEventListener("pointercancel", () => { outputDirectorySaveClickInput = null; });
+  $("#applyStartButton").addEventListener("click", () => { outputDirectorySaveClickInput = null; });
   document.querySelectorAll('input[name="batchSaveMode"]').forEach((input) => input.addEventListener("change", syncApplyMode));
   $("#applyTargetMode").addEventListener("change", refreshApplyTargets);
   $("#applyOutputFormat").addEventListener("change", syncApplyMode);
@@ -1163,6 +1188,11 @@ function bindEvents() {
   lightDismiss($("#applyDialog"), () => { if (!state.applyRunning) $("#applyDialog").close(); });
   $("#singleSaveForm").addEventListener("submit", startSingleSave);
   $("#singleSaveChooseOutputDirectoryButton").addEventListener("click", () => { void chooseSingleOutputDirectory(); });
+  $("#singleSaveOutputDirectoryStatus").addEventListener("change", () => { if (outputDirectorySaveClickInput !== $("#singleSaveOutputDirectoryStatus")) void commitOutputDirectory($("#singleSaveOutputDirectoryStatus")); });
+  $("#singleSaveOutputDirectoryStatus").addEventListener("keydown", (event) => { if (event.key === "Enter") { event.preventDefault(); void commitOutputDirectory($("#singleSaveOutputDirectoryStatus")); } });
+  $("#singleSaveStartButton").addEventListener("pointerdown", (event) => { if (event.button === 0 && document.activeElement === $("#singleSaveOutputDirectoryStatus")) outputDirectorySaveClickInput = $("#singleSaveOutputDirectoryStatus"); });
+  $("#singleSaveStartButton").addEventListener("pointercancel", () => { outputDirectorySaveClickInput = null; });
+  $("#singleSaveStartButton").addEventListener("click", () => { outputDirectorySaveClickInput = null; });
   document.querySelectorAll('input[name="singleSaveMode"]').forEach((input) => input.addEventListener("change", syncSingleSaveMode));
   $("#singleSaveOutputFormat").addEventListener("change", syncSingleSaveMode);
   $("#singleSaveCloseButton").addEventListener("click", () => $("#singleSaveDialog").close());

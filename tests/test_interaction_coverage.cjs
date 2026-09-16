@@ -4,6 +4,7 @@
 // interaction.js.  It exercises the public interaction paths while retaining
 // the production file as the single source of behaviour.
 const assert = require("node:assert/strict");
+const nodeTest = require("node:test");
 const fs = require("node:fs");
 const path = require("node:path");
 const vm = require("node:vm");
@@ -98,7 +99,7 @@ const context = {
   },
   beginCatalogEpoch: () => ++state.catalogEpoch, isCurrentCatalogEpoch: (epoch) => epoch === state.catalogEpoch, async resyncAfterStaleCatalog() {},
   updateActionButtons: () => calls.push(["actions"]), releaseCandidateBundles: () => {}, resetHistoryToCurrentManualMask: () => {}, refreshMaskStatus: () => {},
-  markImagesUnreviewed: () => {}, renderCandidates: () => {}, renderCatalogViews: () => calls.push(["catalog"]), updateNavigationControls: () => {}, clearStatus: () => {},
+  markImagesUnreviewed: () => {}, renderCandidates: () => calls.push(["candidates"]), renderCatalogViews: () => calls.push(["catalog"]), updateNavigationControls: () => {}, clearStatus: () => {},
   flushAllImageMutations: async () => {}, flushAllWorkspaceMutations: async () => {}, clearStoredCatalogState: () => {}, resetCatalog: (next) => { images = next; state.images = next; },
   reviewPath: (image) => image.id, isReviewed: (image) => state.reviewedPaths.has(image.id), isHidden: (image) => Boolean(image.hidden),
   selectImage: async (id) => { state.currentId = id; state.currentImage = state.images.find((image) => image.id === id) || null; },
@@ -126,7 +127,7 @@ const indexSource = fs.readFileSync(path.join(__dirname, "..", "static", "index.
 const styleSource = fs.readFileSync(path.join(__dirname, "..", "static", "style.css"), "utf8");
 const tolerancePanelCss = styleSource.match(/\.bucket-tolerance-panel\s*\{([^}]*)\}/)?.[1] || "";
 
-(async () => {
+nodeTest("interaction and catalog mutation controls", async () => {
   assert.match(indexSource, /id="bucketTool"[^>]*aria-controls="bucketToleranceControl"[^>]*aria-expanded="false"/, "the mosaic fill control owns its tolerance popover semantically");
   assert.match(indexSource, /id="excludeBucketTool"[^>]*aria-controls="bucketToleranceControl"[^>]*aria-expanded="false"/, "the exclusion fill control owns the shared tolerance popover semantically");
   assert.match(indexSource, /<output id="bucketToleranceValue" for="bucketTolerance">/, "the displayed tolerance is associated with its range input");
@@ -160,6 +161,7 @@ const tolerancePanelCss = styleSource.match(/\.bucket-tolerance-panel\s*\{([^}]*
   assert.equal(state.maskDirty, true, "resetting the current draft marks composed masks dirty before recomposition");
   assert.ok(calls.some(([name]) => name === "flushMaskComposition"), "resetting the current draft recomposes masks before its render");
   assert.ok(calls.some(([name]) => name === "api" && name === "api"), "clearing masks follows the server catalog refresh path");
+  assert.ok(calls.some(([name]) => name === "candidates"), "clearing masks redraws candidate controls after releasing its busy lock");
   await test.clearCatalog();
 
   images = [{ id: "one", sourcePath: "C:/one.png" }, { id: "two" }]; state.images = images; state.currentId = "one"; state.currentImage = images[0]; state.selectedImageIds = new Set(["one"]);
@@ -351,5 +353,4 @@ const tolerancePanelCss = styleSource.match(/\.bucket-tolerance-panel\s*\{([^}]*
   context.fetch = async () => { throw new Error("network"); }; context.api = async () => { throw new Error("refresh"); };
   state.importing = false; state.importSession = null; await test.importFiles([{ getFile: async () => file("failure.png"), relativePath: "failure.png" }]);
   context.fetch = originalFetch; context.api = apiForClear;
-  console.log("test_interaction_coverage: passed");
-})().catch((error) => { console.error(error); process.exitCode = 1; });
+});

@@ -1,4 +1,5 @@
 const assert = require("node:assert/strict");
+const nodeTest = require("node:test");
 const fs = require("node:fs");
 const path = require("node:path");
 const vm = require("node:vm");
@@ -30,6 +31,7 @@ function element(children = {}) {
     getAttribute(name) { return attributes.get(name); },
     querySelector(selector) { return children[selector] || null; },
     scrollIntoView(options) { this.scrolled = options; },
+    focus() { this.focused = true; },
     listeners: new Map(),
     addEventListener(name, callback) { this.listeners.set(name, callback); }, showModal() { this.open = true; }, close() { this.open = false; },
   };
@@ -286,7 +288,7 @@ function makeSaveRuntime() {
   context.confirmed = true;
   const source = fs.readFileSync(path.join(jsRoot, "save.js"), "utf8");
   vm.runInNewContext(source, context, { filename: path.join(jsRoot, "save.js") });
-  vm.runInNewContext("globalThis.__saveTest = { setApplyResult, showApplyError, isTerminalApply, selectedSaveMode, sourceAccessFor, sourceCanOverwrite, sourceCanDelete, applyTargetsSupport, applyRestrictionMessage, syncApplyMode, refreshApplyTargets, openApplyDialog, selectedSingleSaveMode, setSingleSaveResult, syncSingleSaveMode, openSingleSaveDialog, chooseSingleOutputDirectory, renderSingleSave, startSingleSave, draftPayload, renderOutputDirectory, setOutputDirectoryPickerBusy, pickOutputDirectory, reserveSaveRender, renderDefaultCopy, renderStreamedSave, chooseOutputDirectory, waitForBrowserSave, showBrowserSaveProgress, reconcileStoredMaskStatuses, reconcileBrowserSaveState, ensureHandlePermission, ensureSaveSources, writeSourceHandle, snapshotSourceHandle, restoreSourceHandle, runBrowserSave, commitBrowserSaveWithRetry, cancelBrowserSave, acknowledgePendingBrowserSave, isDefinitiveCommitRejection, startApplyFromDialog, finishSaveStart, controlApply, showRunningApply, finishApplyJob, isTerminalDetection, finishDetectionJob, pollJob, scheduleJobPoll };", context, { filename: "test-save-exports.js" });
+  vm.runInNewContext("globalThis.__saveTest = { setApplyResult, showApplyError, isTerminalApply, selectedSaveMode, sourceAccessFor, sourceCanOverwrite, sourceCanDelete, applyTargetsSupport, applyRestrictionMessage, syncApplyMode, refreshApplyTargets, openApplyDialog, selectedSingleSaveMode, setSingleSaveResult, syncSingleSaveMode, openSingleSaveDialog, chooseSingleOutputDirectory, renderSingleSave, startSingleSave, draftPayload, renderOutputDirectory, commitOutputDirectory, setOutputDirectoryPickerBusy, pickOutputDirectory, reserveSaveRender, renderDefaultCopy, renderStreamedSave, chooseOutputDirectory, waitForBrowserSave, showBrowserSaveProgress, reconcileStoredMaskStatuses, reconcileBrowserSaveState, ensureHandlePermission, ensureSaveSources, writeSourceHandle, snapshotSourceHandle, restoreSourceHandle, runBrowserSave, commitBrowserSaveWithRetry, cancelBrowserSave, acknowledgePendingBrowserSave, isDefinitiveCommitRejection, startApplyFromDialog, finishSaveStart, controlApply, showRunningApply, finishApplyJob, isTerminalDetection, finishDetectionJob, pollJob, scheduleJobPoll };", context, { filename: "test-save-exports.js" });
   return { ...context.__saveTest, calls, context, errors, nodes, requests, saveMode, singleSaveMode, state, setHandler(fn) { handler = fn; } };
 }
 
@@ -298,13 +300,50 @@ async function saveInteractions() {
   await runtime.openSingleSaveDialog(null); runtime.context.busy = true; await runtime.openSingleSaveDialog("file"); runtime.context.busy = false; runtime.context.flushError = new Error("draft"); await runtime.openSingleSaveDialog("file"); runtime.context.flushError = null; state.candidateUpdateChains.set("pending", Promise.resolve()); await runtime.openSingleSaveDialog("file"); state.candidateUpdateChains.clear(); assert.equal(state.singleSave.imageId, "file");
   state.singleSave = null; runtime.syncSingleSaveMode(); state.singleSave = { imageId: "missing" }; runtime.syncSingleSaveMode(); state.singleSave = { imageId: "file" }; runtime.singleSaveMode.value = "overwrite"; runtime.syncSingleSaveMode(); runtime.singleSaveMode.value = "copy";
   runtime.syncSingleSaveMode(); assert.equal(runtime.nodes.get("#singleSaveStartButton").disabled, false); state.saving = true; await runtime.chooseSingleOutputDirectory(); state.saving = false;
+  runtime.saveMode.value = "overwrite"; runtime.nodes.get("#applyOutputFormat").value = "jpg"; runtime.syncApplyMode();
+  assert.equal(runtime.selectedSaveMode(), "overwrite", "changing a PNG batch to JPG preserves the overwrite choice");
+  assert.equal(runtime.nodes.get("#applyOverwriteMode").disabled, false, "changing format does not force batch overwrite off");
+  runtime.singleSaveMode.value = "overwrite"; runtime.nodes.get("#singleSaveOutputFormat").value = "jpg"; runtime.syncSingleSaveMode();
+  assert.equal(runtime.selectedSingleSaveMode(), "overwrite", "changing a PNG single save to JPG preserves the overwrite choice");
+  assert.equal(runtime.nodes.get("#singleSaveOverwriteMode").disabled, false, "changing format does not force single overwrite off");
+  runtime.saveMode.value = "copy"; runtime.singleSaveMode.value = "copy"; runtime.nodes.get("#applyOutputFormat").value = "original"; runtime.nodes.get("#singleSaveOutputFormat").value = "original";
   runtime.setHandler(async (url) => url === "/api/output-directory/pick" ? { cancelled: false, path: "G:/picked", settings: { saving: { default_output_directory: "G:/picked" } } } : {});
   await runtime.pickOutputDirectory(); assert.equal(state.settings.saving.default_output_directory, "G:/picked", "the server picker updates the absolute single-save path");
   runtime.setHandler(async (url) => url === "/api/output-directory/pick" ? { cancelled: true } : {});
   await runtime.chooseSingleOutputDirectory(); assert.equal(state.settings.saving.default_output_directory, "G:/picked", "a cancelled picker keeps the prior absolute path");
+  let resolveDirectorySave;
+  runtime.nodes.get("#applyOutputDirectoryStatus").value = " G:/manual ";
+  runtime.setHandler((url, options) => {
+    if (url !== "/api/settings?status=0") return {};
+    assert.deepEqual(JSON.parse(options.body), { saving: { default_output_directory: "G:/manual" } }, "manual output directories use the narrow settings payload");
+    return new Promise((resolve) => { resolveDirectorySave = resolve; });
+  });
+  const pendingDirectorySave = runtime.commitOutputDirectory(runtime.nodes.get("#applyOutputDirectoryStatus"));
+  await Promise.resolve();
+  assert.equal(state.outputDirectoryCommitPending, true);
+  assert.equal(runtime.nodes.get("#applyOutputDirectoryStatus").disabled, true);
+  assert.equal(runtime.nodes.get("#singleSaveOutputDirectoryStatus").disabled, true);
+  assert.equal(runtime.nodes.get("#applyStartButton").disabled, true);
+  assert.equal(runtime.nodes.get("#singleSaveStartButton").disabled, true);
+  resolveDirectorySave({ settings: { saving: { default_output_directory: "G:/manual" } } });
+  assert.equal(await pendingDirectorySave, true);
+  assert.equal(state.settings.saving.default_output_directory, "G:/manual");
+  assert.equal(runtime.nodes.get("#settingsDefaultOutputDirectory").value, "G:/manual");
+  assert.equal(runtime.nodes.get("#applyOutputDirectoryStatus").value, "G:/manual");
+  assert.equal(runtime.nodes.get("#singleSaveOutputDirectoryStatus").value, "G:/manual");
+  assert.equal(runtime.nodes.get("#applyOutputDirectoryStatus").disabled, false);
+  runtime.nodes.get("#singleSaveOutputDirectoryStatus").value = "G:/reject";
+  runtime.setHandler(async (url) => { if (url === "/api/settings?status=0") { const error = new Error("reject"); error.code = "output_folder_unavailable"; throw error; } return {}; });
+  assert.equal(await runtime.commitOutputDirectory(runtime.nodes.get("#singleSaveOutputDirectoryStatus")), false);
+  assert.equal(runtime.nodes.get("#singleSaveOutputDirectoryStatus").value, "G:/reject", "a rejected directory keeps its draft");
+  assert.equal(state.saveStarting, false, "a rejected directory never starts a save");
+  runtime.nodes.get("#singleSaveOutputDirectoryStatus").value = "G:/manual";
   runtime.setHandler(async (url) => url === "/api/save/render" ? { ok: false, status: 409, json: async () => ({ error_code: "save_state_changed" }) } : {}); await assert.rejects(runtime.renderSingleSave({}), (error) => error.code === "save_state_changed");
   runtime.setHandler(async (url) => { if (url === "/api/save/prepare") return { entries: [{ imageId: "file", candidateRevision: 1, relativePath: "file.png" }] }; if (url === "/api/save/render") return { ok: true, headers: { get() { return "single-token"; } }, body: { async pipeTo(stream) { await stream.write(Uint8Array.from([1])); await stream.close(); } } }; if (url === "/api/save/commit") return { cleared: false, stale: false }; if (url === "/api/images") return { images: state.images }; return {}; });
   state.singleSave = { imageId: "file", generation: state.imageGeneration, divisor: 16, draft: null }; runtime.nodes.get("#singleSaveSuffix").value = "_m"; await runtime.startSingleSave({ preventDefault() {} });
+  assert.ok(runtime.calls.includes("candidates"), "a single overwrite redraws candidate controls after its save lock settles");
+  runtime.calls.length = 0; runtime.finishSaveStart();
+  assert.ok(runtime.calls.includes("candidates"), "a failed or cancelled batch start redraws candidate controls after releasing its lock");
   assert.equal(runtime.isTerminalApply({ kind: "detect", state: "complete" }), false); state.applyRunning = true; assert.equal(runtime.isTerminalApply({ kind: "apply", state: "complete" }), true); state.applyRunning = false; state.handledApplyStartedAt = 2; assert.equal(runtime.isTerminalApply({ kind: "apply", state: "complete", startedAt: 3 }), true);
   assert.equal(runtime.selectedSaveMode(), "copy"); assert.equal(runtime.sourceAccessFor("missing"), null); assert.equal(runtime.sourceCanOverwrite(state.images[0]), true); assert.equal(runtime.sourceCanDelete(state.images[1]), false); assert.equal(runtime.applyTargetsSupport("overwrite"), true);
   state.applyTargetIds = ["session"]; runtime.saveMode.value = "overwrite"; assert.match(runtime.applyRestrictionMessage(), /overwriteUnavailable/); runtime.syncApplyMode(); assert.equal(runtime.nodes.get("#applyStartButton").disabled, true);
@@ -315,7 +354,7 @@ async function saveInteractions() {
   runtime.context.busy = true; await runtime.openApplyDialog(); runtime.context.busy = false; runtime.context.flushError = new Error("draft failed"); await runtime.openApplyDialog(); runtime.context.flushError = null;
   state.applyTargetIds = []; await runtime.openApplyDialog([]); state.applyTargetIds = ["file"]; await runtime.openApplyDialog({ initialMode: "masked" }); assert.equal(runtime.nodes.get("#applyDialog").open, true);
   state.drafts.set("file", { add: "add", exclusion: "x", exclusionErase: "erase", manualEnabled: false, manualExclusionEnabled: false, manualExclusionEraseEnabled: false, removedCandidateIds: ["old"] }); assert.deepEqual(JSON.parse(JSON.stringify(runtime.draftPayload(["file", "missing"]))), { file: { add: "", exclusion: "", exclusionErase: "", manualExclusionForced: true, removedCandidateIds: ["old"] } });
-  runtime.renderOutputDirectory(); assert.equal(runtime.nodes.get("#settingsDefaultOutputDirectory").value, "G:/picked"); runtime.setOutputDirectoryPickerBusy(true); assert.equal(state.outputDirectoryPicking, true); runtime.setOutputDirectoryPickerBusy(false);
+  runtime.renderOutputDirectory(); assert.equal(runtime.nodes.get("#settingsDefaultOutputDirectory").value, "G:/manual"); runtime.setOutputDirectoryPickerBusy(true); assert.equal(state.outputDirectoryPicking, true); runtime.setOutputDirectoryPickerBusy(false);
 
   runtime.setHandler(async (url) => url === "/api/output-directory/pick" ? { cancelled: false, path: "G:/picked-again", settings: { saving: { default_output_directory: "G:/picked-again" } } } : {});
   const picked = await runtime.pickOutputDirectory(); assert.equal(picked, "G:/picked-again"); assert.equal(state.settings.saving.default_output_directory, "G:/picked-again"); await runtime.chooseOutputDirectory();
@@ -360,9 +399,8 @@ async function saveCoverageMatrix() {
   // They execute against the current HTTP lifecycle above; no File System Access output-directory path remains here.
 }
 
-(async () => {
+nodeTest("gallery and save interactions", async () => {
   await galleryInteractions();
   await saveInteractions();
   await saveCoverageMatrix();
-  console.log("test_gallery_save_coverage: passed");
-})().catch((error) => { console.error(error); process.exitCode = 1; });
+});

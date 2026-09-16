@@ -868,6 +868,52 @@ async function runHandleOverwriteCase() {
   assert.equal(JSON.parse(runtime.requests.find((request) => request.path === "/api/save/commit").options.body).sourceAction, "overwrite");
 }
 
+async function runFormattedHandleOverwriteCase() {
+  const files = new Map([['source.png', sourceBlob('source.png', 12, 34)] ]);
+  const handles = new Map();
+  const handleFor = (name) => {
+    if (!handles.has(name)) handles.set(name, {
+      name,
+      async getFile() { return files.get(name); },
+      async createWritable() {
+        const bytes = [];
+        return { async write(chunk) { bytes.push(...new Uint8Array(chunk)); }, async close() { files.set(name, sourceBlob(name, bytes.length, 35)); }, async abort() {} };
+      },
+    });
+    return handles.get(name);
+  };
+  const removed = [];
+  const parentHandle = {
+    async getFileHandle(name, options = {}) {
+      if (!files.has(name) && !options.create) throw new DOMException('missing', 'NotFoundError');
+      if (!files.has(name)) files.set(name, sourceBlob(name, 0, 34));
+      return handleFor(name);
+    },
+    async removeEntry(name) { removed.push(name); files.delete(name); },
+  };
+  const runtime = createRuntime({ commit: () => jsonResponse({ cleared: true, stale: false, images: [] }) });
+  runtime.state.images = [{ id: 'image-1', sourceKind: 'session', relativePath: 'source.png', width: 32, height: 32, candidateCount: 1, enabledCandidateCount: 1 }];
+  const access = { fileHandle: handleFor('source.png'), parentHandle, name: 'source.png', size: 12, lastModified: 34 };
+  runtime.state.sourceAccess.set('image-1', access);
+  runtime.element('#applyOutputFormat').value = 'jpg';
+  await runtime.runBrowserSave(['image-1'], '_censored', false, 'overwrite');
+  assert.deepEqual(removed, ['source.png'], 'a browser PNG overwrite removes the old source only after the JPG save commits');
+  assert.equal(access.name, 'source.jpg', 'the live browser source handle follows the renamed output');
+  assert.equal(files.has('source.jpg'), true, 'the renamed browser source remains available after commit');
+}
+
+async function runFormattedHandleCollisionCase() {
+  const source = sourceBlob('source.png', 12, 34); const destination = sourceBlob('source.jpg', 9, 30);
+  const sourceHandle = { name: 'source.png', async getFile() { return source; } };
+  const parentHandle = { async getFileHandle(name) { if (name === 'source.jpg') return { name, async getFile() { return destination; } }; throw new DOMException('missing', 'NotFoundError'); }, async removeEntry() { throw new Error('must not remove on collision'); } };
+  const runtime = createRuntime({ commit: () => jsonResponse({ cleared: true, stale: false, images: [] }) });
+  runtime.state.images = [{ id: 'image-1', sourceKind: 'session', relativePath: 'source.png', width: 32, height: 32, candidateCount: 1, enabledCandidateCount: 1 }];
+  runtime.state.sourceAccess.set('image-1', { fileHandle: sourceHandle, parentHandle, name: 'source.png', size: 12, lastModified: 34 });
+  runtime.element('#applyOutputFormat').value = 'jpg';
+  await assert.rejects(runtime.runBrowserSave(['image-1'], '_censored', false, 'overwrite'), (error) => error?.code === 'save_write_failed');
+  assert.equal(runtime.requests.some((request) => request.path === '/api/save/commit'), false, 'a pre-existing renamed target leaves the original source and does not commit');
+}
+
 async function runHandleOverwriteChangedDuringRenderCase() {
   let writes = 0;
   let sourceFile = sourceBlob("source.png", 12, 34);
@@ -1189,6 +1235,8 @@ nodeTest("browser save runtime contracts", async () => {
   await runCancelCase();
   await runDeleteOriginalCase();
   await runHandleOverwriteCase();
+  await runFormattedHandleOverwriteCase();
+  await runFormattedHandleCollisionCase();
   await runHandleOverwriteChangedDuringRenderCase();
   await runRepeatedHandleOverwriteCase();
   await runHandleDeleteAfterCopyCase();

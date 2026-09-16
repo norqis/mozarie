@@ -5,6 +5,7 @@
 // through the same functions that the page uses rather than duplicating their
 // decisions in test-only helpers.
 const assert = require("node:assert/strict");
+const nodeTest = require("node:test");
 const fs = require("node:fs");
 const path = require("node:path");
 const vm = require("node:vm");
@@ -327,7 +328,7 @@ async function testCoreBoundaryAndWorkspaceBehaviour() {
     refreshMaskStatus: () => false, selectImage() {}, imageAssetVersion: () => 0, canvasHasPixels: () => false,
     applyRestrictionMessage: () => "", candidateDisplayIdsForRole: () => [], queueWorkspaceFlags: () => Promise.reject(new Error("write failed")),
     showModalFromInvoker() {}, showConnectionFailure() {}, releaseMosaicPreview() {}, requestMosaicPreview() {},
-    closeBoundaryModeMenu() {}, closeCatalogContextMenu() {}, releaseImageCaches() {}, clearCandidateBlink() {}, clearEditor() {}, flushAllWorkspaceMutations: async () => {},
+    closeBoundaryModeMenu() {}, closeCatalogContextMenu() {}, releaseImageCaches() {}, clearCandidateBlink() {}, clearEditor() {}, resetCatalogWindows() {}, flushAllWorkspaceMutations: async () => {},
     isBusy: () => false, catalogStagingEditsActive: () => false, currentImageActionPending: () => false, currentRecord: () => state.images.find((image) => image.id === state.currentId) || null,
     isProcessableImage: (image) => Boolean(image && !image.hidden), candidateControlLocked: () => false, manualLayerPresence: () => ({ hasManualExclude: false, hasManualExclusionErase: false }),
     processableImages: (images = state.images) => images.filter((image) => !image.hidden), imageHasMask: () => false, closeFilterPopovers() {}, selectedSaveMode: () => "copy",
@@ -336,11 +337,35 @@ async function testCoreBoundaryAndWorkspaceBehaviour() {
   };
   const source = fs.readFileSync(path.join(jsRoot, "core.js"), "utf8");
   vm.runInNewContext(source, context, { filename: path.join(jsRoot, "core.js") });
-  vm.runInNewContext("globalThis.coreCoverage={ state, t, validCandidateTokens, showUserError, responseError, loadTranslations, api, setStatus, setStatusKey, showProcessing, progressText, processingCurrentPath, catalogRecordMatches, cancelFillWork, abortCatalogLoads, publishWorkspaceFlags, saveWorkspaceFlag, saveTargets, setHidden, selectCatalogImage, refreshReviewViews, markImagesUnreviewed, refreshCurrentReviewAndMask, clearBoundaryConstruction, updateActionButtons, updateCandidateBatchButtons, setMosaicPreviewEnabled, loadFolder, formatDuration, normaliseDetectionConfidence, normaliseDivisor, calculatedBlockSize };", context, { filename: "test-core-exports.js" });
+  vm.runInNewContext("globalThis.coreCoverage={ state, t, validCandidateTokens, showUserError, responseError, loadTranslations, api, setStatus, setStatusKey, showProcessing, progressText, processingCurrentPath, catalogRecordMatches, cancelFillWork, abortCatalogLoads, publishWorkspaceFlags, saveWorkspaceFlag, saveTargets, setHidden, selectCatalogImage, refreshReviewViews, markImagesUnreviewed, refreshCurrentReviewAndMask, clearBoundaryConstruction, updateActionButtons, updateCandidateBatchButtons, setMosaicPreviewEnabled, loadFolder, formatDuration, normaliseDetectionConfidence, normaliseDivisor, calculatedBlockSize, isBusy, resetCatalog };", context, { filename: "test-core-exports.js" });
   const test = context.coreCoverage;
   const coreState = test.state;
   Object.assign(coreState, state);
   coreState.workspaceFlagPending = new Map();
+  coreState.transformPending = true;
+  assert.equal(test.isBusy(), true, "an image transform participates in the shared busy lock used by save, detection, and candidate controls");
+  coreState.transformPending = false;
+  assert.equal(test.isBusy(), false, "transform completion releases the shared busy lock");
+  coreState.outputDirectoryCommitPending = true;
+  assert.equal(test.isBusy(), true, "committing a manual output directory locks save and edit actions until its settings write settles");
+  coreState.outputDirectoryCommitPending = false;
+  coreState.outputDirectoryPicking = true;
+  assert.equal(test.isBusy(), true, "the output-directory picker shares the same lock while its request is pending");
+  coreState.outputDirectoryPicking = false;
+  assert.equal(test.isBusy(), false, "output-directory controls release only after their pending request finishes");
+  coreState.galleryFilter = new Set(["masked"]); coreState.overviewFilter = new Set(["reviewed"]); coreState.overviewQuery = "old project query";
+  const catalogFilterControls = [element("galleryFilter"), element("overviewFilter")];
+  catalogFilterControls.forEach((control) => { control.checked = true; }); element("#overviewQuery").value = "old project query";
+  const catalogQuerySelectorAll = document.querySelectorAll;
+  document.querySelectorAll = (selector) => selector === "[data-gallery-filter], [data-overview-filter]" ? catalogFilterControls : catalogQuerySelectorAll.call(document, selector);
+  test.resetCatalog([{ id: "other", relativePath: "other.png" }], "C:/other");
+  document.querySelectorAll = catalogQuerySelectorAll;
+  assert.deepEqual([...coreState.galleryFilter], [], "a catalog replacement clears the prior gallery filter");
+  assert.deepEqual([...coreState.overviewFilter], [], "a catalog replacement clears the prior overview filter");
+  assert.equal(coreState.overviewQuery, "", "a catalog replacement clears the prior overview query state");
+  assert.equal(element("galleryFilter").checked, false, "a catalog replacement clears checked gallery-filter controls");
+  assert.equal(element("overviewFilter").checked, false, "a catalog replacement clears checked overview-filter controls");
+  assert.equal(element("#overviewQuery").value, "", "a catalog replacement clears the visible overview query field");
   coreState.mosaicPreviewFailureReported = true;
   test.setMosaicPreviewEnabled(true);
   assert.equal(coreState.mosaicPreviewFailureReported, false, "explicitly re-enabling mosaic preview starts a fresh failure-reporting attempt");
@@ -532,8 +557,10 @@ async function testCoreBoundaryAndWorkspaceBehaviour() {
   assert.equal(test.catalogRecordMatches(matchingRecord, 2, { version: 0, revision: 0 }), true);
   let terminated = false;
   coreState.fillWorker = { terminate() { terminated = true; } };
+  context.uiRefreshes.length = 0;
   test.cancelFillWork();
   assert.equal(terminated, true, "fill cancellation terminates a live worker");
+  assert.deepEqual(context.uiRefreshes, ["candidates"], "fill cancellation redraws candidate controls after releasing their pending lock");
   assert.equal(await test.setHidden(null, true), false);
   test.selectCatalogImage("missing");
   coreState.viewMode = "overview";
@@ -560,7 +587,6 @@ async function testCoreBoundaryAndWorkspaceBehaviour() {
   element("#folderPath").value = "G:/fixture";
   coreState.saving = true;
   await test.loadFolder();
-  assert.deepEqual(context.uiRefreshes, ["candidates"], "fill cancellation redraws candidate controls after releasing their pending lock");
   coreState.saving = false;
   element("#folderPath").value = "";
   await test.loadFolder();
@@ -660,10 +686,9 @@ async function testDetectionImportAndSaveBehaviour() {
   await context.detectionCoverage.startDetectionFromDialog({ preventDefault() {} });
 }
 
-Promise.resolve()
-  .then(testApplicationStartupPaths)
-  .then(testBoundApplicationEvents)
-  .then(testCoreBoundaryAndWorkspaceBehaviour)
-  .then(testDetectionImportAndSaveBehaviour)
-  .then(() => console.log("test_app_core_detection_coverage: passed"))
-  .catch((error) => { console.error(error); process.exitCode = 1; });
+nodeTest("application startup, catalog state, and detection controls", async () => {
+  await testApplicationStartupPaths();
+  await testBoundApplicationEvents();
+  await testCoreBoundaryAndWorkspaceBehaviour();
+  await testDetectionImportAndSaveBehaviour();
+});

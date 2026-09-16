@@ -4,6 +4,7 @@
 // event handlers that ship in app.js.  This intentionally uses no test-only
 // production hooks beyond exporting the public functions after evaluation.
 const assert = require("node:assert/strict");
+const nodeTest = require("node:test");
 const fs = require("node:fs");
 const path = require("node:path");
 const vm = require("node:vm");
@@ -47,7 +48,7 @@ let projects = [
   { id: "separate", name: "Gamma", status: "working", imageCount: 1, sourceRoot: "C:/alpha", updatedAt: 500_000 },
 ];
 let openPayload = null;
-const state = { project: null, projectReadOnly: false, projectOperationPending: false, catalogTransition: null, missingNativeSources: [], images: [], candidateUpdateChains: new Map(), workspaceDraftChains: new Map(), workspaceDraftTimers: new Map(), workspaceMutationErrors: new Map(), candidateBatchPending: new Set(), settings: { general: { language: "ja" } }, importing: false };
+const state = { project: null, projectReadOnly: false, projectOperationPending: false, catalogTransition: null, missingNativeSources: [], images: [], selectedImageIds: new Set(), candidateUpdateChains: new Map(), workspaceDraftChains: new Map(), workspaceDraftTimers: new Map(), workspaceMutationErrors: new Map(), candidateBatchPending: new Set(), settings: { general: { language: "ja" } }, importing: false };
 const context = {
   console, Promise, Map, Set, WeakMap, Array, Object, Number, String, Boolean, Math, JSON, Error, Intl, AbortController,
   document, state, window: { addEventListener() {}, showDirectoryPicker: async () => ({ kind: "directory" }) }, URL: { createObjectURL: () => "blob:test", revokeObjectURL: () => {} },
@@ -56,7 +57,7 @@ const context = {
   focusElement(value) { document.activeElement = value; }, loadTranslations: async () => {},
   isBusy: () => false, currentImageActionPending: () => false, isCurrentGeneration: () => true, isProcessableImage: (image) => Boolean(image && !image.hidden), currentRecord: () => state.images.find((image) => image.id === state.currentId) || null, beginCatalogEpoch: () => 1, isCurrentCatalogEpoch: () => true, runCatalogTransition: async (operation) => operation({ epoch: 1, signal: null }), catalogApi: (url, body, options) => context.api(url, { ...options, body: JSON.stringify(body) }), showUserError(error) { calls.push(["error", error.code || error.message]); },
   waitForCandidateMutations: async () => calls.push(["wait"]), flushAllImageMutations: async () => calls.push(["image-flush"]), flushAllWorkspaceMutations: async () => calls.push(["flush"]),
-  resetCatalog(images) { state.images = images; calls.push(["reset", images.length]); }, applyProjectSnapshot(snapshot) { state.project = snapshot.project || state.project; state.projectReadOnly = snapshot.readOnly === true || state.project?.status === "completed"; calls.push(["snapshot"]); }, renderCatalogViews() { calls.push(["render"]); },
+  resetCatalog(images) { state.images = images; state.currentId = null; state.selectedImageIds.clear(); calls.push(["reset", images.length]); }, applyProjectSnapshot(snapshot) { state.project = snapshot.project || state.project; state.projectReadOnly = snapshot.readOnly === true || state.project?.status === "completed"; calls.push(["snapshot"]); }, renderCatalogViews() { calls.push(["render"]); },
   updateActionButtons() { calls.push(["actions"]); }, rememberProjectSource: async () => "source", rememberProjectSourceCleanup: async () => "cleanup", forgetProjectSources: async (id) => calls.push(["forget", id]), loadFolder: async () => calls.push(["loadFolder"]),
   rememberedProjectSources: async () => ({ files: [], directories: [] }), matchingProjectDirectorySources: async () => [], ensureProjectSourcePermission: async () => true,
   importProjectDirectoryHandle: async (_handle, _project, sourceId) => calls.push(["directory", sourceId]), importProjectFileHandles: async (sources) => { calls.push(["files", sources.length]); return []; },
@@ -86,10 +87,10 @@ context.canvas = new Element("canvas"); context.stage = new Element("stage"); co
 
 const appPath = path.join(__dirname, "..", "static", "js", "app.js");
 vm.runInNewContext(fs.readFileSync(appPath, "utf8"), context, { filename: appPath });
-vm.runInNewContext("globalThis.projectTest={projectTitle,projectDate,projectSource,renderProjectCurrent,openProjectNameDialog,showProjectList,showSourceMismatches,openProject,downloadProjectArtifact,resumeCurrentProject,openSameSourceDialog,openProjectDeleteDialog,deleteProject,bindEvents};", context, { filename: "project-ui-exports.js" });
+vm.runInNewContext("globalThis.projectTest={projectTitle,projectDate,projectSource,renderProjectCurrent,openProjectNameDialog,showProjectList,showSourceMismatches,openProject,downloadProjectArtifact,resumeCurrentProject,openSameSourceDialog,openProjectDeleteDialog,deleteProject,bindEvents,setPendingBrowserProjectSources:(sources)=>{ pendingBrowserProjectSources=sources; },pendingBrowserProjectSources:()=>pendingBrowserProjectSources};", context, { filename: "project-ui-exports.js" });
 const test = context.projectTest;
 
-(async () => {
+nodeTest("project dialogs, source recovery, and project switching", async () => {
   await new Promise((resolve) => setImmediate(resolve));
   for (const key of ["project.open", "project.new", "project.name", "project.openList", "project.complete", "project.close", "project.resume", "project.sourceChangedClear", "project.downloadMosaic", "project.downloadExclude", "project.downloadMosaicZip", "project.downloadExcludeZip", "project.delete", "project.deleteData", "project.deleteSource", "project.deleteIrreversible"]) {
     assert.equal(typeof japanese[key], "string", `Japanese includes ${key}`); assert.equal(typeof english[key], "string", `English includes ${key}`);
@@ -112,6 +113,14 @@ const test = context.projectTest;
   }
   openPayload = { project: projects[0], images: [{ id: "native" }], needsSource: false };
   await test.openProject(projects[0]); assert.equal(state.images[0].id, "native", "native projects open immediately");
+
+  openPayload = { project: projects[2], images: [{ id: "beta-image" }], needsSource: false };
+  state.currentId = "native"; state.selectedImageIds.add("native");
+  await test.openProject(projects[2]);
+  assert.deepEqual({ project: state.project.id, image: state.images[0].id, currentId: state.currentId, selected: [...state.selectedImageIds] }, { project: "separate", image: "beta-image", currentId: null, selected: [] }, "A to B replaces catalog selection rather than retaining project A state");
+  openPayload = { project: projects[0], images: [{ id: "alpha-return" }], needsSource: false };
+  await test.openProject(projects[0]);
+  assert.deepEqual({ project: state.project.id, image: state.images[0].id, currentId: state.currentId, selected: [...state.selectedImageIds] }, { project: "working", image: "alpha-return", currentId: null, selected: [] }, "A to B to A restores only project A's returned catalog without B selection leakage");
 
   openPayload = { project: projects[0], images: [], needsSource: true };
   context.rememberedProjectSources = async () => ({ directories: [{ sourceId: "dir", handle: { kind: "directory" } }], files: [{ sourceId: "files", handle: { kind: "file" } }] });
@@ -139,6 +148,40 @@ const test = context.projectTest;
   await test.openSameSourceDialog("C:/alpha/"); assert.equal(element("#sameSourceList").children.length, 1, "same-folder warning excludes the active project and lists the existing project");
   await test.downloadProjectArtifact("/api/project/masks/mosaic", "mosaic.zip");
 
+  // An unsuccessful open keeps the current project and its browser source
+  // recovery action visible.  The pending list belongs to the old catalog
+  // until a new project-open response has actually been accepted.
+  state.project = projects[0]; state.images = [{ id: "old" }]; state.currentId = "old";
+  test.setPendingBrowserProjectSources([{ projectId: "working", key: "file:old", kind: "file", handle: { name: "old" } }]);
+  test.renderProjectCurrent();
+  assert.equal(element("#projectBrowserRestore").hidden, false, "the current project exposes its pending browser-source recovery action");
+  const oldProject = state.project; const oldImages = state.images;
+  context.api = async (url, options = {}) => {
+    calls.push(["api", url, options.method]);
+    if (url === "/api/project/open") throw new Error("open failed");
+    return {};
+  };
+  await test.openProject(projects[2]);
+  assert.equal(state.project, oldProject, "a failed project open keeps the prior project");
+  assert.equal(state.images, oldImages, "a failed project open keeps the prior catalog");
+  assert.equal(test.pendingBrowserProjectSources().length, 1, "a failed project open keeps pending browser-source recovery state");
+  test.renderProjectCurrent();
+  assert.equal(element("#projectBrowserRestore").hidden, false, "a failed project open keeps its recovery UI visible");
+  context.api = async (url, options = {}) => {
+    calls.push(["api", url, options.method]);
+    if (url === "/api/project/mismatches" && options.method !== "POST") return { images: [{ id: "changed", relativePath: "changed.png", dimensionsChanged: true }] };
+    if (url === "/api/project/mismatches") return { project: projects[0], images: [{ id: "changed" }] };
+    if (url === "/api/project/source-check") return { projects: [projects[0], projects[2]] };
+    if (url === "/api/projects?sort=updated_desc") return { projects };
+    if (url === "/api/project/resume") return { project: { ...projects[1], status: "working" } };
+    if (url === "/api/project/complete") return { project: { ...state.project, status: "completed" } };
+    if (url === "/api/project/close") return { ok: true };
+    if (url === "/api/project/working" && options.method === "DELETE") return { deleted: true };
+    if (url === "/api/projects" && options.method === "POST") return { project: { id: "new", name: "New", status: "working", imageCount: 0 } };
+    if (url === "/api/project/name") return { project: { ...state.project, name: "Renamed", status: "working" } };
+    return openPayload;
+  };
+
   test.bindEvents();
   const fire = async (id, type = "click") => { const listener = element(id).listeners.get(type); assert.ok(listener, `${id} is interactive`); await listener({ preventDefault() {} }); await new Promise((resolve) => setImmediate(resolve)); };
   await fire("#projectButton"); await fire("#projectClose"); await fire("#projectNew"); await fire("#projectName"); await fire("#projectOpenList"); await fire("#projectListClose");
@@ -158,7 +201,26 @@ const test = context.projectTest;
   assert.ok(calls.some(([kind, id]) => kind === "forget" && id === "working"), "project deletion removes browser source handles");
   assert.equal(calls.slice(callsBeforeDelete).some(([kind]) => kind === "flush"), true, "deleting the active project flushes its workspace mutation queue before the server delete");
   state.project = projects[0]; element("#projectNameInput").value = "Renamed"; await fire("#projectNameForm", "submit"); await fire("#projectNameCancel");
-  element("#sourceMismatchDialog").dataset.imageIds = JSON.stringify(["changed"]); element("#sourceMismatchClear").checked = true; await fire("#sourceMismatchForm", "submit"); await fire("#sourceMismatchCancel");
+  element("#sourceMismatchDialog").dataset.imageIds = JSON.stringify(["changed"]); element("#sourceMismatchClear").checked = true;
+  let releaseMismatchFlush;
+  context.flushAllImageMutations = () => new Promise((resolve) => { releaseMismatchFlush = resolve; });
+  const mismatchPostsBefore = calls.filter(([kind, url]) => kind === "api" && url === "/api/project/mismatches").length;
+  const sourceMismatchSubmit = element("#sourceMismatchForm").listeners.get("submit");
+  const firstMismatchSubmit = sourceMismatchSubmit({ preventDefault() {} });
+  const secondMismatchSubmit = sourceMismatchSubmit({ preventDefault() {} });
+  await Promise.resolve();
+  assert.equal(element("#sourceMismatchConfirm").disabled, true, "a pending mismatch submit disables its confirm action");
+  assert.equal(element("#sourceMismatchCancel").disabled, true, "a pending mismatch submit disables cancellation while its catalog mutation is unsettled");
+  let preventedMismatchDismiss = false;
+  element("#sourceMismatchDialog").listeners.get("cancel")({ preventDefault() { preventedMismatchDismiss = true; } });
+  assert.equal(preventedMismatchDismiss, true, "Escape cannot dismiss a mismatch dialog while its catalog mutation is pending");
+  releaseMismatchFlush(); await firstMismatchSubmit; await secondMismatchSubmit;
+  assert.equal(element("#sourceMismatchConfirm").disabled, false, "mismatch controls are restored after the request settles");
+  preventedMismatchDismiss = false;
+  element("#sourceMismatchDialog").listeners.get("cancel")({ preventDefault() { preventedMismatchDismiss = true; } });
+  assert.equal(preventedMismatchDismiss, false, "Escape can dismiss a mismatch dialog again after its catalog mutation settles");
+  assert.equal(calls.filter(([kind, url]) => kind === "api" && url === "/api/project/mismatches").length, mismatchPostsBefore + 1, "a second mismatch submit cannot start a competing catalog mutation");
+  context.flushAllImageMutations = async () => calls.push(["image-flush"]);
+  await fire("#sourceMismatchCancel");
   await fire("#sameSourceOpen"); await fire("#sameSourceSeparate"); await fire("#sameSourceCancel");
-  console.log("test_project_ui_runtime: passed");
-})().catch((error) => { console.error(error); process.exitCode = 1; });
+});
