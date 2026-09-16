@@ -458,7 +458,7 @@ class CatalogMixin:
                         self.source_mismatches = dict(publish_source_mismatches)
                     # Old unnamed data is removed only after the active pointer
                     # and every live catalog field describe the new workspace.
-                    if discard_workspace_id and discard_workspace_id != publish_active_workspace_id:
+                    if discard_workspace_id and discard_workspace_id != self.workspace_id:
                         self.workspace_store.delete_project(discard_workspace_id)
                 except Exception:
                     for field, value in live_state.items():

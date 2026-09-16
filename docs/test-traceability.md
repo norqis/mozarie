@@ -12,6 +12,7 @@
 
 | 手動ID | CIで確認する規則 | 実テスト | 手動で残す部分 |
 | --- | --- | --- | --- |
+| WS-142 | 同じ無名フォルダーの再読込が編集中のworkspaceを削除せず、ID・手描き・Undo履歴・再起動復元を保持する。別フォルダーへの切替後も編集できる | `tests.test_unnamed_folder_reload.UnnamedFolderReloadTests.test_same_folder_reload_keeps_history_manual_edits_and_allows_switch` | 実画面の再読込・再編集・再起動操作 |
 | SD-141 | 新規設定の相対モデル・保存先を拒否し、該当タブと入力欄を案内する | `tests.test_absolute_path_regression.AbsolutePathRegressionTests.test_relative_model_and_output_paths_are_rejected_for_new_settings`、`tests/test_settings_runtime.cjs` | 実在するモデル選択時の表示 |
 | CI-001 | Windows backendの全`unittest`を安定した二shardへ一度ずつ分配し、失敗・skip・manifestの欠損/重複を集計jobで失敗にしてcoverageを結合する | `tests/test_backend_shard_runner.cjs`、`tests/test_quiet_runner.cjs`、`.github/workflows/tests.yml` | GitHub Actionsの実runner負荷、cache命中率、実行時間 |
 | SD-142 | 旧設定の相対モデル・保存先を一度だけ絶対化して保存する | `tests.test_absolute_path_regression.AbsolutePathRegressionTests.test_legacy_relative_paths_are_migrated_to_absolute_paths_once` | 実際の起動、既存local.json、利用者の作業フォルダーでの表示 |
