@@ -432,7 +432,7 @@ function reconcileCatalogSnapshot(snapshot, expectedProjectId, expectedCatalogGe
     resetCatalog(snapshot.images || [], snapshot.root || "");
     applyProjectSnapshot(snapshot);
     state.missingNativeSources = typeof missingNativeSources === "function" ? missingNativeSources(snapshot.sources) : [];
-    if (typeof restoreBrowserProjectSourcesForCurrentCatalog === "function") void restoreBrowserProjectSourcesForCurrentCatalog().catch(() => {});
+    if (typeof restoreBrowserProjectSourcesForCurrentCatalog === "function") void restoreBrowserProjectSourcesForCurrentCatalog(snapshot.sources).catch(() => {});
   }
   return replaced;
 }
@@ -474,7 +474,7 @@ async function resyncCatalog(epoch = state.catalogEpoch, signal = undefined) {
   resetCatalog(snapshot.images || [], snapshot.root || "");
   applyProjectSnapshot(snapshot);
   state.missingNativeSources = typeof missingNativeSources === "function" ? missingNativeSources(snapshot.sources) : [];
-  if (typeof restoreBrowserProjectSourcesForCurrentCatalog === "function") void restoreBrowserProjectSourcesForCurrentCatalog().catch(() => {});
+  if (typeof restoreBrowserProjectSourcesForCurrentCatalog === "function") void restoreBrowserProjectSourcesForCurrentCatalog(snapshot.sources).catch(() => {});
   return snapshot;
 }
 async function syncCatalogOnReturn() {
@@ -495,7 +495,7 @@ async function syncCatalogOnReturn() {
     if (changed) {
       resetCatalog(snapshot.images || [], snapshot.root || "");
       state.missingNativeSources = typeof missingNativeSources === "function" ? missingNativeSources(snapshot.sources) : [];
-      if (typeof restoreBrowserProjectSourcesForCurrentCatalog === "function") void restoreBrowserProjectSourcesForCurrentCatalog().catch(() => {});
+      if (typeof restoreBrowserProjectSourcesForCurrentCatalog === "function") void restoreBrowserProjectSourcesForCurrentCatalog(snapshot.sources).catch(() => {});
     }
   } catch (error) {
     if (error?.name !== "AbortError") showUserError(error);
@@ -1031,7 +1031,7 @@ async function loadFolder({ skipSameSourceWarning = false, path: suppliedPath = 
       resetCatalog(data.images || [], data.root || path);
       applyProjectSnapshot(data);
       state.missingNativeSources = typeof missingNativeSources === "function" ? missingNativeSources(data.sources) : [];
-      if (typeof restoreBrowserProjectSourcesForCurrentCatalog === "function") void restoreBrowserProjectSourcesForCurrentCatalog().catch(() => {});
+      if (typeof restoreBrowserProjectSourcesForCurrentCatalog === "function") void restoreBrowserProjectSourcesForCurrentCatalog(data.sources).catch(() => {});
       setStatusKey("status.imagesLoaded", { count: state.images.length });
       showImportFailures(data.importFailures, state.images.length, $("loadFolderButton"));
       if (typeof showSourceMismatches === "function") await showSourceMismatches();

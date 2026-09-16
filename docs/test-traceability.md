@@ -12,7 +12,7 @@
 
 | 手動ID | CIで確認する規則 | 実テスト | 手動で残す部分 |
 | --- | --- | --- | --- |
-| WS-143 | ブラウザーフォルダーsourceは初回選択時に書込み可能なhandleを取得し、一覧再取得後も深い階層の画像を直接の親フォルダーへ対応付ける。明示した復元だけがフォルダーへ書込み許可を再要求し、取消は一覧と読込状態を保持する | `tests/test_folder_permissions_e2e.cjs` | 実ブラウザーの権限表示・許可結果、実フォルダーの削除 |
+| WS-143 | ブラウザーフォルダーsourceは初回選択時に書込み可能なhandleを取得し、一覧再取得後は保存済みrequest IDを同じbrowser-directory sourceのAPI正規IDへ対応付け、深い階層と同じ相対パスを持つ別sourceの画像を直接の親フォルダーへ対応付ける。明示した復元だけがフォルダーへ書込み許可を再要求し、取消は一覧と読込状態を保持する | `tests/test_folder_permissions_e2e.cjs` | 実ブラウザーの権限表示・許可結果、実フォルダーの削除 |
 | WS-142 | 同じ無名フォルダーの再読込が編集中のworkspaceを削除せず、ID・手描き・Undo履歴・再起動復元を保持する。別フォルダーへの切替後も編集できる | `tests.test_unnamed_folder_reload.UnnamedFolderReloadTests.test_same_folder_reload_keeps_history_manual_edits_and_allows_switch` | 実画面の再読込・再編集・再起動操作 |
 | SD-141 | 新規設定の相対モデル・保存先を拒否し、該当タブと入力欄を案内する | `tests.test_absolute_path_regression.AbsolutePathRegressionTests.test_relative_model_and_output_paths_are_rejected_for_new_settings`、`tests/test_settings_runtime.cjs` | 実在するモデル選択時の表示 |
 | CI-001 | Windows backendの全`unittest`を安定した二shardへ一度ずつ分配し、失敗・skip・manifestの欠損/重複を集計jobで失敗にしてcoverageを結合する | `tests/test_backend_shard_runner.cjs`、`tests/test_quiet_runner.cjs`、`.github/workflows/tests.yml` | GitHub Actionsの実runner負荷、cache命中率、実行時間 |
