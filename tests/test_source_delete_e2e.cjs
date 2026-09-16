@@ -110,6 +110,113 @@ test("source-delete confirmation can be skipped, restored in settings, and cance
   }
 });
 
+test("native confirmation closes an earlier cancelled dialog without settling its immediate replacement", { timeout: 60000 }, async () => {
+  const fixture = await startFixtureServer();
+  const browser = await chromium.launch({ headless: true });
+  let context; let page;
+  try {
+    ({ context, page } = await freshPage(browser, fixture));
+    await page.waitForFunction(() => state.settings?.confirmations);
+    await page.evaluate(() => {
+      state.settings.confirmations.removeImage = true;
+      window.confirmationReopen = { first: undefined, second: undefined, firstCalls: 0, secondCalls: 0 };
+      void confirmAction("first", "first", "removeImage", () => { window.confirmationReopen.firstCalls += 1; }).then((value) => {
+        window.confirmationReopen.first = value;
+      });
+    });
+    await page.waitForFunction(() => $("#confirmDialog").open);
+    await page.locator("#confirmNeverShow").check();
+    const afterNativeClose = await page.evaluate(async () => {
+      const dialog = $("#confirmDialog");
+      const oldClose = new Promise((resolve) => dialog.addEventListener("close", resolve, { once: true }));
+      $("#confirmCancel").click();
+      void confirmAction("second", "second", "removeImage", () => { window.confirmationReopen.secondCalls += 1; }).then((value) => {
+        window.confirmationReopen.second = value;
+      });
+      await oldClose;
+      await Promise.resolve();
+      return {
+        first: window.confirmationReopen.first,
+        second: window.confirmationReopen.second,
+        open: dialog.open,
+        title: $("#confirmTitle").textContent,
+      };
+    });
+    assert.deepEqual(afterNativeClose, { first: false, second: undefined, open: true, title: "second" }, "the observed native close leaves the immediate replacement pending");
+    assert.deepEqual(await page.evaluate(() => ({
+      first: window.confirmationReopen.first,
+      second: window.confirmationReopen.second,
+      firstCalls: window.confirmationReopen.firstCalls,
+      secondCalls: window.confirmationReopen.secondCalls,
+      neverShow: $("#confirmNeverShow").checked,
+      enabled: state.settings.confirmations.removeImage,
+    })), {
+      first: false, second: undefined, firstCalls: 0, secondCalls: 0, neverShow: false, enabled: true,
+    }, "the native close event settles only the cancelled action and resets its unchecked preference state");
+    const settingsPayloadsBeforeAccept = fixture.settingsPayloads.length;
+    const currentSettingsWrite = page.waitForResponse((response) => new URL(response.url()).pathname === "/api/settings"
+      && new URL(response.url()).search === "?status=0" && response.request().method() === "POST");
+    await page.locator("#confirmNeverShow").check();
+    await page.locator("#confirmAccept").click();
+    await currentSettingsWrite;
+    await page.waitForFunction(() => window.confirmationReopen.second === true && !$("#confirmDialog").open);
+    assert.deepEqual(await page.evaluate(() => ({
+      first: window.confirmationReopen.first,
+      second: window.confirmationReopen.second,
+      firstCalls: window.confirmationReopen.firstCalls,
+      secondCalls: window.confirmationReopen.secondCalls,
+      enabled: state.settings.confirmations.removeImage,
+    })), {
+      first: false, second: true, firstCalls: 0, secondCalls: 1, enabled: false,
+    }, "only the current accepted dialog invokes its callback once and saves its own checkbox");
+    assert.equal(fixture.settingsPayloads.length, settingsPayloadsBeforeAccept + 1, "only the current accepted confirmation writes settings");
+    assert.equal(fixture.settingsPayloads.at(-1).body.confirmations.removeImage, false, "the current accepted checkbox is the only persisted confirmation value");
+  } finally {
+    await context?.close();
+    await browser.close();
+    await closeServer(fixture.server);
+  }
+});
+
+test("source delete can reopen immediately after cancel and commits only the current confirmation", { timeout: 60000 }, async () => {
+  const fixture = await startFixtureServer();
+  const browser = await chromium.launch({ headless: true });
+  let context; let page;
+  try {
+    ({ context, page } = await freshPage(browser, fixture));
+    await page.locator('.gallery-item[data-id="sample"]').click();
+    await page.waitForFunction(() => state.currentId === "sample" && state.currentImage);
+    await page.evaluate(() => { state.settings.confirmations.removeImage = true; });
+    const settingsWritesBefore = fixture.settingsActions.length;
+    await page.locator("#removeAndNextButton").click();
+    await page.waitForFunction(() => $("#confirmDialog").open);
+    await page.locator("#confirmNeverShow").check();
+    await page.evaluate(async () => {
+      const dialog = $("#confirmDialog");
+      const oldClose = new Promise((resolve) => dialog.addEventListener("close", resolve, { once: true }));
+      $("#confirmCancel").click();
+      $("#removeAndNextButton").click();
+      await oldClose;
+      await Promise.resolve();
+    });
+    await page.waitForFunction(() => $("#confirmDialog").open && $("#confirmNeverShow").checked === false);
+    assert.equal(fixture.sourceDeleteRequests.length, 0, "the cancelled source-delete action never starts its protocol before the current confirmation");
+    await page.locator("#confirmAccept").click();
+    await page.waitForFunction(() => !state.images.some((image) => image.id === "sample") && !state.catalogMutation);
+    assert.deepEqual(fixture.sourceDeleteRequests.map((request) => request.path), [
+      "/api/catalog/delete-source/prepare",
+      "/api/catalog/delete-source/claim",
+      "/api/catalog/delete-source",
+    ], "the immediate reopen commits one public source deletion after its own confirmation");
+    assert.equal(fixture.settingsActions.length, settingsWritesBefore, "cancelling a checked first dialog and accepting an unchecked replacement does not change confirmation settings");
+    assert.equal(await page.evaluate(() => state.settings.confirmations.removeImage), true, "the source-delete preference remains enabled after the replacement confirmation");
+  } finally {
+    await context?.close();
+    await browser.close();
+    await closeServer(fixture.server);
+  }
+});
+
 test("unknown browser-source deletion remains recoverable instead of silently committing or cancelling", { timeout: 60000 }, async () => {
   const fixture = await startFixtureServer();
   const browser = await chromium.launch({ headless: true });

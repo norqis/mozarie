@@ -86,29 +86,35 @@ function updateBlockSizeDisplay() {
   $("#applyBlockSize").textContent = applyBlockSize ? t("editor.calculatedPixels", { value: applyBlockSize }) : "";
 }
 
+let pendingConfirmationFinish = null;
 function confirmAction(title, message, key = null, onConfirm = null) {
   const newConfirmation = new Set(["candidateDelete", "candidateRoleDelete", "overwriteSource", "deleteSourceAfterCopy"]);
+  const dialog = $("#confirmDialog");
+  if (!dialog.open) pendingConfirmationFinish?.();
   const accept = () => { try { onConfirm?.(); } catch { /* The caller turns a failed preflight into a normal per-image failure. */ } };
   if (key && (newConfirmation.has(key) ? state.settings?.confirmations?.[key] !== true : state.settings?.confirmations?.[key] === false)) {
     accept(); return Promise.resolve(true);
   }
-  const dialog = $("#confirmDialog");
   $("#confirmTitle").textContent = title;
   $("#confirmMessage").textContent = message;
   return new Promise((resolve) => {
     const finish = () => {
+      if (dialog.open || pendingConfirmationFinish !== finish) return;
+      pendingConfirmationFinish = null;
       $("#confirmAccept").removeEventListener("click", accept);
-      const accepted = dialog.returnValue === "confirm";
-      if (accepted && key && $("#confirmNeverShow").checked && state.settings) {
+      dialog.removeEventListener("close", finish);
+      const wasAccepted = dialog.returnValue === "confirm";
+      if (wasAccepted && key && $("#confirmNeverShow").checked && state.settings) {
         state.settings.confirmations = { ...state.settings.confirmations, [key]: false };
         void api("/api/settings?status=0", { method: "POST", body: JSON.stringify(state.settings) }).then((data) => {
           state.settings = data.settings;
         }).catch(() => {});
       }
-      $("#confirmNeverShow").checked = false; resolve(accepted);
+      $("#confirmNeverShow").checked = false; resolve(wasAccepted);
     };
+    pendingConfirmationFinish = finish;
     $("#confirmAccept").addEventListener("click", accept, { once: true });
-    dialog.addEventListener("close", finish, { once: true });
+    dialog.addEventListener("close", finish);
     showModalFromInvoker(dialog);
   });
 }
