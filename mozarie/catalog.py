@@ -1769,9 +1769,16 @@ class CatalogMixin:
                 for record in records:
                     shutil.rmtree(self.cache_dir / record.image_id, ignore_errors=True)
                 for thumbnail_path in thumbnail_paths:
-                    thumbnail_path.unlink(missing_ok=True)
+                    try:
+                        thumbnail_path.unlink(missing_ok=True)
+                    except OSError as exc:
+                        LOGGER.warning("Could not remove stale thumbnail %s: %s", thumbnail_path, exc)
                 for path in session_paths:
-                    path.unlink(missing_ok=True)
+                    try:
+                        path.unlink(missing_ok=True)
+                    except OSError as exc:
+                        LOGGER.warning("Could not remove stale import copy %s: %s", path, exc)
+                        continue
                     if session_imports_dir is not None:
                         parent = path.parent
                         while parent != session_imports_dir and parent.is_relative_to(session_imports_dir):

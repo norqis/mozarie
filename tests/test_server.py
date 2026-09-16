@@ -2150,6 +2150,39 @@ class MozarieTests(unittest.TestCase):
             self.assertIn(image_id, state.images)
             self.assertTrue(state.workspace_store.has_image(image_id))
 
+    def test_catalog_remove_succeeds_when_disposable_files_are_locked(self):
+        for locked_kind in ("thumbnail", "import_copy"):
+            with self.subTest(locked_kind=locked_kind):
+                encoded = io.BytesIO()
+                Image.new("RGB", (16, 16), "white").save(encoded, format="PNG")
+                state = self.new_state()
+                images, _imported = import_images_for_test(state, [{
+                    "clientKey": "locked-cleanup", "name": "nested/source.png",
+                    "data": base64.b64encode(encoded.getvalue()).decode("ascii"),
+                }])
+                image_id = images[0]["id"]
+                record = state.image_for_id(image_id)
+                thumbnail = state.cache_dir / "thumbnails" / f"{image_id}-test.jpg"
+                thumbnail.parent.mkdir(parents=True, exist_ok=True)
+                thumbnail.write_bytes(b"thumbnail")
+                locked_path = thumbnail if locked_kind == "thumbnail" else record.path
+                unlink = Path.unlink
+
+                def locked_unlink(path, *args, **kwargs):
+                    if path == locked_path:
+                        raise PermissionError("file is in use")
+                    return unlink(path, *args, **kwargs)
+
+                with patch.object(Path, "unlink", locked_unlink), patch("mozarie.catalog.LOGGER.warning") as warning:
+                    result = state.remove_images_from_catalog([image_id])
+
+                self.assertEqual(result["removedImageIds"], [image_id])
+                self.assertEqual(result["images"], [])
+                self.assertNotIn(image_id, state.images)
+                self.assertFalse(state.workspace_store.has_image(image_id))
+                self.assertTrue(locked_path.exists())
+                warning.assert_called()
+
     def test_remove_image_from_catalog_rejects_active_work(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "source.png"
