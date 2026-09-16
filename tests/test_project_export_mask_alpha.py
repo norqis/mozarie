@@ -59,10 +59,24 @@ class ProjectExportMaskAlphaTests(unittest.TestCase):
             "manualExclusionEraseEnabled": True,
             "manualExclusionForced": True,
         })
+        replacement_add = self.rgba_mask((0, 3))
+        self.state.save_manual_workspace(image_id, {
+            "add": data_uri(replacement_add),
+            "exclusion": data_uri(exclusion),
+            "exclusionErase": "",
+            "removedCandidateIds": [],
+            "candidateRevision": self.state._candidate_revision(image_id),
+            "manualEnabled": True,
+            "manualExclusionEnabled": True,
+            "manualExclusionEraseEnabled": True,
+            "manualExclusionForced": True,
+        })
+        self.assertEqual(self.state.restore_project_history(image_id, "undo")["changedImageIds"], [image_id])
+        self.assertEqual(self.state.restore_project_history(image_id, "redo")["changedImageIds"], [image_id])
 
         mosaic = list(self.state.iter_project_mask_exports(project["id"], "mosaic"))[0][1]
         excluded = list(self.state.iter_project_mask_exports(project["id"], "exclude"))[0][1]
-        for exported, pixel in ((mosaic, (1, 2)), (excluded, (3, 0))):
+        for exported, pixel in ((mosaic, (0, 3)), (excluded, (3, 0))):
             with Image.open(io.BytesIO(exported)) as image:
                 mask = image.convert("L")
                 self.assertEqual(mask.size, (4, 4))
