@@ -737,6 +737,24 @@ class WorkspaceStore:
                 db.execute("ROLLBACK")
                 raise
 
+    def image_relative_path(self, image_id: str) -> str | None:
+        """Return the persisted path for rename recovery without loading a catalogue."""
+        with self._connect() as db:
+            row = db.execute("SELECT relative_path FROM images WHERE image_id=?", (image_id,)).fetchone()
+        return str(row["relative_path"]) if row is not None else None
+
+    def native_image_path(self, image_id: str) -> Path | None:
+        with self._connect() as db:
+            row = db.execute("""SELECT images.relative_path,project_sources.native_path
+                FROM images JOIN project_sources ON project_sources.source_id=images.source_id
+                WHERE images.image_id=? AND project_sources.kind='native-folder'""", (image_id,)).fetchone()
+        if row is None or row["native_path"] is None:
+            return None
+        try:
+            return (Path(str(row["native_path"])) / safe_import_relative_path(str(row["relative_path"]))).resolve()
+        except (OSError, ClientError):
+            return None
+
     def relink_native_source(
         self, catalog_id: str, source_id: str, root: Path, records: list[Any], *, allow_new: bool,
         transform_rollback: list[tuple[str, int, int, int]] | None = None,

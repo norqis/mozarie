@@ -207,7 +207,7 @@ function openCatalogContextMenu(event, imageId) {
   $("#toggleReviewMenuItem").textContent = t(isReviewed(image) ? "context.unreview" : "context.review");
   const rename = $("#renameImageMenuItem"); const renameAvailable = canRenameCatalogImage(image);
   rename.disabled = !renameAvailable;
-  rename.textContent = t(renameAvailable ? "context.rename" : "context.renameUnavailable");
+  rename.textContent = t("context.rename");
   rename.title = renameAvailable ? "" : t("context.renameUnavailableHelp");
   $("#copyImagePathMenuItem").hidden = !image.sourcePath;
   $("#removeImageMenuItem").textContent = t(isHidden(image) ? "editor.show" : "editor.hide");
@@ -223,7 +223,7 @@ function openCatalogContextMenu(event, imageId) {
 }
 
 function canRenameCatalogImage(image) {
-  if (!image || isBusy() || state.importing || state.projectReadOnly || currentImageActionPending()) return false;
+  if (!image || isBusy() || state.importing || state.projectReadOnly || state.renamePending || currentImageActionPending() || catalogStagingEditsActive()) return false;
   if (image.sourceKind === "filesystem") return true;
   const access = sourceAccessFor(image.id);
   return Boolean(access?.fileHandle && access?.parentHandle && typeof access.fileHandle.move === "function");
@@ -242,23 +242,51 @@ function openRenameImageDialog(imageId = state.contextMenuImageId || state.curre
 async function submitRenameImage(event) {
   event.preventDefault(); const rename = state.renameImage; const image = state.images.find((entry) => entry.id === rename?.imageId);
   const input = $("#renameImageFilename"); const filename = input.value.trim(); const access = sourceAccessFor(image?.id); let previousName = "";
-  if (!rename || !canRenameCatalogImage(image)) return;
+  if (!rename || state.renamePending || !canRenameCatalogImage(image)) return;
+  const originalName = String(image.relativePath || "").split(/[\\/]/).pop() || "";
+  if (originalName.slice(originalName.lastIndexOf(".")).toLocaleLowerCase() !== filename.slice(filename.lastIndexOf(".")).toLocaleLowerCase()) {
+    const error = { code: "rename_extension_unsupported" };
+    $("#renameImageResult").textContent = t(`errorCode.${error.code}`); $("#renameImageResult").classList.add("error"); showUserError(error, input); return;
+  }
+  state.renamePending = true;
+  $("#renameImageFilename").disabled = true; $("#renameImageCancel").disabled = true; $("#renameImageConfirm").disabled = true;
+  updateActionButtons();
+  let durable = false;
   try {
     if (image.sourceKind !== "filesystem") {
       await ensureHandlePermission(access, true); previousName = access.fileHandle.name || access.name;
       await access.fileHandle.move(access.parentHandle, filename); const file = await access.fileHandle.getFile();
       access.name = file.name; access.size = file.size; access.lastModified = file.lastModified;
     }
+    await flushWorkspaceDraft(image.id);
     const result = await catalogApi("/api/catalog/rename", { imageId: image.id, filename, browserRenamed: image.sourceKind !== "filesystem" }, { method: "POST" });
+    durable = true;
     state.images = result.images || state.images; state.serverCatalogGeneration = result.catalogGeneration ?? state.serverCatalogGeneration;
     try { renderCatalogViews(); } catch (error) { console.warn("名前変更後の画面更新に失敗しました", error); }
-    $("#renameImageDialog").close();
+    try { $("#renameImageDialog").close(); } catch (error) { console.warn("名前変更後のダイアログ終了に失敗しました", error); }
   } catch (error) {
-    if (previousName && access?.fileHandle?.move) try {
+    let rollbackKnown = false;
+    if (!durable && previousName) {
+      const authoritative = await api("/api/images", { resyncOnStale: false }).catch(() => null);
+      const current = authoritative?.images?.find((entry) => entry.id === image.id);
+      durable = Boolean(current && String(current.relativePath || "").split(/[\\/]/).pop() === filename);
+      rollbackKnown = Boolean(current && String(current.relativePath || "").split(/[\\/]/).pop() === previousName);
+      if (durable) {
+        state.images = authoritative.images; state.serverCatalogGeneration = authoritative.catalogGeneration ?? state.serverCatalogGeneration;
+        try { renderCatalogViews(); } catch (renderError) { console.warn("名前変更後の画面更新に失敗しました", renderError); }
+        try { $("#renameImageDialog").close(); } catch (closeError) { console.warn("名前変更後のダイアログ終了に失敗しました", closeError); }
+        return;
+      }
+    }
+    if (!durable && rollbackKnown && previousName && access?.fileHandle?.move) try {
       await access.fileHandle.move(access.parentHandle, previousName); const file = await access.fileHandle.getFile();
       access.name = file.name; access.size = file.size; access.lastModified = file.lastModified;
     } catch {}
     $("#renameImageResult").textContent = t(`errorCode.${userErrorCode(error)}`); $("#renameImageResult").classList.add("error"); showUserError(error, input);
+  } finally {
+    state.renamePending = false;
+    $("#renameImageFilename").disabled = false; $("#renameImageCancel").disabled = false; $("#renameImageConfirm").disabled = false;
+    updateActionButtons();
   }
 }
 

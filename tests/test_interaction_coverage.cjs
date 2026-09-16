@@ -14,7 +14,7 @@ class Element {
     this.id = id; this.hidden = false; this.value = ""; this.textContent = "";
     this.checked = false; this.returnValue = "confirm"; this.style = {};
     this.listeners = new Map(); this.attributes = new Map(); this.open = false;
-    this.classList = { toggle() {} };
+    this.classList = { toggle() {}, remove() {}, add() {} };
   }
   setAttribute(key, value) { this.attributes.set(key, value); }
   getAttribute(key) { return this.attributes.get(key) || null; }
@@ -39,6 +39,7 @@ const ids = [
   "boundaryModeMenu", "boundaryTool", "brushSize", "brushSizeValue", "blockSizeValue", "applyBlockSize",
   "confirmDialog", "confirmTitle", "confirmMessage", "confirmNeverShow", "bucketToleranceControl",
   "candidateStatus", "catalogContextMenu", "toggleReviewMenuItem", "copyImagePathMenuItem", "removeImageMenuItem",
+  "renameImageMenuItem", "renameImageDialog", "renameImageFilename", "renameImageResult", "renameImageCancel", "renameImageConfirm",
   "pickerMenu", "galleryDropOverlay",
 ];
 for (const id of ids) element(`#${id}`);
@@ -49,8 +50,8 @@ let editable = false;
 let dialogOpen = false;
 let gesture = false;
 let images = [
-  { id: "one", sourcePath: "C:/one.png", candidateCount: 1, enabledCandidateCount: 1 },
-  { id: "two", sourcePath: "C:/two.png", candidateCount: 1, enabledCandidateCount: 1 },
+  { id: "one", sourcePath: "C:/one.png", sourceKind: "filesystem", candidateCount: 1, enabledCandidateCount: 1 },
+  { id: "two", sourcePath: "C:/two.png", sourceKind: "filesystem", candidateCount: 1, enabledCandidateCount: 1 },
 ];
 const state = {
   importing: false, tool: "brush", images, currentId: "one", pendingImageId: null, currentImage: images[0],
@@ -58,7 +59,7 @@ const state = {
   masksClearing: false, catalogMutation: false, imageGeneration: 0, catalogEpoch: 0, candidates: [],
   drafts: new Map(), maskStatus: new Map(), selectedImageIds: new Set(["one"]), sourceAccess: new Map(), projectlessDirectorySources: new Map(), hiddenImageIds: new Set(), reviewedImageIds: new Set(),
   reviewedPaths: new Set(), candidateImages: new Map(), batchMode: false, contextMenuImageId: null,
-  contextMenuOrigin: null, importSession: null, navigationShortcutsEnabled: true, viewMode: "edit",
+  contextMenuOrigin: null, importSession: null, navigationShortcutsEnabled: true, viewMode: "edit", renamePending: false,
   historyIndex: 1, manualMaskPresent: true, manualEnabled: false, manualExclusionEnabled: false,
   manualExclusionEraseEnabled: false, maskDirty: false,
 };
@@ -183,18 +184,30 @@ nodeTest("interaction and catalog mutation controls", async () => {
   assert.ok(calls.some(([name]) => name === "candidates"), "clearing masks redraws candidate controls after releasing its busy lock");
   await test.clearCatalog();
 
-  images = [{ id: "one", sourcePath: "C:/one.png" }, { id: "two" }]; state.images = images; state.currentId = "one"; state.currentImage = images[0]; state.selectedImageIds = new Set(["one"]);
+  images = [{ id: "one", sourcePath: "C:/one.png", sourceKind: "filesystem" }, { id: "two", sourceKind: "filesystem" }]; state.images = images; state.currentId = "one"; state.currentImage = images[0]; state.selectedImageIds = new Set(["one"]);
   test.positionCatalogContextMenu(element("#catalogContextMenu"), -1, 999);
   const pointerOrigin = element("#pointer-origin"); const pointerTarget = element("#pointer-target"); document.activeElement = pointerOrigin;
   test.openCatalogContextMenu({ ...event("", "contextmenu"), currentTarget: pointerTarget }, "two");
-  assert.equal(state.contextMenuOrigin, pointerOrigin, "a pointer context menu restores the previously focused catalog card");
-  assert.equal(document.activeElement, pointerOrigin, "a pointer context menu does not move focus to its target or menu");
-  test.closeCatalogContextMenu(); assert.equal(document.activeElement, pointerOrigin, "closing a pointer context menu preserves its prior focus");
+  assert.equal(state.contextMenuOrigin, pointerTarget, "a pointer context menu keeps the actual right-clicked catalog card as its rename target");
+  assert.equal(element("#renameImageMenuItem").textContent, "context.rename", "the right-click menu keeps the Rename action visible");
+  assert.equal(element("#catalogContextMenu").style.left, "30px", "the context menu is positioned at the pointer x coordinate");
+  test.closeCatalogContextMenu(); assert.equal(document.activeElement, pointerTarget, "closing a pointer context menu restores focus to its actual target card");
   const keyboardTarget = element("#keyboard-target");
   test.openCatalogContextMenu({ ...event("", "keydown"), currentTarget: keyboardTarget }, "one");
   assert.equal(state.contextMenuOrigin, keyboardTarget, "a keyboard context menu restores its invoking card");
   assert.equal(document.activeElement, element("#toggleReviewMenuItem"), "a keyboard context menu moves focus into its first action");
   test.closeCatalogContextMenu(); assert.equal(document.activeElement, keyboardTarget, "closing a keyboard context menu restores its invoking card");
+  const focusedNoncurrent = element("#gallery-two"); focusedNoncurrent.dataset = { id: "two" }; focusedNoncurrent.matches = (selector) => selector === "button.gallery-item, button.overview-item";
+  document.activeElement = focusedNoncurrent; editable = true;
+  state.settings.shortcuts.bindings = { renameImage: "F2" }; state.settings.shortcuts.actions = { renameImage: true };
+  assert.deepEqual(JSON.parse(JSON.stringify(test.navigationShortcutAction(event("F2")))), { action: "renameImage", imageId: "two" }, "F2 targets the focused noncurrent gallery card even though cards are buttons");
+  editable = false;
+  state.images = [{ id: "browser", sourceKind: "session" }]; images = state.images;
+  test.openCatalogContextMenu({ ...event("", "contextmenu"), currentTarget: pointerTarget }, "browser");
+  assert.equal(element("#renameImageMenuItem").disabled, true, "an FSA source without move support cannot report a pseudo rename success");
+  assert.equal(element("#renameImageMenuItem").textContent, "context.rename", "unsupported FSA sources still present the Rename action");
+  assert.equal(element("#renameImageMenuItem").title, "context.renameUnavailableHelp", "unsupported FSA sources explain the native reconnect path");
+  state.images = images = [{ id: "one", sourcePath: "C:/one.png", sourceKind: "filesystem" }, { id: "two", sourceKind: "filesystem" }]; state.currentId = "one"; state.currentImage = images[0];
   test.openCatalogContextMenu(event("", "contextmenu"), "one"); await test.copyContextMenuImagePath();
   context.navigator.clipboard.writeText = async () => { throw new Error("denied"); };
   state.contextMenuImageId = "one"; state.contextMenuOrigin = element("#origin"); await test.copyContextMenuImagePath();

@@ -23,8 +23,9 @@ function renderDirectoryStructurePreference() {
   $("#singleSavePreserveDirectoryStructure").checked = preserve;
 }
 let directoryStructurePreferenceMutation = Promise.resolve();
+let directoryStructurePreferenceVersion = 0;
 async function saveDirectoryStructurePreference(input) {
-  const preserve = Boolean(input.checked); const previous = preserveDirectoryStructure();
+  const preserve = Boolean(input.checked); const previous = preserveDirectoryStructure(); const version = ++directoryStructurePreferenceVersion;
   $("#applyPreserveDirectoryStructure").checked = preserve;
   $("#singleSavePreserveDirectoryStructure").checked = preserve;
   if (previous === preserve) return true;
@@ -33,30 +34,23 @@ async function saveDirectoryStructurePreference(input) {
     method: "POST", body: JSON.stringify({ saving: { preserve_directory_structure: preserve } }),
   }));
   directoryStructurePreferenceMutation = save;
-  try { state.settings = (await save).settings; renderDirectoryStructurePreference(); return true; }
+  try {
+    const response = await save;
+    if (version === directoryStructurePreferenceVersion) {
+      state.settings = response.settings; renderDirectoryStructurePreference();
+    }
+    return true;
+  }
   catch (error) {
-    state.settings.saving.preserve_directory_structure = previous;
-    renderDirectoryStructurePreference(); showUserError(error, input); return false;
+    if (version === directoryStructurePreferenceVersion) {
+      state.settings.saving.preserve_directory_structure = previous;
+      renderDirectoryStructurePreference(); showUserError(error, input);
+    }
+    return false;
   }
 }
 async function ensureDirectoryStructurePreference(input) {
   return input.checked === preserveDirectoryStructure() ? directoryStructurePreferenceMutation.then(() => true, () => false) : saveDirectoryStructurePreference(input);
-}
-function copySaveRelativeName(image, suffix, format, preserve = preserveDirectoryStructure()) {
-  const parts = String(image?.relativePath || "").replace(/\\/g, "/").split("/").filter(Boolean);
-  const filename = preserve ? parts.join("/") : parts.at(-1);
-  const dot = filename.lastIndexOf("."); const stem = dot > 0 ? filename.slice(0, dot) : filename;
-  const extension = format === "original" ? (dot > 0 ? filename.slice(dot).toLowerCase() : "") : `.${format}`;
-  return `${stem}${suffix}${extension}`;
-}
-function copySavePlan(imageIds, suffix, format) {
-  const preserve = preserveDirectoryStructure(); const names = new Set();
-  return imageIds.map((imageId) => {
-    const relativePath = copySaveRelativeName(state.images.find((image) => image.id === imageId), suffix, format, preserve);
-    const key = relativePath.toLocaleLowerCase();
-    if (!preserve && names.has(key)) throw codedError("output_name_conflict");
-    names.add(key); return { imageId, relativePath };
-  });
 }
 function syncApplyOutputOptions() {
   const format = selectedApplyOutputFormat();
@@ -385,20 +379,20 @@ async function startSingleSave(event) {
   const suffix = $("#singleSaveSuffix").value;
   const format = selectedSingleOutputFormat(); const keepMetadata = $("#singleSaveKeepMetadata").checked;
   if (copying && !state.settings?.saving?.default_output_directory) return syncSingleSaveMode();
-  if (copying && !await ensureDirectoryStructurePreference($("#singleSavePreserveDirectoryStructure"))) return;
   state.saveStarting = true;
   syncSingleSaveMode();
   try {
     if (copying) await ensureSaveSources([save.imageId], "copy", deleteOriginal);
+    if (copying && !await ensureDirectoryStructurePreference($("#singleSavePreserveDirectoryStructure"))) return;
     if (!copying && !await confirmAction(t("confirm.overwriteSource.title"), t("confirm.overwriteSource.message"), "overwriteSource")) return;
     if (deleteOriginal && !await confirmAction(t("confirm.deleteSourceAfterCopy.title"), t("confirm.deleteSourceAfterCopy.message"), "deleteSourceAfterCopy")) return;
     state.saving = true; updateActionButtons(); syncSingleSaveMode(); setSingleSaveResult("");
     let entry; let saveToken = ""; let output = null; let sourceSnapshot = null; let sourceRename = null; let cleanupIntent = null; let browserSourceDelete = null;
     const cleanupProjectId = state.project?.id || null;
     try {
-    await flushWorkspaceDraft(save.imageId);
     const prepared = await api("/api/save/prepare", { method: "POST", body: JSON.stringify({ imageIds: [save.imageId], divisor: save.divisor, suffix, deleteOriginal: false, copyToDefault: copying, format, keepMetadata }) });
     entry = prepared.entries?.[0]; if (!entry) throw Object.assign(new Error("save_state_changed"), { code: "save_state_changed" });
+    await flushWorkspaceDraft(save.imageId);
     const access = sourceAccessFor(save.imageId);
     if (!copying) await ensureSaveSources([save.imageId], "overwrite", false);
     const rendered = copying
@@ -901,7 +895,7 @@ async function restoreCopiedBrowserSourcesAfterRejectedDelete(pending) {
   }
 }
 
-async function runBrowserSave(imageIds, suffix, deleteOriginal, mode = "copy", removeSaved = false) {
+async function runBrowserSave(imageIds, suffix, deleteOriginal, mode = "copy", removeSaved = false, prepared = null) {
   const inputs = {
     imageIds: [...imageIds],
     divisor: Number($("#applyDivisor").value),
@@ -919,8 +913,7 @@ async function runBrowserSave(imageIds, suffix, deleteOriginal, mode = "copy", r
       access: sourceAccessFor(imageId) ? { ...sourceAccessFor(imageId) } : null,
     }])),
   };
-  if (mode === "copy") copySavePlan(inputs.imageIds, suffix, inputs.format);
-  const result = await api("/api/save/prepare", {
+  const result = prepared || await api("/api/save/prepare", {
     method: "POST",
     body: JSON.stringify({ imageIds: inputs.imageIds, divisor: inputs.divisor, suffix: inputs.suffix, deleteOriginal: false, copyToDefault: mode === "copy", format: inputs.format, keepMetadata: inputs.keepMetadata }),
   });
@@ -1150,6 +1143,7 @@ async function runBrowserSave(imageIds, suffix, deleteOriginal, mode = "copy", r
       state.browserSave = null;
       state.job = { kind: "idle", state: "idle" };
       $("#applyPauseButton").hidden = true;
+      $("#applyPauseButton").disabled = false;
       $("#applyCancelButton").hidden = true;
       $("#applyCloseButton").hidden = false;
       renderCandidates(); updateActionButtons();
@@ -1216,7 +1210,6 @@ async function startApplyFromDialog(event) {
   if (!imageIds.length || state.saveStarting || isBusy() || state.importing || catalogStagingEditsActive()) return;
   const suffix = $("#applySuffix").value;
   if (copy && !state.settings?.saving?.default_output_directory) { syncApplyMode(); return; }
-  if (copy && !await ensureDirectoryStructurePreference($("#applyPreserveDirectoryStructure"))) return;
   state.saveStarting = true;
   syncApplyMode();
   try {
@@ -1227,11 +1220,13 @@ async function startApplyFromDialog(event) {
     state.applyCatalogSnapshot = { order: state.images.map((image) => image.id), recordsById: new Map(state.images.map((image) => [image.id, image])) };
     updateActionButtons();
     await ensureSaveSources(imageIds, mode, copy && $("#deleteOriginal").checked);
+    if (copy && !await ensureDirectoryStructurePreference($("#applyPreserveDirectoryStructure"))) return;
     if (state.candidateUpdateChains.size) await waitForCandidateMutations();
     if (state.importing) return;
+    const prepared = await api("/api/save/prepare", { method: "POST", body: JSON.stringify({ imageIds, divisor: Number($("#applyDivisor").value), suffix, deleteOriginal: false, copyToDefault: copy, format: selectedApplyOutputFormat(), keepMetadata: $("#applyKeepMetadata").checked }) });
     await Promise.all(imageIds.map((imageId) => flushWorkspaceDraft(imageId)));
     state.saveStarting = false;
-    await runBrowserSave(imageIds, suffix, copy && $("#deleteOriginal").checked, mode, removeSaved);
+    await runBrowserSave(imageIds, suffix, copy && $("#deleteOriginal").checked, mode, removeSaved, prepared);
   } catch (error) {
     showApplyError(error);
     if (!state.saveStarting) {
@@ -1317,6 +1312,7 @@ async function finishApplyJob(job) {
     state.saving = false;
     state.applyRunning = false;
     $("#applyPauseButton").hidden = true;
+    $("#applyPauseButton").disabled = false;
     $("#applyCancelButton").hidden = true;
     $("#applyCloseButton").hidden = false;
     if (job.state === "complete") setApplyResult(t("apply.complete", { completed: job.completed }));

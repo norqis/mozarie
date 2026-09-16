@@ -28,6 +28,12 @@ from .image_io import (
 from .masks import compose_masks, expand_mask, union_mask
 
 class SavingMixin:
+    def _preserve_directory_structure(self) -> bool:
+        value = self.settings["saving"].get("preserve_directory_structure", True)
+        if not isinstance(value, bool):
+            raise ClientError("保存設定が正しくありません。", "input_invalid")
+        return value
+
     @staticmethod
     def _copy_relative_path(record: ImageRecord, suffix: str, output_format: str, preserve_directory_structure: bool) -> Path:
         """Build one final copy name from the immutable catalogue snapshot."""
@@ -82,7 +88,7 @@ class SavingMixin:
             records = [replace(record) for record in records]
             output_directory = Path(self.settings["saving"]["default_output_directory"])
             saving_parallelism = int(self.settings.get("saving", {}).get("parallelism", 2))
-            preserve_directory_structure = bool(self.settings.get("saving", {}).get("preserve_directory_structure", True))
+            preserve_directory_structure = self._preserve_directory_structure()
         if copy_to_default:
             self._copy_destinations_are_available(
                 records, suffix, output_format, output_directory, preserve_directory_structure,
@@ -183,7 +189,7 @@ class SavingMixin:
                 return {"state": str(durable["state"]), "outputPath": str(durable["destination"] or "")}
             catalog_generation = self.catalog_generation
             configured_output_directory = Path(self.settings["saving"]["default_output_directory"]).resolve() if copy_to_default else None
-            preserve_directory_structure = bool(self.settings.get("saving", {}).get("preserve_directory_structure", True))
+            preserve_directory_structure = self._preserve_directory_structure()
         destination = None; staged = None; initial_fingerprint = None
         if configured_output_directory is not None:
             self._copy_destinations_are_available(
@@ -344,7 +350,7 @@ class SavingMixin:
                 output_directory = Path(self.settings["saving"]["default_output_directory"])
                 self._copy_destinations_are_available(
                     records, suffix, output_format, output_directory,
-                    bool(self.settings.get("saving", {}).get("preserve_directory_structure", True)),
+                    self._preserve_directory_structure(),
                 )
             return [
                 {
@@ -1056,6 +1062,7 @@ class SavingMixin:
                     except OSError:
                         if stage_path is not None:
                             stage_path.unlink(missing_ok=True)
+                            SaveJournal._cleanup_staging_parent(stage_path)
                         raise
                     assert stage_path is not None
                     save_token = f"apply-{uuid.uuid4().hex}"
@@ -1066,9 +1073,10 @@ class SavingMixin:
                         try:
                             publication = self._publish_staged_copy(save_token, stage_path, output_path, (stage_stat.st_mtime_ns, stage_stat.st_size))
                             if publication is None:
-                                output_path = self._reassign_output_destination(output_path)
-                                self.save_journal.destination(save_token, output_path)
-                                publication = self._publish_staged_copy(save_token, stage_path, output_path, (stage_stat.st_mtime_ns, stage_stat.st_size))
+                                if preserve_directory_structure:
+                                    output_path = self._reassign_output_destination(output_path)
+                                    self.save_journal.destination(save_token, output_path)
+                                    publication = self._publish_staged_copy(save_token, stage_path, output_path, (stage_stat.st_mtime_ns, stage_stat.st_size))
                             if publication is None:
                                 raise ClientError("同名ファイルが追加されました。保存をやり直してください。", "save_state_changed")
                             identity, destination_fingerprint = publication

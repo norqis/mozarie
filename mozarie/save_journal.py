@@ -29,6 +29,17 @@ class SaveJournal:
                 replacement_mtime INTEGER, replacement_size INTEGER, replacement_identity TEXT,
                 recovery_decision TEXT, cleanup_note TEXT, updated_at INTEGER NOT NULL
             )""")
+            # Renames cross the filesystem and the workspace database.  Keep a
+            # very small durable intent so a stop between those two operations
+            # can be reconciled on the next launch.
+            db.execute("""CREATE TABLE IF NOT EXISTS rename_operations (
+                token TEXT PRIMARY KEY, kind TEXT NOT NULL, image_id TEXT NOT NULL,
+                catalog_id TEXT, source_id TEXT, old_path TEXT NOT NULL, new_path TEXT NOT NULL,
+                old_relative TEXT, new_relative TEXT, identity TEXT, state TEXT NOT NULL, updated_at INTEGER NOT NULL
+            )""")
+            rename_columns = {row[1] for row in db.execute("PRAGMA table_info(rename_operations)")}
+            if "identity" not in rename_columns:
+                db.execute("ALTER TABLE rename_operations ADD COLUMN identity TEXT")
             columns = {row[1] for row in db.execute("PRAGMA table_info(saves)")}
             for column in ("staged_identity", "destination_identity", "source_path", "source_identity", "quarantine_mtime", "quarantine_size", "quarantine_identity", "replacement_mtime", "replacement_size", "replacement_identity", "recovery_decision", "cleanup_note"):
                 if column not in columns:
@@ -156,6 +167,35 @@ class SaveJournal:
             db.execute("DELETE FROM saves WHERE token=?", (token,))
             return True
 
+    def prepare_rename(self, token: str, *, kind: str, image_id: str, old_path: Path, new_path: Path,
+                       catalog_id: str | None = None, source_id: str | None = None,
+                       old_relative: str | None = None, new_relative: str | None = None, identity: str | None = None) -> None:
+        with self._lock, self._connection() as db:
+            db.execute("""INSERT OR REPLACE INTO rename_operations
+                (token,kind,image_id,catalog_id,source_id,old_path,new_path,old_relative,new_relative,identity,state,updated_at)
+                VALUES(?,?,?,?,?,?,?,?,?,?,?,?)""", (
+                    token, kind, image_id, catalog_id, source_id, str(old_path), str(new_path),
+                    old_relative, new_relative, identity, "prepared", time.time_ns(),
+                ))
+
+    def finish_rename(self, token: str) -> None:
+        with self._lock, self._connection() as db:
+            db.execute("DELETE FROM rename_operations WHERE token=?", (token,))
+
+    def recover_renames(self, recover: Any) -> None:
+        """Reconcile every unfinished rename from the filesystem's current state."""
+        with self._lock, self._connection() as db:
+            db.row_factory = sqlite3.Row
+            rows = [dict(row) for row in db.execute("SELECT * FROM rename_operations")]
+        for row in rows:
+            try:
+                complete = bool(recover(row))
+            except Exception as exc:
+                LOGGER.warning("名前変更ジャーナルの回復を保留しました: %s", exc)
+                continue
+            if complete:
+                self.finish_rename(str(row["token"]))
+
     @staticmethod
     def _identity(stat: os.stat_result) -> str | None:
         # Windows exposes the volume serial/file index through st_dev/st_ino
@@ -232,7 +272,9 @@ class SaveJournal:
         if not path: return True
         target = Path(path)
         try: stat = target.stat()
-        except FileNotFoundError: return True
+        except FileNotFoundError:
+            cls._cleanup_staging_parent(target)
+            return True
         except OSError: return False
         if mtime is not None and (stat.st_mtime_ns != mtime or stat.st_size != size): return False
         # Final outputs are deleted only when the exclusive creator's file ID
@@ -242,21 +284,34 @@ class SaveJournal:
         current_identity = cls.file_identity(target, stat)
         if identity is not None and current_identity != identity: return False
         if os.name == "nt" and identity is not None:
-            return cls._delete_windows_owned(target, identity)
+            deleted = cls._delete_windows_owned(target, identity)
+            if deleted: cls._cleanup_staging_parent(target)
+            return deleted
         if require_identity:
             # POSIX unlink is path based; without an unlink-by-handle API a
             # replacement can race after fstat. Preserve the final instead of
             # risking deletion of another process's same-name file.
             return False
         try: target.unlink()
-        except FileNotFoundError: return True
+        except FileNotFoundError:
+            cls._cleanup_staging_parent(target)
+            return True
         except OSError: return False
-        try: target.parent.rmdir()
-        except OSError: pass
+        cls._cleanup_staging_parent(target)
         try: target.stat()
         except FileNotFoundError: return True
         except OSError: return False
         return False
+
+    @staticmethod
+    def _cleanup_staging_parent(target: Path) -> None:
+        """Remove only this save's now-empty staging directory; never sweep parents."""
+        if target.parent.name != ".mozarie-staging":
+            return
+        try:
+            target.parent.rmdir()
+        except OSError:
+            pass
 
     @classmethod
     def _rename_windows_handle(cls, handle: int, target: Path, identity: str) -> bool:

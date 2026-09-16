@@ -1243,7 +1243,8 @@ function bindEvents() {
   $("#removeImageMenuItem").addEventListener("click", () => { const image = state.images.find((item) => item.id === state.contextMenuImageId); if (image) void setHidden(image, !isHidden(image)); closeCatalogContextMenu(); });
   $("#renameImageForm").addEventListener("submit", submitRenameImage);
   $("#renameImageCancel").addEventListener("click", () => $("#renameImageDialog").close());
-  $("#renameImageDialog").addEventListener("close", () => { const invoker = state.renameImage?.invoker; state.renameImage = null; focusElement(invoker); });
+  $("#renameImageDialog").addEventListener("cancel", (event) => { if (state.renamePending) event.preventDefault(); });
+  $("#renameImageDialog").addEventListener("close", () => { if (state.renamePending) return; const invoker = state.renameImage?.invoker; state.renameImage = null; focusElement(invoker); });
   $("#gallery").addEventListener("dragenter", (event) => {
     if (!event.dataTransfer?.types?.includes("Files")) return;
     event.preventDefault(); setGalleryDropOverlay(true);

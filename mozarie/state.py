@@ -89,6 +89,10 @@ class StudioState(CatalogMixin, SavingMixin, DetectionMixin, JobsMixin):
         self.workspace_store = WorkspaceStore(APP_DIR / "data")
         self.save_journal = SaveJournal(APP_DIR / "data")
         try:
+            self.save_journal.recover_renames(self._recover_rename_operation)
+        except (OSError, sqlite3.Error) as exc:
+            LOGGER.warning("名前変更ジャーナルの起動時回復を保留しました: %s", exc)
+        try:
             self.save_journal.recover(self.workspace_store.browser_save_receipt)
         except (OSError, sqlite3.Error) as exc:
             LOGGER.warning("保存ジャーナルの起動時回復を保留しました: %s", exc)
@@ -184,6 +188,42 @@ class StudioState(CatalogMixin, SavingMixin, DetectionMixin, JobsMixin):
         self.inference_lock = InferenceGate()
         self.retry_source_delete_cleanups()
         self._cleanup_stale_sessions()
+
+    def _recover_rename_operation(self, operation: dict[str, Any]) -> bool:
+        """Complete only a filesystem rename that is still visibly in flight."""
+        old_path = Path(str(operation["old_path"]))
+        new_path = Path(str(operation["new_path"]))
+        try:
+            old_exists = old_path.exists()
+            new_exists = new_path.exists()
+        except OSError:
+            return False
+        kind = str(operation["kind"])
+        image_id = str(operation["image_id"])
+        new_relative = operation.get("new_relative")
+        # A completed database update can be left behind only by journal
+        # cleanup.  It is already durable and needs no filesystem action.
+        if new_relative and self.workspace_store.image_relative_path(image_id) == new_relative:
+            return True
+        if kind == "native" and self.workspace_store.native_image_path(image_id) == new_path:
+            return True
+        if old_exists and not new_exists:
+            # The move never happened (or was rolled back) before the durable
+            # database step, so discard the intent.
+            return True
+        if not new_exists or old_exists:
+            return False
+        identity = operation.get("identity")
+        if not identity or self.save_journal.file_identity(new_path) != identity:
+            return False
+        if kind == "browser":
+            catalog_id = operation.get("catalog_id"); source_id = operation.get("source_id")
+            if not catalog_id or not source_id or not new_relative:
+                return False
+            self.workspace_store.rename_browser_source_record(str(catalog_id), str(source_id), image_id, str(new_relative))
+            return True
+        self.workspace_store.rename_native_source_records(old_path, new_path)
+        return True
 
     def begin_shutdown(self) -> None:
         """Let long-lived local operations leave cleanly during process shutdown."""

@@ -189,7 +189,9 @@ function createRuntime({ commit, copy = null, deleteOriginal = false, renderBina
   ).runInContext(runtimeContext);
   const { state, ensureSaveSources, finishApplyJob, runBrowserSave, saveTargets, processableImages, isBusy, catalogStagingEditsActive, selectedSaveMode, chooseOutputDirectory, startApplyFromDialog, startSingleSave, writeSourceHandle, restoreSourceHandle, renderOutputDirectory, pickOutputDirectory: pickOutputDirectoryApi, reserveSaveRender, renderDefaultCopy, renderStreamedSave, commitBrowserSaveWithRetry, acknowledgePendingBrowserSave, translate } = context.__browserSaveRuntime;
   state.images = initialImages || [{ id: "image-1", relativePath: "nested/source.png", width: 32, height: 32, candidateCount: 1, enabledCandidateCount: 1 }];
-  state.settings = { saving: { parallelism: 1, default_output_directory: "G:/output" }, confirmations: { overwriteSource: false, deleteSourceAfterCopy: false } };
+  state.settings = { saving: { parallelism: 1, default_output_directory: "G:/output", preserve_directory_structure: true }, confirmations: { overwriteSource: false, deleteSourceAfterCopy: false } };
+  getElement("#applyPreserveDirectoryStructure").checked = true;
+  getElement("#singleSavePreserveDirectoryStructure").checked = true;
   getElement("#applyOutputDirectoryStatus").value = state.settings.saving.default_output_directory;
   getElement("#singleSaveOutputDirectoryStatus").value = state.settings.saving.default_output_directory;
   state.translations = {
@@ -246,6 +248,27 @@ async function runSingleCopyKeepsEditorStateCase() {
   assert.deepEqual([runtime.state.manualMaskPresent, runtime.state.manualEnabled, runtime.state.manualExclusionEnabled, runtime.state.manualExclusionEraseEnabled, runtime.state.manualExclusionForced], [true, false, true, false, true], "copy-and-keep preserves manual layer switches");
   assert.deepEqual([image.reviewed, image.hidden], [false, false], "copy-and-keep preserves reviewed and hidden flags");
   assert.equal(runtime.requests.filter((request) => request.path === "/api/save/commit").length, 1, "copy-and-keep reaches the browser commit contract");
+}
+
+async function runPauseResetAfterTerminalBrowserSaveCase() {
+  const complete = createRuntime({ commit: () => jsonResponse({ cleared: true, stale: false }) });
+  complete.element("#applyPauseButton").disabled = true;
+  await complete.runBrowserSave(["image-1"], "_censored", false, "copy");
+  assert.equal(complete.element("#applyPauseButton").disabled, false, "a completed browser save leaves Pause enabled for the next save");
+
+  const failed = createRuntime({ copy: () => jsonResponse({ error_code: "save_render_failed" }, 500), commit: () => jsonResponse({}) });
+  failed.element("#applyPauseButton").disabled = true;
+  await assert.rejects(failed.runBrowserSave(["image-1"], "_censored", false, "copy"));
+  assert.equal(failed.element("#applyPauseButton").disabled, false, "a failed browser save clears a stale pausing disable state");
+
+  let cancelled;
+  cancelled = createRuntime({
+    copy: () => { cancelled.state.browserSave.cancelled = true; return binaryResponse([4, 5, 6], "cancel-pause-token", null, "G:/output/source_censored.png"); },
+    commit: () => jsonResponse({ cleared: true, stale: false }),
+  });
+  cancelled.element("#applyPauseButton").disabled = true;
+  await cancelled.runBrowserSave(["image-1"], "_censored", false, "copy");
+  assert.equal(cancelled.element("#applyPauseButton").disabled, false, "a cancelled browser save leaves Pause enabled for the next save");
 }
 
 function deferred() {
@@ -1384,6 +1407,7 @@ async function runSaveKeepsCatalogueAndEditorStateCase() {
 nodeTest("browser save runtime contracts", async () => {
   await runOutputDirectoryPermissionCases();
   await runSingleCopyKeepsEditorStateCase();
+  await runPauseResetAfterTerminalBrowserSaveCase();
   await runOutputPermissionSubmissionLockCases();
   await runSuccessCase();
   await runDraftBarrierBeforeDefaultApplyCase();

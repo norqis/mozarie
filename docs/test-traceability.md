@@ -74,6 +74,8 @@
 | WS-140 | 寸法変更で候補を逐次リサイズし、手描きなしでは展開マスクを生成しない。手描きありでは3つのunionへ逐次合成して既存編集を保持する | `tests.test_workspace.WorkspaceTests` | 実4K以上の画像でのメモリと画面応答 |
 | SD-150 | apply/detectのスレッド開始に失敗しても処理ロックと未確定履歴を解放し、設定・編集・読込・再実行を継続できる | `tests.test_server.MozarieTests.test_thread_start_failure_releases_every_job_gate_and_allows_retry` | OSの資源不足時の表示 |
 
+| SV-094・WS-141 | コピー保存のフォルダー構成保持を設定へ保存し、平坦化時は形式・suffix後の同名を出力作成前に拒否する。ネイティブ元画像の名前変更はID・候補・手描き・状態・反転・履歴を維持し、停止またはDB失敗後に元ファイルと永続相対名を回復する。 | `tests.test_recursive_save_rename.RecursiveSaveTests`、`tests.test_recursive_save_rename.StudioStateNativeRenameTests`、`tests/test_browser_save_runtime.cjs`、`tests/test_interaction_coverage.cjs` | 実Windowsの大文字小文字だけの変更、Explorerでのロック、FSAのmove対応と再接続案内 |
+
 ## active
 
 | 手動ID | 実機で確認する理由 |
