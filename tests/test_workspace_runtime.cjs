@@ -2,6 +2,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const vm = require("node:vm");
+const nodeTest = require("node:test");
 
 const workspacePath = path.join(__dirname, "..", "static", "js", "workspace.js");
 const source = fs.readFileSync(workspacePath, "utf8");
@@ -27,12 +28,11 @@ const context = {
 vm.runInNewContext(source, context, { filename: workspacePath });
 vm.runInNewContext("globalThis.workspaceTest={queueWorkspaceDraft,flushDraftSaves,flushWorkspaceDraft,flushAllWorkspaceMutations,queueWorkspaceMutation,queueWorkspaceFlags,workspaceDraftPayload,directoryCatalogStore,rememberedOutputDirectoryHandle,rememberOutputDirectoryHandle,rememberedProjectSource,rememberedProjectSources,forgetProjectSources,ensureProjectSourcePermission,catalogForDirectoryHandle,loadWorkspaceDraft,scheduleManualWorkspaceSave};", context, { filename: "test-workspace-exports.js" });
 
-(async () => {
+nodeTest("workspace runtime contracts", async () => {
   await context.workspaceTest.queueWorkspaceDraft("one", true);
   state.drafts.set("one", { add: "data:image/png;base64,a", hasEffectiveMask: true });
   await context.workspaceTest.queueWorkspaceDraft("one", true);
   assert.deepEqual(calls.map(([, method]) => method), ["DELETE", "POST"], "draft snapshots choose DELETE or POST at enqueue time");
-
   state.project = { id: "project-one" }; state.currentId = null; state.workspaceDraftChains.clear(); state.workspaceDraftTimers.clear(); state.workspaceMutationErrors.clear(); state.draftSaveChains.clear();
   const durableDraft = { add: "data:image/png;base64,durable", hasEffectiveMask: true };
   state.drafts.set("one", durableDraft); state.maskStatus = new Map([["one", true]]);
@@ -47,7 +47,6 @@ vm.runInNewContext("globalThis.workspaceTest={queueWorkspaceDraft,flushDraftSave
   state.drafts.set("one", durableDraft); state.maskStatus.set("one", true);
   await context.workspaceTest.queueWorkspaceDraft("one", true);
   assert.equal(state.drafts.get("one"), durableDraft, "projectless sessions keep their only in-memory draft copy");
-
   const manyImages = Array.from({ length: 400 }, (_, index) => ({ id: `many-${index}` }));
   state.images = manyImages; state.project = { id: "project-many" }; state.currentId = null;
   state.drafts.clear(); state.maskStatus.clear(); state.workspaceDraftChains.clear(); state.workspaceMutationErrors.clear(); calls.length = 0;
@@ -81,7 +80,6 @@ vm.runInNewContext("globalThis.workspaceTest={queueWorkspaceDraft,flushDraftSave
   state.currentId = null;
   await context.workspaceTest.queueWorkspaceDraft(manyImages.at(-1).id, true);
   assert.equal(state.drafts.size, 400, "projectless drafts are never evicted because no durable project recovery path exists");
-
   state.images = [{ id: "one" }];
   calls.length = 0; state.drafts.set("one", { add: "data:image/png;base64,a", hasEffectiveMask: true }); rejectFirst = true;
   const failed = context.workspaceTest.queueWorkspaceDraft("one", true);
@@ -106,7 +104,6 @@ vm.runInNewContext("globalThis.workspaceTest={queueWorkspaceDraft,flushDraftSave
   let switched = false;
   await assert.rejects(context.workspaceTest.flushAllWorkspaceMutations().then(() => { switched = true; }), /encode failed/);
   assert.equal(switched, false, "a rejected draft encoder prevents the transition");
-
   state.currentId = null; state.draftDirty = false; state.draftSaveChains.clear();
   let resolveFirst;
   const first = new Promise((resolve) => { resolveFirst = resolve; });
@@ -186,7 +183,6 @@ vm.runInNewContext("globalThis.workspaceTest={queueWorkspaceDraft,flushDraftSave
   assert.equal(saved, 1, "the current manual edit is encoded on the next task");
   context.saveDraft = () => { throw new Error("encode synchronously failed"); };
   await assert.rejects(context.workspaceTest.scheduleManualWorkspaceSave(), /encode synchronously failed/, "a synchronous encoder failure rejects its scheduling chain");
-
   const originalApi = context.api;
   const originalIndexedDb = context.indexedDB;
   const originalWindowIndexedDb = context.window.indexedDB;
@@ -230,36 +226,41 @@ vm.runInNewContext("globalThis.workspaceTest={queueWorkspaceDraft,flushDraftSave
   assert.equal(await context.workspaceTest.ensureProjectSourcePermission({ queryPermission: async () => "granted" }), true, "a granted project source opens without another prompt");
   assert.equal(await context.workspaceTest.ensureProjectSourcePermission({ queryPermission: async () => "prompt", requestPermission: async () => "granted" }, true), true, "an explicitly requested project source can obtain browser read permission");
   assert.equal(await context.workspaceTest.ensureProjectSourcePermission({ queryPermission: async () => { throw new Error("denied"); } }), false, "a project source permission failure remains closed");
-
   const deletedHandleKeys = [];
   const cleanupDb = {
     close() {},
-    transaction(_name, mode) { return { objectStore() { const getAll = () => { const request = {}; queueMicrotask(() => request.onsuccess()); request.result = [
-      { key: "project:source-a:one", projectId: "project" }, { key: "project:dir:root", projectId: "project" }, { key: "other:source-b:two", projectId: "other" },
-    ]; return request; }; return mode === "readwrite" ? { delete(key) { deletedHandleKeys.push(key); }, index() { return { getAll }; } } : { getAll, index() { return { getAll }; } }; } }; },
+    transaction(_name, mode) {
+      const transaction = {
+        objectStore() {
+          const getAll = () => {
+            const request = {};
+            queueMicrotask(() => {
+              request.result = [
+                { key: "project:source-a:one", projectId: "project" }, { key: "project:dir:root", projectId: "project" },
+              ];
+              request.onsuccess();
+              queueMicrotask(() => transaction.oncomplete());
+            });
+            return request;
+          };
+          return mode === "readwrite" ? { delete(key) { deletedHandleKeys.push(key); }, index() { return { getAll }; } } : { getAll, index() { return { getAll }; } };
+        },
+      };
+      return transaction;
+    },
   };
   context.indexedDB = context.window.indexedDB = { open() { const request = { result: cleanupDb }; queueMicrotask(() => request.onsuccess()); return request; } };
-  await context.workspaceTest.forgetProjectSources("project");
+  await context.workspaceTest.forgetProjectSources("project", { clearIntent: false });
   assert.deepEqual(deletedHandleKeys, ["project:source-a:one", "project:dir:root"], "deleting a project removes only its persisted browser handles");
-
   const outputReadErrorDb = {
     close() {},
     transaction() { return { objectStore() { return { get() { const request = {}; queueMicrotask(() => request.onerror()); return request; } }; } }; },
   };
   context.indexedDB = context.window.indexedDB = { open() { const request = { result: outputReadErrorDb }; queueMicrotask(() => request.onsuccess()); return request; } };
   assert.equal(await context.workspaceTest.rememberedOutputDirectoryHandle(), null, "an unreadable remembered output directory is treated as absent");
-
-  const directoryEvents = [];
   context.state.project = null;
-  context.api = async (url) => {
-    assert.equal(url, "/api/projects", "a directory creates explicit unnamed project work");
-    return { project: { id: "fresh", name: null, status: "working" } };
-  };
-  assert.equal(await context.workspaceTest.catalogForDirectoryHandle({}), "fresh", "a remembered directory never silently reopens old work");
-  context.state.project = { id: "fresh" };
-  context.api = async (url) => { assert.equal(url, "/api/workspace/catalog", "an active project activates its existing workspace catalog"); return { catalogId: "active" }; };
-  assert.equal(await context.workspaceTest.catalogForDirectoryHandle({}), "active", "a selected directory activates the current project rather than creating another one");
-
+  assert.equal(await context.workspaceTest.catalogForDirectoryHandle({}), null, "a directory import never creates or reopens project work as a side effect");
+  assert.equal(state.pendingDirectorySourceId, null, "a projectless directory has no durable source until the user saves a project");
   state.currentId = null; state.draftDirty = false; state.draftSaveChains.clear(); state.workspaceDraftChains.clear(); state.workspaceMutationErrors.clear(); state.workspaceDraftTimers.clear();
   assert.equal(JSON.stringify(context.workspaceTest.workspaceDraftPayload({})), JSON.stringify({ add: "", exclusion: "", exclusionErase: "", manualEnabled: true, manualExclusionEnabled: true, manualExclusionEraseEnabled: true, manualExclusionForced: true, hasEffectiveMask: false, removedCandidateIds: [], candidateRevision: 0 }), "a partially initialized manual draft receives the persisted defaults");
   await context.workspaceTest.flushDraftSaves(["one"]);
@@ -272,7 +273,6 @@ vm.runInNewContext("globalThis.workspaceTest={queueWorkspaceDraft,flushDraftSave
   state.draftSaveChains.set("one", Promise.resolve().then(() => { throw new Error("draft encoding failed"); }));
   await assert.rejects(context.workspaceTest.flushDraftSaves(["one"]), /draft encoding failed/, "a rejected encoded draft stops its dependent transition");
   state.draftSaveChains.clear();
-
   await context.workspaceTest.flushWorkspaceDraft("one");
   assert.equal(state.workspaceDraftChains.has("one"), false, "an image with no pending server write flushes without creating one");
   assert.equal(await context.workspaceTest.queueWorkspaceDraft("missing"), undefined, "a missing catalog image never schedules a manual write");
@@ -281,8 +281,7 @@ vm.runInNewContext("globalThis.workspaceTest={queueWorkspaceDraft,flushDraftSave
   const debouncedTwo = context.workspaceTest.queueWorkspaceDraft("one");
   await Promise.all([debouncedOne, debouncedTwo]);
   assert.equal(state.workspaceDraftTimers.has("one"), false, "a replacement debounce clears its earlier timer before writing");
-
-  context.api = async () => ({});
+  context.api = async (url, options = {}) => { calls.push([url, options.method]); return {}; };
   state.currentId = null; state.draftDirty = false; state.workspaceDraftChains.clear(); state.workspaceMutationErrors.clear(); state.workspaceDraftTimers.clear(); state.drafts.set("one", {});
   state.workspaceDraftTimers.set("one", setTimeout(() => {}, 5000));
   assert.equal(state.workspaceDraftTimers.size, 1, "the global flush fixture begins with one pending timer");
@@ -290,12 +289,10 @@ vm.runInNewContext("globalThis.workspaceTest={queueWorkspaceDraft,flushDraftSave
   await context.workspaceTest.flushAllWorkspaceMutations();
   assert.equal(state.workspaceDraftTimers.size, 0, "a global flush drains every pending workspace timer before a catalog transition");
   assert.equal(calls.length, flushCalls + 1, "a global flush sends the pending manual workspace write");
-
   state.workspaceDraftChains.set("one", Promise.resolve().then(() => { throw new Error("queued write failed"); }));
   await assert.rejects(context.workspaceTest.flushAllWorkspaceMutations(), /queued write failed/, "a rejected queued mutation blocks a catalog transition");
   state.workspaceDraftChains.clear(); state.workspaceMutationErrors.clear();
   context.api = originalApi;
   context.indexedDB = originalIndexedDb;
   context.window.indexedDB = originalWindowIndexedDb;
-  console.log("test_workspace_runtime: passed");
-})().catch((error) => { console.error(error); process.exitCode = 1; });
+});

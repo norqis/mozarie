@@ -27,4 +27,9 @@ assert.deepEqual(coverage.testFiles, frontend.frontendTestFiles(), "coverage run
 assert.deepEqual(frontendPerformanceTestFiles(), ["tests/test_gallery_performance_e2e.cjs"], "the 20k gallery test is discovered as the single non-coverage performance suite");
 assert.equal(frontendTestFiles().includes("tests/test_gallery_performance_e2e.cjs"), false, "coverage discovery excludes the uninstrumented performance suite");
 assert.deepEqual(frontendTestArguments(["tests/nested/test_fixture.cjs"]), ["--test", "--test-reporter=./scripts/strict-tap-reporter.cjs", "--test-concurrency=1", "tests/nested/test_fixture.cjs"], "ordinary and coverage execution share the strict reporter, stable browser concurrency, and nested paths");
+for (const file of [...frontendTestFiles(), ...frontendPerformanceTestFiles()]) {
+  const contents = fs.readFileSync(path.join(__dirname, "..", file), "utf8");
+  assert.equal(/^\s*\(async\s*\(\)\s*=>/m.test(contents), false, `${file} must register asynchronous work with node:test instead of a top-level async IIFE`);
+  assert.equal(/^\s*Promise\.(?:resolve|all|race|any)\s*\(/m.test(contents), false, `${file} must register top-level Promise chains with node:test`);
+}
 console.log("test_test_discovery: passed");

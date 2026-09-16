@@ -1,7 +1,7 @@
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
-const test = require("node:test");
+const nodeTest = require("node:test");
 
 const source = fs.readFileSync(path.join(__dirname, "..", "static", "js", "save.js"), "utf8");
 const interaction = fs.readFileSync(path.join(__dirname, "..", "static", "js", "interaction.js"), "utf8");
@@ -25,7 +25,49 @@ function compiled(name, dependencies) {
 
 const codedError = (code) => Object.assign(new Error(code), { code });
 
-test("a missing browser source snapshot starts neither deletion nor commit", async (t) => {
+nodeTest("a source snapshot reads durable bytes before destructive work and restores the original name and type", async () => {
+  const original = new File([Uint8Array.from([3, 1, 4, 1, 5])], "nested source.png", { type: "image/png", lastModified: 123 });
+  const originalArrayBuffer = original.arrayBuffer.bind(original);
+  let sourceAvailable = true; let sourceReads = 0;
+  original.arrayBuffer = async () => {
+    sourceReads += 1;
+    assert.equal(sourceAvailable, true, "snapshot bytes are read before the source can change");
+    return originalArrayBuffer();
+  };
+  const lazySlice = Object.create(Blob.prototype);
+  lazySlice.arrayBuffer = async () => {
+    assert.equal(sourceAvailable, true, "a lazy slice becomes unreadable after destructive work");
+    return originalArrayBuffer();
+  };
+  original.slice = () => lazySlice;
+  const snapshotSource = compiled("snapshotSourceHandle", { Blob });
+  const snapshot = await snapshotSource({ fileHandle: { getFile: async () => original } });
+  sourceAvailable = false;
+  assert.equal(sourceReads, 1, "the source is materialized exactly once before destructive work");
+  assert.ok(snapshot instanceof Blob);
+  assert.equal(snapshot.type, "image/png");
+  assert.deepEqual([...new Uint8Array(await snapshot.arrayBuffer())], [3, 1, 4, 1, 5]);
+
+  let restoredName = null; let restoredBytes = null;
+  const restoredFile = new File([snapshot], original.name, { type: snapshot.type, lastModified: original.lastModified });
+  const restoreSource = compiled("restoreSourceHandle", { codedError });
+  await restoreSource({
+    name: original.name,
+    fileHandle: { name: original.name },
+    parentHandle: { async getFileHandle(name) {
+      restoredName = name;
+      return {
+        async createWritable() { return { async write(bytes) { restoredBytes = [...new Uint8Array(await bytes.arrayBuffer())]; }, async close() {}, async abort() {} }; },
+        async getFile() { return restoredFile; },
+      };
+    } },
+  }, snapshot, true);
+  assert.equal(restoredName, original.name);
+  assert.deepEqual(restoredBytes, [3, 1, 4, 1, 5]);
+  assert.equal(restoredFile.type, original.type);
+});
+
+nodeTest("a missing browser source snapshot starts neither deletion nor commit", async (t) => {
   const prepare = t.mock.fn();
   const claim = t.mock.fn();
   const deleteHandle = t.mock.fn();
@@ -53,8 +95,31 @@ test("a missing browser source snapshot starts neither deletion nor commit", asy
   for (const mock of [prepare, claim, deleteHandle, commit]) assert.equal(mock.mock.callCount(), 0);
 });
 
-test("a definitive delete commit rejection restores the exact Blob source", async (t) => {
-  const snapshot = new Blob(["original bytes"]);
+nodeTest("a rejected source snapshot starts neither deletion nor commit", async (t) => {
+  const snapshotSource = compiled("snapshotSourceHandle", { Blob });
+  for (const getFile of [
+    async () => { throw new Error("read denied"); },
+    async () => {
+      const file = new File(["original"], "source.png", { type: "image/png" });
+      file.arrayBuffer = async () => { throw new Error("bytes denied"); };
+      return file;
+    },
+  ]) {
+    const prepare = t.mock.fn(); const claim = t.mock.fn(); const deleteHandle = t.mock.fn(); const commit = t.mock.fn();
+    const removeSource = compiled("deleteCopiedBrowserSource", {
+      browserDeleteEntry: () => ({ fileHandle: { getFile }, state: "ready" }), snapshotSourceHandle: snapshotSource, codedError,
+      crypto: { randomUUID: () => "delete-token" }, rememberPendingSourceDelete: t.mock.fn(), catalogApi: prepare,
+      claimSourceDelete: claim, browserDeleteHandle: deleteHandle, commitSourceDeleteWithRetry: commit, api: t.mock.fn(),
+      acknowledgeSourceDelete: t.mock.fn(), isDefinitiveCommitRejection: () => true, restoreCopiedBrowserSourcesAfterRejectedDelete: t.mock.fn(), console, Blob,
+    });
+    const result = await removeSource({ id: "image-1" }, "save-token");
+    assert.equal(result.error.code, "source_restore_failed");
+    for (const mock of [prepare, claim, deleteHandle, commit]) assert.equal(mock.mock.callCount(), 0);
+  }
+});
+
+nodeTest("a definitive delete commit rejection restores the exact materialized source bytes", async (t) => {
+  const snapshot = new Blob(["original bytes"], { type: "image/png" });
   const entry = { fileHandle: { getFile: async () => snapshot }, state: "ready" };
   const restored = t.mock.fn();
   const remembered = t.mock.fn(async () => {});
@@ -96,7 +161,7 @@ test("a definitive delete commit rejection restores the exact Blob source", asyn
   assert.equal(acknowledged.mock.callCount(), 1);
 });
 
-test("all source-delete mutations explicitly POST", () => {
+nodeTest("all source-delete mutations explicitly POST", () => {
   for (const endpoint of [
     "/api/catalog/delete-source",
     "/api/catalog/delete-source/prepare",

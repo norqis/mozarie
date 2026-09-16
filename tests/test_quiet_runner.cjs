@@ -2,6 +2,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
+const nodeTest = require("node:test");
 
 const runner = require("../scripts/test-quiet.cjs");
 const policy = require("../scripts/test-result-policy.cjs");
@@ -212,10 +213,9 @@ fs.writeFileSync(path.join(artifactFixture, ".http-coverage.stderr.log"), "fixtu
 assert.deepEqual(runner.workspaceArtifacts(artifactFixture), [".http-coverage.stderr.log", path.join("mozarie", "__pycache__")], "the runner detects only generated root logs and bytecode directories");
 fs.rmSync(artifactFixture, { recursive: true, force: true });
 
-(async () => {
+nodeTest("quiet runner contracts", async () => {
   await runCommandCases();
   await runTemporaryDirectoryCases();
   await runArtifactCases();
   await runFrontendCases();
-  console.log("test_quiet_runner: passed");
-})().catch((error) => { console.error(error); process.exitCode = 1; });
+});

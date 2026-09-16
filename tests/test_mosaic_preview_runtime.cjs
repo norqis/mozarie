@@ -2,6 +2,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const vm = require("node:vm");
+const nodeTest = require("node:test");
 
 const counters = { bitmaps: 0, closed: 0, workers: 0, terminated: 0, workerCanvases: 0, peakWorkerCanvases: 0 };
 const draws = [];
@@ -64,7 +65,7 @@ const context = {
 const canvasPath = path.join(__dirname, "..", "static", "js", "editor-canvas.js");
 vm.runInNewContext(fs.readFileSync(canvasPath, "utf8"), context, { filename: canvasPath });
 
-(async () => {
+nodeTest("mosaic preview runtime contracts", async () => {
   await context.rebuildMosaicPreview();
   const worker = state.mosaicWorker;
   const first = await worker.nextRender();
@@ -118,6 +119,42 @@ vm.runInNewContext(fs.readFileSync(canvasPath, "utf8"), context, { filename: can
   assert.deepEqual([roiJob.left, roiJob.top, roiJob.width, roiJob.height], [160, 320, 64, 64], "the patch keeps the dirty source rectangle");
   assert.equal(fullFlushes, 0, "an active stroke never flushes the full mask composition");
   state.mosaicWorker.frame(roiJob); state.activeStroke = null; context.flushMaskComposition = () => {};
+
+  // A render superseded after its mask capture must retain the request that
+  // was consumed for that capture.  Otherwise an earlier brush ROI vanishes.
+  context.releaseMosaicPreview(); state.mosaicPreviewEnabled = true; state.currentImage = { width: 3840, height: 2160 }; state.currentId = "roi-union";
+  const roiA = { left: 16, top: 32, right: 32, bottom: 48 }; const roiB = { left: 64, top: 80, right: 96, bottom: 112 };
+  let resolveRoiMask; let roiMaskReady;
+  const roiMaskCaptured = new Promise((resolve) => { roiMaskReady = resolve; });
+  context.createImageBitmap = (image) => {
+    if (image === context.combinedCanvas && !resolveRoiMask) {
+      roiMaskReady(); return new Promise((resolve) => { resolveRoiMask = () => resolve(bitmap("roi-a")); });
+    }
+    return Promise.resolve(bitmap(image === context.originalCanvas ? "source" : "mask"));
+  };
+  state.mosaicPreviewRoi = roiA;
+  const roiPendingBuild = context.rebuildMosaicPreview(); await roiMaskCaptured;
+  context.requestMosaicPreview(roiB); resolveRoiMask(); await roiPendingBuild;
+  const mergedRoiJob = await state.mosaicWorker.nextRender();
+  assert.deepEqual([mergedRoiJob.type, mergedRoiJob.left, mergedRoiJob.top, mergedRoiJob.width, mergedRoiJob.height], ["patch", 16, 32, 80, 80], "a pending ROI preserves and unions the ROI consumed by the discarded capture");
+  state.mosaicWorker.frame(mergedRoiJob);
+
+  context.releaseMosaicPreview(); state.mosaicPreviewEnabled = true; state.currentImage = { width: 3840, height: 2160 }; state.currentId = "full-priority";
+  let resolveFullMask; let fullMaskReady;
+  const fullMaskCaptured = new Promise((resolve) => { fullMaskReady = resolve; });
+  context.createImageBitmap = (image) => {
+    if (image === context.combinedCanvas && !resolveFullMask) {
+      fullMaskReady(); return new Promise((resolve) => { resolveFullMask = () => resolve(bitmap("full")); });
+    }
+    return Promise.resolve(bitmap(image === context.originalCanvas ? "source" : "mask"));
+  };
+  state.mosaicPreviewFull = true;
+  const fullPendingBuild = context.rebuildMosaicPreview(); await fullMaskCaptured;
+  context.requestMosaicPreview(roiB); resolveFullMask(); await fullPendingBuild;
+  const fullPriorityJob = await state.mosaicWorker.nextRender();
+  assert.equal(fullPriorityJob.type, "render", "a full request remains full when a later ROI arrives during its discarded capture");
+  state.mosaicWorker.frame(fullPriorityJob);
+  context.createImageBitmap = async (image) => bitmap(image === context.originalCanvas ? "source" : "mask");
 
   const throwingOutput = bitmap("throwing");
   context.mosaicCtx.drawImage = () => { throw new Error("paint failed"); };
@@ -257,6 +294,5 @@ vm.runInNewContext(fs.readFileSync(canvasPath, "utf8"), context, { filename: can
   assert.equal(counters.workers, counters.terminated, "all controlled workers are terminated");
   assert.equal(counters.closed, counters.bitmaps, "all source, mask, and output bitmaps are reclaimed");
   assert.ok(counters.peakWorkerCanvases <= 1, "at most one worker canvas bundle is live");
-  assert.ok(counters.workers <= 114, "100 switches and transient states create a bounded number of workers");
-  console.log("test_mosaic_preview_runtime: passed");
-})().catch((error) => { console.error(error); process.exitCode = 1; });
+  assert.ok(counters.workers <= 116, "100 switches, pending ROI/full recovery, and transient states create a bounded number of workers");
+});

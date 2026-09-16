@@ -3,6 +3,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const vm = require("node:vm");
+const nodeTest = require("node:test");
 
 const resourcesPath = path.join(__dirname, "..", "static", "js", "resources.js");
 const state = {
@@ -44,4 +45,4 @@ assert.equal(cache.has(oldKey), false, "ownership is released when the navigatio
 assert.deepEqual(released, ["previous", "previous-retained"]);
 assert.equal(test.imageUrl({ id: "a b", assetVersion: "v/1" }), "/api/image/a%20b?v=v%2F1");
 assert.equal(test.maskUrl("image/id", "candidate id", 4), "/api/mask/image%2Fid/candidate%20id?v=4-candidate%20id");
-(async () => { await test.schedulePrefetch(state.images[2]); console.log("test_resources: passed"); })().catch((error) => { console.error(error); process.exitCode = 1; });
+nodeTest("resource contracts", async () => { await test.schedulePrefetch(state.images[2]); });

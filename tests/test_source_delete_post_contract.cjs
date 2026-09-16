@@ -1,6 +1,7 @@
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
+const nodeTest = require("node:test");
 
 const source = fs.readFileSync(path.join(__dirname, "..", "static", "js", "interaction.js"), "utf8");
 
@@ -24,7 +25,7 @@ async function callsFrom(name, nextName, argument, failure = null) {
   return calls;
 }
 
-(async () => {
+nodeTest("source delete POST contracts", async () => {
   const payload = { imageIds: ["image-1"], deleteToken: "token-1" };
   for (const calls of [
     await callsFrom("commitSourceDeleteWithRetry", "claimSourceDelete", payload),
@@ -37,7 +38,4 @@ async function callsFrom(name, nextName, argument, failure = null) {
 
   const prepare = source.match(/catalogApi\(\"\/api\/catalog\/delete-source\/prepare\",[^\n]*\{ method: \"POST\" \}\)/);
   assert.ok(prepare, "source-delete prepare must be POST");
-})().catch((error) => {
-  console.error(error);
-  process.exitCode = 1;
 });

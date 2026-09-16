@@ -2,6 +2,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const vm = require("node:vm");
+const nodeTest = require("node:test");
 const workspacePath = path.join(__dirname, "..", "static", "js", "workspace.js");
 const source = fs.readFileSync(workspacePath, "utf8");
 const deleted = []; const writes = []; const events = []; let opens = 0; let openFails = false; let readFails = false;
@@ -38,7 +39,7 @@ const context = {
 };
 vm.runInNewContext(source, context, { filename: workspacePath });
 vm.runInNewContext("globalThis.idbTest={directoryCatalogStore, catalogForDirectoryHandle, rememberedProjectSource, rememberedProjectSources, forgetProjectSources, rememberedOutputDirectoryHandle};", context, { filename: "test-workspace-idb-exports.js" });
-(async () => {
+nodeTest("workspace IndexedDB runtime contracts", async () => {
   assert.equal(await context.idbTest.catalogForDirectoryHandle({}), null);
   assert.equal(context.state.project, null, "a folder import does not create or select a project implicitly");
   assert.deepEqual(deleted, [], "a remembered folder never silently selects or deletes a prior project");
@@ -54,5 +55,4 @@ vm.runInNewContext("globalThis.idbTest={directoryCatalogStore, catalogForDirecto
   assert.deepEqual(JSON.parse(JSON.stringify(await context.idbTest.rememberedProjectSources("fresh"))), { files: [], directories: [] }, "a failed source lookup has no implicit import fallback");
   await context.idbTest.forgetProjectSources("fresh");
   assert.equal(await context.idbTest.rememberedOutputDirectoryHandle(), null, "a failed output-handle lookup leaves output selection explicit");
-  console.log("test_workspace_idb_runtime: passed");
-})().catch((error) => { console.error(error); process.exitCode = 1; });
+});

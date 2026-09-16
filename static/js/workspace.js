@@ -2,6 +2,7 @@
 // quick image switch never lets an earlier canvas snapshot overwrite a later one.
 state.workspaceDraftChains = new Map();
 state.workspaceDraftTimers = new Map();
+state.workspaceDraftPending = new Map();
 state.workspaceMutationErrors = new Map();
 state.workspaceFlagPending = new Map();
 
@@ -430,13 +431,14 @@ async function saveWorkspaceDraft(imageId, draft) {
 
 function queueWorkspaceDraft(imageId, immediate = false) {
   if (!imageId || !state.images.some((image) => image.id === imageId)) return Promise.resolve();
+  state.workspaceDraftPending ??= new Map();
   const previousTimer = state.workspaceDraftTimers.get(imageId);
   if (previousTimer) clearTimeout(previousTimer);
   const write = () => {
     state.workspaceDraftTimers.delete(imageId);
     const draft = state.drafts.get(imageId);
     const persisted = queueWorkspaceMutation(imageId, () => saveWorkspaceDraft(imageId, draft));
-    return persisted.then((result) => {
+    const completed = persisted.then((result) => {
       if (draft && state.drafts.get(imageId) === draft) {
         draft.dirtyLayers = [];
         draft.dirtyRois = {};
@@ -462,15 +464,28 @@ function queueWorkspaceDraft(imageId, immediate = false) {
       }
       return result;
     });
+    const pending = state.workspaceDraftPending.get(imageId);
+    if (pending) {
+      state.workspaceDraftPending.delete(imageId);
+      pending.resolve(completed.catch((error) => {
+        // Retain the bitmap and dirty layers for retry, while making it explicit
+        // that the displayed hand-drawn edit is not durable yet.
+        state.workspaceUnsavedImageId = imageId;
+        setStatusKey("status.workspaceUnsaved", {}, "warning"); showUserError(error);
+      }));
+    }
+    return completed;
   };
   if (immediate) return write();
-  const promise = new Promise((resolve) => state.workspaceDraftTimers.set(imageId, setTimeout(() => resolve(write().catch((error) => {
-    // Retain the bitmap and dirty layers for retry, while making it explicit
-    // that the displayed hand-drawn edit is not durable yet.
-    state.workspaceUnsavedImageId = imageId;
-    setStatusKey("status.workspaceUnsaved", {}, "warning"); showUserError(error);
-  })), 250)));
-  return promise;
+  let pending = state.workspaceDraftPending.get(imageId);
+  if (!pending) {
+    let resolve;
+    const promise = new Promise((done) => { resolve = done; });
+    pending = { promise, resolve };
+    state.workspaceDraftPending.set(imageId, pending);
+  }
+  state.workspaceDraftTimers.set(imageId, setTimeout(() => { void write(); }, 250));
+  return pending.promise;
 }
 
 function draftSaveEntries(imageIds = null) {

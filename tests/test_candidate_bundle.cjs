@@ -1,4 +1,4 @@
-const assert = require("node:assert/strict"); const fs = require("node:fs"); const path = require("node:path"); const vm = require("node:vm");
+const assert = require("node:assert/strict"); const fs = require("node:fs"); const path = require("node:path"); const vm = require("node:vm"); const nodeTest = require("node:test");
 const resourcesPath = path.join(__dirname, "..", "static", "js", "resources.js"); const canvasPath = path.join(__dirname, "..", "static", "js", "editor-canvas.js");
 const record = { id: "image", assetVersion: "v1", candidateRevision: 4 }; const state = { images: [record], currentId: "image", pendingImageId: null, candidateImages: new Map(), catalogEpoch: 1, catalogLoadControllers: new Set(), candidateLoadControllers: new Map(), imageLoadControllers: new Map(), candidateInflight: new Map(), imageInflight: new Map(), prefetchQueue: [], prefetchTimer: null, prefetchActive: 0, galleryNodes: new Map(), overviewNodes: new Map(), drafts: new Map(), resourceImageKeys: new Set(), resourceCandidateKeys: new Set() };
 let apiResult; let bitmapLoader;
@@ -8,7 +8,7 @@ vm.runInNewContext(fs.readFileSync(resourcesPath, "utf8"), context, { filename: 
 vm.runInNewContext(fs.readFileSync(canvasPath, "utf8"), context, { filename: canvasPath });
 vm.runInNewContext("globalThis.loadCandidateBundle = loadCandidateBundle; globalThis.cachedImage = cachedImage;", context, { filename: "test-candidate-bundle-exports.js" }); context.fetchBitmap = (...args) => bitmapLoader(...args);
 
-(async () => {
+nodeTest("candidate bundle contracts", async () => {
   let decodes = 0; apiResult = { candidates: [{ id: "stale", labelToken: "penis", source: "target", refinement: null }], candidateRevision: 5 }; bitmapLoader = async () => { decodes += 1; return { close() {} }; };
   record.candidateRevision = 4; const changed = context.loadCandidateBundle("image", 1); record.candidateRevision = 5;
   await changed; assert.equal(decodes, 1, "metadata is authoritative when candidate revision changes"); assert.equal(state.catalogLoadControllers.size, 0, "request unregisters its controller"); for (const [key] of state.candidateBundleCache.items) state.candidateBundleCache.delete(key);
@@ -71,4 +71,4 @@ vm.runInNewContext("globalThis.loadCandidateBundle = loadCandidateBundle; global
   context.fetchBitmap = () => new Promise((resolve) => { resolveFull = resolve; }); context.api = async () => { const error = new Error("stale"); error.code = "stale_asset"; throw error; };
   const fullPending = context.cachedImage(stale); await assert.rejects(context.loadCandidateBundle("stale", 1), /stale/); context.invalidateStaleAsset("stale"); resolveFull({ width: 1, height: 1, close() { fullClosed += 1; } }); await assert.rejects(fullPending, (error) => error.name === "AbortError");
   assert.equal(state.imageCache.has("stale:v1"), false, "aborted full load cannot reinsert after candidate stale"); assert.equal(fullClosed, 1, "aborted full bitmap closes once");
-})().catch((error) => { console.error(error); process.exitCode = 1; });
+});

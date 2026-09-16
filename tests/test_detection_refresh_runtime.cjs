@@ -2,6 +2,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const vm = require("node:vm");
+const nodeTest = require("node:test");
 
 const root = path.join(__dirname, "..", "static", "js");
 
@@ -125,11 +126,10 @@ async function testCompletionInvalidatesAndReloadsCandidates() {
   );
 }
 
-Promise.resolve()
-  .then(testDetectionWaitsForDraft)
-  .then(testDetectionShowsProcessingBeforeDelayedRequests)
-  .then(testDetectionStartFailureClosesProcessing)
-  .then(testDetectionSettingsFailureDoesNotStartDetect)
-  .then(testCompletionInvalidatesAndReloadsCandidates)
-  .then(() => console.log("test_detection_refresh_runtime: passed"))
-  .catch((error) => { console.error(error); process.exitCode = 1; });
+nodeTest("detection refresh runtime contracts", async () => {
+  await testDetectionWaitsForDraft();
+  await testDetectionShowsProcessingBeforeDelayedRequests();
+  await testDetectionStartFailureClosesProcessing();
+  await testDetectionSettingsFailureDoesNotStartDetect();
+  await testCompletionInvalidatesAndReloadsCandidates();
+});

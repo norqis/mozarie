@@ -2,6 +2,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const vm = require("node:vm");
+const nodeTest = require("node:test");
 
 function context2d(canvas) {
   return {
@@ -92,7 +93,7 @@ vm.runInNewContext(source, context, { filename: canvasPath });
 vm.runInNewContext("globalThis.canvasCompletion = { canvasSizeForImage, ensureHistoryCanvases, releaseHistoryCanvases, clearEditor, canvasHasPixels, syncCandidateRecord, syncStoredMaskStatus, refreshCandidateRecord, updateCandidateStatus, canvasToDataUrl, decodeDraftImages, restoreDraft, releaseMosaicPreview, prepareOriginalImage, rebuildMosaicPreview, requestMosaicPreview, drawEffectiveExclusions, composeCurrentMask, markDraftDirty, markMaskDirty, flushMaskComposition, hasEffectiveMask, maskStatusWithoutCandidate, refreshMaskStatus, paintMosaicPreview, updateBrushCursor, drawCandidateBlinkOverlay, renderNow, flushRender };", context, { filename: "test-editor-canvas-completion-exports.js" });
 const test = context.canvasCompletion;
 
-(async () => {
+nodeTest("editor canvas completion contracts", async () => {
   test.canvasSizeForImage({ width: 20, height: 12 });
   assert.equal(addCanvas.width, 20, "resizing an image resets every editable canvas");
   assert.equal(state.maskDirty, true);
@@ -181,17 +182,21 @@ const test = context.canvasCompletion;
   assert.equal(test.refreshMaskStatus(true), true, "status changes redraw catalog indicators");
 
   state.mosaicWorker = { terminate() { this.terminated = true; } }; state.mosaicWorkerBusy = true; state.mosaicPending = true;
+  state.mosaicPreviewEnabled = false;
   test.releaseMosaicPreview();
   assert.equal(state.mosaicWorker, null); assert.equal(mosaicCanvas.width, 1);
   workerCreated = 0;
-  state.currentImage = { width: 4, height: 3, alpha: 255 }; combinedCanvas.width = 4; combinedCanvas.height = 3;
+  state.currentImage = { width: 4, height: 3, alpha: 255 }; state.candidates = [{ id: "candidate-after-preview-toggle", enabled: true, role: "apply" }]; combinedCanvas.width = 4; combinedCanvas.height = 3;
+  state.mosaicPreviewEnabled = true;
   test.prepareOriginalImage();
   assert.deepEqual([originalCanvas.width, originalCanvas.height], [4, 3]);
   await test.rebuildMosaicPreview();
+  assert.deepEqual([mosaicCanvas.width, mosaicCanvas.height], [4, 3], "re-enabling preview after release reallocates its full canvas before a later candidate preview");
   assert.equal(workerCreated, 1); assert.equal(state.mosaicWorker.posted.length, 2, "preview worker receives one source bitmap and one mask buffer");
   const completedFrame = { close() { this.closed = true; } };
   state.mosaicWorker.onmessage({ data: { type: "frame", sourceId: state.mosaicSourceId, generation: state.mosaicPreviewGeneration, output: completedFrame } });
   assert.ok(mosaicCanvas.ctx.calls.some(([name]) => name === "image"));
+  assert.deepEqual([mosaicCanvas.width, mosaicCanvas.height], [4, 3], "a re-enabled preview draws its worker frame into the reallocated canvas");
   assert.equal(completedFrame.closed, true, "painting a completed worker frame releases its bitmap");
   state.mosaicPreviewRequested = false; test.requestMosaicPreview(); assert.equal(state.mosaicPreviewRequested, false, "preview coalescing resets after the animation frame");
 
@@ -213,5 +218,4 @@ const test = context.canvasCompletion;
   test.drawCandidateBlinkOverlay();
   assert.ok(layerCtx.calls.some(([name]) => name === "fill"), "blink overlay colors each candidate through the viewport layer");
   test.renderNow(); test.flushRender();
-  console.log("test_editor_canvas_completion_runtime: passed");
-})().catch((error) => { console.error(error); process.exitCode = 1; });
+});

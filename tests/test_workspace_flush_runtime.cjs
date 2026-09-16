@@ -2,6 +2,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const vm = require("node:vm");
+const nodeTest = require("node:test");
 
 const workspacePath = path.join(__dirname, "..", "static", "js", "workspace.js");
 const source = fs.readFileSync(workspacePath, "utf8");
@@ -22,12 +23,11 @@ const context = {
 vm.runInNewContext(source, context, { filename: workspacePath });
 vm.runInNewContext("globalThis.workspaceFlushTest={flushAllWorkspaceMutations};", context, { filename: "test-workspace-flush-exports.js" });
 
-(async () => {
+nodeTest("workspace flush runtime contracts", async () => {
   state.workspaceDraftTimers.set("one", setTimeout(() => {}, 5000));
   await context.workspaceFlushTest.flushAllWorkspaceMutations();
   assert.equal(state.workspaceDraftTimers.size, 0, "a pending manual timer is consumed before the global transition settles");
   assert.deepEqual(writes.map(({ url, options }) => [url, options.method]), [["/api/workspace/manual/one", "POST"]], "global flush persists the current manual snapshot exactly once");
   state.workspaceDraftChains.set("one", Promise.resolve().then(() => { throw new Error("write rejected"); }));
   await assert.rejects(context.workspaceFlushTest.flushAllWorkspaceMutations(), /write rejected/, "a rejected queued manual write prevents a global transition");
-  console.log("test_workspace_flush_runtime: passed");
-})().catch((error) => { console.error(error); process.exitCode = 1; });
+});

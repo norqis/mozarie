@@ -2,6 +2,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const vm = require("node:vm");
+const nodeTest = require("node:test");
 
 const staticRoot = path.join(__dirname, "..", "static");
 const index = fs.readFileSync(path.join(staticRoot, "index.html"), "utf8");
@@ -16,7 +17,7 @@ function element() {
     style: {},
     dataset: {},
     children: [],
-    classList: { toggle() {}, add() {} },
+    classList: { toggle() {}, add() {}, contains() { return false; } },
     setAttribute() {},
     append(child) { this.children.push(child); child.parentNode = this; },
     insertBefore(child, before) {
@@ -50,7 +51,7 @@ function binaryResponse(bytes, saveToken = "runtime-render-token", beforePipe = 
 }
 
 function sourceBlob(name, size, lastModified) {
-  return Object.assign(new Blob([new Uint8Array(size)]), { name, lastModified });
+  return new File([new Uint8Array(size)], name, { type: "image/png", lastModified });
 }
 
 function createRuntime({ commit, copy = null, deleteOriginal = false, renderBinary = null, renderToken = "runtime-render-token", entries = null, initialImages = null, removeCatalog = null, saveStatus = null, saveCancel = null, reserve = null, pickOutputDirectory = null }) {
@@ -120,6 +121,7 @@ function createRuntime({ commit, copy = null, deleteOriginal = false, renderBina
     Uint8Array,
     ArrayBuffer,
     Blob,
+    File,
     TextDecoder,
     Intl,
     crypto: { randomUUID: () => `runtime-client-token-${requests.length}` },
@@ -188,6 +190,8 @@ function createRuntime({ commit, copy = null, deleteOriginal = false, renderBina
   const { state, ensureSaveSources, finishApplyJob, runBrowserSave, saveTargets, processableImages, isBusy, catalogStagingEditsActive, selectedSaveMode, chooseOutputDirectory, startApplyFromDialog, startSingleSave, writeSourceHandle, restoreSourceHandle, renderOutputDirectory, pickOutputDirectory: pickOutputDirectoryApi, reserveSaveRender, renderDefaultCopy, renderStreamedSave, commitBrowserSaveWithRetry, acknowledgePendingBrowserSave, translate } = context.__browserSaveRuntime;
   state.images = initialImages || [{ id: "image-1", relativePath: "nested/source.png", width: 32, height: 32, candidateCount: 1, enabledCandidateCount: 1 }];
   state.settings = { saving: { parallelism: 1, default_output_directory: "G:/output" }, confirmations: { overwriteSource: false, deleteSourceAfterCopy: false } };
+  getElement("#applyOutputDirectoryStatus").value = state.settings.saving.default_output_directory;
+  getElement("#singleSaveOutputDirectoryStatus").value = state.settings.saving.default_output_directory;
   state.translations = {
     "apply.complete": "complete {completed}",
     "apply.completeWithStale": "stale {completed}/{stale}",
@@ -228,6 +232,7 @@ async function runSingleCopyKeepsEditorStateCase() {
   runtime.element('input[name="singleSaveMode"]:checked').value = "copy";
   runtime.element("#singleSaveDeleteOriginal").checked = false;
   runtime.element("#singleSaveSuffix").value = "_copy";
+  runtime.element("#singleSaveOutputDirectoryStatus").value = runtime.state.settings.saving.default_output_directory;
 
   await runtime.startSingleSave({ preventDefault() {} });
 
@@ -258,6 +263,7 @@ async function runOutputPermissionSubmissionLockCases() {
   runtime.state.applyTargetIds = ["image-1"];
   runtime.element('input[name="batchSaveMode"]:checked').value = "copy";
   runtime.element("#applySuffix").value = "_locked";
+  runtime.element("#applyOutputDirectoryStatus").value = runtime.state.settings.saving.default_output_directory;
   const firstBatch = runtime.startApplyFromDialog(event);
   const secondBatch = runtime.startApplyFromDialog(event);
   assert.equal(runtime.state.saveStarting, true, "batch locks synchronously before save preflight awaits");
@@ -269,6 +275,7 @@ async function runOutputPermissionSubmissionLockCases() {
 
   const retry = createRuntime({ commit: () => jsonResponse({}), reserve: (() => { let calls = 0; return () => { calls += 1; if (calls === 1) throw Object.assign(new Error("reserve failed"), { status: 500 }); return { state: "rendering" }; }; })() });
   retry.state.applyTargetIds = ["image-1"];
+  retry.element("#applyOutputDirectoryStatus").value = retry.state.settings.saving.default_output_directory;
   await retry.startApplyFromDialog(event);
   assert.equal(retry.state.saveStarting, false, "a rejected reservation releases the batch lock");
   await retry.startApplyFromDialog(event);
@@ -281,6 +288,7 @@ async function runOutputPermissionSubmissionLockCases() {
   single.state.singleSave = { imageId: "image-1", generation: single.state.imageGeneration, divisor: 100, draft: null };
   single.element('input[name="singleSaveMode"]:checked').value = "copy";
   single.element("#singleSaveSuffix").value = "_locked";
+  single.element("#singleSaveOutputDirectoryStatus").value = single.state.settings.saving.default_output_directory;
   const firstSingle = single.startSingleSave(event);
   const secondSingle = single.startSingleSave(event);
   assert.equal(single.state.saveStarting, true, "single save locks synchronously before server reservation awaits");
@@ -349,7 +357,7 @@ async function runBrowserCopyPoolAndWriteOverlapCases() {
   let activeRenders = 0; let maxActiveRenders = 0; let renderStarts = 0;
   const runtime = createRuntime({
     entries, initialImages: images,
-    renderBinary: async () => {
+    copy: async () => {
       activeRenders += 1; maxActiveRenders = Math.max(maxActiveRenders, activeRenders);
       if (++renderStarts === 2) twoRendersStarted.resolve();
       await releaseRenders.promise;
@@ -364,31 +372,6 @@ async function runBrowserCopyPoolAndWriteOverlapCases() {
   assert.equal(maxActiveRenders, 2, "browser copies use the configured bounded save pool");
   releaseRenders.resolve();
   await batch;
-
-  const releaseWrites = deferred(); const twoWritesOpened = deferred();
-  let openedWrites = 0;
-  const files = new Map();
-  const directory = {
-    async getFileHandle(name, options = {}) {
-      if (!files.has(name)) {
-        if (!options.create) throw new DOMException("missing", "NotFoundError");
-        files.set(name, []);
-      }
-      return { async createWritable() {
-        if (++openedWrites === 2) twoWritesOpened.resolve();
-        return { async write(bytes) { files.set(name, [...bytes]); }, async close() {}, async abort() {} };
-      } };
-    },
-    async removeEntry(name) { files.delete(name); },
-  };
-  const slowResponse = (value) => ({ body: { async pipeTo(stream) { await releaseWrites.promise; await stream.write(Uint8Array.from([value])); await stream.close(); } } });
-  const first = runtime.writeSingleOutput(directory, "same.png", "", slowResponse(1));
-  const second = runtime.writeSingleOutput(directory, "same.png", "", slowResponse(2));
-  const overlapped = await Promise.race([twoWritesOpened.promise.then(() => true), new Promise((resolve) => setTimeout(() => resolve(false), 100))]);
-  releaseWrites.resolve();
-  await Promise.all([first, second]);
-  assert.equal(overlapped, true, "copy writes begin together after only their distinct names are reserved");
-  assert.deepEqual([...files.values()], [[1], [2]], "parallel copy writes retain their separate reserved outputs");
 }
 
 async function runBrowserCopyPoolAtScaleCases() {
@@ -397,98 +380,51 @@ async function runBrowserCopyPoolAtScaleCases() {
       imageId: `image-${index}`, relativePath: "nested/same.png", candidateRevision: 7,
     }));
     const images = entries.map((entry) => ({ id: entry.imageId, relativePath: entry.relativePath, width: 32, height: 32, candidateCount: 1, enabledCandidateCount: 1 }));
-    let activeReservations = 0; let maxActiveReservations = 0;
     let activeRenders = 0; let maxActiveRenders = 0;
-    let activeWrites = 0; let maxActiveWrites = 0;
-    const releaseRenders = deferred(); const releaseWrites = deferred();
+    const releaseRenders = deferred();
     const runtime = createRuntime({
       entries, initialImages: images,
-      renderBinary: async ({ options }) => {
+      copy: async ({ options }) => {
         const index = Number(JSON.parse(options.body).imageId.slice("image-".length));
         activeRenders += 1; maxActiveRenders = Math.max(maxActiveRenders, activeRenders);
         if (activeRenders === parallelism) releaseRenders.resolve();
         await releaseRenders.promise;
         activeRenders -= 1;
-        return {
-          ok: true, status: 200,
-          headers: { get: (name) => name === "X-Mozarie-Save-Token" ? `token-${index}` : null },
-          body: { pipeTo: async (stream) => {
-            activeWrites += 1; maxActiveWrites = Math.max(maxActiveWrites, activeWrites);
-            if (activeWrites === parallelism) releaseWrites.resolve();
-            await releaseWrites.promise;
-            await stream.write(Uint8Array.from([index >> 8, index & 0xff])); await stream.close();
-            activeWrites -= 1;
-          } },
-        };
+        return binaryResponse([index >> 8, index & 0xff], `token-${index}`, null, `G:/output/${index}.png`);
       },
       commit: () => jsonResponse({ cleared: false, stale: false, images }),
     });
-    runtime.state.outputDirectoryHandle = {
-      name: "output",
-      async queryPermission() { return "granted"; }, async requestPermission() { return "granted"; },
-      async getFileHandle(name, options = {}) {
-        activeReservations += 1; maxActiveReservations = Math.max(maxActiveReservations, activeReservations);
-        await Promise.resolve();
-        activeReservations -= 1;
-        if (!options.create && !runtime.outputFiles.has(name)) throw new DOMException("missing", "NotFoundError");
-        if (options.create) runtime.outputFiles.set(name, []);
-        return { async createWritable() { return {
-          async write(bytes) { runtime.outputFiles.set(name, [...bytes]); }, async close() {}, async abort() {},
-        }; } };
-      },
-      async removeEntry(name) { runtime.outputFiles.delete(name); },
-    };
     runtime.state.settings.saving.parallelism = parallelism;
     assert.equal(runtime.saveTargets().length, 400, "all 400 catalogue entries remain batch-save targets before copying");
     await runtime.runBrowserSave(entries.map((entry) => entry.imageId), "_censored", false, "copy");
-    assert.equal(maxActiveReservations, 1, "same-name reservations remain serialized while output streams run independently");
     assert.equal(maxActiveRenders, parallelism, `400 browser copies use exactly the configured ${parallelism}-entry render pool`);
-    assert.equal(maxActiveWrites, parallelism, `400 browser copies use exactly the configured ${parallelism}-entry write pool`);
-    assert.equal(runtime.outputFiles.size, 400, "every parallel copy keeps its own reserved output");
-    assert.equal(new Set(runtime.outputFiles.keys()).size, 400, "400 parallel copies reserve unique output names");
-    assert.equal(new Set([...runtime.outputFiles.values()].map((bytes) => bytes.join(","))).size, 400, "400 parallel copies retain their own response bytes");
     assert.equal(runtime.imageFetches(), 0, "a keep-source browser batch skips its final catalogue reload");
     assert.equal(runtime.saveTargets().length, 400, "repeated copy saving keeps all 400 original entries as targets");
     assert.equal(JSON.parse(runtime.requests[0].options.body).imageIds.length, 400, "the prepare request retains all 400 target IDs");
     await runtime.runBrowserSave(entries.map((entry) => entry.imageId), "_censored", false, "copy");
-    assert.equal(runtime.outputFiles.size, 800, "a repeated 400-copy save reserves another distinct set of outputs");
+    assert.equal(runtime.requests.filter((request) => request.path === "/api/save/reserve").length, 800, "a repeated 400-copy save reserves every output independently");
     assert.equal(runtime.saveTargets().length, 400, "a repeated 400-copy save keeps the source target set invariant");
   }
 }
 
-async function runBrowserCopyWriteFailureCancelsRenderCase() {
+async function runBrowserCopyRenderFailureCancelsReservationCase() {
   const entries = Array.from({ length: 400 }, (_, index) => ({ imageId: `failure-${index}`, relativePath: "nested/same.png", candidateRevision: 1 }));
   const images = entries.map((entry) => ({ id: entry.imageId, relativePath: entry.relativePath, width: 32, height: 32, candidateCount: 1, enabledCandidateCount: 1 }));
-  let activeRenders = 0; let activeWrites = 0;
   const runtime = createRuntime({
     entries, initialImages: images,
-    renderBinary: async ({ options }) => {
+    copy: async ({ options }) => {
       const index = Number(JSON.parse(options.body).imageId.slice("failure-".length));
-      activeRenders += 1; await Promise.resolve(); activeRenders -= 1;
-      return {
-        ok: true, status: 200,
-        headers: { get: (name) => name === "X-Mozarie-Save-Token" ? `render-token-${index}` : null },
-        body: { async pipeTo(stream) {
-          activeWrites += 1;
-          try {
-            if (index === 399) throw new Error("write failed");
-            await stream.write(Uint8Array.from([index >> 8, index & 0xff])); await stream.close();
-          } finally { activeWrites -= 1; }
-        } },
-      };
+      if (index === 399) return jsonResponse({ error_code: "save_render_failed" }, 500);
+      return binaryResponse([index >> 8, index & 0xff], `render-token-${index}`, null, `G:/output/${index}.png`);
     },
     commit: () => jsonResponse({ cleared: false, stale: false }),
   });
   runtime.state.settings.saving.parallelism = 8;
-  await assert.rejects(runtime.runBrowserSave(entries.map((entry) => entry.imageId), "_censored", false, "copy"), /write failed/);
+  await assert.rejects(runtime.runBrowserSave(entries.map((entry) => entry.imageId), "_censored", false, "copy"), (error) => error?.code === "save_render_failed");
   const cancellations = runtime.requests.filter((request) => request.path === "/api/save/cancel");
-  assert.equal(cancellations.length, 1, "a browser copy write failure releases its issued render token");
-  assert.equal(JSON.parse(cancellations[0].options.body).saveToken, "render-token-399", "the cancelled token matches the failed output render");
-  assert.equal(runtime.outputFiles.size, 399, "only the failed reservation is removed from a 400-copy batch");
-  assert.ok([...runtime.outputFiles.values()].every((bytes) => bytes.length > 0), "failure cleanup leaves no empty reservation file behind");
-  assert.equal(new Set([...runtime.outputFiles.values()].map((bytes) => bytes.join(","))).size, 399, "successful 400-copy peers retain their own output bytes");
-  assert.equal(activeRenders, 0, "render workers drain after the failed reservation is cancelled");
-  assert.equal(activeWrites, 0, "write workers drain after the failed reservation is cleaned up");
+  assert.equal(cancellations.length, 1, "a browser copy render failure releases its reservation");
+  assert.match(JSON.parse(cancellations[0].options.body).saveToken, /^runtime-client-token-/, "the cancelled token belongs to the failed render reservation");
+  assert.equal(runtime.requests.filter((request) => request.path === "/api/save/commit").length, 399, "only successful browser copies are committed");
 }
 
 async function runBrowserHandleSnapshotSerializationCase() {
@@ -498,16 +434,17 @@ async function runBrowserHandleSnapshotSerializationCase() {
   let activeSnapshots = 0; let maxActiveSnapshots = 0;
   const sourceHandle = (name) => ({
     async queryPermission() { return "granted"; }, async requestPermission() { return "granted"; },
-    async getFile() { return {
-      name, size: 3, lastModified: 1,
-      async arrayBuffer() {
+    async getFile() {
+      const file = new File([Uint8Array.from([1, 2, 3])], name, { type: "image/png", lastModified: 1 });
+      file.arrayBuffer = async () => {
         activeSnapshots += 1; maxActiveSnapshots = Math.max(maxActiveSnapshots, activeSnapshots);
         if (activeSnapshots === 1) firstSnapshot.resolve();
         await releaseSnapshot.promise;
         activeSnapshots -= 1;
         return Uint8Array.from([1, 2, 3]).buffer;
-      },
-    }; },
+      };
+      return file;
+    },
     async createWritable() { return { async write() {}, async close() {}, async abort() {} }; },
   });
   const runtime = createRuntime({ entries, initialImages: images, commit: () => jsonResponse({ cleared: true, stale: false }) });
@@ -530,17 +467,18 @@ async function runBrowserHandleOverwritePoolAtScaleCase() {
   let rejectedImageId = null;
   const sourceHandle = (imageId, name) => ({
     async queryPermission() { return "granted"; }, async requestPermission() { return "granted"; },
-    async getFile() { return {
-      name, size: files.get(imageId).length, lastModified: 1,
-      async arrayBuffer() {
+    async getFile() {
+      const file = new File([Uint8Array.from(files.get(imageId))], name, { type: "image/png", lastModified: 1 });
+      file.arrayBuffer = async () => {
         activeSnapshots += 1; maxActiveSnapshots = Math.max(maxActiveSnapshots, activeSnapshots); snapshotStarts += 1;
         await Promise.resolve(); activeSnapshots -= 1;
         return Uint8Array.from(files.get(imageId)).buffer;
-      },
-    }; },
+      };
+      return file;
+    },
     async createWritable() {
       writableOpens += 1;
-      return { async write(bytes) { files.set(imageId, [...bytes]); }, async close() {}, async abort() {} };
+      return { async write(bytes) { files.set(imageId, [...(bytes instanceof Blob ? new Uint8Array(await bytes.arrayBuffer()) : bytes)]); }, async close() {}, async abort() {} };
     },
   });
   const runtime = createRuntime({
@@ -616,7 +554,7 @@ function runOutputDirectoryDisplayCase() {
   runtime.state.settings.saving.default_output_directory = "G:/configured-output";
   runtime.renderOutputDirectory();
   assert.equal(runtime.element("#applyOutputDirectoryStatus").value, "G:/configured-output", "the configured absolute path is shown for batch copies");
-  assert.equal(runtime.element("#singleSaveOutputDirectoryStatus").textContent, "G:/configured-output", "single save shows the same server-side output path");
+  assert.equal(runtime.element("#singleSaveOutputDirectoryStatus").value, "G:/configured-output", "single save shows the same server-side output path");
 }
 
 async function runSuccessCase() {
@@ -1237,7 +1175,7 @@ async function runSaveKeepsCatalogueAndEditorStateCase() {
   assert.equal(runtime.requests.some((request) => request.path === "/api/catalog/remove"), false, "saving never removes list entries");
 }
 
-(async () => {
+nodeTest("browser save runtime contracts", async () => {
   await runOutputDirectoryPermissionCases();
   await runSingleCopyKeepsEditorStateCase();
   await runOutputPermissionSubmissionLockCases();
@@ -1262,10 +1200,9 @@ async function runSaveKeepsCatalogueAndEditorStateCase() {
   await runConcurrentOutputLockCases();
   await runBrowserCopyPoolAndWriteOverlapCases();
   await runBrowserCopyPoolAtScaleCases();
-  await runBrowserCopyWriteFailureCancelsRenderCase();
+  await runBrowserCopyRenderFailureCancelsReservationCase();
   await runBrowserHandleSnapshotSerializationCase();
   await runBrowserHandleOverwritePoolAtScaleCase();
   await runSingleSaveKeepsReviewAndDraftCase();
   runOutputDirectoryDisplayCase();
-  console.log("test_browser_save_runtime: passed");
-})().catch((error) => { console.error(error); process.exitCode = 1; });
+});

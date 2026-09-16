@@ -2,6 +2,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const vm = require("node:vm");
+const nodeTest = require("node:test");
 
 function canvas(width = 100, height = 80) {
   const target = { width, height, alpha: 0, toBlob(done) { done({}); } };
@@ -294,7 +295,7 @@ assert.ok(overlayCanvas.ctx.calls.length > overlayCalls && overlayCanvas.ctx.cal
 test.renderNow();
 test.render(); test.flushRender();
 
-(async () => {
+nodeTest("editor canvas geometry contracts", async () => {
   // Cache and request helpers are exercised with their real cache ownership
   // rules.  These are the states reached while selecting, replacing, and
   // clearing editor images.
@@ -693,5 +694,4 @@ test.render(); test.flushRender();
   state.boundaryDrafts = [{ id: "missing-points", type: "polygon" }];
   assert.deepEqual(JSON.parse(JSON.stringify(test.boundaryRequests())), [], "a polygon without points takes the same rejected detection path");
   for (const shape of [{ type: "rectangle", roi: { left: 1, top: 1, right: 4, bottom: 4 } }, { type: "polygon", points: validBoundary }, { type: "polygon", points: [{ x: 1, y: 1 }] }, { type: "polygon", points: "" }]) test.drawBoundaryShape(shape);
-  console.log("test_editor_canvas_geometry_runtime: passed");
-})().catch((error) => { console.error(error); process.exitCode = 1; });
+});
