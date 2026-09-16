@@ -690,6 +690,7 @@ class MozarieTests(unittest.TestCase):
             state.candidates[image_id] = [Candidate("candidate", "penis", 0.9, mask_path)]
             self.commit_candidates(state, image_id)
             entered = threading.Event(); release = threading.Event()
+            factory_reached = threading.Event(); allow_factory = threading.Event()
             toggle_attempted = threading.Event(); failures: list[BaseException] = []
             original_save = state.workspace_store.save_manual
             underlying_lock = state.image_io_lock(image_id)
@@ -704,6 +705,12 @@ class MozarieTests(unittest.TestCase):
                 def __exit__(self, *_args):
                     underlying_lock.release()
 
+            def image_lock(requested_id: str):
+                if threading.current_thread() is toggle:
+                    factory_reached.set()
+                    self.assertTrue(allow_factory.wait(THREAD_TIMEOUT))
+                return ObservedImageLock()
+
             def delayed_save(*args, **kwargs):
                 entered.set()
                 self.assertTrue(release.wait(THREAD_TIMEOUT))
@@ -717,24 +724,23 @@ class MozarieTests(unittest.TestCase):
 
             def toggle_candidate() -> None:
                 try:
-                    with state.image_io_lock(image_id):
-                        pass
                     state.set_candidate_state(image_id, "candidate", {"enabled": False})
                 except BaseException as exc:
                     failures.append(exc)
 
             draft = {"add": "", "exclusion": "", "exclusionErase": "", "removedCandidateIds": [], "candidateRevision": 1, "hasEffectiveMask": False}
             with patch.object(state.workspace_store, "save_manual", side_effect=delayed_save), \
-                 patch.object(state, "image_io_lock", return_value=ObservedImageLock()):
+                 patch.object(state, "image_io_lock", side_effect=image_lock):
                 manual = threading.Thread(target=save_manual)
                 toggle = threading.Thread(target=toggle_candidate)
                 try:
+                    toggle.start(); self.assertTrue(factory_reached.wait(THREAD_TIMEOUT))
                     manual.start(); self.assertTrue(entered.wait(THREAD_TIMEOUT))
-                    toggle.start(); self.assertTrue(toggle_attempted.wait(THREAD_TIMEOUT))
+                    allow_factory.set(); self.assertTrue(toggle_attempted.wait(THREAD_TIMEOUT))
                     self.assertTrue(toggle.is_alive())
                     release.set()
                 finally:
-                    release.set()
+                    release.set(); allow_factory.set()
                     join_threads(manual, toggle)
             self.assertEqual(failures, [])
             revision = state._candidate_revision(image_id)
@@ -3081,7 +3087,7 @@ class MozarieTests(unittest.TestCase):
             thread = threading.Thread(
                 target=run_apply,
             )
-            with patch.object(state, "_reserve_output_destination", side_effect=lambda record, suffix, _directory: output_destination(record, suffix, state.reserved_output_paths)), \
+            with patch.object(state, "_reserve_output_destination", side_effect=lambda record, suffix, _directory, *_args: output_destination(record, suffix, state.reserved_output_paths)), \
                  patch.object(saving_module, "render_output", side_effect=render_in_inverse_order):
                 try:
                     thread.start()
@@ -3147,7 +3153,7 @@ class MozarieTests(unittest.TestCase):
                 args=(records, 100, masks),
                 kwargs={"copy_to_default": True, "saving_parallelism": 2},
             )
-            with patch.object(state, "_reserve_output_destination", side_effect=lambda record, suffix, _directory: output_destination(record, suffix, state.reserved_output_paths)), \
+            with patch.object(state, "_reserve_output_destination", side_effect=lambda record, suffix, _directory, *_args: output_destination(record, suffix, state.reserved_output_paths)), \
                  patch.object(saving_module, "render_output", side_effect=fail_first_render), \
                  patch.object(saving_module, "write_rendered_copy"):
                 try:
@@ -6021,6 +6027,7 @@ class MozarieTests(unittest.TestCase):
 
                 def __exit__(self, *_args):
                     underlying_lock.release()
+
             def delayed_open(path, *args, **kwargs):
                 if Path(path) == mask_path:
                     opened.set()
@@ -6035,8 +6042,6 @@ class MozarieTests(unittest.TestCase):
 
             def mutate() -> None:
                 try:
-                    with state.image_io_lock(image_id):
-                        pass
                     state.set_candidate_state(image_id, "candidate", {"enabled": False})
                 except Exception as exc:
                     outcome["mutation_error"] = exc
@@ -6255,7 +6260,7 @@ class MozarieTests(unittest.TestCase):
             def colliding_destination(_record, _suffix, reserved):
                 return output if output not in reserved else root / "output_2.png"
 
-            with patch.object(state, "_reserve_output_destination", side_effect=lambda record, suffix, _directory: colliding_destination(record, suffix, state.reserved_output_paths)):
+            with patch.object(state, "_reserve_output_destination", side_effect=lambda record, suffix, _directory, *_args: colliding_destination(record, suffix, state.reserved_output_paths)):
                 state._apply_worker(
                     records, 100, {first_id: np.zeros((16, 16), dtype=np.uint8), second_id: self._mask(16, 16)},
                     copy_to_default=True, saving_parallelism=2,
@@ -6319,7 +6324,7 @@ class MozarieTests(unittest.TestCase):
                 kwargs={"copy_to_default": True, "saving_parallelism": 3},
             )
             with patch.object(state, "combined_candidate_mask", side_effect=compose), \
-                patch.object(state, "_reserve_output_destination", side_effect=lambda record, _suffix, _directory: output_paths[record.image_id]), \
+                patch.object(state, "_reserve_output_destination", side_effect=lambda record, _suffix, _directory, *_args: output_paths[record.image_id]), \
                  patch.object(saving_module, "render_with_mask", return_value=b"rendered"), \
                  patch.object(saving_module, "write_rendered_copy"):
                 try:

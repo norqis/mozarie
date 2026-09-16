@@ -258,28 +258,40 @@ class JobsSavingCoverageTests(unittest.TestCase):
         for kind, terminal in (("detect", "complete"), ("apply", "complete"), ("detect", "cancelled"), ("detect", "failed"), ("detect", "oom")):
             with self.subTest(kind=kind, terminal=terminal):
                 state = self.make_jobs()
+                state.job_generation = 0
                 record = SimpleNamespace(image_id="one")
                 retained_tracebacks = []
+                failures: list[BaseException] = []
+                terminal_reached = threading.Event()
+                cleanup_finished = threading.Event()
 
                 def worker(_records, *, control, job_generation, catalog_generation):
-                    if terminal == "complete":
-                        state._finish_job(job_generation, catalog_generation)
-                    elif terminal == "cancelled":
-                        state._cancel_job(job_generation, catalog_generation)
-                    else:
-                        try:
-                            raise RuntimeError("CUDA out of memory" if terminal == "oom" else "failure")
-                        except RuntimeError as exc:
-                            state._fail_job(exc, job_generation, catalog_generation)
-                            retained_tracebacks.append(exc.__traceback__)
-                    release.assert_not_called()
+                    try:
+                        if terminal == "complete":
+                            state._finish_job(job_generation, catalog_generation)
+                        elif terminal == "cancelled":
+                            state._cancel_job(job_generation, catalog_generation)
+                        else:
+                            try:
+                                raise RuntimeError("CUDA out of memory" if terminal == "oom" else "failure")
+                            except RuntimeError as exc:
+                                state._fail_job(exc, job_generation, catalog_generation)
+                                retained_tracebacks.append(exc.__traceback__)
+                        release.assert_not_called()
+                    except BaseException as exc:
+                        failures.append(exc)
+                    finally:
+                        terminal_reached.set()
 
-                with patch.object(state, "_release_gpu_job_memory") as release:
+                with patch.object(state, "_release_gpu_job_memory", side_effect=cleanup_finished.set) as release:
                     state._start_job(kind, [record], worker)
                     assert state.worker_thread is not None
-                    state.worker_thread.join(THREAD_TIMEOUT)
-                    self.assertFalse(state.worker_thread.is_alive())
+                    join_threads(state.worker_thread)
                 release.assert_called_once_with()
+                self.assertTrue(terminal_reached.is_set())
+                self.assertTrue(cleanup_finished.is_set())
+                self.assertEqual(failures, [])
+                self.assertEqual(state.job.state, {"complete": "complete", "cancelled": "cancelled", "failed": "error", "oom": "error"}[terminal])
                 if terminal == "oom":
                     self.assertEqual(retained_tracebacks, [None])
 
@@ -348,6 +360,7 @@ class JobsSavingCoverageTests(unittest.TestCase):
         def cleanup_memory() -> None:
             try:
                 state._release_gpu_job_memory()
+                cleanup_result["success"] = True
             except BaseException as exc:
                 cleanup_result["error"] = exc
 
@@ -381,6 +394,7 @@ class JobsSavingCoverageTests(unittest.TestCase):
         self.assertTrue(settings_entered.is_set())
         self.assertTrue(boundary_entered.is_set())
         self.assertNotIn("error", cleanup_result)
+        self.assertTrue(cleanup_result.get("success"))
 
     def test_job_races_and_remaining_worker_branches(self) -> None:
         state = self.make_jobs()
