@@ -303,7 +303,7 @@ try {{
   $owner.Size = New-Object System.Drawing.Size(1, 1)
   $owner.Show(); $owner.Activate(); $owner.BringToFront()
   $dialog.Filter = 'Model files ({pattern})|{pattern}'
-  $dialog.CheckFileExists = $true; $dialog.Multiselect = $false; $dialog.RestoreDirectory = $true
+  $dialog.AutoUpgradeEnabled = $true; $dialog.CheckFileExists = $true; $dialog.Multiselect = $false; $dialog.RestoreDirectory = $true
   $initial = $env:MOZARIE_MODEL_INITIAL_DIRECTORY
   if ($initial -and [System.IO.Directory]::Exists($initial)) {{ $dialog.InitialDirectory = $initial }}
   if ($dialog.ShowDialog($owner) -ne [System.Windows.Forms.DialogResult]::OK) {{ exit 0 }}
@@ -330,21 +330,127 @@ def _pick_output_directory(state: StudioState = STATE, current_path: str = "") -
         if state.active_import_count or state.job.state in {"running", "pausing", "paused"} or state._has_active_worker():
             raise ClientError("処理中は保存先を変更できません。", "job_running")
     script = """
+$ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
+Add-Type -TypeDefinition @"
+using System;
+using System.Runtime.InteropServices;
+
+namespace Mozarie {
+  [ComImport, Guid("42F85136-DB7E-439C-85F1-E4075D135FC8"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+  internal interface IFileDialog {
+    [PreserveSig] int Show(IntPtr parent);
+    [PreserveSig] int SetFileTypes(uint count, IntPtr filters);
+    [PreserveSig] int SetFileTypeIndex(uint index);
+    [PreserveSig] int GetFileTypeIndex(out uint index);
+    [PreserveSig] int Advise(IntPtr events, out uint cookie);
+    [PreserveSig] int Unadvise(uint cookie);
+    [PreserveSig] int SetOptions(uint options);
+    [PreserveSig] int GetOptions(out uint options);
+    [PreserveSig] int SetDefaultFolder(IShellItem folder);
+    [PreserveSig] int SetFolder(IShellItem folder);
+    [PreserveSig] int GetFolder(out IShellItem folder);
+    [PreserveSig] int GetCurrentSelection(out IShellItem item);
+    [PreserveSig] int SetFileName([MarshalAs(UnmanagedType.LPWStr)] string name);
+    [PreserveSig] int GetFileName(out IntPtr name);
+    [PreserveSig] int SetTitle([MarshalAs(UnmanagedType.LPWStr)] string title);
+    [PreserveSig] int SetOkButtonLabel([MarshalAs(UnmanagedType.LPWStr)] string label);
+    [PreserveSig] int SetFileNameLabel([MarshalAs(UnmanagedType.LPWStr)] string label);
+    [PreserveSig] int GetResult(out IShellItem item);
+    [PreserveSig] int AddPlace(IShellItem item, int placement);
+    [PreserveSig] int SetDefaultExtension([MarshalAs(UnmanagedType.LPWStr)] string extension);
+    [PreserveSig] int Close(int result);
+    [PreserveSig] int SetClientGuid(ref Guid guid);
+    [PreserveSig] int ClearClientData();
+    [PreserveSig] int SetFilter(IntPtr filter);
+  }
+
+  [ComImport, Guid("43826D1E-E718-42EE-BC55-A1E261C37BFE"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+  internal interface IShellItem {
+    [PreserveSig] int BindToHandler(IntPtr bindContext, ref Guid handlerId, ref Guid interfaceId, out IntPtr result);
+    [PreserveSig] int GetParent(out IShellItem parent);
+    [PreserveSig] int GetDisplayName(uint displayName, out IntPtr name);
+    [PreserveSig] int GetAttributes(uint mask, out uint attributes);
+    [PreserveSig] int Compare(IShellItem other, uint hint, out int order);
+  }
+
+  [ComImport, Guid("DC1C5A9C-E88A-4DDE-A5A1-60F82A20AEF7")]
+  internal class FileOpenDialogClass { }
+
+  public static class NativeFolderPicker {
+    private const uint FOS_NOCHANGEDIR = 0x00000008;
+    private const uint FOS_PICKFOLDERS = 0x00000020;
+    private const uint FOS_FORCEFILESYSTEM = 0x00000040;
+    private const uint FOS_PATHMUSTEXIST = 0x00000800;
+    private const uint SIGDN_FILESYSPATH = 0x80058000;
+    private const int ERROR_CANCELLED = unchecked((int)0x800704C7);
+
+    [DllImport("shell32.dll", CharSet = CharSet.Unicode, PreserveSig = true)]
+    private static extern int SHCreateItemFromParsingName(
+      [MarshalAs(UnmanagedType.LPWStr)] string path,
+      IntPtr bindContext,
+      ref Guid interfaceId,
+      [MarshalAs(UnmanagedType.Interface)] out IShellItem item);
+
+    private static void Check(int result) {
+      if (result == 0) return;
+      Marshal.ThrowExceptionForHR(result);
+      throw new COMException("Windows shell operation failed.", result);
+    }
+
+    private static void Release(object value) {
+      if (value != null && Marshal.IsComObject(value)) Marshal.ReleaseComObject(value);
+    }
+
+    public static string PickFolder(IntPtr owner, string initialDirectory) {
+      IFileDialog dialog = null;
+      IShellItem initial = null;
+      IShellItem selected = null;
+      IntPtr path = IntPtr.Zero;
+      try {
+        dialog = (IFileDialog)new FileOpenDialogClass();
+        uint options;
+        Check(dialog.GetOptions(out options));
+        Check(dialog.SetOptions(options | FOS_PICKFOLDERS | FOS_FORCEFILESYSTEM | FOS_PATHMUSTEXIST | FOS_NOCHANGEDIR));
+        if (!String.IsNullOrWhiteSpace(initialDirectory)) {
+          Guid shellItemId = typeof(IShellItem).GUID;
+          Check(SHCreateItemFromParsingName(initialDirectory, IntPtr.Zero, ref shellItemId, out initial));
+          Check(dialog.SetFolder(initial));
+        }
+        int result = dialog.Show(owner);
+        if (result == ERROR_CANCELLED) return null;
+        Check(result);
+        Check(dialog.GetResult(out selected));
+        Check(selected.GetDisplayName(SIGDN_FILESYSPATH, out path));
+        return Marshal.PtrToStringUni(path);
+      } finally {
+        if (path != IntPtr.Zero) Marshal.FreeCoTaskMem(path);
+        Release(selected);
+        Release(initial);
+        Release(dialog);
+      }
+    }
+  }
+}
+"@
 $owner = New-Object System.Windows.Forms.Form
-$dialog = New-Object System.Windows.Forms.FolderBrowserDialog
 try {
   $owner.ShowInTaskbar = $false; $owner.Opacity = 0; $owner.TopMost = $true
   $owner.StartPosition = [System.Windows.Forms.FormStartPosition]::CenterScreen
   $owner.Size = New-Object System.Drawing.Size(1, 1)
   $owner.Show(); $owner.Activate(); $owner.BringToFront()
   $initial = $env:MOZARIE_OUTPUT_INITIAL_DIRECTORY
-  if ($initial -and [System.IO.Directory]::Exists($initial)) { $dialog.SelectedPath = $initial }
-  if ($dialog.ShowDialog($owner) -ne [System.Windows.Forms.DialogResult]::OK) { exit 0 }
-  $bytes = [System.Text.Encoding]::UTF8.GetBytes($dialog.SelectedPath)
-  [Console]::Out.Write([Convert]::ToBase64String($bytes))
-} finally { $dialog.Dispose(); $owner.Close(); $owner.Dispose() }
+  if (-not ($initial -and [System.IO.Directory]::Exists($initial))) { $initial = $null }
+  $selected = [Mozarie.NativeFolderPicker]::PickFolder($owner.Handle, $initial)
+  if ($null -ne $selected) {
+    $bytes = [System.Text.Encoding]::UTF8.GetBytes($selected)
+    [Console]::Out.Write([Convert]::ToBase64String($bytes))
+  }
+} catch {
+  [Console]::Error.WriteLine($_.Exception.Message)
+  exit 1
+} finally { $owner.Close(); $owner.Dispose() }
 """
     environment = os.environ.copy()
     candidate = _picker_hint_path(current_path) if isinstance(current_path, str) else None
