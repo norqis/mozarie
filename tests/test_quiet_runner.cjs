@@ -191,6 +191,10 @@ async function runFrontendCases() {
 }
 
 assert.deepEqual(runner.parseArguments(["frontend", "--artifacts", "coverage-artifacts"]).suite, "frontend", "the requested suite is parsed");
+assert.deepEqual(runner.parseArguments(["backend", "--shard-index", "1", "--shard-total", "2"]).shardIndex, 1, "a backend shard has a stable zero-based index");
+assert.throws(() => runner.parseArguments(["backend", "--shard-index", "2", "--shard-total", "2"]), /usage/, "an out-of-range backend shard is rejected before execution");
+assert.equal(runner.parseArguments(["backend-aggregate", "--shard-artifacts", "coverage-artifacts"]).suite, "backend-aggregate", "the aggregate runner requires downloaded shard artifacts");
+assert.throws(() => runner.parseArguments(["backend-aggregate"]), /usage/, "aggregate cannot run without shard artifacts");
 assert.deepEqual(runner.coverageRates('<coverage line-rate="1" branch-rate="1"/>'), { line: 100, branch: 100 }, "coverage rates are summarized as percentages");
 assert.doesNotThrow(() => runner.verifyBackendCoverage('<coverage><class filename="server.py" line-rate="0" branch-rate="0"/><class filename="updater.py" line-rate="0" branch-rate="0"/><class filename="setup_gpu_check.py" line-rate="0" branch-rate="0"/></coverage>'), "required files are reported without a numeric coverage gate");
 assert.throws(() => runner.verifyBackendCoverage('<coverage><class filename="server.py" line-rate="1" branch-rate="1"/></coverage>'), /missing required files: updater.py/, "missing required coverage is rejected");

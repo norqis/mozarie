@@ -13,6 +13,7 @@
 | 手動ID | CIで確認する規則 | 実テスト | 手動で残す部分 |
 | --- | --- | --- | --- |
 | SD-141 | 新規設定の相対モデル・保存先を拒否し、該当タブと入力欄を案内する | `tests.test_absolute_path_regression.AbsolutePathRegressionTests.test_relative_model_and_output_paths_are_rejected_for_new_settings`、`tests/test_settings_runtime.cjs` | 実在するモデル選択時の表示 |
+| CI-001 | Windows backendの全`unittest`を安定した二shardへ一度ずつ分配し、失敗・skip・manifestの欠損/重複を集計jobで失敗にしてcoverageを結合する | `tests/test_backend_shard_runner.cjs`、`tests/test_quiet_runner.cjs`、`.github/workflows/tests.yml` | GitHub Actionsの実runner負荷、cache命中率、実行時間 |
 | SD-142 | 旧設定の相対モデル・保存先を一度だけ絶対化して保存する | `tests.test_absolute_path_regression.AbsolutePathRegressionTests.test_legacy_relative_paths_are_migrated_to_absolute_paths_once` | 実際の起動、既存local.json、利用者の作業フォルダーでの表示 |
 | SD-144 | 保存先選択後も未保存の一般設定入力を保持し、Windows絶対パスだけを保存先として受け付ける | `tests/test_import_picker_e2e.cjs`、`tests/test_settings_runtime.cjs` | OSの保存先ダイアログ、実UNCパス、選択取消時の表示 |
 | SD-145 | 実行中に選択GPUのONNX providerが存在しない場合、起動を停止し設定状態でGPU未準備を返す。テストは製品`.venv`を使わない | `tests.test_runtime_profile.RuntimeProfileTests.test_preflight_allows_empty_environment_and_rejects_unusable_runtime`、`tests.test_runtime_contract.RuntimeContractTests.test_onnx_status_does_not_treat_cuda_torch_as_a_cuda_execution_provider`、`tests.test_server.MozarieTests.test_settings_status_rejects_a_gpu_when_onnx_exports_only_cpu`、`tests/test_quiet_runner.cjs` | 実GPUと実CUDA/DirectML DLLでの起動・設定表示 |
