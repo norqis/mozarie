@@ -924,7 +924,7 @@ class SavingMixin:
                                 manual_exclude_forced=manual_exclude_forced,
                                 removed_candidate_ids=removed_candidate_ids,
                             )
-                    except Exception:
+                    except OSError:
                         raise
                     no_effect = (mask is None or not np.any(mask)) and output_format_matches_source(record, output_format) and keep_metadata and \
                         record.flip_horizontal == record.source_flip_horizontal and record.flip_vertical == record.source_flip_vertical
@@ -989,8 +989,15 @@ class SavingMixin:
                         output_path.parent.mkdir(parents=True, exist_ok=True)
                     rendered_dir = (output_path.parent / ".mozarie-staging") if copy_to_default else (self.cache_dir / "apply-render")
                     rendered_dir.mkdir(parents=True, exist_ok=True)
-                    with tempfile.NamedTemporaryFile(dir=rendered_dir, suffix=output_suffix, delete=False) as handle:
-                        stage_path = Path(handle.name); handle.write(output); handle.flush()
+                    stage_path: Path | None = None
+                    try:
+                        with tempfile.NamedTemporaryFile(dir=rendered_dir, suffix=output_suffix, delete=False) as handle:
+                            stage_path = Path(handle.name); handle.write(output); handle.flush(); os.fsync(handle.fileno())
+                    except Exception:
+                        if stage_path is not None:
+                            stage_path.unlink(missing_ok=True)
+                        raise
+                    assert stage_path is not None
                     save_token = f"apply-{uuid.uuid4().hex}"
                     stage_stat = stage_path.stat()
                     self.save_journal.reserve(save_token, record.image_id, record.asset_revision, output_path if copy_to_default else None, stage_path)

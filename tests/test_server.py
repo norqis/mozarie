@@ -6052,7 +6052,13 @@ class MozarieTests(unittest.TestCase):
             )
             self.assertEqual([candidate.candidate_id for candidate in state.candidates[first_id]], ["candidate"])
             self.assertTrue(mask_path.is_file())
-            self.assertEqual(state.manual_workspace(first_id)["add"], manual)
+            restored = state.manual_workspace(first_id)["add"]
+            self.assertTrue(restored.startswith("data:image/png;base64,"))
+            with Image.open(io.BytesIO(base64.b64decode(restored.split(",", 1)[1]))) as normalized, \
+                    Image.open(io.BytesIO(manual_png.getvalue())) as original:
+                normalized_alpha = normalized.getchannel("A") if normalized.mode in {"RGBA", "LA"} else normalized.convert("L")
+                original_alpha = original.getchannel("A") if original.mode in {"RGBA", "LA"} else original.convert("L")
+                self.assertTrue(np.array_equal(np.asarray(normalized_alpha), np.asarray(original_alpha)))
             self.assertFalse(state.manual_workspace(first_id)["manualEnabled"])
             self.assertEqual(state.workspace_store.image_state(first_id), (False, False))
             self.assertEqual(second.read_bytes(), original_second)
@@ -8573,6 +8579,34 @@ image_io._stage_record_replacement(record, rendered, (source.stat().st_mtime_ns,
             self.assertEqual(list(output.rglob("*.png")), [])
             self.assertEqual(state._candidate_revision(image_id), revision)
 
+    def test_background_copy_fsync_failure_does_not_publish_or_change_workspace(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); source = root / "source.png"; output = root / "copies"; output.mkdir()
+            Image.new("RGB", (16, 16), "white").save(source)
+            original = source.read_bytes()
+            state = self.new_state(); image_id = state.set_root(str(root))[0]["id"]
+            record = state.image_for_id(image_id)
+            mask_path = state.cache_dir / image_id / "candidate.png"; mask_path.parent.mkdir(parents=True, exist_ok=True)
+            Image.fromarray(self._mask(16, 16)).save(mask_path)
+            candidate = Candidate("candidate", "penis", .9, mask_path)
+            state.candidates[image_id] = [candidate]; revision = state._touch_candidates(image_id)
+            fsync_calls: list[int] = []
+
+            def fail_fsync(descriptor: int) -> None:
+                fsync_calls.append(descriptor)
+                raise OSError("simulated staging sync failure")
+
+            with patch.object(saving_module.os, "fsync", side_effect=fail_fsync):
+                state._apply_worker([record], 100, {image_id: self._mask(16, 16)}, copy_to_default=True, output_directory=output)
+
+            self.assertEqual(state.job.state, "error")
+            self.assertEqual(len(fsync_calls), 1)
+            self.assertEqual(list(output.rglob("*.png")), [])
+            self.assertEqual(source.read_bytes(), original)
+            self.assertEqual(state.candidates[image_id], [candidate])
+            self.assertTrue(mask_path.is_file())
+            self.assertEqual(state._candidate_revision(image_id), revision)
+
     def test_background_copy_reassigns_when_an_external_file_appears_after_reservation(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory); source = root / "source.png"; output = root / "copies"; output.mkdir()
@@ -8835,7 +8869,7 @@ image_io._stage_record_replacement(record, rendered, (source.stat().st_mtime_ns,
                 patch.object(state, "_records_for_ids_with_catalog", return_value=([], state.catalog_generation)), \
                 patch.object(state, "_start_job") as start:
             state.start_detection([], .6, 3)
-        self.assertEqual(start.call_args.args[-2], {"penis"})
+        self.assertEqual(start.call_args.args[-3], {"penis"})
 
     def test_detection_worker_cancel_stale_directml_and_outer_error_paths(self):
         state = self.new_state()
