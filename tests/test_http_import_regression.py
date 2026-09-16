@@ -126,6 +126,25 @@ class FolderLoadLoggingContractTests(unittest.TestCase):
         self.assertEqual(raised.exception.params, {"failures": [{"relativePath": "locked", "reason": "scan_unreadable"}]})
         self.assertEqual(state.catalog_snapshot(), before)
 
+    def test_folder_scan_reports_access_loss_before_any_image_as_incomplete(self) -> None:
+        previous = self.root / "previous"; previous.mkdir(); self.write_png(previous / "previous.png")
+        folder = self.root / "permission-loss-empty"; folder.mkdir()
+        state = self.new_state(); state.set_root(str(previous)); before = state.catalog_snapshot()
+        native_walk = catalog_module.os.walk
+
+        def inaccessible_walk(path: Path, *, onerror):
+            if path == folder:
+                onerror(PermissionError(13, "access denied", str(folder / "locked")))
+                return
+            yield from native_walk(path, onerror=onerror)
+
+        with patch.object(catalog_module.os, "walk", inaccessible_walk), self.assertRaisesRegex(ClientError, "最後まで") as raised:
+            state.set_root(str(folder))
+
+        self.assertEqual(raised.exception.error_code, "image_read_failed")
+        self.assertEqual(raised.exception.params, {"failures": [{"relativePath": "locked", "reason": "scan_unreadable"}]})
+        self.assertEqual(state.catalog_snapshot(), before)
+
     def test_empty_and_unreadable_folders_keep_the_previous_catalog(self) -> None:
         previous = self.root / "previous"
         previous.mkdir()

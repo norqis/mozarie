@@ -659,7 +659,10 @@ class WorkspaceStore:
         return {"id": str(row["source_id"]), "kind": str(row["kind"]), "displayName": str(row["display_name"]),
                 "nativePath": row["native_path"], "identity": str(row["source_identity"])}
 
-    def relink_native_source(self, catalog_id: str, source_id: str, root: Path, records: list[Any], *, allow_new: bool) -> dict[str, dict[str, Any]]:
+    def relink_native_source(
+        self, catalog_id: str, source_id: str, root: Path, records: list[Any], *, allow_new: bool,
+        transform_rollback: list[tuple[str, int, int, int]] | None = None,
+    ) -> dict[str, dict[str, Any]]:
         identity = native_source_identity(root)
         incoming_paths = {str(record.relative_path) for record in records}
         def update_source(db: sqlite3.Connection, now: int) -> None:
@@ -679,7 +682,45 @@ class WorkspaceStore:
             db.execute("""UPDATE project_sources SET display_name=?,native_path=?,source_identity=?
                 WHERE catalog_id=? AND source_id=?""", (root.name or identity, identity, identity, catalog_id, source_id))
             db.execute("UPDATE catalogs SET source_root=?,updated_at=? WHERE catalog_id=?", (identity, now, catalog_id))
-        return self.reconcile_images(catalog_id, records, source_id=source_id, allow_new=allow_new, before_reconcile=update_source)
+        return self.reconcile_images(
+            catalog_id, records, source_id=source_id, allow_new=allow_new,
+            before_reconcile=update_source, transform_rollback=transform_rollback,
+        )
+
+    def rollback_native_relink(
+        self, catalog_id: str, source_id: str, previous_source: dict[str, Any], previous_project: dict[str, Any],
+        transform_rollback: list[tuple[str, int, int, int]],
+    ) -> None:
+        """Restore the durable source metadata when its live publication fails."""
+        with self._lock, self._connect() as db:
+            db.execute("BEGIN IMMEDIATE")
+            try:
+                cursor = db.execute(
+                    """UPDATE project_sources SET display_name=?,native_path=?,source_identity=?
+                       WHERE catalog_id=? AND source_id=? AND kind='native-folder'""",
+                    (
+                        previous_source["displayName"], previous_source["nativePath"], previous_source["identity"],
+                        catalog_id, source_id,
+                    ),
+                )
+                if not cursor.rowcount:
+                    raise ProjectSourceUnavailableError("native project source is missing")
+                db.execute(
+                    "UPDATE catalogs SET source_root=?,updated_at=? WHERE catalog_id=?",
+                    (previous_project["sourceRoot"], previous_project["updatedAt"], catalog_id),
+                )
+                for image_id, source_horizontal, source_vertical, revision in transform_rollback:
+                    cursor = db.execute(
+                        """UPDATE image_transforms SET source_flip_horizontal=?,source_flip_vertical=?,revision=?
+                           WHERE image_id=? AND revision=?""",
+                        (source_horizontal, source_vertical, revision, image_id, revision + 1),
+                    )
+                    if not cursor.rowcount:
+                        raise RuntimeError("native relink transform rollback was superseded")
+                db.execute("COMMIT")
+            except Exception:
+                db.execute("ROLLBACK")
+                raise
 
     def reconcile_native_source(self, catalog_id: str, source_id: str, root: Path, records: list[Any]) -> dict[str, dict[str, Any]]:
         identity = str(root.resolve())

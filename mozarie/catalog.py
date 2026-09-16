@@ -622,10 +622,10 @@ class CatalogMixin:
                 root,
                 "\n".join(f"- {failure['relativePath']} ({failure['reason']})" for failure in sorted(scan_failures, key=lambda item: (item["relativePath"].casefold(), item["relativePath"]))),
             )
-        if not candidate_count:
-            raise ClientError("指定フォルダーに対応画像がありません。", "image_read_failed")
         if scan_interrupted:
             raise ClientError("指定フォルダーを最後まで読み込めませんでした。", "image_read_failed", {"failures": scan_failures})
+        if not candidate_count:
+            raise ClientError("指定フォルダーに対応画像がありません。", "image_read_failed")
         if not records:
             raise ClientError("指定フォルダーの対応画像を読み込めませんでした。", "image_read_failed", {"failures": scan_failures})
         # A fresh unnamed folder becomes durable only after every source image
@@ -647,16 +647,36 @@ class CatalogMixin:
                 raise
         records.sort(key=lambda record: (record.relative_path.casefold(), record.relative_path))
         prehydrated: dict[str, tuple[int, list[Candidate]]] | None = None
+        relink_previous_source: dict[str, Any] | None = None
+        relink_previous_project: dict[str, Any] | None = None
+        relink_transform_rollback: list[tuple[str, int, int, int]] = []
+        relink_committed = False
+
+        def rollback_native_relink() -> None:
+            if not relink_committed or relink_previous_source is None or relink_previous_project is None:
+                return
+            self.workspace_store.rollback_native_relink(
+                catalog_id, source_id, relink_previous_source, relink_previous_project, relink_transform_rollback,
+            )
+
         try:
             if created_projectless_stored is not None:
                 stored = created_projectless_stored
             elif staging:
                 stored = self.workspace_store.preview_reconcile_images(catalog_id, source_id, records)
             elif relink_source_id:
+                relink_previous_source = self.workspace_store.native_source(catalog_id, source_id)
+                relink_previous_project = self.workspace_store.project(catalog_id)
+                if relink_previous_project is None:
+                    raise ValueError("project is missing")
                 preview = self.workspace_store.preview_reconcile_images(catalog_id, source_id, records)
                 staged_records, _staged_mismatches = self._apply_source_state(records, preview, source_id, root, keep_unstored=allow_new)
                 prehydrated = self._stage_workspace_candidates(staged_records)
-                stored = self.workspace_store.relink_native_source(catalog_id, source_id, root, records, allow_new=allow_new)
+                stored = self.workspace_store.relink_native_source(
+                    catalog_id, source_id, root, records, allow_new=allow_new,
+                    transform_rollback=relink_transform_rollback,
+                )
+                relink_committed = True
             elif catalog_id is not None:
                 preview = self.workspace_store.preview_reconcile_images(catalog_id, source_id, records)
                 staged_records, _staged_mismatches = self._apply_source_state(records, preview, source_id, root, keep_unstored=allow_new)
@@ -685,7 +705,11 @@ class CatalogMixin:
             if relink_source_id:
                 raise ClientError("元フォルダーを読み込めません。", "project_source_unavailable") from exc
             raise
-        records, source_mismatches = self._apply_source_state(records, stored, source_id, root)
+        try:
+            records, source_mismatches = self._apply_source_state(records, stored, source_id, root)
+        except Exception:
+            rollback_native_relink()
+            raise
         source_image_ids = {record.image_id for record in records}
         if staged_source_mismatches is not None:
             staged_source_mismatches.update(source_mismatches)
@@ -720,6 +744,7 @@ class CatalogMixin:
                 prehydrated = self._stage_workspace_candidates(records)
             publish_sources = self.workspace_store.project_sources(catalog_id) if catalog_id is not None else []
         except Exception:
+            rollback_native_relink()
             if created_projectless_id is not None:
                 self.workspace_store.delete_project(created_projectless_id)
             raise
@@ -735,6 +760,7 @@ class CatalogMixin:
                                            publish_source_mismatches=publish_mismatches if catalog_id is not None else None,
                                            publish_sources=publish_sources)
         except Exception:
+            rollback_native_relink()
             if created_projectless_id is not None:
                 self.workspace_store.delete_project(created_projectless_id)
             raise

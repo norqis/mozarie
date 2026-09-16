@@ -144,6 +144,36 @@ class ProjectNativeRelinkHttpTests(unittest.TestCase):
         self.assertEqual(self.state._candidate_revision(browser_id), 1)
         self.assertEqual(Path(str(self.state.workspace_store.native_source(project_id, native_source_id)["nativePath"])).resolve(), self.relinked.resolve())
 
+    def test_relink_publish_failure_restores_durable_source_and_retries(self) -> None:
+        project_id, native_id, browser_id = self.create_mixed_project()
+        native_source_id = next(source["id"] for source in self.state.catalog_sources if source["kind"] == "native-folder")
+        previous_source = self.state.workspace_store.native_source(project_id, native_source_id)
+        previous_path = self.state.images[native_id].path
+
+        def fail_reset() -> None:
+            raise RuntimeError("GPU image cache reset failed")
+
+        self.state.sam_predictor = SimpleNamespace(reset_image=fail_reset)
+        try:
+            status, _headers, body = self.request("POST", "/api/project/source/relink", {
+                "projectId": project_id, "sourceId": native_source_id, "path": str(self.relinked),
+            }, authorized=True)
+        finally:
+            self.state.sam_predictor = None
+        self.assertEqual(status, 500, body.decode("utf-8"))
+        self.assertEqual(self.state.workspace_store.native_source(project_id, native_source_id), previous_source)
+        self.assertEqual(self.state.images[native_id].path, previous_path)
+        self.assertEqual(self.state._candidate_revision(browser_id), 1)
+        self.assertTrue(self.state.manual_workspace(browser_id)["add"].startswith("data:image/png;base64,"))
+        self.assertTrue(self.state.project_history_status(browser_id)["canUndo"])
+        self.assertEqual(next(source for source in self.state.catalog_sources if source["id"] == native_source_id), previous_source)
+
+        status, _headers, body = self.request("POST", "/api/project/source/relink", {
+            "projectId": project_id, "sourceId": native_source_id, "path": str(self.relinked),
+        }, authorized=True)
+        self.assertEqual(status, 200, body.decode("utf-8"))
+        self.assertEqual(Path(str(self.state.workspace_store.native_source(project_id, native_source_id)["nativePath"])).resolve(), self.relinked.resolve())
+
     def test_relink_rejections_leave_source_and_live_catalog_unchanged(self) -> None:
         project_id, native_id, browser_id = self.create_mixed_project()
         native_source_id = next(source["id"] for source in self.state.catalog_sources if source["kind"] == "native-folder")
