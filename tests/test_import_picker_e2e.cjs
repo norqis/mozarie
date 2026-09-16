@@ -2320,9 +2320,12 @@ async function runControlLedger(page, fixtureUrl, contracts, finishCancel, holdS
       const requests = settled.api.slice(before.api.length).filter((request) => request.method === "POST"
         && new URL(request.url, fixtureUrl).pathname === "/api/catalog/rename");
       assert.equal(requests.length, 1, "renameImageConfirm sends one rename request");
-      assert.deepEqual(JSON.parse(requests[0].body), {
-        imageId: before.state.renameImageId, filename, browserRenamed: false, expectedCatalogGeneration: before.state.catalogGeneration,
-      }, "renameImageConfirm submits the selected image and entered filename exactly");
+      const payload = JSON.parse(String(requests[0].body));
+      assert.deepEqual(Object.keys(payload).sort(), ["browserRenamed", "expectedCatalogGeneration", "filename", "imageId"], "renameImageConfirm submits exactly the four supported payload fields");
+      assert.equal(payload.imageId, before.state.renameImageId, "renameImageConfirm submits the right-clicked image ID");
+      assert.equal(payload.filename, filename, "renameImageConfirm submits the entered filename");
+      assert.equal(payload.browserRenamed, false, "renameImageConfirm declares that the native source was not pre-moved in the browser");
+      assert.equal(payload.expectedCatalogGeneration, before.state.catalogGeneration, "renameImageConfirm submits the current catalog generation");
       assert.equal(settled.state.images.find((image) => image.id === before.state.renameImageId)?.relativePath, filename, "renameImageConfirm updates the catalog path after the server commit");
     },
     removeImageMenuItem: async (before) => { await page.waitForFunction((count) => state.hiddenImageIds.size !== count, before.state.hiddenCount); const settled = await snapshot(); assert.notEqual(settled.state.hiddenCount, before.state.hiddenCount, "removeImageMenuItem must toggle hidden state"); assert.equal(settled.popovers.catalogContextMenu, false, "removeImageMenuItem must close its context menu"); },
