@@ -221,6 +221,7 @@
 
   <div id="catalogContextMenu" class="catalog-context-menu" popover="manual" role="menu" tabindex="-1" data-i18n-aria-label="context.menu" aria-label="画像の操作">
     <button id="toggleReviewMenuItem" type="button" role="menuitem"></button>
+    <button id="renameImageMenuItem" type="button" role="menuitem" data-i18n="context.rename">名前を変更</button>
     <button id="copyImagePathMenuItem" type="button" role="menuitem" hidden data-i18n="context.copyPath">パスをコピー</button>
     <button id="removeImageMenuItem" type="button" role="menuitem" data-i18n="editor.hide">非表示</button>
   </div>
@@ -412,6 +413,7 @@
         <label id="applySuffixRow" class="form-row"><span data-i18n="apply.suffix">ファイル名の末尾</span><input id="applySuffix" type="text" value="_censored"></label>
         <label class="form-row"><span data-i18n="apply.format">出力形式</span><select id="applyOutputFormat"><option value="original" data-i18n="apply.formatOriginal">元画像と同じ</option><option value="png">PNG</option><option value="jpg">JPG</option></select></label>
         <label class="choice-row"><input id="applyKeepMetadata" type="checkbox" checked><span data-i18n="apply.keepMetadata">メタ情報を保持</span></label>
+        <label id="applyPreserveDirectoryStructureRow" class="choice-row"><input id="applyPreserveDirectoryStructure" type="checkbox"><span data-i18n="apply.preserveDirectoryStructure">フォルダー構成を保持</span></label>
         <label class="choice-row"><input id="applyRemoveSaved" type="checkbox"><span data-i18n="apply.removeSaved">保存後に一覧から削除</span></label>
         <p id="applyFormatNote" class="fixed-note" hidden></p>
         <label id="deleteOriginalRow" class="choice-row"><input id="deleteOriginal" type="checkbox"><span data-i18n="apply.deleteOriginal">コピー成功後に元画像を削除</span></label>
@@ -448,6 +450,7 @@
         <label id="singleSaveSuffixRow" class="form-row"><span data-i18n="apply.suffix">ファイル名の末尾</span><input id="singleSaveSuffix" type="text"></label>
         <label class="form-row"><span data-i18n="apply.format">出力形式</span><select id="singleSaveOutputFormat"><option value="original" data-i18n="apply.formatOriginal">元画像と同じ</option><option value="png">PNG</option><option value="jpg">JPG</option></select></label>
         <label class="choice-row"><input id="singleSaveKeepMetadata" type="checkbox" checked><span data-i18n="apply.keepMetadata">メタ情報を保持</span></label>
+        <label id="singleSavePreserveDirectoryStructureRow" class="choice-row"><input id="singleSavePreserveDirectoryStructure" type="checkbox"><span data-i18n="apply.preserveDirectoryStructure">フォルダー構成を保持</span></label>
         <label class="choice-row"><input id="singleSaveRemoveSaved" type="checkbox"><span data-i18n="apply.removeSaved">保存後に一覧から削除</span></label>
         <p id="singleSaveFormatNote" class="fixed-note" hidden></p>
         <label id="singleSaveDeleteOriginalRow" class="choice-row"><input id="singleSaveDeleteOriginal" type="checkbox"><span data-i18n="apply.deleteOriginal">コピー成功後に元画像を削除</span></label>
@@ -455,6 +458,15 @@
       </fieldset>
       <p id="singleSaveResult" class="dialog-result" aria-live="polite"></p>
       <div class="dialog-actions"><button id="singleSaveCloseButton" type="button" data-i18n="dialog.close">閉じる</button><button id="singleSaveStartButton" type="submit" class="primary" data-i18n="apply.start">保存</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="renameImageDialog" class="modal-dialog compact-dialog" aria-labelledby="renameImageDialogTitle">
+    <form id="renameImageForm" class="dialog-body">
+      <h2 id="renameImageDialogTitle" data-i18n="context.rename">名前を変更</h2>
+      <label class="form-row"><span data-i18n="context.renameFilename">ファイル名</span><input id="renameImageFilename" type="text" required spellcheck="false"></label>
+      <p id="renameImageResult" class="dialog-result" aria-live="polite"></p>
+      <div class="dialog-actions"><button id="renameImageCancel" type="button" data-i18n="dialog.cancel">キャンセル</button><button id="renameImageConfirm" type="submit" class="primary" data-i18n="dialog.save">保存</button></div>
     </form>
   </dialog>
 

@@ -1171,6 +1171,7 @@ function bindEvents() {
   $("#applyStartButton").addEventListener("pointercancel", () => { outputDirectorySaveClickInput = null; });
   $("#applyStartButton").addEventListener("click", () => { outputDirectorySaveClickInput = null; });
   document.querySelectorAll('input[name="batchSaveMode"]').forEach((input) => input.addEventListener("change", syncApplyMode));
+  $("#applyPreserveDirectoryStructure").addEventListener("change", () => { void saveDirectoryStructurePreference($("#applyPreserveDirectoryStructure")); });
   $("#applyTargetMode").addEventListener("change", refreshApplyTargets);
   $("#applyOutputFormat").addEventListener("change", syncApplyMode);
   $("#mosaicHelpButton").addEventListener("click", () => {
@@ -1194,6 +1195,7 @@ function bindEvents() {
   $("#singleSaveStartButton").addEventListener("pointercancel", () => { outputDirectorySaveClickInput = null; });
   $("#singleSaveStartButton").addEventListener("click", () => { outputDirectorySaveClickInput = null; });
   document.querySelectorAll('input[name="singleSaveMode"]').forEach((input) => input.addEventListener("change", syncSingleSaveMode));
+  $("#singleSavePreserveDirectoryStructure").addEventListener("change", () => { void saveDirectoryStructurePreference($("#singleSavePreserveDirectoryStructure")); });
   $("#singleSaveOutputFormat").addEventListener("change", syncSingleSaveMode);
   $("#singleSaveCloseButton").addEventListener("click", () => $("#singleSaveDialog").close());
   $("#singleSaveDialog").addEventListener("cancel", (event) => { event.preventDefault(); if (!state.saving) $("#singleSaveDialog").close(); });
@@ -1237,7 +1239,11 @@ function bindEvents() {
     closeCatalogContextMenu();
   });
   $("#copyImagePathMenuItem").addEventListener("click", () => { void copyContextMenuImagePath(); });
+  $("#renameImageMenuItem").addEventListener("click", () => { openRenameImageDialog(); });
   $("#removeImageMenuItem").addEventListener("click", () => { const image = state.images.find((item) => item.id === state.contextMenuImageId); if (image) void setHidden(image, !isHidden(image)); closeCatalogContextMenu(); });
+  $("#renameImageForm").addEventListener("submit", submitRenameImage);
+  $("#renameImageCancel").addEventListener("click", () => $("#renameImageDialog").close());
+  $("#renameImageDialog").addEventListener("close", () => { const invoker = state.renameImage?.invoker; state.renameImage = null; focusElement(invoker); });
   $("#gallery").addEventListener("dragenter", (event) => {
     if (!event.dataTransfer?.types?.includes("Files")) return;
     event.preventDefault(); setGalleryDropOverlay(true);

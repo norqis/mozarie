@@ -242,7 +242,7 @@ function setSettingsForm(settings, status = null) {
   renderSettingsStatus(status || state.settingsStatus, settings.models.gpu_device);
 }
 
-const SHORTCUT_LABELS = { previous: "settings.shortcut.previous", next: "settings.shortcut.next", previousVisible: "settings.shortcut.previousVisible", nextVisible: "settings.shortcut.nextVisible", first: "settings.shortcut.first", last: "settings.shortcut.last", reviewAndNext: "settings.shortcut.reviewAndNext", removeImage: "settings.shortcut.removeImage", toggleOverview: "settings.shortcut.toggleOverview", undo: "settings.shortcut.undo", redo: "settings.shortcut.redo" };
+const SHORTCUT_LABELS = { previous: "settings.shortcut.previous", next: "settings.shortcut.next", previousVisible: "settings.shortcut.previousVisible", nextVisible: "settings.shortcut.nextVisible", first: "settings.shortcut.first", last: "settings.shortcut.last", reviewAndNext: "settings.shortcut.reviewAndNext", removeImage: "settings.shortcut.removeImage", renameImage: "settings.shortcut.renameImage", toggleOverview: "settings.shortcut.toggleOverview", undo: "settings.shortcut.undo", redo: "settings.shortcut.redo" };
 function renderShortcutBindings(bindings, actions) {
   const root = $("#shortcutBindings"); root.textContent = "";
   for (const [action, labelKey] of Object.entries(SHORTCUT_LABELS)) {
@@ -324,6 +324,7 @@ function settingsPayload() {
     saving: {
       parallelism: Math.max(1, Math.round(Number($("#settingsSaveParallelism").value) || 2)),
       default_output_directory: $("#settingsDefaultOutputDirectory").value.trim(),
+      preserve_directory_structure: state.settings.saving?.preserve_directory_structure !== false,
     },
     shortcuts: { enabled: $("#settingsShortcutsEnabled").checked, bindings: shortcutBindingsPayload(), actions: shortcutActionsPayload() },
     editing: { fill_color_tolerance: state.settings.editing.fill_color_tolerance },

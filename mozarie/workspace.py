@@ -23,6 +23,7 @@ from PIL import Image, UnidentifiedImageError
 import numpy as np
 
 from .image_io import open_image
+from .core import ClientError, safe_import_relative_path
 from .masks import compose_masks, expand_mask, union_mask
 
 
@@ -658,6 +659,83 @@ class WorkspaceStore:
             raise ProjectSourceUnavailableError("native project source is missing")
         return {"id": str(row["source_id"]), "kind": str(row["kind"]), "displayName": str(row["display_name"]),
                 "nativePath": row["native_path"], "identity": str(row["source_identity"])}
+
+    def rename_native_source_records(self, old_path: Path, new_path: Path) -> dict[str, str]:
+        """Retarget every durable native-folder row that names one real file.
+
+        A project can contain nested source roots, so matching `(source_id,
+        relative_path)` is insufficient.  Resolve each native root and update
+        all rows whose absolute source path is the file that was renamed.
+        Image IDs remain stable, preserving all FK-owned candidates and history.
+        """
+        old_path = old_path.resolve()
+        new_path = new_path.resolve()
+        changed: dict[str, str] = {}
+        now = time.time_ns()
+        with self._lock, self._connect() as db:
+            db.execute("BEGIN IMMEDIATE")
+            try:
+                rows = db.execute("""SELECT images.catalog_id,images.source_id,images.image_id,images.relative_path,
+                    project_sources.native_path
+                    FROM images JOIN project_sources ON project_sources.source_id=images.source_id
+                    WHERE project_sources.kind='native-folder'""").fetchall()
+                updates: list[tuple[str, str, str, str]] = []
+                touched_catalogs: set[str] = set()
+                for row in rows:
+                    try:
+                        root = Path(str(row["native_path"])).resolve()
+                        actual = (root / safe_import_relative_path(str(row["relative_path"]))).resolve()
+                        relative = new_path.relative_to(root).as_posix()
+                    except (OSError, ValueError, ClientError):
+                        continue
+                    if actual != old_path:
+                        continue
+                    conflict = db.execute("""SELECT image_id FROM images
+                        WHERE source_id=? AND relative_path=? COLLATE NOCASE AND image_id<>?""",
+                        (str(row["source_id"]), relative, str(row["image_id"])),
+                    ).fetchone()
+                    if conflict is not None:
+                        raise ValueError("renamed path conflicts with an existing catalog image")
+                    updates.append((relative, str(row["catalog_id"]), str(row["source_id"]), str(row["image_id"])))
+                    changed[str(row["image_id"])] = relative
+                    touched_catalogs.add(str(row["catalog_id"]))
+                if not updates:
+                    raise ValueError("native source image is missing")
+                db.executemany("""UPDATE images SET relative_path=?,updated_at=?
+                    WHERE catalog_id=? AND source_id=? AND image_id=?""",
+                    [(relative, now, catalog_id, source_id, image_id) for relative, catalog_id, source_id, image_id in updates],
+                )
+                db.executemany("UPDATE catalogs SET updated_at=? WHERE catalog_id=?", [(now, catalog_id) for catalog_id in touched_catalogs])
+                db.execute("COMMIT")
+            except Exception:
+                db.execute("ROLLBACK")
+                raise
+        return changed
+
+    def rename_browser_source_record(self, catalog_id: str, source_id: str, image_id: str, relative_path: str) -> None:
+        """Update the one FSA-backed source row after its real handle moved."""
+        relative_path = safe_import_relative_path(relative_path).as_posix()
+        now = time.time_ns()
+        with self._lock, self._connect() as db:
+            db.execute("BEGIN IMMEDIATE")
+            try:
+                conflict = db.execute("""SELECT image_id FROM images
+                    WHERE catalog_id=? AND source_id=? AND relative_path=? COLLATE NOCASE AND image_id<>?""",
+                    (catalog_id, source_id, relative_path, image_id),
+                ).fetchone()
+                if conflict is not None:
+                    raise ValueError("renamed path conflicts with an existing catalog image")
+                cursor = db.execute("""UPDATE images SET relative_path=?,updated_at=?
+                    WHERE catalog_id=? AND source_id=? AND image_id=?""",
+                    (relative_path, now, catalog_id, source_id, image_id),
+                )
+                if not cursor.rowcount:
+                    raise ValueError("browser source image is missing")
+                db.execute("UPDATE catalogs SET updated_at=? WHERE catalog_id=?", (now, catalog_id))
+                db.execute("COMMIT")
+            except Exception:
+                db.execute("ROLLBACK")
+                raise
 
     def relink_native_source(
         self, catalog_id: str, source_id: str, root: Path, records: list[Any], *, allow_new: bool,

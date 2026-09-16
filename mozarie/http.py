@@ -74,6 +74,7 @@ _POST_OPERATION_LABELS = {
     "/api/catalog/clear": "画像一覧クリア",
     "/api/workspace/images": "画像状態の一括変更",
     "/api/catalog/remove": "画像一覧から削除",
+    "/api/catalog/rename": "元画像の名前変更",
     "/api/catalog/delete-source": "元画像を完全削除",
     "/api/catalog/delete-source/prepare": "元画像削除の確認",
     "/api/catalog/delete-source/claim": "元画像削除の所有権確定",
@@ -960,6 +961,12 @@ class MosaicHandler(BaseHTTPRequestHandler):
             elif path == "/api/catalog/remove":
                 self._json(self._catalog_mutation(expected_project_id, expected_catalog_generation,
                                                    lambda: STATE.remove_images_from_catalog(payload.get("imageIds", []))))
+            elif path == "/api/catalog/rename":
+                self._json(self._catalog_mutation(expected_project_id, expected_catalog_generation,
+                                                   lambda: STATE.rename_catalog_image(
+                                                       str(payload.get("imageId", "")), payload.get("filename"),
+                                                       browser_renamed=_read_bool(payload.get("browserRenamed", False), "ブラウザー元画像の名前変更"),
+                                                   )))
             elif path == "/api/catalog/delete-source/prepare":
                 self._json(self._catalog_mutation(expected_project_id, expected_catalog_generation,
                                                    lambda: STATE.prepare_source_delete(payload)))
@@ -1065,6 +1072,9 @@ class MosaicHandler(BaseHTTPRequestHandler):
                     _read_mosaic_divisor(payload.get("divisor")),
                     str(payload.get("suffix", "_censored")),
                     _read_bool(payload.get("deleteOriginal", False), "元画像削除"),
+                    copy_to_default=_read_bool(payload.get("copyToDefault", False), "既定の保存先へコピー"),
+                    output_format=str(payload.get("format", "original")),
+                    keep_metadata=_read_bool(payload.get("keepMetadata", True), "メタ情報の保持"),
                 ))
                 self._json({"entries": entries})
             elif path == "/api/save/reserve":

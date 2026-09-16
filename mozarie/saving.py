@@ -28,6 +28,32 @@ from .image_io import (
 from .masks import compose_masks, expand_mask, union_mask
 
 class SavingMixin:
+    @staticmethod
+    def _copy_relative_path(record: ImageRecord, suffix: str, output_format: str, preserve_directory_structure: bool) -> Path:
+        """Build one final copy name from the immutable catalogue snapshot."""
+        relative = safe_import_relative_path(record.relative_path)
+        if not preserve_directory_structure:
+            relative = Path(relative.name)
+        extension = record.path.suffix if output_format == "original" else f".{output_format}"
+        target = relative.with_suffix(extension)
+        return target.with_name(f"{target.stem}{_read_save_suffix(suffix)}{target.suffix}")
+
+    def _copy_destinations_are_available(
+        self, records: list[ImageRecord], suffix: str, output_format: str, output_directory: Path,
+        preserve_directory_structure: bool,
+    ) -> None:
+        """Reject every flattened collision before a save job or stage exists."""
+        if preserve_directory_structure:
+            return
+        names: set[str] = set()
+        for record in records:
+            relative = self._copy_relative_path(record, suffix, output_format, False)
+            name = relative.as_posix().casefold()
+            destination = output_directory / relative
+            if name in names or destination.exists():
+                raise ClientError("平坦化後の保存名が重複しています。フォルダー構成を保持するか、ファイル名を変更してください。", "output_name_conflict")
+            names.add(name)
+
     def start_apply(
         self,
         image_ids: list[str],
@@ -56,7 +82,11 @@ class SavingMixin:
             records = [replace(record) for record in records]
             output_directory = Path(self.settings["saving"]["default_output_directory"])
             saving_parallelism = int(self.settings.get("saving", {}).get("parallelism", 2))
+            preserve_directory_structure = bool(self.settings.get("saving", {}).get("preserve_directory_structure", True))
         if copy_to_default:
+            self._copy_destinations_are_available(
+                records, suffix, output_format, output_directory, preserve_directory_structure,
+            )
             try:
                 output_directory = validate_output_directory_ready(output_directory)
             except SettingsError as exc:
@@ -64,18 +94,27 @@ class SavingMixin:
         drafts = {str(image_id): (dict(draft) if isinstance(draft, dict) else draft) for image_id, draft in drafts.items()}
         self._start_job(
             "apply", records, self._apply_worker, divisor, drafts, copy_to_default, suffix,
-            saving_parallelism, output_directory, output_format, keep_metadata,
+            saving_parallelism, output_directory, output_format, keep_metadata, preserve_directory_structure,
             expected_catalog_generation=catalog_generation,
         )
         return True
 
-    def _reserve_output_destination(self, record: ImageRecord, suffix: str, output_directory: Path) -> Path:
+    def _reserve_output_destination(
+        self, record: ImageRecord, suffix: str, output_directory: Path, output_format: str = "original",
+        preserve_directory_structure: bool = True,
+    ) -> Path:
         """Reserve a copy name while another worker may be choosing one."""
         with self.output_destination_lock:
-            relative = safe_import_relative_path(record.relative_path)
-            target = (output_directory / relative).with_suffix(record.path.suffix)
+            target = output_directory / self._copy_relative_path(
+                record, suffix, output_format, preserve_directory_structure,
+            )
+            if not preserve_directory_structure:
+                if target.exists() or target in self.reserved_output_paths:
+                    raise ClientError("平坦化後の保存名が重複しています。フォルダー構成を保持するか、ファイル名を変更してください。", "output_name_conflict")
+                self.reserved_output_paths.add(target)
+                return target
             destination = unique_session_import_destination(
-                target.with_name(f"{target.stem}{_read_save_suffix(suffix)}{target.suffix}"), self.reserved_output_paths,
+                target, self.reserved_output_paths,
             )
             self.reserved_output_paths.add(destination)
             return destination
@@ -144,14 +183,19 @@ class SavingMixin:
                 return {"state": str(durable["state"]), "outputPath": str(durable["destination"] or "")}
             catalog_generation = self.catalog_generation
             configured_output_directory = Path(self.settings["saving"]["default_output_directory"]).resolve() if copy_to_default else None
+            preserve_directory_structure = bool(self.settings.get("saving", {}).get("preserve_directory_structure", True))
         destination = None; staged = None; initial_fingerprint = None
         if configured_output_directory is not None:
+            self._copy_destinations_are_available(
+                [record], suffix, output_format, configured_output_directory, preserve_directory_structure,
+            )
             try:
                 configured_output_directory = validate_output_directory_ready(configured_output_directory)
             except SettingsError as exc:
                 raise ClientError("保存先フォルダを使用できません。設定で変更してください。", "output_folder_unavailable") from exc
-            extension = record.path.suffix.lower() if output_format == "original" else f".{output_format}"
-            destination = self._reserve_output_destination(replace(record, path=record.path.with_suffix(extension)), suffix, configured_output_directory)
+            destination = self._reserve_output_destination(
+                record, suffix, configured_output_directory, output_format, preserve_directory_structure,
+            )
             staged = destination.parent / ".mozarie-staging" / f"{client_save_token}.stage"
             try:
                 self.save_journal.reserve(client_save_token, image_id, revision, destination, staged)
@@ -180,7 +224,8 @@ class SavingMixin:
                 catalog_generation=catalog_generation, issued_at=time.monotonic(), rendered_path=None,
                 output_path=staged, output_fingerprint=initial_fingerprint, output_destination=destination,
                 state="rendering", allow_copy_action=copy_to_default, output_format=output_format,
-                keep_metadata=keep_metadata, transform_revision=record.transform_revision,
+                keep_metadata=keep_metadata, preserve_directory_structure=preserve_directory_structure,
+                transform_revision=record.transform_revision,
                 flip_horizontal=record.flip_horizontal, flip_vertical=record.flip_vertical,
                 source_flip_horizontal=record.source_flip_horizontal, source_flip_vertical=record.source_flip_vertical,
             )
@@ -276,6 +321,10 @@ class SavingMixin:
         divisor: int,
         suffix: str,
         delete_original: bool,
+        *,
+        copy_to_default: bool = False,
+        output_format: str = "original",
+        keep_metadata: bool = True,
     ) -> list[dict[str, Any]]:
         with self.lock:
             self._assert_catalog_mutable()
@@ -283,12 +332,20 @@ class SavingMixin:
         for record in records:
             self._assert_image_editable(record.image_id)
         _read_mosaic_divisor(divisor)
-        _read_save_suffix(suffix)
+        suffix = _read_save_suffix(suffix)
+        if output_format not in {"original", "png", "jpg"} or not isinstance(keep_metadata, bool) or (output_format == "jpg" and keep_metadata):
+            raise ClientError("保存形式が正しくありません。", "input_invalid")
         with self.lock:
             if any(self.images.get(record.image_id) is not record for record in records):
                 raise ClientError("画像一覧が変更されました。保存をやり直してください。", "save_state_changed")
             for record in records:
                 self._assert_image_editable(record.image_id)
+            if copy_to_default:
+                output_directory = Path(self.settings["saving"]["default_output_directory"])
+                self._copy_destinations_are_available(
+                    records, suffix, output_format, output_directory,
+                    bool(self.settings.get("saving", {}).get("preserve_directory_structure", True)),
+                )
             return [
                 {
                     "imageId": record.image_id,
@@ -600,6 +657,8 @@ class SavingMixin:
                         staged_fingerprint = (staged_stat.st_mtime_ns, staged_stat.st_size)
                         publication = self._publish_staged_copy(save_token, token_details.output_path, token_details.output_destination, staged_fingerprint)
                         if publication is None:
+                            if not token_details.preserve_directory_structure:
+                                raise ClientError("平坦化後の保存名が重複しています。フォルダー構成を保持するか、ファイル名を変更してください。", "output_name_conflict")
                             replacement = self._reassign_output_destination(token_details.output_destination)
                             token_details = replace(token_details, output_destination=replacement)
                             with self.lock:
@@ -896,6 +955,7 @@ class SavingMixin:
         output_directory: Path | None = None,
         output_format: str = "original",
         keep_metadata: bool = True,
+        preserve_directory_structure: bool = True,
         *,
         control: JobControl | None = None,
         job_generation: int | None = None,
@@ -980,8 +1040,11 @@ class SavingMixin:
                         output = read_stable_source_bytes(record, source_fingerprint); output_suffix = record.path.suffix.lower()
                     else:
                         output, output_suffix, _mime = render_output(record, mask, calculate_block_size(record.width, record.height, divisor), output_format, keep_metadata)
-                    target_record = replace(record, path=record.path.with_suffix(output_suffix))
-                    output_path = self._reserve_output_destination(target_record, suffix, output_directory) if copy_to_default else record.path
+                    output_path = (
+                        self._reserve_output_destination(
+                            record, suffix, output_directory, output_format, preserve_directory_structure,
+                        ) if copy_to_default else record.path
+                    )
                     if copy_to_default:
                         output_path.parent.mkdir(parents=True, exist_ok=True)
                     rendered_dir = (output_path.parent / ".mozarie-staging") if copy_to_default else (self.cache_dir / "apply-render")

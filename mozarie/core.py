@@ -213,6 +213,7 @@ class BrowserSaveToken:
     no_effect: bool = False
     output_format: str = "original"
     keep_metadata: bool = True
+    preserve_directory_structure: bool = True
     transform_revision: int = 0
     flip_horizontal: bool = False
     flip_vertical: bool = False

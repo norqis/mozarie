@@ -16,6 +16,48 @@ function isTerminalApply(job) {
 function selectedSaveMode() { return document.querySelector('input[name="batchSaveMode"]:checked').value; }
 function selectedApplyOutputFormat() { return $("#applyOutputFormat").value; }
 function selectedSingleOutputFormat() { return $("#singleSaveOutputFormat").value; }
+function preserveDirectoryStructure() { return state.settings?.saving?.preserve_directory_structure !== false; }
+function renderDirectoryStructurePreference() {
+  const preserve = preserveDirectoryStructure();
+  $("#applyPreserveDirectoryStructure").checked = preserve;
+  $("#singleSavePreserveDirectoryStructure").checked = preserve;
+}
+let directoryStructurePreferenceMutation = Promise.resolve();
+async function saveDirectoryStructurePreference(input) {
+  const preserve = Boolean(input.checked); const previous = preserveDirectoryStructure();
+  $("#applyPreserveDirectoryStructure").checked = preserve;
+  $("#singleSavePreserveDirectoryStructure").checked = preserve;
+  if (previous === preserve) return true;
+  state.settings.saving.preserve_directory_structure = preserve;
+  const save = directoryStructurePreferenceMutation.catch(() => {}).then(() => api("/api/settings?status=0", {
+    method: "POST", body: JSON.stringify({ saving: { preserve_directory_structure: preserve } }),
+  }));
+  directoryStructurePreferenceMutation = save;
+  try { state.settings = (await save).settings; renderDirectoryStructurePreference(); return true; }
+  catch (error) {
+    state.settings.saving.preserve_directory_structure = previous;
+    renderDirectoryStructurePreference(); showUserError(error, input); return false;
+  }
+}
+async function ensureDirectoryStructurePreference(input) {
+  return input.checked === preserveDirectoryStructure() ? directoryStructurePreferenceMutation.then(() => true, () => false) : saveDirectoryStructurePreference(input);
+}
+function copySaveRelativeName(image, suffix, format, preserve = preserveDirectoryStructure()) {
+  const parts = String(image?.relativePath || "").replace(/\\/g, "/").split("/").filter(Boolean);
+  const filename = preserve ? parts.join("/") : parts.at(-1);
+  const dot = filename.lastIndexOf("."); const stem = dot > 0 ? filename.slice(0, dot) : filename;
+  const extension = format === "original" ? (dot > 0 ? filename.slice(dot).toLowerCase() : "") : `.${format}`;
+  return `${stem}${suffix}${extension}`;
+}
+function copySavePlan(imageIds, suffix, format) {
+  const preserve = preserveDirectoryStructure(); const names = new Set();
+  return imageIds.map((imageId) => {
+    const relativePath = copySaveRelativeName(state.images.find((image) => image.id === imageId), suffix, format, preserve);
+    const key = relativePath.toLocaleLowerCase();
+    if (!preserve && names.has(key)) throw codedError("output_name_conflict");
+    names.add(key); return { imageId, relativePath };
+  });
+}
 function syncApplyOutputOptions() {
   const format = selectedApplyOutputFormat();
   const metadata = $("#applyKeepMetadata"); const note = $("#applyFormatNote");
@@ -70,12 +112,14 @@ function syncApplyMode() {
   $("#applySuffixRow").hidden = !copying;
   $("#deleteOriginalRow").hidden = !copying;
   $("#applyOutputDirectoryRow").hidden = !copying;
+  $("#applyPreserveDirectoryStructureRow").hidden = !copying;
   const outputDirectoryPending = state.outputDirectoryPicking || state.outputDirectoryCommitPending;
   $("#applySuffix").disabled = state.applyRunning || state.outputDirectoryPicking;
   $("#applyTargetMode").disabled = state.applyRunning || state.saveStarting || state.outputDirectoryPicking;
   $("#chooseOutputDirectoryButton").disabled = outputDirectoryPending || state.applyRunning || state.saveStarting;
   $("#applyOutputDirectoryStatus").disabled = outputDirectoryPending || state.applyRunning || state.saveStarting;
   $("#applyRemoveSaved").disabled = state.outputDirectoryPicking || state.applyRunning || state.saveStarting;
+  $("#applyPreserveDirectoryStructure").disabled = state.outputDirectoryPicking || state.applyRunning || state.saveStarting;
   $("#deleteOriginal").disabled = !canDelete || state.applyRunning;
   if (!canDelete) $("#deleteOriginal").checked = false;
   $("#applyOverwriteMode").disabled = !canOverwrite || state.applyRunning;
@@ -114,6 +158,7 @@ async function openApplyDialog(options = {}) {
     $("#applyOutputFormat").value = "original";
     $("#applyKeepMetadata").checked = true;
     $("#applyRemoveSaved").checked = false;
+    renderDirectoryStructurePreference();
   }
   updateBlockSizeDisplay();
   $("#applyProgressPanel").hidden = true;
@@ -122,7 +167,7 @@ async function openApplyDialog(options = {}) {
   $("#applyPauseButton").hidden = true;
   $("#applyCancelButton").hidden = true;
   $("#applySettings").disabled = false;
-  setApplyResult(""); renderOutputDirectory(); syncApplyMode();
+  setApplyResult(""); renderOutputDirectory(); renderDirectoryStructurePreference(); syncApplyMode();
   showModalFromInvoker($("#applyDialog"), invoker);
   state.applyDialogInitialized = true;
 }
@@ -140,6 +185,7 @@ function syncSingleSaveMode() {
   $("#singleSaveSuffixRow").hidden = !copying;
   $("#singleSaveDeleteOriginalRow").hidden = !copying;
   $("#singleSaveOutputDirectoryRow").hidden = !copying;
+  $("#singleSavePreserveDirectoryStructureRow").hidden = !copying;
   $("#singleSaveOverwriteMode").disabled = !canOverwrite || state.saving || state.saveStarting;
   $("#singleSaveOverwriteRow").classList.toggle("muted", !canOverwrite);
   $("#singleSaveDeleteOriginal").disabled = !canDelete || state.saving || state.saveStarting;
@@ -148,6 +194,7 @@ function syncSingleSaveMode() {
   $("#singleSaveChooseOutputDirectoryButton").disabled = outputDirectoryPending || state.saving || state.saveStarting;
   $("#singleSaveOutputDirectoryStatus").disabled = outputDirectoryPending || state.saving || state.saveStarting;
   $("#singleSaveRemoveSaved").disabled = state.outputDirectoryPicking || state.saving || state.saveStarting;
+  $("#singleSavePreserveDirectoryStructure").disabled = state.outputDirectoryPicking || state.saving || state.saveStarting;
   $("#singleSaveStartButton").disabled = outputDirectoryPending || state.saving || state.saveStarting || !isProcessableImage(image) || (copying && !state.settings?.saving?.default_output_directory) || (!copying && !canOverwrite);
   $("#singleSaveSettings").disabled = state.outputDirectoryPicking || state.saving || state.saveStarting;
   syncSingleOutputOptions();
@@ -171,9 +218,10 @@ async function openSingleSaveDialog(imageId = state.currentId) {
     $("#singleSaveOutputFormat").value = "original";
     $("#singleSaveKeepMetadata").checked = true;
     $("#singleSaveRemoveSaved").checked = false;
+    renderDirectoryStructurePreference();
   }
   setSingleSaveResult("");
-  renderOutputDirectory();
+  renderOutputDirectory(); renderDirectoryStructurePreference();
   syncSingleSaveMode();
   showModalFromInvoker($("#singleSaveDialog"), invoker);
   state.singleSaveDialogInitialized = true;
@@ -337,6 +385,7 @@ async function startSingleSave(event) {
   const suffix = $("#singleSaveSuffix").value;
   const format = selectedSingleOutputFormat(); const keepMetadata = $("#singleSaveKeepMetadata").checked;
   if (copying && !state.settings?.saving?.default_output_directory) return syncSingleSaveMode();
+  if (copying && !await ensureDirectoryStructurePreference($("#singleSavePreserveDirectoryStructure"))) return;
   state.saveStarting = true;
   syncSingleSaveMode();
   try {
@@ -348,7 +397,7 @@ async function startSingleSave(event) {
     const cleanupProjectId = state.project?.id || null;
     try {
     await flushWorkspaceDraft(save.imageId);
-    const prepared = await api("/api/save/prepare", { method: "POST", body: JSON.stringify({ imageIds: [save.imageId], divisor: save.divisor, suffix, deleteOriginal: false, format, keepMetadata }) });
+    const prepared = await api("/api/save/prepare", { method: "POST", body: JSON.stringify({ imageIds: [save.imageId], divisor: save.divisor, suffix, deleteOriginal: false, copyToDefault: copying, format, keepMetadata }) });
     entry = prepared.entries?.[0]; if (!entry) throw Object.assign(new Error("save_state_changed"), { code: "save_state_changed" });
     const access = sourceAccessFor(save.imageId);
     if (!copying) await ensureSaveSources([save.imageId], "overwrite", false);
@@ -558,6 +607,7 @@ async function waitForBrowserSave(save) {
 }
 
 function showBrowserSaveProgress(save, entry) {
+  $("#applyPauseButton").disabled = false;
   state.job = { kind: "apply", state: save.paused ? "paused" : "running", total: save.entries.length, completed: save.completed, current: entry?.relativePath || "" };
   $("#applyProgress").max = Math.max(1, save.entries.length);
   $("#applyProgress").value = save.completed;
@@ -869,9 +919,10 @@ async function runBrowserSave(imageIds, suffix, deleteOriginal, mode = "copy", r
       access: sourceAccessFor(imageId) ? { ...sourceAccessFor(imageId) } : null,
     }])),
   };
+  if (mode === "copy") copySavePlan(inputs.imageIds, suffix, inputs.format);
   const result = await api("/api/save/prepare", {
     method: "POST",
-    body: JSON.stringify({ imageIds: inputs.imageIds, divisor: inputs.divisor, suffix: inputs.suffix, deleteOriginal: false, format: inputs.format, keepMetadata: inputs.keepMetadata }),
+    body: JSON.stringify({ imageIds: inputs.imageIds, divisor: inputs.divisor, suffix: inputs.suffix, deleteOriginal: false, copyToDefault: mode === "copy", format: inputs.format, keepMetadata: inputs.keepMetadata }),
   });
   const save = {
     entries: result.entries, completed: 0, stale: 0, paused: false, cancelled: false, failed: false,
@@ -879,6 +930,7 @@ async function runBrowserSave(imageIds, suffix, deleteOriginal, mode = "copy", r
     removalSelection: removeSaved ? deletionSelectionSnapshot(new Set(imageIds), galleryFilteredImages()) : null,
   };
   state.browserSave = save;
+  $("#applyPauseButton").disabled = false;
   state.saving = true;
   state.applyRunning = true;
   $("#applySettings").disabled = true;
@@ -1164,6 +1216,7 @@ async function startApplyFromDialog(event) {
   if (!imageIds.length || state.saveStarting || isBusy() || state.importing || catalogStagingEditsActive()) return;
   const suffix = $("#applySuffix").value;
   if (copy && !state.settings?.saving?.default_output_directory) { syncApplyMode(); return; }
+  if (copy && !await ensureDirectoryStructurePreference($("#applyPreserveDirectoryStructure"))) return;
   state.saveStarting = true;
   syncApplyMode();
   try {

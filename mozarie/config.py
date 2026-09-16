@@ -242,6 +242,9 @@ def validate_settings(value: Any) -> dict[str, Any]:
             "default_output_directory": _validate_output_directory(
                 saving.get("default_output_directory") or str((Path(__file__).resolve().parent.parent / "output").resolve())
             ),
+            "preserve_directory_structure": _expect_bool(
+                saving.get("preserve_directory_structure", True), "saving.preserve_directory_structure"
+            ),
         },
         "shortcuts": {
             "enabled": _expect_bool(shortcuts.get("enabled", general.get("shortcuts_enabled", True)), "shortcuts.enabled"),
@@ -334,12 +337,12 @@ def _validate_targets(value: Any) -> list[str]:
     return list(dict.fromkeys(value))
 
 
-_DEFAULT_SHORTCUTS = {"previous": "ArrowLeft", "next": "ArrowRight", "previousVisible": "ArrowUp", "nextVisible": "ArrowDown", "first": "Home", "last": "End", "reviewAndNext": "Enter", "removeImage": "Delete", "toggleOverview": "G", "undo": "Ctrl+Z", "redo": "Ctrl+Shift+Z"}
+_DEFAULT_SHORTCUTS = {"previous": "ArrowLeft", "next": "ArrowRight", "previousVisible": "ArrowUp", "nextVisible": "ArrowDown", "first": "Home", "last": "End", "reviewAndNext": "Enter", "removeImage": "Delete", "toggleOverview": "G", "undo": "Ctrl+Z", "redo": "Ctrl+Shift+Z", "renameImage": "F2"}
 _SHORTCUT_ACTIONS = set(_DEFAULT_SHORTCUTS)
 
 
 def _migrate_legacy_shortcuts(settings: Any) -> Any:
-    """Keep an old custom Delete binding usable when the new action is added."""
+    """Add new shortcut actions without taking an existing custom binding."""
     if not isinstance(settings, dict):
         return settings
     shortcuts = settings.get("shortcuts")
@@ -350,20 +353,37 @@ def _migrate_legacy_shortcuts(settings: Any) -> Any:
     if not isinstance(bindings, dict) or ("actions" in shortcuts and not isinstance(actions, dict)):
         return settings
     used_bindings = {str(binding).strip() for binding in bindings.values()}
-    if "removeImage" in bindings or "Delete" not in used_bindings:
+    additions: dict[str, str] = {}
+    disabled: set[str] = set()
+    for action, preferred, fallbacks in (
+        ("removeImage", "Delete", ("Ctrl+Delete", "Shift+Delete", "Alt+Delete", "Ctrl+Shift+Delete", "Ctrl+Alt+Delete", "Shift+Alt+Delete", "Ctrl+Shift+Alt+Delete")),
+        ("renameImage", "F2", ("Ctrl+F2", "Shift+F2", "Alt+F2", "Ctrl+Shift+F2", "Ctrl+Alt+F2", "Shift+Alt+F2", "Ctrl+Shift+Alt+F2")),
+    ):
+        if action in bindings:
+            continue
+        if preferred not in used_bindings:
+            additions[action] = preferred
+            used_bindings.add(preferred)
+            continue
+        fallback = next((binding for binding in fallbacks if binding not in used_bindings), None)
+        # A pre-existing action already owns the preferred key.  Keep that
+        # choice authoritative and show the newly introduced action disabled
+        # until the user explicitly enables its fallback in Settings.
+        disabled.add(action)
+        if fallback is None:
+            fallback = f"{preferred} (legacy disabled)"
+            suffix = 2
+            while fallback in used_bindings:
+                fallback = f"{preferred} (legacy disabled {suffix})"
+                suffix += 1
+        additions[action] = fallback
+        used_bindings.add(fallback)
+    if not additions:
         return settings
-    fallbacks = ("Ctrl+Delete", "Shift+Delete", "Alt+Delete", "Ctrl+Shift+Delete", "Ctrl+Alt+Delete", "Shift+Alt+Delete", "Ctrl+Shift+Alt+Delete")
-    fallback = next((binding for binding in fallbacks if binding not in used_bindings), None)
-    if fallback is None:
-        fallback = "Ctrl+Alt+Shift+Delete (legacy disabled)"
-        suffix = 2
-        while fallback in used_bindings:
-            fallback = f"Ctrl+Alt+Shift+Delete (legacy disabled {suffix})"
-            suffix += 1
     migrated = copy.deepcopy(settings)
     migrated_shortcuts = migrated["shortcuts"]
-    migrated_shortcuts["bindings"] = {**bindings, "removeImage": fallback}
-    migrated_shortcuts["actions"] = {**(actions or {}), "removeImage": False}
+    migrated_shortcuts["bindings"] = {**bindings, **additions}
+    migrated_shortcuts["actions"] = {**(actions or {}), **{action: action not in disabled for action in additions}}
     return migrated
 
 

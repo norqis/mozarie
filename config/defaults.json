@@ -51,7 +51,8 @@
   },
   "saving": {
     "parallelism": 2,
-    "default_output_directory": ""
+    "default_output_directory": "",
+    "preserve_directory_structure": true
   },
   "shortcuts": {
     "enabled": true,
@@ -66,9 +67,10 @@
       "removeImage": "Delete",
       "toggleOverview": "G",
       "undo": "Ctrl+Z",
-      "redo": "Ctrl+Shift+Z"
+      "redo": "Ctrl+Shift+Z",
+      "renameImage": "F2"
     },
-    "actions": {"previous": true, "next": true, "previousVisible": true, "nextVisible": true, "first": true, "last": true, "reviewAndNext": true, "removeImage": true, "toggleOverview": true, "undo": true, "redo": true}
+    "actions": {"previous": true, "next": true, "previousVisible": true, "nextVisible": true, "first": true, "last": true, "reviewAndNext": true, "removeImage": true, "toggleOverview": true, "undo": true, "redo": true, "renameImage": true}
   },
   "confirmations": {
     "clearMasks": true,
