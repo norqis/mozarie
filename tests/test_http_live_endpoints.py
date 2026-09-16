@@ -32,7 +32,7 @@ from mozarie.state import StudioState
 class LiveHttpEndpointTests(unittest.TestCase):
     def setUp(self) -> None:
         self._temporary_directory = tempfile.TemporaryDirectory()
-        root = Path(self._temporary_directory.name)
+        root = Path(self._temporary_directory.name).resolve()
         self.app_dir = root / "app"
         shutil.copytree(Path(__file__).resolve().parents[1] / "config", self.app_dir / "config")
         self.source_dir = root / "images"
