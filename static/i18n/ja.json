@@ -223,6 +223,8 @@
   "apply.jpgMetadataDisabled": "JPG形式ではメタ情報を保持しません。",
   "apply.formatRequiresCopy": "出力形式を変える場合はコピー保存してください。",
   "apply.deleteOriginal": "コピー成功後に元画像を削除",
+  "apply.removeSaved": "保存後に一覧から削除",
+  "apply.removeSavedFailed": "保存しましたが、一覧から削除できませんでした。",
   "apply.overwriteNote": "元画像を上書きするため、ファイル名・保存先・元画像削除は変更できません。",
   "apply.outputDirectoryUnset": "保存先: 未選択",
   "apply.outputDirectorySelected": "保存先: {name}",

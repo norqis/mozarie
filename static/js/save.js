@@ -75,6 +75,7 @@ function syncApplyMode() {
   $("#applyTargetMode").disabled = state.applyRunning || state.saveStarting || outputDirectoryPending;
   $("#chooseOutputDirectoryButton").disabled = outputDirectoryPending || state.applyRunning || state.saveStarting;
   $("#applyOutputDirectoryStatus").disabled = outputDirectoryPending || state.applyRunning || state.saveStarting;
+  $("#applyRemoveSaved").disabled = outputDirectoryPending || state.applyRunning || state.saveStarting;
   $("#deleteOriginal").disabled = !canDelete || state.applyRunning;
   if (!canDelete) $("#deleteOriginal").checked = false;
   $("#applyOverwriteMode").disabled = !canOverwrite || state.applyRunning;
@@ -99,14 +100,21 @@ function refreshApplyTargets() {
 async function openApplyDialog(options = {}) {
   const invoker = document.activeElement;
   if (state.candidateUpdateChains.size) await waitForCandidateMutations();
-  const initialMode = Array.isArray(options) ? "current" : (options.initialMode || "masked");
+  const initialMode = Array.isArray(options) ? "current" : options.initialMode;
   if (isBusy() || state.importing) return;
   try { await flushDraftSaves(); }
   catch (error) { showUserError(error); return; }
-  $("#applyTargetMode").value = initialMode;
+  if (!state.applyDialogInitialized || initialMode) $("#applyTargetMode").value = initialMode || "masked";
   refreshApplyTargets();
   state.applyRunning = false;
-  $("#applyDivisor").value = $("#divisor").value;
+  if (!state.applyDialogInitialized) {
+    $("#applyDivisor").value = $("#divisor").value;
+    $("#applyCopyMode").checked = true;
+    $("#deleteOriginal").checked = false;
+    $("#applyOutputFormat").value = "original";
+    $("#applyKeepMetadata").checked = true;
+    $("#applyRemoveSaved").checked = false;
+  }
   updateBlockSizeDisplay();
   $("#applyProgressPanel").hidden = true;
   $("#applyStartButton").hidden = false;
@@ -114,10 +122,9 @@ async function openApplyDialog(options = {}) {
   $("#applyPauseButton").hidden = true;
   $("#applyCancelButton").hidden = true;
   $("#applySettings").disabled = false;
-  $("#applyOutputFormat").value = "original";
-  $("#applyKeepMetadata").checked = true;
   setApplyResult(""); renderOutputDirectory(); syncApplyMode();
   showModalFromInvoker($("#applyDialog"), invoker);
+  state.applyDialogInitialized = true;
 }
 
 function selectedSingleSaveMode() { return document.querySelector('input[name="singleSaveMode"]:checked').value; }
@@ -140,6 +147,7 @@ function syncSingleSaveMode() {
   const outputDirectoryPending = state.outputDirectoryPicking || state.outputDirectoryCommitPending;
   $("#singleSaveChooseOutputDirectoryButton").disabled = outputDirectoryPending || state.saving || state.saveStarting;
   $("#singleSaveOutputDirectoryStatus").disabled = outputDirectoryPending || state.saving || state.saveStarting;
+  $("#singleSaveRemoveSaved").disabled = outputDirectoryPending || state.saving || state.saveStarting;
   $("#singleSaveStartButton").disabled = outputDirectoryPending || state.saving || state.saveStarting || !isProcessableImage(image) || (copying && !state.settings?.saving?.default_output_directory) || (!copying && !canOverwrite);
   $("#singleSaveSettings").disabled = outputDirectoryPending || state.saving || state.saveStarting;
   syncSingleOutputOptions();
@@ -157,14 +165,18 @@ async function openSingleSaveDialog(imageId = state.currentId) {
     || !state.currentImage || state.projectReadOnly || image.sourceDimensionsChanged) return;
   state.singleSave = { imageId, generation, divisor: Number($("#divisor").value), draft: draftPayload([imageId])[imageId] || null, invoker };
   $("#singleSaveTarget").textContent = t("apply.singleTarget", { name: image.relativePath });
-  $("#singleSaveCopyMode").checked = true;
-  $("#singleSaveDeleteOriginal").checked = false;
-  $("#singleSaveOutputFormat").value = "original";
-  $("#singleSaveKeepMetadata").checked = true;
+  if (!state.singleSaveDialogInitialized) {
+    $("#singleSaveCopyMode").checked = true;
+    $("#singleSaveDeleteOriginal").checked = false;
+    $("#singleSaveOutputFormat").value = "original";
+    $("#singleSaveKeepMetadata").checked = true;
+    $("#singleSaveRemoveSaved").checked = false;
+  }
   setSingleSaveResult("");
   renderOutputDirectory();
   syncSingleSaveMode();
   showModalFromInvoker($("#singleSaveDialog"), invoker);
+  state.singleSaveDialogInitialized = true;
 }
 
 async function chooseSingleOutputDirectory() {
@@ -319,6 +331,9 @@ async function startSingleSave(event) {
   if (copying && outputDirectory.value.trim() !== (state.settings?.saving?.default_output_directory || "") && !await commitOutputDirectory(outputDirectory)) return;
   if (state.saving || state.saveStarting || isBusy()) return;
   const deleteOriginal = copying && $("#singleSaveDeleteOriginal").checked;
+  const removeSaved = $("#singleSaveRemoveSaved").checked;
+  const removalSelection = removeSaved ? deletionSelectionSnapshot(new Set([save.imageId]), galleryFilteredImages()) : null;
+  const catalogEpoch = state.catalogEpoch;
   const suffix = $("#singleSaveSuffix").value;
   const format = selectedSingleOutputFormat(); const keepMetadata = $("#singleSaveKeepMetadata").checked;
   if (copying && !state.settings?.saving?.default_output_directory) return syncSingleSaveMode();
@@ -416,12 +431,17 @@ async function startSingleSave(event) {
       renderCatalogViews();
       }
     }
+    let listRemovalFailed = false;
+    if (removeSaved && !committed.stale && (copying || !noEffect)) {
+      try { await removeSavedCatalogEntries([save.imageId], catalogEpoch, removalSelection); }
+      catch (error) { console.warn("保存後の一覧削除に失敗しました: %s", error?.code || error); listRemovalFailed = true; }
+    }
     state.singleSave = null;
     if (browserSourceDelete && !browserSourceDelete.deleted) {
       if (browserSourceDelete.retryable === false) setSingleSaveResult(t("sourceDelete.notAvailable", { complete: t("apply.complete", { completed: 1 }), output }), true);
       else
       setSingleSaveResult(t("sourceDelete.singlePending", { complete: t("apply.complete", { completed: 1 }), output }), true);
-    } else setSingleSaveResult(copying ? `${t("apply.complete", { completed: 1 })} ${output}` : t("apply.complete", { completed: 1 }));
+    } else setSingleSaveResult(`${copying ? `${t("apply.complete", { completed: 1 })} ${output}` : t("apply.complete", { completed: 1 })}${listRemovalFailed ? ` ${t("apply.removeSavedFailed")}` : ""}`, listRemovalFailed);
     } catch (error) {
       if (saveToken && entry) await cancelBrowserSave(entry, saveToken);
       if (cleanupIntent && isDefinitiveCommitRejection(error)) await clearProjectSourceCleanup({ intentIds: [cleanupIntent] });
@@ -593,6 +613,7 @@ function discardRemovedBrowserSaveState() {
     state.workspaceDraftChains.delete(imageId);
     state.workspaceDraftPending?.delete(imageId);
     state.workspaceMutationErrors.delete(imageId);
+    clearCandidateMutationState(imageId);
     releaseImageCaches(imageId);
     releaseCandidateBundles(imageId);
   }
@@ -621,6 +642,30 @@ function reconcileBrowserSaveState() {
     render();
   }
   renderCatalogViews();
+}
+
+async function removeSavedCatalogEntries(imageIds, catalogEpoch, selection) {
+  if (!imageIds.length || !isCurrentCatalogEpoch(catalogEpoch)) return false;
+  const expectedProjectId = state.project?.id || null;
+  const data = await catalogApi("/api/catalog/remove", { imageIds }, { method: "POST" });
+  if (!isCurrentCatalogEpoch(catalogEpoch)) return false;
+  state.images = data.images || state.images;
+  loadReviewedPaths();
+  const removedImageIds = Array.isArray(data.removedImageIds) ? data.removedImageIds : [];
+  if (expectedProjectId && removedImageIds.length) await forgetProjectImageSources(expectedProjectId, removedImageIds);
+  const removed = new Set(removedImageIds);
+  if (removed.has(state.pendingImageId)) {
+    state.pendingImageId = null; state.pendingImageKey = null; state.pendingCandidateKey = null;
+    abortCatalogLoads(); state.prefetchQueue = []; state.hoverPrefetchId = null;
+  }
+  if (removed.has(state.selectionAnchorId)) state.selectionAnchorId = null;
+  if (removed.has(state.contextMenuImageId)) {
+    state.contextMenuImageId = null; state.contextMenuOrigin = null; state.contextMenuScroll = null;
+  }
+  discardRemovedBrowserSaveState();
+  reconcileBrowserSaveState();
+  if (selection && removedImageIds.length) await restoreDeletionSelection(selection, new Set(removedImageIds));
+  return true;
 }
 
 async function ensureHandlePermission(access, requireWrite = true) {
@@ -807,7 +852,7 @@ async function restoreCopiedBrowserSourcesAfterRejectedDelete(pending) {
   }
 }
 
-async function runBrowserSave(imageIds, suffix, deleteOriginal, mode = "copy") {
+async function runBrowserSave(imageIds, suffix, deleteOriginal, mode = "copy", removeSaved = false) {
   const inputs = {
     imageIds: [...imageIds],
     divisor: Number($("#applyDivisor").value),
@@ -816,6 +861,7 @@ async function runBrowserSave(imageIds, suffix, deleteOriginal, mode = "copy") {
     keepMetadata: $("#applyKeepMetadata").checked,
     deleteOriginal,
     mode,
+    removeSaved,
     projectId: state.project?.id || null,
     parallelism: Math.max(1, Math.round(Number(state.settings?.saving?.parallelism) || 2)),
     drafts: new Map(Object.entries(draftPayload(imageIds))),
@@ -830,7 +876,8 @@ async function runBrowserSave(imageIds, suffix, deleteOriginal, mode = "copy") {
   });
   const save = {
     entries: result.entries, completed: 0, stale: 0, paused: false, cancelled: false, failed: false,
-    sourceDeleteFailures: [], catalogEpoch: state.catalogEpoch, cleanupIntents: new Map(),
+    sourceDeleteFailures: [], catalogEpoch: state.catalogEpoch, cleanupIntents: new Map(), savedImageIds: new Set(),
+    removalSelection: removeSaved ? deletionSelectionSnapshot(new Set(imageIds), galleryFilteredImages()) : null,
   };
   state.browserSave = save;
   state.saving = true;
@@ -941,7 +988,7 @@ async function runBrowserSave(imageIds, suffix, deleteOriginal, mode = "copy") {
               if (sourceRename && liveAccess) Object.assign(liveAccess, sourceRename.replacement);
               await finishFormattedSourceRename(access, sourceRename);
               if (liveAccess) Object.assign(liveAccess, access);
-              return finishBrowserSaveEntry(committed, entry, save, sourceAction);
+              return finishBrowserSaveEntry(committed, entry, save, sourceAction, noEffect);
             } catch (error) {
               const reconcile = !commitStarted || isDefinitiveCommitRejection(error) || error.saveState === "pending";
               if (reconcile) await cancelBrowserSave(entry, saveToken);
@@ -959,19 +1006,21 @@ async function runBrowserSave(imageIds, suffix, deleteOriginal, mode = "copy") {
             });
           } finally { inputs.drafts.delete(entry.imageId); }
           const saveToken = binary.headers?.get("X-Mozarie-Save-Token") || "";
-          sourceAction = binary.headers?.get("X-Mozarie-No-Effect") === "1" ? "keep" : "overwrite";
+          const noEffect = binary.headers?.get("X-Mozarie-No-Effect") === "1";
+          sourceAction = noEffect ? "keep" : "overwrite";
           const committed = await commitBrowserSaveWithRetry({ imageId: entry.imageId, candidateRevision: entry.candidateRevision, deleteOriginal: inputs.deleteOriginal, sourceAction, saveToken });
-          return finishBrowserSaveEntry(committed, entry, save, sourceAction);
+          return finishBrowserSaveEntry(committed, entry, save, sourceAction, noEffect);
         } else {
           throw codedError("source_action_unavailable");
         }
       };
-      const finishBrowserSaveEntry = (committed, entry, save, sourceAction) => {
+      const finishBrowserSaveEntry = (committed, entry, save, sourceAction, noEffect = false) => {
         // Saving is output-only: no candidate, manual, review, hidden, or
         // list state may be reset as a side effect.
         if (committed.stale) save.stale += 1;
         if (sourceAction === "overwrite" && state.currentId === entry.imageId) save.reloadCurrent = true;
         if (sourceAction !== "keep") save.needsCatalogReconcile = true;
+        if (inputs.removeSaved && !committed.stale && (inputs.mode === "copy" || !noEffect)) save.savedImageIds.add(entry.imageId);
         save.completed += 1;
         showBrowserSaveProgress(save, entry);
       };
@@ -1035,6 +1084,14 @@ async function runBrowserSave(imageIds, suffix, deleteOriginal, mode = "copy") {
           }
         }
       }
+      if (inputs.removeSaved && save.savedImageIds.size) {
+        try {
+          await removeSavedCatalogEntries([...save.savedImageIds], save.catalogEpoch, save.removalSelection);
+        } catch (error) {
+          console.warn("保存後の一覧削除に失敗しました: %s", error?.code || error);
+          setApplyResult(`${$("#applyResult").textContent} ${t("apply.removeSavedFailed")}`, true);
+        }
+      }
     } finally {
       state.saving = false;
       state.applyRunning = false;
@@ -1094,6 +1151,7 @@ async function startApplyFromDialog(event) {
   if (state.saveStarting || state.saving || isBusy() || state.importing || catalogStagingEditsActive()) return;
   const mode = selectedSaveMode();
   const copy = mode === "copy";
+  const removeSaved = $("#applyRemoveSaved").checked;
   const outputDirectory = $("#applyOutputDirectoryStatus");
   if (copy && outputDirectory.value.trim() !== (state.settings?.saving?.default_output_directory || "") && !await commitOutputDirectory(outputDirectory)) return;
   if (state.saveStarting || state.saving || isBusy()) return;
@@ -1121,7 +1179,7 @@ async function startApplyFromDialog(event) {
     if (state.importing) return;
     await Promise.all(imageIds.map((imageId) => flushWorkspaceDraft(imageId)));
     state.saveStarting = false;
-    await runBrowserSave(imageIds, suffix, copy && $("#deleteOriginal").checked, mode);
+    await runBrowserSave(imageIds, suffix, copy && $("#deleteOriginal").checked, mode, removeSaved);
   } catch (error) {
     showApplyError(error);
     if (!state.saveStarting) {

@@ -1083,6 +1083,10 @@ function cancelManualStroke() {
     state.draftDirty = stroke.draftDirty; state.draftLayerDirty = stroke.draftLayers; state.draftDirtyRois = stroke.draftRois;
     refreshManualLayerPresence("add", "exclusion", "exclusionErase"); invalidateMaskComposition();
   } else rebuildManualMaskFromHistory();
+  const inheritedManual = ["brush", "mosaic_eraser"].includes(stroke.tool) ? ["manual:apply", state.manualMaskPresent]
+    : (stroke.tool === "eraser" ? ["manual:exclude", state.manualExclusionPresent]
+      : (stroke.tool === "exclude_eraser" ? ["manual:excludeErase", state.manualExclusionErasePresent] : null));
+  if (inheritedManual && !inheritedManual[1]) setCandidateDisplayMode([inheritedManual[0]], "off");
   requestMosaicPreview(); renderCandidates(); render();
 }
 

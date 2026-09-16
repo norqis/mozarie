@@ -6,6 +6,8 @@
   "apply.completeWithStale": "Saved {completed} image(s). {stale} source file(s) changed.",
   "apply.copy": "Save a copy",
   "apply.deleteOriginal": "Delete original after copy succeeds",
+  "apply.removeSaved": "Remove from the list after saving",
+  "apply.removeSavedFailed": "Saved, but could not remove it from the list.",
   "apply.deleteUnavailable": "Deleting the original is unavailable for {count} imported image(s).",
   "apply.error": "Save failed: {error}",
   "apply.handleSource": "This imported image can only be saved as a copy.",

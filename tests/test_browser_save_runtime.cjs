@@ -40,11 +40,11 @@ function jsonResponse(body, status = 200) {
   return { ok: status >= 200 && status < 300, status, json: async () => body };
 }
 
-function binaryResponse(bytes, saveToken = "runtime-render-token", beforePipe = null, outputPath = "") {
+function binaryResponse(bytes, saveToken = "runtime-render-token", beforePipe = null, outputPath = "", noEffect = false) {
   return {
     ok: true,
     status: 200,
-    headers: { get: (name) => name === "X-Mozarie-Save-Token" ? saveToken : (name === "X-Mozarie-Output-Path-B64" && outputPath ? Buffer.from(outputPath).toString("base64") : null) },
+    headers: { get: (name) => name === "X-Mozarie-Save-Token" ? saveToken : (name === "X-Mozarie-No-Effect" && noEffect ? "1" : (name === "X-Mozarie-Output-Path-B64" && outputPath ? Buffer.from(outputPath).toString("base64") : null)) },
     body: { pipeTo: async (writable) => { await beforePipe?.(); await writable.write(Uint8Array.from(bytes)); await writable.close(); } },
     json: async () => ({}),
   };
@@ -604,7 +604,9 @@ async function runRemoveAfterSaveCase() {
     initialImages: [image],
     commit: () => jsonResponse({ cleared: true, stale: false, images: [] }),
     removeCatalog: ({ options }) => {
-      assert.deepEqual(JSON.parse(options.body), { imageIds: [image.id] });
+      assert.deepEqual(JSON.parse(options.body), {
+        imageIds: [image.id], expectedProjectId: null, expectedCatalogGeneration: null,
+      });
       return jsonResponse({ images: [], removedImageIds: [image.id] });
     },
   });
@@ -646,7 +648,9 @@ async function runRemoveAfterSavePartialAndStaleCase() {
         : jsonResponse({ error: "second commit failed" }, 500);
     },
     removeCatalog: ({ options }) => {
-      assert.deepEqual(JSON.parse(options.body), { imageIds: [first.id] });
+      assert.deepEqual(JSON.parse(options.body), {
+        imageIds: [first.id], expectedProjectId: null, expectedCatalogGeneration: null,
+      });
       return jsonResponse({ images: [second], removedImageIds: [first.id] });
     },
   });
@@ -1208,7 +1212,9 @@ async function runRemoveAfterSaveCases() {
     },
   });
   await enabled.runBrowserSave([saved.id], "_censored", false, "copy", true);
-  assert.deepEqual(removalPayload, { imageIds: [saved.id] }, "only completed and committed images are removed after save");
+  assert.deepEqual(removalPayload, {
+    imageIds: [saved.id], expectedProjectId: null, expectedCatalogGeneration: null,
+  }, "only completed and committed images are removed after save");
   assert.deepEqual(enabled.state.images.map((image) => image.id), [retained.id]);
 
   const disabled = createRuntime({
@@ -1224,6 +1230,26 @@ async function runRemoveAfterSaveCases() {
   });
   await stale.runBrowserSave([saved.id], "_censored", false, "copy", true);
   assert.equal(stale.requests.some((request) => request.path === "/api/catalog/remove"), false, "stale saves remain in the catalog");
+}
+
+async function runNoEffectRemovalEligibilityCases() {
+  const image = { id: "image-1", relativePath: "source.png", sourceKind: "filesystem", width: 32, height: 32, candidateCount: 0, enabledCandidateCount: 0 };
+  const copy = createRuntime({
+    initialImages: [image],
+    copy: () => binaryResponse([4, 5, 6], "copy-no-effect", null, "", true),
+    commit: () => jsonResponse({ cleared: true, stale: false }),
+    removeCatalog: () => jsonResponse({ images: [], removedImageIds: [image.id] }),
+  });
+  await copy.runBrowserSave([image.id], "_censored", false, "copy", true);
+  assert.equal(copy.requests.some((request) => request.path === "/api/catalog/remove"), true, "a committed copy remains eligible when the render reports no effect");
+
+  const overwrite = createRuntime({
+    initialImages: [image],
+    renderBinary: () => binaryResponse([4, 5, 6], "overwrite-no-effect", null, "", true),
+    commit: () => jsonResponse({ cleared: true, stale: false }),
+  });
+  await overwrite.runBrowserSave([image.id], "_censored", false, "overwrite", true);
+  assert.equal(overwrite.requests.some((request) => request.path === "/api/catalog/remove"), false, "a no-effect overwrite remains in the catalog");
 }
 
 async function runNoEffectiveMaskBatchCases() {
@@ -1256,7 +1282,9 @@ async function runNoEffectiveMaskBatchCases() {
     },
     commit: () => jsonResponse({ cleared: true, stale: false, deleted: false }),
     removeCatalog: ({ options }) => {
-      assert.deepEqual(JSON.parse(options.body), { imageIds: [first.id] });
+      assert.deepEqual(JSON.parse(options.body), {
+        imageIds: [first.id], expectedProjectId: null, expectedCatalogGeneration: null,
+      });
       return jsonResponse({ images: [second], removedImageIds: [first.id] });
     },
   });
@@ -1270,7 +1298,9 @@ async function runNoEffectiveMaskBatchCases() {
     copy: () => (++renders % 2 ? jsonResponse({ output: "G:/output/first.png" }) : jsonResponse({ error_code: "no_effective_mask" }, 400)),
     commit: () => jsonResponse({ cleared: true, stale: false, deleted: false }),
     removeCatalog: ({ options }) => {
-      assert.deepEqual(JSON.parse(options.body), { imageIds: [first.id] });
+      assert.deepEqual(JSON.parse(options.body), {
+        imageIds: [first.id], expectedProjectId: null, expectedCatalogGeneration: null,
+      });
       return jsonResponse({ images: [second], removedImageIds: [first.id] });
     },
   });
@@ -1357,6 +1387,12 @@ nodeTest("browser save runtime contracts", async () => {
   await runHandleDeleteAfterCopyCase();
   await runQueuedHandleChangeCases();
   await runCatalogEpochGuardCase();
+  await runRemoveAfterSaveCase();
+  await runRemoveAfterSaveAlreadyAbsentCase();
+  await runRemoveAfterSavePartialAndStaleCase();
+  await runRemoveAfterSaveUiCleanupCase();
+  await runRemoveAfterSaveCases();
+  await runNoEffectRemovalEligibilityCases();
   await runSaveKeepsCatalogueAndEditorStateCase();
   await runExclusiveWritableCases();
   await runPartialOutputCleanupCases();
