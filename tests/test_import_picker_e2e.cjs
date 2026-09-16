@@ -2711,8 +2711,12 @@ async function runControlLedger(page, fixtureUrl, contracts, finishCancel, holdS
   await click("detectAllButton");
   await input("detectExcludeCandidatePadding", "2"); await input("detectFluidColorFillEnabled", true); await input("detectFluidColorFillTolerance", "27");
   await click("detectCancelButton");
-  await click("saveAllButton"); await input("applyOutputFormat", "png"); await input("applyKeepMetadata", true); await input("applyRemoveSaved", false); await click("applyCloseButton");
-  await click("saveButton"); await input("singleSaveOutputFormat", "png"); await input("singleSaveKeepMetadata", true); await input("singleSaveRemoveSaved", false); await click("singleSaveCloseButton");
+  await click("saveAllButton"); await input("applyOutputFormat", "png"); await input("applyKeepMetadata", true); await input("applyRemoveSaved", true);
+  assert.equal(await page.locator("#applyRemoveSaved").isChecked(), true, "batch list removal can be enabled");
+  await input("applyRemoveSaved", false); assert.equal(await page.locator("#applyRemoveSaved").isChecked(), false, "batch list removal can be disabled"); await click("applyCloseButton");
+  await click("saveButton"); await input("singleSaveOutputFormat", "png"); await input("singleSaveKeepMetadata", true); await input("singleSaveRemoveSaved", true);
+  assert.equal(await page.locator("#singleSaveRemoveSaved").isChecked(), true, "single list removal can be enabled");
+  await input("singleSaveRemoveSaved", false); assert.equal(await page.locator("#singleSaveRemoveSaved").isChecked(), false, "single list removal can be disabled"); await click("singleSaveCloseButton");
   await click("settingsButton");
   for (const id of ["settingsTabGeneral", "settingsTabModels", "settingsTabDisplay", "settingsTabShortcuts", "settingsTabConfirm", "settingsTabInfo"]) await click(id);
   await click("settingsTabGeneral");

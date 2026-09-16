@@ -1252,6 +1252,46 @@ async function runNoEffectRemovalEligibilityCases() {
   assert.equal(overwrite.requests.some((request) => request.path === "/api/catalog/remove"), false, "a no-effect overwrite remains in the catalog");
 }
 
+async function runCancelledBatchRemovalAfterSettledWorkersCase() {
+  const images = ["first", "second", "third"].map((id) => ({ id, relativePath: `${id}.png`, width: 32, height: 32, candidateCount: 1, enabledCandidateCount: 1 }));
+  const entries = images.map((image) => ({ imageId: image.id, relativePath: image.relativePath, candidateRevision: 1 }));
+  const secondRenderStarted = deferred(); const firstCommitted = deferred(); const releaseSecondRender = deferred();
+  let commits = 0; let thirdStarted = false;
+  const runtime = createRuntime({
+    initialImages: images, entries,
+    copy: async ({ options }) => {
+      const imageId = JSON.parse(options.body).imageId;
+      if (imageId === "second") { secondRenderStarted.resolve(); await releaseSecondRender.promise; }
+      if (imageId === "third") thirdStarted = true;
+      return binaryResponse([4, 5, 6], `${imageId}-token`);
+    },
+    commit: () => {
+      commits += 1;
+      if (commits === 1) { runtime.state.browserSave.cancelled = true; firstCommitted.resolve(); }
+      return jsonResponse({ cleared: true, stale: false });
+    },
+    removeCatalog: ({ options }) => {
+      assert.equal(commits, 2, "catalog removal waits for every started worker to commit");
+      assert.deepEqual(JSON.parse(options.body), {
+        imageIds: ["first", "second"], expectedProjectId: null, expectedCatalogGeneration: null,
+      });
+      return jsonResponse({ images: [images[2]], removedImageIds: ["first", "second"] });
+    },
+  });
+  runtime.state.settings.saving.parallelism = 2;
+  const saving = runtime.runBrowserSave(entries.map((entry) => entry.imageId), "_censored", false, "copy", true);
+  await Promise.all([secondRenderStarted.promise, firstCommitted.promise]);
+  assert.equal(runtime.state.browserSave.cancelled, true, "the first committed entry records cancellation before the held worker settles");
+  assert.equal(runtime.state.saving, true, "the batch remains active until the held worker settles");
+  assert.equal(commits, 1, "only the first worker has committed before the held render is released");
+  assert.equal(runtime.requests.some((request) => request.path === "/api/catalog/remove"), false, "catalog removal does not run before the held worker settles");
+  assert.equal(thirdStarted, false, "cancellation prevents the unstarted third entry");
+  releaseSecondRender.resolve();
+  await saving;
+  assert.equal(runtime.requests.filter((request) => request.path === "/api/catalog/remove").length, 1, "cancelled work submits one terminal removal");
+  assert.equal(thirdStarted, false, "the third entry remains in the catalog after cancellation");
+}
+
 async function runNoEffectiveMaskBatchCases() {
   const first = { id: "image-1", relativePath: "first.png", width: 32, height: 32, candidateCount: 1, enabledCandidateCount: 1 };
   const second = { id: "image-2", relativePath: "second.png", width: 32, height: 32, candidateCount: 0, enabledCandidateCount: 0 };
@@ -1306,26 +1346,6 @@ async function runNoEffectiveMaskBatchCases() {
   });
   await keepAll.runBrowserSave([first.id, second.id], "_censored", false, "copy", true, false);
   assert.equal(keepAll.requests.filter((request) => request.path === "/api/catalog/remove").length, 1, "remove-after-save removes only the saved image when remove-only-masked is off");
-}
-
-async function runServerCopyRemovalCases() {
-  const first = { id: "image-1", relativePath: "first.png", width: 32, height: 32, candidateCount: 1, enabledCandidateCount: 1 };
-  const second = { id: "image-2", relativePath: "second.png", width: 32, height: 32, candidateCount: 0, enabledCandidateCount: 0 };
-  let removalPayload = null;
-  const mixed = createRuntime({
-    initialImages: [first, second],
-    commit: () => jsonResponse({}),
-    removeCatalog: ({ options }) => {
-      removalPayload = JSON.parse(options.body);
-      return jsonResponse({ images: [second], removedImageIds: [first.id] });
-    },
-  });
-  await mixed.finishApplyJob({ kind: "apply", state: "complete", completed: 1, imageIds: [first.id, second.id], completedImageIds: [first.id], removeAfterSave: true });
-  assert.deepEqual(removalPayload, { imageIds: [first.id] }, "server-copy removal keeps an empty-mask image even when remove-only-masked was off");
-
-  const empty = createRuntime({ initialImages: [second], commit: () => jsonResponse({}) });
-  await empty.finishApplyJob({ kind: "apply", state: "complete", completed: 0, imageIds: [second.id], completedImageIds: [], removeAfterSave: true });
-  assert.equal(empty.requests.some((request) => request.path === "/api/catalog/remove"), false, "server-copy all-empty batches stay in the catalog");
 }
 
 async function runSaveKeepsCatalogueAndEditorStateCase() {
@@ -1393,6 +1413,7 @@ nodeTest("browser save runtime contracts", async () => {
   await runRemoveAfterSaveUiCleanupCase();
   await runRemoveAfterSaveCases();
   await runNoEffectRemovalEligibilityCases();
+  await runCancelledBatchRemovalAfterSettledWorkersCase();
   await runSaveKeepsCatalogueAndEditorStateCase();
   await runExclusiveWritableCases();
   await runPartialOutputCleanupCases();

@@ -14,7 +14,7 @@ function canvasContext(name) {
     clearRect() { this.pixels = false; this.calls.push("clear"); },
     drawImage() { this.pixels = true; this.calls.push("draw"); },
     fillRect() { this.pixels = true; this.calls.push(`fill:${this.globalCompositeOperation}`); },
-    getImageData() { return { data: new Uint8ClampedArray(100 * 80 * 4) }; },
+    getImageData() { return { data: new Uint8ClampedArray(100 * 80 * 4) }; }, putImageData() {},
   };
   return context;
 }
@@ -657,6 +657,21 @@ nodeTest("editor masks, fill, candidates, and history", async () => {
   test.clearCandidateBlink();
   test.beginManualStroke({ x: 5, y: 5 });
   assert.equal(test.candidateDisplayMode("manual:excludeErase"), "off", "an exclusion erase does not start an animation when no existing exclusion layer is displayed");
+
+  const freshManualPixels = pixelLayer(addCtx);
+  resetCandidateState(); state.historyDurable = true; context.hasDurableHistory = () => state.historyDurable === true; state.tool = "brush"; state.manualMaskPresent = false; addCtx.pixels = false;
+  test.toggleCandidateDisplay("apply"); test.beginManualStroke({ x: 5, y: 5 });
+  assert.equal(test.candidateDisplayMode("manual:apply"), "normal", "a fresh manual mosaic inherits its role display before paint completes");
+  test.cancelManualStroke();
+  assert.equal(test.candidateDisplayMode("manual:apply"), "off", "cancelling a fresh manual mosaic clears its inherited display ID");
+  assert.equal(state.blinkCandidateIds.has("manual:apply"), false, "a cancelled fresh manual mosaic does not leave a blink candidate");
+  state.historyDurable = false; context.hasDurableHistory = () => false; freshManualPixels.restore();
+
+  const existingManualPixels = pixelLayer(addCtx);
+  resetCandidateState(); state.historyDurable = true; context.hasDurableHistory = () => state.historyDurable === true; state.tool = "brush"; existingManualPixels.set(3, 3);
+  test.toggleCandidateEffective("apply"); test.beginManualStroke({ x: 5, y: 5 }); test.cancelManualStroke();
+  assert.equal(test.candidateDisplayMode("manual:apply"), "effective", "cancelling on an existing manual mosaic preserves its role display mode");
+  state.historyDurable = false; context.hasDurableHistory = () => false; existingManualPixels.restore();
 
   resetCandidateState();
   const boundaryBodies = [];
