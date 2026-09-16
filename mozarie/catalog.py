@@ -27,7 +27,7 @@ from .core import (
     safe_import_relative_path, torch_module,
 )
 from .domain import Candidate, CandidateRole
-from .image_io import _valid_color, decode_draft_masks, draft_manual_exclusion_forced, inspect_import_image, open_image, oriented_image_size, unique_session_import_destination
+from .image_io import _valid_color, decode_draft_masks, draft_manual_exclusion_forced, inspect_import_image, mask_alpha_or_luma, open_image, oriented_image_size, unique_session_import_destination
 from .masks import compose_masks, expand_mask, union_mask
 from .runtime import patch_directml_sam_prompt_encoder, runtime_backend, torch_device
 from .save_journal import SaveJournal
@@ -1039,7 +1039,7 @@ class CatalogMixin:
                 continue
             try: raw = base64.b64decode(str(candidate["mask"]), validate=True)
             except (KeyError, ValueError, binascii.Error) as exc: raise ClientError("保存済みマスクが正しくありません。", "workspace_write_failed") from exc
-            with open_image(io.BytesIO(raw)) as image: mask = expand_mask(np.asarray(image.convert("L"), dtype=np.uint8), int(candidate.get("expandPx", 0)))
+            with open_image(io.BytesIO(raw)) as image: mask = expand_mask(mask_alpha_or_luma(image), int(candidate.get("expandPx", 0)))
             if mask.shape != shape:
                 raise ValueError("apply mask dimensions do not match the source image" if candidate.get("role") == CandidateRole.APPLY.value else "exclude mask dimensions do not match the source image")
             if candidate.get("role") == CandidateRole.APPLY.value:

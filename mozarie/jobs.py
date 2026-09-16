@@ -14,7 +14,7 @@ import numpy as np
 from PIL import Image
 
 from .core import JOB_LABELS, LOGGER, CandidateRole, ClientError, ImageRecord, Job, JobControl
-from .image_io import calculate_block_size, open_image
+from .image_io import calculate_block_size, mask_alpha_or_luma, open_image
 from .masks import compose_masks, expand_mask, union_mask
 from .runtime import runtime_backend
 
@@ -379,7 +379,7 @@ class JobsMixin:
                 self.materialize_candidate_mask(candidate, image_id)
                 try:
                     with open_image(candidate.mask_path) as mask_image:
-                        mask = expand_mask(np.asarray(mask_image.convert("L"), dtype=np.uint8), candidate.expand_px)
+                        mask = expand_mask(mask_alpha_or_luma(mask_image), candidate.expand_px)
                 except FileNotFoundError as exc:
                     raise ClientError("検出候補のマスクが見つかりません。自動検出をやり直してください。", "catalog_changed") from exc
                 if mask.shape != shape:

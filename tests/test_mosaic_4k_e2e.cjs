@@ -157,3 +157,80 @@ test("4K drag renders a preview before pointerup with one bounded worker", { tim
     await closeServer(fixture.server);
   }
 });
+
+test("public preview re-enable restores its canvas and pointer cancellation restores a curved durable stroke", { timeout: 60000 }, async () => {
+  const fixture = await startFixtureServer();
+  const browser = await chromium.launch();
+  let context; let page;
+  try {
+    context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+    page = await context.newPage();
+    page.setDefaultTimeout(25000);
+    await page.addInitScript(() => {
+      window.showOpenFilePicker = async () => [];
+      window.showDirectoryPicker = async () => ({ async *values() {} });
+    });
+    await page.goto(fixture.url, { waitUntil: "domcontentloaded" });
+    await page.locator('.gallery-item[data-id="sample"]').click();
+    await page.waitForFunction(() => state.currentId === "sample" && state.currentImage);
+    const geometry = await page.evaluate(async () => {
+      const source = document.createElement("canvas"); source.width = source.height = 64;
+      const sourceContext = source.getContext("2d");
+      for (let x = 0; x < source.width; x += 1) {
+        sourceContext.fillStyle = x % 2 ? "#fff" : "#000";
+        sourceContext.fillRect(x, 0, 1, source.height);
+      }
+      state.currentImage = await createImageBitmap(source);
+      const record = currentRecord(); record.width = source.width; record.height = source.height;
+      canvasSizeForImage(record); prepareOriginalImage(); resetCurrentDraft();
+      addCtx.clearRect(0, 0, source.width, source.height); exclusionCtx.clearRect(0, 0, source.width, source.height); exclusionEraseCtx.clearRect(0, 0, source.width, source.height);
+      addCtx.fillRect(8, 8, 8, 8);
+      state.manualEnabled = true; state.manualExclusionEnabled = false; state.manualExclusionEraseEnabled = false;
+      state.historyDurable = true; state.project = { id: "preview-cancel-fixture" };
+      state.draftDirty = false; state.draftLayerDirty = new Set(); state.draftDirtyRois = new Map(); markMaskDirty();
+      document.querySelector("#divisor").value = "16";
+      state.mosaicPreviewEnabled = true;
+      const previewButton = document.querySelector("#mosaicPreviewButton"); previewButton.classList.add("active"); previewButton.setAttribute("aria-pressed", "true");
+      fitImage(); requestMosaicPreview();
+      const rect = canvas.getBoundingClientRect();
+      const point = (x, y) => ({ x: rect.left + state.view.x + x * state.view.scale, y: rect.top + state.view.y + y * state.view.scale });
+      return { start: point(40, 40), corner: point(52, 40), end: point(40, 52) };
+    });
+    await page.waitForFunction(() => !state.mosaicWorkerBusy && state.mosaicSourceId && mosaicCanvas.width === 64 && mosaicCanvas.height === 64);
+    assert.deepEqual(await page.evaluate(() => [...mosaicCtx.getImageData(10, 10, 1, 1).data]), [128, 128, 128, 255], "the live worker produces the masked mosaic pixel before toggling");
+
+    await page.evaluate(() => releaseMosaicPreview());
+    assert.deepEqual(await page.evaluate(() => [mosaicCanvas.width, mosaicCanvas.height]), [1, 1], "turning the preview off releases its full-size backing canvas");
+    await page.locator("#mosaicPreviewButton").click();
+    assert.equal(await page.evaluate(() => state.mosaicPreviewEnabled), false, "the public button turns the released preview off");
+    await page.locator("#mosaicPreviewButton").click();
+    await page.waitForFunction(() => state.mosaicPreviewEnabled && !state.mosaicWorkerBusy && mosaicCanvas.width === 64 && mosaicCanvas.height === 64);
+    assert.deepEqual(await page.evaluate(() => [...mosaicCtx.getImageData(10, 10, 1, 1).data]), [128, 128, 128, 255], "the public re-enable repaints the full-size masked pixel rather than a clipped 1x1 canvas");
+
+    await page.evaluate(() => {
+      state.manualEnabled = false; state.manualExclusionEnabled = false; state.manualExclusionEraseEnabled = false;
+      state.draftDirty = false; state.draftLayerDirty = new Set(); state.draftDirtyRois = new Map();
+    });
+    await page.locator("#brushTool").click();
+    await page.evaluate(() => { document.querySelector("#brushSize").value = "4"; });
+    await page.mouse.move(geometry.start.x, geometry.start.y); await page.mouse.down();
+    await page.mouse.move(geometry.corner.x, geometry.corner.y, { steps: 8 });
+    await page.mouse.move(geometry.end.x, geometry.end.y, { steps: 8 });
+    await page.mouse.move(geometry.start.x, geometry.start.y, { steps: 8 });
+    await page.waitForFunction(() => state.activeStroke?.points.length > 3 && addCtx.getImageData(40, 40, 1, 1).data[3] === 255);
+    await page.evaluate(({ x, y }) => canvas.dispatchEvent(new PointerEvent("pointercancel", { pointerId: 1, bubbles: true, cancelable: true, clientX: x, clientY: y, button: 0, buttons: 0 })), geometry.start);
+    await page.waitForFunction(() => !state.activeStroke && !state.mosaicWorkerBusy && !state.mosaicPending);
+    assert.deepEqual(await page.evaluate(() => ({
+      prior: addCtx.getImageData(10, 10, 1, 1).data[3],
+      cancelledStart: addCtx.getImageData(40, 40, 1, 1).data[3],
+      cancelledCurve: addCtx.getImageData(52, 40, 1, 1).data[3],
+      enabled: state.manualEnabled,
+      draftDirty: state.draftDirty,
+    })), { prior: 255, cancelledStart: 0, cancelledCurve: 0, enabled: false, draftDirty: false }, "a public pointer cancellation restores existing pixels and all durable-stroke state after a curved retraced gesture");
+  } finally {
+    await context?.close();
+    await browser.close();
+    fixture.server.closeAllConnections();
+    await closeServer(fixture.server);
+  }
+});
