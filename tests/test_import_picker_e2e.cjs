@@ -1239,7 +1239,37 @@ async function runExhaustiveCandidateScenarios(browser) {
 
 async function runDynamicProjectAndShortcutScenario(browser, fixtureUrl) {
   const page = await newCoveredPage(browser, { viewport: { width: 1280, height: 900 } });
+  const restoredFileRequests = [];
+  const sameSourceOpenRequests = [];
+  let restoringProjectSource = false;
+  let restoreCatalogGeneration = null;
   try {
+    await page.route("**/api/images", async (route) => {
+      if (!restoringProjectSource) return route.continue();
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({
+        images: [], root: "G:\\restore-source", catalogGeneration: restoreCatalogGeneration, workspace: false, workspaceId: null, historyDurable: false,
+        project: { id: "restore-project", name: "Restore project", status: "working", imageCount: 2, sourceRoot: "G:\\restore-source" }, readOnly: false, sources: [], needsSource: false,
+      }) });
+    });
+    await page.route("**/api/import/file", async (route) => {
+      const request = route.request();
+      const headers = request.headers();
+      const catalogGeneration = Number(headers["x-mozarie-expected-catalog-generation"]);
+      restoredFileRequests.push({
+        sourceId: decodeURIComponent(headers["x-mozarie-source-id"] || ""),
+        clientKey: decodeURIComponent(headers["x-mozarie-client-key"] || ""),
+        intent: headers["x-mozarie-import-intent"],
+      });
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ catalogId: "restore-project", catalogGeneration }) });
+    });
+    await page.route("**/api/project/open", async (route) => {
+      const request = route.request();
+      sameSourceOpenRequests.push(JSON.parse(request.postData() || "{}"));
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({
+        project: { id: "same-source-second", name: "Second source", status: "working", imageCount: 0, sourceRoot: "G:\\same-source" },
+        images: [], root: "G:\\same-source", sources: [], needsSource: false, readOnly: false,
+      }) });
+    });
     await page.goto(fixtureUrl, { waitUntil: "domcontentloaded" });
     await waitForFixtureReady(page);
 
@@ -1279,6 +1309,73 @@ async function runDynamicProjectAndShortcutScenario(browser, fixtureUrl) {
     assert.equal(await shortcutEnabled.isChecked(), !enabledBefore, "shortcut enabled control toggles the action availability");
     recordDynamicControl("[data-shortcut-enabled]");
     await page.locator("#settingsCloseButton").click();
+
+    // Restore one browser file source through its visible recovery action.
+    // The page fixture provides only the File System Access boundary; the
+    // browser button drives the real import start/file/finish flow.
+    await page.evaluate(async () => {
+      const bytes = Uint8Array.from(atob("iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAEElEQVR4nGP8zwACTGCSAQANHQEDgslx/wAAAABJRU5ErkJggg=="), (byte) => byte.charCodeAt(0));
+      const directory = await navigator.storage.getDirectory();
+      const handle = await directory.getFileHandle("restore-source.png", { create: true });
+      const writable = await handle.createWritable(); await writable.write(bytes); await writable.close();
+      const source = {
+        projectId: "restore-project", sourceId: "restore-source", clientKey: "restore-client", relativePath: "restore-source.png", kind: "file", key: "file:restore-source:restore-client",
+        handle,
+      };
+      pendingBrowserProjectSources = [source, { ...source, sourceId: "retained-source", clientKey: "retained-client", relativePath: "retained-source.png", key: "file:retained-source:retained-client" }];
+      state.project = { id: "restore-project", name: "Restore project", status: "working", imageCount: 2 };
+      state.projectReadOnly = false;
+      renderProjectCurrent();
+    });
+    await page.locator("#projectButton").click();
+    restoreCatalogGeneration = await page.evaluate(() => state.serverCatalogGeneration);
+    restoringProjectSource = true;
+    await page.locator("#projectBrowserRestoreList button").first().click();
+    await page.waitForFunction(() => !state.importing && !state.projectOperationPending && state.project?.id === "restore-project"
+      && pendingBrowserProjectSources.length === 1 && pendingBrowserProjectSources[0].key === "file:retained-source:retained-client");
+    assert.deepEqual(await page.evaluate(() => ({
+      pending: pendingBrowserProjectSources.map((item) => item.key),
+      error: { open: $("#errorDialog").open, cause: $("#errorDialogCause").textContent },
+    })), { pending: ["file:retained-source:retained-client"], error: { open: false, cause: "" } }, "browser recovery keeps only the unselected pending source after its import settles");
+    assert.deepEqual(restoredFileRequests, [{ sourceId: "restore-source", clientKey: "restore-client", intent: "restore" }], "browser source recovery uploads only the selected source through the public restore import");
+    recordDynamicControl("#projectBrowserRestoreList button");
+    restoringProjectSource = false;
+    await page.locator("#projectClose").click();
+
+    // Select the second missing native source through the dialog's generated
+    // button, then prove that its retained path becomes the active relink
+    // target before any relink request is submitted.
+    await page.evaluate(() => {
+      state.project = { id: "native-relink-project", name: "Native relink", status: "working", imageCount: 0 };
+      state.projectReadOnly = false;
+      state.missingNativeSources = [
+        { id: "native-first", displayName: "First", nativePath: "G:\\native-first", kind: "native-folder", exists: false },
+        { id: "native-second", displayName: "Second", nativePath: "G:\\native-second", kind: "native-folder", exists: false },
+      ];
+      renderProjectCurrent();
+    });
+    await page.locator("#projectButton").click();
+    await page.locator("#projectSourceRelink").click();
+    await page.locator("#nativeRelinkSources button").nth(1).click();
+    await page.waitForFunction(() => document.querySelector("#nativeRelinkPath")?.value === "G:\\native-second"
+      && document.querySelectorAll("#nativeRelinkSources button")[1]?.getAttribute("aria-pressed") === "true");
+    assert.deepEqual(await page.locator("#nativeRelinkSources button").evaluateAll((buttons) => buttons.map((button) => button.getAttribute("aria-pressed"))), ["false", "true"], "selecting the second native source updates the generated selection state");
+    recordDynamicControl("#nativeRelinkSources button");
+    await page.locator("#nativeRelinkCancel").click();
+    await page.locator("#projectClose").click();
+
+    // A matching-source list uses its selected row when its public Open
+    // action posts the target project id.
+    await page.evaluate(() => showSameSourceDialog([
+      { id: "same-source-first", name: "First source", status: "working", imageCount: 1 },
+      { id: "same-source-second", name: "Second source", status: "working", imageCount: 2 },
+    ], { path: "G:\\same-source" }));
+    await page.locator("#sameSourceList button").nth(1).click();
+    await page.locator("#sameSourceOpen").click();
+    await page.waitForFunction(() => state.project?.id === "same-source-second");
+    assert.equal(sameSourceOpenRequests.length, 1, "opening a matching source sends one project-open request");
+    assert.equal(sameSourceOpenRequests[0].projectId, "same-source-second", "opening a matching source posts the project selected from the generated list");
+    recordDynamicControl("#sameSourceList button");
   } finally {
     await stopCoveredPage(page, true);
   }
@@ -4844,4 +4941,4 @@ if (require.main === module) {
   nodeTest("import picker browser coverage", { timeout: 120000 }, main);
 }
 
-module.exports = { closeServer, runCandidateBlinkScenario, startFixtureServer };
+module.exports = { closeServer, runCandidateBlinkScenario, runDynamicProjectAndShortcutScenario, startFixtureServer };
