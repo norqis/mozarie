@@ -321,7 +321,7 @@ async function testCoreBoundaryAndWorkspaceBehaviour() {
     console, Promise, Map, Set, Array, Object, Number, String, Boolean, Math, Error, Uint8ClampedArray,
     document, window: { addEventListener() {} }, state, canvas, stage: element("#canvasStage"), $: (selector) => element(selector),
     clearTimeout() {}, setTimeout() {}, fetch: async () => ({ ok: false, json: async () => ({}) }),
-    renderModelStatus() {}, renderCatalogViews() {}, renderCandidates() {}, render() {}, renderGallery() {}, renderOverview() {},
+    uiRefreshes: [], renderModelStatus() {}, renderCatalogViews() {}, renderCandidates() { context.uiRefreshes.push("candidates"); }, render() {}, renderGallery() {}, renderOverview() {},
     renderStatus() {}, updateBoundaryActions() {}, updateNavigationControls() {}, updateHistoryButtons() {}, updateSelectionActionBar() {},
     updateCandidateStatus() {}, syncApplyMode() {}, updateProgress() {}, syncDetectionActions() {}, updateCandidateBatchButtons() {},
     refreshMaskStatus: () => false, selectImage() {}, imageAssetVersion: () => 0, canvasHasPixels: () => false,
@@ -560,6 +560,7 @@ async function testCoreBoundaryAndWorkspaceBehaviour() {
   element("#folderPath").value = "G:/fixture";
   coreState.saving = true;
   await test.loadFolder();
+  assert.deepEqual(context.uiRefreshes, ["candidates"], "fill cancellation redraws candidate controls after releasing their pending lock");
   coreState.saving = false;
   element("#folderPath").value = "";
   await test.loadFolder();

@@ -864,6 +864,9 @@ function takeMosaicPreviewRequest() {
 
 async function rebuildMosaicPreview() {
   if (!state.mosaicPreviewEnabled || !state.currentImage) return;
+  if (mosaicCanvas.width !== state.currentImage.width || mosaicCanvas.height !== state.currentImage.height) {
+    mosaicCanvas.width = state.currentImage.width; mosaicCanvas.height = state.currentImage.height;
+  }
   if (state.mosaicWorkerBusy) { state.mosaicPending = true; return; }
   const worker = createMosaicWorker(); if (!worker) return;
   state.mosaicWorkerBusy = true;
@@ -885,6 +888,8 @@ async function rebuildMosaicPreview() {
     if (state.mosaicWorker !== worker || !state.mosaicPreviewEnabled) { mask.close?.(); state.mosaicWorkerBusy = false; state.mosaicInFlightSourceId = ""; state.mosaicInFlightGeneration = 0; return; }
     if (state.mosaicPending) {
       mask.close?.(); state.mosaicWorkerBusy = false; state.mosaicInFlightSourceId = ""; state.mosaicInFlightGeneration = 0;
+      if (full) { state.mosaicPreviewFull = true; state.mosaicPreviewRoi = null; }
+      else if (!state.mosaicPreviewFull) state.mosaicPreviewRoi = mergeMosaicPreviewRoi(roi, state.mosaicPreviewRoi);
       state.mosaicPending = false; void rebuildMosaicPreview();
       return;
     }

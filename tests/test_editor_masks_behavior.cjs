@@ -19,6 +19,58 @@ function canvasContext(name) {
 }
 
 const addCtx = canvasContext("add");
+function pixelLayer(context) {
+  const pixels = new Set();
+  let point = null; let path = [];
+  const key = (x, y) => `${x},${y}`;
+  const original = {
+    beginPath: context.beginPath, moveTo: context.moveTo, lineTo: context.lineTo, arc: context.arc, fill: context.fill, stroke: context.stroke,
+    drawImage: context.drawImage, getImageData: context.getImageData, putImageData: context.putImageData,
+  };
+  const draw = (x, y) => {
+    if (context.globalCompositeOperation === "destination-out") pixels.delete(key(x, y));
+    else pixels.add(key(x, y));
+    context.pixels = pixels.size > 0;
+  };
+  context.beginPath = () => { point = null; path = []; };
+  context.moveTo = (x, y) => { path.push({ x: Math.floor(x), y: Math.floor(y) }); };
+  context.lineTo = (x, y) => { path.push({ x: Math.floor(x), y: Math.floor(y) }); };
+  context.arc = (x, y) => { point = { x: Math.floor(x), y: Math.floor(y) }; };
+  context.fill = () => {
+    if (!point) return;
+    draw(point.x, point.y);
+  };
+  context.stroke = () => { for (const segment of path) draw(segment.x, segment.y); };
+  context.drawImage = (source) => {
+    const sourcePixels = source?.__pixelLayer?.copy?.();
+    if (!sourcePixels) return original.drawImage.call(context, source);
+    pixels.clear(); for (const pixel of sourcePixels) pixels.add(pixel);
+    context.pixels = pixels.size > 0;
+  };
+  context.getImageData = (left, top, width, height) => {
+    const data = new Uint8ClampedArray(width * height * 4);
+    for (let y = 0; y < height; y += 1) for (let x = 0; x < width; x += 1) {
+      if (pixels.has(key(left + x, top + y))) data[(y * width + x) * 4 + 3] = 255;
+    }
+    return { data, width, height };
+  };
+  context.putImageData = (image, left, top) => {
+    for (let y = 0; y < image.height; y += 1) for (let x = 0; x < image.width; x += 1) {
+      const target = key(left + x, top + y);
+      if (image.data[(y * image.width + x) * 4 + 3]) pixels.add(target); else pixels.delete(target);
+    }
+    context.pixels = pixels.size > 0;
+  };
+  const layer = {
+    set(x, y) { pixels.add(key(x, y)); context.pixels = true; },
+    has(x, y) { return pixels.has(key(x, y)); },
+    copy() { return new Set(pixels); },
+    restore() { Object.assign(context, original); delete context.canvas.__pixelLayer; },
+  };
+  context.canvas.__pixelLayer = layer;
+  return layer;
+}
+
 const exclusionCtx = canvasContext("exclude");
 const exclusionEraseCtx = canvasContext("excludeErase");
 const historyAddCtx = canvasContext("historyAdd");
@@ -117,7 +169,7 @@ const context = {
   calculatedBlockSize: () => 8, composeCurrentMask: () => events.push("compose-roi"), flushMaskComposition: () => events.push("flush"), requestMosaicPreview: () => events.push("preview"), scheduleManualWorkspaceSave: () => events.push("save"), saveDraft: () => events.push("draft-save"),
   ensureHistoryCanvases: () => true, releaseHistoryCanvases() {},
   setReviewed: () => events.push("review"), updateHistoryButtons() {}, updateCandidateStatus() {}, refreshCurrentReviewAndMask() {}, refreshMaskStatus() {},
-  renderCandidates: () => events.push("candidates"), render: () => events.push("render"), renderCatalogViews: () => events.push("catalog"), updateActionButtons() {},
+  fillUiRefreshes: [], renderCandidates: () => events.push("candidates"), render: () => events.push("render"), renderCatalogViews: () => events.push("catalog"), updateActionButtons: () => context.fillUiRefreshes.push("actions"),
   updateCandidateBatchButtons(...args) { batchPresences.push(args[2]); },
   syncCurrentCandidateRecord() {}, syncCandidateRecord() {}, retainCurrentCandidateBundle() {}, refreshCandidateRecord: async () => {}, reconcileCurrentCandidates: async () => true,
   fetchBitmap: async () => ({ close() {} }), maskUrl: (_imageId, candidateId, revision) => `${candidateId}:${revision}`, closeBitmap(bitmap) { bitmap.close(); },
@@ -132,7 +184,7 @@ const context = {
 const masksPath = path.join(__dirname, "..", "static", "js", "editor-masks.js");
 const source = fs.readFileSync(masksPath, "utf8");
 vm.runInNewContext(source, context, { filename: masksPath });
-vm.runInNewContext("globalThis.masksTest = { candidateLabel, manualLayerPresence, renderCandidateRows: renderCandidates, candidatePaddingLimit, candidatePaddingValue, validateCandidatePadding, openCandidatePadding, openBatchCandidatePadding, closeCandidatePadding, commitCandidatePadding, commitBatchCandidatePadding, changeCandidatePaddingDraft, candidateDisplayMode, candidateDisplayIdsForRole, syncCandidateDisplayButtons, syncCandidateBlinkTimer, setCandidateDisplayMode, toggleCandidateDisplay, toggleCandidateEffective, candidateDisplayToggle, candidateEffectiveToggle, clearCandidateBlink, clearCandidateMutationState, candidateMutationKey, nextCandidateMutationVersion, enqueueCandidateMutation, waitForCandidateMutations, updateCandidate, deleteCandidate, deleteManualMask, deleteManualExclusion, deleteManualExclusionErase, shouldBlinkNewManual, batchCandidateOperation, escapeHtml, pointFromEvent, clampPoint, boundaryDragStarted, polygonVertexAt, completedPolygonVertexAt, rectangleDraftAt, paintStrokeOnContexts, paintStrokePath, paintFillSpans, applyFillSpans, enableManualLayerForTool, beginManualStroke, appendManualStrokePoint, paintPendingManualStroke, completeManualStroke, cancelManualStroke, replayManualStroke, historyWeight, trimHistory, rebuildManualMaskFromHistory, recordHistoryOperation, resetHistoryToCurrentManualMask, restoreProjectHistory, restoreSnapshot, buildCombinedMask, addBoundaryCandidate, cancelBoundary, fillAt };\nrenderCandidates = globalThis.renderCandidates; render = globalThis.render;", context, { filename: "test-editor-masks-exports.js" });
+vm.runInNewContext("globalThis.masksTest = { candidateLabel, manualLayerPresence, renderCandidateRows: renderCandidates, candidatePaddingLimit, candidatePaddingValue, validateCandidatePadding, openCandidatePadding, openBatchCandidatePadding, closeCandidatePadding, commitCandidatePadding, commitBatchCandidatePadding, changeCandidatePaddingDraft, candidateDisplayMode, candidateDisplayIdsForRole, syncCandidateDisplayButtons, syncCandidateBlinkTimer, setCandidateDisplayMode, toggleCandidateDisplay, toggleCandidateEffective, candidateDisplayToggle, candidateEffectiveToggle, clearCandidateBlink, clearCandidateMutationState, candidateMutationKey, nextCandidateMutationVersion, enqueueCandidateMutation, waitForCandidateMutations, updateCandidate, deleteCandidate, deleteManualMask, deleteManualExclusion, deleteManualExclusionErase, shouldBlinkNewManual, batchCandidateOperation, escapeHtml, pointFromEvent, clampPoint, boundaryDragStarted, polygonVertexAt, completedPolygonVertexAt, rectangleDraftAt, paintStrokeOnContexts, paintStrokePath, paintFillSpans, applyFillSpans, enableManualLayerForTool, beginManualStroke, appendManualStrokePoint, paintPendingManualStroke, completeManualStroke, cancelManualStroke, replayManualStroke, historyWeight, trimHistory, rebuildManualMaskFromHistory, recordHistoryOperation, resetHistoryToCurrentManualMask, refreshProjectHistory, restoreProjectHistory, restoreSnapshot, buildCombinedMask, addBoundaryCandidate, cancelBoundary, fillAt };\nrenderCandidates = () => globalThis.fillUiRefreshes.push(\"candidates\"); render = globalThis.render;", context, { filename: "test-editor-masks-exports.js" });
 const test = context.masksTest;
 
 const candidateLabelFixtures = [
@@ -729,6 +781,7 @@ assert.equal(state.manualExclusionEraseEnabled, true);
   assert.deepEqual([latestFillWorker.payload.x, latestFillWorker.payload.y], [0, 79], "bucket fill clamps the requested pixel to image bounds");
   latestFillWorker.onmessage({ data: { spans: [2, 3, 7] } });
   assert.equal(state.fillPending, false, "worker completion clears the pending fill flag");
+  assert.deepEqual(context.fillUiRefreshes, ["candidates", "actions"], "starting a fill immediately locks every candidate and action control");
   assert.equal(state.history.at(-1).tool, "bucket", "worker completion adds an undoable bucket operation");
   test.fillAt({ x: 4, y: 4 }, "bucket");
   latestFillWorker.onerror();
@@ -751,6 +804,39 @@ assert.equal(state.manualExclusionEraseEnabled, true);
   assert.equal(element("#exclusionList").children[0].textContent, "candidates.none", "an empty exclusion list remains explicit when only apply masks exist");
 
   // Geometry helpers back the same pointer paths used by the single and
+
+  // Project history intentionally does not rebuild local canvases.  A
+  // cancelled live stroke therefore restores only its modified regions, in
+  // reverse order, and returns the layer switches to their pre-stroke state.
+  const addPixels = pixelLayer(addCtx); const exclusionPixels = pixelLayer(exclusionCtx); const exclusionErasePixels = pixelLayer(exclusionEraseCtx);
+  addPixels.set(4, 4); exclusionPixels.set(12, 12); exclusionErasePixels.set(20, 20);
+  state.historyDurable = true; context.hasDurableHistory = () => state.historyDurable === true;
+  state.tool = "brush"; state.manualEnabled = false; state.manualExclusionEnabled = true; state.manualExclusionEraseEnabled = true;
+  state.draftDirty = false; state.draftLayerDirty = new Set(["exclusion"]); state.draftDirtyRois = new Map([["exclusion", { left: 8, top: 8, right: 16, bottom: 16 }]]);
+  test.beginManualStroke({ x: 20, y: 20 });
+  test.appendManualStrokePoint({ x: 40, y: 40 });
+  test.appendManualStrokePoint({ x: 60, y: 20 });
+  test.appendManualStrokePoint({ x: 20, y: 20 });
+  assert.equal(addPixels.has(40, 40), true, "the live durable curved stroke draws its intermediate pixel before cancellation");
+  assert.equal(state.activeStroke.rollback.get(addCtx).size, 1, "returning through an already-captured rollback tile does not duplicate its snapshot");
+  test.cancelManualStroke();
+  assert.deepEqual([addPixels.has(4, 4), addPixels.has(20, 20), addPixels.has(40, 40), addPixels.has(60, 20), exclusionPixels.has(12, 12), exclusionErasePixels.has(20, 20)], [true, false, false, false, true, true], "durable cancellation preserves all three existing mask layers while removing the full curved live stroke");
+  assert.equal(state.manualEnabled, false, "durable cancellation restores an initially disabled manual layer");
+  assert.equal(state.draftDirty, false, "durable cancellation restores the draft dirty flag");
+  assert.deepEqual([...state.draftLayerDirty], ["exclusion"], "durable cancellation restores the draft layer set");
+  assert.deepEqual([...state.draftDirtyRois], [["exclusion", { left: 8, top: 8, right: 16, bottom: 16 }]], "durable cancellation restores the draft ROI map");
+  state.historyDurable = false; context.hasDurableHistory = () => false;
+  addPixels.restore(); exclusionPixels.restore(); exclusionErasePixels.restore();
+
+  const localAddPixels = pixelLayer(addCtx); const localHistoryAddPixels = pixelLayer(historyAddCtx);
+  context.historyAddCanvas.__pixelLayer = localHistoryAddPixels;
+  state.history = []; state.historyIndex = 0; state.manualEnabled = true; state.manualExclusionForced = true;
+  localAddPixels.set(4, 4); test.resetHistoryToCurrentManualMask();
+  state.tool = "brush"; test.beginManualStroke({ x: 40, y: 40 });
+  test.cancelManualStroke();
+  assert.deepEqual([localAddPixels.has(4, 4), localAddPixels.has(40, 40)], [true, false], "local-history cancellation rebuilds the saved A pixel and removes the live B pixel");
+  localAddPixels.restore(); localHistoryAddPixels.restore(); delete context.historyAddCanvas.__pixelLayer;
+
   // compare canvases.  Keep their coordinate and hit-testing limits explicit.
   assert.equal(test.escapeHtml(`<mask&\"'>`), "&lt;mask&amp;&quot;&#39;&gt;");
   state.currentImage = null;
@@ -890,11 +976,22 @@ assert.equal(state.manualExclusionEraseEnabled, true);
   assert.equal(state.fillPending, true, "a replaced worker result cannot complete the newer fill request");
   state.fillWorker = null; state.fillPending = false;
 
+  assert.deepEqual([state.manualEnabled, state.manualExclusionEnabled, state.manualExclusionEraseEnabled], [false, false, false], "a stale fill result leaves every manual layer flag unchanged");
+  assert.equal(state.history.length, staleFillHistoryLength, "a stale fill result does not create a history operation");
+  assert.deepEqual(context.fillUiRefreshes, ["candidates", "actions", "candidates", "actions"], "a stale fill result only refreshes controls when its pending state clears");
   // Empty/current-image guards are real UI states, especially while switching
   // files.  They must not mutate masks or history.
   resetCandidateState(); state.currentId = null;
   test.renderCandidateRows();
   assert.equal(element("#candidateList").textContent, "", "no current image clears candidate rows");
+  assert.deepEqual([state.manualEnabled, state.manualExclusionEnabled, state.manualExclusionEraseEnabled], [false, false, false], "worker construction failure leaves all manual-layer flags unchanged");
+  assert.deepEqual(context.fillUiRefreshes.slice(-4), ["candidates", "actions", "candidates", "actions"], "worker construction failure unlocks every control after its initial lock");
+  context.Worker = workerClass;
+  context.fillUiRefreshes.length = 0;
+  context.Worker = class PostFailureWorker { postMessage() { throw new Error("post failed"); } terminate() { this.terminated = true; } };
+  test.fillAt({ x: 4, y: 4 }, "bucket");
+  assert.equal(state.fillPending, false, "a failed worker post does not leave fill pending");
+  assert.deepEqual(context.fillUiRefreshes, ["candidates", "actions", "candidates", "actions"], "a failed worker post unlocks every control after its initial lock");
   state.currentId = "image"; state.manualMaskPresent = false; state.manualExclusionPresent = false; state.manualExclusionErasePresent = false; addCtx.pixels = false; exclusionCtx.pixels = false; exclusionEraseCtx.pixels = false;
   test.deleteManualMask(); test.deleteManualExclusion(); test.deleteManualExclusionErase();
   assert.equal(state.history.length, 0, "deleting absent manual masks is inert");

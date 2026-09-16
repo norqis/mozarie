@@ -546,7 +546,10 @@ function abortCatalogLoads() {
   state.imageLoadControllers.clear(); state.candidateLoadControllers.clear();
   state.imageInflight.clear(); state.candidateInflight.clear();
 }
-function cancelFillWork() { state.fillWorker?.terminate?.(); state.fillWorker = null; state.fillPending = false; }
+function cancelFillWork() {
+  state.fillWorker?.terminate?.(); state.fillWorker = null; state.fillPending = false;
+  renderCandidates(); updateActionButtons();
+}
 function isGestureActive() { return state.drawing || state.panning || state.boundaryDragging; }
 function imageHasMask(image) { return state.maskStatus.get(image.id) ?? image.hasEffectiveMask === true; }
 function isProcessableImage(image) { return Boolean(image) && !isHidden(image); }

@@ -915,7 +915,34 @@ function refreshManualStrokeRoi(roi) {
   requestMosaicPreview(roi);
 }
 
+const MANUAL_STROKE_ROLLBACK_TILE_SIZE = 256;
+
+function captureActiveStrokeRollback(points, tool, size) {
+  const stroke = state.activeStroke;
+  if (!stroke || !hasDurableHistory()) return;
+  const roi = strokeDirtyRoi(points, tool, size);
+  if (!roi) return;
+  const contexts = tool === "mosaic_eraser" ? [addCtx]
+    : tool === "exclude_eraser" ? [exclusionEraseCtx]
+      : tool === "eraser" ? [exclusionCtx, exclusionEraseCtx]
+        : state.manualExclusionForced ? [addCtx] : [addCtx, exclusionCtx];
+  const tileSize = MANUAL_STROKE_ROLLBACK_TILE_SIZE;
+  const firstLeft = Math.floor(roi.left / tileSize) * tileSize;
+  const firstTop = Math.floor(roi.top / tileSize) * tileSize;
+  for (const context of contexts) {
+    const snapshots = stroke.rollback.get(context) || new Map();
+    stroke.rollback.set(context, snapshots);
+    for (let top = firstTop; top < roi.bottom; top += tileSize) for (let left = firstLeft; left < roi.right; left += tileSize) {
+      const key = `${left}:${top}`;
+      if (snapshots.has(key)) continue;
+      const width = Math.min(tileSize, originalCanvas.width - left); const height = Math.min(tileSize, originalCanvas.height - top);
+      snapshots.set(key, { left, top, pixels: context.getImageData(left, top, width, height) });
+    }
+  }
+}
+
 function paintStroke(from, to, tool, size) {
+  captureActiveStrokeRollback([from, to], tool, size);
   paintStrokeOnContexts(addCtx, exclusionCtx, exclusionEraseCtx, from, to, tool, size);
   markStrokeDirty(tool, [from, to], size);
 }
@@ -932,6 +959,7 @@ function markStrokeDirty(tool, points = null, size = Number($("#brushSize").valu
 }
 
 function paintStrokePath(points, tool, size, startIndex = 0) {
+  if (points.length > startIndex) captureActiveStrokeRollback(points.slice(Math.max(0, startIndex - 1)), tool, size);
   if (tool === "mosaic_eraser") strokePath(addCtx, points, size, "destination-out", startIndex);
   else if (tool === "exclude_eraser") strokePath(exclusionEraseCtx, points, size, "source-over", startIndex);
   else if (tool === "eraser") { strokePath(exclusionCtx, points, size, "source-over", startIndex); strokePath(exclusionEraseCtx, points, size, "destination-out", startIndex); }
@@ -941,14 +969,16 @@ function paintStrokePath(points, tool, size, startIndex = 0) {
 
 function fillAt(point, tool = state.tool) {
   if (!state.currentImage || !isProcessableImage(currentRecord()) || manualCanvasInputLocked()) return;
-  enableManualLayerForTool(tool);
   const width = originalCanvas.width; const height = originalCanvas.height;
   const pixels = originalCtx.getImageData(0, 0, width, height).data;
   const x = Math.min(width - 1, Math.max(0, Math.floor(point.x))); const y = Math.min(height - 1, Math.max(0, Math.floor(point.y)));
   const tolerance = state.settings.editing.fill_color_tolerance;
   const generation = state.imageGeneration; const epoch = state.catalogEpoch; const imageId = state.currentId; const record = currentRecord(); const version = imageAssetVersion(record); const revision = Number(record?.candidateRevision || 0);
+  const refreshFillActions = () => { renderCandidates(); updateActionButtons(); };
   const apply = (spans) => {
-    if (!catalogRecordMatches(record, epoch, { version, revision }) || !isCurrentGeneration(generation) || state.currentId !== imageId) { state.fillPending = false; return; }
+    if (!catalogRecordMatches(record, epoch, { version, revision }) || !isCurrentGeneration(generation) || state.currentId !== imageId) { state.fillPending = false; refreshFillActions(); return; }
+    if (!spans.length) { state.fillPending = false; refreshFillActions(); return; }
+    enableManualLayerForTool(tool);
     applyFillSpans(spans, tool);
     if (tool === "bucket") refreshManualLayerPresence("add", ...(state.manualExclusionForced ? [] : ["exclusion"]));
     else if (tool === "mosaic_eraser") refreshManualLayerPresence("add");
@@ -957,16 +987,17 @@ function fillAt(point, tool = state.tool) {
     state.fillPending = false;
     if (tool === "bucket" && shouldBlinkNewManual("apply")) inheritRoleCandidateDisplayMode("apply", ["manual:apply"]);
     if (tool === "exclude_bucket" && shouldBlinkNewManual("exclude")) inheritRoleCandidateDisplayMode("exclude", ["manual:exclude"]);
-    scheduleManualWorkspaceSave(); setEditorUnreviewed(); recordHistoryOperation({ tool, spans }); updateHistoryButtons(); refreshCurrentReviewAndMask(); requestMosaicPreview(); renderCandidates(); render();
+    scheduleManualWorkspaceSave(); setEditorUnreviewed(); recordHistoryOperation({ tool, spans }); updateHistoryButtons(); refreshCurrentReviewAndMask(); requestMosaicPreview(); refreshFillActions(); render();
   };
   if (typeof Worker !== "function") { showUserError("internal_error"); return; }
-  state.fillWorker?.terminate?.(); state.fillPending = true;
+  state.fillWorker?.terminate?.(); state.fillPending = true; refreshFillActions();
   let worker;
   try { worker = state.fillWorker = new Worker("/js/flood-fill-worker.js"); }
-  catch { state.fillPending = false; showUserError("internal_error"); return; }
+  catch { state.fillPending = false; refreshFillActions(); showUserError("internal_error"); return; }
   worker.onmessage = ({ data }) => { if (state.fillWorker !== worker) return; state.fillWorker = null; worker.terminate(); apply(data.spans); };
-  worker.onerror = () => { if (state.fillWorker === worker) { state.fillWorker = null; state.fillPending = false; showUserError("internal_error"); } worker.terminate(); };
-  worker.postMessage({ pixels: pixels.buffer, width, height, x, y, tolerance }, [pixels.buffer]);
+  worker.onerror = () => { if (state.fillWorker === worker) { state.fillWorker = null; state.fillPending = false; refreshFillActions(); showUserError("internal_error"); } worker.terminate(); };
+  try { worker.postMessage({ pixels: pixels.buffer, width, height, x, y, tolerance }, [pixels.buffer]); }
+  catch { if (state.fillWorker === worker) { state.fillWorker = null; state.fillPending = false; refreshFillActions(); showUserError("internal_error"); } worker.terminate(); }
 }
 
 function paintFillSpans(addContext, exclusionContext, exclusionEraseContext, spans, tool = "bucket") {
@@ -1011,8 +1042,12 @@ function enableManualLayerForTool(tool) {
 
 function beginManualStroke(point) {
   if (!isProcessableImage(currentRecord()) || manualCanvasInputLocked()) return;
+  const editorState = hasDurableHistory() ? historyEditorState() : null;
   enableManualLayerForTool(state.tool);
-  state.activeStroke = { tool: state.tool, size: Number($("#brushSize").value), points: [{ ...point }], paintedPointCount: 1 };
+  state.activeStroke = {
+    tool: state.tool, size: Number($("#brushSize").value), points: [{ ...point }], paintedPointCount: 1, rollback: new Map(),
+    editorState, draftDirty: state.draftDirty, draftLayers: new Set(state.draftLayerDirty || []), draftRois: new Map(state.draftDirtyRois || []),
+  };
   state.mosaicPending = true;
   if (state.tool === "brush" && shouldBlinkNewManual("apply")) inheritRoleCandidateDisplayMode("apply", ["manual:apply"]);
   if (state.tool === "eraser" && shouldBlinkNewManual("exclude")) inheritRoleCandidateDisplayMode("exclude", ["manual:exclude"]);
@@ -1037,11 +1072,17 @@ function paintPendingManualStroke() {
 }
 
 function cancelManualStroke() {
-  if (!state.activeStroke) return;
+  const stroke = state.activeStroke;
+  if (!stroke) return;
   if (state.manualStrokePaintFrame) cancelAnimationFrame(state.manualStrokePaintFrame);
   state.manualStrokePaintFrame = 0;
   state.activeStroke = null;
-  rebuildManualMaskFromHistory();
+  if (hasDurableHistory()) {
+    for (const [context, snapshots] of stroke.rollback) for (const snapshot of snapshots.values()) context.putImageData(snapshot.pixels, snapshot.left, snapshot.top);
+    applyHistoryEditorState(stroke.editorState);
+    state.draftDirty = stroke.draftDirty; state.draftLayerDirty = stroke.draftLayers; state.draftDirtyRois = stroke.draftRois;
+    refreshManualLayerPresence("add", "exclusion", "exclusionErase"); invalidateMaskComposition();
+  } else rebuildManualMaskFromHistory();
   requestMosaicPreview(); renderCandidates(); render();
 }
 

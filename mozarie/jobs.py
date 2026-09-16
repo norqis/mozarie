@@ -301,7 +301,19 @@ class JobsMixin:
         thread = threading.Thread(target=run_worker, daemon=True)
         with self.lock:
             self.worker_thread = thread
-        thread.start()
+        try:
+            thread.start()
+        except Exception as exc:
+            # Thread.start() can fail after the job was made visible.  Leave a
+            # terminal error for the UI, but release the launch-only control
+            # objects so catalog, settings, and the next job are usable again.
+            self._fail_job(exc, job_generation, catalog_generation)
+            with self.lock:
+                if (self._job_is_current(job_generation, catalog_generation)
+                        and self.worker_thread is thread and self.job_control is control):
+                    self.worker_thread = None
+                    self.job_control = None
+            raise
 
 
     def _wait_while_paused(self, control: JobControl | None, job_generation: int | None, catalog_generation: int | None) -> None:
