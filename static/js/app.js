@@ -1174,7 +1174,7 @@ function bindEvents() {
   $("#processingDialog").addEventListener("cancel", (event) => event.preventDefault());
   $("#processingPauseButton").addEventListener("click", async () => {
     const processing = state.processing;
-    if (!processing) return;
+    if (!processing || $("#processingPauseButton").disabled) return;
     if (processing.kind === "import") {
       const session = state.importSession; if (!session) return;
       session.paused = !session.paused;
