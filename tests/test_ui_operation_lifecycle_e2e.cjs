@@ -83,46 +83,67 @@ async function assertSettled(page, label, available = ["#detectCurrentButton", "
   for (const selector of available) assert.equal(await page.locator(selector).isDisabled(), false, `${label}: ${selector} is enabled again`);
 }
 
+async function renderProjectActionsWhileBusy(page, label) {
+  await page.evaluate(async () => { await showProjectList({ keepClosed: true }); });
+  const actions = page.locator("[data-project-action]");
+  assert.ok(await actions.count() >= 4, `${label}: the real project table generated its open, export, and delete actions`);
+  assert.equal(await actions.evaluateAll((nodes) => nodes.every((node) => node.disabled)), true, `${label}: project actions generated during a busy rerender are locked`);
+}
+
+async function installResponseGate(page, pattern) {
+  let markReady;
+  let releaseReply;
+  const routeReady = new Promise((resolve) => { markReady = resolve; });
+  const replyReady = new Promise((resolve) => { releaseReply = resolve; });
+  await page.route(pattern, async (route) => {
+    markReady(route.request());
+    const reply = await replyReady;
+    if (reply === "continue") await route.continue();
+    else await route.fulfill(reply);
+  });
+  return { routeReady, release: releaseReply };
+}
+
 test("clear masks keeps rerendered controls locked and releases them after success, failure, and no-op", { timeout: 60000 }, async () => {
   await withFixture(async ({ fixture, page }) => {
     await openSample(page, fixture.url);
     await seedCandidateUi(page);
 
-    let clearRoute;
-    let unblockClear;
-    const clearGate = new Promise((resolve) => { unblockClear = resolve; });
-    await page.route("**/api/masks/clear", async (route) => { clearRoute = route; await clearGate; });
+    const clearGate = await installResponseGate(page, "**/api/masks/clear");
     await page.locator("#clearCurrentMasksButton").click();
     await page.waitForFunction(() => state.masksClearing);
     await rerenderCandidateUi(page);
+    await renderProjectActionsWhileBusy(page, "clear success");
     await assertNativeControlsLocked(page, "clear success");
-    await clearRoute.continue();
-    unblockClear();
+    clearGate.release("continue");
     await assertSettled(page, "clear success");
 
     const clearRequests = await page.evaluate(() => performance.getEntriesByType("resource").filter((entry) => entry.name.includes("/api/masks/clear")).length);
     assert.equal(await page.locator("#clearCurrentMasksButton").isDisabled(), true, "a cleared image has no remaining clear operation to start");
     assert.equal(await page.evaluate(() => performance.getEntriesByType("resource").filter((entry) => entry.name.includes("/api/masks/clear")).length), clearRequests, "the disabled clear control is a no-op and sends no second request");
+    await page.locator("#projectButton").click();
+    await page.locator("#projectOpenList").click();
+    await page.waitForFunction(() => document.querySelectorAll("[data-project-action]").length >= 4);
+    assert.equal(await page.locator("[data-project-action]").evaluateAll((nodes) => nodes.every((node) => !node.disabled)), true, "project actions are enabled again after the clear settles");
+    await page.locator('[data-project-action="delete"]').click();
+    await page.waitForFunction(() => document.querySelector("#projectDeleteDialog").open);
+    await page.locator("#projectDeleteCancel").click();
+    await page.locator("#projectListClose").click();
 
     await page.unroute("**/api/masks/clear");
     await seedCandidateUi(page);
-    let failureRoute;
-    let unblockFailure;
-    const failureGate = new Promise((resolve) => { unblockFailure = resolve; });
-    await page.route("**/api/masks/clear", async (route) => { failureRoute = route; await failureGate; });
+    const failureGate = await installResponseGate(page, "**/api/masks/clear");
     await page.locator("#clearCurrentMasksButton").click();
     await page.waitForFunction(() => state.masksClearing);
     await rerenderCandidateUi(page);
     await assertNativeControlsLocked(page, "clear failure");
-    await failureRoute.fulfill({ status: 500, contentType: "application/json", body: JSON.stringify({ error_code: "internal_error" }) });
-    unblockFailure();
+    failureGate.release({ status: 500, contentType: "application/json", body: JSON.stringify({ error_code: "internal_error" }) });
     await assertSettled(page, "clear failure", ["#clearCurrentMasksButton", "#detectCurrentButton", "#saveButton"]);
     await page.locator("#errorDialogClose").click();
-
-    const display = page.locator(".candidate-row .candidate-display-toggle");
-    const pressed = await display.getAttribute("aria-pressed");
-    await display.click();
-    await page.waitForFunction((before) => document.querySelector(".candidate-row .candidate-display-toggle")?.getAttribute("aria-pressed") !== before, pressed);
+    await page.unroute("**/api/masks/clear");
+    await page.locator("#clearCurrentMasksButton").click();
+    await page.waitForFunction(() => !state.masksClearing);
+    assert.equal(await page.locator("#clearCurrentMasksButton").isDisabled(), true, "the failed clear control can be clicked again and completes through the real fixture route");
   });
 });
 
@@ -131,19 +152,15 @@ test("single and batch saves hold native controls, then complete or cancel throu
     await openSample(page, fixture.url);
     await seedCandidateUi(page);
 
-    let renderRoute;
-    let unblockRender;
-    const renderGate = new Promise((resolve) => { unblockRender = resolve; });
-    await page.route("**/api/save/render", async (route) => { renderRoute = route; await renderGate; });
+    const renderGate = await installResponseGate(page, "**/api/save/render");
     await page.locator("#saveButton").click();
     await page.waitForFunction(() => document.querySelector("#singleSaveDialog").open && !document.querySelector("#singleSaveStartButton").disabled);
     await page.locator("#singleSaveStartButton").click();
     await page.waitForFunction(() => state.saving);
     await rerenderCandidateUi(page);
     await assertNativeControlsLocked(page, "single save");
-    const saveToken = renderRoute.request().postDataJSON().clientSaveToken;
-    await renderRoute.fulfill({ status: 200, contentType: "application/json", headers: { "X-Mozarie-Save-Token": saveToken }, body: JSON.stringify({ saveToken }) });
-    unblockRender();
+    const saveToken = (await renderGate.routeReady).postDataJSON().clientSaveToken;
+    renderGate.release({ status: 200, contentType: "application/json", headers: { "X-Mozarie-Save-Token": saveToken }, body: JSON.stringify({ saveToken }) });
     await assertSettled(page, "single save", ["#saveButton", "#saveAllButton", "#detectCurrentButton"]);
     await page.waitForFunction(() => !state.saving);
     await page.locator("#singleSaveCloseButton").click();
@@ -151,10 +168,7 @@ test("single and batch saves hold native controls, then complete or cancel throu
 
     await page.unroute("**/api/save/render");
     await page.evaluate(() => { state.settings.saving.parallelism = 1; });
-    let batchRenderRoute;
-    let unblockBatchRender;
-    const batchRenderGate = new Promise((resolve) => { unblockBatchRender = resolve; });
-    await page.route("**/api/save/render", async (route) => { batchRenderRoute = route; await batchRenderGate; });
+    const batchRenderGate = await installResponseGate(page, "**/api/save/render");
     await page.locator("#saveAllButton").click();
     await page.waitForFunction(() => document.querySelector("#applyDialog").open && !document.querySelector("#applyStartButton").disabled);
     await page.locator("#applyStartButton").click();
@@ -164,11 +178,15 @@ test("single and batch saves hold native controls, then complete or cancel throu
     assert.equal(await page.locator("#applyCancelButton").isDisabled(), false, "batch save keeps its actual cancel control available");
     await page.locator("#applyCancelButton").click();
     await page.waitForFunction(() => state.browserSave?.cancelled === true);
-    const batchSaveToken = batchRenderRoute.request().postDataJSON().clientSaveToken;
-    await batchRenderRoute.fulfill({ status: 200, contentType: "application/json", headers: { "X-Mozarie-Save-Token": batchSaveToken }, body: JSON.stringify({ saveToken: batchSaveToken }) });
-    unblockBatchRender();
+    const batchSaveToken = (await batchRenderGate.routeReady).postDataJSON().clientSaveToken;
+    batchRenderGate.release({ status: 200, contentType: "application/json", headers: { "X-Mozarie-Save-Token": batchSaveToken }, body: JSON.stringify({ saveToken: batchSaveToken }) });
     await page.waitForFunction(() => !state.saving);
     await assertSettled(page, "batch save cancellation", ["#saveAllButton", "#detectCurrentButton"]);
+    await page.locator("#applyCloseButton").click();
+    await page.waitForFunction(() => !document.querySelector("#applyDialog").open);
+    await page.locator("#saveAllButton").click();
+    await page.waitForFunction(() => document.querySelector("#applyDialog").open);
+    await page.locator("#applyCloseButton").click();
   });
 });
 
@@ -185,10 +203,7 @@ test("boundary, fill, transform, undo, and redo recover from pending work withou
     await openSample(page, fixture.url);
     await seedCandidateUi(page);
 
-    let boundaryRoute;
-    let unblockBoundary;
-    const boundaryGate = new Promise((resolve) => { unblockBoundary = resolve; });
-    await page.route("**/api/boundary", async (route) => { boundaryRoute = route; await boundaryGate; });
+    const boundaryGate = await installResponseGate(page, "**/api/boundary");
     await page.evaluate(() => {
       state.boundaryDrafts = [{ id: "lifecycle-boundary", type: "rectangle", roi: { left: 8, top: 8, right: 36, bottom: 36 }, point: { x: 22, y: 22 } }];
       state.boundaryActiveId = "lifecycle-boundary";
@@ -198,10 +213,9 @@ test("boundary, fill, transform, undo, and redo recover from pending work withou
     await page.waitForFunction(() => state.boundaryPending);
     await rerenderCandidateUi(page);
     await assertNativeControlsLocked(page, "boundary add");
-    await boundaryRoute.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({
+    boundaryGate.release({ status: 200, contentType: "application/json", body: JSON.stringify({
       candidates: [{ id: "boundary-lifecycle", role: "apply", enabled: true, forced: false, labelToken: "boundary", source: "boundary", confidence: 1, color: "#ff3d4d" }], candidateRevision: 2,
     }) });
-    unblockBoundary();
     await page.waitForFunction(() => !state.boundaryPending);
     await assertSettled(page, "boundary add");
     await seedCandidateUi(page);
@@ -216,20 +230,18 @@ test("boundary, fill, transform, undo, and redo recover from pending work withou
     await page.evaluate(() => window.__heldFillWorker.onmessage({ data: { spans: [[0, 0, 2]] } }));
     await assertSettled(page, "fill worker");
 
-    let transformRoute;
-    let unblockTransform;
-    const transformGate = new Promise((resolve) => { unblockTransform = resolve; });
-    await page.route("**/api/images/sample/transform", async (route) => { transformRoute = route; await transformGate; });
+    const transformGate = await installResponseGate(page, "**/api/images/sample/transform");
     await page.locator("#flipHorizontalButton").click();
     await page.waitForFunction(() => state.transformPending);
     await rerenderCandidateUi(page);
     await assertNativeControlsLocked(page, "transform failure");
-    await transformRoute.fulfill({ status: 500, contentType: "application/json", body: JSON.stringify({ error_code: "internal_error" }) });
-    unblockTransform();
+    transformGate.release({ status: 500, contentType: "application/json", body: JSON.stringify({ error_code: "internal_error" }) });
     await assertSettled(page, "transform failure");
     await page.locator("#errorDialogClose").click();
 
     await page.unroute("**/api/images/sample/transform");
+    await page.locator("#flipVerticalButton").click();
+    await page.waitForFunction(() => currentRecord()?.flipV === true && !state.transformPending);
     const canvas = await page.locator("#editorCanvas").boundingBox();
     await page.locator("#brushTool").click();
     await page.mouse.move(canvas.x + canvas.width / 2, canvas.y + canvas.height / 2);
