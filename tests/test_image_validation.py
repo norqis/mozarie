@@ -15,6 +15,15 @@ from mozarie.image_io import canonical_image, inspect_import_image, open_image
 THREAD_TIMEOUT = 30
 
 
+def join_threads(*threads: threading.Thread) -> None:
+    started = [thread for thread in threads if thread.ident is not None]
+    for thread in started:
+        thread.join(THREAD_TIMEOUT)
+    for thread in started:
+        if thread.is_alive():
+            raise AssertionError(f"thread did not finish: {thread.name}")
+
+
 class InputImageValidationTests(unittest.TestCase):
     def test_truncated_jpeg_is_rejected(self):
         output = io.BytesIO()
@@ -80,24 +89,19 @@ class InputImageValidationTests(unittest.TestCase):
 
             with mock.patch.object(Image, "MAX_IMAGE_PIXELS", 1):
                 threads = [threading.Thread(target=worker) for _index in range(2)]
-                completed = False
+                gate_reached = False
                 try:
                     for thread in threads:
                         thread.start()
                     entered.wait(timeout=THREAD_TIMEOUT)
                     self.assertIsNone(Image.MAX_IMAGE_PIXELS)
                     release.set()
-                    for thread in threads:
-                        thread.join(THREAD_TIMEOUT)
-                        self.assertFalse(thread.is_alive())
-                    completed = True
+                    gate_reached = True
                 finally:
                     release.set()
-                    if not completed:
+                    if not gate_reached:
                         entered.abort()
-                        for thread in threads:
-                            thread.join(THREAD_TIMEOUT)
-                            self.assertFalse(thread.is_alive())
+                    join_threads(*threads)
                 self.assertEqual(failures, [])
                 self.assertEqual(Image.MAX_IMAGE_PIXELS, 1)
 

@@ -21,6 +21,17 @@ from mozarie.inference.onnx import BaseOnnxModel, Letterbox, available_providers
 from mozarie.inference.yolo_detect import HandDetector
 from mozarie.inference.yolo_segment import TargetSegmenter
 
+THREAD_TIMEOUT = 30
+
+
+def join_threads(*threads: threading.Thread) -> None:
+    started = [thread for thread in threads if thread.ident is not None]
+    for thread in started:
+        thread.join(THREAD_TIMEOUT)
+    for thread in started:
+        if thread.is_alive():
+            raise AssertionError(f"thread did not finish: {thread.name}")
+
 
 class OnnxAdapterTests(unittest.TestCase):
     def test_cpu_provider_contract_does_not_depend_on_gpu_runtime(self) -> None:
@@ -215,30 +226,54 @@ class OnnxAdapterTests(unittest.TestCase):
                     run_options.return_value.add_run_config_entry.assert_called_once_with("memory.enable_memory_arena_shrinkage", "gpu:3")
 
     def test_cuda_model_serializes_runs_without_blocking_another_model(self) -> None:
-        entered = threading.Event(); release = threading.Event(); active = 0; peak = 0; active_lock = threading.Lock()
+        entered = threading.Event(); release = threading.Event(); second_waiting = threading.Event(); active = 0; peak = 0; active_lock = threading.Lock(); failures: list[BaseException] = []; results: dict[str, list[np.ndarray]] = {}
         def run(*_args):
             nonlocal active, peak
             with active_lock:
                 active += 1; peak = max(peak, active)
-            entered.set(); self.assertTrue(release.wait(1))
+            entered.set(); self.assertTrue(release.wait(THREAD_TIMEOUT))
             with active_lock: active -= 1
             return [np.asarray([1])]
-        model = BaseOnnxModel.__new__(BaseOnnxModel)
-        model.device = "gpu"; model.input_name = "image"; model.run_options = Mock(); model.run_lock = threading.RLock()
-        model.session = Mock(); model.session.run.side_effect = run
-        first = threading.Thread(target=lambda: model.run(np.zeros((1,), dtype=np.float32)))
-        second = threading.Thread(target=lambda: model.run(np.zeros((1,), dtype=np.float32)))
-        first.start(); self.assertTrue(entered.wait(1)); second.start(); time.sleep(.02)
-        self.assertEqual(peak, 1)
-        release.set(); first.join(1); second.join(1)
-        self.assertFalse(first.is_alive()); self.assertFalse(second.is_alive())
+        class ObservedLock:
+            def __init__(self):
+                self.lock = threading.RLock()
 
-        barrier = threading.Barrier(2); active = 0; peak = 0
+            def __enter__(self):
+                if not self.lock.acquire(blocking=False):
+                    second_waiting.set()
+                    self.lock.acquire()
+                return self
+
+            def __exit__(self, *_args):
+                self.lock.release()
+
+        model = BaseOnnxModel.__new__(BaseOnnxModel)
+        model.device = "gpu"; model.input_name = "image"; model.run_options = Mock(); model.run_lock = ObservedLock()
+        model.session = Mock(); model.session.run.side_effect = run
+        def run_model(name, item):
+            try:
+                results[name] = item.run(np.zeros((1,), dtype=np.float32))
+            except BaseException as exc:
+                failures.append(exc)
+        first = threading.Thread(target=lambda: run_model("first", model))
+        second = threading.Thread(target=lambda: run_model("second", model))
+        try:
+            first.start(); self.assertTrue(entered.wait(THREAD_TIMEOUT)); second.start()
+            self.assertTrue(second_waiting.wait(THREAD_TIMEOUT))
+            self.assertEqual(peak, 1)
+            release.set()
+        finally:
+            release.set()
+            join_threads(first, second)
+        self.assertEqual(failures, [])
+        self.assertEqual({name: output[0].tolist() for name, output in results.items()}, {"first": [1], "second": [1]})
+
+        barrier = threading.Barrier(2); active = 0; peak = 0; independent_results: dict[int, list[np.ndarray]] = {}
         def parallel_run(*_args):
             nonlocal active, peak
             with active_lock:
                 active += 1; peak = max(peak, active)
-            barrier.wait(timeout=1)
+            barrier.wait(timeout=THREAD_TIMEOUT)
             with active_lock: active -= 1
             return [np.asarray([1])]
         models = []
@@ -247,10 +282,23 @@ class OnnxAdapterTests(unittest.TestCase):
             other.device = "gpu"; other.input_name = "image"; other.run_options = Mock(); other.run_lock = threading.RLock()
             other.session = Mock(); other.session.run.side_effect = parallel_run
             models.append(other)
-        threads = [threading.Thread(target=lambda item=item: item.run(np.zeros((1,), dtype=np.float32))) for item in models]
-        for thread in threads: thread.start()
-        for thread in threads: thread.join(1)
-        self.assertTrue(all(not thread.is_alive() for thread in threads))
+        def run_other(index, item):
+            try:
+                independent_results[index] = item.run(np.zeros((1,), dtype=np.float32))
+            except BaseException as exc:
+                failures.append(exc)
+        threads = [threading.Thread(target=lambda index=index, item=item: run_other(index, item)) for index, item in enumerate(models)]
+        completed = False
+        try:
+            for thread in threads: thread.start()
+            join_threads(*threads)
+            completed = True
+        finally:
+            if not completed:
+                barrier.abort()
+            join_threads(*threads)
+        self.assertEqual(failures, [])
+        self.assertEqual({index: output[0].tolist() for index, output in independent_results.items()}, {0: [1], 1: [1]})
         self.assertEqual(peak, 2)
 
     def test_restore_box_and_empty_nms_paths(self) -> None:

@@ -13,6 +13,17 @@ import sys
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from mozarie.model_downloads import ModelDownload, ModelDownloadCancelled, ModelDownloadError, ModelDownloadInProgress, ModelDownloadManager
 
+THREAD_TIMEOUT = 30
+
+
+def join_threads(*threads: threading.Thread) -> None:
+    started = [thread for thread in threads if thread.ident is not None]
+    for thread in started:
+        thread.join(THREAD_TIMEOUT)
+    for thread in started:
+        if thread.is_alive():
+            raise AssertionError(f"thread did not finish: {thread.name}")
+
 
 class _Response:
     def __init__(self, payload: bytes, url: str = "https://models.example/file", content_length: str | None = None, status: int = 200, content_range: str | None = None) -> None:
@@ -187,8 +198,16 @@ class ModelDownloadTests(unittest.TestCase):
             if len(calls) == 2: raise ModelDownloadError("fixture failure")
             path = entry.destination(root); path.parent.mkdir(parents=True, exist_ok=True); path.write_bytes(b"ok"); return path
         with patch.object(manager, "_download", side_effect=download):
-            manager.start("all", "vit_b")
-            while manager.snapshot()["state"] in {"running", "cancelling"}: time.sleep(0.002)
+            worker = None
+            try:
+                with manager._lock:
+                    manager.start("all", "vit_b")
+                    worker = manager._thread
+                assert worker is not None
+                join_threads(worker)
+            finally:
+                if worker is not None:
+                    join_threads(worker)
         job = manager.snapshot()
         self.assertEqual(calls, ["sam_vit_b", "hand_detection"])
         self.assertEqual(job["state"], "failed")
@@ -220,21 +239,30 @@ class ModelDownloadTests(unittest.TestCase):
         root = Path(tempfile.mkdtemp()); manager = ModelDownloadManager(root)
         entered = threading.Event(); release = threading.Event()
         def blocked_download(entry: ModelDownload) -> Path:
-            entered.set(); self.assertTrue(release.wait(1))
+            entered.set(); self.assertTrue(release.wait(THREAD_TIMEOUT))
             if manager._cancel.is_set(): raise ModelDownloadCancelled()
             return entry.destination(root)
         with patch.object(manager, "_download", side_effect=blocked_download) as download:
-            manager.start("sam_vit_b", "vit_b")
-            self.assertTrue(entered.wait(1))
-            original_cancel = manager._cancel
-            manager.cancel()
-            with self.assertRaises(ModelDownloadInProgress):
-                manager.start("hand_detection", "vit_b")
-            self.assertIs(manager._cancel, original_cancel)
-            self.assertTrue(original_cancel.is_set())
-            self.assertEqual(download.call_count, 1)
-            release.set()
-            while manager.snapshot()["state"] in {"running", "cancelling"}: time.sleep(0.002)
+            worker = None
+            try:
+                with manager._lock:
+                    manager.start("sam_vit_b", "vit_b")
+                    worker = manager._thread
+                assert worker is not None
+                self.assertTrue(entered.wait(THREAD_TIMEOUT))
+                original_cancel = manager._cancel
+                manager.cancel()
+                with self.assertRaises(ModelDownloadInProgress):
+                    manager.start("hand_detection", "vit_b")
+                self.assertIs(manager._cancel, original_cancel)
+                self.assertTrue(original_cancel.is_set())
+                self.assertEqual(download.call_count, 1)
+                release.set()
+            finally:
+                manager.cancel()
+                release.set()
+                if worker is not None:
+                    join_threads(worker)
         self.assertEqual(manager.snapshot()["state"], "cancelled")
         self.assertIsNone(manager._thread)
 
@@ -242,26 +270,80 @@ class ModelDownloadTests(unittest.TestCase):
         manager = ModelDownloadManager(Path(tempfile.mkdtemp()))
         entered = threading.Event(); release = threading.Event()
         def blocked_download(_entry: ModelDownload) -> Path:
-            entered.set(); self.assertTrue(release.wait(1))
+            entered.set(); self.assertTrue(release.wait(THREAD_TIMEOUT))
             if manager._cancel.is_set(): raise ModelDownloadCancelled()
             raise AssertionError("shutdown did not cancel the worker")
         with patch.object(manager, "_download", side_effect=blocked_download):
-            manager.start("hand_detection", "vit_b")
-            self.assertTrue(entered.wait(1))
-            release.set()
-            self.assertTrue(manager.shutdown())
+            worker = None
+            shutdown_result: dict[str, object] = {}
+            shutdown_returned = threading.Event()
+
+            def shutdown() -> None:
+                try:
+                    shutdown_result["value"] = manager.shutdown()
+                except BaseException as exc:
+                    shutdown_result["error"] = exc
+                finally:
+                    shutdown_returned.set()
+
+            shutdown_thread = threading.Thread(target=shutdown)
+            try:
+                with manager._lock:
+                    manager.start("hand_detection", "vit_b")
+                    worker = manager._thread
+                assert worker is not None
+                self.assertTrue(entered.wait(THREAD_TIMEOUT))
+                shutdown_thread.start()
+                self.assertFalse(shutdown_returned.wait(.1))
+                release.set()
+                self.assertTrue(shutdown_returned.wait(THREAD_TIMEOUT))
+            finally:
+                manager.cancel()
+                release.set()
+                join_threads(shutdown_thread)
+                if worker is not None:
+                    join_threads(worker)
+        self.assertNotIn("error", shutdown_result)
+        self.assertTrue(shutdown_result["value"])
         self.assertEqual(manager.snapshot()["state"], "cancelled")
 
     def test_shutdown_waits_for_the_cancelled_worker_to_finish(self) -> None:
         manager = ModelDownloadManager(Path(tempfile.mkdtemp()))
         entered = threading.Event(); release = threading.Event()
         def blocked_download(_entry: ModelDownload) -> Path:
-            entered.set(); self.assertTrue(release.wait(1)); raise ModelDownloadCancelled()
+            entered.set(); self.assertTrue(release.wait(THREAD_TIMEOUT)); raise ModelDownloadCancelled()
         with patch.object(manager, "_download", side_effect=blocked_download):
-            manager.start("hand_detection", "vit_b")
-            self.assertTrue(entered.wait(1))
-            release.set()
-            self.assertTrue(manager.shutdown())
+            worker = None
+            shutdown_result: dict[str, object] = {}
+            shutdown_returned = threading.Event()
+
+            def shutdown() -> None:
+                try:
+                    shutdown_result["value"] = manager.shutdown()
+                except BaseException as exc:
+                    shutdown_result["error"] = exc
+                finally:
+                    shutdown_returned.set()
+
+            shutdown_thread = threading.Thread(target=shutdown)
+            try:
+                with manager._lock:
+                    manager.start("hand_detection", "vit_b")
+                    worker = manager._thread
+                assert worker is not None
+                self.assertTrue(entered.wait(THREAD_TIMEOUT))
+                shutdown_thread.start()
+                self.assertFalse(shutdown_returned.wait(.1))
+                release.set()
+                self.assertTrue(shutdown_returned.wait(THREAD_TIMEOUT))
+            finally:
+                manager.cancel()
+                release.set()
+                join_threads(shutdown_thread)
+                if worker is not None:
+                    join_threads(worker)
+        self.assertNotIn("error", shutdown_result)
+        self.assertTrue(shutdown_result["value"])
         self.assertEqual(manager.snapshot()["state"], "cancelled")
 
 

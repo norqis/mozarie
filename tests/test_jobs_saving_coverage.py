@@ -22,6 +22,15 @@ from mozarie.saving import SavingMixin
 THREAD_TIMEOUT = 30
 
 
+def join_threads(*threads: threading.Thread) -> None:
+    started = [thread for thread in threads if thread.ident is not None]
+    for thread in started:
+        thread.join(THREAD_TIMEOUT)
+    for thread in started:
+        if thread.is_alive():
+            raise AssertionError(f"thread did not finish: {thread.name}")
+
+
 class JobsSavingCoverageTests(unittest.TestCase):
     def make_jobs(self) -> JobsMixin:
         state = JobsMixin()
@@ -346,12 +355,12 @@ class JobsSavingCoverageTests(unittest.TestCase):
             with state.inference_lock:
                 boundary_entered.set()
 
+        settings = threading.Thread(target=update_settings)
+        boundary = threading.Thread(target=run_boundary_inference)
         with patch.object(state, "_release_gpu_cache", side_effect=release_cache):
-            cleanup.start()
-            self.assertTrue(cleanup_started.wait(THREAD_TIMEOUT))
-            settings = threading.Thread(target=update_settings)
-            boundary = threading.Thread(target=run_boundary_inference)
             try:
+                cleanup.start()
+                self.assertTrue(cleanup_started.wait(THREAD_TIMEOUT))
                 settings.start(); boundary.start()
                 self.assertTrue(settings_attempted.wait(THREAD_TIMEOUT))
                 self.assertTrue(boundary_attempted.wait(THREAD_TIMEOUT))
@@ -360,10 +369,7 @@ class JobsSavingCoverageTests(unittest.TestCase):
                 allow_cleanup.set()
             finally:
                 allow_cleanup.set()
-                for thread in (cleanup, settings, boundary):
-                    thread.join(THREAD_TIMEOUT)
-                    self.assertFalse(thread.is_alive())
-        self.assertFalse(cleanup.is_alive())
+                join_threads(cleanup, settings, boundary)
         self.assertTrue(settings_entered.is_set())
         self.assertTrue(boundary_entered.is_set())
 
