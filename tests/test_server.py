@@ -3034,6 +3034,8 @@ class MozarieTests(unittest.TestCase):
             self.assertEqual(state.job.outputs, [str(output_paths[record.image_id]) for record in records])
             self.assertEqual({Path(path) for path in state.job.outputs}, set(output_paths.values()))
             self.assertTrue(all(path.is_file() for path in output_paths.values()))
+            for index, record in enumerate(records):
+                self.assertEqual(output_paths[record.image_id].read_bytes(), f"rendered-{index}".encode("ascii"))
 
     def test_parallel_apply_failure_stops_workers_from_claiming_more_records(self):
         with tempfile.TemporaryDirectory() as directory:
