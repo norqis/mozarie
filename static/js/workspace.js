@@ -338,9 +338,9 @@ async function ensureProjectSourcePermission(handle, request = false) {
     return (await handle.requestPermission({ mode })) === "granted";
   } catch { return false; }
 }
-async function requestProjectSourcePermission(handle) {
+async function requestProjectSourcePermission(handle, mode = "read") {
   if (!handle?.requestPermission) return Boolean(handle);
-  try { return (await handle.requestPermission({ mode: "read" })) === "granted"; }
+  try { return (await handle.requestPermission({ mode })) === "granted"; }
   catch { return false; }
 }
 async function rememberedOutputDirectoryHandle() {

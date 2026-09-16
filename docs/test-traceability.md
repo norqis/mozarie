@@ -35,6 +35,7 @@
 | WS-113 | 大きいPNG文字列メタデータを画像本体として検証し、破損画像が混在しても他の読込を継続できる | `tests.test_image_validation.InputImageValidationTests.test_png_with_large_text_metadata_is_inspected_from_pixels`、`tests.test_http_import_regression.FolderLoadLoggingContractTests.test_folder_scan_keeps_large_ztxt_itxt_pngs_when_a_corrupt_png_is_present` | zTXt・iTXt、CRC不一致、実ファイルでの表示 |
 | WS-114 | ブラウザーフォルダー選択の読込操作をfixtureで要求し、成功後にフォルダーAPIへ渡す | `tests/test_import_picker_e2e.cjs` | 実ブラウザーの権限要求、実フォルダー配下の読込 |
 | WS-115 | ブラウザーフォルダー選択の取消・拒否で一覧と読込状態を保持する | `tests/test_import_picker_e2e.cjs` | 実ブラウザーの拒否表示と権限状態 |
+| WS-143 | ブラウザーフォルダーsourceは初回選択時に書込み可能なhandleを取得し、一覧再取得後も深い階層の画像を直接の親フォルダーへ対応付ける。明示した復元だけがフォルダーへ書込み許可を再要求し、取消は一覧と読込状態を保持する | `tests/test_folder_permissions_e2e.cjs` | 実ブラウザーの権限表示・許可結果、実フォルダーの削除 |
 | WS-116 | 読込・カタログ切替中の新規フォルダー読込を拒否し、先行状態を保持する | `tests.test_server.MozarieTests.test_same_root_reload_rejects_while_import_is_preparing` | 実ブラウザーでの同時操作の案内 |
 | WS-117 | 高位操作は正規化ルート、status/error_code、所要だけを記録し、ID・本文・token・headerを記録しない | `tests.test_http_import_regression.FolderLoadLoggingContractTests.test_handler_logs_normalized_routes_without_request_secrets` | 全高位操作をCMDで実行した際の表示 |
 | WS-118 | pause/resume/cancelを含む処理状態は操作面と対象数を保ち、画像単位の正常処理はINFOへ出さない | `tests/test_import_picker_e2e.cjs`、`tests.test_http_import_regression.FolderLoadLoggingContractTests.test_per_image_success_logs_are_suppressed_but_failures_are_safe_warnings` | 実モデルの開始・停止、CMDの進捗表示 |

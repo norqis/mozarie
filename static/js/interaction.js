@@ -1060,7 +1060,7 @@ async function pickImageFiles() {
 async function pickImageDirectory() {
   $("#pickerMenu").hidePopover();
   const session = beginImportSession(); if (!session) return;
-  try { await importDirectoryHandle(await window.showDirectoryPicker({ mode: "read", id: "mozarie-source" }), session); }
+  try { await importDirectoryHandle(await window.showDirectoryPicker({ mode: "readwrite", id: "mozarie-source" }), session); }
   catch (error) {
     if (error?.name === "AbortError") setStatusKey("status.folderPickerCancelled");
     else { setStatusKey("status.folderPickerFailed"); showUserError(error); }

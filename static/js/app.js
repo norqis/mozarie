@@ -112,19 +112,19 @@ async function restoreBrowserProjectSourcesForCurrentCatalog() {
   for (const source of directories) {
     if (!await ensureProjectSourcePermission(source.handle)) { pending.push({ ...source, projectId, kind: "directory", key: `directory:${source.sourceId}` }); continue; }
     const images = new Map(state.images.filter((image) => image.sourceId === source.sourceId).map((image) => [image.relativePath, image]));
-    async function collect(handle, parent = "", parentHandle = null) {
+    async function collect(handle, parent = "") {
       for await (const child of handle.values()) {
         const relativePath = parent ? `${parent}/${child.name}` : child.name;
         if (child.kind === "file") {
           const image = images.get(relativePath);
           if (image) stagedAccess.set(image.id, {
-            fileHandle: child, parentHandle, name: child.name, sourceId: source.sourceId, relativePath,
+            fileHandle: child, parentHandle: handle, name: child.name, sourceId: source.sourceId, relativePath,
             sourceKind: "browser-directory", size: image.sizeBytes, lastModified: Math.floor(Number(image.mtimeNs) / 1000000),
           });
-        } else await collect(child, relativePath, handle);
+        } else await collect(child, relativePath);
       }
     }
-    try { await collect(source.handle, "", source.handle); }
+    try { await collect(source.handle); }
     catch { pending.push({ ...source, projectId, kind: "directory", key: `directory:${source.sourceId}` }); }
   }
   if (restoreGeneration === browserSourceRestoreGeneration && isCurrentCatalogEpoch(epoch) && state.project?.id === projectId) {
@@ -254,7 +254,7 @@ async function restoreBrowserProjectSource(source) {
   try {
     // Call requestPermission directly from this click handler. A project open
     // has already awaited IndexedDB and cannot retain user activation.
-    if (!await requestProjectSourcePermission(source.handle)) return;
+    if (!await requestProjectSourcePermission(source.handle, source.kind === "directory" ? "readwrite" : "read")) return;
     if (source.kind === "directory") await importProjectDirectoryHandle(source.handle, state.project.id, source.sourceId, "restore");
     else if ((await importProjectFileHandles([source], state.project.id)).length) throw codedError("project_source_unavailable");
     pendingBrowserProjectSources = pendingBrowserProjectSources.filter((item) => item.key !== source.key || item.projectId !== source.projectId);
@@ -649,7 +649,7 @@ function bindEvents() {
     if (!projectId || !beginProjectOperation()) return;
     let held = true;
     try {
-      const handle = await window.showDirectoryPicker({ mode: "read", id: "mozarie-project-source" });
+      const handle = await window.showDirectoryPicker({ mode: "readwrite", id: "mozarie-project-source" });
       const matches = await matchingProjectDirectorySources(handle);
       const current = matches.find((source) => source.projectId === projectId);
       const others = new Set(matches.filter((source) => source.projectId !== projectId).map((source) => source.projectId));
