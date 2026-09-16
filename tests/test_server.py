@@ -959,8 +959,46 @@ class MozarieTests(unittest.TestCase):
             self.assertEqual(live_record.asset_revision, asset_revision + 1)
             self.assertNotEqual(state.asset_version(live_record), asset_version)
 
-    def test_output_directory_picker_is_not_a_server_api(self):
-        self.assertTrue(callable(http_module._pick_output_directory))
+    def test_output_directory_picker_normalizes_existing_absolute_hint_and_releases_lock(self):
+        state = self.new_state()
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            executable = root / "System32" / "WindowsPowerShell" / "v1.0" / "powershell.exe"
+            executable.parent.mkdir(parents=True); executable.touch()
+            selected = root / "picked"; selected.mkdir()
+            process = Mock(returncode=0)
+            process.communicate.return_value = (base64.b64encode(str(selected).encode("utf-8")), b"")
+            with patch.dict(http_module.os.environ, {"SystemRoot": str(root)}, clear=False), \
+                 patch.object(http_module.subprocess, "Popen", return_value=process) as popen:
+                self.assertEqual(http_module._pick_output_directory(state, str(selected)), str(selected.resolve()))
+            picker_kwargs = popen.call_args.kwargs
+            command = popen.call_args.args[0]
+            script = base64.b64decode(command[-1]).decode("utf-16le")
+            self.assertIn("FolderBrowserDialog", script)
+            self.assertIn("ShowDialog($owner)", script)
+            self.assertFalse(picker_kwargs["shell"])
+            self.assertEqual(picker_kwargs["env"]["MOZARIE_OUTPUT_INITIAL_DIRECTORY"], str(selected.resolve()))
+            self.assertTrue(state.native_picker_lock.acquire(blocking=False)); state.native_picker_lock.release()
+
+    def test_output_directory_picker_cancellation_and_failure_release_lock(self):
+        state = self.new_state()
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            executable = root / "System32" / "WindowsPowerShell" / "v1.0" / "powershell.exe"
+            executable.parent.mkdir(parents=True); executable.touch()
+            cancelled = Mock(returncode=0)
+            cancelled.communicate.return_value = (b"", b"")
+            failed = Mock(returncode=1)
+            failed.communicate.return_value = (b"", b"failed")
+            with patch.dict(http_module.os.environ, {"SystemRoot": str(root)}, clear=False), \
+                 patch.object(http_module.subprocess, "Popen", side_effect=[cancelled, failed]) as popen:
+                self.assertIsNone(http_module._pick_output_directory(state, "relative-output"))
+                with self.assertRaises(ClientError) as raised:
+                    http_module._pick_output_directory(state, str(root / "missing"))
+            self.assertNotIn("MOZARIE_OUTPUT_INITIAL_DIRECTORY", popen.call_args_list[0].kwargs["env"])
+            self.assertNotIn("MOZARIE_OUTPUT_INITIAL_DIRECTORY", popen.call_args_list[1].kwargs["env"])
+            self.assertEqual(raised.exception.error_code, "output_folder_unavailable")
+            self.assertTrue(state.native_picker_lock.acquire(blocking=False)); state.native_picker_lock.release()
 
     def test_model_file_picker_uses_fixed_powershell_and_validates_selection(self):
         state = self.new_state()
@@ -3669,6 +3707,15 @@ class MozarieTests(unittest.TestCase):
                 state.update_settings(changed_output)
         ready.assert_called_once_with(canonical)
         save.assert_called_once_with(expected_output)
+
+    def test_output_directory_only_update_does_not_probe_an_unchanged_gpu(self):
+        state = self.new_state()
+        with tempfile.TemporaryDirectory() as directory:
+            output = str(Path(directory).resolve())
+            with patch.object(state, "_require_supported_gpu", side_effect=AssertionError("GPU must not be checked")) as probe:
+                settings = state.update_settings({"saving": {"default_output_directory": output}})
+        self.assertEqual(settings["saving"]["default_output_directory"], output)
+        probe.assert_not_called()
 
     def test_output_validation_uses_its_dedicated_user_error_and_does_not_save(self):
         state = self.new_state()

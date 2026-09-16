@@ -123,6 +123,24 @@ class LiveHttpEndpointTests(unittest.TestCase):
         self.assertEqual(status, 404)
         self.assertEqual(json.loads(body), {"error_code": "api_not_found", "params": {}})
 
+    def test_live_output_directory_picker_updates_settings_without_gpu_probe(self) -> None:
+        output = Path(self._temporary_directory.name) / "output"
+        output.mkdir()
+        gpu_settings = json.loads(json.dumps(self.state.settings))
+        gpu_settings["models"]["provider"] = "gpu"
+        self.state.settings = self.state.settings_store.save(gpu_settings)
+        with patch.object(http_module, "_pick_output_directory", return_value=str(output.resolve())) as picker, \
+             patch.object(self.state, "_require_supported_gpu", side_effect=AssertionError("GPU must not be checked")) as probe:
+            status, _headers, body = self.request(
+                "POST", "/api/output-directory/pick", {"currentPath": str(output)}, authorized=True,
+            )
+        self.assertEqual(status, 200, body.decode("utf-8") if status != 200 else "")
+        payload = json.loads(body)
+        self.assertEqual(payload["path"], str(output.resolve()))
+        self.assertEqual(payload["settings"]["saving"]["default_output_directory"], str(output.resolve()))
+        picker.assert_called_once_with(current_path=str(output))
+        probe.assert_not_called()
+
     def test_get_body_is_rejected_and_cannot_frame_the_following_request(self) -> None:
         """A failed mutation body before GET must never become the next method token."""
         body = b'{"expectedProjectId":null,"expectedCatalogGeneration":0}'

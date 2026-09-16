@@ -265,6 +265,19 @@ def _run_native_picker(script: str, environment: dict[str, str], *, failed_messa
         state.native_picker_lock.release()
 
 
+def _picker_hint_path(current_path: str) -> Path | None:
+    """Return an existing absolute directory that is safe to pass to Windows."""
+    if not current_path or "\x00" in current_path:
+        return None
+    try:
+        candidate = Path(current_path.strip()).expanduser()
+        if not candidate.is_absolute() or not candidate.is_dir():
+            return None
+        return candidate.resolve()
+    except (OSError, ValueError):
+        return None
+
+
 _MODEL_PICKER_SUFFIXES = {
     "target_segmentation": {".onnx"}, "ntd11": {".onnx"}, "sensitive": {".onnx"}, "hand_detection": {".onnx"},
     "hand_segmentation": {".safetensors"}, "sam_checkpoint": {".pth", ".pt", ".ckpt"},
@@ -337,7 +350,16 @@ try {
     candidate = _picker_hint_path(current_path) if isinstance(current_path, str) else None
     if candidate is not None and candidate.is_dir():
         environment["MOZARIE_OUTPUT_INITIAL_DIRECTORY"] = str(candidate.resolve())
-    selected = _run_native_picker(script, environment, failed_message="保存先フォルダーの選択を開けませんでした。", busy_message="保存先フォルダーを選択しています。", state=state)
+    try:
+        selected = _run_native_picker(
+            script, environment,
+            failed_message="保存先フォルダーの選択を開けませんでした。",
+            busy_message="保存先フォルダーを選択しています。", state=state,
+        )
+    except ClientError as exc:
+        if exc.error_code in {"model_picker_failed", "model_picker_invalid"}:
+            raise ClientError("保存先フォルダーの選択を完了できません。", "output_folder_unavailable") from exc
+        raise
     if selected is None:
         return None
     try:

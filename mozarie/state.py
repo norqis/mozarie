@@ -244,7 +244,11 @@ class StudioState(CatalogMixin, SavingMixin, DetectionMixin, JobsMixin):
                 validate_output_directory_ready(settings["saving"]["default_output_directory"])
             except (SettingsError, OSError) as exc:
                 raise ClientError("保存先フォルダを使用できません。", "output_folder_unavailable") from exc
-            self._require_supported_gpu(settings["models"])
+            # Selecting an output folder must remain available when a previously
+            # configured GPU is temporarily unavailable. Model changes still
+            # receive the same validation before they are persisted.
+            if settings["models"] != previous_models:
+                self._require_supported_gpu(settings["models"])
             settings = self.settings_store.save(settings)
             self.settings = settings
             detection_keys = {
