@@ -77,7 +77,8 @@ jobs:
           merge-multiple: false
       - name: Require successful backend shards
         if: needs.backend-shards.result != 'success'
-        run: throw "backend shard result: ${{ needs.backend-shards.result }}"
+        run: |
+          throw "backend shard result: ${{ needs.backend-shards.result }}"
       - run: node scripts/test-quiet.cjs backend-aggregate --shard-artifacts "${{ runner.temp }}/backend-shards" --artifacts "${{ runner.temp }}/mozarie-coverage"
       - if: always()
         uses: actions/upload-artifact@v6
