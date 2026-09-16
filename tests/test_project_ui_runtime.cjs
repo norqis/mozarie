@@ -77,6 +77,8 @@ const context = {
     return {};
   },
 };
+const submitRenameImage = () => calls.push(["rename-submit"]);
+context.submitRenameImage = submitRenameImage;
 // bindEvents also attaches the established editor controls.  They are inert in
 // this project-focused fixture, but defining their collaborators keeps the
 // real binding pass intact instead of testing a copied subset.
@@ -198,6 +200,7 @@ nodeTest("project dialogs, source recovery, and project switching", async () => 
   };
 
   test.bindEvents();
+  assert.equal(element("#renameImageForm").listeners.get("submit"), submitRenameImage, "project fixture keeps the bound rename submit collaborator intact");
   const fire = async (id, type = "click") => { const listener = element(id).listeners.get(type); assert.ok(listener, `${id} is interactive`); await listener({ preventDefault() {} }); await new Promise((resolve) => setImmediate(resolve)); };
   await fire("#projectButton"); await fire("#projectClose"); await fire("#projectNew"); await fire("#projectName"); await fire("#projectOpenList"); await fire("#projectListClose");
   state.project = projects[0]; state.projectReadOnly = false; await fire("#projectSourceAdd");

@@ -129,6 +129,8 @@ async function testBoundApplicationEvents() {
     polygonIsValid: () => true, polygonRoi: () => ({ left: 1 }), roiFromPoints: () => ({ left: 1 }), pointForRoi: () => ({ x: 1, y: 1 }),
     rectangleDraftAt: () => null, boundaryDragStarted: () => true, imageHasMask: () => true,
   };
+  const submitRenameImage = note("submitRenameImage");
+  context.submitRenameImage = submitRenameImage;
   for (const name of [
     "openSettings", "selectSettingsTab", "moveSettingsTab", "saveSettings", "resetSettings", "chooseSettingsOutputDirectory", "chooseSettingsModelFile", "startModelDownload", "cancelModelDownload", "beginModelDownload", "syncProviderSelection", "markModelStatusDirty", "selectSamVariant", "startUpdate", "handleToolRailKeydown", "setToolRailTabStop", "setModelCardEnabled", "setHandSegmentationAvailable", "setPrecisionDetectionEnabled", "refreshSettingsStatus", "setFluidExclusionEnabled", "pickImageFiles", "pickImageDirectory", "importDroppedFiles", "loadFolder", "openDetectionDialog", "validateDetectionTargets", "runDetection", "saveAll", "saveCurrent", "setDisplayMode", "fitImage", "updateCompareSplitter", "render", "updateBrushCursor", "updateBrushSize", "setHidden", "clearMasks", "closeBatchMoreMenus", "closeFilterPopovers", "syncResourceOwnership", "clearCatalog", "renderGallery", "setViewMode", "runNavigationAction", "moveCurrentBy", "reviewAndMoveNext", "removeImageFromCatalog", "hideAndMoveNext", "runSelectionAction", "clearBatchSelection", "renderOverview", "updateSelectionActionBar", "batchCandidateOperation", "toggleCandidateDisplay", "toggleCandidateEffective", "renderShortcutBindings", "setTool", "setBoundaryModeMenuOpen", "addBoundaryCandidate", "cancelBoundary", "setMosaicPreviewEnabled", "requestMosaicPreview", "updateBlockSizeDisplay", "setDetectionConfidence", "syncDetectionTargetSwitch", "syncDetectionFluidColorFill", "validateDetectionFluidColorFill", "startDetectionFromDialog", "restoreSnapshot", "resizeRenderCanvas", "refreshApplyTargets", "chooseOutputDirectory", "syncApplyMode", "controlApply", "startApplyFromDialog", "chooseSingleOutputDirectory", "syncSingleSaveMode", "startSingleSave", "showProcessing", "updateProgress", "scheduleJobPoll", "showUserError", "cancelDetection", "setReviewed", "closeCatalogContextMenu", "copyContextMenuImagePath", "setGalleryDropOverlay", "beginBoundaryBrushStroke", "appendBoundaryBrushPoint", "beginManualStroke", "appendManualStrokePoint", "fillAt", "completeManualStroke", "cancelManualStroke", "completeBoundaryBrushStroke", "flushRender", "focusElement", "closeBoundaryModeMenu", "cancelFillWork", "handleWindowKeydown", "addBoundaryDraft", "loadTranslations", "updateBoundaryActions", "setSettingsForm", "initCandidatePaddingPopover"
   ]) context[name] = note(name);
@@ -144,6 +146,7 @@ async function testBoundApplicationEvents() {
   vm.runInNewContext(source, context, { filename: path.join(jsRoot, "app.js") });
   vm.runInNewContext("globalThis.appEvents={ bindEvents };", context, { filename: "test-app-events-exports.js" });
   context.appEvents.bindEvents();
+  assert.equal(element("#renameImageForm").listeners.get("submit"), submitRenameImage, "renameImageForm binds the supplied rename submit collaborator");
   const event = (extra = {}) => ({ button: 0, pointerId: 1, clientX: 5, clientY: 5, buttons: 1, isPrimary: true, target: null, currentTarget: null, preventDefault() { this.prevented = true; }, ...extra });
   const fire = async (id, name, extra) => { const callback = element(id).listeners.get(name); assert.ok(callback, `${id} ${name} is bound`); await callback(event(extra)); };
 
@@ -238,6 +241,8 @@ async function testApplicationStartupPaths() {
     cancelAnimationFrame() {},
     toolRail: element("#canvasToolRail"),
   };
+  const submitRenameImage = () => {};
+  context.submitRenameImage = submitRenameImage;
   for (const name of [
     "saveSettings", "syncProviderSelection", "handleToolRailKeydown", "loadFolder", "saveAll", "saveCurrent",
     "startDetectionFromDialog", "startApplyFromDialog", "startSingleSave", "chooseSingleOutputDirectory", "syncSingleSaveMode", "rememberedOutputDirectoryHandle", "renderOutputDirectory", "chooseOutputDirectory", "importDroppedFiles", "cancelBoundary",
@@ -262,6 +267,7 @@ async function testApplicationStartupPaths() {
 
   apiResults.push({ settings: { general: { shortcuts_enabled: false } }, status: {}, version: "1" }, { images: [{ id: "one" }], root: "" });
   await context.appCoverage.initialise();
+  assert.equal(element("#renameImageForm").listeners.get("submit"), submitRenameImage, "startup binds renameImageForm through the supplied collaborator");
   assert.equal(element("#folderPath").value, "");
   assert.equal(state.images.length, 1);
   apiResults.push({ settings: { general: {} }, status: {}, version: "1" }, new Error("image list unavailable"));
