@@ -389,11 +389,11 @@ function mosaicDivisor() { return normaliseDivisor($("#divisor").value); }
 function calculatedBlockSize(image = currentRecord(), divisor = mosaicDivisor()) {
   return image ? Math.max(4, Math.ceil(Math.max(image.width, image.height) / divisor)) : 0;
 }
-function isBusy() {
+function isBusy({ ignoreOutputDirectoryCommit = false } = {}) {
   return ["running", "pausing", "paused"].includes(state.job?.state)
     || state.saving || state.saveStarting || state.detectionStarting || state.masksClearing
     || state.processing?.kind === "detect"
-    || state.catalogMutation || state.boundaryPending || state.fillPending || state.transformPending || state.outputDirectoryPicking || state.outputDirectoryCommitPending || state.projectHistoryBusy || state.historyRestoreBusy;
+    || state.catalogMutation || state.boundaryPending || state.fillPending || state.transformPending || state.outputDirectoryPicking || (!ignoreOutputDirectoryCommit && state.outputDirectoryCommitPending) || state.projectHistoryBusy || state.historyRestoreBusy;
 }
 function beginCatalogEpoch() { state.catalogEpoch += 1; return state.catalogEpoch; }
 function isCurrentCatalogEpoch(epoch) { return state.catalogEpoch === epoch; }
@@ -751,10 +751,13 @@ function canRemoveCurrentImage() {
 
 function applyBusyControlLock(controls, busyLocked, confirmDialog) {
   if (!busyLocked) return;
+  const canEditSavePreferences = state.outputDirectoryCommitPending && !state.applyRunning && !state.importing
+    && !isBusy({ ignoreOutputDirectoryCommit: true });
   for (const control of controls) {
     if ((["applyPauseButton", "applyCancelButton"].includes(control.id) && state.applyRunning)
       || (["processingPauseButton", "processingCancelButton"].includes(control.id) && state.processing)
-      || control.id === "errorDialogClose" || (state.saveStarting && confirmDialog.open && confirmDialog.contains(control))) continue;
+      || control.id === "errorDialogClose" || (state.saveStarting && confirmDialog.open && confirmDialog.contains(control))
+      || (canEditSavePreferences && (control.id === "applyTargetMode" || control.closest("#applySettings, #singleSaveSettings")))) continue;
     if (!control.disabled) control.dataset.disabledByLock = "true";
     control.disabled = true;
   }

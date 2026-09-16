@@ -8,6 +8,26 @@ async function waitForEditor(page, imageId) {
   await page.waitForFunction((id) => state.currentId === id && state.currentImage && !state.pendingImageId, imageId);
 }
 
+async function holdOutputDirectorySettingsResponse(page) {
+  let responseCaptured;
+  let releaseResponse;
+  const responseHeld = new Promise((resolve) => { responseCaptured = resolve; });
+  const release = new Promise((resolve) => { releaseResponse = resolve; });
+  const pattern = /\/api\/settings\?status=0$/;
+  const handler = async (route) => {
+    const response = await route.fetch();
+    responseCaptured();
+    await release;
+    await route.fulfill({ response });
+  };
+  await page.route(pattern, handler);
+  return {
+    waitForResponse: () => responseHeld,
+    release: () => releaseResponse(),
+    stop: () => page.unroute(pattern, handler),
+  };
+}
+
 async function main() {
   const fixture = await startFixtureServer();
   const browser = await chromium.launch({ headless: true });
@@ -115,6 +135,64 @@ async function main() {
     await page.locator("#saveAllButton").click();
     await page.waitForFunction(() => $("#applyDialog").open);
     assert.deepEqual(await page.evaluate(() => ({ target: $("#applyTargetMode").value, divisor: $("#applyDivisor").value, format: $("#applyOutputFormat").value, metadata: $("#applyKeepMetadata").checked, remove: $("#applyRemoveSaved").checked })), { target: "all", divisor: "23", format: "png", metadata: false, remove: true }, "batch choices persist after its first opening");
+    await page.locator("#applyCloseButton").click();
+
+    // A real settings response held after the path blur must not swallow the
+    // next checkbox click. The path and save start remain locked, while local
+    // save choices stay usable until the settings request completes.
+    await page.locator("#saveButton").click();
+    await page.waitForFunction(() => $("#singleSaveDialog").open);
+    await page.locator("#singleSaveCopyMode").check();
+    const singleSettings = await holdOutputDirectorySettingsResponse(page);
+    await page.locator("#singleSaveOutputDirectoryStatus").fill("G:\\fixture-output-single");
+    await page.locator("#singleSaveRemoveSaved").click();
+    await singleSettings.waitForResponse();
+    await page.waitForFunction(() => state.outputDirectoryCommitPending);
+    const singlePendingState = await page.evaluate(() => ({
+      checked: $("#singleSaveRemoveSaved").checked,
+      disabled: $("#singleSaveRemoveSaved").disabled,
+      fieldsetDisabled: $("#singleSaveSettings").disabled,
+      picking: state.outputDirectoryPicking,
+      pending: state.outputDirectoryCommitPending,
+      busy: isBusy(),
+      busyWithoutCommit: isBusy({ ignoreOutputDirectoryCommit: true }),
+    }));
+    assert.equal(singlePendingState.checked, true, `single remove-after-save click survives its output-path blur: ${JSON.stringify(singlePendingState)}`);
+    assert.equal(await page.locator("#singleSaveSettings").isDisabled(), false, "single local save settings remain editable while the path commit waits");
+    assert.equal(await page.locator("#singleSaveOutputDirectoryStatus").isDisabled(), true, "single output path remains locked while its commit waits");
+    assert.equal(await page.locator("#singleSaveChooseOutputDirectoryButton").isDisabled(), true, "single path picker remains locked while its commit waits");
+    assert.equal(await page.locator("#singleSaveStartButton").isDisabled(), true, "single save start remains locked while its path commit waits");
+    assert.deepEqual({ busy: singlePendingState.busy, busyWithoutCommit: singlePendingState.busyWithoutCommit }, { busy: true, busyWithoutCommit: false }, "the delayed path commit still holds the normal editor lock");
+    assert.equal(await page.locator("#saveButton").isDisabled(), true, "the editor save action remains locked while its output path commits");
+    singleSettings.release();
+    await page.waitForFunction(() => !state.outputDirectoryCommitPending);
+    await singleSettings.stop();
+    assert.equal(await page.locator("#singleSaveOutputDirectoryStatus").inputValue(), "G:\\fixture-output-single", "single path commit updates the visible value after its response");
+    assert.equal(await page.locator("#singleSaveStartButton").isDisabled(), false, "single save start unlocks after the path commit");
+    await page.locator("#singleSaveCloseButton").click();
+
+    await page.locator("#saveAllButton").click();
+    await page.waitForFunction(() => $("#applyDialog").open);
+    await page.locator("#applyRemoveSaved").uncheck();
+    const batchSettings = await holdOutputDirectorySettingsResponse(page);
+    await page.locator("#applyOutputDirectoryStatus").fill("G:\\fixture-output-batch");
+    await page.locator("#applyRemoveSaved").click();
+    await batchSettings.waitForResponse();
+    await page.waitForFunction(() => state.outputDirectoryCommitPending);
+    assert.equal(await page.locator("#applyRemoveSaved").isChecked(), true, "batch remove-after-save click survives its output-path blur");
+    assert.equal(await page.locator("#applySuffix").isDisabled(), false, "batch suffix remains editable while the path commit waits");
+    assert.equal(await page.locator("#applyTargetMode").isDisabled(), false, "batch target remains editable while the path commit waits");
+    await page.locator("#applySuffix").fill("_pending");
+    await page.locator("#applyTargetMode").selectOption("masked");
+    assert.equal(await page.locator("#applyOutputDirectoryStatus").isDisabled(), true, "batch output path remains locked while its commit waits");
+    assert.equal(await page.locator("#chooseOutputDirectoryButton").isDisabled(), true, "batch path picker remains locked while its commit waits");
+    assert.equal(await page.locator("#applyStartButton").isDisabled(), true, "batch save start remains locked while its path commit waits");
+    batchSettings.release();
+    await page.waitForFunction(() => !state.outputDirectoryCommitPending);
+    await batchSettings.stop();
+    assert.deepEqual(await page.evaluate(() => ({ path: $("#applyOutputDirectoryStatus").value, suffix: $("#applySuffix").value, target: $("#applyTargetMode").value, remove: $("#applyRemoveSaved").checked })), { path: "G:\\fixture-output-batch", suffix: "_pending", target: "masked", remove: true }, "batch path response preserves choices changed while it waited");
+    await page.locator("#applyTargetMode").selectOption("all");
+    assert.equal(await page.locator("#applyStartButton").isDisabled(), false, "batch save start unlocks after the path commit");
     await page.locator("#applyCloseButton").click();
 
     // Copy save successfully commits before it removes only the saved entry.

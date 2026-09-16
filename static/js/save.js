@@ -71,11 +71,11 @@ function syncApplyMode() {
   $("#deleteOriginalRow").hidden = !copying;
   $("#applyOutputDirectoryRow").hidden = !copying;
   const outputDirectoryPending = state.outputDirectoryPicking || state.outputDirectoryCommitPending;
-  $("#applySuffix").disabled = state.applyRunning || outputDirectoryPending;
-  $("#applyTargetMode").disabled = state.applyRunning || state.saveStarting || outputDirectoryPending;
+  $("#applySuffix").disabled = state.applyRunning || state.outputDirectoryPicking;
+  $("#applyTargetMode").disabled = state.applyRunning || state.saveStarting || state.outputDirectoryPicking;
   $("#chooseOutputDirectoryButton").disabled = outputDirectoryPending || state.applyRunning || state.saveStarting;
   $("#applyOutputDirectoryStatus").disabled = outputDirectoryPending || state.applyRunning || state.saveStarting;
-  $("#applyRemoveSaved").disabled = outputDirectoryPending || state.applyRunning || state.saveStarting;
+  $("#applyRemoveSaved").disabled = state.outputDirectoryPicking || state.applyRunning || state.saveStarting;
   $("#deleteOriginal").disabled = !canDelete || state.applyRunning;
   if (!canDelete) $("#deleteOriginal").checked = false;
   $("#applyOverwriteMode").disabled = !canOverwrite || state.applyRunning;
@@ -147,9 +147,9 @@ function syncSingleSaveMode() {
   const outputDirectoryPending = state.outputDirectoryPicking || state.outputDirectoryCommitPending;
   $("#singleSaveChooseOutputDirectoryButton").disabled = outputDirectoryPending || state.saving || state.saveStarting;
   $("#singleSaveOutputDirectoryStatus").disabled = outputDirectoryPending || state.saving || state.saveStarting;
-  $("#singleSaveRemoveSaved").disabled = outputDirectoryPending || state.saving || state.saveStarting;
+  $("#singleSaveRemoveSaved").disabled = state.outputDirectoryPicking || state.saving || state.saveStarting;
   $("#singleSaveStartButton").disabled = outputDirectoryPending || state.saving || state.saveStarting || !isProcessableImage(image) || (copying && !state.settings?.saving?.default_output_directory) || (!copying && !canOverwrite);
-  $("#singleSaveSettings").disabled = outputDirectoryPending || state.saving || state.saveStarting;
+  $("#singleSaveSettings").disabled = state.outputDirectoryPicking || state.saving || state.saveStarting;
   syncSingleOutputOptions();
 }
 
