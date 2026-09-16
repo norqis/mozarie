@@ -30,6 +30,8 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: '22'
+      - run: npm ci
+      - run: npx playwright install chromium --only-shell
       - run: python -m venv .venv-test
       - run: .\.venv-test\Scripts\python.exe -m pip install -r requirements-test.txt
       - run: node scripts/test-quiet.cjs backend --artifacts "${{ runner.temp }}/mozarie-coverage"

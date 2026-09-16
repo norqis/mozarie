@@ -392,7 +392,9 @@ async function recoverPendingBrowserDeletes(pending) {
 }
 
 async function resumePendingSourceDeletes(requestPermission = false) {
-  for (const pending of await pendingSourceDeletes()) {
+  const pendingDeletes = await pendingSourceDeletes();
+  if (!pendingDeletes.length) return;
+  for (const pending of pendingDeletes) {
     try {
       let status;
       try {

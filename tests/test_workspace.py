@@ -531,6 +531,59 @@ class WorkspaceTests(unittest.TestCase):
             accepted = store.reconcile_images(catalog, [changed])["001.png"]
             self.assertFalse(accepted["changed"]); self.assertFalse(accepted["dimensions_changed"])
 
+    def test_dimension_acknowledgement_resizes_candidates_without_changing_manual_forced_exclusion(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); store = WorkspaceStore(root); catalog = self._new_catalog(store)
+            initial = SimpleNamespace(relative_path="001.png", size_bytes=10, mtime_ns=20, width=4, height=4)
+            image_id = str(store.reconcile_images(catalog, [initial])["001.png"]["image_id"])
+
+            def mask(name: str, point: tuple[int, int]) -> Path:
+                image = Image.new("L", (4, 4), 0); image.putpixel(point, 255)
+                path = root / name; image.save(path, format="PNG")
+                return path
+
+            apply = SimpleNamespace(candidate_id="apply", label_token="penis", confidence=.9, mask_path=mask("apply.png", (0, 0)),
+                                    enabled=True, color="#f00", source="detector", origin="automatic", refinement=None,
+                                    role=SimpleNamespace(value="apply"), forced=False, expand_px=1)
+            forced_exclude = SimpleNamespace(candidate_id="exclude", label_token="hand", confidence=.8, mask_path=mask("exclude.png", (0, 0)),
+                                             enabled=True, color="#0ff", source="detector", origin="automatic", refinement=None,
+                                             role=SimpleNamespace(value="exclude"), forced=True, expand_px=1)
+            store.commit_candidate_state(image_id, 1, [apply, forced_exclude], False, replace=True)
+            layers = {"add": mask("add.png", (1, 1)).read_bytes(), "exclusion": mask("exclusion.png", (2, 2)).read_bytes(),
+                      "exclusionErase": mask("erase.png", (2, 2)).read_bytes()}
+            store.save_manual(image_id, {
+                "add": "add", "exclusion": "exclusion", "exclusionErase": "exclusionErase", "manualEnabled": True,
+                "manualExclusionEnabled": True, "manualExclusionEraseEnabled": True, "manualExclusionForced": True,
+                "removedCandidateIds": [], "hasEffectiveMask": True,
+            }, layers.get)
+
+            changed = SimpleNamespace(image_id=image_id, relative_path="001.png", size_bytes=11, mtime_ns=21, width=8, height=8)
+            self.assertEqual(store.acknowledge_source_mismatches([changed]), {image_id})
+            manual = store.manual(image_id, lambda raw: raw)
+            self.assertTrue(manual["hasEffectiveMask"]); self.assertTrue(manual["manualExclusionForced"])
+            for raw in (manual["add"], manual["exclusion"], manual["exclusionErase"], store.candidate_png(image_id, "apply"), store.candidate_png(image_id, "exclude")):
+                with Image.open(io.BytesIO(raw)) as image:
+                    self.assertEqual(image.size, (8, 8))
+            self.assertEqual(store.history_status(image_id), {"canUndo": False, "canRedo": False})
+
+    def test_dimension_acknowledgement_without_manual_masks_does_not_expand_candidates(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); store = WorkspaceStore(root); catalog = self._new_catalog(store)
+            initial = SimpleNamespace(relative_path="001.png", size_bytes=10, mtime_ns=20, width=4, height=4)
+            image_id = str(store.reconcile_images(catalog, [initial])["001.png"]["image_id"])
+            mask_path = root / "candidate.png"; mask_path.write_bytes(self._png())
+            candidate = SimpleNamespace(candidate_id="candidate", label_token="penis", confidence=.9, mask_path=mask_path,
+                                        enabled=True, color="#f00", source="detector", origin="automatic", refinement=None,
+                                        role=SimpleNamespace(value="apply"), forced=False, expand_px=2)
+            store.commit_candidate_state(image_id, 1, [candidate], True, replace=True)
+            store.delete_manual([image_id])
+            changed = SimpleNamespace(image_id=image_id, relative_path="001.png", size_bytes=11, mtime_ns=21, width=8, height=8)
+            with patch("mozarie.workspace.expand_mask", wraps=workspace_module.expand_mask) as expand:
+                self.assertEqual(store.acknowledge_source_mismatches([changed]), {image_id})
+            expand.assert_not_called()
+            with Image.open(io.BytesIO(store.candidate_png(image_id, "candidate"))) as image:
+                self.assertEqual(image.size, (8, 8))
+
     def test_atomic_mutations_roll_back_when_the_history_insert_fails(self):
         with tempfile.TemporaryDirectory() as directory:
             store = WorkspaceStore(Path(directory)); catalog = self._new_catalog(store)

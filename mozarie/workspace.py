@@ -23,7 +23,7 @@ from PIL import Image, UnidentifiedImageError
 import numpy as np
 
 from .image_io import open_image
-from .masks import compose_masks, expand_mask
+from .masks import compose_masks, expand_mask, union_mask
 
 
 def _chunks(db: sqlite3.Connection, values: list[str], *, reserved_binds: int = 0) -> Iterator[list[str]]:
@@ -1209,41 +1209,55 @@ class WorkspaceStore:
         WorkspaceStore._prune_unreferenced_candidates(db, image_id)
 
     def _preserve_resized_workspace_db(self, db: sqlite3.Connection, image_id: str, old_size: tuple[int, int], new_size: tuple[int, int], revision: int) -> None:
-        candidate_rows = db.execute("""SELECT candidates.candidate_id,candidates.mask_png,candidates.enabled,candidates.role,candidates.forced,
+        candidate_rows = db.execute("""SELECT candidates.candidate_id,candidates.enabled,candidates.role,candidates.forced,
             COALESCE(candidate_metadata.expand_px,0) AS expand_px FROM candidates
             LEFT JOIN candidate_metadata USING(image_id,candidate_id) WHERE candidates.image_id=? AND candidates.deleted=0""", (image_id,)).fetchall()
         manual = db.execute("SELECT * FROM manual_edits WHERE image_id=?", (image_id,)).fetchone()
         max_expand = int(np.ceil(np.hypot(new_size[0] - 1, new_size[1] - 1)))
-        candidates: list[tuple[sqlite3.Row, np.ndarray, int]] = []
+        if manual is not None:
+            try:
+                removed = json.loads(str(manual["removed_candidate_ids"]))
+            except (TypeError, ValueError, json.JSONDecodeError) as exc:
+                raise ValueError("workspace removed candidates are invalid") from exc
+            if not isinstance(removed, list) or any(not isinstance(candidate_id, str) for candidate_id in removed):
+                raise ValueError("workspace removed candidates are invalid")
+        else:
+            removed = []
+        candidate_ids = {str(row["candidate_id"]) for row in candidate_rows}
+        removed_ids = set(removed) & candidate_ids
+        apply_union: np.ndarray | None = None
+        exclude_union: np.ndarray | None = None
+        forced_exclude_union: np.ndarray | None = None
         for row in candidate_rows:
-            raw, mask = self._resize_binary_mask(row["mask_png"], old_size, new_size)
+            stored = db.execute("SELECT mask_png FROM candidates WHERE image_id=? AND candidate_id=?", (image_id, row["candidate_id"])).fetchone()
+            if stored is None:
+                raise ValueError("workspace candidate is missing")
+            raw, mask = self._resize_binary_mask(stored["mask_png"], old_size, new_size)
             assert raw is not None and mask is not None
             expand_px = min(int(row["expand_px"]), max_expand)
             db.execute("UPDATE candidates SET mask_png=? WHERE image_id=? AND candidate_id=?", (raw, image_id, row["candidate_id"]))
             db.execute("""INSERT INTO candidate_metadata(image_id,candidate_id,expand_px) VALUES(?,?,?)
                 ON CONFLICT(image_id,candidate_id) DO UPDATE SET expand_px=excluded.expand_px""", (image_id, row["candidate_id"], expand_px))
-            candidates.append((row, expand_mask(mask, expand_px), expand_px))
+            if manual is None or not row["enabled"] or row["candidate_id"] in removed_ids:
+                continue
+            expanded = expand_mask(mask, expand_px)
+            if row["role"] == "apply":
+                apply_union = union_mask(apply_union, expanded)
+            else:
+                exclude_union = union_mask(exclude_union, expanded)
+                if row["forced"]:
+                    forced_exclude_union = union_mask(forced_exclude_union, expanded)
         if manual is None:
             self._reset_image_history_db(db, image_id)
             return
         add_raw, add = self._resize_binary_mask(manual["add_png"], old_size, new_size)
         exclusion_raw, exclusion = self._resize_binary_mask(manual["exclusion_png"], old_size, new_size)
         erase_raw, erase = self._resize_binary_mask(manual["exclusion_erase_png"], old_size, new_size)
-        try:
-            removed = json.loads(str(manual["removed_candidate_ids"]))
-        except (TypeError, ValueError, json.JSONDecodeError) as exc:
-            raise ValueError("workspace removed candidates are invalid") from exc
-        if not isinstance(removed, list) or any(not isinstance(candidate_id, str) for candidate_id in removed):
-            raise ValueError("workspace removed candidates are invalid")
-        removed_ids = set(removed) & {str(row["candidate_id"]) for row, _mask, _expand in candidates}
-        apply_masks = [mask for row, mask, _expand in candidates if row["enabled"] and row["role"] == "apply" and row["candidate_id"] not in removed_ids]
-        exclude_masks = [mask for row, mask, _expand in candidates if row["enabled"] and row["role"] != "apply" and row["candidate_id"] not in removed_ids]
-        forced_exclude_masks = [mask for row, mask, _expand in candidates if row["enabled"] and row["role"] != "apply" and row["forced"] and row["candidate_id"] not in removed_ids]
         effective = bool(np.any(compose_masks(
-            (new_size[1], new_size[0]), apply_masks, exclude_masks,
+            (new_size[1], new_size[0]), [apply_union] if apply_union is not None else [], [exclude_union] if exclude_union is not None else [],
             add if manual["manual_enabled"] else None,
             exclusion if manual["exclusion_enabled"] else None,
-            forced_exclude_masks, bool(manual["exclusion_forced"]),
+            [forced_exclude_union] if forced_exclude_union is not None else [], bool(manual["exclusion_forced"]),
             erase if manual["exclusion_erase_enabled"] else None,
         )))
         db.execute("""UPDATE manual_edits SET add_png=?,exclusion_png=?,exclusion_erase_png=?,removed_candidate_ids=?,candidate_revision=?,has_effective_mask=?,updated_at=?
