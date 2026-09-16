@@ -757,7 +757,7 @@ function applyBusyControlLock(controls, busyLocked, confirmDialog) {
     if ((["applyPauseButton", "applyCancelButton"].includes(control.id) && state.applyRunning)
       || (["processingPauseButton", "processingCancelButton"].includes(control.id) && state.processing)
       || control.id === "errorDialogClose" || (state.saveStarting && confirmDialog.open && confirmDialog.contains(control))
-      || (canEditSavePreferences && (control.id === "applyTargetMode" || control.closest("#applySettings, #singleSaveSettings")))) continue;
+      || (canEditSavePreferences && (control.id === "applyTargetMode" || (control.closest("#applySettings, #singleSaveSettings") && !control.closest(".output-directory-row"))))) continue;
     if (!control.disabled) control.dataset.disabledByLock = "true";
     control.disabled = true;
   }
