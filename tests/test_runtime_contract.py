@@ -14,7 +14,7 @@ class RuntimeContractTests(unittest.TestCase):
     def test_release_archive_excludes_development_only_files(self):
         root = Path(__file__).resolve().parents[1]
         attributes = (root / ".gitattributes").read_text(encoding="utf-8")
-        for path in ("/.github export-ignore", "/.coveragerc export-ignore", "/tests export-ignore", "/scripts export-ignore", "/package.json export-ignore", "/package-lock.json export-ignore", "/requirements-test.txt export-ignore"):
+        for path in ("/.github export-ignore", "/.coveragerc export-ignore", "/tests export-ignore", "/scripts export-ignore", "/site export-ignore", "/package.json export-ignore", "/package-lock.json export-ignore", "/requirements-test.txt export-ignore"):
             self.assertIn(path, attributes)
         self.assertIn("output/", (root / ".gitignore").read_text(encoding="utf-8"))
 

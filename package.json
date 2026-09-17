@@ -13,6 +13,7 @@
     "check": "node -e \"const fs=require('fs'); const path=require('path'); const cp=require('child_process'); const scan=(dir)=>fs.readdirSync(dir,{withFileTypes:true}).flatMap(entry=>entry.isDirectory()?scan(path.join(dir,entry.name)):entry.name.endsWith('.js')?[path.join(dir,entry.name)]:[]); for (const file of scan('static/js')) cp.execFileSync(process.execPath,['--check',file],{stdio:'inherit'});\"",
     "test:frontend": "node scripts/test-frontend.cjs",
     "test:frontend:performance": "node scripts/test-frontend-performance.cjs",
+    "test:site": "node --test scripts/test-site.cjs",
     "test": "npm run check && npm run test:frontend",
     "coverage:js": "npm run check && node scripts/coverage-js.cjs"
   }

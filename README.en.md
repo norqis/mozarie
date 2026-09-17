@@ -1,6 +1,6 @@
 <p align="center"><img src="static/images/long_logo.png" alt="Mozarie" width="400"></p>
 
-[日本語](README.md) · [Latest release](https://github.com/norqis/mozarie/releases/latest) · [Report an issue](https://github.com/norqis/mozarie/issues)
+[日本語](README.md) · [Website](https://norqis.github.io/mozarie/) · [Latest release](https://github.com/norqis/mozarie/releases/latest) · [Report an issue](https://github.com/norqis/mozarie/issues)
 
 Mozarie is a local Windows app for detecting, reviewing, editing, and saving mosaic areas in images.
 

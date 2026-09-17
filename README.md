@@ -1,6 +1,6 @@
 <p align="center"><img src="static/images/long_logo.png" alt="Mozarie" width="400"></p>
 
-[English](README.en.md) · [最新版](https://github.com/norqis/mozarie/releases/latest) · [不具合を報告](https://github.com/norqis/mozarie/issues)
+[English](README.en.md) · [公式サイト](https://norqis.github.io/mozarie/) · [最新版](https://github.com/norqis/mozarie/releases/latest) · [不具合を報告](https://github.com/norqis/mozarie/issues)
 
 Mozarieは、画像のモザイク範囲をローカルで検出・編集するWindowsアプリです。
 
