@@ -66,12 +66,14 @@ test("the landing page works without JavaScript and fits desktop and mobile view
       const response = await page.goto(`${site.url}/`, { waitUntil: "domcontentloaded" });
       assert.equal(response.status(), 200);
       assert.equal(await page.title(), "Mozarie | Windowsで画像のモザイク範囲を検出・編集・保存");
-      assert.equal(await page.locator("h1").innerText(), "Mozarieで、画像のモザイク範囲を\n手元で確認して仕上げる。");
+      assert.equal(await page.locator("h1").innerText(), "Mozarie");
       assert.equal(await page.locator('meta[name="description"]').getAttribute("content"), "Mozarieは、PNG・JPEG・WebP画像のモザイク範囲をWindows上でローカル検出、確認、編集、保存できるアプリです。");
       assert.equal(await page.locator('link[rel="canonical"]').getAttribute("href"), canonicalUrl);
       assert.equal(await page.locator('a[href="https://github.com/norqis/mozarie/releases/latest"]').count(), 1);
       assert.equal(await page.locator('[lang="en"] a[href="https://github.com/norqis/mozarie/blob/main/README.en.md"]').count(), 1);
       assert.equal(await page.getByText("Mozarieは、Windowsで画像を読み込み、モザイク範囲をローカルで検出・確認・編集・保存するアプリです。", { exact: true }).isVisible(), true);
+      const downloadBounds = await page.getByRole("link", { name: "最新版をダウンロード", exact: true }).boundingBox();
+      assert.ok(downloadBounds && downloadBounds.y >= 0 && downloadBounds.y + downloadBounds.height <= viewport.height, "the download link is visible in the initial viewport");
       await page.keyboard.press("Tab");
       const focus = await page.evaluate(() => {
         const style = getComputedStyle(document.activeElement);

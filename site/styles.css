@@ -48,11 +48,11 @@ a:focus-visible { outline: 3px solid var(--accent); outline-offset: 4px; }
 nav { display: flex; gap: 24px; font-size: .9rem; }
 nav a { text-decoration: none; }
 
-.hero { padding: clamp(80px, 14vw, 170px) 0 104px; }
+.hero { padding: clamp(48px, 7vw, 96px) 0 72px; }
 .eyebrow { margin: 0 0 15px; color: var(--accent); font-size: .75rem; font-weight: 700; letter-spacing: .14em; }
 h1, h2, h3, p { margin-top: 0; }
 h1, h2, h3 { line-height: 1.18; }
-h1 { max-width: 850px; margin-bottom: 28px; font-size: clamp(2.65rem, 7vw, 5.8rem); letter-spacing: -.055em; }
+h1 { max-width: 850px; margin-bottom: 28px; font-size: clamp(2.5rem, 6vw, 4.5rem); letter-spacing: -.055em; }
 h2 { margin-bottom: 26px; font-size: clamp(2rem, 4.2vw, 3.7rem); letter-spacing: -.045em; }
 h3 { font-size: 1.18rem; }
 .lead { max-width: 650px; color: var(--muted); font-size: clamp(1.05rem, 2vw, 1.28rem); }

@@ -13,7 +13,7 @@ Search Console では URL-prefix プロパティとして、末尾のスラッ�
 - Website workflow の `Website contract`、`Build Pages artifact`、`Deploy Pages` が成功している。
 - 実際の公開 URL で、canonical URL が `https://norqis.github.io/mozarie/`、サイトマップには同じ絶対 URL が一つだけある。
 - GitHub Release の「最新版をダウンロード」、日本語・英語 README、Issues、リポジトリへのリンクがそれぞれ到達する。
-- 幅 1440px と 390px で横スクロールがなく、Tab 移動時にフォーカス枠が見える。
+- 幅 1440px と 390px で横スクロールがなく、最初の画面で最新版のダウンロードリンクを読める。Tab 移動時にフォーカス枠が見える。
 
 ## 参照
 
