@@ -65,7 +65,7 @@ test("the editorial landing page works without JavaScript and fits every support
   let browser;
   try {
     browser = await chromium.launch({ headless: true });
-    for (const viewport of [{ width: 320, height: 720 }, { width: 390, height: 844 }, { width: 768, height: 800 }, { width: 1440, height: 900 }, { width: 1920, height: 960 }]) {
+    for (const viewport of [{ width: 320, height: 720 }, { width: 390, height: 844 }, { width: 701, height: 800 }, { width: 720, height: 800 }, { width: 768, height: 800 }, { width: 1440, height: 900 }, { width: 1920, height: 960 }]) {
       const context = await browser.newContext({ javaScriptEnabled: false, viewport });
       await context.route("**/*", localOnly(site));
       const page = await context.newPage();
@@ -400,7 +400,7 @@ test("the enabled carousel keeps its visible geometry at every supported viewpor
   let browser;
   try {
     browser = await chromium.launch({ headless: true });
-    for (const viewport of [{ width: 320, height: 720 }, { width: 390, height: 844 }, { width: 768, height: 800 }, { width: 1440, height: 900 }, { width: 1920, height: 960 }]) {
+    for (const viewport of [{ width: 320, height: 720 }, { width: 390, height: 844 }, { width: 701, height: 800 }, { width: 720, height: 800 }, { width: 768, height: 800 }, { width: 1440, height: 900 }, { width: 1920, height: 960 }]) {
       const context = await browser.newContext({ viewport });
       await context.route("**/*", localOnly(site));
       const page = await context.newPage();
