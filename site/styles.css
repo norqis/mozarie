@@ -16,7 +16,7 @@ a { color: inherit; text-underline-offset: .2em; }
 a:hover { color: var(--brand); }
 a:focus-visible, button:focus-visible { outline: 2px solid var(--brand); outline-offset: 3px; }
 
-.site-header, .hero, footer { width: min(calc(100% - 80px), var(--max)); margin-inline: auto; }
+.site-header, .hero, .product-summary, footer { width: min(calc(100% - 80px), var(--max)); margin-inline: auto; }
 .site-header { height: 64px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--line); }
 .brand, footer > p { display: inline-flex; align-items: center; gap: 9px; margin: 0; font-family: "Segoe UI Variable Display", "Segoe UI", sans-serif; font-size: 20px; font-weight: 600; letter-spacing: -.045em; text-decoration: none; }
 .brand-mark { position: relative; display: block; width: 40px; aspect-ratio: 1.72; overflow: hidden; border-radius: 3px; flex: none; }
@@ -25,7 +25,7 @@ nav, footer div { display: flex; align-items: center; gap: 24px; font-size: .875
 nav a, footer a { color: var(--muted); text-decoration: none; }
 
 .hero { max-width: 760px; padding-top: 30px; text-align: center; }
-h1, p { margin-top: 0; }
+h1, h2, h3, p { margin-top: 0; }
 h1 { margin: 0; font-family: "Segoe UI Variable Display", "Segoe UI", sans-serif; font-size: 44px; font-weight: 600; line-height: 1.22; letter-spacing: -.05em; }
 .hero-title-tail { white-space: nowrap; }
 .intro { max-width: 570px; margin: 16px auto 0; color: var(--muted); font-size: 17px; line-height: 1.7; }
@@ -38,36 +38,48 @@ h1 { margin: 0; font-family: "Segoe UI Variable Display", "Segoe UI", sans-serif
 .platform { margin: 0; color: var(--muted); font-size: .75rem; }
 .hero .platform { margin-top: 10px; }
 
-.gallery { width: min(calc(100% - 80px), 960px); margin: 26px auto 0; padding: 32px 32px 14px; border: 1px solid var(--line); border-radius: 16px; background: var(--stage); box-shadow: 0 16px 36px rgba(0, 0, 0, .18); }
-.gallery-frame { position: relative; max-width: 896px; margin: auto; }
-.gallery-slide { margin: 0; }
-.gallery-slide.gallery-entering { animation: gallery-fade 200ms ease-out; }
-.gallery-slide a { display: block; }
+.gallery { width: min(calc(100% - 80px), 960px); margin: 26px auto 0; padding: 28px 24px 14px; border: 1px solid var(--line); border-radius: 16px; background: var(--stage); box-shadow: 0 16px 36px rgba(0, 0, 0, .18); }
+.gallery-frame { max-width: 910px; margin: auto; }
+[data-gallery-controls][hidden] { display: none; }
+.gallery-row { display: grid; grid-template-columns: 44px minmax(0, 1fr) 44px; align-items: center; }
+.gallery-arrow, .gallery-dots button, .gallery-image, .gallery-modal-close { appearance: none; border: 0; background: transparent; color: var(--ink); cursor: pointer; }
+.gallery-arrow { display: grid; width: 44px; height: 44px; padding: 0; place-items: center; opacity: .62; }
+.gallery-arrow:hover, .gallery-arrow:focus-visible { opacity: 1; }
+.gallery-arrow svg, .gallery-modal-close svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.35; }
+.gallery-viewport { grid-column: 2; position: relative; min-width: 0; aspect-ratio: 2.38; overflow: hidden; }
+.gallery-slide { position: absolute; top: 50%; left: 50%; width: 84%; margin: 0; opacity: 0; transition: opacity 160ms ease-out; }
+.gallery-slide[data-gallery-position="active"] { z-index: 2; opacity: 1; transform: translate(-50%, -50%); }
+.gallery-slide[data-gallery-position="previous"], .gallery-slide[data-gallery-position="next"] { z-index: 1; opacity: .3; filter: saturate(.72); }
+.gallery-slide[data-gallery-position="previous"] { left: -8%; transform: translate(-50%, -50%) scale(.82); }
+.gallery-slide[data-gallery-position="next"] { left: 108%; transform: translate(-50%, -50%) scale(.82); }
+.gallery-image { display: block; width: 100%; padding: 0; }
+.gallery-image:disabled { cursor: default; }
 .gallery-slide img { display: block; width: 100%; height: auto; border: 1px solid var(--line); border-radius: 10px; }
-.gallery-controls[hidden] { display: none; }
-.gallery-arrow, .gallery-pause, .gallery-dots button { appearance: none; border: 0; background: transparent; color: var(--ink); cursor: pointer; }
-.gallery-arrow { position: absolute; top: calc((100% - 38px) / 2); z-index: 1; display: grid; width: 44px; height: 44px; padding: 0; place-items: center; filter: drop-shadow(0 1px 3px rgba(0, 0, 0, .5)); opacity: .4; transform: translateY(-50%); }
-.gallery-arrow:hover, .gallery-arrow:focus-visible { opacity: .85; }
-.gallery-arrow-previous { left: 10px; }
-.gallery-arrow-next { right: 10px; }
-.gallery-arrow svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.25; }
-.gallery-status { display: flex; min-height: 38px; align-items: end; justify-content: center; gap: 3px; }
+.gallery-status { display: flex; min-height: 38px; align-items: end; justify-content: center; }
 .gallery-dots { display: flex; align-items: center; }
 .gallery-dots button { position: relative; width: 24px; height: 24px; padding: 0; }
 .gallery-dots button::after { position: absolute; inset: 50% auto auto 50%; width: 4px; height: 4px; border-radius: 50%; background: rgba(242, 242, 245, .48); content: ""; transform: translate(-50%, -50%); }
 .gallery-dots button[aria-current="true"]::after { width: 12px; background: var(--ink); }
-.gallery-pause { display: grid; width: 24px; height: 24px; padding: 0; place-items: center; opacity: .7; }
-.gallery-pause:hover, .gallery-pause:focus-visible { opacity: 1; }
-.gallery-pause svg { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-width: 1.5; }
-.gallery a:focus-visible, .gallery button:focus-visible { outline-color: var(--brand); }
+.product-summary { max-width: 960px; margin-top: 62px; text-align: center; }
+.product-summary h2 { margin-bottom: 10px; font-family: "Segoe UI Variable Display", "Segoe UI", sans-serif; font-size: 30px; line-height: 1.25; letter-spacing: -.035em; }
+.product-summary > p { margin-bottom: 28px; color: var(--muted); }
+.feature-list { display: grid; grid-template-columns: repeat(3, 1fr); gap: 34px; text-align: left; }
+.feature-list h3 { margin-bottom: 8px; font-size: 18px; }
+.feature-list p { margin-bottom: 0; color: var(--muted); font-size: .94rem; }
+
+.gallery-modal { width: min(calc(100% - 40px), 1440px); max-height: calc(100% - 40px); padding: 0; border: 1px solid var(--line); border-radius: 12px; background: var(--stage); color: var(--ink); }
+.gallery-modal::backdrop { background: rgba(0, 0, 0, .74); }
+.gallery-modal-content { position: relative; }
+.gallery-modal img { display: block; max-width: 100%; max-height: calc(100vh - 42px); margin: auto; }
+.gallery-modal-close { position: absolute; top: 8px; right: 8px; display: grid; width: 44px; height: 44px; padding: 0; place-items: center; border-radius: 50%; background: rgba(17, 18, 22, .78); }
+.gallery-modal-close:hover { background: var(--graphite); }
+.visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 
 footer { display: flex; align-items: center; justify-content: space-between; gap: 24px; margin-top: 56px; padding: 20px 0 36px; border-top: 1px solid var(--line); color: var(--muted); font-size: .85rem; }
 footer > p { color: var(--ink); }
 
-@keyframes gallery-fade { from { opacity: 0; } to { opacity: 1; } }
-
 @media (max-width: 700px) {
-  .site-header, .hero, footer { width: min(calc(100% - 40px), var(--max)); }
+  .site-header, .hero, .product-summary, footer { width: min(calc(100% - 40px), var(--max)); }
   nav, footer div { gap: 16px; }
   .brand, footer > p { font-size: 18px; }
   .brand-mark { width: 36px; }
@@ -76,10 +88,11 @@ footer > p { color: var(--ink); }
   .intro { margin-top: 14px; font-size: 16px; }
   .hero-action { margin-top: 18px; }
   .download, .readme { padding-inline: 12px; font-size: .875rem; }
-  .gallery { width: calc(100% - 40px); margin-top: 24px; padding: 6px 6px 12px; border-radius: 12px; }
+  .gallery { width: calc(100% - 40px); margin-top: 24px; padding: 12px 6px 12px; border-radius: 12px; }
   .gallery-slide img { border-radius: 8px; }
-  .gallery-arrow-previous { left: 0; }
-  .gallery-arrow-next { right: 0; }
+  .product-summary { margin-top: 50px; text-align: left; }
+  .product-summary h2 { font-size: 26px; }
+  .feature-list { grid-template-columns: 1fr; gap: 24px; }
   footer { align-items: flex-start; flex-direction: column; gap: 12px; margin-top: 56px; }
 }
 

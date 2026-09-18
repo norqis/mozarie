@@ -56,6 +56,10 @@ function localOnly(site) {
   return (route) => new URL(route.request().url()).origin === site.url ? route.continue() : route.abort();
 }
 
+function activeImage(page) {
+  return page.locator('[data-gallery-slide][data-gallery-position="active"] img');
+}
+
 test("the editorial landing page works without JavaScript and fits every supported viewport", { timeout: 30_000 }, async () => {
   const site = await startSite();
   let browser;
@@ -72,27 +76,22 @@ test("the editorial landing page works without JavaScript and fits every support
       assert.equal(await page.locator('meta[name="description"]').getAttribute("content"), "Mozarieは、PNG・JPEG・WebP画像のモザイク範囲をWindows上でローカル検出、確認、編集、保存できるアプリです。");
       assert.equal(await page.locator('link[rel="canonical"]').getAttribute("href"), canonicalUrl);
       assert.equal(await page.locator('meta[name="google-site-verification"]').getAttribute("content"), "UrWwBw6iDkiGPFlWk3S4jrSsP7YfkvctuNVveYOJd_o");
-      assert.equal(await page.getByText("Mozarieは、画像のモザイク範囲をローカルで検出し、確認・編集・保存できるWindowsアプリです。", { exact: true }).isVisible(), true);
+      assert.equal(await page.getByText("画像のモザイク範囲を自動検出し、確認・修正して保存できるWindowsアプリです。処理はローカルで行います。", { exact: true }).isVisible(), true);
       assert.equal(await page.getByRole("link", { name: "最新版をダウンロード", exact: false }).count(), 1);
       assert.equal(await page.locator('footer a[lang="en"][href="https://github.com/norqis/mozarie/blob/main/README.en.md"]').count(), 1);
-      assert.equal(await page.locator("[data-gallery-controls]").isHidden(), true);
-      assert.equal(await page.locator("[data-gallery-caption], [data-gallery-count]").count(), 0);
-      assert.equal(await page.getByText("前の画面", { exact: true }).count(), 0);
+      assert.equal(await page.locator("[data-gallery-controls]").evaluateAll((controls) => controls.every((control) => control.hidden && getComputedStyle(control).display === "none")), true);
+      assert.equal(await page.locator("[data-gallery-pause], [data-gallery-caption], [data-gallery-count]").count(), 0);
+      assert.equal(await page.locator("[data-gallery-slide]:not([hidden])").count(), 1);
       assert.equal(await page.locator("[data-gallery-slide]:not([hidden]) img").getAttribute("src"), "assets/demo1.png");
+      assert.equal(await page.locator("[data-gallery-slide] a").count(), 0);
+      assert.equal(await page.locator("[data-gallery-open]").evaluateAll((buttons) => buttons.every((button) => button.disabled)), true);
       assert.deepEqual(await page.locator("[data-gallery-slide]:not([hidden]) img").evaluate((image) => ({ width: image.naturalWidth, height: image.naturalHeight, complete: image.complete })), { width: 1920, height: 959, complete: true });
       assert.deepEqual(await page.locator(".brand-mark img").evaluate((image) => ({ src: image.getAttribute("src"), alt: image.getAttribute("alt"), width: image.naturalWidth, height: image.naturalHeight, complete: image.complete })), { src: "assets/mozarie-logo.png", alt: "", width: 799, height: 547, complete: true });
       const stage = await page.locator(".gallery").boundingBox();
       const image = await page.locator("[data-gallery-slide]:not([hidden]) img").boundingBox();
       assert.ok(stage && stage.width <= 960, `gallery is capped at 960px at ${viewport.width}px`);
       assert.ok(image && Math.abs((image.width - 2) / (image.height - 2) - 1920 / 959) < .002, `demo image is not cropped at ${viewport.width}px`);
-      if (viewport.width >= 1440) {
-        assert.ok(stage && stage.x >= 220 && viewport.width - stage.x - stage.width >= 220, `desktop stage keeps wide side gutters at ${viewport.width}px`);
-        assert.ok(image && image.width <= 896.5, `desktop image stays within the 896px inner stage at ${viewport.width}px`);
-      }
-      if (viewport.width === 1440) {
-        assert.ok(stage && image && Math.abs(stage.width - 960) <= 1 && image.width >= 893.5 && image.width <= 896.5, "1440px desktop uses the 960px stage and a 894–896px image inside its 32px padding");
-        assert.ok(stage && stage.y + stage.height <= viewport.height, "the entire desktop stage fits in the initial 900px viewport");
-      }
+      if (viewport.width >= 1440) assert.ok(stage && stage.x >= 220 && viewport.width - stage.x - stage.width >= 220, `desktop stage keeps wide side gutters at ${viewport.width}px`);
       if (viewport.width <= 390) {
         assert.ok(stage && stage.x >= 20 && viewport.width - stage.x - stage.width >= 20, `mobile stage keeps 20px side margins at ${viewport.width}px`);
         const actions = await page.locator(".hero-action a").evaluateAll((links) => links.map((link) => {
@@ -103,9 +102,9 @@ test("the editorial landing page works without JavaScript and fits every support
         assert.ok(actions.every((action) => action.height >= 48) && actions[0].right + 8 <= actions[1].left, `mobile CTAs remain legible and separate at ${viewport.width}px`);
       }
       const download = await page.getByRole("link", { name: "最新版をダウンロード", exact: false }).boundingBox();
-      assert.ok(download && download.y >= 0 && download.y + download.height <= viewport.height, "download remains in the initial viewport");
       assert.equal(await page.getByRole("link", { name: "最新版をダウンロード", exact: false }).getAttribute("href"), "https://github.com/norqis/mozarie/releases/latest");
-      await page.keyboard.press("Tab");
+      assert.ok(download && download.y >= 0 && download.y + download.height <= viewport.height, "download remains in the initial viewport");
+      await page.getByRole("link", { name: "最新版をダウンロード", exact: false }).focus();
       assert.notEqual(await page.evaluate(() => getComputedStyle(document.activeElement).outlineStyle), "none");
       assert.equal(await page.locator("html").evaluate((element) => element.scrollWidth <= element.clientWidth), true, `no horizontal overflow at ${viewport.width}px`);
       await context.close();
@@ -138,7 +137,7 @@ test("the static assets and sitemap are published with the editorial source", { 
   }
 });
 
-test("the gallery continuously rotates, preserves explicit pause, and respects keyboard and tab visibility", { timeout: 30_000 }, async () => {
+test("the peek carousel rotates, keeps its focus and tab rules, and opens a modal preview", { timeout: 30_000 }, async () => {
   const site = await startSite();
   let browser;
   try {
@@ -149,106 +148,106 @@ test("the gallery continuously rotates, preserves explicit pause, and respects k
     await page.clock.install({ time: new Date("2026-09-18T00:00:00Z") });
     await page.goto(`${site.url}/`, { waitUntil: "domcontentloaded" });
     await page.waitForFunction(() => [...document.querySelectorAll("[data-gallery-slide] img")].every((image) => image.complete && image.naturalWidth === 1920));
-    const image = page.locator("[data-gallery-slide]:not([hidden]) img");
     const gallery = page.locator("[data-gallery]");
-    const pause = page.getByRole("button", { name: "自動再生を一時停止" });
-    const next = page.getByRole("button", { name: "次の画面" });
+    const viewport = page.locator("[data-gallery-viewport]");
     const previous = page.getByRole("button", { name: "前の画面" });
-    assert.equal(await page.locator("[data-gallery-controls] button").evaluateAll((buttons) => buttons.every((button) => button.textContent.trim() === "")), true);
-    assert.deepEqual(await page.locator("[data-gallery-slide] a").evaluateAll((links) => links.map((link) => link.getAttribute("href"))), ["assets/demo1.png", "assets/demo2.png", "assets/demo3.png"]);
-    assert.deepEqual(await page.locator("[data-gallery-slide] img").evaluateAll((images) => images.map((image) => ({ width: image.naturalWidth, height: image.naturalHeight, complete: image.complete }))), Array(3).fill({ width: 1920, height: 959, complete: true }));
-    const imageBounds = await image.boundingBox();
-    for (const control of [previous, next]) {
-      const bounds = await control.boundingBox();
-      assert.ok(bounds && bounds.width >= 44 && bounds.height >= 44);
-      assert.ok(imageBounds && bounds.x >= imageBounds.x && bounds.x + bounds.width <= imageBounds.x + imageBounds.width);
-      assert.ok(imageBounds && Math.abs(bounds.y + bounds.height / 2 - (imageBounds.y + imageBounds.height / 2)) <= 1);
+    const next = page.getByRole("button", { name: "次の画面" });
+    const current = () => activeImage(page);
+
+    assert.equal(await page.locator("[data-gallery-pause]").count(), 0);
+    assert.equal(await page.locator("[data-gallery-slide] a").count(), 0);
+    assert.deepEqual(await page.locator("[data-gallery-slide] img").evaluateAll((images) => images.map((image) => ({ src: image.getAttribute("src"), width: image.naturalWidth, height: image.naturalHeight, complete: image.complete }))), [
+      { src: "assets/demo1.png", width: 1920, height: 959, complete: true },
+      { src: "assets/demo2.png", width: 1920, height: 959, complete: true },
+      { src: "assets/demo3.png", width: 1920, height: 959, complete: true },
+    ]);
+    assert.deepEqual(await page.locator("[data-gallery-slide]").evaluateAll((slides) => slides.map((slide) => ({ hidden: slide.hidden, position: slide.dataset.galleryPosition, ariaHidden: slide.getAttribute("aria-hidden"), disabled: slide.querySelector("button").disabled }))), [
+      { hidden: false, position: "active", ariaHidden: "false", disabled: false },
+      { hidden: false, position: "next", ariaHidden: "true", disabled: true },
+      { hidden: false, position: "previous", ariaHidden: "true", disabled: true },
+    ]);
+    const [previousBounds, viewportBounds, nextBounds, imageBounds] = await Promise.all([previous.boundingBox(), viewport.boundingBox(), next.boundingBox(), current().boundingBox()]);
+    assert.ok(previousBounds && viewportBounds && nextBounds && imageBounds);
+    assert.ok(previousBounds.width >= 44 && previousBounds.height >= 44 && previousBounds.x + previousBounds.width <= viewportBounds.x, "previous arrow occupies its own 44px column");
+    assert.ok(nextBounds.width >= 44 && nextBounds.height >= 44 && nextBounds.x >= viewportBounds.x + viewportBounds.width, "next arrow occupies its own 44px column");
+    assert.ok(imageBounds.width >= viewportBounds.width * .82 && imageBounds.width <= viewportBounds.width * .86, "the central image remains compact inside the viewport");
+    assert.equal(await page.locator("[data-gallery-slide][data-gallery-position='previous'], [data-gallery-slide][data-gallery-position='next']").evaluateAll((slides) => slides.every((slide) => {
+      const bounds = slide.getBoundingClientRect();
+      const viewportBounds = slide.parentElement.getBoundingClientRect();
+      return getComputedStyle(slide).opacity === "0.3" && bounds.right > viewportBounds.left && bounds.left < viewportBounds.right;
+    })), true, "both neighboring images remain visibly peeking into the clipped viewport");
+
+    await previous.click();
+    assert.equal(await current().getAttribute("src"), "assets/demo3.png");
+    assert.equal(await page.getByRole("button", { name: "画面 3を表示" }).getAttribute("aria-current"), "true");
+    for (const [index, source] of ["assets/demo1.png", "assets/demo2.png", "assets/demo3.png"].entries()) {
+      await page.getByRole("button", { name: `画面 ${index + 1}を表示` }).click();
+      assert.equal(await current().getAttribute("src"), source);
+      assert.equal(await page.getByRole("button", { name: `画面 ${index + 1}を表示` }).getAttribute("aria-current"), "true");
     }
-    const dotBounds = await page.getByRole("button", { name: "画面 1を表示" }).boundingBox();
-    assert.ok(imageBounds && dotBounds && dotBounds.y - (imageBounds.y + imageBounds.height) >= 14 && dotBounds.y - (imageBounds.y + imageBounds.height) <= 18);
-    for (const control of [page.getByRole("button", { name: "画面 1を表示" }), page.getByRole("button", { name: "画面 2を表示" }), page.getByRole("button", { name: "画面 3を表示" }), pause]) {
-      const bounds = await control.boundingBox();
-      assert.ok(bounds && bounds.width >= 24 && bounds.height >= 24);
-    }
-    assert.equal(await page.locator("[data-gallery-dot][aria-current='true']").count(), 1);
+    await page.getByRole("button", { name: "画面 1を表示" }).click();
 
     for (const expected of ["assets/demo2.png", "assets/demo3.png", "assets/demo1.png"]) {
       await page.clock.fastForward(6000);
-      assert.equal(await image.getAttribute("src"), expected);
+      assert.equal(await current().getAttribute("src"), expected);
     }
+    assert.deepEqual(await page.locator("[data-gallery-slide]").evaluateAll((slides) => slides.map((slide) => ({ position: slide.dataset.galleryPosition, src: slide.querySelector("img").getAttribute("src") }))), [
+      { position: "active", src: "assets/demo1.png" },
+      { position: "next", src: "assets/demo2.png" },
+      { position: "previous", src: "assets/demo3.png" },
+    ]);
     await gallery.hover();
     await page.clock.fastForward(6000);
-    assert.equal(await image.getAttribute("src"), "assets/demo2.png", "hover does not pause autoplay");
+    assert.equal(await current().getAttribute("src"), "assets/demo2.png", "hover does not pause autoplay");
     await next.click();
-    assert.equal(await image.getAttribute("src"), "assets/demo3.png");
+    assert.equal(await current().getAttribute("src"), "assets/demo3.png");
     await page.clock.fastForward(6000);
-    assert.equal(await image.getAttribute("src"), "assets/demo1.png", "pointer focus and manual navigation reset instead of pausing autoplay");
-    await page.getByRole("button", { name: "画面 1を表示" }).click();
-    await page.clock.fastForward(6000);
-    assert.equal(await image.getAttribute("src"), "assets/demo2.png", "dot navigation resets instead of pausing autoplay");
-    assert.equal(await page.getByRole("button", { name: "画面 2を表示" }).getAttribute("aria-current"), "true");
+    assert.equal(await current().getAttribute("src"), "assets/demo1.png", "pointer navigation schedules the next cycle");
 
-    const download = page.getByRole("link", { name: "最新版をダウンロード", exact: false });
-    await download.focus();
-    for (let index = 0; index < 3; index += 1) await page.keyboard.press("Tab");
-    assert.equal(await page.locator("[data-gallery-prev]").evaluate((element) => document.activeElement === element && element.matches(":focus-visible")), true);
-    await page.clock.fastForward(6000);
-    assert.equal(await image.getAttribute("src"), "assets/demo2.png", "keyboard focus temporarily suspends autoplay");
+    await previous.focus();
     await page.keyboard.press("Tab");
+    assert.equal(await page.locator('[data-gallery-slide][data-gallery-position="active"] [data-gallery-open]').evaluate((element) => document.activeElement === element), true, "Tab skips both neighboring images");
+    await page.keyboard.press("Shift+Tab");
+    await previous.press("ArrowRight");
+    const focusSource = await current().getAttribute("src");
     await page.clock.fastForward(6000);
-    assert.equal(await image.getAttribute("src"), "assets/demo2.png", "moving within the gallery retains keyboard suspension");
-    for (let index = 0; index < 4; index += 1) await page.keyboard.press("Shift+Tab");
-    assert.equal(await download.evaluate((element) => document.activeElement === element), true);
+    assert.equal(await current().getAttribute("src"), focusSource, "keyboard focus suspends autoplay");
+    await page.getByRole("link", { name: "最新版をダウンロード", exact: false }).focus();
     await page.clock.fastForward(6000);
-    assert.equal(await image.getAttribute("src"), "assets/demo3.png", "leaving keyboard focus restores autoplay");
+    assert.notEqual(await current().getAttribute("src"), focusSource, "leaving keyboard focus restores autoplay");
 
-    await pause.click();
-    assert.equal(await page.getByRole("button", { name: "自動再生を再開" }).count(), 1);
-    await page.getByRole("button", { name: "画面 3を表示" }).click();
-    await page.clock.fastForward(6000);
-    assert.equal(await image.getAttribute("src"), "assets/demo3.png", "manual navigation retains explicit pause");
-
-    await download.focus();
-    for (let index = 0; index < 3; index += 1) await page.keyboard.press("Tab");
-    assert.equal(await page.locator("[data-gallery-prev]").evaluate((element) => document.activeElement === element && element.matches(":focus-visible")), true);
-    await page.keyboard.press("Tab");
-    await page.keyboard.press("Tab");
-    assert.equal(await page.locator("[data-gallery-dot='0']").evaluate((element) => document.activeElement === element), true);
-    for (let index = 0; index < 5; index += 1) await page.keyboard.press("Shift+Tab");
-    assert.equal(await download.evaluate((element) => document.activeElement === element), true);
-    await page.clock.fastForward(6000);
-    assert.equal(await image.getAttribute("src"), "assets/demo3.png", "leaving keyboard focus retains explicit pause");
-    assert.equal(await page.getByRole("button", { name: "自動再生を再開" }).count(), 1);
-    await page.getByRole("button", { name: "自動再生を再開" }).click();
-    await page.clock.fastForward(6000);
-    assert.equal(await image.getAttribute("src"), "assets/demo1.png", "explicit play restarts from the next six-second boundary");
-
-    await pause.click();
-    await download.focus();
-    for (let index = 0; index < 8; index += 1) {
-      await page.keyboard.press("Tab");
-      if (await page.locator("[data-gallery-pause]").evaluate((element) => document.activeElement === element)) break;
-    }
-    assert.equal(await page.locator("[data-gallery-pause]").evaluate((element) => document.activeElement === element && element.matches(":focus-visible")), true);
-    await page.keyboard.press("Space");
-    assert.equal(await page.getByRole("button", { name: "自動再生を一時停止" }).count(), 1);
-    await page.clock.fastForward(6000);
-    assert.equal(await image.getAttribute("src"), "assets/demo2.png", "keyboard play resumes while the button stays focused");
-
+    const modal = page.locator("[data-gallery-modal]");
+    const opener = page.locator('[data-gallery-slide][data-gallery-position="active"] [data-gallery-open]');
+    const modalSource = await current().getAttribute("src");
+    await opener.click();
+    assert.equal(await modal.getAttribute("open"), "");
     await page.evaluate((hidden) => {
       Object.defineProperty(document, "hidden", { configurable: true, get: () => hidden });
       document.dispatchEvent(new Event("visibilitychange"));
     }, true);
-    assert.equal(await page.evaluate(() => document.hidden), true);
-    await page.clock.fastForward(6000);
-    assert.equal(await image.getAttribute("src"), "assets/demo2.png", "hidden pages do not advance");
     await page.evaluate((hidden) => {
       Object.defineProperty(document, "hidden", { configurable: true, get: () => hidden });
       document.dispatchEvent(new Event("visibilitychange"));
     }, false);
-    assert.equal(await page.evaluate(() => document.hidden), false);
     await page.clock.fastForward(6000);
-    assert.equal(await image.getAttribute("src"), "assets/demo3.png", "visible pages schedule a fresh cycle");
+    assert.equal(await current().getAttribute("src"), modalSource, "visibility changes do not restart autoplay behind a modal");
+    await page.getByRole("button", { name: "拡大表示を閉じる" }).click();
+    await modal.waitFor({ state: "hidden" });
+
+    await page.getByRole("link", { name: "最新版をダウンロード", exact: false }).focus();
+    await page.evaluate((hidden) => {
+      Object.defineProperty(document, "hidden", { configurable: true, get: () => hidden });
+      document.dispatchEvent(new Event("visibilitychange"));
+    }, true);
+    const visibleSource = await current().getAttribute("src");
+    await page.clock.fastForward(6000);
+    assert.equal(await current().getAttribute("src"), visibleSource, "hidden pages do not advance");
+    await page.evaluate((hidden) => {
+      Object.defineProperty(document, "hidden", { configurable: true, get: () => hidden });
+      document.dispatchEvent(new Event("visibilitychange"));
+    }, false);
+    await page.clock.fastForward(6000);
+    assert.notEqual(await current().getAttribute("src"), visibleSource, "visible pages schedule a fresh cycle");
     await context.close();
   } finally {
     await browser?.close();
@@ -256,7 +255,137 @@ test("the gallery continuously rotates, preserves explicit pause, and respects k
   }
 });
 
-test("reduced motion starts paused and Google tag initialization keeps tracking traffic blocked", { timeout: 30_000 }, async () => {
+test("the preview modal opens repeatedly and restores its opener without changing the page", { timeout: 30_000 }, async () => {
+  const site = await startSite();
+  let browser;
+  try {
+    browser = await chromium.launch({ headless: true });
+    const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+    await context.route("**/*", localOnly(site));
+    const page = await context.newPage();
+    await page.goto(`${site.url}/`, { waitUntil: "domcontentloaded" });
+    await page.waitForFunction(() => [...document.querySelectorAll("[data-gallery-slide] img")].every((image) => image.complete));
+    const opener = page.locator('[data-gallery-slide][data-gallery-position="active"] [data-gallery-open]');
+    const dialog = page.locator("[data-gallery-modal]");
+    const close = page.getByRole("button", { name: "拡大表示を閉じる" });
+    const url = page.url();
+    const source = await activeImage(page).getAttribute("src");
+    const alt = await activeImage(page).getAttribute("alt");
+
+    await opener.click();
+    assert.equal(await dialog.getAttribute("open"), "");
+    assert.equal(await page.locator("[data-gallery-modal-image]").getAttribute("src"), new URL(source, `${site.url}/`).href);
+    assert.equal(await page.locator("[data-gallery-modal-image]").getAttribute("alt"), alt);
+    assert.equal(page.url(), url, "opening the preview does not navigate");
+    assert.equal(await close.evaluate((element) => document.activeElement === element), true);
+    await page.locator("[data-gallery-modal-image]").click();
+    assert.equal(await dialog.getAttribute("open"), "", "clicking the image does not close the modal");
+    await close.click();
+    assert.equal(await opener.evaluate((element) => document.activeElement === element), true);
+    await page.waitForFunction((initialSource) => document.querySelector('[data-gallery-slide][data-gallery-position="active"] img').getAttribute("src") !== initialSource, source);
+
+    await opener.click();
+    await page.mouse.click(2, 2);
+    assert.equal(await dialog.getAttribute("open"), null, "clicking the backdrop closes the modal");
+    assert.equal(await opener.evaluate((element) => document.activeElement === element), true);
+
+    await opener.click();
+    await page.keyboard.press("Escape");
+    assert.equal(await dialog.getAttribute("open"), null, "Escape closes the modal");
+    assert.equal(await opener.evaluate((element) => document.activeElement === element), true);
+    await context.close();
+  } finally {
+    await browser?.close();
+    await site.close();
+  }
+});
+
+test("the enabled carousel keeps its visible geometry at every supported viewport", { timeout: 30_000 }, async () => {
+  const site = await startSite();
+  let browser;
+  try {
+    browser = await chromium.launch({ headless: true });
+    for (const viewport of [{ width: 320, height: 720 }, { width: 390, height: 844 }, { width: 768, height: 800 }, { width: 1440, height: 900 }, { width: 1920, height: 960 }]) {
+      const context = await browser.newContext({ viewport });
+      await context.route("**/*", localOnly(site));
+      const page = await context.newPage();
+      await page.goto(`${site.url}/`, { waitUntil: "domcontentloaded" });
+      await page.waitForFunction(() => [...document.querySelectorAll("[data-gallery-slide] img")].every((image) => image.complete));
+      const [previous, viewportBounds, next, image, dots] = await Promise.all([
+        page.getByRole("button", { name: "前の画面" }).boundingBox(),
+        page.locator("[data-gallery-viewport]").boundingBox(),
+        page.getByRole("button", { name: "次の画面" }).boundingBox(),
+        activeImage(page).boundingBox(),
+        page.locator("[data-gallery-dot]").evaluateAll((buttons) => buttons.map((button) => {
+          const bounds = button.getBoundingClientRect();
+          return { width: bounds.width, height: bounds.height };
+        })),
+      ]);
+      assert.ok(previous && viewportBounds && next && image);
+      assert.ok(previous.width >= 44 && previous.height >= 44 && previous.x + previous.width <= viewportBounds.x, `previous arrow stays outside the image viewport at ${viewport.width}px`);
+      assert.ok(next.width >= 44 && next.height >= 44 && next.x >= viewportBounds.x + viewportBounds.width, `next arrow stays outside the image viewport at ${viewport.width}px`);
+      assert.ok(image.width >= viewportBounds.width * .82 && image.width <= viewportBounds.width * .86, `central image remains compact at ${viewport.width}px`);
+      assert.ok(dots.every((dot) => dot.width >= 24 && dot.height >= 24), `dots retain 24px targets at ${viewport.width}px`);
+      assert.equal(await page.locator("[data-gallery-slide][data-gallery-position='previous'], [data-gallery-slide][data-gallery-position='next']").evaluateAll((slides) => slides.every((slide) => {
+        const bounds = slide.getBoundingClientRect();
+        const viewportBounds = slide.parentElement.getBoundingClientRect();
+        return Number(getComputedStyle(slide).opacity) >= .25 && Number(getComputedStyle(slide).opacity) <= .35 && bounds.right > viewportBounds.left && bounds.left < viewportBounds.right;
+      })), true, `both neighboring images peek into view at ${viewport.width}px`);
+      assert.equal(await page.locator("html").evaluate((element) => element.scrollWidth <= element.clientWidth), true, `no horizontal overflow at ${viewport.width}px`);
+      await context.close();
+    }
+  } finally {
+    await browser?.close();
+    await site.close();
+  }
+});
+
+test("keyboard focus remains suspended after closing a modal preview", { timeout: 30_000 }, async () => {
+  const site = await startSite();
+  let browser;
+  try {
+    browser = await chromium.launch({ headless: true });
+    const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+    await context.route("**/*", localOnly(site));
+    const page = await context.newPage();
+    await page.clock.install({ time: new Date("2026-09-18T00:00:00Z") });
+    await page.goto(`${site.url}/`, { waitUntil: "domcontentloaded" });
+    await page.waitForFunction(() => [...document.querySelectorAll("[data-gallery-slide] img")].every((image) => image.complete));
+    const opener = page.locator('[data-gallery-slide][data-gallery-position="active"] [data-gallery-open]');
+    const dialog = page.locator("[data-gallery-modal]");
+    const source = await activeImage(page).getAttribute("src");
+    await opener.focus();
+    await opener.press("Enter");
+    assert.equal(await dialog.getAttribute("open"), "");
+    await page.keyboard.press("Escape");
+    await dialog.waitFor({ state: "hidden" });
+    assert.equal(await opener.evaluate((element) => document.activeElement === element && element.matches(":focus-visible")), true);
+    await page.clock.fastForward(6000);
+    assert.equal(await activeImage(page).getAttribute("src"), source, "keyboard-opened modal keeps autoplay suspended after Escape");
+    await context.close();
+    const pointerContext = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+    await pointerContext.route("**/*", localOnly(site));
+    const pointerPage = await pointerContext.newPage();
+    await pointerPage.clock.install({ time: new Date("2026-09-18T00:00:00Z") });
+    await pointerPage.goto(`${site.url}/`, { waitUntil: "domcontentloaded" });
+    await pointerPage.waitForFunction(() => [...document.querySelectorAll("[data-gallery-slide] img")].every((image) => image.complete));
+    const pointerOpener = pointerPage.locator('[data-gallery-slide][data-gallery-position="active"] [data-gallery-open]');
+    const pointerDialog = pointerPage.locator("[data-gallery-modal]");
+    const pointerSource = await activeImage(pointerPage).getAttribute("src");
+    await pointerOpener.click();
+    await pointerPage.keyboard.press("Escape");
+    await pointerDialog.waitFor({ state: "hidden" });
+    assert.equal(await pointerOpener.evaluate((element) => document.activeElement === element && element.matches(":focus-visible")), true);
+    await pointerPage.clock.fastForward(6000);
+    assert.equal(await activeImage(pointerPage).getAttribute("src"), pointerSource, "pointer-opened modal also respects the restored visible focus");
+    await pointerContext.close();
+  } finally {
+    await browser?.close();
+    await site.close();
+  }
+});
+
+test("reduced motion keeps autoplay off while retaining manual navigation and Google tag initialization", { timeout: 30_000 }, async () => {
   const site = await startSite();
   let browser;
   try {
@@ -275,30 +404,20 @@ test("reduced motion starts paused and Google tag initialization keeps tracking 
     await page.clock.install({ time: new Date("2026-09-18T00:00:00Z") });
     const loaderResponse = page.waitForResponse((response) => response.url() === googleTagUrl);
     await page.goto(`${site.url}/`, { waitUntil: "domcontentloaded" });
-    const image = page.locator("[data-gallery-slide]:not([hidden]) img");
     await page.waitForFunction(() => [...document.querySelectorAll("[data-gallery-slide] img")].every((image) => image.complete && image.naturalWidth === 1920));
     assert.equal((await loaderResponse).status(), 200);
     assert.equal(loaderRequests, 1);
-    assert.equal(await page.getByRole("button", { name: "自動再生を再開" }).isVisible(), true);
+    assert.equal(await page.locator("[data-gallery-pause]").count(), 0);
+    assert.equal(await activeImage(page).getAttribute("src"), "assets/demo1.png");
     await page.clock.fastForward(6000);
-    assert.equal(await image.getAttribute("src"), "assets/demo1.png");
-    await page.getByRole("button", { name: "自動再生を再開" }).click();
-    await page.clock.fastForward(6000);
-    assert.equal(await image.getAttribute("src"), "assets/demo2.png");
-    assert.equal(await page.locator("html").evaluate((element) => element.scrollWidth <= element.clientWidth), true);
-    const imageBounds = await image.boundingBox();
-    for (const control of [page.getByRole("button", { name: "前の画面" }), page.getByRole("button", { name: "次の画面" })]) {
-      const bounds = await control.boundingBox();
-      assert.ok(bounds && bounds.width >= 44 && bounds.height >= 44);
-      assert.ok(imageBounds && bounds.x >= imageBounds.x && bounds.x + bounds.width <= imageBounds.x + imageBounds.width);
-      assert.ok(imageBounds && Math.abs(bounds.y + bounds.height / 2 - (imageBounds.y + imageBounds.height / 2)) <= 1);
-    }
-    const dotBounds = await page.getByRole("button", { name: "画面 2を表示" }).boundingBox();
-    assert.ok(imageBounds && dotBounds && dotBounds.y - (imageBounds.y + imageBounds.height) >= 14 && dotBounds.y - (imageBounds.y + imageBounds.height) <= 18);
+    assert.equal(await activeImage(page).getAttribute("src"), "assets/demo1.png");
+    await page.getByRole("button", { name: "次の画面" }).click();
+    assert.equal(await activeImage(page).getAttribute("src"), "assets/demo2.png", "manual navigation remains available");
     assert.deepEqual(await page.evaluate((tagId) => ({
       initialized: window.dataLayer.filter(([command, value]) => command === "js" && value instanceof Date).length,
       configured: window.dataLayer.filter(([command, value]) => command === "config" && value === tagId).length,
     }), googleTagId), { initialized: 1, configured: 1 });
+    assert.equal(await page.locator("html").evaluate((element) => element.scrollWidth <= element.clientWidth), true);
     await context.close();
   } finally {
     await browser?.close();
