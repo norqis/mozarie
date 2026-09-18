@@ -12,20 +12,20 @@
   </script>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="google-site-verification" content="UrWwBw6iDkiGPFlWk3S4jrSsP7YfkvctuNVveYOJd_o">
-  <title>Mozarie | Windowsで画像のモザイク範囲を検出・編集・保存</title>
-  <meta name="description" content="Mozarieは、PNG・JPEG・WebP画像のモザイク範囲をWindows上でローカル検出、確認、編集、保存できるアプリです。">
+  <title>Mozarie | 自動検出・手描き編集に対応したモザイク加工ソフト</title>
+  <meta name="description" content="Mozarieは、モザイクをかける場所の自動検出から手描き調整、複数画像の確認、保存まで行えるWindowsアプリです。画像の加工はPC上で行います。">
   <link rel="canonical" href="https://norqis.github.io/mozarie/">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
   <header class="site-header">
     <a class="brand" href="https://norqis.github.io/mozarie/" aria-label="Mozarie ホーム"><span class="brand-mark" aria-hidden="true"><img src="assets/mozarie-logo.png" alt=""></span><span>Mozarie</span></a>
-    <nav aria-label="主要リンク"><a href="#features">できること</a><a href="#install">使い始める</a><a href="https://github.com/norqis/mozarie">GitHub</a></nav>
+    <nav aria-label="主要リンク"><a href="#features">できること</a><a href="https://github.com/norqis/mozarie">GitHub</a></nav>
   </header>
   <main>
     <section class="hero" aria-labelledby="page-title">
-      <div><h1 id="page-title">画像のモザイク範囲を検出・編集・保存</h1><p class="intro">Mozarieは、PNG・JPEG・WebP画像のモザイク範囲をWindows上でローカル検出し、確認・編集・保存できるアプリです。</p></div>
-      <div class="hero-action"><a class="download" href="https://github.com/norqis/mozarie/releases/latest">最新版をダウンロード</a><a class="readme" href="https://github.com/norqis/mozarie#readme">READMEを読む</a><p class="platform">Windows / PNG・JPEG・WebP / MIT License</p></div>
+      <div><h1 id="page-title">モザイク加工を、<span class="heading-tail">検出から仕上げまで</span></h1><p class="intro">Mozarieは、モザイクをかける場所の自動検出から、手描きでの調整、複数画像の確認、保存まで行えるWindowsアプリです。</p></div>
+      <div class="hero-action"><a class="download" href="https://github.com/norqis/mozarie/releases/latest">最新版をダウンロード</a><a class="readme" href="https://github.com/norqis/mozarie#readme">詳しい使い方</a><p class="platform">Windows / PNG・JPEG・WebP / MIT License</p></div>
     </section>
     <section class="gallery" aria-label="Mozarie の画面" aria-roledescription="carousel">
       <div class="gallery-frame" data-gallery>
@@ -42,28 +42,18 @@
       </div>
     </section>
     <section class="features content-section" id="features" aria-labelledby="features-title">
-      <h2 id="features-title">検出から保存まで</h2>
+      <h2 id="features-title">モザイク加工を、<span class="heading-tail">ひとつの作業画面で</span></h2>
+      <p class="feature-lead">検出した候補を出発点に、画像を見ながら範囲を整えます。一枚の仕上げも、フォルダーにまとめた画像の確認も、Mozarieで進められます。</p>
       <div class="feature-list">
-        <section><h3>画像を読み込み、候補を検出</h3><div><p>PNG・JPEG・WebP画像やフォルダーを読み込み、現在の画像または全画像からモザイク候補を検出できます。</p><p>SAMによる輪郭補正や、検出した手の領域の除外に対応しています。</p></div></section>
-        <section><h3>範囲を見て、手描きで調整</h3><div><p>候補を確認し、除外・削除できます。モザイク・除外ブラシ、消しゴム、境界ツールで範囲を調整できます。</p><p>強制除外を優先し、Undo / Redoで編集を戻したりやり直したりできます。</p></div></section>
-        <section><h3>複数画像の作業を整理</h3><div><p>PJごとに管理し、確認済み・未確認、モザイクの有無で絞り込めます。</p><p>非表示にしたデータは保持して再表示でき、全画像検出・保存・マスク出力の対象から除外できます。</p></div></section>
-        <section><h3>保存対象と出力を選択</h3><div><p>現在の画像、モザイクのある画像、確認済み画像を選び、コピー保存または元画像へ上書きできます。</p><p>モザイクの粗さ、形式、メタデータの保持を選べます。</p></div></section>
+        <section><h3>モザイクをかける場所を見つける</h3><div><p>読み込んだ画像から、モザイクをかける範囲の候補を自動検出できます。一枚ずつの検出に加え、フォルダー内の画像をまとめて検出し、候補を確認しながら作業を進められます。</p></div></section>
+        <section><h3>必要な部分を、ブラシで仕上げる</h3><div><p>検出した範囲を画像に重ねて確認し、足りない部分を描き足したり、残したい部分を除外したりできます。ブラシや消しゴム、境界の調整を使い、画像ごとにモザイクの範囲を整えられます。</p><p>編集は元に戻したり、やり直したりできるので、範囲を見比べながら仕上げられます。</p></div></section>
+        <section><h3>複数画像の確認を、整理しながら</h3><div><p>画像をプロジェクトにまとめ、確認済み・未確認で絞り込めます。まだ見ていない画像やモザイクのある画像を一覧で探し、次に確認する画像を選べます。</p><p>今回の作業に使わない画像は非表示にしておけます。編集内容は保持され、再表示すると続きから作業できます。</p></div></section>
+        <section><h3>用途に合わせて、保存する</h3><div><p>モザイクの粗さや保存形式を選び、仕上げた画像を書き出せます。現在の一枚だけでなく、モザイクのある画像や確認済みの画像をまとめて保存できます。</p><p>別のファイルへのコピー保存と元画像への上書きに対応し、メタデータを保持するかどうかも選べます。</p></div></section>
       </div>
     </section>
-    <section class="install content-section" id="install" aria-labelledby="install-title">
-      <h2 id="install-title">使い始めるまで</h2>
-      <div class="install-grid"><p>Windowsと64-bit Python（Python Launcher <code>py</code>）を用意します。NVIDIA/CUDAはPython 3.11〜3.14、AMD/DirectMLとCPUは3.11または3.12に対応しています。</p><ol><li>最新ReleaseのZIPを展開します。</li><li><code>setup.bat</code> を実行して、使用する環境をセットアップします。</li><li><code>run.bat</code> で起動し、<strong>設定 &gt; 検出</strong>から基本モデルを指定します。</li></ol></div>
-      <p>検出・編集・保存はPC上で行います。モデルの取得やアプリの更新にはネットワーク接続が必要です。基本モデルは別途用意します。必要なモデル、補助モデルの配布条件、変換手順は<a href="https://github.com/norqis/mozarie#モデル">READMEのモデル説明</a>を確認してください。</p>
-      <p>更新は設定の<strong>更新を確認</strong>、または<code>update.bat</code>から行います。適用前にMozarieを終了し、失敗した場合は同じReleaseの<code>update.bat</code>をもう一度実行します。</p>
-    </section>
-    <section class="faq content-section" id="faq" aria-labelledby="faq-title">
-      <h2 id="faq-title">よくある質問</h2>
-      <dl>
-        <div><dt>検出候補は、そのまま保存できますか？</dt><dd>候補は確認して必要に応じて修正してください。検出後もブラシや境界ツールで範囲を調整できます。</dd></div>
-        <div><dt>コピー保存で元画像は変わりますか？</dt><dd>元画像を残すにはコピー保存を選び、「コピー成功後に元画像を削除」をオフにしてください。元画像を変更する場合は上書きを選びます。</dd></div>
-        <div><dt>GPUで失敗したらCPUへ自動で切り替わりますか？</dt><dd>CPUでも利用できますが、GPUで失敗しても自動ではCPUへ再試行しません。設定からCPUへ手動で切り替えてください。</dd></div>
-        <div><dt>モデルはアプリに含まれますか？</dt><dd>基本モデルは別途選んで取得します。補助モデルを含む配布元の条件とライセンスは、各配布元と<a href="https://github.com/norqis/mozarie/blob/main/THIRD_PARTY_NOTICES.md">第三者ライセンス・モデル配布元</a>を確認してください。</dd></div>
-      </dl>
+    <section class="local content-section" id="local" aria-labelledby="local-title">
+      <h2 id="local-title">画像の検出・編集・保存は<span class="heading-tail">ローカルで</span></h2>
+      <div class="local-content"><p>検出・編集・保存は、WindowsのPC上で行います。PNG・JPEG・WebPに対応しています。</p><a class="download" href="https://github.com/norqis/mozarie/releases/latest">Mozarieをダウンロード</a></div>
     </section>
   </main>
   <dialog class="gallery-modal" data-gallery-modal aria-labelledby="gallery-modal-title"><div class="gallery-modal-content"><button class="gallery-modal-close" type="button" data-gallery-modal-close aria-label="拡大表示を閉じる" autofocus><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m3 3 10 10M13 3 3 13"></path></svg></button><img data-gallery-modal-image alt=""><p id="gallery-modal-title" class="visually-hidden">Mozarieの作業画面を拡大表示</p></div></dialog>
