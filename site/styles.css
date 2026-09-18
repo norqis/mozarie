@@ -63,7 +63,7 @@ h1 { margin: 0; text-align: center; font-size: clamp(88px, 12vw, 172px); font-we
 .workflow li { min-width: 0; padding-top: 18px; border-top: 1px solid var(--line); }
 .workflow li > span { display: block; margin-bottom: 22px; color: var(--muted); font-size: .75rem; letter-spacing: .1em; }
 .workflow h3 { margin-bottom: 8px; font-size: 24px; font-weight: 600; }
-.workflow p { margin: 0; color: var(--muted); font-size: .94rem; }
+.workflow p { margin: 0; color: var(--muted); font-size: .94rem; text-wrap: pretty; }
 
 .setup { display: grid; grid-template-columns: minmax(0, 1fr) minmax(320px, 2fr); gap: 48px; margin-top: 100px; padding: 44px; background: var(--accent); color: #fff; }
 .setup h2 { margin: 0; font-size: clamp(34px, 4vw, 44px); font-weight: 600; line-height: 1.2; }
