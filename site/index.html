@@ -38,6 +38,35 @@
       <p class="platform">Windows向け · ローカルで処理</p>
     </section>
 
+    <section class="section gallery" aria-labelledby="gallery-title" aria-roledescription="carousel">
+      <div class="section-heading">
+        <p class="eyebrow">APP PREVIEW</p>
+        <h2 id="gallery-title">作業画面を見てから始める。</h2>
+      </div>
+      <div class="gallery-frame" data-gallery>
+        <figure class="gallery-slide" data-gallery-slide>
+          <a href="assets/demo1.png" aria-label="Mozarieの作業画面 1を原寸で開く"><img src="assets/demo1.png" width="1920" height="959" alt="Mozarieでモザイクの範囲を手描きで調整している画面"></a>
+          <figcaption data-gallery-caption aria-live="off">モザイクの範囲を手描きで調整する。</figcaption>
+        </figure>
+        <figure class="gallery-slide" data-gallery-slide hidden>
+          <a href="assets/demo2.png" aria-label="Mozarieの作業画面 2を原寸で開く"><img src="assets/demo2.png" width="1920" height="959" alt="Mozarieで検出モデルと輪郭補正を設定している画面"></a>
+          <figcaption data-gallery-caption aria-live="off">検出モデルと輪郭補正を設定する。</figcaption>
+        </figure>
+        <figure class="gallery-slide" data-gallery-slide hidden>
+          <a href="assets/demo3.png" aria-label="Mozarieの作業画面 3を原寸で開く"><img src="assets/demo3.png" width="1920" height="959" alt="Mozarieで編集結果と適用範囲を見比べている画面"></a>
+          <figcaption data-gallery-caption aria-live="off">編集結果と適用範囲を見比べる。</figcaption>
+        </figure>
+        <div class="gallery-controls" data-gallery-controls hidden aria-label="画面表示の操作">
+          <span class="gallery-count" data-gallery-count>01 / 03</span>
+          <div class="gallery-buttons">
+            <button type="button" data-gallery-prev>前の画面</button>
+            <button type="button" data-gallery-next>次の画面</button>
+            <button type="button" data-gallery-pause>一時停止</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <section class="section workflow" aria-labelledby="workflow-title">
       <div class="section-heading">
         <p class="eyebrow">WORKFLOW</p>
@@ -87,5 +116,6 @@
       <a href="https://github.com/norqis/mozarie/blob/main/README.md">README 日本語</a>
     </div>
   </footer>
+  <script src="gallery.js"></script>
 </body>
 </html>

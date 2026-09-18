@@ -1,4 +1,5 @@
 <p align="center"><img src="static/images/long_logo.png" alt="Mozarie" width="400"></p>
+<p align="center"><a href="https://norqis.github.io/mozarie/assets/demo1.png"><img src="https://norqis.github.io/mozarie/assets/demo1.png" alt="Mozarie workspace" width="960"></a></p>
 
 [日本語](README.md) · [Website](https://norqis.github.io/mozarie/) · [Latest release](https://github.com/norqis/mozarie/releases/latest) · [Report an issue](https://github.com/norqis/mozarie/issues)
 

@@ -12,6 +12,8 @@ const siteRoot = path.join(root, "site");
 const contentTypes = {
   ".css": "text/css; charset=utf-8",
   ".html": "text/html; charset=utf-8",
+  ".js": "application/javascript; charset=utf-8",
+  ".png": "image/png",
   ".xml": "application/xml; charset=utf-8",
 };
 const canonicalUrl = "https://norqis.github.io/mozarie/";
@@ -74,6 +76,10 @@ test("the landing page works without JavaScript and fits desktop and mobile view
       assert.equal(await page.locator('a[href="https://github.com/norqis/mozarie/releases/latest"]').count(), 1);
       assert.equal(await page.locator('[lang="en"] a[href="https://github.com/norqis/mozarie/blob/main/README.en.md"]').count(), 1);
       assert.equal(await page.getByText("Mozarieは、Windowsで画像を読み込み、モザイク範囲をローカルで検出・確認・編集・保存するアプリです。", { exact: true }).isVisible(), true);
+      assert.equal(await page.locator("[data-gallery-controls]").isHidden(), true);
+      assert.equal(await page.locator("[data-gallery-slide]").count(), 3);
+      assert.equal(await page.locator("[data-gallery-slide]:not([hidden]) img").getAttribute("src"), "assets/demo1.png");
+      assert.deepEqual(await page.locator("[data-gallery-slide]:not([hidden]) img").evaluate((image) => ({ width: image.naturalWidth, height: image.naturalHeight, complete: image.complete })), { width: 1920, height: 959, complete: true });
       const downloadBounds = await page.getByRole("link", { name: "最新版をダウンロード", exact: true }).boundingBox();
       assert.ok(downloadBounds && downloadBounds.y >= 0 && downloadBounds.y + downloadBounds.height <= viewport.height, "the download link is visible in the initial viewport");
       await page.keyboard.press("Tab");
@@ -100,6 +106,14 @@ test("the stylesheet and sitemap are published as valid static assets", { timeou
     const stylesheet = await get(`${site.url}/styles.css`);
     assert.equal(stylesheet.status, 200);
     assert.match(stylesheet.headers["content-type"], /^text\/css; charset=utf-8$/);
+    const script = await get(`${site.url}/gallery.js`);
+    assert.equal(script.status, 200);
+    assert.match(script.headers["content-type"], /^application\/javascript; charset=utf-8$/);
+    for (const image of ["demo1.png", "demo2.png", "demo3.png"]) {
+      const asset = await get(`${site.url}/assets/${image}`);
+      assert.equal(asset.status, 200);
+      assert.equal(asset.headers["content-type"], "image/png");
+    }
     const sitemap = await get(`${site.url}/sitemap.xml`);
     assert.equal(sitemap.status, 200);
     assert.match(sitemap.headers["content-type"], /^application\/xml; charset=utf-8$/);
@@ -128,6 +142,84 @@ test("the stylesheet and sitemap are published as valid static assets", { timeou
     });
     assert.notEqual(contrast.color, contrast.background, "the hovered English README link remains visible");
     await context.close();
+  } finally {
+    await browser?.close();
+    await site.close();
+  }
+});
+
+test("the demo gallery wraps, pauses, and resumes its rotation accessibly", { timeout: 30_000 }, async () => {
+  const site = await startSite();
+  let browser;
+  try {
+    browser = await chromium.launch({ headless: true });
+    const context = await browser.newContext();
+    await context.route("**/*", (route) => {
+      const url = new URL(route.request().url());
+      return url.origin === site.url ? route.continue() : route.abort();
+    });
+    const page = await context.newPage();
+    await page.clock.install({ time: new Date("2026-09-18T00:00:00Z") });
+    await page.goto(`${site.url}/`, { waitUntil: "domcontentloaded" });
+    const count = page.locator("[data-gallery-count]");
+    const caption = page.locator("[data-gallery-slide]:not([hidden]) [data-gallery-caption]");
+    const visibleImage = page.locator("[data-gallery-slide]:not([hidden]) img");
+    assert.equal(await count.innerText(), "01 / 03");
+    assert.equal(await caption.innerText(), "モザイクの範囲を手描きで調整する。");
+    assert.deepEqual(await visibleImage.evaluate((image) => ({ width: image.naturalWidth, height: image.naturalHeight })), { width: 1920, height: 959 });
+    assert.deepEqual(await page.locator("[data-gallery-slide] img").evaluateAll((images) => images.map((image) => ({ width: image.naturalWidth, height: image.naturalHeight, complete: image.complete }))), [
+      { width: 1920, height: 959, complete: true },
+      { width: 1920, height: 959, complete: true },
+      { width: 1920, height: 959, complete: true },
+    ]);
+    assert.deepEqual(await page.locator("[data-gallery-slide] a").evaluateAll((links) => links.map((link) => link.getAttribute("href"))), ["assets/demo1.png", "assets/demo2.png", "assets/demo3.png"]);
+
+    await page.getByRole("button", { name: "前の画面" }).click();
+    assert.equal(await count.innerText(), "03 / 03");
+    assert.equal(await caption.innerText(), "編集結果と適用範囲を見比べる。");
+    await page.getByRole("button", { name: "次の画面" }).click();
+    assert.equal(await count.innerText(), "01 / 03");
+
+    await page.getByRole("button", { name: "再開" }).click();
+    await page.locator(".hero").hover();
+    await page.clock.fastForward(6000);
+    assert.equal(await count.innerText(), "02 / 03");
+    await page.getByRole("button", { name: "一時停止" }).click();
+    await page.clock.fastForward(6000);
+    assert.equal(await count.innerText(), "02 / 03");
+    assert.equal(await caption.getAttribute("aria-live"), "polite");
+    await page.getByRole("button", { name: "再開" }).click();
+    await page.locator(".hero").hover();
+    await page.clock.fastForward(6000);
+    assert.equal(await count.innerText(), "03 / 03");
+
+    await page.locator("[data-gallery]").hover();
+    await page.clock.fastForward(6000);
+    assert.equal(await count.innerText(), "03 / 03");
+    assert.equal(await caption.getAttribute("aria-live"), "polite");
+    await page.locator(".hero").hover();
+    await page.clock.fastForward(6000);
+    assert.equal(await count.innerText(), "01 / 03");
+
+    await page.getByRole("button", { name: "次の画面" }).focus();
+    await page.clock.fastForward(6000);
+    assert.equal(await count.innerText(), "01 / 03");
+    assert.equal(await caption.getAttribute("aria-live"), "polite");
+    await context.close();
+
+    const reducedContext = await browser.newContext({ reducedMotion: "reduce" });
+    await reducedContext.route("**/*", (route) => {
+      const url = new URL(route.request().url());
+      return url.origin === site.url ? route.continue() : route.abort();
+    });
+    const reducedPage = await reducedContext.newPage();
+    await reducedPage.clock.install({ time: new Date("2026-09-18T00:00:00Z") });
+    await reducedPage.goto(`${site.url}/`, { waitUntil: "domcontentloaded" });
+    assert.equal(await reducedPage.getByRole("button", { name: "再開" }).isVisible(), true);
+    await reducedPage.clock.fastForward(6000);
+    assert.equal(await reducedPage.locator("[data-gallery-count]").innerText(), "01 / 03");
+    assert.equal(await reducedPage.locator("[data-gallery-slide]:not([hidden]) [data-gallery-caption]").getAttribute("aria-live"), "polite");
+    await reducedContext.close();
   } finally {
     await browser?.close();
     await site.close();
