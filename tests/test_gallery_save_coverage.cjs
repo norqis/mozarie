@@ -5,6 +5,7 @@ const path = require("node:path");
 const vm = require("node:vm");
 
 const jsRoot = path.join(__dirname, "..", "static", "js");
+const imageDisplayPathSource = fs.readFileSync(path.join(jsRoot, "core.js"), "utf8").match(/function imageDisplayPath\(image\) \{[\s\S]*?\n\}/)?.[0];
 
 function sourceBlob(name, size, lastModified) {
   return Object.assign(new Blob([new Uint8Array(size)]), { name, lastModified });
@@ -106,6 +107,7 @@ function makeGalleryRuntime() {
     async selectImage(id) { selected.push(`image:${id}`); }, async setHidden(image, value) { image.hidden = value; return context.hideResult; }, async queueImageMutation(_id, action) { return action(); }, async saveWorkspaceFlagNow(image, _flag, value, after) { image.reviewed = value; after?.(); return context.reviewResult; }, refreshReviewViews() {},
   };
   context.reviewResult = true; context.hideResult = true;
+  vm.runInNewContext(imageDisplayPathSource, context, { filename: path.join(jsRoot, "core.js") });
   const source = fs.readFileSync(path.join(jsRoot, "gallery.js"), "utf8");
   vm.runInNewContext(source, context, { filename: path.join(jsRoot, "gallery.js") });
   vm.runInNewContext("globalThis.__galleryTest = { thumbnailObserver, thumbnailSource, loadThumbnail, retryThumbnail, observeThumbnail, forgetThumbnail, catalogWindow, focusCatalogIndex, renderGallery, imageMatchesGalleryFilter, updateGalleryCurrent, overviewFolderOptions, overviewImages, syncOverviewFolders, selectOverviewImage, renderOverview, renderCatalogViews, setViewMode, moveCurrentBy, reviewAndMoveNext, hideAndMoveNext, runNavigationAction, updateNavigationControls, thumbnailObservers, catalogWindows, catalogMoveIndex, resetCatalogWindows, scrollCatalogImage };", context, { filename: "test-gallery-exports.js" });
@@ -286,6 +288,7 @@ function makeSaveRuntime() {
     modalInvokers: new Map(), updateProgress() { calls.push("progress"); }, setStatusKey(key) { calls.push(`status:${key}`); }, scheduleJobPoll() { calls.push("schedule"); },
   };
   context.confirmed = true;
+  vm.runInNewContext(imageDisplayPathSource, context, { filename: path.join(jsRoot, "core.js") });
   const source = fs.readFileSync(path.join(jsRoot, "save.js"), "utf8");
   vm.runInNewContext(source, context, { filename: path.join(jsRoot, "save.js") });
   vm.runInNewContext("globalThis.__saveTest = { setApplyResult, showApplyError, isTerminalApply, selectedSaveMode, sourceAccessFor, sourceCanOverwrite, sourceCanDelete, applyTargetsSupport, applyRestrictionMessage, syncApplyMode, refreshApplyTargets, openApplyDialog, selectedSingleSaveMode, setSingleSaveResult, syncSingleSaveMode, openSingleSaveDialog, chooseSingleOutputDirectory, renderSingleSave, startSingleSave, draftPayload, renderOutputDirectory, commitOutputDirectory, saveDirectoryStructurePreference, setOutputDirectoryPickerBusy, pickOutputDirectory, reserveSaveRender, renderDefaultCopy, renderStreamedSave, chooseOutputDirectory, waitForBrowserSave, showBrowserSaveProgress, reconcileStoredMaskStatuses, reconcileBrowserSaveState, ensureHandlePermission, ensureSaveSources, writeSourceHandle, snapshotSourceHandle, restoreSourceHandle, runBrowserSave, commitBrowserSaveWithRetry, cancelBrowserSave, acknowledgePendingBrowserSave, isDefinitiveCommitRejection, startApplyFromDialog, finishSaveStart, controlApply, showRunningApply, finishApplyJob, isTerminalDetection, finishDetectionJob, pollJob, scheduleJobPoll };", context, { filename: "test-save-exports.js" });
@@ -394,9 +397,9 @@ async function saveInteractions() {
   assert.equal(runtime.isTerminalApply({ kind: "detect", state: "complete" }), false); state.applyRunning = true; assert.equal(runtime.isTerminalApply({ kind: "apply", state: "complete" }), true); state.applyRunning = false; state.handledApplyStartedAt = 2; assert.equal(runtime.isTerminalApply({ kind: "apply", state: "complete", startedAt: 3 }), true);
   assert.equal(runtime.selectedSaveMode(), "copy"); assert.equal(runtime.sourceAccessFor("missing"), null); assert.equal(runtime.sourceCanOverwrite(state.images[0]), true); assert.equal(runtime.sourceCanDelete(state.images[1]), false); assert.equal(runtime.applyTargetsSupport("overwrite"), true);
   state.applyTargetIds = ["session"]; runtime.saveMode.value = "overwrite"; assert.match(runtime.applyRestrictionMessage(), /overwriteUnavailable/); runtime.syncApplyMode(); assert.equal(runtime.nodes.get("#applyStartButton").disabled, true);
-  runtime.saveMode.value = "copy"; runtime.nodes.get("#deleteOriginal").checked = true; assert.match(runtime.applyRestrictionMessage(), /deleteUnavailable/); runtime.syncApplyMode(); assert.equal(runtime.nodes.get("#deleteOriginal").checked, false);
+  runtime.saveMode.value = "copy"; runtime.nodes.get("#deleteOriginal").checked = true; assert.equal(runtime.applyRestrictionMessage(), ""); runtime.syncApplyMode(); assert.equal(runtime.nodes.get("#deleteOriginal").checked, true, "copy-and-delete remains selected until its explicit-save preflight");
   state.sourceAccess.set("session", { fileHandle: {} }); runtime.syncApplyMode();
-  assert.match(runtime.nodes.get("#applyTemporarySourceNote").textContent, /apply\.deleteUnavailable:1/, "temporary sources without a parent handle explain that deletion is unavailable");
+  assert.equal(runtime.nodes.get("#deleteOriginal").disabled, false, "a browser source without a remembered parent can request reconnection during explicit save");
   state.applyTargetIds = ["file"]; runtime.nodes.get("#applyTargetMode").value = "current"; runtime.refreshApplyTargets(); assert.equal(state.applyTargetMode, "current");
   runtime.context.busy = true; await runtime.openApplyDialog(); runtime.context.busy = false; runtime.context.flushError = new Error("draft failed"); await runtime.openApplyDialog(); runtime.context.flushError = null;
   state.applyTargetIds = []; await runtime.openApplyDialog([]); state.applyTargetIds = ["file"]; await runtime.openApplyDialog({ initialMode: "masked" }); assert.equal(runtime.nodes.get("#applyDialog").open, true);

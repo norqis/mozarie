@@ -74,7 +74,7 @@ _POST_OPERATION_LABELS = {
     "/api/catalog/clear": "画像一覧クリア",
     "/api/workspace/images": "画像状態の一括変更",
     "/api/catalog/remove": "画像一覧から削除",
-    "/api/catalog/rename": "元画像の名前変更",
+    "/api/catalog/rename": "画像の保存名変更",
     "/api/catalog/delete-source": "元画像を完全削除",
     "/api/catalog/delete-source/prepare": "元画像削除の確認",
     "/api/catalog/delete-source/claim": "元画像削除の所有権確定",

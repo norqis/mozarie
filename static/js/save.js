@@ -8,6 +8,26 @@ function showApplyError(error, invoker = $("#applyStartButton")) {
   showUserError(error, invoker);
 }
 
+function isCancelledSaveSourceAccess(error) {
+  return error?.name === "AbortError";
+}
+
+async function publishCommittedCatalogImages(committed, imageId = null) {
+  if (Array.isArray(committed?.images)) state.images = committed.images;
+  else if (imageId && typeof committed?.relativePath === "string") {
+    state.images = state.images.map((image) => image.id === imageId
+      ? { ...image, relativePath: committed.relativePath, editedFilename: Object.prototype.hasOwnProperty.call(committed, "editedFilename") ? committed.editedFilename : image.editedFilename }
+      : image);
+  } else if (imageId) {
+    const latest = await api("/api/images");
+    state.images = latest.images || state.images;
+  } else return;
+  loadReviewedPaths();
+  const current = imageId && state.currentId === imageId ? state.images.find((image) => image.id === imageId) : null;
+  if (current) $("#currentFileName").textContent = imageDisplayPath(current);
+  renderCatalogViews();
+}
+
 function isTerminalApply(job) {
   if (job.kind !== "apply" || !["complete", "cancelled", "error"].includes(job.state)) return false;
   return state.applyRunning || (job.startedAt != null && state.handledApplyStartedAt !== job.startedAt);
@@ -16,6 +36,10 @@ function isTerminalApply(job) {
 function selectedSaveMode() { return document.querySelector('input[name="batchSaveMode"]:checked').value; }
 function selectedApplyOutputFormat() { return $("#applyOutputFormat").value; }
 function selectedSingleOutputFormat() { return $("#singleSaveOutputFormat").value; }
+let applyKeepMetadataPreference = true;
+let applyKeepMetadataForcedOff = false;
+let singleKeepMetadataPreference = true;
+let singleKeepMetadataForcedOff = false;
 function preserveDirectoryStructure() { return state.settings?.saving?.preserve_directory_structure !== false; }
 function mergeSavingSettings(response, fields) {
   const saving = response?.settings?.saving;
@@ -62,8 +86,10 @@ async function ensureDirectoryStructurePreference(input) {
 function syncApplyOutputOptions() {
   const format = selectedApplyOutputFormat();
   const metadata = $("#applyKeepMetadata"); const note = $("#applyFormatNote");
+  if (format !== "jpg" && !applyKeepMetadataForcedOff) applyKeepMetadataPreference = metadata.checked;
   metadata.disabled = format === "jpg" || state.applyRunning || state.saveStarting;
-  if (format === "jpg") metadata.checked = false;
+  metadata.checked = format === "jpg" ? false : applyKeepMetadataPreference;
+  applyKeepMetadataForcedOff = format === "jpg";
   note.textContent = format === "jpg" ? t("apply.jpgMetadataDisabled") : "";
   note.classList.toggle("save-option-warning", format === "jpg");
   note.hidden = !note.textContent;
@@ -73,8 +99,10 @@ function syncApplyOutputOptions() {
 function syncSingleOutputOptions() {
   const save = state.singleSave; const format = selectedSingleOutputFormat();
   const metadata = $("#singleSaveKeepMetadata"); const note = $("#singleSaveFormatNote");
+  if (format !== "jpg" && !singleKeepMetadataForcedOff) singleKeepMetadataPreference = metadata.checked;
   metadata.disabled = format === "jpg" || state.saving || state.saveStarting;
-  if (format === "jpg") metadata.checked = false;
+  metadata.checked = format === "jpg" ? false : singleKeepMetadataPreference;
+  singleKeepMetadataForcedOff = format === "jpg";
   note.textContent = format === "jpg" ? t("apply.jpgMetadataDisabled") : "";
   note.classList.toggle("save-option-warning", format === "jpg");
   note.hidden = !note.textContent;
@@ -85,12 +113,12 @@ function sourceAccessFor(imageId) { return state.sourceAccess.get(imageId) || nu
 function sourceCanOverwrite(image, format = "original") {
   const access = sourceAccessFor(image?.id);
   if (image?.sourceKind === "filesystem") return true;
-  return Boolean(access?.fileHandle) && (!renamedSourceFileName(image, access, format) || Boolean(access?.parentHandle));
+  return Boolean(access?.fileHandle);
 }
 function sourceCanDelete(image) {
   if (image?.sourceKind === "filesystem") return true;
   const access = sourceAccessFor(image?.id);
-  return Boolean(access?.fileHandle && access.parentHandle);
+  return Boolean(access?.fileHandle);
 }
 function applyTargetsSupport(capability, format = "original") {
   return state.applyTargetIds.every((imageId) => {
@@ -100,15 +128,12 @@ function applyTargetsSupport(capability, format = "original") {
 }
 function applyRestrictionMessage() {
   const noOverwrite = state.applyTargetIds.filter((imageId) => !sourceCanOverwrite(state.images.find((image) => image.id === imageId), selectedApplyOutputFormat()));
-  const noDelete = state.applyTargetIds.filter((imageId) => !sourceCanDelete(state.images.find((image) => image.id === imageId)));
   if (selectedSaveMode() === "overwrite" && noOverwrite.length) return t("apply.overwriteUnavailable", { count: noOverwrite.length });
-  if (selectedSaveMode() === "copy" && $("#deleteOriginal").checked && noDelete.length) return t("apply.deleteUnavailable", { count: noDelete.length });
   return "";
 }
 
 function syncApplyMode() {
   const canOverwrite = applyTargetsSupport("overwrite", selectedApplyOutputFormat());
-  const canDelete = applyTargetsSupport("delete");
   const copying = selectedSaveMode() === "copy";
   $("#applySuffixRow").hidden = !copying;
   $("#deleteOriginalRow").hidden = !copying;
@@ -121,14 +146,12 @@ function syncApplyMode() {
   $("#applyOutputDirectoryStatus").disabled = outputDirectoryPending || state.applyRunning || state.saveStarting;
   $("#applyRemoveSaved").disabled = state.outputDirectoryPicking || state.applyRunning || state.saveStarting;
   $("#applyPreserveDirectoryStructure").disabled = state.outputDirectoryPicking || state.applyRunning || state.saveStarting;
-  $("#deleteOriginal").disabled = !canDelete || state.applyRunning;
-  if (!canDelete) $("#deleteOriginal").checked = false;
+  $("#deleteOriginal").disabled = !copying || state.applyRunning || state.saveStarting;
   $("#applyOverwriteMode").disabled = !canOverwrite || state.applyRunning;
   $("#applyOverwriteRow").classList.toggle("muted", !canOverwrite);
   const restriction = applyRestrictionMessage();
   const capabilityNote = !canOverwrite
-    ? t("apply.overwriteUnavailable", { count: state.applyTargetIds.filter((imageId) => !sourceCanOverwrite(state.images.find((image) => image.id === imageId), selectedApplyOutputFormat())).length })
-    : (!canDelete ? t("apply.deleteUnavailable", { count: state.applyTargetIds.filter((imageId) => !sourceCanDelete(state.images.find((image) => image.id === imageId))).length }) : "");
+    ? t("apply.overwriteUnavailable", { count: state.applyTargetIds.filter((imageId) => !sourceCanOverwrite(state.images.find((image) => image.id === imageId), selectedApplyOutputFormat())).length }) : "";
   $("#applyTemporarySourceNote").textContent = restriction || capabilityNote || t("apply.handleSource");
   $("#applyTemporarySourceNote").hidden = !restriction && !capabilityNote;
   $("#applyStartButton").disabled = Boolean(restriction) || outputDirectoryPending || state.applyRunning || state.saveStarting || state.applyTargetIds.length === 0 || (copying && !state.settings?.saving?.default_output_directory);
@@ -182,15 +205,13 @@ function syncSingleSaveMode() {
   const image = state.images.find((entry) => entry.id === save?.imageId);
   const copying = selectedSingleSaveMode() === "copy";
   const canOverwrite = sourceCanOverwrite(image, selectedSingleOutputFormat());
-  const canDelete = sourceCanDelete(image);
   $("#singleSaveSuffixRow").hidden = !copying;
   $("#singleSaveDeleteOriginalRow").hidden = !copying;
   $("#singleSaveOutputDirectoryRow").hidden = !copying;
   $("#singleSavePreserveDirectoryStructureRow").hidden = !copying;
   $("#singleSaveOverwriteMode").disabled = !canOverwrite || state.saving || state.saveStarting;
   $("#singleSaveOverwriteRow").classList.toggle("muted", !canOverwrite);
-  $("#singleSaveDeleteOriginal").disabled = !canDelete || state.saving || state.saveStarting;
-  if (!canDelete) $("#singleSaveDeleteOriginal").checked = false;
+  $("#singleSaveDeleteOriginal").disabled = !copying || state.saving || state.saveStarting;
   const outputDirectoryPending = state.outputDirectoryPicking || state.outputDirectoryCommitPending;
   $("#singleSaveChooseOutputDirectoryButton").disabled = outputDirectoryPending || state.saving || state.saveStarting;
   $("#singleSaveOutputDirectoryStatus").disabled = outputDirectoryPending || state.saving || state.saveStarting;
@@ -212,7 +233,7 @@ async function openSingleSaveDialog(imageId = state.currentId) {
   if (!isProcessableImage(image) || isBusy() || state.importing || currentImageActionPending() || state.currentId !== imageId || !isCurrentGeneration(generation)
     || !state.currentImage || state.projectReadOnly || image.sourceDimensionsChanged) return;
   state.singleSave = { imageId, generation, divisor: Number($("#divisor").value), draft: draftPayload([imageId])[imageId] || null, invoker };
-  $("#singleSaveTarget").textContent = t("apply.singleTarget", { name: image.relativePath });
+  $("#singleSaveTarget").textContent = t("apply.singleTarget", { name: imageDisplayPath(image) });
   if (!state.singleSaveDialogInitialized) {
     $("#singleSaveCopyMode").checked = true;
     $("#singleSaveDeleteOriginal").checked = false;
@@ -376,20 +397,21 @@ async function startSingleSave(event) {
   if (!save || !isProcessableImage(image) || state.saving || state.saveStarting || isBusy() || state.importing || catalogStagingEditsActive() || currentImageActionPending()
     || state.currentId !== save.imageId || !isCurrentGeneration(save.generation) || !state.currentImage || state.projectReadOnly || image.sourceDimensionsChanged) return;
   const mode = selectedSingleSaveMode(); const copying = mode === "copy";
+  const deleteOriginal = copying && $("#singleSaveDeleteOriginal").checked;
+  const format = selectedSingleOutputFormat(); const keepMetadata = $("#singleSaveKeepMetadata").checked;
+  const sourcePreparation = beginSaveSourcePreparation([save.imageId], mode, deleteOriginal, format);
   const outputDirectory = $("#singleSaveOutputDirectoryStatus");
   if (copying && outputDirectory.value.trim() !== (state.settings?.saving?.default_output_directory || "") && !await commitOutputDirectory(outputDirectory)) return;
   if (state.saving || state.saveStarting || isBusy()) return;
-  const deleteOriginal = copying && $("#singleSaveDeleteOriginal").checked;
   const removeSaved = $("#singleSaveRemoveSaved").checked;
   const removalSelection = removeSaved ? deletionSelectionSnapshot(new Set([save.imageId]), galleryFilteredImages()) : null;
   const catalogEpoch = state.catalogEpoch;
   const suffix = $("#singleSaveSuffix").value;
-  const format = selectedSingleOutputFormat(); const keepMetadata = $("#singleSaveKeepMetadata").checked;
   if (copying && !state.settings?.saving?.default_output_directory) return syncSingleSaveMode();
   state.saveStarting = true;
   syncSingleSaveMode();
   try {
-    if (copying) await ensureSaveSources([save.imageId], "copy", deleteOriginal);
+    if (copying) await ensureSaveSources([save.imageId], "copy", deleteOriginal, format, sourcePreparation);
     if (copying && !await ensureDirectoryStructurePreference($("#singleSavePreserveDirectoryStructure"))) return;
     if (!copying && !await confirmAction(t("confirm.overwriteSource.title"), t("confirm.overwriteSource.message"), "overwriteSource")) return;
     if (deleteOriginal && !await confirmAction(t("confirm.deleteSourceAfterCopy.title"), t("confirm.deleteSourceAfterCopy.message"), "deleteSourceAfterCopy")) return;
@@ -401,7 +423,7 @@ async function startSingleSave(event) {
     entry = prepared.entries?.[0]; if (!entry) throw Object.assign(new Error("save_state_changed"), { code: "save_state_changed" });
     await flushWorkspaceDraft(save.imageId);
     const access = sourceAccessFor(save.imageId);
-    if (!copying) await ensureSaveSources([save.imageId], "overwrite", false);
+    if (!copying) await ensureSaveSources([save.imageId], "overwrite", false, format, sourcePreparation);
     const rendered = copying
       ? await renderDefaultCopy(entry, { imageId: save.imageId, candidateRevision: entry.candidateRevision, divisor: save.divisor, draft: save.draft, copyToDefault: true, suffix, format, keepMetadata })
       : { response: await renderStreamedSave(entry, { imageId: save.imageId, candidateRevision: entry.candidateRevision, divisor: save.divisor, draft: save.draft, suffix, format, keepMetadata }) };
@@ -438,6 +460,11 @@ async function startSingleSave(event) {
       if (sourceAction === "deleted") updatePendingSaveAction(saveToken, "deleted");
       commitStarted = true;
       committed = await commitBrowserSaveWithRetry({ imageId: save.imageId, candidateRevision: entry.candidateRevision, saveToken, sourceAction, ...(sourceAction === "overwrite" && access?.fileHandle ? sourceCommitMetadata(sourceRename?.replacement || access) : {}) });
+      if (sourceAction === "overwrite") await publishCommittedCatalogImages(committed, save.imageId);
+      if (sourceRename) {
+        Object.assign(access, sourceRename.replacement);
+        await persistBrowserSourceAccess(save.imageId, access, committed.images?.find((item) => item.id === save.imageId));
+      }
       await finishFormattedSourceRename(access, sourceRename);
       if (committed.sourceDeletePending) browserSourceDelete = { deleted: false, retryable: false };
       if (copying && committed.outputPath) output = committed.outputPath;
@@ -495,13 +522,17 @@ async function startSingleSave(event) {
     } catch (error) {
       if (saveToken && entry) await cancelBrowserSave(entry, saveToken);
       if (cleanupIntent && isDefinitiveCommitRejection(error)) await clearProjectSourceCleanup({ intentIds: [cleanupIntent] });
-      setSingleSaveResult(t(`errorCode.${userErrorCode(error)}`), true); showUserError(error, $("#singleSaveStartButton"));
+      if (!isCancelledSaveSourceAccess(error)) {
+        setSingleSaveResult(t(`errorCode.${userErrorCode(error)}`), true); showUserError(error, $("#singleSaveStartButton"));
+      }
     } finally {
       state.saving = false; renderCandidates(); updateActionButtons(); syncSingleSaveMode();
     }
   } catch (error) {
-    setSingleSaveResult(t(`errorCode.${userErrorCode(error)}`), true);
-    showUserError(error, $("#singleSaveStartButton"));
+    if (!isCancelledSaveSourceAccess(error)) {
+      setSingleSaveResult(t(`errorCode.${userErrorCode(error)}`), true);
+      showUserError(error, $("#singleSaveStartButton"));
+    }
   } finally {
     state.saveStarting = false; renderCandidates(); updateActionButtons(); syncSingleSaveMode();
   }
@@ -608,11 +639,12 @@ async function waitForBrowserSave(save) {
 }
 
 function showBrowserSaveProgress(save, entry) {
+  const displayName = imageDisplayPath(state.images.find((image) => image.id === entry?.imageId)) || entry?.relativePath || "";
   $("#applyPauseButton").disabled = false;
-  state.job = { kind: "apply", state: save.paused ? "paused" : "running", total: save.entries.length, completed: save.completed, current: entry?.relativePath || "" };
+  state.job = { kind: "apply", state: save.paused ? "paused" : "running", total: save.entries.length, completed: save.completed, current: displayName };
   $("#applyProgress").max = Math.max(1, save.entries.length);
   $("#applyProgress").value = save.completed;
-  $("#applyCurrentName").textContent = entry?.relativePath || "";
+  $("#applyCurrentName").textContent = displayName;
   $("#applyProgressText").textContent = t("apply.progress", { completed: save.completed, total: save.entries.length });
   $("#applyPauseButton").textContent = t(save.paused ? "apply.resume" : "apply.pause");
 }
@@ -718,12 +750,12 @@ async function removeSavedCatalogEntries(imageIds, catalogEpoch, selection) {
   return true;
 }
 
-async function ensureHandlePermission(access, requireWrite = true) {
+async function ensureHandlePermission(access, requireWrite = true, requestedPermission = null, requestPermission = true) {
   const handle = access?.fileHandle;
   if (!handle) return;
   const options = requireWrite ? { mode: "readwrite" } : { mode: "read" };
-  let permission = await handle.queryPermission?.(options);
-  if (permission !== "granted") permission = await handle.requestPermission?.(options);
+  let permission = requestedPermission ? await preparedRequest(requestedPermission) : await handle.queryPermission?.(options);
+  if (permission !== "granted" && !requestedPermission && requestPermission) permission = await handle.requestPermission?.(options);
   if (permission && permission !== "granted") throw codedError("source_permission_denied");
   const file = await handle.getFile();
   if (access.size != null && (file.size !== access.size || file.lastModified !== access.lastModified)) {
@@ -731,13 +763,116 @@ async function ensureHandlePermission(access, requireWrite = true) {
   }
 }
 
-async function ensureSaveSources(imageIds, mode, deleteOriginal) {
+function sourceNeedsParent(image, access, mode, deleteOriginal, format) {
+  return Boolean(access?.fileHandle) && ((mode === "overwrite" && renamedSourceFileName(image, access, format)) || (mode === "copy" && deleteOriginal));
+}
+
+function beginSaveSourcePreparation(imageIds, mode, deleteOriginal, format = "original") {
+  const prepared = new Map();
+  const settle = (request) => {
+    try { return Promise.resolve(request()).then((value) => ({ value }), (error) => ({ error })); }
+    catch (error) { return Promise.resolve({ error }); }
+  };
+  const needsPicker = imageIds.some((imageId) => {
+    const image = state.images.find((entry) => entry.id === imageId); const access = sourceAccessFor(imageId);
+    return sourceNeedsParent(image, access, mode, deleteOriginal, format) && !access?.parentHandle;
+  });
+  const sharedPicker = needsPicker && typeof window.showDirectoryPicker === "function"
+    ? settle(() => window.showDirectoryPicker({ mode: "readwrite", id: "mozarie-source-parent" })) : null;
+  const parentPermissions = new Map();
   for (const imageId of imageIds) {
     const image = state.images.find((entry) => entry.id === imageId);
     const access = sourceAccessFor(imageId);
-    if (mode === "overwrite" && !sourceCanOverwrite(image)) throw codedError("source_action_unavailable");
+    if (!access?.fileHandle) continue;
+    const write = mode === "overwrite" || deleteOriginal;
+    const needsParent = sourceNeedsParent(image, access, mode, deleteOriginal, format);
+    const item = { filePermission: !needsParent && write && access.fileHandle.requestPermission ? settle(() => access.fileHandle.requestPermission({ mode: "readwrite" })) : null };
+    if (needsParent) {
+      if (access.parentHandle) {
+        if (!parentPermissions.has(access.parentHandle)) parentPermissions.set(access.parentHandle,
+          access.parentHandle.requestPermission ? settle(() => access.parentHandle.requestPermission({ mode: "readwrite" })) : null);
+        item.parentPermission = parentPermissions.get(access.parentHandle);
+      }
+      else item.parentPicker = sharedPicker;
+    }
+    prepared.set(imageId, item);
+  }
+  return prepared;
+}
+
+async function preparedRequest(result) {
+  if (!result) return null;
+  const settled = await result;
+  if (settled.error) throw settled.error;
+  return settled.value;
+}
+
+async function ensureParentPermission(parentHandle, requestedPermission = null) {
+  const options = { mode: "readwrite" };
+  let permission = requestedPermission ? await preparedRequest(requestedPermission) : await parentHandle.queryPermission?.(options);
+  if (permission !== "granted" && !requestedPermission) permission = await parentHandle.requestPermission?.(options);
+  if (permission && permission !== "granted") throw codedError("source_permission_denied");
+}
+
+async function persistBrowserSourceAccess(imageId, access, canonicalImage = null) {
+  if (!state.project?.id || access?.sourceKind !== "browser-files" || !access.fileHandle) return;
+  if (canonicalImage?.relativePath) {
+    access.relativePath = canonicalImage.relativePath;
+    access.name = String(canonicalImage.relativePath).split("/").at(-1) || access.name;
+  }
+  await rememberProjectSource(state.project.id, access.fileHandle, imageId, access.sourceId, access.clientKey, access.relativePath, access.parentHandle || null);
+}
+
+async function reconnectSaveSourceParent(image, access, pickedParent) {
+  const parentHandle = pickedParent;
+  const canonicalName = String(image?.relativePath || "").split("/").at(-1) || access.fileHandle.name || access.name;
+  const candidates = [];
+  try {
+    const resolvedPath = await parentHandle.resolve?.(access.fileHandle);
+    if (Array.isArray(resolvedPath) && resolvedPath.length) {
+      let resolvedParent = parentHandle;
+      for (const part of resolvedPath.slice(0, -1)) resolvedParent = await resolvedParent.getDirectoryHandle(part);
+      candidates.push(resolvedParent);
+    }
+  } catch { /* Fall back to the picked directory and canonical relative path. */ }
+  candidates.push(parentHandle);
+  let nested = parentHandle;
+  try {
+    for (const part of String(image?.relativePath || "").split("/").slice(0, -1)) nested = await nested.getDirectoryHandle(part);
+    if (nested !== parentHandle && !candidates.includes(nested)) candidates.push(nested);
+  } catch { /* The chosen directory may already be the direct parent. */ }
+  let matched = null;
+  for (const candidate of candidates) {
+    try {
+      const resolved = await candidate.getFileHandle(canonicalName);
+      if (resolved.isSameEntry && await resolved.isSameEntry(access.fileHandle)) { matched = { parentHandle: candidate, fileHandle: resolved }; break; }
+    } catch { /* Try the canonical relative parent next. */ }
+  }
+  if (!matched) throw codedError("source_action_unavailable");
+  const file = await matched.fileHandle.getFile();
+  if (access.size != null && (file.size !== access.size || file.lastModified !== access.lastModified)) throw codedError("stale_asset");
+  access.parentHandle = matched.parentHandle;
+  access.fileHandle = matched.fileHandle;
+  access.name = file.name;
+  await persistBrowserSourceAccess(image.id, access);
+}
+
+async function ensureSaveSources(imageIds, mode, deleteOriginal, format = "original", preparation = null) {
+  for (const imageId of imageIds) {
+    const image = state.images.find((entry) => entry.id === imageId);
+    const access = sourceAccessFor(imageId);
+    const item = preparation?.get(imageId);
+    if (mode === "overwrite" && !sourceCanOverwrite(image, format)) throw codedError("source_action_unavailable");
     if (mode === "copy" && deleteOriginal && !sourceCanDelete(image)) throw codedError("source_action_unavailable");
-    if (access?.fileHandle) await ensureHandlePermission(access, mode === "overwrite" || deleteOriginal);
+    if (!access?.fileHandle) continue;
+    if (sourceNeedsParent(image, access, mode, deleteOriginal, format)) {
+      if (!access.parentHandle) {
+        if (!item?.parentPicker) throw codedError("source_action_unavailable");
+        await reconnectSaveSourceParent(image, access, await preparedRequest(item.parentPicker));
+      }
+      await ensureParentPermission(access.parentHandle, item?.parentPermission);
+    }
+    await ensureHandlePermission(access, mode === "overwrite" || deleteOriginal, item?.filePermission, !sourceNeedsParent(image, access, mode, deleteOriginal, format));
   }
 }
 
@@ -763,12 +898,14 @@ async function writeSourceHandle(access, response) {
 }
 
 function renamedSourceFileName(image, access, format) {
-  if (format === "original") return "";
-  const name = access?.fileHandle?.name || access?.name || String(image?.relativePath || "").split("/").at(-1);
+  const currentName = access?.fileHandle?.name || access?.name || String(image?.relativePath || "").split("/").at(-1);
+  const name = String(image?.editedFilename || "").trim() || currentName;
+  if (!name) return "";
+  if (format === "original") return name === currentName ? "" : name;
   const extension = name.split(".").at(-1).toLowerCase();
   const targetExtension = format === "jpg" ? "jpg" : "png";
-  if (!name || extension === targetExtension || (format === "jpg" && extension === "jpeg")) return "";
-  return `${name.slice(0, -(extension.length + 1))}.${targetExtension}`;
+  const targetName = extension === targetExtension || (format === "jpg" && extension === "jpeg") ? name : `${name.slice(0, -(extension.length + 1))}.${targetExtension}`;
+  return targetName === currentName ? "" : targetName;
 }
 
 async function writeFormattedSourceHandle(access, image, format, response) {
@@ -792,7 +929,8 @@ async function writeFormattedSourceHandle(access, image, format, response) {
 async function finishFormattedSourceRename(access, rename) {
   if (!rename) return;
   Object.assign(access, rename.replacement);
-  await access.parentHandle.removeEntry(rename.previousName);
+  try { await access.parentHandle.removeEntry(rename.previousName); }
+  catch { throw codedError("source_rename_cleanup_pending"); }
 }
 
 async function discardFormattedSourceRename(access, rename) {
@@ -1033,12 +1171,17 @@ async function runBrowserSave(imageIds, suffix, deleteOriginal, mode = "copy", r
               }
               commitStarted = true;
               const committed = await commitBrowserSaveWithRetry({ imageId: entry.imageId, candidateRevision: entry.candidateRevision, deleteOriginal: inputs.deleteOriginal, sourceAction, saveToken, ...sourceCommitMetadata(sourceRename?.replacement || access) });
+              if (sourceAction === "overwrite") {
+                save.needsCatalogReconcile = true;
+                if (state.currentId === entry.imageId) save.reloadCurrent = true;
+              }
               // The server has committed the new relative path. Keep the live
               // directory handle aligned even if retiring the old name fails.
               const liveAccess = sourceAccessFor(entry.imageId);
-              if (sourceRename && liveAccess) Object.assign(liveAccess, sourceRename.replacement);
-              await finishFormattedSourceRename(access, sourceRename);
+              if (sourceRename) Object.assign(access, sourceRename.replacement);
               if (liveAccess) Object.assign(liveAccess, access);
+              if (sourceRename && liveAccess) await persistBrowserSourceAccess(entry.imageId, liveAccess, committed.images?.find((item) => item.id === entry.imageId));
+              await finishFormattedSourceRename(access, sourceRename);
               return finishBrowserSaveEntry(committed, entry, save, sourceAction, noEffect);
             } catch (error) {
               const reconcile = !commitStarted || isDefinitiveCommitRejection(error) || error.saveState === "pending";
@@ -1203,6 +1346,7 @@ async function startApplyFromDialog(event) {
   if (state.saveStarting || state.saving || isBusy() || state.importing || catalogStagingEditsActive()) return;
   const mode = selectedSaveMode();
   const copy = mode === "copy";
+  const initialSourcePreparation = beginSaveSourcePreparation(state.applyTargetIds, mode, copy && $("#deleteOriginal").checked, selectedApplyOutputFormat());
   const removeSaved = $("#applyRemoveSaved").checked;
   const outputDirectory = $("#applyOutputDirectoryStatus");
   if (copy && outputDirectory.value.trim() !== (state.settings?.saving?.default_output_directory || "") && !await commitOutputDirectory(outputDirectory)) return;
@@ -1216,6 +1360,8 @@ async function startApplyFromDialog(event) {
   }
   if (!imageIds.length || state.saveStarting || isBusy() || state.importing || catalogStagingEditsActive()) return;
   const suffix = $("#applySuffix").value;
+  const format = selectedApplyOutputFormat();
+  const sourcePreparation = initialSourcePreparation;
   if (copy && !state.settings?.saving?.default_output_directory) { syncApplyMode(); return; }
   state.saveStarting = true;
   syncApplyMode();
@@ -1226,7 +1372,7 @@ async function startApplyFromDialog(event) {
     state.applyRunning = true;
     state.applyCatalogSnapshot = { order: state.images.map((image) => image.id), recordsById: new Map(state.images.map((image) => [image.id, image])) };
     updateActionButtons();
-    await ensureSaveSources(imageIds, mode, copy && $("#deleteOriginal").checked);
+    await ensureSaveSources(imageIds, mode, copy && $("#deleteOriginal").checked, format, sourcePreparation);
     if (copy && !await ensureDirectoryStructurePreference($("#applyPreserveDirectoryStructure"))) return;
     if (state.candidateUpdateChains.size) await waitForCandidateMutations();
     if (state.importing) return;
@@ -1235,7 +1381,7 @@ async function startApplyFromDialog(event) {
     state.saveStarting = false;
     await runBrowserSave(imageIds, suffix, copy && $("#deleteOriginal").checked, mode, removeSaved, prepared);
   } catch (error) {
-    showApplyError(error);
+    if (!isCancelledSaveSourceAccess(error)) showApplyError(error);
     if (!state.saveStarting) {
       state.saving = false;
       state.applyRunning = false;

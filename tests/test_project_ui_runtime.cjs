@@ -88,6 +88,9 @@ for (const name of [
 context.canvas = new Element("canvas"); context.stage = new Element("stage"); context.toolRail = new Element("toolRail"); context.toolRailItems = () => []; context.modelDownloadPoll = null;
 
 const appPath = path.join(__dirname, "..", "static", "js", "app.js");
+const corePath = path.join(__dirname, "..", "static", "js", "core.js");
+const imageDisplayPathSource = fs.readFileSync(corePath, "utf8").match(/function imageDisplayPath\(image\) \{[\s\S]*?\n\}/)?.[0];
+vm.runInNewContext(imageDisplayPathSource, context, { filename: corePath });
 vm.runInNewContext(fs.readFileSync(appPath, "utf8"), context, { filename: appPath });
 vm.runInNewContext("globalThis.projectTest={projectTitle,projectDate,projectSource,renderProjectCurrent,renderNativeRelinkDialog,showSameSourceDialog,openProjectNameDialog,showProjectList,showSourceMismatches,openProject,downloadProjectArtifact,resumeCurrentProject,openSameSourceDialog,openProjectDeleteDialog,deleteProject,bindEvents,setPendingBrowserProjectSources:(sources)=>{ pendingBrowserProjectSources=sources; },pendingBrowserProjectSources:()=>pendingBrowserProjectSources};", context, { filename: "project-ui-exports.js" });
 const test = context.projectTest;

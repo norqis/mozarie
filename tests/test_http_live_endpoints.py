@@ -497,6 +497,61 @@ class LiveHttpEndpointTests(unittest.TestCase):
         with Image.open(io.BytesIO(body)) as rendered:
             self.assertEqual((rendered.mode, rendered.size), ("RGB", (12, 8)))
 
+    def test_live_edited_name_moves_native_source_only_after_overwrite_and_reopens_canonically(self) -> None:
+        status, _headers, body = self.request("POST", "/api/projects", {"name": "Edited HTTP save"}, authorized=True)
+        self.assertEqual(status, 200, body.decode("utf-8"))
+        project_id = json.loads(body)["project"]["id"]
+        status, _headers, body = self.request("POST", "/api/folder", {"path": str(self.source_dir)}, authorized=True)
+        self.assertEqual(status, 200, body.decode("utf-8"))
+        image_id = json.loads(body)["images"][0]["id"]
+
+        status, _headers, body = self.request(
+            "POST", "/api/catalog/rename", {"imageId": image_id, "filename": "edited.png"}, authorized=True,
+        )
+        self.assertEqual(status, 200, body.decode("utf-8"))
+        renamed = json.loads(body)["images"][0]
+        self.assertEqual((renamed["relativePath"], renamed["editedFilename"]), ("source.png", "edited.png"))
+        self.assertTrue((self.source_dir / "source.png").is_file())
+        self.assertFalse((self.source_dir / "edited.png").exists())
+
+        options = {
+            "imageId": image_id, "candidateRevision": 0,
+            "clientSaveToken": "00000000-0000-4000-8000-000000000063",
+            "copyToDefault": False, "suffix": "_censored", "format": "original", "keepMetadata": True,
+        }
+        status, _headers, body = self.request("POST", "/api/save/reserve", options, authorized=True)
+        self.assertEqual(status, 200, body.decode("utf-8"))
+        status, headers, body = self.request("POST", "/api/save/render", {**options, "divisor": 100, "draft": None}, authorized=True)
+        self.assertEqual(status, 200)
+        with Image.open(io.BytesIO(body)) as rendered:
+            self.assertEqual((rendered.format, rendered.size), ("PNG", (12, 8)))
+
+        commit = {"imageId": image_id, "candidateRevision": 0, "saveToken": headers["X-Mozarie-Save-Token"], "sourceAction": "overwrite"}
+        status, _headers, body = self.request("POST", "/api/save/commit", commit, authorized=True)
+        self.assertEqual(status, 200, body.decode("utf-8"))
+        committed = json.loads(body)
+        self.assertEqual((committed["sourceAction"], committed["relativePath"], committed["editedFilename"]), ("overwrite", "edited.png", None))
+        self.assertFalse((self.source_dir / "source.png").exists())
+        with Image.open(self.source_dir / "edited.png") as saved:
+            self.assertEqual((saved.format, saved.size), ("PNG", (12, 8)))
+
+        status, _headers, body = self.request("POST", "/api/save/commit", commit, authorized=True)
+        self.assertEqual(status, 200, body.decode("utf-8"))
+        retried = json.loads(body)
+        self.assertEqual((retried["relativePath"], retried["editedFilename"]), ("edited.png", None))
+        status, _headers, body = self.request("POST", "/api/save/status", {**commit}, authorized=True)
+        self.assertEqual(status, 200, body.decode("utf-8"))
+        receipt = json.loads(body)
+        self.assertEqual((receipt["state"], receipt["relativePath"], receipt["editedFilename"]), ("committed", "edited.png", None))
+
+        reopened = StudioState(self.state.cache_dir, self.state.session_base_dir)
+        try:
+            reopened.open_project(project_id)
+            restored = reopened.catalog_snapshot()["images"]
+            self.assertEqual([(image["relativePath"], image["editedFilename"]) for image in restored], [("edited.png", None)])
+        finally:
+            reopened.shutdown()
+
     def test_live_browser_overwrite_converts_png_to_jpg_and_persists_the_new_path(self) -> None:
         status, _headers, body = self.request("POST", "/api/projects", {"name": "Format overwrite"}, authorized=True)
         self.assertEqual(status, 200, body.decode("utf-8"))

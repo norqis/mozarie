@@ -102,7 +102,8 @@ function setCatalogNode(windowState, image, index, layout, rowNode) {
   if (scope === "overview" && state.batchMode) item.setAttribute("aria-pressed", String(batchSelected)); else item.removeAttribute?.("aria-pressed");
   cell.setAttribute("aria-selected", String(scope === "gallery" ? current : batchSelected));
   cell.setAttribute("aria-colindex", String(column + 1));
-  const preview = item.querySelector("img"); observeThumbnail(preview, image, scope); preview.alt = image.relativePath;
+  const displayPath = imageDisplayPath(image);
+  const preview = item.querySelector("img"); observeThumbnail(preview, image, scope); preview.alt = displayPath;
   const flipH = (image.flipH === true) !== (image.sourceFlipH === true); const flipV = (image.flipV === true) !== (image.sourceFlipV === true);
   preview.style.transform = flipH || flipV ? `scale(${flipH ? -1 : 1}, ${flipV ? -1 : 1})` : "";
   // Overview is initially rendered in a hidden panel.  Some Chromium builds
@@ -112,19 +113,19 @@ function setCatalogNode(windowState, image, index, layout, rowNode) {
   const reviewed = isReviewed(image);
   item.classList.toggle("reviewed", reviewed);
   if (scope === "gallery") {
-    item.querySelector(".gallery-name").textContent = image.relativePath.split("/").pop();
+    item.querySelector(".gallery-name").textContent = displayPath.split("/").pop();
     item.querySelector(".gallery-meta").textContent = `${image.width} × ${image.height}`;
     item.querySelector(".gallery-review-badge").textContent = reviewed ? t("review.reviewedBadge") : t("review.unreviewedBadge");
-    item.setAttribute("aria-label", [image.relativePath, reviewed ? t("review.reviewedBadge") : t("review.unreviewedBadge")].join(t("a11y.separator")));
+    item.setAttribute("aria-label", [displayPath, reviewed ? t("review.reviewedBadge") : t("review.unreviewedBadge")].join(t("a11y.separator")));
     item.onclick = () => { windowState.focusId = image.id; selectCatalogImage(image.id); };
     item.onmouseenter = () => { state.hoverPrefetchId = image.id; schedulePrefetch(image); };
     item.onmouseleave = () => { if (state.hoverPrefetchId === image.id) { state.hoverPrefetchId = null; syncResourceOwnership(); } };
   } else {
-    item.querySelector(".overview-item-name").textContent = image.relativePath.split(/[\\/]/).pop();
+    item.querySelector(".overview-item-name").textContent = displayPath.split(/[\\/]/).pop();
     item.querySelector(".overview-item-dimensions").textContent = `${image.width} × ${image.height}`;
     item.querySelector(".overview-review-badge").textContent = reviewed ? t("review.reviewedBadge") : t("review.unreviewedBadge");
-    item.title = image.relativePath;
-    const states = [image.relativePath]; if (reviewed) states.push(t("overview.stateReviewed")); if (imageHasMask(image)) states.push(t("overview.stateMasked"));
+    item.title = displayPath;
+    const states = [displayPath]; if (reviewed) states.push(t("overview.stateReviewed")); if (imageHasMask(image)) states.push(t("overview.stateMasked"));
     item.setAttribute("aria-label", states.join(t("a11y.separator")));
     item.onclick = (event) => { windowState.focusId = image.id; selectOverviewImage(image.id, event); };
   }
@@ -310,7 +311,7 @@ function overviewImages() {
     if (!imageMatchesStateFilter(image, state.overviewFilter)) return false;
     const path = image.relativePath.replaceAll("\\", "/");
     if (folder && path !== folder && !path.startsWith(`${folder}/`)) return false;
-    return !query || path.toLowerCase().includes(query);
+    return !query || imageDisplayPath(image).toLowerCase().includes(query) || path.toLowerCase().includes(query);
   });
 }
 function reconcileOverviewSelection(visibleImages = overviewImages()) {

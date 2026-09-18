@@ -16,7 +16,7 @@ from PIL import Image
 from .core import (
     IO_CHUNK_BYTES, BrowserSaveReceipt, BrowserSaveToken,
     BrowserSaveRender, CandidateRole, ClientError,
-    ImageRecord, JobControl, LOGGER, safe_import_relative_path, _read_mosaic_divisor,
+    ImageRecord, JobControl, LOGGER, output_relative_path, _read_mosaic_divisor,
     _read_save_suffix,
 )
 from .config import SettingsError, validate_output_directory_ready
@@ -28,6 +28,13 @@ from .image_io import (
 from .masks import compose_masks, expand_mask, union_mask
 
 class SavingMixin:
+    @staticmethod
+    def _overwrite_destination(record: ImageRecord, output_format: str) -> Path:
+        relative = output_relative_path(record)
+        if output_format == "original" or output_format_matches_source(record, output_format):
+            return record.path.with_name(relative.name)
+        return record.path.with_name(relative.with_suffix(f".{output_format}").name)
+
     def _preserve_directory_structure(self) -> bool:
         value = self.settings["saving"].get("preserve_directory_structure", True)
         if not isinstance(value, bool):
@@ -37,11 +44,10 @@ class SavingMixin:
     @staticmethod
     def _copy_relative_path(record: ImageRecord, suffix: str, output_format: str, preserve_directory_structure: bool) -> Path:
         """Build one final copy name from the immutable catalogue snapshot."""
-        relative = safe_import_relative_path(record.relative_path)
+        relative = output_relative_path(record)
         if not preserve_directory_structure:
             relative = Path(relative.name)
-        extension = record.path.suffix if output_format == "original" else f".{output_format}"
-        target = relative.with_suffix(extension)
+        target = relative if output_format == "original" else relative.with_suffix(f".{output_format}")
         return target.with_name(f"{target.stem}{_read_save_suffix(suffix)}{target.suffix}")
 
     def _copy_destinations_are_available(
@@ -469,7 +475,7 @@ class SavingMixin:
                         shape, [apply_union] if apply_union is not None else [], [exclude_union] if exclude_union is not None else [], add_mask, exclusion_mask,
                         [forced_exclude_union] if forced_exclude_union is not None else [], manual_exclude_forced, exclusion_erase_mask,
                     )
-                    no_effect = (mask is None or not np.any(mask)) and output_format_matches_source(record, output_format) and keep_metadata and \
+                    no_effect = (mask is None or not np.any(mask)) and record.edited_filename is None and output_format_matches_source(record, output_format) and keep_metadata and \
                         record.flip_horizontal == record.source_flip_horizontal and record.flip_vertical == record.source_flip_vertical
                     source_fingerprint = record.asset_fingerprint()
                     # Saving every listed image means an image without a mosaic is
@@ -572,6 +578,8 @@ class SavingMixin:
         published_output: tuple[Path, tuple[int, int], str | None] | None = None
         source_delete_pending = False
         format_replaced = False
+        source_stage: Any | None = None
+        native_source_old_path: Path | None = None
 
         def token_allows_action(details: BrowserSaveToken) -> bool:
             if details.no_effect:
@@ -589,6 +597,7 @@ class SavingMixin:
                 return {"cleared": bool(durable_receipt.get("cleared")), "stale": bool(durable_receipt.get("stale")),
                         "deleted": bool(durable_receipt.get("deleted")), "catalogGeneration": int(durable_receipt.get("catalogGeneration") or 0),
                         "outputPath": str(durable_receipt.get("outputPath") or ""),
+                        "relativePath": durable_receipt.get("relativePath"), "editedFilename": durable_receipt.get("editedFilename"),
                         "sourceDeletePending": bool(durable_receipt.get("sourceDeletePending")),
                         "sourceAction": str(durable_receipt.get("sourceAction") or "keep")}
             with self.lock:
@@ -598,7 +607,8 @@ class SavingMixin:
                         raise ClientError("保存確認トークンが保存対象と一致しません。保存をやり直してください。", "save_state_changed")
                     return {"cleared": receipt.cleared, "stale": receipt.stale, "deleted": receipt.deleted,
                             "catalogGeneration": receipt.catalog_generation, "sourceDeletePending": receipt.source_delete_pending,
-                            "sourceAction": receipt.source_action}
+                            "sourceAction": receipt.source_action, "relativePath": receipt.relative_path,
+                            "editedFilename": receipt.edited_filename}
                 self._assert_request_catalog_expectation()
                 self._assert_image_editable(image_id)
                 token_details = self.browser_save_tokens.get(save_token)
@@ -617,7 +627,8 @@ class SavingMixin:
                             raise ClientError("保存確認トークンが保存対象と一致しません。保存をやり直してください。", "save_state_changed")
                         return {"cleared": receipt.cleared, "stale": receipt.stale, "deleted": receipt.deleted,
                                 "catalogGeneration": receipt.catalog_generation, "sourceDeletePending": receipt.source_delete_pending,
-                                "sourceAction": receipt.source_action}
+                                "sourceAction": receipt.source_action, "relativePath": receipt.relative_path,
+                                "editedFilename": receipt.edited_filename}
                     self._assert_request_catalog_expectation()
                     self._assert_image_editable(image_id)
                     token_details = self.browser_save_tokens.get(save_token)
@@ -645,6 +656,8 @@ class SavingMixin:
                         self.browser_save_claims.add(save_token)
                         exit_stack.callback(self._release_browser_save_claim, save_token)
                         record_snapshot = replace(record)
+                        if record_snapshot.source_kind == "filesystem":
+                            native_source_old_path = record_snapshot.path.resolve()
                         catalog_generation = self.catalog_generation
                         # The per-image lock keeps this render alive through
                         # source I/O; retain its token until the DB commit so a
@@ -684,9 +697,10 @@ class SavingMixin:
                         self.save_journal.published(save_token, destination_fingerprint, identity)
                     if source_action == "overwrite":
                         assert token_details.rendered_path is not None
-                        if not output_format_matches_source(record_snapshot, token_details.output_format):
-                            destination = record_snapshot.path.with_suffix(".jpg" if token_details.output_format == "jpg" else ".png")
-                            _stage_record_format_replacement(
+                        destination = self._overwrite_destination(record_snapshot, token_details.output_format)
+                        destination_changed = os.path.normcase(str(destination)) != os.path.normcase(str(record_snapshot.path))
+                        if destination_changed or not output_format_matches_source(record_snapshot, token_details.output_format):
+                            source_stage = _stage_record_format_replacement(
                                 record_snapshot, token_details.rendered_path, token_details.source_fingerprint, destination,
                                 lambda staged, final_path, staged_fingerprint:
                                     self._publish_staged_copy(save_token, staged, final_path, staged_fingerprint),
@@ -702,7 +716,7 @@ class SavingMixin:
                             )
                             format_replaced = True
                         else:
-                            _stage_record_replacement(
+                            source_stage = _stage_record_replacement(
                                 record_snapshot, token_details.rendered_path, token_details.source_fingerprint,
                                 lambda backup, backup_fingerprint, backup_identity, source_identity, replacement_fingerprint, replacement_identity:
                                     self.save_journal.replacement_backup(
@@ -710,6 +724,7 @@ class SavingMixin:
                                         source_identity, replacement_fingerprint, replacement_identity,
                                     ),
                             )
+                            record_snapshot.relative_path = Path(record_snapshot.relative_path).with_name(destination.name).as_posix()
                     else:
                         self._assert_record_stat_matches(record_snapshot)
                     if source_action == "deleted":
@@ -770,12 +785,19 @@ class SavingMixin:
                                                 "sourceAction": source_action, "cleared": cleared, "stale": not cleared,
                                                 "deleted": deleted, "catalogGeneration": receipt_generation,
                                                 "sourceDeletePending": source_delete_pending,
+                                                "relativePath": record_snapshot.relative_path if source_action == "overwrite" else record.relative_path,
+                                                "editedFilename": None if source_action == "overwrite" else record.edited_filename,
                                                 "outputPath": str(token_details.output_destination) if token_details.output_destination is not None else ""}
-                        self.workspace_store.commit_save(
+                        alias_paths = self.workspace_store.commit_save(
                             image_id,
                             mtime_ns=persisted_mtime if source_action == "overwrite" else None,
                             size_bytes=persisted_size if source_action == "overwrite" else None,
-                            relative_path=record_snapshot.relative_path if source_action == "overwrite" and format_replaced else None,
+                            relative_path=record_snapshot.relative_path if source_action == "overwrite" else None,
+                            clear_edited_filename=source_action == "overwrite",
+                            native_source_old_path=native_source_old_path if source_action == "overwrite" else None,
+                            native_source_new_path=record_snapshot.path if native_source_old_path is not None and source_action == "overwrite" else None,
+                            native_source_flip_horizontal=record_snapshot.flip_horizontal,
+                            native_source_flip_vertical=record_snapshot.flip_vertical,
                             clear_workspace=deleted,
                             delete_image=deleted,
                             source_flip_horizontal=record_snapshot.flip_horizontal if source_action == "overwrite" else None,
@@ -795,6 +817,8 @@ class SavingMixin:
                         # A journal outage must not restore the source or
                         # cancel an output that the workspace already recorded.
                         raise
+                    if source_stage is not None:
+                        source_stage.rollback()
                     self.save_journal.phase(save_token, "cleanup_pending")
                     with self.lock:
                         self._discard_browser_save_token_unchecked(save_token)
@@ -810,8 +834,23 @@ class SavingMixin:
                     if record is None:
                         raise ClientError("画像一覧が変更されました。保存をやり直してください。", "save_state_changed")
                     if source_action == "overwrite":
+                        for alias_id, relative_path in alias_paths.items():
+                            live = self.images.get(alias_id)
+                            if live is None:
+                                continue
+                            live.path = record_snapshot.path
+                            live.relative_path = relative_path
+                            live.set_asset_fingerprint(*record_snapshot.asset_fingerprint())
+                            if live.source_kind == "filesystem":
+                                live.mtime_ns = record_snapshot.mtime_ns; live.size_bytes = record_snapshot.size_bytes
+                            if alias_id != image_id:
+                                live.source_flip_horizontal = record_snapshot.flip_horizontal
+                                live.source_flip_vertical = record_snapshot.flip_vertical
+                                live.transform_revision += 1
+                            live.asset_revision += 1
                         record.path = record_snapshot.path
                         record.relative_path = record_snapshot.relative_path
+                        record.edited_filename = None
                         record.source_flip_horizontal = record.flip_horizontal; record.source_flip_vertical = record.flip_vertical
                         record.transform_revision += 1
                         record.set_asset_fingerprint(*record_snapshot.asset_fingerprint())
@@ -819,8 +858,7 @@ class SavingMixin:
                             record.mtime_ns = record_snapshot.mtime_ns
                             record.size_bytes = record_snapshot.size_bytes
                         elif source_mtime_ns is not None and source_size_bytes is not None:
-                            record.mtime_ns = source_mtime_ns
-                            record.size_bytes = source_size_bytes
+                            record.mtime_ns = source_mtime_ns; record.size_bytes = source_size_bytes
                         record.asset_revision = record_snapshot.asset_revision + 1
                     if deleted:
                         mask_paths = [candidate.mask_path for candidate in self.candidates.get(image_id, [])]
@@ -836,7 +874,7 @@ class SavingMixin:
                     if token_details.output_destination is not None:
                         self._release_output_destination(token_details.output_destination)
                     response_generation = self.catalog_generation
-                    self.browser_save_receipts[save_token] = BrowserSaveReceipt(image_id, revision, source_action, cleared, not cleared, deleted, response_generation, source_delete_pending, time.monotonic())
+                    self.browser_save_receipts[save_token] = BrowserSaveReceipt(image_id, revision, source_action, cleared, not cleared, deleted, response_generation, source_delete_pending, time.monotonic(), record.relative_path, record.edited_filename)
                     rendered_path = token_details.rendered_path
                     if deleted:
                         self._discard_browser_save_tokens_for_image_unchecked(image_id)
@@ -866,6 +904,8 @@ class SavingMixin:
                         "catalogGeneration": response_generation,
                         "sourceAction": source_action,
                         "sourceDeletePending": source_delete_pending,
+                        "relativePath": record.relative_path,
+                        "editedFilename": record.edited_filename,
                         "outputPath": str(token_details.output_destination) if token_details.output_destination is not None else ""}
 
     def browser_save_status(self, image_id: str, revision: int, save_token: str, source_action: str) -> dict[str, Any]:
@@ -876,7 +916,8 @@ class SavingMixin:
                 if receipt.image_id == image_id and receipt.candidate_revision == revision:
                     return {"state": "committed", "cleared": receipt.cleared, "stale": receipt.stale, "deleted": receipt.deleted,
                             "catalogGeneration": receipt.catalog_generation, "sourceDeletePending": receipt.source_delete_pending,
-                            "sourceAction": receipt.source_action}
+                            "sourceAction": receipt.source_action, "relativePath": receipt.relative_path,
+                            "editedFilename": receipt.edited_filename}
                 return {"state": "unknown"}
             self._assert_request_catalog_expectation()
             details = self.browser_save_tokens.get(save_token)
@@ -889,6 +930,7 @@ class SavingMixin:
                     "stale": bool(durable_receipt.get("stale")), "deleted": bool(durable_receipt.get("deleted")),
                     "catalogGeneration": int(durable_receipt.get("catalogGeneration") or 0),
                     "outputPath": str(durable_receipt.get("outputPath") or ""),
+                    "relativePath": durable_receipt.get("relativePath"), "editedFilename": durable_receipt.get("editedFilename"),
                     "sourceDeletePending": bool(durable_receipt.get("sourceDeletePending")),
                     "sourceAction": str(durable_receipt.get("sourceAction") or "keep")}
         journal = self.save_journal.row(save_token)
@@ -989,7 +1031,7 @@ class SavingMixin:
                             manual_exclude_forced=manual_exclude_forced,
                             removed_candidate_ids=removed_candidate_ids,
                         )
-                    no_effect = (mask is None or not np.any(mask)) and output_format_matches_source(record, output_format) and keep_metadata and \
+                    no_effect = (mask is None or not np.any(mask)) and record.edited_filename is None and output_format_matches_source(record, output_format) and keep_metadata and \
                         record.flip_horizontal == record.source_flip_horizontal and record.flip_vertical == record.source_flip_vertical
                     source_fingerprint = record.asset_fingerprint()
                     save_token: str | None = None
@@ -1093,7 +1135,9 @@ class SavingMixin:
                         if not no_effect:
                             source_before = replace(record)
                             try:
-                                if output_format_matches_source(record, output_format):
+                                destination = self._overwrite_destination(record, output_format)
+                                destination_changed = os.path.normcase(str(destination)) != os.path.normcase(str(record.path))
+                                if not destination_changed and output_format_matches_source(record, output_format):
                                     _stage_record_replacement(
                                         record, stage_path, source_fingerprint,
                                         lambda backup, backup_fingerprint, backup_identity, source_identity, replacement_fingerprint, replacement_identity:
@@ -1102,8 +1146,8 @@ class SavingMixin:
                                                 source_identity, replacement_fingerprint, replacement_identity,
                                             ),
                                     )
+                                    record.relative_path = Path(record.relative_path).with_name(destination.name).as_posix()
                                 else:
-                                    destination = record.path.with_suffix(output_suffix)
                                     _stage_record_format_replacement(
                                         record, stage_path, source_fingerprint, destination,
                                         lambda staged, final_path, staged_fingerprint:
@@ -1146,11 +1190,16 @@ class SavingMixin:
                                     "cleared": False, "stale": False, "deleted": False,
                                     "catalogGeneration": self.catalog_generation, "outputPath": str(output_path),
                                 }
-                            self.workspace_store.commit_save(
+                            alias_paths = self.workspace_store.commit_save(
                                 record.image_id,
                                 mtime_ns=None if copy_to_default or no_effect else output_stat.st_mtime_ns,
                                 size_bytes=None if copy_to_default or no_effect else output_stat.st_size,
-                                relative_path=record.relative_path if format_replaced else None,
+                                relative_path=record.relative_path if not copy_to_default and not no_effect else None,
+                                clear_edited_filename=not copy_to_default and not no_effect,
+                                native_source_old_path=source_before.path if source_before is not None and source_before.source_kind == "filesystem" else None,
+                                native_source_new_path=record.path if source_before is not None and source_before.source_kind == "filesystem" else None,
+                                native_source_flip_horizontal=record.flip_horizontal,
+                                native_source_flip_vertical=record.flip_vertical,
                                 clear_workspace=False,
                                 source_flip_horizontal=record.flip_horizontal if not copy_to_default and not no_effect else None,
                                 source_flip_vertical=record.flip_vertical if not copy_to_default and not no_effect else None,
@@ -1158,9 +1207,24 @@ class SavingMixin:
                             )
                             workspace_committed = True
                             if not copy_to_default and not no_effect:
+                                for alias_id, relative_path in alias_paths.items():
+                                    if alias_id == record.image_id:
+                                        continue
+                                    alias = self.images.get(alias_id)
+                                    if alias is None:
+                                        continue
+                                    alias.path = record.path; alias.relative_path = relative_path
+                                    alias.set_asset_fingerprint(*record.asset_fingerprint())
+                                    if alias.source_kind == "filesystem":
+                                        alias.mtime_ns = output_stat.st_mtime_ns; alias.size_bytes = output_stat.st_size
+                                    alias.source_flip_horizontal = record.flip_horizontal
+                                    alias.source_flip_vertical = record.flip_vertical
+                                    alias.transform_revision += 1
+                                    alias.asset_revision += 1
                                 live_record = self.images[record.image_id]
                                 live_record.path = record.path
                                 live_record.relative_path = record.relative_path
+                                live_record.edited_filename = None
                                 live_record.mtime_ns = output_stat.st_mtime_ns
                                 live_record.size_bytes = output_stat.st_size
                                 live_record.set_asset_fingerprint(*record.asset_fingerprint())

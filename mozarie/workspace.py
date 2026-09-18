@@ -151,6 +151,7 @@ class WorkspaceStore:
                     source_id TEXT NOT NULL REFERENCES project_sources(source_id) ON DELETE CASCADE,
                     relative_path TEXT NOT NULL, image_id TEXT NOT NULL UNIQUE,
                     size_bytes INTEGER NOT NULL, mtime_ns INTEGER NOT NULL, width INTEGER NOT NULL, height INTEGER NOT NULL,
+                    edited_filename TEXT,
                     hidden INTEGER NOT NULL DEFAULT 0, reviewed INTEGER NOT NULL DEFAULT 0,
                     source_blocked INTEGER NOT NULL DEFAULT 0,
                     candidate_revision INTEGER NOT NULL DEFAULT 0, updated_at INTEGER NOT NULL,
@@ -202,6 +203,7 @@ class WorkspaceStore:
                 );
                 CREATE INDEX IF NOT EXISTS project_sources_identity ON project_sources(source_identity);
                 CREATE INDEX IF NOT EXISTS images_catalog_source ON images(catalog_id,source_id,relative_path);
+                CREATE INDEX IF NOT EXISTS images_source_relative_nocase ON images(source_id,relative_path COLLATE NOCASE);
                 CREATE INDEX IF NOT EXISTS candidates_image_active ON candidates(image_id,deleted,candidate_id);
                 CREATE INDEX IF NOT EXISTS history_entries_image_entry ON history_entries(image_id, entry_id);
                 CREATE INDEX IF NOT EXISTS history_entries_group ON history_entries(group_id);
@@ -257,6 +259,9 @@ class WorkspaceStore:
                       AND NOT EXISTS (SELECT 1 FROM history_entries WHERE group_id=OLD.group_id);
                 END;
             """)
+            columns = {str(row["name"]) for row in db.execute("PRAGMA table_info(images)")}
+            if "edited_filename" not in columns:
+                db.execute("ALTER TABLE images ADD COLUMN edited_filename TEXT")
             self._migrate_source_delete_operations(db)
             if not existing:
                 db.execute("INSERT INTO meta(key, value) VALUES('schema_version', ?)", (str(self.VERSION),))
@@ -712,6 +717,49 @@ class WorkspaceStore:
                 raise
         return changed
 
+    @staticmethod
+    def _native_save_updates_db(
+        db: sqlite3.Connection, old_path: Path, new_path: Path, *, mtime_ns: int, size_bytes: int,
+        target_image_id: str, source_flip_horizontal: bool, source_flip_vertical: bool,
+    ) -> dict[str, str]:
+        """Retarget every durable native alias in the transaction that saves it."""
+        old_path = old_path.resolve(); new_path = new_path.resolve()
+        updates: list[tuple[str, str, str]] = []
+        changed: dict[str, str] = {}
+        for source in db.execute("SELECT source_id,native_path FROM project_sources WHERE kind='native-folder'"):
+            try:
+                root = Path(str(source["native_path"]))
+                old_relative = old_path.relative_to(root).as_posix()
+                new_relative = new_path.relative_to(root).as_posix()
+            except (OSError, ValueError):
+                continue
+            row = db.execute("SELECT image_id FROM images WHERE source_id=? AND relative_path=? COLLATE NOCASE",
+                             (source["source_id"], old_relative)).fetchone()
+            if row is None:
+                continue
+            image_id = str(row["image_id"])
+            conflict = db.execute("SELECT image_id FROM images WHERE source_id=? AND relative_path=? COLLATE NOCASE AND image_id<>?",
+                                  (source["source_id"], new_relative, image_id)).fetchone()
+            if conflict is not None:
+                raise ValueError("saved path conflicts with an existing catalog image")
+            updates.append((new_relative, str(source["source_id"]), image_id))
+            changed[image_id] = new_relative
+        if target_image_id not in changed:
+            raise ValueError("native source image is missing")
+        now = time.time_ns()
+        for relative_path, source_id, image_id in updates:
+            if image_id == target_image_id:
+                db.execute("""UPDATE images SET relative_path=?,mtime_ns=?,size_bytes=?,edited_filename=NULL,updated_at=?
+                    WHERE source_id=? AND image_id=?""", (relative_path, mtime_ns, size_bytes, now, source_id, image_id))
+            else:
+                db.execute("""UPDATE images SET relative_path=?,mtime_ns=?,size_bytes=?,updated_at=?
+                    WHERE source_id=? AND image_id=?""", (relative_path, mtime_ns, size_bytes, now, source_id, image_id))
+                db.execute("""INSERT INTO image_transforms(image_id,flip_horizontal,flip_vertical,source_flip_horizontal,source_flip_vertical,revision)
+                    SELECT image_id,0,0,?,?,1 FROM images WHERE image_id=? ON CONFLICT(image_id) DO UPDATE SET
+                    source_flip_horizontal=excluded.source_flip_horizontal,source_flip_vertical=excluded.source_flip_vertical,
+                    revision=image_transforms.revision+1""", (int(source_flip_horizontal), int(source_flip_vertical), image_id))
+        return changed
+
     def rename_browser_source_record(self, catalog_id: str, source_id: str, image_id: str, relative_path: str) -> None:
         """Update the one FSA-backed source row after its real handle moved."""
         relative_path = safe_import_relative_path(relative_path).as_posix()
@@ -742,6 +790,16 @@ class WorkspaceStore:
         with self._connect() as db:
             row = db.execute("SELECT relative_path FROM images WHERE image_id=?", (image_id,)).fetchone()
         return str(row["relative_path"]) if row is not None else None
+
+    def set_image_edited_filename(self, image_id: str, filename: str | None) -> None:
+        """Persist an output-only basename without touching the source identity."""
+        with self._lock, self._connect() as db:
+            cursor = db.execute(
+                "UPDATE images SET edited_filename=?,updated_at=? WHERE image_id=?",
+                (filename, time.time_ns(), image_id),
+            )
+            if not cursor.rowcount:
+                raise ValueError("workspace image is missing")
 
     def native_image_path(self, image_id: str) -> Path | None:
         with self._connect() as db:
@@ -852,7 +910,7 @@ class WorkspaceStore:
         with self._connect() as db:
             for chunk in _chunks(db, image_ids):
                 placeholders = ",".join("?" for _ in chunk)
-                rows = db.execute(f"""SELECT images.image_id,images.hidden,images.reviewed,
+                rows = db.execute(f"""SELECT images.image_id,images.hidden,images.reviewed,images.edited_filename,
                     transform.flip_horizontal,transform.flip_vertical,transform.source_flip_horizontal,
                     transform.source_flip_vertical,transform.revision AS transform_revision
                     FROM images LEFT JOIN image_transforms AS transform ON transform.image_id=images.image_id
@@ -860,6 +918,7 @@ class WorkspaceStore:
                 for row in rows:
                     result[str(row["image_id"])] = {
                         "hidden": bool(row["hidden"]), "reviewed": bool(row["reviewed"]),
+                        "edited_filename": row["edited_filename"],
                         "flip_horizontal": bool(row["flip_horizontal"]) if row["flip_horizontal"] is not None else False,
                         "flip_vertical": bool(row["flip_vertical"]) if row["flip_vertical"] is not None else False,
                         "source_flip_horizontal": bool(row["source_flip_horizontal"]) if row["source_flip_horizontal"] is not None else False,
@@ -1112,7 +1171,7 @@ class WorkspaceStore:
                                    (catalog_id, source_id, record.relative_path, image_id, record.size_bytes, record.mtime_ns, int(getattr(record, "width", 0)), int(getattr(record, "height", 0)), now))
                         result[record.relative_path] = {
                             "image_id": image_id, "hidden": False, "reviewed": False,
-                            "revision": 0, "changed": False, "created": True,
+                            "revision": 0, "changed": False, "created": True, "edited_filename": None,
                         }
                         continue
                     width, height = int(getattr(record, "width", 0)), int(getattr(record, "height", 0))
@@ -1133,6 +1192,7 @@ class WorkspaceStore:
                     result[record.relative_path] = {
                         "image_id": row["image_id"], "hidden": bool(row["hidden"]),
                         "reviewed": False if changed else bool(row["reviewed"]),
+                        "edited_filename": row["edited_filename"],
                         "revision": int(row["candidate_revision"]),
                         "changed": changed or bool(row["source_blocked"]),
                         "dimensions_changed": dimensions_changed or bool(row["source_blocked"]),
@@ -1157,6 +1217,7 @@ class WorkspaceStore:
         return {
             "image_id": row["image_id"], "hidden": bool(row["hidden"]),
             "reviewed": False if changed else bool(row["reviewed"]),
+            "edited_filename": row["edited_filename"],
             "revision": int(row["candidate_revision"]),
             "changed": changed or bool(row["source_blocked"]),
             "dimensions_changed": int(row["width"]) != width or int(row["height"]) != height or bool(row["source_blocked"]),
@@ -1731,23 +1792,41 @@ class WorkspaceStore:
 
     def commit_save(self, image_id: str, *, mtime_ns: int | None = None, size_bytes: int | None = None,
                     relative_path: str | None = None,
+                    clear_edited_filename: bool = False,
+                    native_source_old_path: Path | None = None, native_source_new_path: Path | None = None,
+                    native_source_flip_horizontal: bool = False, native_source_flip_vertical: bool = False,
                     candidate_revision: int | None = None,
                     clear_workspace: bool, delete_image: bool = False,
                     source_flip_horizontal: bool | None = None, source_flip_vertical: bool | None = None,
-                    save_receipt: dict[str, Any] | None = None) -> None:
+                    save_receipt: dict[str, Any] | None = None) -> dict[str, str]:
         """Commit one completed save before its in-memory review state is published."""
-        if not delete_image and mtime_ns is None and size_bytes is None and candidate_revision is None and not clear_workspace and save_receipt is None:
-            return
+        if not delete_image and mtime_ns is None and size_bytes is None and candidate_revision is None and not clear_workspace and save_receipt is None and not clear_edited_filename:
+            return {}
+        if (native_source_old_path is None) != (native_source_new_path is None):
+            raise ValueError("native source paths must be paired")
+        changed: dict[str, str] = {}
         with self._lock, self._connect() as db:
             db.execute("BEGIN IMMEDIATE")
             try:
                 if delete_image:
                     db.execute("DELETE FROM images WHERE image_id=?", (image_id,))
                 elif mtime_ns is not None and size_bytes is not None:
-                    if relative_path is None:
-                        db.execute("UPDATE images SET mtime_ns=?,size_bytes=?,updated_at=? WHERE image_id=?", (mtime_ns, size_bytes, time.time_ns(), image_id))
+                    if native_source_old_path is not None and native_source_new_path is not None:
+                        changed = self._native_save_updates_db(
+                            db, native_source_old_path, native_source_new_path,
+                            mtime_ns=mtime_ns, size_bytes=size_bytes, target_image_id=image_id,
+                            source_flip_horizontal=native_source_flip_horizontal, source_flip_vertical=native_source_flip_vertical,
+                        )
                     else:
-                        db.execute("UPDATE images SET relative_path=?,mtime_ns=?,size_bytes=?,updated_at=? WHERE image_id=?", (relative_path, mtime_ns, size_bytes, time.time_ns(), image_id))
+                        fields = ["mtime_ns=?", "size_bytes=?", "updated_at=?"]
+                        values: list[Any] = [mtime_ns, size_bytes, time.time_ns()]
+                        if relative_path is not None:
+                            fields.append("relative_path=?"); values.append(relative_path)
+                        if clear_edited_filename:
+                            fields.append("edited_filename=NULL")
+                        db.execute(f"UPDATE images SET {','.join(fields)} WHERE image_id=?", [*values, image_id])
+                elif clear_edited_filename:
+                    db.execute("UPDATE images SET edited_filename=NULL,updated_at=? WHERE image_id=?", (time.time_ns(), image_id))
                 if candidate_revision is not None and not delete_image:
                     db.execute("UPDATE images SET candidate_revision=?,reviewed=0,updated_at=? WHERE image_id=?", (candidate_revision, time.time_ns(), image_id))
                 if source_flip_horizontal is not None and source_flip_vertical is not None and not delete_image:
@@ -1768,6 +1847,7 @@ class WorkspaceStore:
             except Exception:
                 db.execute("ROLLBACK")
                 raise
+        return changed
 
     def browser_save_receipt(self, token: str) -> dict[str, Any] | None:
         with self._lock, self._connect() as db:

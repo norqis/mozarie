@@ -18,7 +18,7 @@ from PIL import Image, ImageOps, UnidentifiedImageError
 
 from .core import (
     APP_DIR, IO_CHUNK_BYTES, LOGGER, PNG_SIGNATURE,
-    ClientError, ImageRecord, oriented_image_size,
+    ClientError, ImageRecord, oriented_image_size, output_relative_path,
     safe_import_relative_path, torch_module, _read_save_suffix,
 )
 from .runtime import directml_devices, runtime_backend
@@ -563,7 +563,7 @@ def unique_session_import_destination(path: Path, reserved: set[Path] | None = N
 
 
 def _default_output_destination(record: ImageRecord, suffix: str = "_censored", reserved: set[Path] | None = None) -> Path:
-    relative = safe_import_relative_path(record.relative_path)
+    relative = output_relative_path(record)
     target = APP_DIR / "output" / relative
     return unique_session_import_destination(target.with_name(f"{target.stem}{_read_save_suffix(suffix)}{target.suffix}"), reserved)
 
@@ -874,7 +874,7 @@ def _stage_record_format_replacement(
         record.path.unlink()
         stat = destination.stat()
         record.path = destination
-        record.relative_path = Path(record.relative_path).with_suffix(destination.suffix).as_posix()
+        record.relative_path = Path(record.relative_path).with_name(destination.name).as_posix()
         record.set_asset_fingerprint(stat.st_mtime_ns, stat.st_size)
         if record.source_kind == "filesystem":
             record.mtime_ns = stat.st_mtime_ns; record.size_bytes = stat.st_size

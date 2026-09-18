@@ -230,9 +230,7 @@ function openCatalogContextMenu(event, imageId) {
 
 function canRenameCatalogImage(image) {
   if (!image || isBusy() || state.importing || state.projectReadOnly || state.renamePending || currentImageActionPending() || catalogStagingEditsActive()) return false;
-  if (image.sourceKind === "filesystem") return true;
-  const access = sourceAccessFor(image.id);
-  return Boolean(access?.fileHandle && access?.parentHandle && typeof access.fileHandle.move === "function");
+  return true;
 }
 
 function openRenameImageDialog(imageId = state.contextMenuImageId || state.currentId) {
@@ -240,58 +238,30 @@ function openRenameImageDialog(imageId = state.contextMenuImageId || state.curre
   closeCatalogContextMenu({ restoreFocus: false });
   if (!canRenameCatalogImage(image)) { showUserError({ code: "source_action_unavailable" }, invoker); return; }
   state.renameImage = { imageId: image.id, invoker };
-  const input = $("#renameImageFilename"); input.value = String(image.relativePath || "").split(/[\\/]/).pop() || "";
+  const input = $("#renameImageFilename"); input.value = imageDisplayPath(image).split(/[\\/]/).pop() || "";
   $("#renameImageResult").textContent = ""; $("#renameImageResult").classList.remove("error");
   showModalFromInvoker($("#renameImageDialog"), invoker); requestAnimationFrame(() => { input.focus(); input.select(); });
 }
 
 async function submitRenameImage(event) {
   event.preventDefault(); const rename = state.renameImage; const image = state.images.find((entry) => entry.id === rename?.imageId);
-  const input = $("#renameImageFilename"); const filename = input.value.trim(); const access = sourceAccessFor(image?.id); let previousName = "";
+  const input = $("#renameImageFilename"); const filename = input.value.trim();
   if (!rename || state.renamePending || !canRenameCatalogImage(image)) return;
-  const originalName = String(image.relativePath || "").split(/[\\/]/).pop() || "";
-  if (originalName.slice(originalName.lastIndexOf(".")).toLocaleLowerCase() !== filename.slice(filename.lastIndexOf(".")).toLocaleLowerCase()) {
-    const error = { code: "rename_extension_unsupported" };
-    $("#renameImageResult").textContent = t(`errorCode.${error.code}`); $("#renameImageResult").classList.add("error"); showUserError(error, input); return;
-  }
   state.renamePending = true;
-  $("#renameImageFilename").disabled = true; $("#renameImageCancel").disabled = true; $("#renameImageConfirm").disabled = true;
+  $("#renameImageFilename").disabled = true; $("#renameImageRestoreOriginal").disabled = true; $("#renameImageCancel").disabled = true; $("#renameImageConfirm").disabled = true;
   updateActionButtons();
-  let durable = false;
   try {
-    if (image.sourceKind !== "filesystem") {
-      await ensureHandlePermission(access, true); previousName = access.fileHandle.name || access.name;
-      await access.fileHandle.move(access.parentHandle, filename); const file = await access.fileHandle.getFile();
-      access.name = file.name; access.size = file.size; access.lastModified = file.lastModified;
-    }
     await flushWorkspaceDraft(image.id);
-    const result = await catalogApi("/api/catalog/rename", { imageId: image.id, filename, browserRenamed: image.sourceKind !== "filesystem" }, { method: "POST" });
-    durable = true;
+    const result = await catalogApi("/api/catalog/rename", { imageId: image.id, filename }, { method: "POST" });
     state.images = result.images || state.images; state.serverCatalogGeneration = result.catalogGeneration ?? state.serverCatalogGeneration;
+    if (state.currentId === image.id && state.currentImage) $("#currentFileName").textContent = imageDisplayPath(state.images.find((entry) => entry.id === image.id));
     try { renderCatalogViews(); } catch (error) { console.warn("名前変更後の画面更新に失敗しました", error); }
     try { $("#renameImageDialog").close(); } catch (error) { console.warn("名前変更後のダイアログ終了に失敗しました", error); }
   } catch (error) {
-    let rollbackKnown = false;
-    if (!durable && previousName) {
-      const authoritative = await api("/api/images", { resyncOnStale: false }).catch(() => null);
-      const current = authoritative?.images?.find((entry) => entry.id === image.id);
-      durable = Boolean(current && String(current.relativePath || "").split(/[\\/]/).pop() === filename);
-      rollbackKnown = Boolean(current && String(current.relativePath || "").split(/[\\/]/).pop() === previousName);
-      if (durable) {
-        state.images = authoritative.images; state.serverCatalogGeneration = authoritative.catalogGeneration ?? state.serverCatalogGeneration;
-        try { renderCatalogViews(); } catch (renderError) { console.warn("名前変更後の画面更新に失敗しました", renderError); }
-        try { $("#renameImageDialog").close(); } catch (closeError) { console.warn("名前変更後のダイアログ終了に失敗しました", closeError); }
-        return;
-      }
-    }
-    if (!durable && rollbackKnown && previousName && access?.fileHandle?.move) try {
-      await access.fileHandle.move(access.parentHandle, previousName); const file = await access.fileHandle.getFile();
-      access.name = file.name; access.size = file.size; access.lastModified = file.lastModified;
-    } catch {}
     $("#renameImageResult").textContent = t(`errorCode.${userErrorCode(error)}`); $("#renameImageResult").classList.add("error"); showUserError(error, input);
   } finally {
     state.renamePending = false;
-    $("#renameImageFilename").disabled = false; $("#renameImageCancel").disabled = false; $("#renameImageConfirm").disabled = false;
+    $("#renameImageFilename").disabled = false; $("#renameImageRestoreOriginal").disabled = false; $("#renameImageCancel").disabled = false; $("#renameImageConfirm").disabled = false;
     updateActionButtons();
   }
 }
@@ -744,7 +714,7 @@ async function rememberImportedSource(result, session) {
       if (source) source.imageIds.add(imported.imageId);
       continue;
     }
-    if (state.project?.id) await rememberProjectSource(state.project.id, result.entry.fileHandle, imported.imageId, result.sourceId, result.clientKey, result.entry.relativePath);
+    if (state.project?.id) await rememberProjectSource(state.project.id, result.entry.fileHandle, imported.imageId, result.sourceId, result.clientKey, result.entry.relativePath, result.entry.parentHandle || null);
   }
 }
 

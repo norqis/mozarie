@@ -204,6 +204,11 @@ h2 { margin: 0 0 2px; font-size: 14px; } .muted { color: #98a2ad; font-size: 12p
 .inline-field input { min-width: 0; }
 .setting-label { display: inline-flex; align-items: center; justify-content: flex-start; gap: 4px; }
 .compact-dialog { width: min(680px, calc(100vw - 32px)); max-width: 680px; }
+.rename-image-actions { flex-wrap: nowrap; align-items: center; }
+.compact-dialog #renameImageForm .form-row { grid-template-columns: minmax(0, 1fr); align-items: stretch; gap: 6px; }
+.compact-dialog #renameImageFilename { min-width: 0; }
+.dialog-action-spacer { flex: 1 1 auto; }
+.choice-row:has(input:disabled) > span { color: #7c858f; }
 .model-help-details { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 6px 12px; margin: 14px 0 0; }
 .model-help-details dt { color: #aeb8c2; }
 .model-help-details dd { min-width: 0; margin: 0; overflow-wrap: anywhere; }

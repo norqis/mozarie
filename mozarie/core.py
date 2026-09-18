@@ -158,6 +158,9 @@ class ImageRecord:
     height: int
     mtime_ns: int
     size_bytes: int = 0
+    # A rename is an intended output basename.  The canonical relative path
+    # continues to identify the current source until an overwrite succeeds.
+    edited_filename: str | None = None
     # Browser imports are copied to Mozarie's session directory.  Their source
     # File metadata remains the durable project fingerprint, while this pair
     # tracks the copied asset actually served and edited in this process.
@@ -193,6 +196,12 @@ class ImageRecord:
     def set_asset_fingerprint(self, mtime_ns: int, size_bytes: int) -> None:
         self.asset_mtime_ns = mtime_ns
         self.asset_size_bytes = size_bytes
+
+
+def output_relative_path(record: ImageRecord) -> Path:
+    """Return the requested output path while retaining the canonical source path."""
+    relative = safe_import_relative_path(record.relative_path)
+    return relative.with_name(record.edited_filename) if record.edited_filename else relative
 
 
 @dataclass(frozen=True)
@@ -257,6 +266,8 @@ class BrowserSaveReceipt:
     catalog_generation: int
     source_delete_pending: bool = False
     completed_at: float = 0.0
+    relative_path: str | None = None
+    edited_filename: str | None = None
 
 
 @dataclass

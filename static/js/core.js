@@ -304,7 +304,7 @@ function processingCurrentPath(job) {
   // do not guess a filename from the staged count.
   if (job.processed != null) return job.current || "";
   const nextImage = state.images.find((image) => targetIds.has(image.id) && !completedIds.has(image.id));
-  return nextImage ? (nextImage.relativePath || "") : (job.current || "");
+  return nextImage ? imageDisplayPath(nextImage) : (job.current || "");
 }
 
 function showProcessing(processing) {
@@ -352,7 +352,7 @@ function renderStatus() {
 function renderLocalizedDynamicState() {
   const record = currentRecord();
   $("#currentFileName").textContent = record && state.currentImage
-    ? record.relativePath
+    ? imageDisplayPath(record)
     : t("editor.none");
   updateNavigationControls();
   updateCandidateStatus();
@@ -361,6 +361,14 @@ function renderLocalizedDynamicState() {
   renderStatus();
   updateFilterMenuButtons();
   if (typeof renderProjectTable === "function") renderProjectTable();
+}
+
+function imageDisplayPath(image) {
+  const canonical = String(image?.relativePath || "");
+  const edited = String(image?.editedFilename || "").trim();
+  if (!edited) return canonical;
+  const separator = canonical.lastIndexOf("/");
+  return separator < 0 ? edited : `${canonical.slice(0, separator + 1)}${edited}`;
 }
 
 function updateFilterMenuButtons() {

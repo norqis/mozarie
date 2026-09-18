@@ -106,7 +106,7 @@ async function rememberProjectSources(projectId, sources) {
           const keyPart = source.imageId || (source.clientKey ? `pending:${source.clientKey}` : "root");
           store.put({
             key: `${projectId}:${source.stableId}:${keyPart}`,
-            projectId, imageId: source.imageId || null, sourceId: source.stableId, clientKey: source.clientKey || null, relativePath: source.relativePath || null, handle: source.handle,
+            projectId, imageId: source.imageId || null, sourceId: source.stableId, clientKey: source.clientKey || null, relativePath: source.relativePath || null, handle: source.handle, parentHandle: source.parentHandle || null,
           });
           if (source.imageId && source.clientKey) store.delete(`${projectId}:${source.stableId}:pending:${source.clientKey}`);
         }
@@ -124,8 +124,8 @@ async function rememberProjectSources(projectId, sources) {
   } finally { db.close(); }
 }
 
-async function rememberProjectSource(projectId, handle, imageId = null, sourceId = null, clientKey = null, relativePath = null) {
-  return (await rememberProjectSources(projectId, [{ handle, imageId, sourceId, clientKey, relativePath }]))[0];
+async function rememberProjectSource(projectId, handle, imageId = null, sourceId = null, clientKey = null, relativePath = null, parentHandle = null) {
+  return (await rememberProjectSources(projectId, [{ handle, imageId, sourceId, clientKey, relativePath, parentHandle }]))[0];
 }
 
 async function forgetPendingProjectSource(projectId, sourceId, clientKey) {
@@ -175,7 +175,7 @@ async function rememberProjectlessPromotionSources(projectId) {
     if (image.sourceKind !== "session" || directoryImageIds.has(image.id)) continue;
     const access = state.sourceAccess.get(image.id);
     if (!access?.fileHandle || access.sourceKind !== "browser-files" || !access.sourceId) throw codedError("project_source_unavailable");
-    sources.push({ handle: access.fileHandle, imageId: image.id, sourceId: access.sourceId, clientKey: access.clientKey, relativePath: access.relativePath });
+    sources.push({ handle: access.fileHandle, parentHandle: access.parentHandle || null, imageId: image.id, sourceId: access.sourceId, clientKey: access.clientKey, relativePath: access.relativePath });
   }
   await rememberProjectSources(projectId, sources);
 }
@@ -193,7 +193,7 @@ async function rememberedProjectSources(projectId) {
   // create a second source and duplicate every browser-imported image.
   return {
     files: rows.filter((row) => (row.imageId || row.clientKey) && row.handle?.kind === "file")
-      .map((row) => ({ imageId: row.imageId || null, sourceId: row.sourceId, clientKey: row.clientKey || null, relativePath: row.relativePath || row.handle.name, handle: row.handle })),
+      .map((row) => ({ imageId: row.imageId || null, sourceId: row.sourceId, clientKey: row.clientKey || null, relativePath: row.relativePath || row.handle.name, handle: row.handle, parentHandle: row.parentHandle || null })),
     directories: rows.filter((row) => !row.imageId && row.handle?.kind === "directory")
       .map((row) => ({ sourceId: row.sourceId, handle: row.handle })),
   };

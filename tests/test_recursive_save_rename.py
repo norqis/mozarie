@@ -31,6 +31,13 @@ class _SavingState(SavingMixin):
 
 
 class RecursiveSaveTests(unittest.TestCase):
+    def test_copy_uses_edited_basename_before_format_and_suffix(self):
+        record = ImageRecord("one", Path("C:/source.png"), "nested/source.png", 1, 1, 1, 1, edited_filename="edited.png")
+        self.assertEqual(
+            _SavingState._copy_relative_path(record, "_done", "jpg", True).as_posix(),
+            "nested/edited_done.jpg",
+        )
+
     def test_flatten_collision_stops_before_output_probe_or_job(self):
         with tempfile.TemporaryDirectory() as raw:
             root = Path(raw); output = root / "output"; output.mkdir()
@@ -84,6 +91,34 @@ class RecursiveSaveTests(unittest.TestCase):
 
 
 class WorkspaceRenameTests(unittest.TestCase):
+    def test_original_save_retargets_native_aliases_and_keeps_alias_edit(self):
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw); outer = root / "outer"; nested = outer / "nested"; nested.mkdir(parents=True)
+            old = nested / "old.png"; new = nested / "saved.png"; old.write_bytes(b"old"); new.write_bytes(b"saved")
+            store = WorkspaceStore(root / "data")
+            with store._connect() as db:
+                for catalog, source, folder, image, relative, edited in (
+                    ("one", "outer-source", outer, "target", "nested/old.png", "saved.png"),
+                    ("two", "nested-source", nested, "alias", "old.png", "alias-output.png"),
+                ):
+                    db.execute("INSERT INTO catalogs VALUES(?,?,?,?,?,?)", (catalog, catalog, "working", str(folder), 1, 1))
+                    db.execute("INSERT INTO project_sources VALUES(?,?,?,?,?,?,?)", (source, catalog, "native-folder", folder.name, str(folder), str(folder), 1))
+                    db.execute("""INSERT INTO images(catalog_id,source_id,relative_path,image_id,size_bytes,mtime_ns,width,height,edited_filename,updated_at)
+                        VALUES(?,?,?,?,?,?,?,?,?,?)""", (catalog, source, relative, image, 1, 1, 1, 1, edited, 1))
+                db.execute("INSERT INTO image_transforms VALUES(?,?,?,?,?,?)", ("alias", 1, 0, 0, 0, 3))
+            changed = store.commit_save("target", mtime_ns=2, size_bytes=5, clear_workspace=False,
+                                        clear_edited_filename=True, native_source_old_path=old, native_source_new_path=new,
+                                        native_source_flip_horizontal=True)
+            self.assertEqual(changed, {"target": "nested/saved.png", "alias": "saved.png"})
+            with store._connect() as db:
+                rows = {row["image_id"]: row for row in db.execute("SELECT image_id,relative_path,edited_filename,mtime_ns,size_bytes FROM images")}
+            self.assertEqual(rows["target"]["relative_path"], "nested/saved.png"); self.assertIsNone(rows["target"]["edited_filename"])
+            self.assertEqual(rows["alias"]["relative_path"], "saved.png"); self.assertEqual(rows["alias"]["edited_filename"], "alias-output.png")
+            self.assertEqual((rows["alias"]["mtime_ns"], rows["alias"]["size_bytes"]), (2, 5))
+            with store._connect() as db:
+                transform = tuple(db.execute("SELECT flip_horizontal,source_flip_horizontal FROM image_transforms WHERE image_id='alias'").fetchone())
+            self.assertEqual(transform, (1, 1))
+
     def test_nested_native_roots_retarget_one_actual_file_without_new_ids(self):
         with tempfile.TemporaryDirectory() as raw:
             root = Path(raw); outer = root / "outer"; nested = outer / "nested"; nested.mkdir(parents=True)
@@ -177,29 +212,122 @@ class StudioStateNativeRenameTests(unittest.TestCase):
         state.set_image_flags(image_id, {"hidden": True, "reviewed": True})
         return state, str(project["id"]), str(image_id)
 
-    def test_public_native_rename_survives_reopen_with_workspace_state_and_history(self):
+    def test_edited_name_original_overwrite_without_mask_is_not_no_effect(self):
+        state = self.state(); project = state.create_project("save edited name")
+        image_id = state.set_root(str(self.source_root))[0]["id"]
+        state.rename_catalog_image(image_id, "saved.png")
+        state.reserve_browser_save(image_id, 0, "edited-save", copy_to_default=False, suffix="_censored", output_format="original", keep_metadata=True)
+        rendered = state.render_browser_save(image_id, 0, 100, None, client_save_token="edited-save", output_format="original", keep_metadata=True)
+        self.assertFalse(rendered.no_effect)
+        committed = state.commit_browser_save(image_id, 0, rendered.save_token, "overwrite")
+        self.assertEqual(committed["sourceAction"], "overwrite")
+        self.assertFalse(self.source.exists()); self.assertTrue((self.source.parent / "saved.png").exists())
+        saved = state.image_for_id(image_id)
+        self.assertEqual(saved.relative_path, "nested/saved.png"); self.assertIsNone(saved.edited_filename)
+        reopened = self.state(); reopened.open_project(str(project["id"]))
+        self.assertEqual(reopened.image_for_id(image_id).relative_path, "nested/saved.png")
+        self.assertIsNone(reopened.image_for_id(image_id).edited_filename)
+
+    def test_edited_name_original_overwrite_uses_selected_format(self):
+        state = self.state(); state.create_project("save edited format")
+        image_id = state.set_root(str(self.source_root))[0]["id"]
+        state.rename_catalog_image(image_id, "saved.png")
+        state.reserve_browser_save(image_id, 0, "edited-format", copy_to_default=False, suffix="_censored", output_format="jpg", keep_metadata=False)
+        rendered = state.render_browser_save(image_id, 0, 100, None, client_save_token="edited-format", output_format="jpg", keep_metadata=False)
+        self.assertFalse(rendered.no_effect)
+        state.commit_browser_save(image_id, 0, rendered.save_token, "overwrite")
+        self.assertFalse(self.source.exists()); self.assertTrue((self.source.parent / "saved.jpg").exists())
+        saved = state.image_for_id(image_id)
+        self.assertEqual(saved.relative_path, "nested/saved.jpg"); self.assertIsNone(saved.edited_filename)
+
+    def test_edited_name_keeps_jpeg_and_png_casing_for_copy_and_original_overwrite(self):
+        jpeg = self.source.parent / "original.jpeg"; Image.new("RGB", (8, 8), "white").save(jpeg, format="JPEG")
+        state = self.state(); state.create_project("save edited casing")
+        images = {image["relativePath"]: image["id"] for image in state.set_root(str(self.source_root))}
+        jpeg_id = images["nested/original.jpeg"]
+        state.rename_catalog_image(jpeg_id, "new.jpeg")
+        state.reserve_browser_save(jpeg_id, 0, "jpeg-casing", copy_to_default=False, suffix="_censored", output_format="jpg", keep_metadata=False)
+        rendered = state.render_browser_save(jpeg_id, 0, 100, None, client_save_token="jpeg-casing", output_format="jpg", keep_metadata=False)
+        state.commit_browser_save(jpeg_id, 0, rendered.save_token, "overwrite")
+        self.assertFalse(jpeg.exists())
+        with Image.open(jpeg.with_name("new.jpeg")) as saved:
+            self.assertEqual(saved.format, "JPEG")
+        public_jpeg = next(image for image in state.catalog_snapshot()["images"] if image["id"] == jpeg_id)
+        self.assertEqual((public_jpeg["relativePath"], public_jpeg["editedFilename"]), ("nested/new.jpeg", None))
+
+        png_id = images["nested/source.png"]
+        state.rename_catalog_image(png_id, "new.PNG")
+        output = self.root / "output"; output.mkdir(); state.settings["saving"]["default_output_directory"] = str(output)
+        state.reserve_browser_save(png_id, 0, "png-copy-casing", copy_to_default=True, suffix="_copy", output_format="original", keep_metadata=True)
+        copied = state.render_browser_save(png_id, 0, 100, None, client_save_token="png-copy-casing", copy_to_default=True, output_format="original", keep_metadata=True)
+        state.commit_browser_save(png_id, 0, copied.save_token, "keep")
+        self.assertTrue((output / "nested" / "new_copy.PNG").is_file())
+        self.assertEqual(state.image_for_id(png_id).edited_filename, "new.PNG")
+        state.reserve_browser_save(png_id, 0, "png-overwrite-casing", copy_to_default=False, suffix="_censored", output_format="original", keep_metadata=True)
+        rendered = state.render_browser_save(png_id, 0, 100, None, client_save_token="png-overwrite-casing", output_format="original", keep_metadata=True)
+        state.commit_browser_save(png_id, 0, rendered.save_token, "overwrite")
+        self.assertFalse(self.source.exists())
+        self.assertTrue(self.source.with_name("new.PNG").is_file())
+        with Image.open(self.source.with_name("new.PNG")) as saved:
+            self.assertEqual(saved.format, "PNG")
+        self.assertEqual(state.image_for_id(png_id).relative_path, "nested/new.PNG")
+
+    def test_edited_name_collision_keeps_original_and_edit(self):
+        state = self.state(); state.create_project("save collision")
+        image_id = state.set_root(str(self.source_root))[0]["id"]
+        original = self.source.read_bytes(); collision = self.source.parent / "saved.png"; collision.write_bytes(b"collision")
+        state.rename_catalog_image(image_id, "saved.png")
+        state.reserve_browser_save(image_id, 0, "edited-collision", copy_to_default=False, suffix="_censored", output_format="original", keep_metadata=True)
+        rendered = state.render_browser_save(image_id, 0, 100, None, client_save_token="edited-collision", output_format="original", keep_metadata=True)
+        with self.assertRaises(ClientError): state.commit_browser_save(image_id, 0, rendered.save_token, "overwrite")
+        self.assertEqual(self.source.read_bytes(), original); self.assertEqual(collision.read_bytes(), b"collision")
+        self.assertEqual(state.image_for_id(image_id).relative_path, "nested/source.png")
+        self.assertEqual(state.image_for_id(image_id).edited_filename, "saved.png")
+
+    def test_edited_name_workspace_abort_restores_original_and_edit(self):
+        state = self.state(); state.create_project("save abort")
+        image_id = state.set_root(str(self.source_root))[0]["id"]
+        original = self.source.read_bytes()
+        state.rename_catalog_image(image_id, "saved.png")
+        state.reserve_browser_save(image_id, 0, "edited-abort", copy_to_default=False, suffix="_censored", output_format="original", keep_metadata=True)
+        rendered = state.render_browser_save(image_id, 0, 100, None, client_save_token="edited-abort", output_format="original", keep_metadata=True)
+        with state.workspace_store._connect() as db:
+            db.execute("""CREATE TRIGGER abort_edited_save BEFORE UPDATE OF relative_path ON images
+                BEGIN SELECT RAISE(ABORT, 'edited save abort'); END""")
+        with self.assertRaises(sqlite3.DatabaseError): state.commit_browser_save(image_id, 0, rendered.save_token, "overwrite")
+        self.assertEqual(self.source.read_bytes(), original); self.assertFalse((self.source.parent / "saved.png").exists())
+        self.assertEqual(state.image_for_id(image_id).relative_path, "nested/source.png")
+        self.assertEqual(state.image_for_id(image_id).edited_filename, "saved.png")
+        self.assertIsNone(state.workspace_store.browser_save_receipt("edited-abort"))
+
+    def test_public_rename_is_metadata_only_and_survives_reopen_with_workspace_state(self):
         state, project_id, image_id = self._loaded_state()
         result = state.rename_catalog_image(image_id, "renamed.png")
-        self.assertEqual(result["images"][0]["id"], image_id); self.assertFalse(self.source.exists()); self.assertTrue((self.source.parent / "renamed.png").exists())
+        self.assertEqual(result["images"][0]["id"], image_id); self.assertTrue(self.source.exists()); self.assertFalse((self.source.parent / "renamed.png").exists())
+        self.assertEqual(result["images"][0]["relativePath"], "nested/source.png")
+        self.assertEqual(result["images"][0]["editedFilename"], "renamed.png")
         with state.save_journal._connection() as db:
-            self.assertIsNone(db.execute("SELECT token FROM rename_operations").fetchone(), "the completed rename journal is compacted")
+            self.assertIsNone(db.execute("SELECT token FROM rename_operations").fetchone(), "metadata rename never needs a filesystem journal")
         reopened = self.state(); reopened.open_project(project_id)
         record = reopened.image_for_id(image_id)
-        self.assertEqual(record.relative_path, "nested/renamed.png"); self.assertTrue(record.hidden); self.assertTrue(record.reviewed); self.assertTrue(record.flip_horizontal)
+        self.assertEqual(record.relative_path, "nested/source.png"); self.assertEqual(record.edited_filename, "renamed.png"); self.assertTrue(record.hidden); self.assertTrue(record.reviewed); self.assertTrue(record.flip_horizontal)
         self.assertEqual([candidate["id"] for candidate in reopened.list_candidates(image_id)], ["candidate"])
         self.assertTrue(reopened.manual_workspace(image_id)["add"])
         self.assertTrue(reopened.project_history_status(image_id)["canUndo"])
         self.assertIn(image_id, reopened.restore_project_history(image_id, "undo")["changedImageIds"])
-        self.assertEqual(reopened.image_for_id(image_id).relative_path, "nested/renamed.png")
+        self.assertEqual(reopened.image_for_id(image_id).edited_filename, "renamed.png")
         self.assertIn(image_id, reopened.restore_project_history(image_id, "redo")["changedImageIds"])
-        self.assertEqual(reopened.image_for_id(image_id).relative_path, "nested/renamed.png")
+        self.assertEqual(reopened.image_for_id(image_id).edited_filename, "renamed.png")
 
-    def test_native_rename_database_failure_restores_source_and_keeps_ids(self):
+    def test_rename_database_failure_keeps_source_and_live_metadata(self):
         state, _project_id, image_id = self._loaded_state()
-        with patch.object(state.workspace_store, "rename_native_source_records", side_effect=sqlite3.DatabaseError("locked")):
-            with self.assertRaises(sqlite3.DatabaseError): state.rename_catalog_image(image_id, "renamed.png")
+        with state.workspace_store._connect() as db:
+            db.execute("""CREATE TRIGGER abort_edited_filename BEFORE UPDATE OF edited_filename ON images
+                BEGIN SELECT RAISE(ABORT, 'edited filename abort'); END""")
+        with self.assertRaises(sqlite3.DatabaseError):
+            state.rename_catalog_image(image_id, "renamed.png")
         self.assertTrue(self.source.exists()); self.assertFalse((self.source.parent / "renamed.png").exists())
-        self.assertEqual(state.image_for_id(image_id).relative_path, "nested/source.png")
+        self.assertEqual(state.image_for_id(image_id).relative_path, "nested/source.png"); self.assertIsNone(state.image_for_id(image_id).edited_filename)
         with state.save_journal._connection() as db:
             self.assertIsNone(db.execute("SELECT token FROM rename_operations").fetchone(), "a restored failure clears its rename intent")
 

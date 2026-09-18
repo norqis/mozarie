@@ -39,7 +39,7 @@ const ids = [
   "boundaryModeMenu", "boundaryTool", "brushSize", "brushSizeValue", "blockSizeValue", "applyBlockSize",
   "confirmDialog", "confirmTitle", "confirmMessage", "confirmNeverShow", "bucketToleranceControl",
   "candidateStatus", "catalogContextMenu", "toggleReviewMenuItem", "copyImagePathMenuItem", "removeImageMenuItem",
-  "renameImageMenuItem", "renameImageDialog", "renameImageFilename", "renameImageResult", "renameImageCancel", "renameImageConfirm",
+  "renameImageMenuItem", "renameImageDialog", "renameImageFilename", "renameImageResult", "renameImageRestoreOriginal", "renameImageCancel", "renameImageConfirm",
   "pickerMenu", "galleryDropOverlay",
 ];
 for (const id of ids) element(`#${id}`);
@@ -85,6 +85,7 @@ const context = {
   addCtx: { clearRect() {} }, exclusionCtx: { clearRect() {} }, exclusionEraseCtx: { clearRect() {} },
   t: (key, data = {}) => `${key}${data.value ?? data.count ?? ""}`,
   sourceAccessFor: (imageId) => state.sourceAccess.get(imageId) || null,
+  imageDisplayPath: (image) => image?.editedFilename || image?.relativePath || "",
   ensureHandlePermission: async () => {}, flushWorkspaceDraft: async () => {},
   catalogApi: async () => ({}),
   isBusy: () => busy, catalogStagingEditsActive: () => false, currentImageActionPending: () => Boolean(state.pendingImageId), canRemoveCurrentImage: () => true, isProcessableImage: () => true, processableImages: (records = state.images) => records, galleryFilteredImages: () => state.images, overviewImages: () => state.images, closeBoundaryModeMenu: undefined,
@@ -207,33 +208,20 @@ nodeTest("interaction and catalog mutation controls", async () => {
   editable = false;
   state.images = [{ id: "browser", sourceKind: "session" }]; images = state.images;
   test.openCatalogContextMenu({ ...event("", "contextmenu"), currentTarget: pointerTarget }, "browser");
-  assert.equal(element("#renameImageMenuItem").disabled, true, "an FSA source without move support cannot report a pseudo rename success");
-  assert.equal(element("#renameImageMenuItem").textContent, "context.rename", "unsupported FSA sources still present the Rename action");
-  assert.equal(element("#renameImageMenuItem").title, "context.renameUnavailableHelp", "unsupported FSA sources explain the native reconnect path");
-  const originalApiForRename = context.api; const originalCatalogApi = context.catalogApi;
-  async function responseLostRename(authoritativeName) {
-    const browserImage = { id: "browser", relativePath: "source.png", sourceKind: "session" };
-    let handleName = "source.png"; const moves = [];
-    const handle = { get name() { return handleName; }, async move(_parent, next) { moves.push(next); handleName = next; }, async getFile() { return { name: handleName, size: 1, lastModified: 1 }; } };
-    state.images = images = [browserImage]; state.renameImage = { imageId: browserImage.id, invoker: pointerTarget }; state.renamePending = false;
-    state.sourceAccess.set(browserImage.id, { fileHandle: handle, parentHandle: {}, name: handleName, size: 1, lastModified: 1 });
-    element("#renameImageFilename").value = "renamed.png";
-    context.catalogApi = async () => { throw Object.assign(new Error("response lost"), { code: "internal_error" }); };
-    context.api = async (url) => url === "/api/images" ? (authoritativeName === undefined ? null : { images: [{ ...browserImage, relativePath: authoritativeName }] }) : {};
-    await test.submitRenameImage({ preventDefault() {} });
-    return { moves, access: state.sourceAccess.get(browserImage.id), pending: state.renamePending };
-  }
-  const committedRename = await responseLostRename("renamed.png");
-  assert.deepEqual(committedRename.moves, ["renamed.png"], "a lost response with authoritative renamed state never rolls the FSA file back");
-  assert.equal(committedRename.access.name, "renamed.png", "the live FSA access snapshot keeps the authoritative renamed name");
-  const rejectedRename = await responseLostRename("source.png");
-  assert.deepEqual(rejectedRename.moves, ["renamed.png", "source.png"], "a lost response with authoritative old state restores the FSA file");
-  assert.equal(rejectedRename.access.name, "source.png", "the restored FSA access snapshot returns to the old name");
-  const unknownRename = await responseLostRename(undefined);
-  assert.deepEqual(unknownRename.moves, ["renamed.png"], "a lost response without an authoritative image never guesses that the FSA rename should be reversed");
-  assert.equal(unknownRename.access.name, "renamed.png", "an unknown response leaves the physical FSA name available for reconnect recovery");
-  assert.equal(unknownRename.pending, false, "an unknown rename response releases the pending lock for recovery guidance");
-  context.api = originalApiForRename; context.catalogApi = originalCatalogApi;
+  assert.equal(element("#renameImageMenuItem").disabled, false, "metadata rename remains available without browser source access");
+  const browserImage = { id: "browser", relativePath: "source.png", sourceKind: "session" };
+  const moves = [];
+  const handle = { async move(...args) { moves.push(args); } };
+  state.images = images = [browserImage]; state.renameImage = { imageId: browserImage.id, invoker: pointerTarget }; state.renamePending = false;
+  state.sourceAccess.set(browserImage.id, { fileHandle: handle, name: "source.png" });
+  element("#renameImageFilename").value = "renamed.png";
+  const originalCatalogApi = context.catalogApi;
+  context.catalogApi = async (_path, payload) => ({ images: [{ ...browserImage, editedFilename: payload.filename }], catalogGeneration: 3 });
+  await test.submitRenameImage({ preventDefault() {} });
+  assert.deepEqual(moves, [], "metadata rename never moves a browser file or requests its parent permission");
+  assert.equal(state.images[0].relativePath, "source.png", "metadata rename preserves the canonical source path");
+  assert.equal(state.images[0].editedFilename, "renamed.png", "metadata rename stores the edited basename from the catalog response");
+  context.catalogApi = originalCatalogApi;
   state.images = images = [{ id: "one", sourcePath: "C:/one.png", sourceKind: "filesystem" }, { id: "two", sourceKind: "filesystem" }]; state.currentId = "one"; state.currentImage = images[0];
   test.openCatalogContextMenu(event("", "contextmenu"), "one"); await test.copyContextMenuImagePath();
   context.navigator.clipboard.writeText = async () => { throw new Error("denied"); };

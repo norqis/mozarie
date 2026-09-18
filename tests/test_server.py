@@ -937,6 +937,26 @@ class MozarieTests(unittest.TestCase):
         self.assertTrue(restored[reopened_ids["same/001.png"]]["hidden"])
         self.assertTrue(restored[reopened_ids["same/001.png"]]["reviewed"])
 
+    def test_browser_reimport_restores_the_edited_output_name_from_workspace(self):
+        raw = io.BytesIO(); Image.new("RGB", (10, 10), "purple").save(raw, format="PNG")
+        files = [("same/source.png", raw.getvalue())]
+        state = self.new_state()
+        image_id = self._import_browser_manifest(state, files)["same/source.png"]
+        catalog_id = self.persist_project(state, "browser-edited-name")
+        self.assertIsNotNone(catalog_id)
+        state.rename_catalog_image(image_id, "edited.png")
+
+        with state.workspace_store._connect() as db:
+            row = db.execute("SELECT relative_path,edited_filename FROM images WHERE image_id=?", (image_id,)).fetchone()
+        self.assertEqual((row["relative_path"], row["edited_filename"]), ("same/source.png", "edited.png"))
+
+        reimported = self._import_browser_manifest(state, files, catalog_id)
+        self.assertEqual(reimported["same/source.png"], image_id)
+        live = state.image_for_id(image_id)
+        self.assertEqual((live.relative_path, live.edited_filename), ("same/source.png", "edited.png"))
+        public = state.catalog_snapshot()["images"]
+        self.assertEqual([(image["id"], image["relativePath"], image["editedFilename"]) for image in public], [(image_id, "same/source.png", "edited.png")])
+
     def test_browser_manifest_never_reuses_native_catalog(self):
         def png(color):
             buffer = io.BytesIO(); Image.new("RGB", (10, 10), color).save(buffer, format="PNG"); return buffer.getvalue()

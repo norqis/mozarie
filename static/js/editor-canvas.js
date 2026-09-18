@@ -120,7 +120,7 @@ async function selectImage(imageId, force = false, { saveCurrentDraft = true, pr
       if (preservedView) state.view = preservedView; else fitImage();
       updateBlockSizeDisplay(); refreshMaskStatus();
       $("#emptyState").hidden = true;
-      $("#currentFileName").textContent = record.relativePath;
+      $("#currentFileName").textContent = imageDisplayPath(record);
       updateCandidateStatus();
       renderCandidates(); updateGalleryCurrent(); updateNavigationControls(); updateActionButtons(); render(); clearStatus();
       if (hasDurableHistory()) void refreshProjectHistory(imageId);

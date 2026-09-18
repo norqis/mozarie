@@ -125,7 +125,7 @@ async function restoreBrowserProjectSourcesForCurrentCatalog(catalogSources = []
     const image = imagesById.get(source.imageId);
     if (await ensureProjectSourcePermission(source.handle)) {
       if (image) stagedAccess.set(source.imageId, {
-        fileHandle: source.handle, sourceId: source.sourceId, clientKey: source.clientKey, relativePath: source.relativePath,
+        fileHandle: source.handle, parentHandle: source.parentHandle || null, sourceId: source.sourceId, clientKey: source.clientKey, relativePath: source.relativePath,
         sourceKind: "browser-files", size: image.sizeBytes, lastModified: Math.round(Number(image.mtimeNs) / 1000000),
       });
       continue;
@@ -444,7 +444,8 @@ async function showSourceMismatches() {
   const list = $("#sourceMismatchList"); list.replaceChildren();
   for (const image of images) {
     const item = document.createElement("li");
-    item.textContent = image.dimensionsChanged ? `${image.relativePath} · ${t("project.dimensionsChanged")}` : image.relativePath;
+    const displayPath = imageDisplayPath(image);
+    item.textContent = image.dimensionsChanged ? `${displayPath} · ${t("project.dimensionsChanged")}` : displayPath;
     list.append(item);
   }
   $("#sourceMismatchClear").checked = false;
@@ -1199,6 +1200,7 @@ function bindEvents() {
   $("#applyPreserveDirectoryStructure").addEventListener("change", () => { void saveDirectoryStructurePreference($("#applyPreserveDirectoryStructure")); });
   $("#applyTargetMode").addEventListener("change", refreshApplyTargets);
   $("#applyOutputFormat").addEventListener("change", syncApplyMode);
+  $("#applyKeepMetadata").addEventListener("change", () => { if (!$("#applyKeepMetadata").disabled) applyKeepMetadataPreference = $("#applyKeepMetadata").checked; });
   $("#mosaicHelpButton").addEventListener("click", () => {
     showModalFromInvoker($("#mosaicHelpDialog"));
   });
@@ -1222,6 +1224,7 @@ function bindEvents() {
   document.querySelectorAll('input[name="singleSaveMode"]').forEach((input) => input.addEventListener("change", syncSingleSaveMode));
   $("#singleSavePreserveDirectoryStructure").addEventListener("change", () => { void saveDirectoryStructurePreference($("#singleSavePreserveDirectoryStructure")); });
   $("#singleSaveOutputFormat").addEventListener("change", syncSingleSaveMode);
+  $("#singleSaveKeepMetadata").addEventListener("change", () => { if (!$("#singleSaveKeepMetadata").disabled) singleKeepMetadataPreference = $("#singleSaveKeepMetadata").checked; });
   $("#singleSaveCloseButton").addEventListener("click", () => $("#singleSaveDialog").close());
   $("#singleSaveDialog").addEventListener("cancel", (event) => { event.preventDefault(); if (!state.saving) $("#singleSaveDialog").close(); });
   $("#singleSaveDialog").addEventListener("close", () => { if (!state.saving) state.singleSave = null; });
@@ -1267,6 +1270,11 @@ function bindEvents() {
   $("#renameImageMenuItem").addEventListener("click", () => { openRenameImageDialog(); });
   $("#removeImageMenuItem").addEventListener("click", () => { const image = state.images.find((item) => item.id === state.contextMenuImageId); if (image) void setHidden(image, !isHidden(image)); closeCatalogContextMenu(); });
   $("#renameImageForm").addEventListener("submit", submitRenameImage);
+  $("#renameImageRestoreOriginal").addEventListener("click", () => {
+    const image = state.images.find((entry) => entry.id === state.renameImage?.imageId);
+    $("#renameImageFilename").value = String(image?.relativePath || "").split(/[\\/]/).pop() || "";
+    $("#renameImageFilename").focus();
+  });
   $("#renameImageCancel").addEventListener("click", () => $("#renameImageDialog").close());
   $("#renameImageDialog").addEventListener("cancel", (event) => { if (state.renamePending) event.preventDefault(); });
   $("#renameImageDialog").addEventListener("close", () => {

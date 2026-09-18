@@ -74,9 +74,11 @@ test("the landing page works without JavaScript and fits desktop and mobile view
       assert.equal(await page.locator('meta[name="description"]').getAttribute("content"), "Mozarieは、PNG・JPEG・WebP画像のモザイク範囲をWindows上でローカル検出、確認、編集、保存できるアプリです。");
       assert.equal(await page.locator('link[rel="canonical"]').getAttribute("href"), canonicalUrl);
       assert.equal(await page.locator('a[href="https://github.com/norqis/mozarie/releases/latest"]').count(), 1);
-      assert.equal(await page.locator('[lang="en"] a[href="https://github.com/norqis/mozarie/blob/main/README.en.md"]').count(), 1);
-      assert.equal(await page.getByText("Mozarieは、Windowsで画像を読み込み、モザイク範囲をローカルで検出・確認・編集・保存するアプリです。", { exact: true }).isVisible(), true);
+      assert.equal(await page.locator('footer a[lang="en"][href="https://github.com/norqis/mozarie/blob/main/README.en.md"]').count(), 1);
+      assert.equal(await page.getByText("Mozarieは、画像のモザイク範囲をローカルで検出し、確認・編集できるWindowsアプリです。", { exact: true }).isVisible(), true);
       assert.equal(await page.locator("[data-gallery-controls]").isHidden(), true);
+      assert.equal(await page.locator("[data-gallery-caption], [data-gallery-count]").count(), 0);
+      assert.equal(await page.getByText("前の画面", { exact: true }).count(), 0);
       assert.equal(await page.locator("[data-gallery-slide]").count(), 3);
       assert.equal(await page.locator("[data-gallery-slide]:not([hidden]) img").getAttribute("src"), "assets/demo1.png");
       assert.deepEqual(await page.locator("[data-gallery-slide]:not([hidden]) img").evaluate((image) => ({ width: image.naturalWidth, height: image.naturalHeight, complete: image.complete })), { width: 1920, height: 959, complete: true });
@@ -133,12 +135,11 @@ test("the stylesheet and sitemap are published as valid static assets", { timeou
     }, sitemap.text);
     assert.equal(parsed.error, "");
     assert.deepEqual(parsed.urls, [canonicalUrl]);
-    const englishLink = page.locator('[lang="en"] a');
+    const englishLink = page.locator('footer a[lang="en"]');
     await page.goto(`${site.url}/`, { waitUntil: "domcontentloaded" });
     await englishLink.hover();
     const contrast = await englishLink.evaluate((link) => {
-      const section = link.closest(".english");
-      return { background: getComputedStyle(section).backgroundColor, color: getComputedStyle(link).color };
+      return { background: getComputedStyle(document.body).backgroundColor, color: getComputedStyle(link).color };
     });
     assert.notEqual(contrast.color, contrast.background, "the hovered English README link remains visible");
     await context.close();
@@ -148,77 +149,89 @@ test("the stylesheet and sitemap are published as valid static assets", { timeou
   }
 });
 
-test("the demo gallery wraps, pauses, and resumes its rotation accessibly", { timeout: 30_000 }, async () => {
+test("the demo gallery uses quiet icon controls and handles rotation accessibly", { timeout: 30_000 }, async () => {
   const site = await startSite();
   let browser;
   try {
     browser = await chromium.launch({ headless: true });
-    const context = await browser.newContext();
-    await context.route("**/*", (route) => {
-      const url = new URL(route.request().url());
-      return url.origin === site.url ? route.continue() : route.abort();
-    });
+    const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+    await context.route("**/*", (route) => new URL(route.request().url()).origin === site.url ? route.continue() : route.abort());
     const page = await context.newPage();
     await page.clock.install({ time: new Date("2026-09-18T00:00:00Z") });
     await page.goto(`${site.url}/`, { waitUntil: "domcontentloaded" });
-    const count = page.locator("[data-gallery-count]");
-    const caption = page.locator("[data-gallery-slide]:not([hidden]) [data-gallery-caption]");
     const visibleImage = page.locator("[data-gallery-slide]:not([hidden]) img");
-    assert.equal(await count.innerText(), "01 / 03");
-    assert.equal(await caption.innerText(), "モザイクの範囲を手描きで調整する。");
-    assert.deepEqual(await visibleImage.evaluate((image) => ({ width: image.naturalWidth, height: image.naturalHeight })), { width: 1920, height: 959 });
-    assert.deepEqual(await page.locator("[data-gallery-slide] img").evaluateAll((images) => images.map((image) => ({ width: image.naturalWidth, height: image.naturalHeight, complete: image.complete }))), [
-      { width: 1920, height: 959, complete: true },
-      { width: 1920, height: 959, complete: true },
-      { width: 1920, height: 959, complete: true },
-    ]);
+    const gallery = page.locator("[data-gallery]");
+    const pause = page.getByRole("button", { name: "自動再生を一時停止" });
+    assert.equal(await page.locator("[data-gallery-caption], [data-gallery-count]").count(), 0);
+    assert.deepEqual(await visibleImage.evaluate((image) => ({ src: image.getAttribute("src"), width: image.naturalWidth, height: image.naturalHeight })), { src: "assets/demo1.png", width: 1920, height: 959 });
+    assert.deepEqual(await page.locator("[data-gallery-slide] img").evaluateAll((images) => images.map((image) => ({ width: image.naturalWidth, height: image.naturalHeight, complete: image.complete }))), Array(3).fill({ width: 1920, height: 959, complete: true }));
     assert.deepEqual(await page.locator("[data-gallery-slide] a").evaluateAll((links) => links.map((link) => link.getAttribute("href"))), ["assets/demo1.png", "assets/demo2.png", "assets/demo3.png"]);
+    assert.equal(await page.locator("[data-gallery-controls] button").evaluateAll((buttons) => buttons.every((button) => button.textContent.trim() === "")), true);
 
+    const imageBounds = await visibleImage.boundingBox();
+    const arrows = [page.getByRole("button", { name: "前の画面" }), page.getByRole("button", { name: "次の画面" })];
+    for (const button of arrows) {
+      const bounds = await button.boundingBox();
+      assert.ok(bounds && bounds.width >= 44 && bounds.height >= 44);
+      assert.ok(imageBounds && bounds.x >= imageBounds.x && bounds.x + bounds.width <= imageBounds.x + imageBounds.width);
+      assert.ok(imageBounds && Math.abs(bounds.y + bounds.height / 2 - (imageBounds.y + imageBounds.height / 2)) <= 1);
+    }
+    for (const button of [page.getByRole("button", { name: "画面 1を表示" }), page.getByRole("button", { name: "画面 2を表示" }), page.getByRole("button", { name: "画面 3を表示" }), pause]) {
+      const bounds = await button.boundingBox();
+      assert.ok(bounds && bounds.width >= 24 && bounds.height >= 24);
+    }
+    const dotBounds = await page.getByRole("button", { name: "画面 1を表示" }).boundingBox();
+    assert.ok(imageBounds && dotBounds && dotBounds.y - (imageBounds.y + imageBounds.height) >= 14 && dotBounds.y - (imageBounds.y + imageBounds.height) <= 18);
+    assert.equal(await gallery.locator("[data-gallery-dot][aria-current='true']").count(), 1);
+
+    await page.clock.fastForward(6000);
+    assert.equal(await visibleImage.getAttribute("src"), "assets/demo2.png");
     await page.getByRole("button", { name: "前の画面" }).click();
-    assert.equal(await count.innerText(), "03 / 03");
-    assert.equal(await caption.innerText(), "編集結果と適用範囲を見比べる。");
+    assert.equal(await visibleImage.getAttribute("src"), "assets/demo1.png");
     await page.getByRole("button", { name: "次の画面" }).click();
-    assert.equal(await count.innerText(), "01 / 03");
+    assert.equal(await visibleImage.getAttribute("src"), "assets/demo2.png");
+    await page.getByRole("button", { name: "画面 3を表示" }).click();
+    assert.equal(await visibleImage.getAttribute("src"), "assets/demo3.png");
+    assert.equal(await page.getByRole("button", { name: "画面 3を表示" }).getAttribute("aria-current"), "true");
 
-    await page.getByRole("button", { name: "再開" }).click();
+    await page.getByRole("button", { name: "自動再生を再開" }).click();
     await page.locator(".hero").hover();
     await page.clock.fastForward(6000);
-    assert.equal(await count.innerText(), "02 / 03");
-    await page.getByRole("button", { name: "一時停止" }).click();
+    assert.equal(await visibleImage.getAttribute("src"), "assets/demo1.png");
+    await page.getByRole("button", { name: "自動再生を一時停止" }).click();
     await page.clock.fastForward(6000);
-    assert.equal(await count.innerText(), "02 / 03");
-    assert.equal(await caption.getAttribute("aria-live"), "polite");
-    await page.getByRole("button", { name: "再開" }).click();
-    await page.locator(".hero").hover();
-    await page.clock.fastForward(6000);
-    assert.equal(await count.innerText(), "03 / 03");
-
+    assert.equal(await visibleImage.getAttribute("src"), "assets/demo1.png");
+    await page.getByRole("button", { name: "自動再生を再開" }).click();
     await page.locator("[data-gallery]").hover();
     await page.clock.fastForward(6000);
-    assert.equal(await count.innerText(), "03 / 03");
-    assert.equal(await caption.getAttribute("aria-live"), "polite");
+    assert.equal(await visibleImage.getAttribute("src"), "assets/demo1.png");
     await page.locator(".hero").hover();
     await page.clock.fastForward(6000);
-    assert.equal(await count.innerText(), "01 / 03");
-
+    assert.equal(await visibleImage.getAttribute("src"), "assets/demo2.png");
     await page.getByRole("button", { name: "次の画面" }).focus();
+    await page.locator('nav a[href="https://github.com/norqis/mozarie"]').focus();
     await page.clock.fastForward(6000);
-    assert.equal(await count.innerText(), "01 / 03");
-    assert.equal(await caption.getAttribute("aria-live"), "polite");
+    assert.equal(await visibleImage.getAttribute("src"), "assets/demo2.png");
     await context.close();
 
-    const reducedContext = await browser.newContext({ reducedMotion: "reduce" });
-    await reducedContext.route("**/*", (route) => {
-      const url = new URL(route.request().url());
-      return url.origin === site.url ? route.continue() : route.abort();
-    });
+    const reducedContext = await browser.newContext({ reducedMotion: "reduce", viewport: { width: 390, height: 844 } });
+    await reducedContext.route("**/*", (route) => new URL(route.request().url()).origin === site.url ? route.continue() : route.abort());
     const reducedPage = await reducedContext.newPage();
     await reducedPage.clock.install({ time: new Date("2026-09-18T00:00:00Z") });
     await reducedPage.goto(`${site.url}/`, { waitUntil: "domcontentloaded" });
-    assert.equal(await reducedPage.getByRole("button", { name: "再開" }).isVisible(), true);
+    assert.equal(await reducedPage.getByRole("button", { name: "自動再生を再開" }).isVisible(), true);
     await reducedPage.clock.fastForward(6000);
-    assert.equal(await reducedPage.locator("[data-gallery-count]").innerText(), "01 / 03");
-    assert.equal(await reducedPage.locator("[data-gallery-slide]:not([hidden]) [data-gallery-caption]").getAttribute("aria-live"), "polite");
+    assert.equal(await reducedPage.locator("[data-gallery-slide]:not([hidden]) img").getAttribute("src"), "assets/demo1.png");
+    assert.equal(await reducedPage.locator("html").evaluate((element) => element.scrollWidth <= element.clientWidth), true);
+    const reducedImageBounds = await reducedPage.locator("[data-gallery-slide]:not([hidden]) img").boundingBox();
+    for (const button of [reducedPage.getByRole("button", { name: "前の画面" }), reducedPage.getByRole("button", { name: "次の画面" })]) {
+      const bounds = await button.boundingBox();
+      assert.ok(bounds && bounds.width >= 44 && bounds.height >= 44);
+      assert.ok(reducedImageBounds && bounds.x >= reducedImageBounds.x && bounds.x + bounds.width <= reducedImageBounds.x + reducedImageBounds.width);
+      assert.ok(reducedImageBounds && Math.abs(bounds.y + bounds.height / 2 - (reducedImageBounds.y + reducedImageBounds.height / 2)) <= 1);
+    }
+    const reducedDotBounds = await reducedPage.getByRole("button", { name: "画面 1を表示" }).boundingBox();
+    assert.ok(reducedImageBounds && reducedDotBounds && reducedDotBounds.y - (reducedImageBounds.y + reducedImageBounds.height) >= 14 && reducedDotBounds.y - (reducedImageBounds.y + reducedImageBounds.height) <= 18);
     await reducedContext.close();
   } finally {
     await browser?.close();

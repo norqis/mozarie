@@ -381,8 +381,7 @@ function startFixtureServer() {
       let body = ""; for await (const chunk of request) body += chunk;
       const payload = JSON.parse(body); const image = catalog.find((entry) => entry.id === payload.imageId);
       if (!image) { response.writeHead(404, { "Content-Type": "application/json" }); response.end(JSON.stringify({ error_code: "image_not_found" })); return; }
-      const prefix = image.relativePath.includes("/") ? `${image.relativePath.split("/").slice(0, -1).join("/")}/` : "";
-      image.relativePath = `${prefix}${payload.filename}`;
+      image.editedFilename = payload.filename;
       catalogGeneration += 1; renameRequests.push(payload);
       response.writeHead(200, { "Content-Type": "application/json" }); response.end(JSON.stringify({ images: catalog, catalogGeneration }));
       return;
@@ -1929,14 +1928,19 @@ async function runExhaustiveAddedScenarios(page, fixtureUrl, resetScenario) {
   for (const language of ["ja", "en"]) {
     await page.evaluate((locale) => loadTranslations(locale), language);
     for (const code of errorCodes) {
-      await page.evaluate((errorCode) => showUserError({ code: errorCode, message: "fixture server detail" }), code);
       if (code === "connection_lost") {
-        assert.equal(await page.locator("#errorDialog").evaluate((dialog) => dialog.open), false, "connection loss remains outside the modal error dialog");
-        assert.equal(await page.locator("#connectionStatus").isVisible(), true, `connection loss is visible inline in ${language}`);
-        assert.equal(await page.locator("#connectionStatus").evaluate((node) => node.classList.contains("error")), true, `connection loss uses the inline error presentation in ${language}`);
+        const presentation = await page.evaluate((errorCode) => {
+          showUserError({ code: errorCode, message: "fixture server detail" });
+          const status = document.querySelector("#connectionStatus");
+          return { modal: document.querySelector("#errorDialog").open, visible: !status.hidden, error: status.classList.contains("error") };
+        }, code);
+        assert.equal(presentation.modal, false, "connection loss remains outside the modal error dialog");
+        assert.equal(presentation.visible, true, `connection loss is visible inline in ${language}`);
+        assert.equal(presentation.error, true, `connection loss uses the inline error presentation in ${language}`);
         await page.evaluate(() => clearStatus());
         continue;
       }
+      await page.evaluate((errorCode) => showUserError({ code: errorCode, message: "fixture server detail" }), code);
       await page.waitForFunction(() => document.querySelector("#errorDialog").open);
       const presentation = await page.evaluate(() => ["#errorDialogTitle", "#errorDialogCause", "#errorDialogAction"].map((selector) => document.querySelector(selector).textContent.trim()));
       assert.equal(presentation.every(Boolean), true, `${code} has title, cause, and action in ${language}`);
@@ -2124,7 +2128,7 @@ async function runControlLedger(page, fixtureUrl, contracts, finishCancel, holdS
       state: {
         tool: state.tool, view: state.viewMode, displayMode: state.displayMode, scale: state.view?.scale, history: state.history?.length, historyIndex: state.historyIndex,
         galleryCollapsed: state.galleryCollapsed, inspectorCollapsed: state.inspectorCollapsed, mosaicPreview: state.mosaicPreviewEnabled,
-        current: state.currentId, imageIds: state.images.map((image) => image.id), images: state.images.map((image) => ({ id: image.id, relativePath: image.relativePath, reviewed: image.reviewed, hidden: image.hidden })), selectedImageIds: [...state.selectedImageIds].sort(), batchMode: state.batchMode,
+        current: state.currentId, imageIds: state.images.map((image) => image.id), images: state.images.map((image) => ({ id: image.id, relativePath: image.relativePath, editedFilename: image.editedFilename, reviewed: image.reviewed, hidden: image.hidden })), selectedImageIds: [...state.selectedImageIds].sort(), batchMode: state.batchMode,
         galleryFilter: state.galleryFilter, overviewFilter: state.overviewFilter, overviewQuery: state.overviewQuery, overviewFolder: state.overviewFolder, hiddenCount: state.hiddenImageIds.size,
         candidateDisplay: [...state.blinkCandidateIds || []].sort(), candidateDisplayModes: [...state.blinkModes || []].sort(),
         catalogGeneration: state.serverCatalogGeneration, projectId: state.project?.id || null, contextMenuImageId: state.contextMenuImageId, renameImageId: state.renameImage?.imageId || null,
@@ -2312,22 +2316,32 @@ async function runControlLedger(page, fixtureUrl, contracts, finishCancel, holdS
       assert.equal(settled.state.renameImageId, null, "renameImageCancel clears the pending rename target");
       assert.equal(settled.api.slice(before.api.length).filter((request) => new URL(request.url, fixtureUrl).pathname === "/api/catalog/rename").length, 0, "renameImageCancel sends no rename request");
     },
+    renameImageRestoreOriginal: async (before) => {
+      const canonical = before.state.images.find((image) => image.id === before.state.renameImageId)?.relativePath.split("/").at(-1);
+      await page.waitForFunction((value) => document.querySelector("#renameImageFilename").value === value, canonical);
+      const settled = await snapshot();
+      assert.equal(settled.controls.renameImageFilename.value, canonical, "renameImageRestoreOriginal restores only the canonical basename in the open form");
+      assert.equal(settled.api.slice(before.api.length).filter((request) => new URL(request.url, fixtureUrl).pathname === "/api/catalog/rename").length, 0, "renameImageRestoreOriginal does not save metadata");
+    },
     renameImageConfirm: async (before) => {
       const filename = before.controls.renameImageFilename.value;
-      await page.waitForFunction(([imageId, relativePath]) => !document.querySelector("#renameImageDialog").open
-        && state.images.find((image) => image.id === imageId)?.relativePath === relativePath, [before.state.renameImageId, filename]);
+      await page.waitForFunction(([imageId, filename]) => !document.querySelector("#renameImageDialog").open
+        && state.images.find((image) => image.id === imageId)?.editedFilename === filename, [before.state.renameImageId, filename]);
       const settled = await snapshot();
       const requests = settled.api.slice(before.api.length).filter((request) => request.method === "POST"
         && new URL(request.url, fixtureUrl).pathname === "/api/catalog/rename");
       assert.equal(requests.length, 1, "renameImageConfirm sends one rename request");
       const payload = JSON.parse(String(requests[0].body));
-      assert.deepEqual(Object.keys(payload).sort(), ["browserRenamed", "expectedCatalogGeneration", "expectedProjectId", "filename", "imageId"], "renameImageConfirm submits exactly the five supported payload fields");
+      assert.deepEqual(Object.keys(payload).sort(), ["expectedCatalogGeneration", "expectedProjectId", "filename", "imageId"], "renameImageConfirm submits only the metadata rename contract");
       assert.equal(payload.imageId, before.state.renameImageId, "renameImageConfirm submits the right-clicked image ID");
       assert.equal(payload.filename, filename, "renameImageConfirm submits the entered filename");
-      assert.equal(payload.browserRenamed, false, "renameImageConfirm declares that the native source was not pre-moved in the browser");
       assert.equal(payload.expectedProjectId, before.state.projectId, "renameImageConfirm submits the active project identity");
       assert.equal(payload.expectedCatalogGeneration, before.state.catalogGeneration, "renameImageConfirm submits the current catalog generation");
-      assert.equal(settled.state.images.find((image) => image.id === before.state.renameImageId)?.relativePath, filename, "renameImageConfirm updates the catalog path after the server commit");
+      assert.equal(settled.state.images.find((image) => image.id === before.state.renameImageId)?.relativePath, before.state.images.find((image) => image.id === before.state.renameImageId)?.relativePath, "renameImageConfirm keeps the canonical source path after the server commit");
+      assert.equal(settled.state.images.find((image) => image.id === before.state.renameImageId)?.editedFilename, filename, "renameImageConfirm updates the displayed basename after the server commit");
+      await page.locator(`.gallery-item[data-id="${before.state.renameImageId}"]`).click();
+      await page.waitForFunction((name) => document.querySelector("#currentFileName").textContent.endsWith(name), filename, { timeout: 10000 });
+      assert.equal(await page.evaluate((name) => { state.overviewQuery = name; return overviewImages().some((image) => image.id === state.currentId); }, filename), true, "overview search finds the edited displayed name without changing its canonical folder path");
     },
     removeImageMenuItem: async (before) => { await page.waitForFunction((count) => state.hiddenImageIds.size !== count, before.state.hiddenCount); const settled = await snapshot(); assert.notEqual(settled.state.hiddenCount, before.state.hiddenCount, "removeImageMenuItem must toggle hidden state"); assert.equal(settled.popovers.catalogContextMenu, false, "removeImageMenuItem must close its context menu"); },
     sourceDeleteResume: async () => {
@@ -2690,7 +2704,7 @@ async function runControlLedger(page, fixtureUrl, contracts, finishCancel, holdS
     await page.locator('.gallery-item[data-id="sample"]').click({ button: "right" }); await click(id);
   }
   await page.locator('.gallery-item[data-id="sample"]').click({ button: "right" }); await click("renameImageMenuItem");
-  await input("renameImageFilename", "sample-ledger.png"); await click("renameImageCancel");
+  await input("renameImageFilename", "sample-ledger.png"); await click("renameImageRestoreOriginal"); await click("renameImageCancel");
   await page.locator('.gallery-item[data-id="sample"]').click({ button: "right" }); await click("renameImageMenuItem");
   await input("renameImageFilename", "sample-ledger.png"); await click("renameImageConfirm");
   await page.locator('.gallery-item[data-id="sample"]').click({ button: "right" }); await click("removeImageMenuItem");
@@ -2807,10 +2821,20 @@ async function runControlLedger(page, fixtureUrl, contracts, finishCancel, holdS
   await click("detectAllButton");
   await input("detectExcludeCandidatePadding", "2"); await input("detectFluidColorFillEnabled", true); await input("detectFluidColorFillTolerance", "27");
   await click("detectCancelButton");
-  await click("saveAllButton"); await input("applyOutputFormat", "png"); await input("applyKeepMetadata", true); await input("applyRemoveSaved", true);
+  await click("saveAllButton"); await input("applyOutputFormat", "png"); await input("applyKeepMetadata", true);
+  await input("applyOutputFormat", "jpg"); assert.deepEqual(await page.locator("#applyKeepMetadata").evaluate((input) => ({ checked: input.checked, disabled: input.disabled, color: getComputedStyle(input.closest("label").querySelector("span")).color })), { checked: false, disabled: true, color: "rgb(124, 133, 143)" }, "JPG forces batch metadata off and visibly mutes its row while preserving its preference");
+  await input("applyOutputFormat", "png"); assert.equal(await page.locator("#applyKeepMetadata").isChecked(), true, "batch PNG restores a true metadata preference");
+  await input("applyKeepMetadata", false); await input("applyOutputFormat", "jpg"); await input("applyOutputFormat", "png"); assert.equal(await page.locator("#applyKeepMetadata").isChecked(), false, "batch PNG restores a false metadata preference");
+  await click("applyCloseButton"); await click("saveAllButton"); assert.equal(await page.locator("#applyKeepMetadata").isChecked(), false, "batch metadata preference survives closing and reopening the dialog");
+  await input("applyOutputFormat", "png"); await input("applyRemoveSaved", true);
   assert.equal(await page.locator("#applyRemoveSaved").isChecked(), true, "batch list removal can be enabled");
   await input("applyRemoveSaved", false); assert.equal(await page.locator("#applyRemoveSaved").isChecked(), false, "batch list removal can be disabled"); await click("applyCloseButton");
-  await click("saveButton"); await input("singleSaveOutputFormat", "png"); await input("singleSaveKeepMetadata", true); await input("singleSaveRemoveSaved", true);
+  await click("saveButton"); await input("singleSaveOutputFormat", "png"); await input("singleSaveKeepMetadata", true);
+  await input("singleSaveOutputFormat", "jpg"); assert.equal(await page.locator("#singleSaveKeepMetadata").isDisabled(), true, "JPG disables single-image metadata"); assert.equal(await page.locator("#singleSaveKeepMetadata").isChecked(), false, "JPG forces single-image metadata off");
+  await input("singleSaveOutputFormat", "png"); assert.equal(await page.locator("#singleSaveKeepMetadata").isChecked(), true, "single PNG restores a true metadata preference");
+  await input("singleSaveKeepMetadata", false); await input("singleSaveOutputFormat", "jpg"); await input("singleSaveOutputFormat", "png"); assert.equal(await page.locator("#singleSaveKeepMetadata").isChecked(), false, "single PNG restores a false metadata preference");
+  await click("singleSaveCloseButton"); await click("saveButton"); assert.equal(await page.locator("#singleSaveKeepMetadata").isChecked(), false, "single metadata preference survives closing and reopening the dialog");
+  await input("singleSaveOutputFormat", "png"); await input("singleSaveRemoveSaved", true);
   assert.equal(await page.locator("#singleSaveRemoveSaved").isChecked(), true, "single list removal can be enabled");
   await input("singleSaveRemoveSaved", false); assert.equal(await page.locator("#singleSaveRemoveSaved").isChecked(), false, "single list removal can be disabled"); await click("singleSaveCloseButton");
   await click("settingsButton");
@@ -4096,10 +4120,10 @@ async function main() {
     assert.deepEqual(reopenedRename, { open: true, imageId: "sample" }, "a queued close from Cancel does not clear the F2 reopened rename target");
     await page.locator("#renameImageFilename").fill("sample-f2.png");
     await page.locator("#renameImageConfirm").click();
-    await page.waitForFunction(() => !document.querySelector("#renameImageDialog").open && state.images.find((image) => image.id === "sample")?.relativePath === "sample-f2.png");
-    assert.equal(renameRequests.length, 1, "Cancel then F2 reopen sends one native rename request");
+    await page.waitForFunction(() => !document.querySelector("#renameImageDialog").open && state.images.find((image) => image.id === "sample")?.editedFilename === "sample-f2.png");
+    assert.equal(renameRequests.length, 1, "Cancel then F2 reopen sends one metadata rename request");
     assert.equal(renameRequests[0].imageId, "sample"); assert.equal(renameRequests[0].filename, "sample-f2.png");
-    assert.equal(renameRequests[0].browserRenamed, false); assert.equal(renameRequests[0].expectedCatalogGeneration, 1);
+    assert.equal(renameRequests[0].browserRenamed, undefined); assert.equal(renameRequests[0].expectedCatalogGeneration, 1);
     resetScenario();
     await page.goto(fixtureUrl, { waitUntil: "domcontentloaded" });
     await waitForFixtureReady(page);
@@ -5039,14 +5063,58 @@ async function main() {
       assert.deepEqual(saveRequests.map((request) => request.path), ["/api/save/prepare", "/api/save/reserve", "/api/save/render", "/api/save/commit", "/api/save/ack"], "single copy save drives the durable save lifecycle in order");
       assert.equal(saveRequests[2].payload.copyToDefault, true, "single copy save delegates output creation to the configured server path");
       assert.deepEqual(await browserSavePage.evaluate(() => ({ imageIds: state.images.map((image) => image.id), currentId: state.currentId, reviewed: state.images.find((image) => image.id === "sample")?.reviewed })), { imageIds: ["sample", "sample-two"], currentId: "sample", reviewed: false }, "single save reloads without changing catalogue or reviewed state");
+      await browserSavePage.locator("#singleSaveCloseButton").click();
+      await browserSavePage.waitForFunction(() => !document.querySelector("#singleSaveDialog").open);
+      await browserSavePage.locator("#saveButton").click();
+      await browserSavePage.waitForFunction(() => document.querySelector("#singleSaveDialog").open && state.singleSave?.imageId === "sample");
       await browserSavePage.locator("#singleSaveChooseOutputDirectoryButton").click();
       await browserSavePage.waitForFunction(() => window.__serverOutputPicks.length === 2 && !state.outputDirectoryPicking
         && state.settings?.saving?.default_output_directory === "G:\\fixture-output"
         && document.querySelector("#singleSaveOutputDirectoryStatus").value === "G:\\fixture-output");
+      await browserSavePage.evaluate(async () => {
+        const image = state.images.find((entry) => entry.id === "sample");
+        const bytes = Uint8Array.from(atob("iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAEElEQVR4nGP8zwACTGCSAQANHQEDgslx/wAAAABJRU5ErkJggg=="), (byte) => byte.charCodeAt(0));
+        const parentHandle = await navigator.storage.getDirectory();
+        for (const name of ["sample.png", "edited-output.png"]) {
+          const writable = await (await parentHandle.getFileHandle(name, { create: true })).createWritable();
+          await writable.write(bytes); await writable.close();
+        }
+        const fileHandle = await parentHandle.getFileHandle("sample.png");
+        const file = await fileHandle.getFile();
+        window.__saveParentPickerActivation = [];
+        window.showDirectoryPicker = async () => {
+          window.__saveParentPickerActivation.push(navigator.userActivation.isActive);
+          return parentHandle;
+        };
+        image.sourceKind = "session"; image.editedFilename = "edited-output.png"; image.sizeBytes = file.size; image.mtimeNs = file.lastModified * 1_000_000;
+        state.sourceAccess.set(image.id, { fileHandle, name: file.name, size: file.size, lastModified: file.lastModified, relativePath: image.relativePath, sourceKind: "browser-files" });
+        syncSingleSaveMode();
+      });
+      await browserSavePage.waitForFunction(() => !document.querySelector("#singleSaveStartButton").disabled);
+      const beforeCancelledDelete = saveRequests.length;
+      await browserSavePage.locator("#singleSaveDeleteOriginal").check();
+      await browserSavePage.evaluate(() => { state.settings.confirmations.deleteSourceAfterCopy = true; });
+      await browserSavePage.locator("#singleSaveStartButton").click();
+      await browserSavePage.waitForFunction(() => document.querySelector("#confirmDialog").open);
+      assert.deepEqual(await browserSavePage.evaluate(() => window.__saveParentPickerActivation), [true], "copy-and-delete starts its parent picker in the explicit Save click with active user activation");
+      await browserSavePage.locator("#confirmCancel").click();
+      await browserSavePage.waitForFunction(() => !state.saveStarting && !state.saving);
+      assert.equal(saveRequests.slice(beforeCancelledDelete).some((request) => request.path === "/api/save/render"), false, "cancelling after parent selection writes no output");
+      await browserSavePage.locator("#singleSaveStartButton").click();
+      await browserSavePage.waitForFunction(() => document.querySelector("#confirmDialog").open);
+      await browserSavePage.locator("#confirmAccept").click();
+      await browserSavePage.waitForFunction(() => !state.saving && !state.images.some((image) => image.id === "sample"));
+      assert.deepEqual(await browserSavePage.evaluate(async () => {
+        const parent = await navigator.storage.getDirectory();
+        let canonicalDeleted = false;
+        try { await parent.getFileHandle("sample.png"); } catch (error) { canonicalDeleted = error.name === "NotFoundError"; }
+        return { canonicalDeleted, editedNameRetained: Boolean(await parent.getFileHandle("edited-output.png")) };
+      }), { canonicalDeleted: true, editedNameRetained: true }, "a parentless copy-and-delete removes only the canonical original source name after its receipt, never the edited output name");
     } finally {
       await stopCoveredPage(browserSavePage, true);
     }
 
+    resetScenario();
     await runDynamicProjectAndShortcutScenario(browser, fixtureUrl, settingsPayloads);
     await runExhaustiveCandidateScenarios(browser);
     assertDynamicControlEvidence();

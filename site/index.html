@@ -22,98 +22,77 @@
     <a class="brand" href="https://norqis.github.io/mozarie/" aria-label="Mozarie ホーム">MOZARIE</a>
     <nav aria-label="主要リンク">
       <a href="https://github.com/norqis/mozarie#readme">使い方</a>
-      <a href="https://github.com/norqis/mozarie/issues">Issues</a>
+      <a href="https://github.com/norqis/mozarie">GitHub</a>
     </nav>
   </header>
 
   <main>
     <section class="hero" aria-labelledby="page-title">
-      <p class="eyebrow">LOCAL IMAGE MOSAIC WORKSPACE</p>
       <h1 id="page-title">Mozarie</h1>
-      <p class="lead">Mozarieは、Windowsで画像を読み込み、モザイク範囲をローカルで検出・確認・編集・保存するアプリです。</p>
+      <p class="lead">画像のモザイク範囲を、検出・編集・保存。</p>
+      <p class="intro">Mozarieは、画像のモザイク範囲をローカルで検出し、確認・編集できるWindowsアプリです。</p>
       <div class="actions">
         <a class="button primary" href="https://github.com/norqis/mozarie/releases/latest">最新版をダウンロード</a>
-        <a class="button secondary" href="https://github.com/norqis/mozarie#readme">セットアップを見る</a>
+        <a class="text-link" href="https://github.com/norqis/mozarie">GitHub</a>
       </div>
-      <p class="platform">Windows向け · ローカルで処理</p>
+      <p class="platform">Windows / PNG・JPEG・WebP / ローカル処理</p>
     </section>
 
-    <section class="section gallery" aria-labelledby="gallery-title" aria-roledescription="carousel">
-      <div class="section-heading">
-        <p class="eyebrow">APP PREVIEW</p>
-        <h2 id="gallery-title">作業画面を見てから始める。</h2>
-      </div>
+    <section class="gallery" aria-label="Mozarie の画面" aria-roledescription="carousel">
       <div class="gallery-frame" data-gallery>
         <figure class="gallery-slide" data-gallery-slide>
           <a href="assets/demo1.png" aria-label="Mozarieの作業画面 1を原寸で開く"><img src="assets/demo1.png" width="1920" height="959" alt="Mozarieでモザイクの範囲を手描きで調整している画面"></a>
-          <figcaption data-gallery-caption aria-live="off">モザイクの範囲を手描きで調整する。</figcaption>
         </figure>
         <figure class="gallery-slide" data-gallery-slide hidden>
           <a href="assets/demo2.png" aria-label="Mozarieの作業画面 2を原寸で開く"><img src="assets/demo2.png" width="1920" height="959" alt="Mozarieで検出モデルと輪郭補正を設定している画面"></a>
-          <figcaption data-gallery-caption aria-live="off">検出モデルと輪郭補正を設定する。</figcaption>
         </figure>
         <figure class="gallery-slide" data-gallery-slide hidden>
           <a href="assets/demo3.png" aria-label="Mozarieの作業画面 3を原寸で開く"><img src="assets/demo3.png" width="1920" height="959" alt="Mozarieで編集結果と適用範囲を見比べている画面"></a>
-          <figcaption data-gallery-caption aria-live="off">編集結果と適用範囲を見比べる。</figcaption>
         </figure>
-        <div class="gallery-controls" data-gallery-controls hidden aria-label="画面表示の操作">
-          <span class="gallery-count" data-gallery-count>01 / 03</span>
-          <div class="gallery-buttons">
-            <button type="button" data-gallery-prev>前の画面</button>
-            <button type="button" data-gallery-next>次の画面</button>
-            <button type="button" data-gallery-pause>一時停止</button>
+        <div class="gallery-controls" data-gallery-controls hidden>
+          <div class="gallery-status" data-gallery-status aria-label="画面表示の操作">
+            <button class="gallery-pause" type="button" data-gallery-pause aria-label="自動再生を一時停止">
+              <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5 3v10M11 3v10"/></svg>
+            </button>
+            <div class="gallery-dots">
+              <button type="button" data-gallery-dot="0" aria-label="画面 1を表示" aria-current="true"></button>
+              <button type="button" data-gallery-dot="1" aria-label="画面 2を表示"></button>
+              <button type="button" data-gallery-dot="2" aria-label="画面 3を表示"></button>
+            </div>
           </div>
+          <button class="gallery-arrow gallery-arrow-previous" type="button" data-gallery-prev aria-label="前の画面">
+            <svg viewBox="0 0 16 16" aria-hidden="true"><path d="m10 2-6 6 6 6"/></svg>
+          </button>
+          <button class="gallery-arrow gallery-arrow-next" type="button" data-gallery-next aria-label="次の画面">
+            <svg viewBox="0 0 16 16" aria-hidden="true"><path d="m6 2 6 6-6 6"/></svg>
+          </button>
         </div>
       </div>
     </section>
 
-    <section class="section workflow" aria-labelledby="workflow-title">
-      <div class="section-heading">
-        <p class="eyebrow">WORKFLOW</p>
-        <h2 id="workflow-title">見つける、整える、残す。</h2>
-      </div>
-      <ol class="steps">
-        <li><span>01</span><h3>読み込む</h3><p>PNG、JPEG、WebPの画像またはフォルダーを読み込みます。</p></li>
-        <li><span>02</span><h3>検出して確認する</h3><p>現在の画像または全画像を自動検出し、候補を確認します。</p></li>
-        <li><span>03</span><h3>編集して保存する</h3><p>ブラシ、消しゴム、境界ツールで修正し、コピー保存または元画像へ上書きします。</p></li>
-      </ol>
+    <section class="capabilities" aria-labelledby="capabilities-title">
+      <h2 id="capabilities-title">できること</h2>
+      <dl>
+        <div><dt>読み込み</dt><dd>画像・フォルダーを読み込み、現在または全画像を検出できます。</dd></div>
+        <div><dt>編集</dt><dd>候補の除外・削除、ブラシ・消しゴム・境界ツールで範囲を調整できます。</dd></div>
+        <div><dt>保存</dt><dd>コピー保存と元画像への上書きに対応します。非表示の画像は出力対象から除外されます。</dd></div>
+      </dl>
     </section>
 
-    <section class="section features" aria-labelledby="features-title">
-      <div class="section-heading">
-        <p class="eyebrow">CONTROL</p>
-        <h2 id="features-title">確認のための編集機能。</h2>
-      </div>
-      <div class="feature-grid">
-        <article><h3>候補を見比べる</h3><p>検出候補を確認し、除外や削除を選べます。手の領域の除外と、モザイクより優先する強制除外にも対応します。</p></article>
-        <article><h3>必要な場所だけ直す</h3><p>モザイク・除外ブラシ、消しゴム、境界ツールで、候補と手描き範囲を編集できます。</p></article>
-        <article><h3>作業を保ったまま整理する</h3><p>非表示にした画像は通常表示、全画像検出、保存、マスク出力から外れます。元画像と編集データは保持され、再表示後に続けられます。</p></article>
-      </div>
-    </section>
-
-    <section class="section setup" aria-labelledby="setup-title">
+    <section class="setup" aria-labelledby="setup-title">
+      <h2 id="setup-title">始めるには</h2>
       <div>
-        <p class="eyebrow">GET STARTED</p>
-        <h2 id="setup-title">Windowsで始める。</h2>
-        <p>リリース版を取得し、Mozarieのフォルダーで <code>setup.bat</code> を実行します。初回起動後は、<strong>設定 &gt; 検出</strong> で基本モデルを指定してください。</p>
+        <p>ダウンロードしたフォルダーで <code>setup.bat</code> を実行します。初回起動後は、設定 &gt; 検出で基本モデルを指定してください。</p>
+        <a class="text-link" href="https://github.com/norqis/mozarie#インストール">セットアップ手順 <span aria-hidden="true">→</span></a>
       </div>
-      <a class="text-link" href="https://github.com/norqis/mozarie#インストール">セットアップ手順を読む <span aria-hidden="true">→</span></a>
-    </section>
-
-    <section class="english" lang="en" aria-labelledby="english-title">
-      <p class="eyebrow">ENGLISH</p>
-      <h2 id="english-title">A local Windows workspace for image mosaic review.</h2>
-      <p>Load PNG, JPEG, or WebP images, detect mosaic areas, review and edit the result, then save a copy or overwrite the source.</p>
-      <a href="https://github.com/norqis/mozarie/blob/main/README.en.md">Read the English README <span aria-hidden="true">→</span></a>
     </section>
   </main>
 
   <footer>
     <p>MOZARIE</p>
     <div>
-      <a href="https://github.com/norqis/mozarie">GitHub repository</a>
-      <a href="https://github.com/norqis/mozarie/issues">Report an issue</a>
-      <a href="https://github.com/norqis/mozarie/blob/main/README.md">README 日本語</a>
+      <a lang="en" href="https://github.com/norqis/mozarie/blob/main/README.en.md">English README</a>
+      <a href="https://github.com/norqis/mozarie/issues">Issues</a>
     </div>
   </footer>
   <script src="gallery.js"></script>

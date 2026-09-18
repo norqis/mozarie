@@ -77,7 +77,7 @@ test("source-delete confirmation can be skipped, restored in settings, and cance
 
     fixture.resetScenario();
     await page.reload({ waitUntil: "domcontentloaded" });
-    await page.waitForFunction(() => state.settings.confirmations.removeImage === false);
+    await page.waitForFunction(() => state.settings?.confirmations.removeImage === false);
     await selectSample();
     await page.locator("#removeAndNextButton").click();
     await page.waitForFunction(() => !state.images.some((image) => image.id === "sample"));
