@@ -82,7 +82,7 @@
 
 | 手動ID | 実機で確認する理由 |
 | --- | --- |
-| WEB-001 | `scripts/test-site.cjs` は JavaScript 無効の実 Chromium で静的ページのタイトル、説明、canonical、主要リンクとダウンロードの初期表示、英語README、デモ1枚目、デスクトップ・モバイルの横幅、CSS、JS、PNG、XMLサイトマップを確認する。実 Chromium で説明文や文字操作を表示しないデモの矢印・位置表示・折返し、6秒自動切替、停止・再開、hover・focus・reduced motionと外部送信を遮断したGoogle tag設定を確認する。本番送信とRealtime受信、GitHub Pages の公開 HTTP 応答と主要リンク、ページ全体の配色・余白・文字・デモ操作の表示とフォーカスは実環境で確認する。 |
+| WEB-001 | `scripts/test-site.cjs` は JavaScript 無効の実 Chromium で静的ページのタイトル、説明、canonical、主要リンクとダウンロードの初期表示、英語README、デモ1枚目、320pxを含むデスクトップ・モバイルの横幅、CSS、JS、PNG、XMLサイトマップを確認する。実 Chromium で文字操作を表示しないデモの矢印・位置表示、1→2→3→1の6秒自動切替、hover・pointer操作後の継続、明示停止の維持、キーボードfocusの一時停止と再開、background tab、reduced motionと外部送信を遮断したGoogle tag設定を確認する。本番送信とRealtime受信、GitHub Pages の公開 HTTP 応答と主要リンク、巨大な見出し・配色・余白・モバイルの読みやすさ・デモ操作とフォーカスは実環境で確認する。 |
 
 Windowsダイアログ、実GPU、実モデルによる検出、視覚的な描画・フォーカス、OS権限、実UNC、実ブラウザーのユーザー操作、WS-138のフォルダー入力はactiveの実機確認として残す。個々の行は `docs/manual-verification.md` 配下にある。
 
