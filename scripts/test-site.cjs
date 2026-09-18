@@ -72,15 +72,29 @@ test("the editorial landing page works without JavaScript and fits every support
       const response = await page.goto(`${site.url}/`, { waitUntil: "load" });
       assert.equal(response.status(), 200);
       assert.equal(await page.title(), "Mozarie | 自動検出・手描き編集に対応したモザイク加工ソフト");
-      assert.equal(await page.locator("h1").innerText(), "モザイク加工を、検出から仕上げまで");
+      assert.equal(await page.locator("h1").innerText(), "モザイク加工を、\n検出から仕上げまで");
       assert.equal(await page.locator('meta[name="description"]').getAttribute("content"), "Mozarieは、モザイクをかける場所の自動検出から手描き調整、複数画像の確認、保存まで行えるWindowsアプリです。画像の加工はPC上で行います。");
       assert.equal(await page.locator('link[rel="canonical"]').getAttribute("href"), canonicalUrl);
       assert.equal(await page.locator('meta[name="google-site-verification"]').getAttribute("content"), "UrWwBw6iDkiGPFlWk3S4jrSsP7YfkvctuNVveYOJd_o");
-      assert.equal(await page.getByText("Mozarieは、モザイクをかける場所の自動検出から、手描きでの調整、複数画像の確認、保存まで行えるWindowsアプリです。", { exact: true }).isVisible(), true);
-      assert.equal(await page.getByRole("heading", { name: "モザイク加工を、ひとつの作業画面で", exact: true }).isVisible(), true);
-      assert.equal(await page.locator("#features .feature-list section").count(), 4);
-      assert.equal(await page.locator("#features .feature-list p").evaluateAll((elements) => elements.length > 0 && elements.every((element) => element.textContent.trim().length > 0 && element.getClientRects().length > 0)), true);
-      assert.equal(await page.getByRole("heading", { name: "画像の検出・編集・保存はローカルで", exact: true }).isVisible(), true);
+      assert.equal(await page.getByText("自動検出と手描きで範囲を整え、画像を確認して保存するWindowsアプリです。", { exact: true }).isVisible(), true);
+      assert.deepEqual(await page.locator("#features .visual-moment").evaluateAll((moments) => moments.map((moment) => ({
+        heading: moment.querySelector("h2")?.textContent.trim(),
+        copy: moment.querySelector("p")?.textContent.trim(),
+        source: moment.querySelector("img")?.getAttribute("src"),
+        disabled: moment.querySelector("[data-feature-open]")?.disabled,
+      }))), [
+        { heading: "比べて仕上げる", copy: "編集結果と適用範囲を並べて、モザイクのかかる場所を確認できます。", source: "assets/demo3.png", disabled: true },
+        { heading: "手描きで、細部まで", copy: "ブラシと消しゴムで、かけたい範囲と残したい部分を整えられます。", source: "assets/demo1.png", disabled: true },
+        { heading: "複数画像を、まとめて", copy: "フィルターで確認する画像を絞り、編集した画像をまとめて保存できます。", source: "assets/demo1.png", disabled: true },
+      ]);
+      assert.equal(await page.locator("#features .feature-list, #features .feature-lead").count(), 0);
+      assert.equal(await page.locator("[data-feature-open]").evaluateAll((previews) => previews.every((preview) => {
+        const image = preview.querySelector("img");
+        const previewBounds = preview.getBoundingClientRect();
+        const imageBounds = image.getBoundingClientRect();
+        return previewBounds.width > 0 && previewBounds.height > 0 && image.complete && image.naturalWidth === 1920 && image.naturalHeight === 959 && imageBounds.left <= previewBounds.left && imageBounds.top <= previewBounds.top && imageBounds.right >= previewBounds.right && imageBounds.bottom >= previewBounds.bottom;
+      })), true, `all visual-moment crops load and cover their visible frame at ${viewport.width}px`);
+      assert.equal(await page.getByRole("heading", { name: "画像の加工は、PC上で", exact: true }).isVisible(), true);
       assert.equal(await page.locator("#local p").evaluateAll((elements) => elements.length === 1 && elements.every((element) => element.textContent.trim().length > 0 && element.getClientRects().length > 0)), true);
       assert.equal(await page.locator("#install, #faq").count(), 0);
       assert.equal(await page.getByRole("heading", { name: "使い始めるまで", exact: true }).count(), 0);
@@ -316,6 +330,65 @@ test("the preview modal opens repeatedly and restores its opener without changin
     assert.equal(await dialog.getAttribute("open"), null, "Escape closes the modal");
     assert.equal(await opener.evaluate((element) => document.activeElement === element), true);
     await context.close();
+  } finally {
+    await browser?.close();
+    await site.close();
+  }
+});
+
+test("each visual moment opens its original image and resumes the gallery after closing", { timeout: 30_000 }, async () => {
+  const site = await startSite();
+  let browser;
+  try {
+    browser = await chromium.launch({ headless: true });
+    for (const width of [1440, 390]) {
+      const context = await browser.newContext({ viewport: { width, height: 900 } });
+      await context.route("**/*", localOnly(site));
+      const page = await context.newPage();
+      await page.clock.install({ time: new Date("2026-09-18T00:00:00Z") });
+      await page.goto(`${site.url}/`, { waitUntil: "domcontentloaded" });
+      await page.waitForFunction(() => [...document.querySelectorAll("[data-feature-open] img")].every((image) => image.complete && image.naturalWidth === 1920));
+      const dialog = page.locator("[data-gallery-modal]");
+      const modalImage = page.locator("[data-gallery-modal-image]");
+      const close = page.locator("[data-gallery-modal-close]");
+      const url = page.url();
+      const previews = page.locator("[data-feature-open]");
+      assert.equal(await previews.count(), 3);
+      const expected = [
+        { source: "assets/demo3.png", alt: "Mozarieで編集結果と適用範囲を見比べている画面", close: "button" },
+        { source: "assets/demo1.png", alt: "Mozarieでモザイクの範囲を手描きで調整している画面", close: "escape" },
+        { source: "assets/demo1.png", alt: "Mozarieで複数画像を確認しモザイクの範囲を手描きで調整している画面", close: "backdrop" },
+      ];
+      for (const [index, preview] of expected.entries()) {
+        const opener = previews.nth(index);
+        if (preview.close === "escape") {
+          await opener.focus();
+          await opener.press("Enter");
+        } else {
+          await opener.click();
+        }
+        assert.equal(await dialog.getAttribute("open"), "");
+        assert.equal(await modalImage.getAttribute("src"), new URL(preview.source, `${site.url}/`).href);
+        assert.equal(await modalImage.getAttribute("alt"), preview.alt);
+        await page.waitForFunction(() => { const image = document.querySelector("[data-gallery-modal-image]"); return image.complete && image.naturalWidth === 1920; });
+        assert.deepEqual(await modalImage.evaluate((image) => ({ complete: image.complete, width: image.naturalWidth, height: image.naturalHeight })), { complete: true, width: 1920, height: 959 });
+        assert.equal(page.url(), url);
+        const activeWhileOpen = await activeImage(page).getAttribute("src");
+        await page.clock.fastForward(6000);
+        assert.equal(await activeImage(page).getAttribute("src"), activeWhileOpen, "the gallery remains stopped behind a feature preview");
+        const closeEvent = page.evaluate(() => new Promise((resolve) => document.querySelector("[data-gallery-modal]").addEventListener("close", resolve, { once: true })));
+        if (preview.close === "button") await close.click();
+        if (preview.close === "escape") await page.keyboard.press("Escape");
+        if (preview.close === "backdrop") await page.mouse.click(2, 2);
+        await dialog.waitFor({ state: "hidden" });
+        await closeEvent;
+        assert.equal(await opener.evaluate((element) => document.activeElement === element), true);
+        const activeBefore = await activeImage(page).getAttribute("src");
+        await page.clock.runFor(6000);
+        assert.notEqual(await activeImage(page).getAttribute("src"), activeBefore, `closing feature preview ${index + 1} leaves the gallery autoplay active`);
+      }
+      await context.close();
+    }
   } finally {
     await browser?.close();
     await site.close();

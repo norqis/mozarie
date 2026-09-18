@@ -8,6 +8,7 @@
   const previous = gallery.querySelector("[data-gallery-prev]");
   const next = gallery.querySelector("[data-gallery-next]");
   const dots = [...gallery.querySelectorAll("[data-gallery-dot]")];
+  const featurePreviews = [...document.querySelectorAll("[data-feature-open]")];
   const modalClose = modal.querySelector("[data-gallery-modal-close]");
   const modalImage = modal.querySelector("[data-gallery-modal-image]");
   const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -64,7 +65,10 @@
   previous.addEventListener("click", () => move(index - 1));
   next.addEventListener("click", () => move(index + 1));
   dots.forEach((dot) => dot.addEventListener("click", () => move(Number(dot.dataset.galleryDot))));
-  slides.forEach((slide) => slide.querySelector("[data-gallery-open]").addEventListener("click", (event) => openModal(event.currentTarget)));
+  [...slides.map((slide) => slide.querySelector("[data-gallery-open]")), ...featurePreviews].forEach((button) => {
+    button.disabled = false;
+    button.addEventListener("click", (event) => openModal(event.currentTarget));
+  });
   gallery.addEventListener("pointerdown", () => {
     keyboardSuspended = false;
     schedule();
@@ -91,8 +95,9 @@
     if (event.target === modal) modal.close();
   });
   modal.addEventListener("close", () => {
-    modalOpener?.focus();
-    keyboardSuspended = modalOpener?.matches(":focus-visible") ?? false;
+    const opener = modalOpener;
+    opener?.focus();
+    keyboardSuspended = Boolean(opener && gallery.contains(opener) && opener.matches(":focus-visible"));
     modalOpener = undefined;
     schedule();
   });
