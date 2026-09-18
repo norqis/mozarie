@@ -93,7 +93,7 @@ class RecursiveSaveTests(unittest.TestCase):
 class WorkspaceRenameTests(unittest.TestCase):
     def test_original_save_retargets_native_aliases_and_keeps_alias_edit(self):
         with tempfile.TemporaryDirectory() as raw:
-            root = Path(raw); outer = root / "outer"; nested = outer / "nested"; nested.mkdir(parents=True)
+            root = Path(raw).resolve(); outer = root / "outer"; nested = outer / "nested"; nested.mkdir(parents=True)
             old = nested / "old.png"; new = nested / "saved.png"; old.write_bytes(b"old"); new.write_bytes(b"saved")
             store = WorkspaceStore(root / "data")
             with store._connect() as db:
