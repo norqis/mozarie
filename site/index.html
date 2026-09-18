@@ -19,98 +19,55 @@
 </head>
 <body>
   <header class="site-header">
-    <a class="brand" href="https://norqis.github.io/mozarie/" aria-label="Mozarie ホーム">
-      <span class="brand-mark" aria-hidden="true"><img src="assets/mozarie-logo.png" alt=""></span>
-      <span>Mozarie</span>
-    </a>
-    <nav aria-label="主要リンク">
-      <a href="https://github.com/norqis/mozarie#readme">使い方</a>
-      <a href="https://github.com/norqis/mozarie">GitHub</a>
-    </nav>
+    <a class="brand" href="https://norqis.github.io/mozarie/" aria-label="Mozarie ホーム"><span class="brand-mark" aria-hidden="true"><img src="assets/mozarie-logo.png" alt=""></span><span>Mozarie</span></a>
+    <nav aria-label="主要リンク"><a href="#features">できること</a><a href="#install">使い始める</a><a href="https://github.com/norqis/mozarie">GitHub</a></nav>
   </header>
-
   <main>
     <section class="hero" aria-labelledby="page-title">
-      <h1 id="page-title">モザイクの<span class="hero-title-tail">検出・編集・保存</span></h1>
-      <p class="intro">Mozarieは、画像のモザイク範囲をローカルで検出し、確認・編集・保存できるWindowsアプリです。</p>
-      <div class="hero-action">
-        <a class="download" href="https://github.com/norqis/mozarie/releases/latest">最新版をダウンロード</a>
-        <a class="readme" href="https://github.com/norqis/mozarie#readme">使い方を見る</a>
-      </div>
-      <p class="platform">Windows / PNG・JPEG・WebP / ローカル処理</p>
+      <div><h1 id="page-title">画像のモザイク範囲を検出・編集・保存</h1><p class="intro">Mozarieは、PNG・JPEG・WebP画像のモザイク範囲をWindows上でローカル検出し、確認・編集・保存できるアプリです。</p></div>
+      <div class="hero-action"><a class="download" href="https://github.com/norqis/mozarie/releases/latest">最新版をダウンロード</a><a class="readme" href="https://github.com/norqis/mozarie#readme">READMEを読む</a><p class="platform">Windows / PNG・JPEG・WebP / MIT License</p></div>
     </section>
-
     <section class="gallery" aria-label="Mozarie の画面" aria-roledescription="carousel">
       <div class="gallery-frame" data-gallery>
         <div class="gallery-row">
-            <button class="gallery-arrow" type="button" data-gallery-controls data-gallery-prev aria-label="前の画面" hidden>
-              <svg viewBox="0 0 16 16" aria-hidden="true"><path d="m10 2-6 6 6 6"></path></svg>
-            </button>
-            <div class="gallery-viewport" data-gallery-viewport>
-              <figure class="gallery-slide" data-gallery-slide data-gallery-position="active">
-                <button class="gallery-image" type="button" data-gallery-open aria-label="Mozarieの作業画面 1を拡大表示" disabled><img src="assets/demo1.png" width="1920" height="959" alt="Mozarieでモザイクの範囲を手描きで調整している画面"></button>
-              </figure>
-              <figure class="gallery-slide" data-gallery-slide hidden>
-                <button class="gallery-image" type="button" data-gallery-open aria-label="Mozarieの作業画面 2を拡大表示" disabled><img src="assets/demo2.png" width="1920" height="959" alt="Mozarieで検出モデルと輪郭補正を設定している画面"></button>
-              </figure>
-              <figure class="gallery-slide" data-gallery-slide hidden>
-                <button class="gallery-image" type="button" data-gallery-open aria-label="Mozarieの作業画面 3を拡大表示" disabled><img src="assets/demo3.png" width="1920" height="959" alt="Mozarieで編集結果と適用範囲を見比べている画面"></button>
-              </figure>
-            </div>
-            <button class="gallery-arrow" type="button" data-gallery-controls data-gallery-next aria-label="次の画面" hidden>
-              <svg viewBox="0 0 16 16" aria-hidden="true"><path d="m6 2 6 6-6 6"></path></svg>
-            </button>
+          <button class="gallery-arrow gallery-arrow-previous" type="button" data-gallery-controls data-gallery-prev aria-label="前の画面" hidden><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m10 2-6 6 6 6"></path></svg></button>
+          <div class="gallery-viewport" data-gallery-viewport>
+            <figure class="gallery-slide" data-gallery-slide data-gallery-position="active"><button class="gallery-image" type="button" data-gallery-open aria-label="Mozarieの作業画面 1を拡大表示" disabled><img src="assets/demo1.png" width="1920" height="959" alt="Mozarieでモザイクの範囲を手描きで調整している画面"></button></figure>
+            <figure class="gallery-slide" data-gallery-slide hidden><button class="gallery-image" type="button" data-gallery-open aria-label="Mozarieの作業画面 2を拡大表示" disabled><img src="assets/demo2.png" width="1920" height="959" alt="Mozarieで検出モデルと輪郭補正を設定している画面"></button></figure>
+            <figure class="gallery-slide" data-gallery-slide hidden><button class="gallery-image" type="button" data-gallery-open aria-label="Mozarieの作業画面 3を拡大表示" disabled><img src="assets/demo3.png" width="1920" height="959" alt="Mozarieで編集結果と適用範囲を見比べている画面"></button></figure>
+          </div>
+          <button class="gallery-arrow gallery-arrow-next" type="button" data-gallery-controls data-gallery-next aria-label="次の画面" hidden><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m6 2 6 6-6 6"></path></svg></button>
         </div>
-        <div class="gallery-status" data-gallery-controls aria-label="画面表示の操作" hidden>
-            <div class="gallery-dots">
-              <button type="button" data-gallery-dot="0" aria-label="画面 1を表示" aria-current="true"></button>
-              <button type="button" data-gallery-dot="1" aria-label="画面 2を表示"></button>
-              <button type="button" data-gallery-dot="2" aria-label="画面 3を表示"></button>
-            </div>
-        </div>
+        <div class="gallery-status" data-gallery-controls aria-label="画面表示の操作" hidden><div class="gallery-dots"><button type="button" data-gallery-dot="0" aria-label="画面 1を表示" aria-current="true"></button><button type="button" data-gallery-dot="1" aria-label="画面 2を表示"></button><button type="button" data-gallery-dot="2" aria-label="画面 3を表示"></button></div></div>
       </div>
     </section>
-
-    <section class="product-summary" aria-labelledby="product-summary-title">
-      <h2 id="product-summary-title">Mozarieでできること</h2>
-      <p>画像のモザイク範囲を自動検出し、確認・修正して保存できるWindowsアプリです。処理はローカルで行います。</p>
+    <section class="features content-section" id="features" aria-labelledby="features-title">
+      <h2 id="features-title">検出から保存まで</h2>
       <div class="feature-list">
-        <section>
-          <h3>検出</h3>
-          <p>画像やフォルダーを読み込み、現在の画像または全画像からモザイク候補を検出できます。</p>
-        </section>
-        <section>
-          <h3>調整</h3>
-          <p>候補を確認し、モザイク・除外ブラシ、消しゴム、境界ツールで範囲を調整できます。</p>
-        </section>
-        <section>
-          <h3>保存</h3>
-          <p>現在の画像、モザイクのある画像、確認済み画像をコピー保存または元画像へ上書きできます。</p>
-        </section>
+        <section><h3>画像を読み込み、候補を検出</h3><div><p>PNG・JPEG・WebP画像やフォルダーを読み込み、現在の画像または全画像からモザイク候補を検出できます。</p><p>SAMによる輪郭補正や、検出した手の領域の除外に対応しています。</p></div></section>
+        <section><h3>範囲を見て、手描きで調整</h3><div><p>候補を確認し、除外・削除できます。モザイク・除外ブラシ、消しゴム、境界ツールで範囲を調整できます。</p><p>強制除外を優先し、Undo / Redoで編集を戻したりやり直したりできます。</p></div></section>
+        <section><h3>複数画像の作業を整理</h3><div><p>PJごとに管理し、確認済み・未確認、モザイクの有無で絞り込めます。</p><p>非表示にしたデータは保持して再表示でき、全画像検出・保存・マスク出力の対象から除外できます。</p></div></section>
+        <section><h3>保存対象と出力を選択</h3><div><p>現在の画像、モザイクのある画像、確認済み画像を選び、コピー保存または元画像へ上書きできます。</p><p>モザイクの粗さ、形式、メタデータの保持を選べます。</p></div></section>
       </div>
     </section>
-
+    <section class="install content-section" id="install" aria-labelledby="install-title">
+      <h2 id="install-title">使い始めるまで</h2>
+      <div class="install-grid"><p>Windowsと64-bit Python（Python Launcher <code>py</code>）を用意します。NVIDIA/CUDAはPython 3.11〜3.14、AMD/DirectMLとCPUは3.11または3.12に対応しています。</p><ol><li>最新ReleaseのZIPを展開します。</li><li><code>setup.bat</code> を実行して、使用する環境をセットアップします。</li><li><code>run.bat</code> で起動し、<strong>設定 &gt; 検出</strong>から基本モデルを指定します。</li></ol></div>
+      <p>検出・編集・保存はPC上で行います。モデルの取得やアプリの更新にはネットワーク接続が必要です。基本モデルは別途用意します。必要なモデル、補助モデルの配布条件、変換手順は<a href="https://github.com/norqis/mozarie#モデル">READMEのモデル説明</a>を確認してください。</p>
+      <p>更新は設定の<strong>更新を確認</strong>、または<code>update.bat</code>から行います。適用前にMozarieを終了し、失敗した場合は同じReleaseの<code>update.bat</code>をもう一度実行します。</p>
+    </section>
+    <section class="faq content-section" id="faq" aria-labelledby="faq-title">
+      <h2 id="faq-title">よくある質問</h2>
+      <dl>
+        <div><dt>検出候補は、そのまま保存できますか？</dt><dd>候補は確認して必要に応じて修正してください。検出後もブラシや境界ツールで範囲を調整できます。</dd></div>
+        <div><dt>コピー保存で元画像は変わりますか？</dt><dd>元画像を残すにはコピー保存を選び、「コピー成功後に元画像を削除」をオフにしてください。元画像を変更する場合は上書きを選びます。</dd></div>
+        <div><dt>GPUで失敗したらCPUへ自動で切り替わりますか？</dt><dd>CPUでも利用できますが、GPUで失敗しても自動ではCPUへ再試行しません。設定からCPUへ手動で切り替えてください。</dd></div>
+        <div><dt>モデルはアプリに含まれますか？</dt><dd>基本モデルは別途選んで取得します。補助モデルを含む配布元の条件とライセンスは、各配布元と<a href="https://github.com/norqis/mozarie/blob/main/THIRD_PARTY_NOTICES.md">第三者ライセンス・モデル配布元</a>を確認してください。</dd></div>
+      </dl>
+    </section>
   </main>
-
-  <dialog class="gallery-modal" data-gallery-modal aria-labelledby="gallery-modal-title">
-    <div class="gallery-modal-content">
-      <button class="gallery-modal-close" type="button" data-gallery-modal-close aria-label="拡大表示を閉じる" autofocus>
-        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="m3 3 10 10M13 3 3 13"></path></svg>
-      </button>
-      <img data-gallery-modal-image alt="">
-      <p id="gallery-modal-title" class="visually-hidden">Mozarieの作業画面を拡大表示</p>
-    </div>
-  </dialog>
-
-  <footer>
-    <p>Mozarie</p>
-    <div>
-      <a href="https://github.com/norqis/mozarie#readme">Docs</a>
-      <a href="https://github.com/norqis/mozarie/releases">Releases</a>
-      <a lang="en" href="https://github.com/norqis/mozarie/blob/main/README.en.md">English README</a>
-      <a href="https://github.com/norqis/mozarie/issues">Issues</a>
-    </div>
-  </footer>
+  <dialog class="gallery-modal" data-gallery-modal aria-labelledby="gallery-modal-title"><div class="gallery-modal-content"><button class="gallery-modal-close" type="button" data-gallery-modal-close aria-label="拡大表示を閉じる" autofocus><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m3 3 10 10M13 3 3 13"></path></svg></button><img data-gallery-modal-image alt=""><p id="gallery-modal-title" class="visually-hidden">Mozarieの作業画面を拡大表示</p></div></dialog>
+  <footer><p>Mozarie</p><div><a href="https://github.com/norqis/mozarie#readme">README</a><a href="https://github.com/norqis/mozarie/issues">Issues</a><a lang="en" href="https://github.com/norqis/mozarie/blob/main/README.en.md">English README</a><a href="https://github.com/norqis/mozarie/releases">Releases</a><a href="https://github.com/norqis/mozarie/blob/main/LICENSE">License</a></div></footer>
   <script src="gallery.js"></script>
 </body>
 </html>

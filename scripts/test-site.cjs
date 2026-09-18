@@ -72,11 +72,17 @@ test("the editorial landing page works without JavaScript and fits every support
       const response = await page.goto(`${site.url}/`, { waitUntil: "load" });
       assert.equal(response.status(), 200);
       assert.equal(await page.title(), "Mozarie | Windowsで画像のモザイク範囲を検出・編集・保存");
-      assert.equal(await page.locator("h1").innerText(), "モザイクの検出・編集・保存");
+      assert.equal(await page.locator("h1").innerText(), "画像のモザイク範囲を検出・編集・保存");
       assert.equal(await page.locator('meta[name="description"]').getAttribute("content"), "Mozarieは、PNG・JPEG・WebP画像のモザイク範囲をWindows上でローカル検出、確認、編集、保存できるアプリです。");
       assert.equal(await page.locator('link[rel="canonical"]').getAttribute("href"), canonicalUrl);
       assert.equal(await page.locator('meta[name="google-site-verification"]').getAttribute("content"), "UrWwBw6iDkiGPFlWk3S4jrSsP7YfkvctuNVveYOJd_o");
-      assert.equal(await page.getByText("画像のモザイク範囲を自動検出し、確認・修正して保存できるWindowsアプリです。処理はローカルで行います。", { exact: true }).isVisible(), true);
+      assert.equal(await page.getByText("Mozarieは、PNG・JPEG・WebP画像のモザイク範囲をWindows上でローカル検出し、確認・編集・保存できるアプリです。", { exact: true }).isVisible(), true);
+      assert.equal(await page.getByRole("heading", { name: "検出から保存まで", exact: true }).isVisible(), true);
+      assert.equal(await page.locator("#features .feature-list section").count(), 4);
+      assert.equal(await page.locator("#faq dd").count(), 4);
+      assert.equal(await page.locator("#features .feature-list p, #install p, #faq dd").evaluateAll((elements) => elements.every((element) => element.textContent.trim().length > 0)), true);
+      assert.equal(await page.getByRole("heading", { name: "使い始めるまで", exact: true }).isVisible(), true);
+      assert.equal(await page.getByRole("heading", { name: "よくある質問", exact: true }).isVisible(), true);
       assert.equal(await page.getByRole("link", { name: "最新版をダウンロード", exact: false }).count(), 1);
       assert.equal(await page.locator('footer a[lang="en"][href="https://github.com/norqis/mozarie/blob/main/README.en.md"]').count(), 1);
       assert.equal(await page.locator("[data-gallery-controls]").evaluateAll((controls) => controls.every((control) => control.hidden && getComputedStyle(control).display === "none")), true);
@@ -87,19 +93,27 @@ test("the editorial landing page works without JavaScript and fits every support
       assert.equal(await page.locator("[data-gallery-open]").evaluateAll((buttons) => buttons.every((button) => button.disabled)), true);
       assert.deepEqual(await page.locator("[data-gallery-slide]:not([hidden]) img").evaluate((image) => ({ width: image.naturalWidth, height: image.naturalHeight, complete: image.complete })), { width: 1920, height: 959, complete: true });
       assert.deepEqual(await page.locator(".brand-mark img").evaluate((image) => ({ src: image.getAttribute("src"), alt: image.getAttribute("alt"), width: image.naturalWidth, height: image.naturalHeight, complete: image.complete })), { src: "assets/mozarie-logo.png", alt: "", width: 799, height: 547, complete: true });
-      const stage = await page.locator(".gallery").boundingBox();
+      const stage = await page.locator("[data-gallery-viewport]").boundingBox();
       const image = await page.locator("[data-gallery-slide]:not([hidden]) img").boundingBox();
-      assert.ok(stage && stage.width <= 960, `gallery is capped at 960px at ${viewport.width}px`);
-      assert.ok(image && Math.abs((image.width - 2) / (image.height - 2) - 1920 / 959) < .002, `demo image is not cropped at ${viewport.width}px`);
-      if (viewport.width >= 1440) assert.ok(stage && stage.x >= 220 && viewport.width - stage.x - stage.width >= 220, `desktop stage keeps wide side gutters at ${viewport.width}px`);
+      const expectedWidth = viewport.width <= 700 ? viewport.width - 48 : Math.min(viewport.width * .82, 1480);
+      assert.ok(image && Math.abs(image.width - expectedWidth) <= 1, `central demo image has the intended width at ${viewport.width}px`);
+      assert.ok(image && Math.abs(image.width / image.height - 1920 / 959) < .002, `demo image is not cropped at ${viewport.width}px`);
+      assert.equal(JSON.stringify(await page.locator(".gallery, .gallery-frame, .gallery-image, .gallery-slide img").evaluateAll((elements) => elements.map((element) => {
+        const style = getComputedStyle(element);
+        return { background: style.backgroundColor, border: style.borderWidth, radius: style.borderRadius, shadow: style.boxShadow };
+      }))), JSON.stringify(Array(8).fill({ background: "rgba(0, 0, 0, 0)", border: "0px", radius: "0px", shadow: "none" })));
+      if (viewport.width === 1440) assert.ok(image && image.width >= 1180 && image.width <= 1182, "1440px viewport keeps the 1181px main image");
+      if (viewport.width === 1920) assert.ok(image && image.width === 1480, "1920px viewport caps the main image at 1480px");
+      if (viewport.width === 768) assert.ok(image && image.width >= 629 && image.width <= 631, "768px viewport keeps the 630px main image");
       if (viewport.width <= 390) {
-        assert.ok(stage && stage.x >= 20 && viewport.width - stage.x - stage.width >= 20, `mobile stage keeps 20px side margins at ${viewport.width}px`);
+        assert.ok(stage && stage.x === 0 && stage.width === viewport.width, `mobile stage remains full-width at ${viewport.width}px`);
+        assert.ok(image && image.x >= 24 && viewport.width - image.x - image.width >= 24, `mobile image keeps 24px side margins at ${viewport.width}px`);
         const actions = await page.locator(".hero-action a").evaluateAll((links) => links.map((link) => {
           const bounds = link.getBoundingClientRect();
-          return { height: bounds.height, left: bounds.left, right: bounds.right };
+          return { height: bounds.height, left: bounds.left, right: bounds.right, top: bounds.top, bottom: bounds.bottom };
         }));
         assert.equal(actions.length, 2);
-        assert.ok(actions.every((action) => action.height >= 48) && actions[0].right + 8 <= actions[1].left, `mobile CTAs remain legible and separate at ${viewport.width}px`);
+        assert.ok(actions.every((action) => action.height >= 48) && !(actions[0].left < actions[1].right && actions[0].right > actions[1].left && actions[0].top < actions[1].bottom && actions[0].bottom > actions[1].top), `mobile CTAs remain legible and separate at ${viewport.width}px`);
       }
       const download = await page.getByRole("link", { name: "最新版をダウンロード", exact: false }).boundingBox();
       assert.equal(await page.getByRole("link", { name: "最新版をダウンロード", exact: false }).getAttribute("href"), "https://github.com/norqis/mozarie/releases/latest");
@@ -168,13 +182,13 @@ test("the peek carousel rotates, keeps its focus and tab rules, and opens a moda
     ]);
     const [previousBounds, viewportBounds, nextBounds, imageBounds] = await Promise.all([previous.boundingBox(), viewport.boundingBox(), next.boundingBox(), current().boundingBox()]);
     assert.ok(previousBounds && viewportBounds && nextBounds && imageBounds);
-    assert.ok(previousBounds.width >= 44 && previousBounds.height >= 44 && previousBounds.x + previousBounds.width <= viewportBounds.x, "previous arrow occupies its own 44px column");
-    assert.ok(nextBounds.width >= 44 && nextBounds.height >= 44 && nextBounds.x >= viewportBounds.x + viewportBounds.width, "next arrow occupies its own 44px column");
-    assert.ok(imageBounds.width >= viewportBounds.width * .82 && imageBounds.width <= viewportBounds.width * .86, "the central image remains compact inside the viewport");
+    assert.ok(previousBounds.width >= 44 && previousBounds.height >= 44 && previousBounds.x + previousBounds.width <= imageBounds.x, "previous arrow is outside the central image");
+    assert.ok(nextBounds.width >= 44 && nextBounds.height >= 44 && nextBounds.x >= imageBounds.x + imageBounds.width, "next arrow is outside the central image");
+    assert.ok(imageBounds.width >= 1180 && imageBounds.width <= 1182, "the central image is 1181px at 1440px");
     assert.equal(await page.locator("[data-gallery-slide][data-gallery-position='previous'], [data-gallery-slide][data-gallery-position='next']").evaluateAll((slides) => slides.every((slide) => {
       const bounds = slide.getBoundingClientRect();
       const viewportBounds = slide.parentElement.getBoundingClientRect();
-      return getComputedStyle(slide).opacity === "0.3" && bounds.right > viewportBounds.left && bounds.left < viewportBounds.right;
+      return getComputedStyle(slide).opacity === "0.24" && bounds.right > viewportBounds.left && bounds.left < viewportBounds.right;
     })), true, "both neighboring images remain visibly peeking into the clipped viewport");
 
     await previous.click();
@@ -318,18 +332,31 @@ test("the enabled carousel keeps its visible geometry at every supported viewpor
         activeImage(page).boundingBox(),
         page.locator("[data-gallery-dot]").evaluateAll((buttons) => buttons.map((button) => {
           const bounds = button.getBoundingClientRect();
-          return { width: bounds.width, height: bounds.height };
+          return { width: bounds.width, height: bounds.height, x: bounds.x, y: bounds.y };
         })),
       ]);
       assert.ok(previous && viewportBounds && next && image);
-      assert.ok(previous.width >= 44 && previous.height >= 44 && previous.x + previous.width <= viewportBounds.x, `previous arrow stays outside the image viewport at ${viewport.width}px`);
-      assert.ok(next.width >= 44 && next.height >= 44 && next.x >= viewportBounds.x + viewportBounds.width, `next arrow stays outside the image viewport at ${viewport.width}px`);
-      assert.ok(image.width >= viewportBounds.width * .82 && image.width <= viewportBounds.width * .86, `central image remains compact at ${viewport.width}px`);
-      assert.ok(dots.every((dot) => dot.width >= 24 && dot.height >= 24), `dots retain 24px targets at ${viewport.width}px`);
+      const expectedWidth = viewport.width <= 700 ? viewport.width - 48 : Math.min(viewport.width * .82, 1480);
+      assert.ok(Math.abs(image.width - expectedWidth) <= 1, `central image has the required width at ${viewport.width}px`);
+      assert.ok(Math.abs(image.width / image.height - 1920 / 959) < .002, `central image keeps the source ratio at ${viewport.width}px`);
+      if (viewport.width <= 900) {
+        assert.ok(previous.width >= 44 && previous.height >= 44 && previous.y >= image.y + image.height, `previous arrow is below the image at ${viewport.width}px`);
+        assert.ok(next.width >= 44 && next.height >= 44 && next.y >= image.y + image.height, `next arrow is below the image at ${viewport.width}px`);
+        assert.ok(dots.every((dot) => dot.width >= 24 && dot.height >= 44), `mobile dots retain their control-row targets at ${viewport.width}px`);
+      } else {
+        assert.ok(previous.width >= 44 && previous.height >= 44 && previous.x + previous.width <= image.x, `previous arrow stays outside the image at ${viewport.width}px`);
+        assert.ok(next.width >= 44 && next.height >= 44 && next.x >= image.x + image.width, `next arrow stays outside the image at ${viewport.width}px`);
+        assert.ok(dots.every((dot) => dot.width >= 44 && dot.height >= 44), `desktop dots retain 44px targets at ${viewport.width}px`);
+      }
+      for (const arrow of [previous, next]) {
+        for (const dot of dots) {
+          assert.equal(arrow.x < dot.x + dot.width && arrow.x + arrow.width > dot.x && arrow.y < dot.y + dot.height && arrow.y + arrow.height > dot.y, false, `arrows and dots do not overlap at ${viewport.width}px`);
+        }
+      }
       assert.equal(await page.locator("[data-gallery-slide][data-gallery-position='previous'], [data-gallery-slide][data-gallery-position='next']").evaluateAll((slides) => slides.every((slide) => {
         const bounds = slide.getBoundingClientRect();
         const viewportBounds = slide.parentElement.getBoundingClientRect();
-        return Number(getComputedStyle(slide).opacity) >= .25 && Number(getComputedStyle(slide).opacity) <= .35 && bounds.right > viewportBounds.left && bounds.left < viewportBounds.right;
+        return Number(getComputedStyle(slide).opacity) === .24 && bounds.right > viewportBounds.left && bounds.left < viewportBounds.right;
       })), true, `both neighboring images peek into view at ${viewport.width}px`);
       assert.equal(await page.locator("html").evaluate((element) => element.scrollWidth <= element.clientWidth), true, `no horizontal overflow at ${viewport.width}px`);
       await context.close();
