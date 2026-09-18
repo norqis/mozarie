@@ -15,6 +15,8 @@ const contentTypes = {
   ".xml": "application/xml; charset=utf-8",
 };
 const canonicalUrl = "https://norqis.github.io/mozarie/";
+const googleTagId = "G-BLX3GDM1WQ";
+const googleTagUrl = `https://www.googletagmanager.com/gtag/js?id=${googleTagId}`;
 
 function startSite() {
   const server = http.createServer(async (request, response) => {
@@ -103,6 +105,10 @@ test("the stylesheet and sitemap are published as valid static assets", { timeou
     assert.match(sitemap.headers["content-type"], /^application\/xml; charset=utf-8$/);
     browser = await chromium.launch({ headless: true });
     const context = await browser.newContext();
+    await context.route("**/*", (route) => {
+      const url = new URL(route.request().url());
+      return url.origin === site.url ? route.continue() : route.abort();
+    });
     const page = await context.newPage();
     const parsed = await page.evaluate((xml) => {
       const document = new DOMParser().parseFromString(xml, "application/xml");
@@ -121,6 +127,50 @@ test("the stylesheet and sitemap are published as valid static assets", { timeou
       return { background: getComputedStyle(section).backgroundColor, color: getComputedStyle(link).color };
     });
     assert.notEqual(contrast.color, contrast.background, "the hovered English README link remains visible");
+    await context.close();
+  } finally {
+    await browser?.close();
+    await site.close();
+  }
+});
+
+test("the landing page initializes the Google tag without external tracking traffic", { timeout: 30_000 }, async () => {
+  const site = await startSite();
+  let browser;
+  try {
+    browser = await chromium.launch({ headless: true });
+    const context = await browser.newContext();
+    let loaderRequests = 0;
+    await context.route("**/*", (route) => {
+      const url = new URL(route.request().url());
+      if (url.href === googleTagUrl) {
+        loaderRequests += 1;
+        return route.fulfill({ status: 200, contentType: "application/javascript", body: "" });
+      }
+      return url.origin === site.url ? route.continue() : route.abort();
+    });
+    const page = await context.newPage();
+    const pageErrors = [];
+    page.on("pageerror", (error) => pageErrors.push(error));
+    const loaderResponse = page.waitForResponse((response) => response.url() === googleTagUrl);
+    const response = await page.goto(`${site.url}/`, { waitUntil: "domcontentloaded" });
+    assert.equal(response.status(), 200);
+    assert.equal((await loaderResponse).status(), 200);
+    assert.equal(loaderRequests, 1);
+    const loader = page.locator(`script[src="${googleTagUrl}"]`);
+    assert.equal(await loader.count(), 1);
+    assert.equal(await loader.evaluate((element) => element.async), true);
+    assert.equal(await page.getByRole("link", { name: "最新版をダウンロード", exact: true }).isVisible(), true);
+    const dataLayer = await page.evaluate((tagId) => {
+      const entries = window.dataLayer;
+      return {
+        entries: entries.length,
+        initialized: entries.filter(([command, value]) => command === "js" && value instanceof Date).length,
+        configured: entries.filter(([command, value]) => command === "config" && value === tagId).length,
+      };
+    }, googleTagId);
+    assert.deepEqual(dataLayer, { entries: 2, initialized: 1, configured: 1 });
+    assert.deepEqual(pageErrors, []);
     await context.close();
   } finally {
     await browser?.close();
