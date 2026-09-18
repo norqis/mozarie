@@ -19,7 +19,10 @@
 </head>
 <body>
   <header class="site-header">
-    <a class="brand" href="https://norqis.github.io/mozarie/" aria-label="Mozarie ホーム">Mozarie</a>
+    <a class="brand" href="https://norqis.github.io/mozarie/" aria-label="Mozarie ホーム">
+      <span class="brand-mark" aria-hidden="true"><img src="assets/mozarie-logo.png" alt=""></span>
+      <span>Mozarie</span>
+    </a>
     <nav aria-label="主要リンク">
       <a href="https://github.com/norqis/mozarie#readme">使い方</a>
       <a href="https://github.com/norqis/mozarie">GitHub</a>
@@ -28,17 +31,13 @@
 
   <main>
     <section class="hero" aria-labelledby="page-title">
-      <h1 id="page-title">Mozarie</h1>
-      <div class="hero-band">
-        <div class="hero-copy">
-          <p class="lead">モザイクの検出、<br>編集、保存。</p>
-          <p class="intro">Mozarieは、画像のモザイク範囲をローカルで検出し、確認・編集・保存できるWindowsアプリです。</p>
-        </div>
-        <div class="hero-action">
-          <a class="download" href="https://github.com/norqis/mozarie/releases/latest">最新版をダウンロード <span aria-hidden="true">→</span></a>
-          <p class="platform">Windows / PNG・JPEG・WebP / ローカル処理</p>
-        </div>
+      <h1 id="page-title">モザイクの<span class="hero-title-tail">検出・編集・保存</span></h1>
+      <p class="intro">Mozarieは、画像のモザイク範囲をローカルで検出し、確認・編集・保存できるWindowsアプリです。</p>
+      <div class="hero-action">
+        <a class="download" href="https://github.com/norqis/mozarie/releases/latest">最新版をダウンロード</a>
+        <a class="readme" href="https://github.com/norqis/mozarie#readme">使い方を見る</a>
       </div>
+      <p class="platform">Windows / PNG・JPEG・WebP / ローカル処理</p>
     </section>
 
     <section class="gallery" aria-label="Mozarie の画面" aria-roledescription="carousel">
@@ -73,28 +72,13 @@
       </div>
     </section>
 
-    <section class="workflow" aria-labelledby="workflow-title">
-      <h2 id="workflow-title">検出から、保存まで。</h2>
-      <ol>
-        <li><span>01</span><h3>読み込む</h3><p>画像・フォルダーを読み込み、現在または全画像を検出できます。</p></li>
-        <li><span>02</span><h3>整える</h3><p>候補の除外・削除、ブラシ・消しゴム・境界ツールで範囲を調整できます。</p></li>
-        <li><span>03</span><h3>保存する</h3><p>コピー保存と元画像への上書きに対応します。非表示の画像は出力対象から除外されます。</p></li>
-      </ol>
-    </section>
-
-    <section class="setup" aria-labelledby="setup-title">
-      <h2 id="setup-title">はじめよう。</h2>
-      <div>
-        <p>1. ダウンロードしたフォルダーで <code>setup.bat</code> を実行</p>
-        <p>2. 初回起動後、設定 &gt; 検出で基本モデルを指定</p>
-        <a href="https://github.com/norqis/mozarie#インストール">セットアップ手順 <span aria-hidden="true">→</span></a>
-      </div>
-    </section>
   </main>
 
   <footer>
     <p>Mozarie</p>
     <div>
+      <a href="https://github.com/norqis/mozarie#readme">Docs</a>
+      <a href="https://github.com/norqis/mozarie/releases">Releases</a>
       <a lang="en" href="https://github.com/norqis/mozarie/blob/main/README.en.md">English README</a>
       <a href="https://github.com/norqis/mozarie/issues">Issues</a>
     </div>

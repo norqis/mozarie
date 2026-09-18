@@ -61,14 +61,14 @@ test("the editorial landing page works without JavaScript and fits every support
   let browser;
   try {
     browser = await chromium.launch({ headless: true });
-    for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 }, { width: 320, height: 720 }]) {
+    for (const viewport of [{ width: 320, height: 720 }, { width: 390, height: 844 }, { width: 768, height: 800 }, { width: 1440, height: 900 }, { width: 1920, height: 960 }]) {
       const context = await browser.newContext({ javaScriptEnabled: false, viewport });
       await context.route("**/*", localOnly(site));
       const page = await context.newPage();
       const response = await page.goto(`${site.url}/`, { waitUntil: "load" });
       assert.equal(response.status(), 200);
       assert.equal(await page.title(), "Mozarie | Windowsで画像のモザイク範囲を検出・編集・保存");
-      assert.equal(await page.locator("h1").innerText(), "Mozarie");
+      assert.equal(await page.locator("h1").innerText(), "モザイクの検出・編集・保存");
       assert.equal(await page.locator('meta[name="description"]').getAttribute("content"), "Mozarieは、PNG・JPEG・WebP画像のモザイク範囲をWindows上でローカル検出、確認、編集、保存できるアプリです。");
       assert.equal(await page.locator('link[rel="canonical"]').getAttribute("href"), canonicalUrl);
       assert.equal(await page.locator('meta[name="google-site-verification"]').getAttribute("content"), "UrWwBw6iDkiGPFlWk3S4jrSsP7YfkvctuNVveYOJd_o");
@@ -80,6 +80,28 @@ test("the editorial landing page works without JavaScript and fits every support
       assert.equal(await page.getByText("前の画面", { exact: true }).count(), 0);
       assert.equal(await page.locator("[data-gallery-slide]:not([hidden]) img").getAttribute("src"), "assets/demo1.png");
       assert.deepEqual(await page.locator("[data-gallery-slide]:not([hidden]) img").evaluate((image) => ({ width: image.naturalWidth, height: image.naturalHeight, complete: image.complete })), { width: 1920, height: 959, complete: true });
+      assert.deepEqual(await page.locator(".brand-mark img").evaluate((image) => ({ src: image.getAttribute("src"), alt: image.getAttribute("alt"), width: image.naturalWidth, height: image.naturalHeight, complete: image.complete })), { src: "assets/mozarie-logo.png", alt: "", width: 799, height: 547, complete: true });
+      const stage = await page.locator(".gallery").boundingBox();
+      const image = await page.locator("[data-gallery-slide]:not([hidden]) img").boundingBox();
+      assert.ok(stage && stage.width <= 960, `gallery is capped at 960px at ${viewport.width}px`);
+      assert.ok(image && Math.abs((image.width - 2) / (image.height - 2) - 1920 / 959) < .002, `demo image is not cropped at ${viewport.width}px`);
+      if (viewport.width >= 1440) {
+        assert.ok(stage && stage.x >= 220 && viewport.width - stage.x - stage.width >= 220, `desktop stage keeps wide side gutters at ${viewport.width}px`);
+        assert.ok(image && image.width <= 896.5, `desktop image stays within the 896px inner stage at ${viewport.width}px`);
+      }
+      if (viewport.width === 1440) {
+        assert.ok(stage && image && Math.abs(stage.width - 960) <= 1 && image.width >= 893.5 && image.width <= 896.5, "1440px desktop uses the 960px stage and a 894–896px image inside its 32px padding");
+        assert.ok(stage && stage.y + stage.height <= viewport.height, "the entire desktop stage fits in the initial 900px viewport");
+      }
+      if (viewport.width <= 390) {
+        assert.ok(stage && stage.x >= 20 && viewport.width - stage.x - stage.width >= 20, `mobile stage keeps 20px side margins at ${viewport.width}px`);
+        const actions = await page.locator(".hero-action a").evaluateAll((links) => links.map((link) => {
+          const bounds = link.getBoundingClientRect();
+          return { height: bounds.height, left: bounds.left, right: bounds.right };
+        }));
+        assert.equal(actions.length, 2);
+        assert.ok(actions.every((action) => action.height >= 48) && actions[0].right + 8 <= actions[1].left, `mobile CTAs remain legible and separate at ${viewport.width}px`);
+      }
       const download = await page.getByRole("link", { name: "最新版をダウンロード", exact: false }).boundingBox();
       assert.ok(download && download.y >= 0 && download.y + download.height <= viewport.height, "download remains in the initial viewport");
       assert.equal(await page.getByRole("link", { name: "最新版をダウンロード", exact: false }).getAttribute("href"), "https://github.com/norqis/mozarie/releases/latest");
@@ -103,7 +125,8 @@ test("the static assets and sitemap are published with the editorial source", { 
       assert.equal(asset.status, 200);
       assert.match(asset.headers["content-type"], type);
     }
-    for (const image of ["demo1.png", "demo2.png", "demo3.png"]) assert.equal((await get(`${site.url}/assets/${image}`)).status, 200);
+    for (const image of ["demo1.png", "demo2.png", "demo3.png", "mozarie-logo.png"]) assert.equal((await get(`${site.url}/assets/${image}`)).status, 200);
+    assert.deepEqual(await fs.readFile(path.join(root, "static", "images", "long_logo.png")), await fs.readFile(path.join(siteRoot, "assets", "mozarie-logo.png")));
     const sitemap = await get(`${site.url}/sitemap.xml`);
     browser = await chromium.launch({ headless: true });
     const page = await (await browser.newContext()).newPage();
@@ -167,17 +190,14 @@ test("the gallery continuously rotates, preserves explicit pause, and respects k
 
     const download = page.getByRole("link", { name: "最新版をダウンロード", exact: false });
     await download.focus();
-    await page.keyboard.press("Tab");
-    await page.keyboard.press("Tab");
+    for (let index = 0; index < 3; index += 1) await page.keyboard.press("Tab");
     assert.equal(await page.locator("[data-gallery-prev]").evaluate((element) => document.activeElement === element && element.matches(":focus-visible")), true);
     await page.clock.fastForward(6000);
     assert.equal(await image.getAttribute("src"), "assets/demo2.png", "keyboard focus temporarily suspends autoplay");
     await page.keyboard.press("Tab");
     await page.clock.fastForward(6000);
     assert.equal(await image.getAttribute("src"), "assets/demo2.png", "moving within the gallery retains keyboard suspension");
-    await page.keyboard.press("Shift+Tab");
-    await page.keyboard.press("Shift+Tab");
-    await page.keyboard.press("Shift+Tab");
+    for (let index = 0; index < 4; index += 1) await page.keyboard.press("Shift+Tab");
     assert.equal(await download.evaluate((element) => document.activeElement === element), true);
     await page.clock.fastForward(6000);
     assert.equal(await image.getAttribute("src"), "assets/demo3.png", "leaving keyboard focus restores autoplay");
@@ -189,15 +209,12 @@ test("the gallery continuously rotates, preserves explicit pause, and respects k
     assert.equal(await image.getAttribute("src"), "assets/demo3.png", "manual navigation retains explicit pause");
 
     await download.focus();
-    for (let index = 0; index < 2; index += 1) await page.keyboard.press("Tab");
+    for (let index = 0; index < 3; index += 1) await page.keyboard.press("Tab");
     assert.equal(await page.locator("[data-gallery-prev]").evaluate((element) => document.activeElement === element && element.matches(":focus-visible")), true);
     await page.keyboard.press("Tab");
     await page.keyboard.press("Tab");
     assert.equal(await page.locator("[data-gallery-dot='0']").evaluate((element) => document.activeElement === element), true);
-    await page.keyboard.press("Shift+Tab");
-    await page.keyboard.press("Shift+Tab");
-    await page.keyboard.press("Shift+Tab");
-    await page.keyboard.press("Shift+Tab");
+    for (let index = 0; index < 5; index += 1) await page.keyboard.press("Shift+Tab");
     assert.equal(await download.evaluate((element) => document.activeElement === element), true);
     await page.clock.fastForward(6000);
     assert.equal(await image.getAttribute("src"), "assets/demo3.png", "leaving keyboard focus retains explicit pause");
@@ -208,7 +225,7 @@ test("the gallery continuously rotates, preserves explicit pause, and respects k
 
     await pause.click();
     await download.focus();
-    for (let index = 0; index < 7; index += 1) {
+    for (let index = 0; index < 8; index += 1) {
       await page.keyboard.press("Tab");
       if (await page.locator("[data-gallery-pause]").evaluate((element) => document.activeElement === element)) break;
     }
