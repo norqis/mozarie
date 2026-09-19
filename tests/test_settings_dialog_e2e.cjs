@@ -310,27 +310,57 @@ for (const [id, key, selector] of [
 
 test("SD-144.1 output picker updates only its path and preserves every unsaved general setting", { timeout: 60000 }, async () => {
   await withSettingsPage(async (page) => {
+    await page.locator("#settingsLanguage").selectOption("en");
     await page.locator("#settingsPort").fill("9123");
     await page.locator("#settingsImportParallelism").fill("7");
     await page.locator("#settingsSaveParallelism").fill("8");
     await page.locator("#settingsOpenBrowser").check();
+    await page.locator('[data-settings-tab="display"]').click();
+    await page.locator("#settingsOpacity").fill("0.37");
+    await page.locator("#settingsMosaicPreview").uncheck();
+    await page.locator('[data-settings-tab="shortcuts"]').click();
+    await page.locator('[data-shortcut-action="removeImage"]').fill("Ctrl+D");
+    await page.locator('[data-shortcut-enabled="removeImage"]').uncheck();
+    await page.locator('[data-settings-tab="confirm"]').click();
+    await page.locator("#confirmRemoveImage").uncheck();
+    await page.locator('[data-settings-tab="general"]').click();
     await page.locator("#settingsChooseOutputDirectory").click();
     await page.waitForFunction(() => state.settings.saving.default_output_directory === "G:\\fixture-output");
     assert.equal(await page.locator("#settingsDefaultOutputDirectory").inputValue(), "G:\\fixture-output");
+    assert.equal(await page.locator("#settingsLanguage").inputValue(), "en");
     assert.equal(await page.locator("#settingsPort").inputValue(), "9123");
     assert.equal(await page.locator("#settingsImportParallelism").inputValue(), "7");
     assert.equal(await page.locator("#settingsSaveParallelism").inputValue(), "8");
     assert.equal(await page.locator("#settingsOpenBrowser").isChecked(), true);
+    assert.equal(await page.locator("#settingsOpacity").inputValue(), "0.37");
+    assert.equal(await page.locator("#settingsMosaicPreview").isChecked(), false);
+    assert.equal(await page.locator('[data-shortcut-action="removeImage"]').inputValue(), "Ctrl+D");
+    assert.equal(await page.locator('[data-shortcut-enabled="removeImage"]').isChecked(), false);
+    assert.equal(await page.locator("#confirmRemoveImage").isChecked(), false);
     await page.locator("#settingsSaveButton").click();
-    await page.waitForFunction(() => state.settings.general.port === 9123 && state.settings.importing.parallelism === 7 && state.settings.saving.parallelism === 8);
+    await page.waitForFunction(() => state.settings.general.language === "en" && state.settings.general.port === 9123 && state.settings.importing.parallelism === 7 && state.settings.saving.parallelism === 8);
+    assert.equal(await page.evaluate(() => state.settings.display.overlay_opacity), 0.37);
+    assert.equal(await page.evaluate(() => state.settings.display.mosaic_preview), false);
+    assert.equal(await page.evaluate(() => state.settings.shortcuts.bindings.removeImage), "Ctrl+D");
+    assert.equal(await page.evaluate(() => state.settings.shortcuts.actions.removeImage), false);
+    assert.equal(await page.evaluate(() => state.settings.confirmations.removeImage), false);
   });
 });
 
 test("SD-144.2 output picker cancellation and failure preserve unsaved fields for the settings request", { timeout: 60000 }, async () => {
   await withSettingsPage(async (page, fixture) => {
+    await page.locator("#settingsLanguage").selectOption("en");
     await page.locator("#settingsPort").fill("9123");
     await page.locator("#settingsImportParallelism").fill("7");
     await page.locator("#settingsSaveParallelism").fill("8");
+    await page.locator('[data-settings-tab="display"]').click();
+    await page.locator("#settingsOpacity").fill("0.37");
+    await page.locator('[data-settings-tab="shortcuts"]').click();
+    await page.locator('[data-shortcut-action="removeImage"]').fill("Ctrl+D");
+    await page.locator('[data-shortcut-enabled="removeImage"]').uncheck();
+    await page.locator('[data-settings-tab="confirm"]').click();
+    await page.locator("#confirmRemoveImage").uncheck();
+    await page.locator('[data-settings-tab="general"]').click();
     await page.route("**/api/output-directory/pick", async (route) => route.fulfill({
       status: 200, contentType: "application/json", body: JSON.stringify({ cancelled: true }),
     }));
@@ -343,16 +373,26 @@ test("SD-144.2 output picker cancellation and failure preserve unsaved fields fo
     await page.locator("#settingsChooseOutputDirectory").click();
     await page.waitForFunction(() => document.querySelector("#errorDialog").open);
     await page.locator("#errorDialogClose").click();
+    assert.equal(await page.locator("#settingsLanguage").inputValue(), "en");
     assert.equal(await page.locator("#settingsPort").inputValue(), "9123");
     assert.equal(await page.locator("#settingsImportParallelism").inputValue(), "7");
     assert.equal(await page.locator("#settingsSaveParallelism").inputValue(), "8");
+    assert.equal(await page.locator("#settingsOpacity").inputValue(), "0.37");
+    assert.equal(await page.locator('[data-shortcut-action="removeImage"]').inputValue(), "Ctrl+D");
+    assert.equal(await page.locator('[data-shortcut-enabled="removeImage"]').isChecked(), false);
+    assert.equal(await page.locator("#confirmRemoveImage").isChecked(), false);
     const before = fixture.settingsPayloads.length;
     await page.locator("#settingsSaveButton").click();
     await page.waitForFunction(() => state.settings.general.port === 9123 && state.settings.importing.parallelism === 7 && state.settings.saving.parallelism === 8);
     assert.equal(fixture.settingsPayloads.length, before + 1);
     const payload = fixture.settingsPayloads.at(-1).body;
     assert.equal(payload.general.port, 9123);
+    assert.equal(payload.general.language, "en");
     assert.equal(payload.importing.parallelism, 7);
     assert.equal(payload.saving.parallelism, 8);
+    assert.equal(payload.display.overlay_opacity, 0.37);
+    assert.equal(payload.shortcuts.bindings.removeImage, "Ctrl+D");
+    assert.equal(payload.shortcuts.actions.removeImage, false);
+    assert.equal(payload.confirmations.removeImage, false);
   });
 });
