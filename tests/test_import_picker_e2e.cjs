@@ -104,7 +104,7 @@ async function waitForFixtureReady(page) {
   await page.waitForFunction(() => state.settings && state.job && state.images.length === 2);
 }
 
-function startFixtureServer() {
+function startFixtureServer(options = {}) {
   const detectRequests = [];
   const applyRequests = [];
   const settingsRequests = [];
@@ -161,6 +161,7 @@ function startFixtureServer() {
   ];
   let catalog = structuredClone(initialCatalog);
   let catalogGeneration = 1;
+  const activeProject = options.activeProject || null;
   const listedProjects = [{
     id: "ledger-project", name: "Ledger project", status: "working", imageCount: 1,
     sourceRoot: "G:\\ledger-source", createdAt: "2026-09-16T00:00:00Z", updatedAt: "2026-09-16T00:01:00Z",
@@ -172,7 +173,7 @@ function startFixtureServer() {
     workspace: false,
     workspaceId: null,
     historyDurable: false,
-    project: null,
+    project: activeProject,
     readOnly: false,
     sources: [],
     needsSource: false,
@@ -317,7 +318,7 @@ function startFixtureServer() {
       let body = ""; for await (const chunk of request) body += chunk;
       const { imageIds = [], deleteToken, expectedProjectId, expectedCatalogGeneration } = JSON.parse(body);
       sourceDeleteRequests.push({ path: requestPath, expectedProjectId, expectedCatalogGeneration, headerProjectId: request.headers["x-mozarie-expected-project-id"], headerCatalogGeneration: request.headers["x-mozarie-expected-catalog-generation"] });
-      if (expectedProjectId !== null || expectedCatalogGeneration !== catalogGeneration) { response.writeHead(409, { "Content-Type": "application/json" }); response.end(JSON.stringify({ error_code: "stale_catalog" })); return; }
+      if (expectedProjectId !== (activeProject?.id || null) || expectedCatalogGeneration !== catalogGeneration) { response.writeHead(409, { "Content-Type": "application/json" }); response.end(JSON.stringify({ error_code: "stale_catalog" })); return; }
       const preparedImageIds = forceSourceDeletePrepareEmpty ? [] : catalog.filter((image) => imageIds.includes(image.id)).map((image) => image.id);
       const preparedSourceKinds = Object.fromEntries(catalog.filter((image) => preparedImageIds.includes(image.id)).map((image) => [image.id, image.sourceKind]));
       sourceDeletes.set(deleteToken, { state: "prepared", imageIds: preparedImageIds, preparedSourceKinds });
@@ -330,7 +331,7 @@ function startFixtureServer() {
       let body = ""; for await (const chunk of request) body += chunk;
       const { deleteToken, expectedProjectId, expectedCatalogGeneration } = JSON.parse(body);
       sourceDeleteRequests.push({ path: requestPath, expectedProjectId, expectedCatalogGeneration, headerProjectId: request.headers["x-mozarie-expected-project-id"], headerCatalogGeneration: request.headers["x-mozarie-expected-catalog-generation"] });
-      if (expectedProjectId !== null || expectedCatalogGeneration !== catalogGeneration) { response.writeHead(409, { "Content-Type": "application/json" }); response.end(JSON.stringify({ error_code: "stale_catalog" })); return; }
+      if (expectedProjectId !== (activeProject?.id || null) || expectedCatalogGeneration !== catalogGeneration) { response.writeHead(409, { "Content-Type": "application/json" }); response.end(JSON.stringify({ error_code: "stale_catalog" })); return; }
       const operation = sourceDeletes.get(deleteToken);
       if (!operation) { response.writeHead(409, { "Content-Type": "application/json" }); response.end(JSON.stringify({ error_code: "source_delete_not_prepared" })); return; }
       operation.state = "claimed";
@@ -342,7 +343,7 @@ function startFixtureServer() {
       let body = ""; for await (const chunk of request) body += chunk;
       const payload = JSON.parse(body); const operation = sourceDeletes.get(payload.deleteToken);
       sourceDeleteRequests.push({ path: requestPath, expectedProjectId: payload.expectedProjectId, expectedCatalogGeneration: payload.expectedCatalogGeneration, headerProjectId: request.headers["x-mozarie-expected-project-id"], headerCatalogGeneration: request.headers["x-mozarie-expected-catalog-generation"] });
-      if (payload.expectedProjectId !== null || payload.expectedCatalogGeneration !== catalogGeneration) { response.writeHead(409, { "Content-Type": "application/json" }); response.end(JSON.stringify({ error_code: "stale_catalog" })); return; }
+      if (payload.expectedProjectId !== (activeProject?.id || null) || payload.expectedCatalogGeneration !== catalogGeneration) { response.writeHead(409, { "Content-Type": "application/json" }); response.end(JSON.stringify({ error_code: "stale_catalog" })); return; }
       const imageIds = operation?.imageIds?.filter((imageId) => payload.imageIds.includes(imageId)) || [];
       const removedImageIds = catalog.filter((image) => imageIds.includes(image.id) && !sourceDeleteCommitFailureIds.has(image.id)).map((image) => image.id);
       catalog = catalog.filter((image) => !removedImageIds.includes(image.id));

@@ -3066,6 +3066,9 @@ class MozarieTests(unittest.TestCase):
             Image.new("RGB", (16, 16), "black").save(root / "second.png")
             state = self.new_state()
             records = [state.image_for_id(image["id"]) for image in state.set_root(directory)]
+            for record in records:
+                state.set_image_flags(record.image_id, {"reviewed": True})
+            before = {record.image_id: state.workspace_store.export_state(record.image_id) for record in records}
             state.job = core_module.Job(started_at=time.time(), kind="detect", state="running", total=2,
                                         image_ids=tuple(record.image_id for record in records))
             staged_snapshots: list[dict[str, object]] = []
@@ -3092,6 +3095,7 @@ class MozarieTests(unittest.TestCase):
             self.assertEqual(state.job.processed, 1)
             self.assertEqual(state.job.completed_image_ids, ())
             self.assertTrue(all(not state.candidates.get(record.image_id) for record in records))
+            self.assertEqual({record.image_id: state.workspace_store.export_state(record.image_id) for record in records}, before)
 
     def test_detection_staging_reports_every_success_before_atomic_publication(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -3102,6 +3106,7 @@ class MozarieTests(unittest.TestCase):
             records = [state.image_for_id(image["id"]) for image in state.set_root(directory)]
             state.job = core_module.Job(started_at=time.time(), kind="detect", state="running", total=len(records),
                                         image_ids=tuple(record.image_id for record in records))
+            state._detection_history_group = state.workspace_store.begin_history_group()
             staged_snapshots: list[dict[str, object]] = []
             original_mark_processed = state._mark_job_processed
 
@@ -3116,7 +3121,7 @@ class MozarieTests(unittest.TestCase):
                 return [Candidate(record.image_id, "penis", 0.9, mask_path)]
 
             with patch.object(state, "_ensure_models", return_value=object()), patch.object(state, "_detect_image", side_effect=detect_image), patch.object(state, "_mark_job_processed", side_effect=mark_processed):
-                state._detect_worker(records, DEFAULT_DETECTION_CONFIDENCE, 1)
+                state._detect_worker(records, DEFAULT_DETECTION_CONFIDENCE, 1, history_group=state._detection_history_group)
 
             self.assertEqual([(snapshot["processed"], snapshot["completed"], snapshot["completedImageIds"])
                               for snapshot in staged_snapshots], [(1, 0, []), (2, 0, []), (3, 0, [])])
@@ -3124,6 +3129,16 @@ class MozarieTests(unittest.TestCase):
             self.assertEqual(state.job.processed, len(records))
             self.assertEqual(state.job.completed, len(records))
             self.assertEqual(state.job.completed_image_ids, tuple(record.image_id for record in records))
+            for record in records:
+                self.assertEqual([candidate.label_token for candidate in state.candidates[record.image_id]], ["penis"])
+                self.assertTrue(state.project_history_status(record.image_id)["canUndo"])
+            db = sqlite3.connect(state.workspace_store.path)
+            try:
+                groups = db.execute(
+                    "SELECT DISTINCT group_id FROM history_entries WHERE image_id IN (?,?,?)", tuple(record.image_id for record in records)
+                ).fetchall()
+            finally: db.close()
+            self.assertEqual(len(groups), 1); self.assertIsNotNone(groups[0][0])
 
     def test_parallel_detection_completes_empty_results_in_order(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -8769,23 +8784,30 @@ class MozarieTests(unittest.TestCase):
             self.assertGreaterEqual(peak, 2)
             self.assertEqual([record["relativePath"] for record in records], ["a.png", "B.png", "c.png", "nested/d.png"])
 
-    def test_folder_scan_loads_every_normal_file_in_deterministic_order(self):
+    def test_folder_scan_publishes_five_thousand_valid_images_sorted_and_reports_the_broken_file(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             expected = []
-            for index in range(80):
-                relative = Path(f"part-{index % 5}") / f"image-{79 - index:03}.png"
+            for index in range(5001):
+                relative = Path(f"part-{index % 5}") / f"image-{5000 - index:04}.png"
                 path = root / relative
                 path.parent.mkdir(parents=True, exist_ok=True)
-                Image.new("RGB", (8, 8), "white").save(path)
+                path.write_bytes(b"fixture")
                 expected.append(relative.as_posix())
+            broken = root / "part-0" / "broken.png"; broken.write_bytes(b"broken")
             state = self.new_state()
             state.settings["importing"]["parallelism"] = 4
 
-            records = state.set_root(str(root))
+            def inspect(path, _suffix):
+                if path == broken: raise ClientError("broken", "image_read_failed")
+                return 8, 8
+
+            with patch.object(catalog_module, "inspect_import_image", side_effect=inspect):
+                records = state.set_root(str(root))
 
             self.assertEqual(len(records), len(expected))
             self.assertEqual([record["relativePath"] for record in records], sorted(expected, key=lambda value: (value.casefold(), value)))
+            self.assertEqual(state.last_folder_scan_failures, [{"relativePath": "part-0/broken.png", "reason": "image_read_failed"}])
 
     def test_folder_scan_starts_inspection_before_tree_enumeration_finishes(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -8820,6 +8842,7 @@ class MozarieTests(unittest.TestCase):
             root = Path(directory)
             Image.new("RGB", (8, 8), "white").save(root / "first.png")
             state = self.new_state()
+            state.create_project("existing while scanning")
             entered = threading.Event()
             release = threading.Event()
             finished = threading.Event()
@@ -8846,6 +8869,7 @@ class MozarieTests(unittest.TestCase):
                     self.assertTrue(entered.wait(THREAD_TIMEOUT), "folder scan did not reach its controlled inspection")
                     self.assertTrue(state.import_lock.acquire(blocking=False))
                     state.import_lock.release()
+                    self.assertEqual([project["name"] for project in state.projects()], ["existing while scanning"], "existing project operations complete while folder inspection is blocked")
                     self.assertFalse(finished.is_set(), "folder reload finished before its controlled inspection was released")
                     release.set()
                 finally:
@@ -8923,6 +8947,7 @@ class MozarieTests(unittest.TestCase):
             for name in names:
                 Image.new("RGB", (8, 8), "white").save(root / name)
             state = self.new_state()
+            workers_before = {thread.ident for thread in threading.enumerate() if thread.name.startswith("ThreadPoolExecutor")}
             enumerated = []
             original_inspect = catalog_module.inspect_import_image
 
@@ -8944,6 +8969,7 @@ class MozarieTests(unittest.TestCase):
             self.assertEqual(cancelled.exception.error_code, "operation_cancelled")
             self.assertLess(len(enumerated), len(names))
             self.assertEqual(state.list_images(), [])
+            self.assertEqual({thread.ident for thread in threading.enumerate() if thread.name.startswith("ThreadPoolExecutor")} - workers_before, set(), "cancelled scan leaves no newly running import worker")
 
     def test_browser_render_uses_one_source_read(self):
         with tempfile.TemporaryDirectory() as directory:

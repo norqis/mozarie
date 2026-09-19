@@ -104,7 +104,7 @@ const corePath = path.join(__dirname, "..", "static", "js", "core.js");
 const imageDisplayPathSource = fs.readFileSync(corePath, "utf8").match(/function imageDisplayPath\(image\) \{[\s\S]*?\n\}/)?.[0];
 vm.runInNewContext(imageDisplayPathSource, context, { filename: corePath });
 vm.runInNewContext(fs.readFileSync(appPath, "utf8"), context, { filename: appPath });
-vm.runInNewContext("globalThis.projectTest={projectTitle,projectDate,projectSource,renderProjectCurrent,renderNativeRelinkDialog,showSameSourceDialog,openProjectNameDialog,showProjectList,showSourceMismatches,openProject,downloadProjectArtifact,downloadProjectMasks,renderProjectTableControls,resumeCurrentProject,openSameSourceDialog,openProjectDeleteDialog,deleteProject,bindEvents,setPendingBrowserProjectSources:(sources)=>{ pendingBrowserProjectSources=sources; },pendingBrowserProjectSources:()=>pendingBrowserProjectSources};", context, { filename: "project-ui-exports.js" });
+vm.runInNewContext("globalThis.projectTest={projectTitle,projectDate,projectSource,renderProjectCurrent,renderNativeRelinkDialog,showSameSourceDialog,openProjectNameDialog,showProjectList,showSourceMismatches,openProject,downloadProjectArtifact,downloadProjectMasks,renderProjectTableControls,resumeCurrentProject,openSameSourceDialog,openProjectDeleteDialog,deleteProject,bindEvents,restoreBrowserProjectSourcesForCurrentCatalog,setPendingBrowserProjectSources:(sources)=>{ pendingBrowserProjectSources=sources; },pendingBrowserProjectSources:()=>pendingBrowserProjectSources};", context, { filename: "project-ui-exports.js" });
 const test = context.projectTest;
 
 nodeTest("project deletion warning names its target and every destructive consequence", async () => {
@@ -538,6 +538,24 @@ nodeTest("same-source warning offers open separate and cancel without changing w
   assert.equal(element("#sameSourceOpen").hidden, false); assert.equal(element("#sameSourceSeparate").hidden, false); assert.equal(element("#sameSourceCancel").hidden, false);
   await element("#sameSourceCancel").listeners.get("click")();
   assert.equal(state.project, projects[0]); assert.equal(state.images, currentImages); assert.equal(state.currentId, "current");
+
+  const projectCount = projects.length;
+  context.api = async (url, options = {}) => {
+    if (url === "/api/project/open") return { project: projects[2], images: [{ id: "gamma-image" }], needsSource: false, sources: [] };
+    if (url === "/api/projects" && options.method === "POST") return { project: { id: "new-separate", name: null, status: "working", imageCount: 0 } };
+    return {};
+  };
+  state.projectOperationPending = false; state.catalogTransition = null; test.showSameSourceDialog([projects[2]], { path: "C:/alpha" });
+  await element("#sameSourceOpen").listeners.get("click")();
+  for (let attempt = 0; attempt < 5 && state.project?.id !== "separate"; attempt += 1) await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(state.project.id, "separate"); assert.equal(state.images[0].id, "gamma-image"); assert.equal(projects.length, projectCount, "Open selects the existing project without adding another project");
+
+  state.project = projects[0]; state.images = currentImages; state.currentId = "current"; state.projectOperationPending = false; state.catalogTransition = null;
+  test.showSameSourceDialog([projects[2]], { path: "C:/alpha" });
+  await element("#sameSourceSeparate").listeners.get("click")();
+  for (let attempt = 0; attempt < 5 && state.project?.id !== "new-separate"; attempt += 1) await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(state.project.id, "new-separate", "Separate creates and selects a different project");
+  assert.equal(projects[0].id, "working"); assert.equal(projects[0].name, "Alpha", "Separate does not alter the existing project record");
 });
 
 nodeTest("duplicate project guidance asks for another name while the current project remains intact", () => {
@@ -571,4 +589,43 @@ nodeTest("project operations issue one request per start and the last completed 
   await test.openProject(projects[2]);
   assert.equal(openRequests, 2, "a new start is accepted after the prior operation settles");
   assert.equal(state.project.id, "separate"); assert.equal(state.images[0].id, "separate-image");
+});
+
+nodeTest("completed-project resume is single request and failed open rolls back to completed or unnamed work", async () => {
+  state.project = projects[1]; state.projectReadOnly = true; state.images = [{ id: "completed-kept", candidates: [{ id: "candidate" }], history: [{ kind: "brush" }] }]; state.currentId = "completed-kept"; state.projectOperationPending = false; state.catalogTransition = null;
+  let resumeRequests = 0;
+  context.api = async (url) => {
+    if (url === "/api/project/resume") { resumeRequests += 1; return { project: { ...projects[1], status: "working" } }; }
+    if (url === "/api/project/open") throw Object.assign(new Error("open failed"), { code: "internal_error" });
+    return {};
+  };
+  const resumed = test.resumeCurrentProject(); const duplicate = test.resumeCurrentProject(); await Promise.all([resumed, duplicate]);
+  assert.equal(resumeRequests, 1); assert.equal(state.project.status, "working"); assert.equal(state.projectReadOnly, false); assert.equal(state.images[0].id, "completed-kept");
+  state.project = projects[1]; state.projectReadOnly = true; state.projectOperationPending = false; state.catalogTransition = null;
+  const retainedImages = state.images; await test.openProject(projects[2]);
+  assert.equal(state.project, projects[1]); assert.equal(state.projectReadOnly, true); assert.equal(state.images, retainedImages, "failed open cannot leave a completed project half-resumed");
+
+  const unnamedImages = [{ id: "unnamed", candidates: [{ id: "unnamed-candidate" }], history: [{ kind: "brush" }] }];
+  state.project = null; state.projectReadOnly = false; state.workspaceId = "unnamed-workspace"; state.images = unnamedImages; state.currentId = "unnamed"; state.projectOperationPending = false; state.catalogTransition = null;
+  await test.openProject(projects[2]);
+  assert.equal(state.project, null); assert.equal(state.workspaceId, "unnamed-workspace"); assert.equal(state.images, unnamedImages, "failed competing open keeps the last displayed unnamed work authoritative");
+});
+
+nodeTest("overlapping browser-source restores publish only the last-started access and missing-source result", async () => {
+  state.project = projects[0]; state.catalogEpoch = 9; state.images = [{ id: "restore-image", sourceId: "file-source", relativePath: "image.png", sizeBytes: 3, mtimeNs: 1000000 }]; state.sourceAccess = new Map();
+  test.setPendingBrowserProjectSources([]);
+  let releaseFirst; let restoreCalls = 0;
+  context.rememberedProjectSources = async () => {
+    restoreCalls += 1; const call = restoreCalls;
+    if (call === 1) await new Promise((resolve) => { releaseFirst = resolve; });
+    const suffix = call === 1 ? "old" : "new";
+    return { directories: [], files: [{ sourceId: "file-source", imageId: "restore-image", relativePath: "image.png", clientKey: suffix, handle: { name: suffix } }] };
+  };
+  context.ensureProjectSourcePermission = async (handle) => handle.name === "new";
+  const sources = [{ id: "file-source", kind: "browser-files", identity: "browser:file-source" }];
+  const oldRestore = test.restoreBrowserProjectSourcesForCurrentCatalog(sources); await new Promise((resolve) => setImmediate(resolve));
+  const newRestore = test.restoreBrowserProjectSourcesForCurrentCatalog(sources); await newRestore;
+  releaseFirst(); await oldRestore;
+  assert.equal(state.sourceAccess.get("restore-image").clientKey, "new");
+  assert.equal(test.pendingBrowserProjectSources().length, 0, "the stale denied restore cannot overwrite the last-started granted access or publish a missing-source prompt");
 });

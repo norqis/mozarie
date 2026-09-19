@@ -34,7 +34,8 @@ test("filter popovers close accessibly and retain search, folder, and checkbox s
     opened = await openFixture(fixture); const { page } = opened; await page.setViewportSize({ width: 420, height: 760 });
     const button = page.locator("#galleryFilterButton"); const popover = page.locator("#galleryFilterMenu");
     await button.focus(); await page.keyboard.press("Enter"); assert.equal(await popover.evaluate((node) => node.matches(":popover-open")), true, "Enter opens the gallery filter menu");
-    const menuBox = await popover.boundingBox(); assert.ok(menuBox && menuBox.x >= 0 && menuBox.y >= 0 && menuBox.x + menuBox.width <= 420 && menuBox.y + menuBox.height <= 760, "the narrow-screen menu stays inside the viewport below its button");
+    const menuBox = await popover.boundingBox(); const buttonBox = await button.boundingBox();
+    assert.ok(menuBox && buttonBox && menuBox.x >= 0 && menuBox.y >= buttonBox.y + buttonBox.height && menuBox.x + menuBox.width <= 420 && menuBox.y + menuBox.height <= 760, "the gallery menu opens directly below its button and stays inside the narrow viewport");
     assert.equal(await popover.locator("label").evaluateAll((labels) => labels.every((label, index) => index === 0 || label.getBoundingClientRect().top > labels[index - 1].getBoundingClientRect().top)), true, "gallery filter choices form one vertical column");
     for (let index = 0; index < 6; index += 1) await page.keyboard.press("Tab");
     assert.equal(await page.evaluate(() => document.activeElement?.id), "overviewButton", "Tab reaches the following action after every gallery checkbox");
@@ -43,6 +44,8 @@ test("filter popovers close accessibly and retain search, folder, and checkbox s
     assert.equal(await popover.evaluate((node) => node.matches(":popover-open")), false, "outside click closes the filter menu");
     await button.click(); await page.locator('[data-gallery-filter="reviewed"]').focus(); await page.keyboard.press("Space");
     assert.equal(await button.textContent(), "絞り込み (1)", "Space selects a gallery filter and updates the button count");
+    await page.locator('[data-gallery-filter="masked"]').check(); assert.equal(await button.textContent(), "絞り込み (2)", "two gallery filter checkboxes can be selected simultaneously and report two");
+    await page.locator('[data-gallery-filter="masked"]').uncheck();
     await page.locator("#collapseGalleryButton").click(); assert.equal(await popover.evaluate((node) => node.matches(":popover-open")), false, "collapsing the gallery closes its menu");
     await page.locator("#collapseGalleryButton").click(); await page.locator("#overviewButton").click();
     await page.locator("#overviewQuery").fill("sample"); await page.locator("#overviewFolder").selectOption("beta");
@@ -50,11 +53,15 @@ test("filter popovers close accessibly and retain search, folder, and checkbox s
     await page.locator("#overviewFilterButton").focus(); await page.keyboard.press("Space");
     const overviewPopover = page.locator("#overviewFilterMenu");
     assert.equal(await overviewPopover.evaluate((node) => node.matches(":popover-open")), true, "Space opens the overview filter menu");
+    const overviewMenuBox = await overviewPopover.boundingBox(); const overviewButtonBox = await page.locator("#overviewFilterButton").boundingBox();
+    assert.ok(overviewMenuBox && overviewButtonBox && overviewMenuBox.y >= overviewButtonBox.y + overviewButtonBox.height && overviewMenuBox.x >= 0 && overviewMenuBox.x + overviewMenuBox.width <= 420 && overviewMenuBox.y + overviewMenuBox.height <= 760, "the overview menu opens below its button and remains inside the viewport");
     assert.equal(await overviewPopover.locator("label").evaluateAll((labels) => labels.every((label, index) => index === 0 || label.getBoundingClientRect().top > labels[index - 1].getBoundingClientRect().top)), true, "overview filter choices form one vertical column");
     for (let index = 0; index < 6; index += 1) await page.keyboard.press("Tab");
     assert.equal(await page.evaluate(() => document.activeElement?.id), "overviewQuery", "Tab reaches the following search action after every overview checkbox");
     await page.locator('[data-overview-filter="hidden"]').focus(); await page.keyboard.press("Space");
     assert.equal(await page.locator("#overviewFilterButton").textContent(), "絞り込み (1)", "Space selects an overview filter and updates the button count");
+    await page.locator('[data-overview-filter="reviewed"]').check(); assert.equal(await page.locator("#overviewFilterButton").textContent(), "絞り込み (2)", "two overview filter checkboxes can be selected simultaneously and report two");
+    await page.locator('[data-overview-filter="reviewed"]').uncheck();
     await page.locator('[data-overview-filter="hidden"]').focus(); await page.keyboard.press("Space");
     await page.locator("#overviewQuery").fill(""); await page.locator("#overviewFolder").selectOption("");
     assert.deepEqual((await page.locator(".overview-item").evaluateAll((items) => items.map((item) => item.dataset.id))).sort(), ["sample", "sample-two"], "clearing every overview condition displays all images including hidden images");
@@ -78,6 +85,22 @@ test("returning to an edited image restores its manual pixels and history", { ti
     await page.locator('.gallery-item[data-id="sample-two"]').click(); await page.waitForFunction(() => state.currentId === "sample-two" && state.currentImage);
     await page.locator('.gallery-item[data-id="sample"]').click(); await page.waitForFunction(() => state.currentId === "sample" && state.currentImage && state.history.length === 1 && canvasHasPixels(addCtx, addCanvas));
     assert.deepEqual(await page.evaluate(() => ({ history: state.history.length, index: state.historyIndex, pixels: canvasHasPixels(addCtx, addCanvas) })), { history: 1, index: 1, pixels: true });
+  } finally { await closeFixture(fixture, opened); }
+});
+
+test("mosaic and no-mosaic filters use current effective masks and always exclude hidden images", { timeout: 60000 }, async () => {
+  const fixture = await startFixtureServer(); let opened;
+  try {
+    fixture.setCatalog([
+      { id: "effective", relativePath: "effective.png", sourceKind: "filesystem", width: 10, height: 10, candidateCount: 2, enabledCandidateCount: 2, hasEffectiveMask: true, reviewed: false, hidden: false },
+      { id: "empty", relativePath: "empty.png", sourceKind: "filesystem", width: 10, height: 10, candidateCount: 1, enabledCandidateCount: 0, hasEffectiveMask: false, reviewed: true, hidden: false },
+      { id: "hidden-effective", relativePath: "hidden.png", sourceKind: "filesystem", width: 10, height: 10, candidateCount: 1, enabledCandidateCount: 1, hasEffectiveMask: true, reviewed: false, hidden: true },
+    ]);
+    opened = await openFixture(fixture); const { page } = opened;
+    await page.locator("#galleryFilterButton").click(); await page.locator('[data-gallery-filter="masked"]').check();
+    assert.deepEqual(await page.locator(".gallery-item").evaluateAll((items) => items.map((item) => item.dataset.id)), ["effective"], "mosaic filter uses effective-mask state regardless of review and excludes hidden images");
+    await page.locator('[data-gallery-filter="masked"]').uncheck(); await page.locator('[data-gallery-filter="unmasked"]').check();
+    assert.deepEqual(await page.locator(".gallery-item").evaluateAll((items) => items.map((item) => item.dataset.id)), ["empty"], "no-mosaic filter uses the refreshed zero-effective-mask state and excludes hidden images");
   } finally { await closeFixture(fixture, opened); }
 });
 
@@ -181,10 +204,10 @@ test("completed projects keep browsing and exports enabled while every mutation 
       state.project = { id: "completed-project", name: "Completed", status: "completed", imageCount: state.images.length };
       state.projectReadOnly = true; state.currentId = state.images[0].id; state.currentImage = state.images[0]; renderCatalogViews(); updateActionButtons();
     });
-    for (const selector of ["#detectAllButton", "#detectCurrentButton", "#saveAllButton", "#saveButton", "#reviewAndNextButton", "#removeCurrentImageButton", "#undoButton", "#redoButton", "#brushTool", "#bucketTool"]) {
+    for (const selector of ["#detectAllButton", "#detectCurrentButton", "#saveAllButton", "#saveButton", "#reviewAndNextButton", "#removeCurrentImageButton", "#undoButton", "#redoButton", "#brushTool", "#bucketTool", "#rectangleTool", "#polygonTool", "#boundaryBrushTool", "#flipHorizontalButton", "#flipVerticalButton"]) {
       assert.equal(await page.locator(selector).isDisabled(), true, `${selector} is disabled in a completed project`);
     }
-    for (const selector of ["#nextImageButton", "#galleryFilterButton", "#overviewButton", "#downloadCurrentMosaicMask", "#downloadCurrentExcludeMask"]) {
+    for (const selector of ["#nextImageButton", "#galleryFilterButton", "#overviewButton", "#downloadCurrentMosaicMask", "#downloadCurrentExcludeMask", "#singleViewButton", "#compareViewButton", "#fitButton", "#mosaicPreviewButton"]) {
       assert.equal(await page.locator(selector).isDisabled(), false, `${selector} remains available in a completed project`);
     }
     await page.locator("#galleryFilterButton").click(); assert.equal(await page.locator("#galleryFilterMenu").evaluate((node) => node.matches(":popover-open")), true, "completed projects retain filtering");
@@ -284,7 +307,7 @@ test("image switching disables save detection and candidate editing until the ne
     const switching = page.locator('.gallery-item[data-id="sample-two"]').click(); await imageStarted;
     assert.equal(await page.locator("#saveButton").isDisabled(), true, "save is disabled during an image switch");
     assert.equal(await page.locator("#detectCurrentButton").isDisabled(), true, "current-image detection is disabled during an image switch");
-    assert.equal(await page.locator("#brushTool").isDisabled(), true, "drawing is disabled during an image switch");
+    for (const selector of ["#brushTool", "#rectangleTool", "#polygonTool", "#boundaryBrushTool", "#flipHorizontalButton", "#flipVerticalButton", "#undoButton", "#redoButton"]) assert.equal(await page.locator(selector).isDisabled(), true, `${selector} mutation is disabled during an image switch`);
     assert.equal(await page.locator("#candidatePane button").evaluateAll((buttons) => buttons.every((button) => button.disabled)), true, "candidate editing controls are disabled during an image switch");
     releaseImage(); await switching; await page.waitForFunction(() => state.currentId === "sample-two" && state.currentImage && !currentImageActionPending());
     assert.deepEqual(await page.evaluate(() => structuredClone(state.images.find((image) => image.id === "sample"))), old, "the delayed new-image response never mutates the previous image");

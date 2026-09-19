@@ -710,6 +710,7 @@ function discardRemovedBrowserSaveState() {
     if (!remainingImageIds.has(imageId)) { pending.resolve(); state.workspaceDraftPending.delete(imageId); }
   }
   for (const imageId of removedImageIds) {
+    if (typeof invalidateProjectHistoryRefresh === "function") invalidateProjectHistoryRefresh(imageId);
     state.drafts.delete(imageId);
     state.projectHistory.delete(imageId);
     state.maskStatus.delete(imageId);

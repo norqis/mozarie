@@ -592,7 +592,9 @@ async function permanentlyDeleteImages(images, visibleImages) {
     }
     const removed = new Set(data.removedImageIds || []);
     for (const image of images.filter((item) => removed.has(item.id))) {
-      releaseImageCaches(image.id); state.sourceAccess.delete(image.id); state.drafts.delete(image.id); state.maskStatus.delete(image.id); clearReviewForRemovedImage(image);
+      invalidateProjectHistoryRefresh(image.id);
+      releaseImageCaches(image.id); releaseCandidateBundles(image.id); clearCandidateMutationState(image.id);
+      state.sourceAccess.delete(image.id); state.drafts.delete(image.id); state.projectHistory.delete(image.id); state.maskStatus.delete(image.id); clearReviewForRemovedImage(image);
       state.selectedImageIds.delete(image.id);
     }
     state.images = data.images || state.images;

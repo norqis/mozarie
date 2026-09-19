@@ -17,17 +17,25 @@ async function freshPage(browser, fixture) {
 }
 
 test("Delete shortcut keeps a durable source-delete intent through claim and acknowledges the committed receipt", { timeout: 60000 }, async () => {
-  const fixture = await startFixtureServer();
+  const fixture = await startFixtureServer({ activeProject: { id: "delete-project", name: "Delete project", status: "working", imageCount: 2 } });
   const browser = await chromium.launch({ headless: true });
   let context; let page;
   try {
     fixture.holdSourceDeletePrepare(true);
     fixture.holdSourceDeleteClaim(true);
     ({ context, page } = await freshPage(browser, fixture));
-    await page.evaluate(() => { state.project = { id: "delete-project", name: "Delete project", status: "working" }; state.projectReadOnly = false; renderCatalogViews(); });
     const card = page.locator('.gallery-item[data-id="sample"]');
     await card.click();
     await page.waitForFunction(() => state.currentId === "sample" && state.currentImage);
+    await page.evaluate(() => {
+      state.drafts.set("sample", { manualAdd: "manual-mask", history: [{ kind: "brush" }] });
+      state.projectHistory.set("sample", { canUndo: true, canRedo: false });
+      const image = state.images.find((entry) => entry.id === "sample"); Object.assign(image, { candidateCount: 1, enabledCandidateCount: 1, hasEffectiveMask: true });
+    });
+    await page.evaluate(async () => {
+      const root = await navigator.storage.getDirectory(); const handle = await root.getFileHandle("sample-persisted.png", { create: true });
+      await rememberProjectSources("delete-project", [{ sourceId: "source-sample", imageId: "sample", relativePath: "sample.png", clientKey: "sample", handle }]);
+    });
     await card.focus();
     await page.keyboard.press("Delete");
     await page.waitForFunction(() => document.querySelector("#confirmDialog").open);
@@ -50,6 +58,7 @@ test("Delete shortcut keeps a durable source-delete intent through claim and ack
     await page.waitForFunction(() => !state.images.some((image) => image.id === "sample"));
     await page.waitForFunction(() => !state.catalogMutation);
     assert.deepEqual(await page.evaluate(() => ({ ids: state.images.map((image) => image.id), currentId: state.currentId })), { ids: ["sample-two"], currentId: "sample-two" }, "source, catalogue, and project image state remove only the target and advance to the next filtered image");
+    assert.deepEqual(await page.evaluate(() => ({ draft: state.drafts.has("sample"), history: state.projectHistory.has("sample"), mask: state.maskStatus.has("sample") })), { draft: false, history: false, mask: false }, "the deleted image leaves no candidate, manual-mask, or undo-history state in the active project");
     assert.deepEqual(fixture.catalogImageIds(), ["sample-two"], "the fixture's durable project catalogue no longer contains the deleted image");
     assert.deepEqual(fixture.sourceDeleteRequests.map((request) => request.path), [
       "/api/catalog/delete-source/prepare",
@@ -58,12 +67,14 @@ test("Delete shortcut keeps a durable source-delete intent through claim and ack
       "/api/catalog/delete-source/ack",
     ], "Delete drives the ordered prepare, claim, and commit protocol");
     assert.deepEqual(fixture.sourceDeleteRequests.slice(0, 3).map(({ expectedProjectId, expectedCatalogGeneration, headerProjectId, headerCatalogGeneration }) => ({ expectedProjectId, expectedCatalogGeneration, headerProjectId, headerCatalogGeneration })), [
-      { expectedProjectId: null, expectedCatalogGeneration: 1, headerProjectId: "", headerCatalogGeneration: "1" },
-      { expectedProjectId: null, expectedCatalogGeneration: 1, headerProjectId: "", headerCatalogGeneration: "1" },
-      { expectedProjectId: null, expectedCatalogGeneration: 1, headerProjectId: "", headerCatalogGeneration: "1" },
+      { expectedProjectId: "delete-project", expectedCatalogGeneration: 1, headerProjectId: "delete-project", headerCatalogGeneration: "1" },
+      { expectedProjectId: "delete-project", expectedCatalogGeneration: 1, headerProjectId: "delete-project", headerCatalogGeneration: "1" },
+      { expectedProjectId: "delete-project", expectedCatalogGeneration: 1, headerProjectId: "delete-project", headerCatalogGeneration: "1" },
     ], "every source-delete mutation uses the same captured catalog epoch in its body and headers");
     await page.waitForFunction(async () => (await pendingSourceDeletes()).length === 0);
     assert.deepEqual(fixture.sourceDeleteOperations(), [], "acknowledgement removes the server receipt only after commit is visible to the browser");
+    await page.reload({ waitUntil: "domcontentloaded" });
+    assert.deepEqual(await page.evaluate(async () => rememberedProjectSources("delete-project")), { files: [], directories: [] }, "after browser restart the authoritative deletion has removed only the deleted image's persisted handle");
   } finally {
     await context?.close();
     await browser.close();
