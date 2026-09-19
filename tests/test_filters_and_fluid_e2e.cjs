@@ -22,6 +22,68 @@ async function freshPage(browser, fixture, initScript = null, expectedImageCount
   return { context, page };
 }
 
+test("server save progress is restored in the UI after an offline poll reconnects", { timeout: 60000 }, async () => {
+  const fixture = await startFixtureServer();
+  const browser = await chromium.launch({ headless: true });
+  let context; let page;
+  try {
+    ({ context, page } = await freshPage(browser, fixture));
+    await page.evaluate(() => { clearTimeout(state.jobPollTimer); state.jobPollTimer = null; });
+    let requests = 0;
+    await page.route("**/api/job", async (route) => {
+      requests += 1;
+      if (requests === 1) { await route.abort("failed"); return; }
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ kind: "apply", state: "running", total: 5, completed: 3, current: "three.png", startedAt: 99, imageIds: ["sample", "sample-two"] }) });
+    });
+    await page.evaluate(() => pollJob());
+    assert.equal(await page.evaluate(() => state.pollFailures), 1, "the offline poll is retained as a reconnect failure");
+    await page.evaluate(() => { clearTimeout(state.jobPollTimer); state.jobPollTimer = null; return pollJob(); });
+    assert.equal(await page.evaluate(() => state.pollFailures), 0, "a successful reconnect clears the poll failure count");
+    assert.deepEqual(await page.evaluate(() => ({ value: document.querySelector("#applyProgress").value, max: document.querySelector("#applyProgress").max, current: document.querySelector("#applyCurrentName").textContent, text: document.querySelector("#applyProgressText").textContent, open: document.querySelector("#applyDialog").open })), {
+      value: 3, max: 5, current: "three.png", text: "ファイル保存の進行状況: 3 / 5件 完了", open: true,
+    }, "the reconnected server state, rather than stale client progress, is shown in the save UI");
+  } finally {
+    await context?.close();
+    await browser.close();
+    await closeServer(fixture.server);
+  }
+});
+
+test("catalog clear failure keeps the project and list, and closing the real error dialog restores actions", { timeout: 60000 }, async () => {
+  const fixture = await startFixtureServer();
+  const browser = await chromium.launch({ headless: true });
+  let context; let page;
+  try {
+    ({ context, page } = await freshPage(browser, fixture));
+    await page.evaluate(() => {
+      state.settings.confirmations.clearCatalog = true;
+      state.project = { id: "project-kept", name: "Kept project", status: "working" };
+      renderProjectCurrent();
+    });
+    const before = await page.evaluate(() => ({ imageIds: state.images.map((image) => image.id), currentId: state.currentId, project: structuredClone(state.project) }));
+    const resyncSnapshot = await page.evaluate(() => ({ images: structuredClone(state.images), root: state.root || "G:/fixture", catalogGeneration: state.serverCatalogGeneration, workspace: true, workspaceId: state.project.id, historyDurable: true, project: structuredClone(state.project), readOnly: false, sources: [], needsSource: false }));
+    await page.route("**/api/images", (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(resyncSnapshot) }));
+    await page.route("**/api/catalog/clear", (route) => route.fulfill({ status: 500, contentType: "application/json", body: JSON.stringify({ error_code: "workspace_database_error" }) }));
+    await page.locator("#batchMoreButton").click();
+    await page.locator("#clearCatalogButton").click();
+    assert.equal(await page.locator("#confirmDialog").evaluate((dialog) => dialog.open), true, "catalog clear opens its product confirmation before the action");
+    await page.locator("#confirmAccept").click();
+    await page.waitForFunction(() => document.querySelector("#errorDialog").open && state.catalogMutation === false);
+    assert.deepEqual(await page.evaluate(() => ({ imageIds: state.images.map((image) => image.id), currentId: state.currentId, project: structuredClone(state.project) })), before, "a failed clear never reports success by discarding the list, selection, or project");
+    assert.equal(await page.locator("#errorDialogTitle").textContent(), "作業内容を保存できません", "the failure is presented through the real user error dialog");
+
+    await page.locator("#errorDialogClose").click();
+    assert.equal(await page.locator("#errorDialog").evaluate((dialog) => dialog.open), false, "the error dialog returns to the prior screen");
+    assert.equal(await page.locator("#saveAllButton").isEnabled(), true, "save actions are reusable after the error closes");
+    await page.locator("#batchMoreButton").click();
+    assert.equal(await page.locator("#clearCatalogButton").isEnabled(), true, "the failed catalog action itself is reusable after the error closes");
+  } finally {
+    await context?.close();
+    await browser.close();
+    await closeServer(fixture.server);
+  }
+});
+
 test("single overwrite confirmation cancel returns to save dialog with source bytes and mtime unchanged", { timeout: 60000 }, async () => {
   const fixture = await startFixtureServer();
   const browser = await chromium.launch({ headless: true });

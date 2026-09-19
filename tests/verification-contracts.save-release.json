@@ -266,7 +266,7 @@
       "observation": "進行中の処理が落ち着いた後に新規出力を開始しない。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > pause and terminal completion reset controls"
+        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > in-flight pause settles current output and resume saves only unprocessed images"
       ]
     },
     {
@@ -277,7 +277,7 @@
       "observation": "未処理画像を保存し、完了済み画像を重複出力しない。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > pause and terminal completion reset controls"
+        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > in-flight pause settles current output and resume saves only unprocessed images"
       ]
     },
     {
@@ -378,7 +378,7 @@
       "observation": "元ファイルと保存先出力は保持する。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > remove after save removes committed images only"
+        "python:tests.test_server.MozarieTests.test_remove_saved_images_from_catalog_keeps_all_source_files"
       ]
     },
     {
@@ -805,7 +805,7 @@
       "observation": "再接続後はサーバーの進捗を表示する。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > retryable commit reuses the same token"
+        "node:tests/test_filters_and_fluid_e2e.cjs::server save progress is restored in the UI after an offline poll reconnects"
       ]
     },
     {
@@ -860,7 +860,7 @@
       "observation": "削除成功と表示せず、一覧とPJを保持する。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_project_ui_runtime.cjs::project dialogs, source recovery, and project switching > project network failures preserve list order editor state and selected project"
+        "node:tests/test_filters_and_fluid_e2e.cjs::catalog clear failure keeps the project and list, and closing the real error dialog restores actions"
       ]
     },
     {
@@ -871,7 +871,7 @@
       "observation": "元の画面へ戻り、実行中でない操作を再び使える。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_gallery_save_coverage.cjs::gallery and save interactions > single and batch save modal preferences and controls"
+        "node:tests/test_filters_and_fluid_e2e.cjs::catalog clear failure keeps the project and list, and closing the real error dialog restores actions"
       ]
     },
     {
@@ -1111,7 +1111,8 @@
         "python:tests.test_updater.UpdaterTests.test_safe_extract_rejects_invalid_paths_without_writing_outside_destination",
         "python:tests.test_updater.UpdaterTests.test_safe_extract_rejects_precreated_directory_symlink",
         "python:tests.test_updater.UpdaterTests.test_apply_rolls_back_only_mutated_files_on_failure",
-        "python:tests.test_updater.UpdaterTests.test_dependency_update_apply_failure_keeps_a_retryable_pending_update"
+        "python:tests.test_updater.UpdaterTests.test_dependency_update_apply_failure_keeps_a_retryable_pending_update",
+        "python:tests.test_updater.UpdaterTests.test_update_storage_aggregates_same_volume_extract_rollback_and_incoming_copy_and_retries_without_mutation"
       ]
     },
     {
@@ -1409,7 +1410,7 @@
       "observation": "クライアント生成UUIDトークンでpending/commit/cancelを再開し、通信不明だけでトークンを捨てない。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > retryable commit reuses the same token"
+        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > client UUID pending token survives a tab restart and resumes cancellation"
       ]
     },
     {

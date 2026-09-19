@@ -2311,14 +2311,21 @@ class MozarieTests(unittest.TestCase):
     def test_remove_saved_images_from_catalog_keeps_all_source_files(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
+            output = root / "saved"; output.mkdir()
             first = root / "first.png"
             second = root / "second.png"
             Image.new("RGB", (16, 16), "white").save(first)
             Image.new("RGB", (16, 16), "black").save(second)
             originals = {first: first.read_bytes(), second: second.read_bytes()}
             state = self.new_state()
+            state.settings["saving"]["default_output_directory"] = str(output)
             images = state.set_root(directory)
             first_id, second_id = (image["id"] for image in images)
+            rendered = state.render_browser_save(first_id, state._candidate_revision(first_id), 100, None, copy_to_default=True, suffix="_saved")
+            committed = state.commit_browser_save(first_id, rendered.candidate_revision, rendered.save_token, "keep")
+            saved_output = rendered.output_path
+            saved_bytes = saved_output.read_bytes()
+            self.assertTrue(committed["cleared"])
 
             result = state.remove_images_from_catalog([first_id, second_id, first_id])
 
@@ -2326,6 +2333,7 @@ class MozarieTests(unittest.TestCase):
             self.assertEqual(result["removedImageIds"], [first_id, second_id])
             self.assertEqual(state.list_images(), [])
             self.assertEqual({path: path.read_bytes() for path in originals}, originals)
+            self.assertEqual(saved_output.read_bytes(), saved_bytes, "catalog removal keeps the already saved output")
 
     def test_remove_image_keeps_live_and_durable_state_when_database_delete_fails(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -3450,11 +3458,15 @@ class MozarieTests(unittest.TestCase):
     def test_candidate_exclusion_render_preserves_excluded_pixels_dimensions_and_state(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "source.png"
+            untouched_path = Path(directory) / "untouched.png"
             pixels = np.zeros((16, 16, 3), dtype=np.uint8)
             pixels[..., 0] = np.arange(16, dtype=np.uint8)[None, :] * 15
             pixels[..., 1] = np.arange(16, dtype=np.uint8)[:, None] * 15
             Image.fromarray(pixels).save(path)
-            state = self.new_state(); image_id = state.set_root(directory)[0]["id"]
+            Image.new("RGB", (16, 16), "purple").save(untouched_path)
+            state = self.new_state(); listed = state.set_root(directory)
+            image_id = next(image["id"] for image in listed if image["relativePath"] == "source.png")
+            untouched_id = next(image["id"] for image in listed if image["relativePath"] == "untouched.png")
             record = state.image_for_id(image_id)
             apply = np.zeros((16, 16), dtype=np.uint8); apply[2:14, 2:14] = 255
             exclude = np.zeros((16, 16), dtype=np.uint8); exclude[6:10, 6:10] = 255
@@ -3466,6 +3478,26 @@ class MozarieTests(unittest.TestCase):
                 Candidate("exclude", "hand", None, exclude_path, source="hand_exclusion", role=domain_module.CandidateRole.EXCLUDE),
             ]
             state.candidates[image_id] = candidates
+            untouched_mask_path = state.cache_dir / untouched_id / "untouched-candidate.png"
+            untouched_exclude_path = state.cache_dir / untouched_id / "untouched-exclude.png"
+            untouched_mask_path.parent.mkdir(parents=True)
+            Image.fromarray(self._mask(16, 16)).save(untouched_mask_path)
+            untouched_exclude = np.zeros((16, 16), dtype=np.uint8); untouched_exclude[5:11, 5:11] = 255
+            Image.fromarray(untouched_exclude).save(untouched_exclude_path)
+            untouched_candidates = [
+                Candidate("untouched", "pussy", 0.8, untouched_mask_path, enabled=False),
+                Candidate("untouched-exclude", "hand", None, untouched_exclude_path, source="hand_exclusion", role=domain_module.CandidateRole.EXCLUDE),
+            ]
+            state.candidates[untouched_id] = untouched_candidates
+            state.set_image_flags(untouched_id, {"reviewed": True, "hidden": True})
+            untouched_record = state.image_for_id(untouched_id)
+            untouched_before = {
+                "source": untouched_path.read_bytes(),
+                "mask": untouched_mask_path.read_bytes(),
+                "excludeMask": untouched_exclude_path.read_bytes(),
+                "candidates": [candidate.as_api_dict() for candidate in untouched_candidates],
+                "record": (untouched_record.reviewed, untouched_record.hidden, untouched_record.edited_filename),
+            }
 
             combined = state.combined_candidate_mask(image_id)
             rendered = image_io_module.render_with_mask(record, combined, 4)
@@ -3484,6 +3516,11 @@ class MozarieTests(unittest.TestCase):
             with Image.open(io.BytesIO(image_io_module.render_with_mask(record, fully_excluded, 4))) as image:
                 self.assertTrue(np.array_equal(np.asarray(image.convert("RGB")), pixels), "fully excluded candidates output no mosaic pixels")
             self.assertEqual(state.candidates[image_id], candidates, "rendering does not alter candidates or exclusion state")
+            self.assertEqual(untouched_path.read_bytes(), untouched_before["source"], "the out-of-target image file is unchanged")
+            self.assertEqual(untouched_mask_path.read_bytes(), untouched_before["mask"], "the out-of-target candidate mask is unchanged")
+            self.assertEqual(untouched_exclude_path.read_bytes(), untouched_before["excludeMask"], "the out-of-target exclusion mask is unchanged")
+            self.assertEqual([candidate.as_api_dict() for candidate in state.candidates[untouched_id]], untouched_before["candidates"], "the out-of-target candidate state is unchanged")
+            self.assertEqual((untouched_record.reviewed, untouched_record.hidden, untouched_record.edited_filename), untouched_before["record"], "the out-of-target review, hidden, and name state is unchanged")
 
     def test_tile_layout_restores_masks_to_original_coordinates(self):
         specs = detection_tiles(100, 80)

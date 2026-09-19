@@ -54,7 +54,7 @@ function sourceBlob(name, size, lastModified) {
   return new File([new Uint8Array(size)], name, { type: "image/png", lastModified });
 }
 
-function createRuntime({ commit, copy = null, deleteOriginal = false, renderBinary = null, renderToken = "runtime-render-token", entries = null, initialImages = null, removeCatalog = null, saveStatus = null, saveCancel = null, reserve = null, pickOutputDirectory = null }) {
+function createRuntime({ commit, copy = null, deleteOriginal = false, renderBinary = null, renderToken = "runtime-render-token", entries = null, initialImages = null, removeCatalog = null, saveStatus = null, saveCancel = null, reserve = null, pickOutputDirectory = null, sharedStorage = null, timerQueue = null }) {
   const preparedEntries = entries || [{ imageId: "image-1", relativePath: "nested/source.png", candidateRevision: 7, deleteOriginal }];
   let catalogImages = initialImages || [{ id: "image-1", relativePath: "nested/source.png", width: 32, height: 32, candidateCount: 1, enabledCandidateCount: 1 }];
   const elements = new Map();
@@ -124,11 +124,11 @@ function createRuntime({ commit, copy = null, deleteOriginal = false, renderBina
     File,
     TextDecoder,
     Intl,
-    crypto: { randomUUID: () => `runtime-client-token-${requests.length}` },
-    setTimeout(callback) { callback(); return 1; },
+    crypto: { randomUUID: () => `00000000-0000-4000-8000-${String(requests.length).padStart(12, "0")}` },
+    setTimeout: timerQueue ? function queueTimer(callback) { timerQueue.push(callback); return timerQueue.length; } : function setImmediateTimer(callback) { callback(); return 1; },
     clearTimeout() {},
     requestAnimationFrame(callback) { callback(); },
-    localStorage: (() => {
+    localStorage: sharedStorage || (() => {
       const values = new Map();
       return { get length() { return values.size; }, key(index) { return [...values.keys()][index] || null; }, getItem(key) { return values.get(key) || null; }, setItem(key, value) { values.set(key, String(value)); }, removeItem(key) { values.delete(key); } };
     })(),
@@ -546,7 +546,7 @@ async function runBrowserCopyRenderFailureCancelsReservationCase() {
   await assert.rejects(runtime.runBrowserSave(entries.map((entry) => entry.imageId), "_censored", false, "copy"), (error) => error?.code === "save_render_failed");
   const cancellations = runtime.requests.filter((request) => request.path === "/api/save/cancel");
   assert.equal(cancellations.length, 1, "a browser copy render failure releases its reservation");
-  assert.match(JSON.parse(cancellations[0].options.body).saveToken, /^runtime-client-token-/, "the cancelled token belongs to the failed render reservation");
+  assert.match(JSON.parse(cancellations[0].options.body).saveToken, /^[0-9a-f-]{36}$/i, "the cancelled token belongs to the failed render reservation");
   assert.equal(runtime.requests.filter((request) => request.path === "/api/save/commit").length, 399, "only successful browser copies are committed");
 }
 
@@ -670,6 +670,101 @@ async function runSingleSaveKeepsReviewAndDraftCase() {
   reviewedRuntime.state.singleSave = { imageId: reviewed.id, generation: reviewedRuntime.state.imageGeneration, divisor: 100, draft: { add: "manual" } };
   await reviewedRuntime.startSingleSave({ preventDefault() {} });
   assert.equal(reviewedRuntime.state.images[0].reviewed, true, "single save keeps an already reviewed image reviewed");
+}
+
+async function runInFlightPauseAndResumeCase() {
+  const firstRender = deferred();
+  const timerQueue = [];
+  const entries = ["one", "two", "three"].map((imageId, index) => ({ imageId, relativePath: `${imageId}.png`, candidateRevision: index + 1 }));
+  const runtime = createRuntime({
+    entries,
+    initialImages: entries.map((entry) => ({ id: entry.imageId, relativePath: entry.relativePath, width: 16, height: 16, candidateCount: 1, enabledCandidateCount: 1 })),
+    timerQueue,
+    copy: async ({ options }) => {
+      const payload = JSON.parse(options.body);
+      if (payload.imageId === "one") await firstRender.promise;
+      return binaryResponse([1], `token-${payload.imageId}`, null, `G:/output/${payload.imageId}.png`);
+    },
+    commit: () => jsonResponse({ cleared: true, stale: false, images: [] }),
+  });
+  const save = runtime.runBrowserSave(entries.map((entry) => entry.imageId), "_censored", false, "copy");
+  while (!runtime.requests.some((request) => request.path === "/api/save/render")) await new Promise((resolve) => setTimeout(resolve, 1));
+  runtime.state.browserSave.paused = true;
+  firstRender.resolve();
+  while (runtime.state.browserSave.completed !== 1 || timerQueue.length === 0) await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(runtime.requests.filter((request) => request.path === "/api/save/render").map((request) => JSON.parse(request.options.body).imageId), ["one"], "pause lets the in-flight image settle without starting a new output");
+  assert.deepEqual(runtime.requests.filter((request) => request.path === "/api/save/commit").map((request) => JSON.parse(request.options.body).imageId), ["one"], "the in-flight image is committed before the paused boundary");
+
+  runtime.state.browserSave.paused = false;
+  timerQueue.shift()();
+  await save;
+  const rendered = runtime.requests.filter((request) => request.path === "/api/save/render").map((request) => JSON.parse(request.options.body).imageId);
+  const committed = runtime.requests.filter((request) => request.path === "/api/save/commit").map((request) => JSON.parse(request.options.body).imageId);
+  assert.deepEqual(rendered, ["one", "two", "three"], "resume starts only the previously unprocessed images");
+  assert.deepEqual(committed, ["one", "two", "three"], "resume never duplicates an already completed output");
+}
+
+async function runPendingTokenRestartRecoveryCase() {
+  const values = new Map();
+  const sharedStorage = { get length() { return values.size; }, key(index) { return [...values.keys()][index] || null; }, getItem(key) { return values.get(key) || null; }, setItem(key, value) { values.set(key, String(value)); }, removeItem(key) { values.delete(key); } };
+  const entry = { imageId: "image-1", relativePath: "nested/source.png", candidateRevision: 7 };
+  const firstTab = createRuntime({ sharedStorage, commit: () => jsonResponse({}), reserve: () => ({ state: "pending", outputPath: "G:/output/source.png" }) });
+  const reserved = await firstTab.renderDefaultCopy(entry, { imageId: entry.imageId, candidateRevision: entry.candidateRevision, copyToDefault: true, suffix: "_copy", format: "png", keepMetadata: true });
+  const reservePayload = JSON.parse(firstTab.requests.find((request) => request.path === "/api/save/reserve").options.body);
+  assert.match(reservePayload.clientSaveToken, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-8[0-9a-f]{3}-[0-9a-f]{12}$/i, "the client supplies a UUID idempotency token");
+  assert.equal(reserved.saveToken, reservePayload.clientSaveToken, "a pending reservation keeps the client token across the interrupted render");
+  assert.equal(sharedStorage.getItem(`mozarie.pending-save-token.${reserved.saveToken}`) !== null, true, "the pending token is durable before reconnect");
+
+  const secondTab = createRuntime({
+    sharedStorage,
+    commit: () => jsonResponse({}),
+    saveStatus: ({ options }) => {
+      const payload = JSON.parse(options.body);
+      assert.equal(payload.saveToken, reserved.saveToken, "restart checks the original token rather than creating another one");
+      return jsonResponse({ state: "pending" });
+    },
+    saveCancel: ({ options }) => {
+      const payload = JSON.parse(options.body);
+      assert.equal(payload.saveToken, reserved.saveToken, "restart cancels the same pending token");
+      return jsonResponse({ state: "cancelled" });
+    },
+  });
+  while (!secondTab.requests.some((request) => request.path === "/api/save/cancel")) await new Promise((resolve) => setTimeout(resolve, 1));
+  assert.equal(secondTab.requests.filter((request) => request.path === "/api/save/status").length, 1, "a new tab or restart resumes pending-token reconciliation");
+  assert.equal(secondTab.requests.filter((request) => request.path === "/api/save/cancel").length, 1, "the pending operation is explicitly cancelled after reconnect");
+  assert.equal(sharedStorage.getItem(`mozarie.pending-save-token.${reserved.saveToken}`), null, "a confirmed cancellation removes the durable token");
+
+  const committedToken = "11111111-1111-4111-8111-111111111111";
+  sharedStorage.setItem(`mozarie.pending-save-token.${committedToken}`, JSON.stringify({ imageId: entry.imageId, candidateRevision: entry.candidateRevision, sourceAction: "keep", displayName: entry.relativePath }));
+  const thirdTab = createRuntime({
+    sharedStorage,
+    commit: () => jsonResponse({}),
+    saveStatus: ({ options }) => {
+      assert.equal(JSON.parse(options.body).saveToken, committedToken, "restart queries the durable committed token");
+      return jsonResponse({ state: "committed", cleared: true, stale: false });
+    },
+  });
+  while (!thirdTab.requests.some((request) => request.path === "/api/save/ack")) await new Promise((resolve) => setTimeout(resolve, 1));
+  assert.equal(thirdTab.requests.filter((request) => request.path === "/api/save/status").length, 1, "a committed interrupted operation is recovered after restart");
+  assert.equal(thirdTab.requests.filter((request) => request.path === "/api/save/ack").length, 1, "the recovered commit is acknowledged exactly once");
+  assert.equal(sharedStorage.getItem(`mozarie.pending-save-token.${committedToken}`), null, "the token is forgotten only after the committed receipt is acknowledged");
+
+  const unknownToken = "22222222-2222-4222-8222-222222222222";
+  sharedStorage.setItem(`mozarie.pending-save-token.${unknownToken}`, JSON.stringify({ imageId: entry.imageId, candidateRevision: entry.candidateRevision, sourceAction: "keep", displayName: entry.relativePath }));
+  const unknownStatusSeen = deferred();
+  const offlineTab = createRuntime({
+    sharedStorage,
+    commit: () => jsonResponse({}),
+    saveStatus: ({ options }) => {
+      assert.equal(JSON.parse(options.body).saveToken, unknownToken, "reconnect queries the durable token before deciding its outcome");
+      unknownStatusSeen.resolve();
+      throw Object.assign(new Error("offline"), { code: "connection_lost" });
+    },
+  });
+  await unknownStatusSeen.promise;
+  await Promise.resolve();
+  assert.equal(sharedStorage.getItem(`mozarie.pending-save-token.${unknownToken}`) !== null, true, "an unknown communication outcome keeps the durable token for the next reconnect");
+  assert.equal(offlineTab.requests.some((request) => request.path === "/api/save/cancel" || request.path === "/api/save/ack"), false, "an unknown communication outcome is neither cancelled nor acknowledged");
 }
 
 async function runReserveJournalFailurePresentationCase() {
@@ -1647,6 +1742,7 @@ nodeTest("browser save runtime contracts", async (t) => {
   await t.test("single save preserves review and draft state", runSingleSaveKeepsReviewAndDraftCase);
   await t.test("source_restore_failed is shown and preserves source editor and catalog state", runSourceRestoreFailurePresentationAndStateCase);
   await t.test("pause and terminal completion reset controls", runPauseResetAfterTerminalBrowserSaveCase);
+  await t.test("in-flight pause settles current output and resume saves only unprocessed images", runInFlightPauseAndResumeCase);
   await t.test("output permission submission locks settle", runOutputPermissionSubmissionLockCases);
   await t.test("reserve journal failure is visible and starts no output", runReserveJournalFailurePresentationCase);
   await t.test("copy reserve render commit acknowledgement succeeds", runSuccessCase);
@@ -1656,6 +1752,7 @@ nodeTest("browser save runtime contracts", async (t) => {
   await t.test("commit failure preserves source and output ownership", runCommitFailureCase);
   await t.test("recoverable commit failures reconcile token state", runRecoverableCommitFailureCases);
   await t.test("retryable commit reuses the same token", runRetryableCommitCase);
+  await t.test("client UUID pending token survives a tab restart and resumes cancellation", runPendingTokenRestartRecoveryCase);
   await t.test("save cancellation stops unstarted work", runCancelCase);
   await t.test("copy success deletes original only after commit", runDeleteOriginalCase);
   await t.test("browser overwrite replaces only the selected source", runHandleOverwriteCase);
