@@ -53,12 +53,18 @@ const document = {
 };
 
 const calls = [];
-let projects = [
+const initialProjects = [
   { id: "working", name: "Alpha", status: "working", imageCount: 2, sourceRoot: "C:/alpha", updatedAt: 2_000_000 },
   { id: "completed", name: "Beta", status: "completed", imageCount: 1, sourceRoot: "C:/beta", updatedAt: 1_000_000 },
   { id: "separate", name: "Gamma", status: "working", imageCount: 1, sourceRoot: "C:/alpha", updatedAt: 500_000 },
 ];
+let projects;
 let openPayload = null;
+function resetProjectFixture() {
+  projects = initialProjects.map((project) => ({ ...project }));
+  openPayload = null;
+}
+resetProjectFixture();
 const state = { project: null, projectReadOnly: false, projectOperationPending: false, catalogTransition: null, missingNativeSources: [], images: [], selectedImageIds: new Set(), projectlessDirectorySources: new Map(), candidateUpdateChains: new Map(), workspaceDraftChains: new Map(), workspaceDraftTimers: new Map(), workspaceMutationErrors: new Map(), candidateBatchPending: new Set(), settings: { general: { language: "ja" } }, importing: false };
 const context = {
   console, Promise, Map, Set, WeakMap, Array, Object, Number, String, Boolean, Math, JSON, Error, Intl, AbortController,
@@ -108,6 +114,7 @@ vm.runInNewContext("globalThis.projectTest={projectTitle,projectDate,projectSour
 const test = context.projectTest;
 
 nodeTest("project deletion warning names its target and every destructive consequence", async () => {
+  resetProjectFixture();
   const warningKeys = ["project.deleteData", "project.deleteSource", "project.deleteIrreversible"];
   for (const key of warningKeys) {
     assert.equal(typeof japanese[key], "string", `Japanese includes ${key}`);
@@ -123,6 +130,7 @@ nodeTest("project deletion warning names its target and every destructive conseq
 });
 
 nodeTest("native source relink uses a typed path without an OS folder picker", () => {
+  resetProjectFixture();
   const dialog = indexHtml.match(/<dialog id="nativeRelinkDialog"[\s\S]*?<\/dialog>/)?.[0] || "";
   assert.match(dialog, /<input[^>]+id="nativeRelinkPath"/, "native relink provides an editable path field");
   assert.match(dialog, /<button[^>]+id="nativeRelinkConfirm"/, "native relink submits the typed path explicitly");
@@ -130,6 +138,7 @@ nodeTest("native source relink uses a typed path without an OS folder picker", (
 });
 
 nodeTest("project dialogs, A-B-A switching, failed-open recovery, and duplicate transition guards", async (t) => {
+  resetProjectFixture();
   await new Promise((resolve) => setImmediate(resolve));
   for (const key of ["project.open", "project.new", "project.name", "project.openList", "project.complete", "project.close", "project.resume", "project.sourceChangedClear", "project.downloadMosaic", "project.downloadExclude", "project.downloadMosaicZip", "project.downloadExcludeZip", "project.delete", "project.deleteData", "project.deleteSource", "project.deleteIrreversible"]) {
     assert.equal(typeof japanese[key], "string", `Japanese includes ${key}`); assert.equal(typeof english[key], "string", `English includes ${key}`);
@@ -388,6 +397,7 @@ nodeTest("project dialogs, A-B-A switching, failed-open recovery, and duplicate 
 });
 
 nodeTest("project creation, cancellation, duplicate rejection, table columns, and relink payload preserve workspace state", async () => {
+  resetProjectFixture();
   for (let attempt = 0; attempt < 5; attempt += 1) await new Promise((resolve) => setImmediate(resolve));
   const fire = async (id, type = "click") => { const listener = element(id).listeners.get(type); assert.ok(listener, `${id} is bound`); await listener({ preventDefault() {}, target: element(id) }); await new Promise((resolve) => setImmediate(resolve)); };
   const baselineImages = [{ id: "draft", sourceId: "native-a", reviewed: true, hidden: true, candidates: [{ id: "candidate" }], manual: { add: "manual-mask", exclusion: "exclude-mask" }, history: [{ kind: "brush", points: [[1, 1]] }], historyIndex: 1 }];
@@ -469,6 +479,7 @@ nodeTest("project creation, cancellation, duplicate rejection, table columns, an
 });
 
 nodeTest("project close, complete, resume, and delete produce exact workspace outcomes", async () => {
+  resetProjectFixture();
   for (let attempt = 0; attempt < 5; attempt += 1) await new Promise((resolve) => setImmediate(resolve));
   const fire = async (id) => { const listener = element(id).listeners.get("click"); assert.ok(listener); await listener({ preventDefault() {}, target: element(id) }); for (let attempt = 0; attempt < 5; attempt += 1) await new Promise((resolve) => setImmediate(resolve)); };
   const richImages = [{ id: "rich", candidates: [{ id: "candidate" }], manual: { add: "mask" }, reviewed: true, hidden: true, history: [{ kind: "brush" }] }];
@@ -514,6 +525,7 @@ nodeTest("project close, complete, resume, and delete produce exact workspace ou
 });
 
 nodeTest("project completion and deletion cancellation preserve the exact project and image list", async () => {
+  resetProjectFixture();
   test.bindEvents();
   const richImages = [{ id: "cancel-rich", candidates: [{ id: "candidate" }], manual: { add: "mask" }, reviewed: true, hidden: true, history: [{ kind: "brush" }] }];
   state.project = projects[0]; state.projectReadOnly = false; state.images = richImages; state.currentId = "cancel-rich"; state.projectOperationPending = false; state.catalogTransition = null;
@@ -530,6 +542,7 @@ nodeTest("project completion and deletion cancellation preserve the exact projec
 });
 
 nodeTest("same-source warning offers open separate and cancel without changing work until chosen", async () => {
+  resetProjectFixture();
   test.bindEvents();
   const currentImages = [{ id: "current", candidates: [{ id: "keep" }], history: [{ kind: "brush" }] }];
   state.project = projects[0]; state.images = currentImages; state.currentId = "current"; state.projectOperationPending = false; state.catalogTransition = null;
@@ -559,6 +572,7 @@ nodeTest("same-source warning offers open separate and cancel without changing w
 });
 
 nodeTest("duplicate project guidance asks for another name while the current project remains intact", () => {
+  resetProjectFixture();
   assert.match(japanese["errorDialog.project_name_duplicate.title"], /同じ名前/);
   assert.match(japanese["errorDialog.project_name_duplicate.cause"], /すでに使われ/);
   assert.match(japanese["errorDialog.project_name_duplicate.action"], /別の名前/);
@@ -570,6 +584,7 @@ nodeTest("duplicate project guidance asks for another name while the current pro
 });
 
 nodeTest("project operations issue one request per start and the last completed start owns the catalog", async () => {
+  resetProjectFixture();
   state.projectOperationPending = false; state.catalogTransition = null; state.project = projects[0]; state.images = [{ id: "original" }]; state.currentId = "original";
   let releaseFirst; let openRequests = 0;
   context.api = async (url, options = {}) => {
@@ -592,6 +607,7 @@ nodeTest("project operations issue one request per start and the last completed 
 });
 
 nodeTest("completed-project resume is single request and failed open rolls back to completed or unnamed work", async () => {
+  resetProjectFixture();
   state.project = projects[1]; state.projectReadOnly = true; state.images = [{ id: "completed-kept", candidates: [{ id: "candidate" }], history: [{ kind: "brush" }] }]; state.currentId = "completed-kept"; state.projectOperationPending = false; state.catalogTransition = null;
   let resumeRequests = 0;
   context.api = async (url) => {
@@ -612,6 +628,7 @@ nodeTest("completed-project resume is single request and failed open rolls back 
 });
 
 nodeTest("overlapping browser-source restores publish only the last-started access and missing-source result", async () => {
+  resetProjectFixture();
   state.project = projects[0]; state.catalogEpoch = 9; state.images = [{ id: "restore-image", sourceId: "file-source", relativePath: "image.png", sizeBytes: 3, mtimeNs: 1000000 }]; state.sourceAccess = new Map();
   test.setPendingBrowserProjectSources([]);
   let releaseFirst; let restoreCalls = 0;
