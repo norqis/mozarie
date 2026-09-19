@@ -179,7 +179,14 @@ test("all-image detection submits the fluid color-fill settings with default tol
     });
     await page.locator("#detectAllButton").click();
     await page.waitForFunction(() => document.querySelector("#detectDialog").open);
+    assert.equal(await page.locator('label[for="detectFluidColorFillEnabled"], #detectFluidColorFillEnabled').count() > 0, true);
+    assert.match(await page.locator("#detectFluidColorFillEnabled").getAttribute("aria-label"), /精液候補を色で広げる|fluid/i);
+    assert.match(await page.locator("#detectFluidColorFillTolerance").getAttribute("aria-label"), /許容範囲|tolerance/i);
+    assert.equal(await page.locator("#detectFluidColorFillTolerance").getAttribute("min"), "0");
+    assert.equal(await page.locator("#detectFluidColorFillTolerance").getAttribute("max"), "255");
+    assert.equal(await page.locator("#detectFluidColorFillEnabled").isChecked(), true, "color expansion is enabled by default");
     assert.equal(await page.locator("#detectFluidColorFillTolerance").inputValue(), "26", "the all-image dialog starts at the configured default tolerance");
+    assert.equal(await page.locator("#bucketTolerance").inputValue(), "20", "the manual fill tool keeps its independent tolerance");
     await page.locator("#detectFluidColorFillTolerance").fill("27");
     await page.locator("#detectFluidColorFillEnabled").uncheck();
     await page.locator("#detectStartButton").click();
@@ -187,6 +194,45 @@ test("all-image detection submits the fluid color-fill settings with default tol
     assert.deepEqual(await page.evaluate(() => window.__detectPayloads[0]), {
       imageIds: ["sample", "sample-two"], confidence: 0.5, parallelism: 2, targetClasses: ["penis", "pussy"], fluidColorFillEnabled: false, fluidColorFillTolerance: 27,
     }, "the modal sends an explicit fluid-fill switch and tolerance with the detection request");
+    assert.equal(fixture.settingsPayloads.at(-1).body.detection.fluid_color_fill_enabled, false);
+    assert.equal(fixture.settingsPayloads.at(-1).body.detection.fluid_color_fill_tolerance, 27);
+    await page.waitForFunction(() => !state.processing && !isBusy());
+    await page.locator("#detectAllButton").click();
+    assert.equal(await page.locator("#detectFluidColorFillEnabled").isChecked(), false, "saved OFF is restored when the dialog reopens");
+    assert.equal(await page.locator("#detectFluidColorFillTolerance").inputValue(), "27", "saved tolerance is restored when the dialog reopens");
+    assert.equal(await page.locator("#detectFluidColorFillTolerance").isDisabled(), true, "OFF visibly disables its dependent tolerance input");
+    assert.equal(await page.locator("#bucketTolerance").inputValue(), "20", "auto-detection settings never rewrite manual fill tolerance");
+  } finally {
+    await context?.close();
+    await browser.close();
+    await closeServer(fixture.server);
+  }
+});
+
+test("SD-136 fluid color tolerance accepts inclusive bounds and rejects values outside 0 through 255", { timeout: 60000 }, async () => {
+  const fixture = await startFixtureServer();
+  const browser = await chromium.launch({ headless: true });
+  let context; let page;
+  try {
+    ({ context, page } = await freshPage(browser, fixture));
+    await page.locator("#detectAllButton").click();
+    const before = fixture.detectRequests.length;
+    for (const invalid of ["-1", "256", ""]) {
+      await page.locator("#detectFluidColorFillTolerance").fill(invalid);
+      await page.evaluate(() => startDetectionFromDialog({ preventDefault() {} }));
+      assert.equal(fixture.detectRequests.length, before);
+      assert.equal(await page.locator("#detectFluidColorFillTolerance").getAttribute("aria-invalid"), "true");
+    }
+    for (const valid of ["0", "255"]) {
+      await page.locator("#detectFluidColorFillTolerance").fill(valid);
+      const response = page.waitForResponse((item) => new URL(item.url()).pathname === "/api/detect" && item.request().method() === "POST");
+      await page.locator("#detectStartButton").click();
+      await response;
+      assert.equal(fixture.detectRequests.at(-1).fluidColorFillTolerance, Number(valid));
+      await page.waitForFunction(() => !state.processing && !isBusy());
+      await page.locator("#detectAllButton").click();
+      assert.equal(await page.locator("#detectFluidColorFillTolerance").inputValue(), valid);
+    }
   } finally {
     await context?.close();
     await browser.close();

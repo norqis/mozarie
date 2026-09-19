@@ -2122,6 +2122,7 @@
       "observation": "同じ設定モーダルに「精液候補を色で広げる」と0〜255の許容範囲を表示する",
       "status": "automated",
       "testIds": [
+        "node:tests/test_filters_and_fluid_e2e.cjs::SD-136 fluid color tolerance accepts inclusive bounds and rejects values outside 0 through 255",
         "node:tests/test_filters_and_fluid_e2e.cjs::all-image detection submits the fluid color-fill settings with default tolerance 26"
       ]
     },
@@ -2144,6 +2145,7 @@
       "observation": "0〜255の整数だけを受け付け、設定値を保存・再表示する",
       "status": "automated",
       "testIds": [
+        "node:tests/test_filters_and_fluid_e2e.cjs::SD-136 fluid color tolerance accepts inclusive bounds and rejects values outside 0 through 255",
         "node:tests/test_filters_and_fluid_e2e.cjs::all-image detection submits the fluid color-fill settings with default tolerance 26"
       ]
     },
@@ -2155,6 +2157,7 @@
       "observation": "0では既存の精液候補だけを保持し、各検出で対象候補またはメタデータ検索範囲の外へ広がらない",
       "status": "automated",
       "testIds": [
+        "node:tests/test_filters_and_fluid_e2e.cjs::SD-136 fluid color tolerance accepts inclusive bounds and rejects values outside 0 through 255",
         "python:tests.test_fluid.FluidTests.test_expand_white_fluid_mask_respects_alpha_and_tolerance_boundaries"
       ]
     },
