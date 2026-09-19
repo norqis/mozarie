@@ -5742,6 +5742,31 @@ class MozarieTests(unittest.TestCase):
                     state._detect_worker([record], DEFAULT_DETECTION_CONFIDENCE, 1)
                 self.assertEqual(seen_modes, [mode])
 
+    def test_detection_start_snapshots_fluid_settings_for_every_image(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            Image.new("RGB", (8, 8), "white").save(root / "one.png")
+            Image.new("RGB", (8, 8), "black").save(root / "two.png")
+            state = self.new_state()
+            image_ids = [item["id"] for item in state.set_root(directory)]
+            state.settings["models"]["provider"] = "cpu"
+            state.settings["detection"].update({
+                "fluid_exclusion_enabled": True,
+                "fluid_color_fill_enabled": True,
+                "fluid_color_fill_tolerance": 26,
+            })
+            with patch.object(state, "_start_job") as start:
+                state.start_detection(image_ids)
+            snapshot = start.call_args.args[6]
+            state.settings["detection"].update({
+                "fluid_exclusion_enabled": False,
+                "fluid_color_fill_enabled": False,
+                "fluid_color_fill_tolerance": 99,
+            })
+            self.assertEqual(snapshot["fluid_exclusion_enabled"], True)
+            self.assertEqual(snapshot["fluid_color_fill"], (True, 26))
+            self.assertEqual([record.image_id for record in start.call_args.args[1]], image_ids)
+
     def test_detection_start_rejects_a_catalog_switch_after_records_are_captured(self):
         with tempfile.TemporaryDirectory() as directory:
             first_root = Path(directory) / "first"

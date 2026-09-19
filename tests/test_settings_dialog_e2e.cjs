@@ -58,9 +58,22 @@ test("SD-004 detection tab exposes every model switch help and preparation actio
   await withSettingsPage(async (page) => {
     await page.locator('[data-settings-tab="models"]').click();
     assert.equal(await page.locator("#settingsPanelModels .model-card").count(), 7);
-    assert.equal(await page.locator("#settingsPanelModels [data-model-help]").count(), 7);
-    assert.equal(await page.locator("#settingsPanelModels [data-model-download]").count() >= 6, true);
-    assert.equal(await page.locator("#settingsPanelModels [role=switch]").count(), 6);
+    for (const [card, help, download, toggle] of [
+      [null, "target", "target", null],
+      ["#settingsNtd11Card", "ntd11", "ntd11", "#settingsNtd11Toggle"],
+      ["#settingsSensitiveCard", "sensitive", "sensitive", "#settingsSensitiveToggle"],
+      ["#settingsPrecisionCard", "precision", "sam", "#settingsPrecisionToggle"],
+      ["#settingsHandCard", "hand", "hand_detection", "#settingsHandToggle"],
+      ["#settingsHandSegmentationCard", "handSegmentation", "hand_segmentation", "#settingsHandSegmentationToggle"],
+      ["#settingsFluidCard", "fluid", null, "#settingsFluidToggle"],
+    ]) {
+      assert.equal(await page.locator(`[data-model-help="${help}"]`).isVisible(), true);
+      if (download) assert.equal(await page.locator(`[data-model-download="${download}"]`).isVisible(), true);
+      if (toggle) {
+        assert.equal(await page.locator(toggle).getAttribute("role"), "switch");
+        assert.equal(await page.locator(`${card} [data-switch-state]`).textContent(), await page.locator(toggle).isChecked() ? "ON" : "OFF");
+      }
+    }
   });
 });
 
@@ -190,6 +203,26 @@ test("SD-013 resetting settings replaces edited controls with returned defaults"
     await page.locator("#settingsResetButton").click();
     await page.waitForFunction(() => document.querySelector("#settingsImportParallelism").value === "3");
     assert.equal(await page.locator("#settingsImportParallelism").inputValue(), "3");
+  });
+});
+
+test("SD-016 SD-018 SD-019 general execution settings save their exact values and survive reload", { timeout: 60000 }, async () => {
+  await withSettingsPage(async (page, fixture) => {
+    await page.locator("#settingsOpenBrowser").check();
+    await page.locator("#settingsImportParallelism").fill("6");
+    await page.locator("#settingsSaveParallelism").fill("8");
+    await page.locator("#settingsSaveButton").click();
+    await page.waitForFunction(() => state.settings?.importing?.parallelism === 6 && state.settings?.saving?.parallelism === 8);
+    const posted = fixture.settingsPayloads.at(-1).body;
+    assert.equal(posted.general.open_browser, true);
+    assert.equal(posted.importing.parallelism, 6);
+    assert.equal(posted.saving.parallelism, 8);
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await page.waitForFunction(() => state.settings?.general?.open_browser === true);
+    await page.locator("#settingsButton").click();
+    assert.equal(await page.locator("#settingsOpenBrowser").isChecked(), true);
+    assert.equal(await page.locator("#settingsImportParallelism").inputValue(), "6");
+    assert.equal(await page.locator("#settingsSaveParallelism").inputValue(), "8");
   });
 });
 
@@ -363,23 +396,51 @@ test("SD-015 Escape closes settings without dispatching an editor pointer action
 
 test("SD-072 overlay opacity changes display settings without changing mask ownership", { timeout: 60000 }, async () => {
   await withSettingsPage(async (page) => {
-    const before = await page.evaluate(() => state.images.map(({ id, candidateCount, enabledCandidateCount }) => ({ id, candidateCount, enabledCandidateCount })));
+    await page.locator("#settingsCloseButton").click();
+    await page.locator('.gallery-item[data-id="sample"]').click();
+    await page.waitForFunction(() => state.currentId === "sample" && Boolean(state.currentImage));
+    await page.locator("#brushTool").click();
+    const box = await page.locator("#editorCanvas").boundingBox();
+    await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+    await page.waitForFunction(() => state.manualMaskPresent);
+    const before = await page.evaluate(() => {
+      window.__overlayOpacities = [];
+      const original = paintTintedMask;
+      paintTintedMask = (...args) => { window.__overlayOpacities.push(args[2]); return original(...args); };
+      state.blinkCandidateIds.add("manual:apply"); state.blinkPhase = true;
+      return { mask: addCanvas.toDataURL() };
+    });
+    await page.locator("#settingsButton").click();
     await page.locator('[data-settings-tab="display"]').click();
     await page.locator("#settingsOpacity").fill("0.31");
     await page.locator("#settingsSaveButton").click();
     await page.waitForFunction(() => state.settings.display.overlay_opacity === 0.31);
-    assert.deepEqual(await page.evaluate(() => state.images.map(({ id, candidateCount, enabledCandidateCount }) => ({ id, candidateCount, enabledCandidateCount }))), before);
+    await page.locator("#settingsCloseButton").click();
+    await page.evaluate(() => drawCandidateBlinkOverlay());
+    await page.waitForFunction(() => window.__overlayOpacities.some((value) => Math.abs(value - 0.31) < 0.001));
+    assert.equal(await page.evaluate(() => addCanvas.toDataURL()), before.mask);
   });
 });
 
 test("SD-073 mosaic preview switch changes preview state without changing saved mask targets", { timeout: 60000 }, async () => {
   await withSettingsPage(async (page) => {
-    const before = await page.evaluate(() => state.images.map(({ id, hasEffectiveMask }) => ({ id, hasEffectiveMask })));
+    await page.locator("#settingsCloseButton").click();
+    await page.locator('.gallery-item[data-id="sample"]').click();
+    await page.waitForFunction(() => state.currentId === "sample" && Boolean(state.currentImage));
+    await page.locator("#brushTool").click();
+    const box = await page.locator("#editorCanvas").boundingBox();
+    await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+    await page.waitForFunction(() => state.manualMaskPresent);
+    const before = await page.evaluate(() => ({ mask: addCanvas.toDataURL() }));
+    await page.locator("#settingsButton").click();
     await page.locator('[data-settings-tab="display"]').click();
     await page.locator("#settingsMosaicPreview").uncheck();
     await page.locator("#settingsSaveButton").click();
     await page.waitForFunction(() => state.settings.display.mosaic_preview === false);
-    assert.deepEqual(await page.evaluate(() => state.images.map(({ id, hasEffectiveMask }) => ({ id, hasEffectiveMask }))), before);
+    await page.locator("#settingsCloseButton").click();
+    assert.equal(await page.locator("#mosaicPreviewButton").getAttribute("aria-pressed"), "false");
+    assert.equal(await page.evaluate(() => state.mosaicPreviewEnabled), false);
+    assert.equal(await page.evaluate(() => addCanvas.toDataURL()), before.mask);
   });
 });
 

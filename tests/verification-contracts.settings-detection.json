@@ -183,6 +183,7 @@
       "observation": "自動で新しいブラウザーを開かない",
       "status": "automated",
       "testIds": [
+        "node:tests/test_settings_dialog_e2e.cjs::SD-016 SD-018 SD-019 general execution settings save their exact values and survive reload",
         "python:tests.test_server.MozarieTests.test_main_uses_saved_port_and_respects_open_browser_setting"
       ]
     },
@@ -216,6 +217,7 @@
       "observation": "設定値を保持し、全画像の読み込み完了後に操作を再有効化する",
       "status": "automated",
       "testIds": [
+        "node:tests/test_settings_dialog_e2e.cjs::SD-016 SD-018 SD-019 general execution settings save their exact values and survive reload",
         "python:tests.test_server.MozarieTests.test_import_session_records_requested_and_effective_parallelism_without_a_fixed_cap"
       ]
     },
@@ -227,6 +229,7 @@
       "observation": "設定値を保持し、出力の重複・欠落が発生しない",
       "status": "automated",
       "testIds": [
+        "node:tests/test_settings_dialog_e2e.cjs::SD-016 SD-018 SD-019 general execution settings save their exact values and survive reload",
         "python:tests.test_config.SettingsTests.test_valid_settings_are_persisted_only_to_local_file"
       ]
     },
@@ -858,6 +861,7 @@
       "observation": "新規候補へ指定値を反映し、閉じて再表示しても保持する",
       "status": "automated",
       "testIds": [
+        "node:tests/test_detection_dialog_contracts.cjs::SD-127 detection dialog persists distinct apply and exclusion padding",
         "node:tests/test_filters_and_fluid_e2e.cjs::all-image detection filters images with independent OR checkboxes and persists the selection",
         "python:tests.test_server.MozarieTests.test_sd_127_detect_and_boundary_candidates_receive_distinct_apply_and_exclude_padding"
       ]
@@ -903,6 +907,7 @@
       "observation": "非表示を除く対象数に対して進捗が進み、準備表示とファイル名を交互に点滅させない",
       "status": "automated",
       "testIds": [
+        "node:tests/test_detection_progress_ui.cjs::SD-148 detection progress shows staged work and locks pause only while publication is pending",
         "python:tests.test_server.MozarieTests.test_detection_staging_reports_every_success_before_atomic_publication"
       ]
     },
@@ -914,6 +919,7 @@
       "observation": "開始時から60件の対象・進捗を表示し、処理終了後に画面操作を再有効化する",
       "status": "automated",
       "testIds": [
+        "node:tests/test_detection_progress_ui.cjs::SD-148 detection progress shows staged work and locks pause only while publication is pending",
         "python:tests.test_server.MozarieTests.test_detection_staging_reports_every_success_before_atomic_publication"
       ]
     },
@@ -1029,6 +1035,7 @@
       "observation": "通常選択不能時だけ、手との重なりが少ないSAM候補を優先する",
       "status": "automated",
       "testIds": [
+        "python:tests.test_server.MozarieTests.test_standard_hand_box_fallback_is_an_apply_constrained_exclusion",
         "python:tests.test_server.MozarieTests.test_high_precision_refinement_keeps_detector_mask_when_sam_is_incompatible"
       ]
     },
@@ -1040,6 +1047,7 @@
       "observation": "初回候補と手が重なる場合は、初回のpoint・box・low-res maskを保った再推定で、重なり内へ既存分と合計3点までのnegative点を空間分散して追加する",
       "status": "automated",
       "testIds": [
+        "python:tests.test_server.MozarieTests.test_high_precision_refinement_forwards_prompts_and_only_keeps_improved_retry",
         "python:tests.test_server.MozarieTests.test_semantic_sam_refinement_uses_safe_points_and_rejects_hand_overlap"
       ]
     },
@@ -1051,6 +1059,7 @@
       "observation": "SAMは輪郭補正だけに使い、通常の検出器thresholdを通過したAPPLY候補はSAMの選択不成立でも保持する",
       "status": "automated",
       "testIds": [
+        "python:tests.test_server.MozarieTests.test_detect_image_persists_the_refined_apply_mask",
         "python:tests.test_server.MozarieTests.test_high_precision_refinement_keeps_detector_mask_when_sam_is_incompatible"
       ]
     },
@@ -1118,6 +1127,7 @@
       "observation": "`sam_high_precision`の補正済み候補を作る",
       "status": "automated",
       "testIds": [
+        "python:tests.test_server.MozarieTests.test_detect_image_persists_the_refined_apply_mask",
         "python:tests.test_server.MozarieTests.test_high_precision_refinement_keeps_detector_mask_when_sam_is_incompatible"
       ]
     },
@@ -1163,6 +1173,7 @@
       "observation": "推論は透明外側を黒の背景として扱い、APPLY・手・白い液を含む全候補マスクはalphaが0の画素へ出ない",
       "status": "automated",
       "testIds": [
+        "python:tests.test_detection_regressions.DetectionIntegrityRegressionTests.test_rgba_alpha_is_enforced_by_standard_high_precision_and_boundary_routes",
         "python:tests.test_detection_regressions.DetectionIntegrityRegressionTests.test_transparent_pixels_use_black_inference_background_and_clip_every_candidate"
       ]
     },
@@ -2095,6 +2106,7 @@
       "observation": "各経路の新規候補を0pxで作成し、元の候補マスクを広げない",
       "status": "automated",
       "testIds": [
+        "node:tests/test_detection_dialog_contracts.cjs::SD-131 zero padding runs all current and selected routes without substituting a nonzero value",
         "node:tests/test_detection_dialog_contracts.cjs::SD-131 invalid padding blocks detection while zero remains valid",
         "node:tests/test_filters_and_fluid_e2e.cjs::all-image detection filters images with independent OR checkboxes and persists the selection",
         "python:tests.test_server.MozarieTests.test_sd_131_zero_padding_keeps_new_apply_and_exclude_masks_unexpanded"
@@ -2213,6 +2225,7 @@
       "observation": "OFFでは既存の白い液候補検出だけを使い、ONでは開始時の設定値だけを全対象へ一貫して使う",
       "status": "automated",
       "testIds": [
+        "python:tests.test_server.MozarieTests.test_detection_start_snapshots_fluid_settings_for_every_image",
         "python:tests.test_server.MozarieTests.test_finalization_skips_fluid_search_for_empty_apply_masks_and_when_disabled",
         "python:tests.test_server.MozarieTests.test_finalization_applies_fluid_to_every_nonempty_target_once"
       ]
@@ -2225,6 +2238,7 @@
       "observation": "検出中の設定変更で途中画像だけの値を変えない",
       "status": "automated",
       "testIds": [
+        "python:tests.test_server.MozarieTests.test_detection_start_snapshots_fluid_settings_for_every_image",
         "python:tests.test_server.MozarieTests.test_detect_image_persists_a_real_broad_fluid_exclusion"
       ]
     },
@@ -2236,6 +2250,7 @@
       "observation": "完全透明画素へ候補が広がらず、RGB画像および既存の白い液候補検出の条件は変わらない",
       "status": "automated",
       "testIds": [
+        "python:tests.test_fluid.FluidTests.test_legacy_rgb_fluid_expansion_matches_fully_opaque_alpha",
         "python:tests.test_fluid.FluidTests.test_expand_white_fluid_mask_respects_alpha_and_tolerance_boundaries"
       ]
     },

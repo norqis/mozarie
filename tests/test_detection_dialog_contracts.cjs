@@ -101,6 +101,10 @@ test("SD-127 detection dialog persists distinct apply and exclusion padding", { 
     const detection = fixture.settingsPayloads.at(-1).body.detection;
     assert.equal(detection.default_candidate_padding_px, 3);
     assert.equal(detection.default_exclude_candidate_padding_px, 11);
+    await page.waitForFunction(() => !state.processing && !isBusy());
+    await page.locator("#detectAllButton").click();
+    assert.equal(await page.locator("#detectCandidatePadding").inputValue(), "3");
+    assert.equal(await page.locator("#detectExcludeCandidatePadding").inputValue(), "11");
   });
 });
 
@@ -169,5 +173,39 @@ test("SD-130 all-image run persists and uses the dialog apply and exclusion padd
     assert.deepEqual(JSON.parse((await request).postData()).imageIds, ["sample", "sample-two"]);
     assert.equal(fixture.settingsPayloads.at(-1).body.detection.default_candidate_padding_px, 5);
     assert.equal(fixture.settingsPayloads.at(-1).body.detection.default_exclude_candidate_padding_px, 13);
+  });
+});
+
+test("SD-131 zero padding runs all current and selected routes without substituting a nonzero value", { timeout: 60000 }, async () => {
+  await withPage(async (page, fixture) => {
+    await page.locator("#detectAllButton").click();
+    await page.locator("#detectCandidatePadding").fill("0");
+    await page.locator("#detectExcludeCandidatePadding").fill("0");
+    await page.locator("#detectStartButton").click();
+    await page.waitForFunction(() => !state.processing && !isBusy());
+    assert.deepEqual([
+      fixture.settingsPayloads.at(-1).body.detection.default_candidate_padding_px,
+      fixture.settingsPayloads.at(-1).body.detection.default_exclude_candidate_padding_px,
+    ], [0, 0]);
+
+    await selectFirst(page);
+    let request = page.waitForRequest((item) => new URL(item.url()).pathname === "/api/detect" && item.method() === "POST");
+    await page.locator("#detectCurrentButton").click();
+    assert.deepEqual(JSON.parse((await request).postData()).imageIds, ["sample"]);
+    await page.waitForFunction(() => !state.processing && !isBusy());
+
+    await page.evaluate(() => setViewMode("overview"));
+    await page.locator("#batchModeButton").click();
+    await page.locator('.overview-item[data-id="sample-two"]').click();
+    await page.locator("#selectionActionsButton").click();
+    await page.locator('[data-selection-action="detect"]').click();
+    assert.deepEqual(await page.locator("#detectForm").evaluate(() => [
+      document.querySelector("#detectCandidatePadding").value,
+      document.querySelector("#detectExcludeCandidatePadding").value,
+    ]), ["0", "0"]);
+    request = page.waitForRequest((item) => new URL(item.url()).pathname === "/api/detect" && item.method() === "POST");
+    await page.locator("#detectStartButton").click();
+    assert.deepEqual(JSON.parse((await request).postData()).imageIds, ["sample-two"]);
+    assert.equal(fixture.detectRequests.length, 3);
   });
 });
