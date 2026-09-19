@@ -80,7 +80,7 @@ test("the four-pillar page is complete without JavaScript and has no horizontal 
       }))), [
         { sequence: "01", heading: "モザイク自動検出", copy: "現在の画像またはプロジェクト内の全画像を対象に、モザイク候補を自動検出できます。候補は画像ごとに確認し、適用する範囲を選べます。", image: "assets/demo3.png" },
         { sequence: "02", heading: "ブラシツール", copy: "ブラシと消しゴムを使い、モザイクをかける範囲や除外する範囲を画像上で直接編集できます。", image: "assets/demo1.png" },
-        { sequence: "03", heading: "複数画像をまとめて保存", copy: "プロジェクト内の複数画像をまとめて保存できます。コピー保存と元画像への上書きを選び、PNG・JPEG・WebPで出力できます。", image: "assets/demo1.png" },
+        { sequence: "03", heading: "複数画像をまとめて保存", copy: "プロジェクト内の複数画像をまとめて保存できます。コピー保存または元画像への上書きを選べます。", image: "assets/demo1.png" },
         { sequence: "04", heading: "プロジェクトごとの履歴保持", copy: "候補、手描き範囲、確認状態、非表示状態、Undo／Redo履歴をプロジェクトごとに保持します。プロジェクトを切り替えても、それぞれの編集内容を維持します。", image: null },
       ]);
       assert.deepEqual(await page.locator(".feature-index a").evaluateAll((links) => links.map((link) => ({ href: link.getAttribute("href"), text: link.innerText.trim() }))), [
