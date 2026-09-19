@@ -24,11 +24,13 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
+import numpy as np
 from PIL import Image
 
 import mozarie.http as http_module
 import mozarie.state as state_module
 from mozarie.core import Candidate
+from mozarie.domain import CandidateRole
 from mozarie.http import MosaicHandler
 from mozarie.state import StudioState
 
@@ -202,6 +204,31 @@ class ProjectHttpCoverageTests(unittest.TestCase):
         status, _headers, body = self.request("GET", "/api/project/mask/missing/mosaic")
         self.assertEqual(status, 400)
         self.assertEqual(json.loads(body)["error_code"], "image_not_found")
+
+    def test_single_mosaic_mask_export_is_original_size_l_png_with_exclusion_subtracted(self) -> None:
+        _project_id, image_id = self.create_and_load()
+        cache = self.state.cache_dir / image_id
+        cache.mkdir(parents=True, exist_ok=True)
+        apply = np.zeros((8, 12), dtype=np.uint8); apply[1:7, 2:10] = 255
+        exclude = np.zeros((8, 12), dtype=np.uint8); exclude[3:5, 5:7] = 255
+        apply_path, exclude_path = cache / "apply.png", cache / "exclude.png"
+        Image.fromarray(apply).save(apply_path); Image.fromarray(exclude).save(exclude_path)
+        self.state.candidates[image_id] = [
+            Candidate("apply", "penis", .9, apply_path),
+            Candidate("exclude", "hand", None, exclude_path, source="hand_exclusion", role=CandidateRole.EXCLUDE),
+        ]
+        with self.state.image_io_lock(image_id):
+            with self.state.lock:
+                self.state._commit_candidate_snapshot(image_id, self.state.candidates[image_id], replace=True)
+
+        status, headers, body = self.request("GET", f"/api/project/mask/{image_id}/mosaic")
+        self.assertEqual(status, 200, body.decode("utf-8") if status != 200 else "")
+        self.assertEqual(headers["Content-Type"], "image/png")
+        with Image.open(io.BytesIO(body)) as exported:
+            self.assertEqual((exported.format, exported.mode, exported.size), ("PNG", "L", (12, 8)))
+            actual = np.asarray(exported)
+        expected = apply.copy(); expected[exclude > 0] = 0
+        self.assertTrue(np.array_equal(actual, expected), "single mosaic export subtracts the exclusion mask pixel-for-pixel")
 
     def test_project_switch_restores_only_its_durable_candidate_manual_history_and_flags(self) -> None:
         project_a, image_a = self.create_and_load("A")

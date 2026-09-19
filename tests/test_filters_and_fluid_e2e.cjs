@@ -22,6 +22,51 @@ async function freshPage(browser, fixture, initScript = null, expectedImageCount
   return { context, page };
 }
 
+test("single overwrite confirmation cancel returns to save dialog with source bytes and mtime unchanged", { timeout: 60000 }, async () => {
+  const fixture = await startFixtureServer();
+  const browser = await chromium.launch({ headless: true });
+  let context; let page;
+  try {
+    ({ context, page } = await freshPage(browser, fixture));
+    await page.locator('.gallery-item[data-id="sample"]').click();
+    await page.waitForFunction(() => state.currentId === "sample" && state.currentImage);
+    const before = await page.evaluate(async () => {
+      const bytes = Uint8Array.from(atob("iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAEElEQVR4nGP8zwACTGCSAQANHQEDgslx/wAAAABJRU5ErkJggg=="), (value) => value.charCodeAt(0));
+      const parentHandle = await navigator.storage.getDirectory();
+      const fileHandle = await parentHandle.getFileHandle("cancel-overwrite.png", { create: true });
+      const writable = await fileHandle.createWritable(); await writable.write(bytes); await writable.close();
+      const file = await fileHandle.getFile();
+      const image = state.images.find((entry) => entry.id === "sample");
+      image.sourceKind = "session"; image.relativePath = file.name; image.sizeBytes = file.size; image.mtimeNs = file.lastModified * 1_000_000;
+      state.sourceAccess.set(image.id, { fileHandle, name: file.name, size: file.size, lastModified: file.lastModified, relativePath: file.name, sourceKind: "browser-files" });
+      state.settings.confirmations.overwriteSource = true;
+      addCtx.fillStyle = "#fff"; addCtx.fillRect(0, 0, 1, 1); markMaskDirty(); refreshMaskStatus(true);
+      return { bytes: [...new Uint8Array(await file.arrayBuffer())], lastModified: file.lastModified };
+    });
+    await page.waitForFunction(() => !document.querySelector("#saveButton").disabled);
+    await page.locator("#saveButton").click();
+    await page.waitForFunction(() => document.querySelector("#singleSaveDialog").open);
+    await page.locator("#singleSaveOverwriteMode").check();
+    const requestsBefore = fixture.saveRequests.length;
+    await page.locator("#singleSaveStartButton").click();
+    await page.waitForFunction(() => document.querySelector("#confirmDialog").open);
+    assert.equal(await page.locator("#confirmCancel").isEnabled(), true, "the overwrite confirmation exposes an operable Cancel button");
+    await page.locator("#confirmCancel").click();
+    await page.waitForFunction(() => !state.saveStarting && !state.saving && !document.querySelector("#confirmDialog").open);
+    assert.equal(await page.locator("#singleSaveDialog").evaluate((dialog) => dialog.open), true, "Cancel returns to the same single-save dialog");
+    const after = await page.evaluate(async () => {
+      const file = await (await navigator.storage.getDirectory()).getFileHandle("cancel-overwrite.png").then((handle) => handle.getFile());
+      return { bytes: [...new Uint8Array(await file.arrayBuffer())], lastModified: file.lastModified };
+    });
+    assert.deepEqual(after, before, "Cancel leaves the source bytes and last-modified timestamp exactly unchanged");
+    assert.equal(fixture.saveRequests.length, requestsBefore, "Cancel creates no save reservation or output");
+  } finally {
+    await context?.close();
+    await browser.close();
+    await closeServer(fixture.server);
+  }
+});
+
 test("filter popover combines checked states and review-at-tail stays on the filtered image", { timeout: 60000 }, async () => {
   const fixture = await startFixtureServer();
   fixture.setCatalog([

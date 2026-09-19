@@ -111,7 +111,7 @@
       "observation": "取消ボタンが操作でき、元画像の内容と更新時刻を変えず保存画面へ戻る。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > save cancellation stops unstarted work"
+        "node:tests/test_filters_and_fluid_e2e.cjs::single overwrite confirmation cancel returns to save dialog with source bytes and mtime unchanged"
       ]
     },
     {
@@ -255,8 +255,7 @@
       "observation": "指定粒度で出力し、候補マスクの形状は変わらない。",
       "status": "automated",
       "testIds": [
-        "python:tests.test_server.MozarieTests.test_browser_save_uses_1_over_100_block_size_and_keeps_png_metadata",
-        "python:tests.test_server.MozarieTests.test_mosaic_block_rows_are_bit_exact_for_rgb_rgba_and_l"
+        "python:tests.test_server.MozarieTests.test_browser_save_uses_1_over_100_block_size_and_keeps_png_metadata"
       ]
     },
     {
@@ -595,7 +594,7 @@
       "observation": "元画像寸法のPNGで、除外を差し引いた範囲を出力する。",
       "status": "automated",
       "testIds": [
-        "python:tests.test_server.MozarieTests.test_candidate_exclusion_render_preserves_excluded_pixels_dimensions_and_state"
+        "python:tests.test_project_http_coverage.ProjectHttpCoverageTests.test_single_mosaic_mask_export_is_original_size_l_png_with_exclusion_subtracted"
       ]
     },
     {
@@ -1551,8 +1550,8 @@
       "observation": "確定前のjournal失敗では出力予約を解放して失敗を表示する。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > recoverable commit failures reconcile token state",
-        "python:tests.test_server.MozarieTests.test_browser_overwrite_keeps_the_committed_receipt_when_journal_finishing_is_unavailable"
+        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > reserve journal failure is visible and starts no output",
+        "python:tests.test_server.MozarieTests.test_browser_save_reserve_failure_releases_the_output_name"
       ]
     },
     {

@@ -672,6 +672,22 @@ async function runSingleSaveKeepsReviewAndDraftCase() {
   assert.equal(reviewedRuntime.state.images[0].reviewed, true, "single save keeps an already reviewed image reviewed");
 }
 
+async function runReserveJournalFailurePresentationCase() {
+  const runtime = createRuntime({
+    commit: () => jsonResponse({}),
+    reserve: () => { throw Object.assign(new Error("journal locked"), { code: "save_reservation_failed" }); },
+  });
+  runtime.state.applyTargetIds = ["image-1"];
+  runtime.element('input[name="batchSaveMode"]:checked').value = "copy";
+  runtime.element("#applyOutputDirectoryStatus").value = runtime.state.settings.saving.default_output_directory;
+  await runtime.startApplyFromDialog({ preventDefault() {} });
+  assert.equal(runtime.element("#errorDialog").open, true, "a pre-commit journal reservation failure is shown in the public error dialog");
+  assert.equal(runtime.requests.some((request) => ["/api/save/render", "/api/save/commit", "/api/save/ack"].includes(request.path)), false, "a failed reservation starts no render, commit, or acknowledgement");
+  assert.equal(runtime.requests.filter((request) => request.path === "/api/save/cancel").length, 1, "the client makes one compensating release request for the failed reservation token");
+  assert.equal(runtime.state.saving, false, "a failed reservation returns the save UI to an operable state");
+  assert.equal(runtime.state.saveStarting, false, "a failed reservation releases the synchronous submission lock");
+}
+
 async function runSourceRestoreFailurePresentationAndStateCase() {
   const image = { id: "image-1", sourceKind: "session", relativePath: "source.png", width: 32, height: 32, candidateCount: 1, enabledCandidateCount: 1 };
   let writableOpens = 0;
@@ -1632,6 +1648,7 @@ nodeTest("browser save runtime contracts", async (t) => {
   await t.test("source_restore_failed is shown and preserves source editor and catalog state", runSourceRestoreFailurePresentationAndStateCase);
   await t.test("pause and terminal completion reset controls", runPauseResetAfterTerminalBrowserSaveCase);
   await t.test("output permission submission locks settle", runOutputPermissionSubmissionLockCases);
+  await t.test("reserve journal failure is visible and starts no output", runReserveJournalFailurePresentationCase);
   await t.test("copy reserve render commit acknowledgement succeeds", runSuccessCase);
   await t.test("pending drafts flush before save", runDraftBarrierBeforeDefaultApplyCase);
   await t.test("stale save commit is rejected", runStaleCommitCase);

@@ -7678,16 +7678,20 @@ class MozarieTests(unittest.TestCase):
             state = self.new_state()
             image_id = state.set_root(directory)[0]["id"]
             record = state.image_for_id(image_id)
-            rgba_mask = np.full((height, width, 4), 255, dtype=np.uint8)
-            rgba_mask[..., 3] = 0
-            rgba_mask[600:616, 400:416, 3] = 255
-            draft = {"add": self._png_data_url(Image.fromarray(rgba_mask))}
             binary_mask = np.zeros((height, width), dtype=np.uint8)
             binary_mask[600:616, 400:416] = 255
+            mask_path = state.cache_dir / image_id / "candidate.png"
+            mask_path.parent.mkdir(parents=True, exist_ok=True)
+            Image.fromarray(binary_mask).save(mask_path)
+            candidate = Candidate("candidate", "penis", .9, mask_path)
+            state.candidates[image_id] = [candidate]
+            revision = state._touch_candidates(image_id)
+            mask_before = mask_path.read_bytes()
+            candidate_before = candidate.as_api_dict()
 
-            rendered = state.render_browser_save(image_id, 0, 100, draft)
+            rendered = state.render_browser_save(image_id, revision, 100, None)
             output = self.browser_render_bytes(rendered)
-            revision, token = rendered.candidate_revision, rendered.save_token
+            rendered_revision, token = rendered.candidate_revision, rendered.save_token
             expected = image_io_module.render_with_mask(record, binary_mask, 13)
 
             self.assertEqual(calculate_block_size(width, height, 100), 13)
@@ -7699,7 +7703,13 @@ class MozarieTests(unittest.TestCase):
             outside = binary_mask == 0
             self.assertTrue(np.array_equal(rendered_pixels[outside], pixels[outside]))
             self.assertFalse(np.array_equal(rendered_pixels[600:616, 400:416], pixels[600:616, 400:416]))
-            state.commit_browser_save(image_id, revision, token, "overwrite")
+            self.assertEqual(mask_path.read_bytes(), mask_before, "rendering at the selected divisor does not rewrite the candidate PNG")
+            with Image.open(mask_path) as stored_mask:
+                self.assertEqual((stored_mask.mode, stored_mask.size), ("L", (width, height)))
+            self.assertEqual(state.candidates[image_id][0].as_api_dict(), candidate_before, "rendering leaves candidate metadata and geometry unchanged")
+            state.commit_browser_save(image_id, rendered_revision, token, "overwrite")
+            self.assertEqual(mask_path.read_bytes(), mask_before, "committing the output leaves the candidate mask shape unchanged")
+            self.assertEqual(state.candidates[image_id][0].as_api_dict(), candidate_before, "committing does not mutate candidate state")
 
     def test_browser_copy_render_writes_configured_unicode_destination_before_commit(self):
         with tempfile.TemporaryDirectory() as directory:
