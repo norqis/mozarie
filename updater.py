@@ -366,9 +366,11 @@ def _require_update_storage(temporary_root: Path, extracted_size: int, app_dir: 
 def download_archive(url: str, destination: Path, expected_digest: str, expected_size: int,
                      opener: Callable[..., Any] = urllib.request.urlopen) -> None:
     request = urllib.request.Request(url, headers={"User-Agent": "Mozarie-Updater"})
+    staged = destination.parent / f".{destination.name}.download"
     try:
         _require_free_space(destination.parent, expected_size)
-        with opener(request, timeout=60) as response, destination.open("wb") as output:
+        staged.unlink(missing_ok=True)
+        with opener(request, timeout=60) as response, staged.open("xb") as output:
             total = 0
             digest = hashlib.sha256()
             while True:
@@ -382,13 +384,18 @@ def download_archive(url: str, destination: Path, expected_digest: str, expected
                 digest.update(chunk)
                 print(f"\r{tr('downloading_progress', megabytes=total // 1024 // 1024)}", end="", flush=True)
     except UpdateError:
+        staged.unlink(missing_ok=True)
         raise
     except (OSError, urllib.error.URLError) as exc:
+        staged.unlink(missing_ok=True)
         raise UpdateError(tr("archive_download")) from exc
     if total != expected_size:
+        staged.unlink(missing_ok=True)
         raise UpdateError(tr("archive_download"))
     if not hmac.compare_digest(digest.hexdigest(), expected_digest):
+        staged.unlink(missing_ok=True)
         raise UpdateError(tr("archive_digest"))
+    staged.replace(destination)
     print()
 
 

@@ -290,7 +290,7 @@ nodeTest("project dialogs, source recovery, and project switching", async (t) =>
     await test.downloadProjectMasks(working, "mosaic");
     assert.deepEqual(exportOrder, ["image-flush", "workspace-flush", "fetch"], "the active project flushes candidate and workspace edits before ZIP export");
 
-    state.project = readonly; state.projectReadOnly = true; state.images = [{ id: "kept" }]; state.currentId = "kept";
+    state.project = working; state.projectReadOnly = false; state.images = [{ id: "kept" }]; state.currentId = "kept";
     const stateBefore = { project: state.project, images: state.images, currentId: state.currentId, readOnly: state.projectReadOnly };
     let attempts = 0;
     context.fetch = async (url) => {
@@ -301,10 +301,11 @@ nodeTest("project dialogs, source recovery, and project switching", async (t) =>
     const errorsBefore = calls.filter(([kind]) => kind === "error").length;
     await test.downloadProjectMasks(readonly, "exclude");
     assert.equal(calls.filter(([kind]) => kind === "error").length, errorsBefore + 1, "an offline export reports one error");
-    assert.deepEqual({ project: state.project, images: state.images, currentId: state.currentId, readOnly: state.projectReadOnly }, stateBefore, "a failed export preserves the selected project and read-only editor state");
+    assert.deepEqual({ project: state.project, images: state.images, currentId: state.currentId, readOnly: state.projectReadOnly }, stateBefore, "a failed export of another read-only project preserves the current working project and editor state");
     await test.downloadProjectMasks(readonly, "exclude");
     assert.equal(attempts, 2, "the same project ZIP export can be retried after reconnecting");
-    assert.deepEqual({ project: state.project, images: state.images, currentId: state.currentId, readOnly: state.projectReadOnly }, stateBefore, "a completed read-only export never switches the current project");
+    assert.equal(calls.filter(([kind, url]) => kind === "project-export-fetch" && url.includes(readonly.id)).length, 2, "both attempts target the selected read-only row rather than the current project");
+    assert.deepEqual({ project: state.project, images: state.images, currentId: state.currentId, readOnly: state.projectReadOnly }, stateBefore, "a completed read-only export never switches the current working project");
   });
 
   await t.test("project network failures preserve list order editor state and selected project", async () => {

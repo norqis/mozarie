@@ -435,8 +435,8 @@
       "observation": "コピーは編集名と選んだ形式で出力し、元画像と編集名を保持する。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > edited filename overwrite persists",
-        "python:tests.test_recursive_save_rename.StudioStateNativeRenameTests.test_edited_name_collision_keeps_original_and_edit"
+        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > edited-name copy uses selected format and keeps source metadata",
+        "python:tests.test_recursive_save_rename.RecursiveSaveTests.test_copy_uses_edited_basename_before_format_and_suffix"
       ]
     },
     {
@@ -471,7 +471,8 @@
       "observation": "再接続の取消・拒否・不一致では出力と削除を開始せず、許可後だけコピー成功後の元画像削除を確定する。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > browser source preflight rejects cancel denial mismatch and changes"
+        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > browser source preflight rejects cancel denial mismatch and changes",
+        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > copy then source delete follows durable commit"
       ]
     },
     {
@@ -638,7 +639,7 @@
       "observation": "指定した枠の拡張を含む範囲を出力する。",
       "status": "automated",
       "testIds": [
-        "python:tests.test_candidate_expand.CandidateExpandTests.test_expand_is_applied_before_apply_exclude_and_forced_composition"
+        "python:tests.test_server.MozarieTests.test_exported_mask_contains_the_configured_candidate_expansion"
       ]
     },
     {
@@ -660,7 +661,7 @@
       "observation": "そのPJの表示画像だけの除外範囲をZIPに含め、非表示画像のPNGを含めない。",
       "status": "automated",
       "testIds": [
-        "python:tests.test_project_export_mask_alpha.ProjectExportMaskAlphaTests.test_project_zip_export_uses_rgba_alpha_for_manual_mosaic_and_exclude_masks"
+        "python:tests.test_project_http_coverage.ProjectHttpCoverageTests.test_project_mask_png_zip_and_cleanup"
       ]
     },
     {
@@ -671,8 +672,7 @@
       "observation": "現在PJを切り替えず、指定行のPJだけを出力する。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_project_ui_runtime.cjs::project dialogs, source recovery, and project switching > project mask exports preserve project state across empty read-only failure and retry cases",
-        "python:tests.test_project_http_coverage.ProjectHttpCoverageTests.test_project_mask_png_zip_and_cleanup"
+        "node:tests/test_project_ui_runtime.cjs::project dialogs, source recovery, and project switching > project mask exports preserve project state across empty read-only failure and retry cases"
       ]
     },
     {
@@ -941,7 +941,8 @@
       "observation": "GPU処理が残り続けず、次の検出を開始できる。",
       "status": "automated",
       "testIds": [
-        "python:tests.test_server.MozarieTests.test_detection_worker_cancel_stale_directml_and_outer_error_paths"
+        "python:tests.test_server.MozarieTests.test_terminal_gpu_release_allows_detection_models_to_reload",
+        "python:tests.test_jobs_saving_coverage.JobsSavingCoverageTests.test_job_thread_releases_gpu_once_after_every_terminal_worker_path"
       ]
     },
     {
@@ -952,7 +953,8 @@
       "observation": "既存モデルを再利用し、毎回同じモデルの準備を繰り返さない。",
       "status": "automated",
       "testIds": [
-        "python:tests.test_server.MozarieTests.test_parallel_detection_shares_one_model_bundle_and_commits_revisions"
+        "python:tests.test_server.MozarieTests.test_model_verification_occurs_once_for_a_loaded_model_set",
+        "python:tests.test_jobs_saving_coverage.JobsSavingCoverageTests.test_terminal_release_keeps_cpu_model_cache"
       ]
     },
     {
@@ -985,8 +987,8 @@
       "observation": "タグとZIP内VERSIONが一致し、`server.py`、`mozarie`、`static`、`config/defaults.json`、`run.bat`、`setup.bat`、`update.bat`、`VERSION`、`README.md`、`LICENSE`、`.gitignore`、`.gitattributes`を含む。",
       "status": "automated",
       "testIds": [
-        "python:tests.test_runtime_contract.RuntimeContractTests.test_release_archive_excludes_development_only_files",
-        "python:tests.test_updater.UpdaterTests.test_next_release_archive_is_accepted_by_v0513_updater"
+        "python:tests.test_release_policy.ReleasePolicyTests.test_release_archive_version_matches_the_tag",
+        "python:tests.test_runtime_contract.RuntimeContractTests.test_release_archive_excludes_development_only_files"
       ]
     },
     {
@@ -1030,10 +1032,11 @@
         "SV-066"
       ],
       "observation": "PRと説明は日本語、リリース名はバージョンだけ。",
-      "status": "retired",
-      "retired": {
-        "reason": "検証対象外: PR language and release-title wording are repository publishing conventions, not executable product behavior."
-      }
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_release_policy.ReleasePolicyTests.test_release_tag_name_and_version_are_identical",
+        "python:tests.test_release_policy.ReleasePolicyTests.test_pull_request_and_release_description_use_concise_japanese"
+      ]
     },
     {
       "key": "SV-066.2",
@@ -1041,10 +1044,10 @@
         "SV-066"
       ],
       "observation": "説明は変更内容を簡潔に記載する。",
-      "status": "retired",
-      "retired": {
-        "reason": "検証対象外: Release-note prose quality is a publishing review concern and cannot be asserted meaningfully by a stable product test."
-      }
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_release_policy.ReleasePolicyTests.test_pull_request_and_release_description_use_concise_japanese"
+      ]
     },
     {
       "key": "SV-067.1",
@@ -1052,10 +1055,10 @@
         "SV-067"
       ],
       "observation": "マージ後のコミットが一致し、マージ済み作業ブランチが残らない。",
-      "status": "retired",
-      "retired": {
-        "reason": "検証対象外: Merged commit and branch cleanup are transient repository state verified by the release workflow, not product behavior."
-      }
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_release_policy.ReleasePolicyTests.test_merge_commit_matches_and_merged_branch_is_removed"
+      ]
     },
     {
       "key": "SV-068.1",
@@ -1076,6 +1079,7 @@
       "observation": "固定の連番上限で失敗せず、既存ファイルを上書きしない。",
       "status": "automated",
       "testIds": [
+        "python:tests.test_server.MozarieTests.test_copy_destination_keeps_existing_files_and_has_no_numeric_search_cap",
         "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > exclusive writable never replaces an existing output"
       ]
     },
@@ -1089,8 +1093,9 @@
       "testIds": [
         "python:tests.test_updater.UpdaterTests.test_release_asset_must_be_the_immutable_mozarie_asset",
         "python:tests.test_updater.UpdaterTests.test_download_rejects_a_digest_or_size_mismatch",
-        "python:tests.test_updater.UpdaterTests.test_safe_extract_accepts_github_wrapper_directory",
-        "python:tests.test_updater.UpdaterTests.test_apply_backup_failure_leaves_install_unchanged",
+        "python:tests.test_updater.UpdaterTests.test_download_capacity_failure_preserves_existing_archive_and_retry_replaces_it",
+        "python:tests.test_updater.UpdaterTests.test_safe_extract_rejects_invalid_paths_without_writing_outside_destination",
+        "python:tests.test_updater.UpdaterTests.test_safe_extract_rejects_precreated_directory_symlink",
         "python:tests.test_updater.UpdaterTests.test_apply_rolls_back_only_mutated_files_on_failure",
         "python:tests.test_updater.UpdaterTests.test_dependency_update_apply_failure_keeps_a_retryable_pending_update"
       ]
@@ -1139,8 +1144,8 @@
       "observation": "メモリ不足時は既存の明示エラーで停止する。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > 400 browser copies stay bounded by configured parallelism",
-        "python:tests.test_server.MozarieTests.test_import_session_records_requested_and_effective_parallelism_without_a_fixed_cap"
+        "python:tests.test_server.MozarieTests.test_explicit_memory_error_has_a_stable_memory_code",
+        "python:tests.test_server.MozarieTests.test_detection_worker_maps_plain_exception_ort_oom"
       ]
     },
     {
@@ -1152,7 +1157,7 @@
       "status": "automated",
       "testIds": [
         "python:tests.test_http_live_endpoints.LiveHttpEndpointTests.test_live_browser_save_render_streams_a_stable_image_response",
-        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > partial streamed output is aborted and removed"
+        "python:tests.test_server.MozarieTests.test_browser_file_system_copy_token_keeps_no_backend_render_temp"
       ]
     },
     {
@@ -1163,7 +1168,8 @@
       "observation": "コピーと無加工応答の一時ファイルは応答終了後、上書き用の一時ファイルはcommitまたは取消後にだけ消える。",
       "status": "automated",
       "testIds": [
-        "python:tests.test_http_live_endpoints.LiveHttpEndpointTests.test_live_browser_save_render_streams_a_stable_image_response",
+        "python:tests.test_server.MozarieTests.test_browser_file_system_copy_token_keeps_no_backend_render_temp",
+        "python:tests.test_server.MozarieTests.test_browser_copy_render_writes_configured_unicode_destination_before_commit",
         "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > partial streamed output is aborted and removed"
       ]
     },
@@ -1209,7 +1215,9 @@
       "observation": "実ブラウザーでは途中で別版・空応答・404へ変わらず、応答終了後に一時ファイルを解放し、tokenの版不一致を案内することを確認する。",
       "status": "automated",
       "testIds": [
-        "python:tests.test_http_live_endpoints.LiveHttpEndpointTests.test_live_browser_save_render_streams_a_stable_image_response"
+        "python:tests.test_http_live_endpoints.LiveHttpEndpointTests.test_live_browser_save_render_streams_a_stable_image_response",
+        "python:tests.test_server.MozarieTests.test_browser_save_token_render_file_is_removed_when_expired_and_cannot_be_reused",
+        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > stale save commit is rejected"
       ]
     },
     {
@@ -1316,8 +1324,7 @@
       "observation": "実ブラウザーでは`source_restore_failed`を表示し、コピー、元画像、候補、手描き、一覧を保持する。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_save_source_snapshot_contract.cjs::a source snapshot reads durable bytes before destructive work and restores the original name and type",
-        "node:tests/test_save_source_snapshot_contract.cjs::a definitive delete commit rejection restores the exact materialized source bytes"
+        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > source_restore_failed is shown and preserves source editor and catalog state"
       ]
     },
     {
@@ -1481,7 +1488,7 @@
       "observation": "読出し不能時は元画像を削除せず出力を保持する。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_save_source_snapshot_contract.cjs::a source snapshot reads durable bytes before destructive work and restores the original name and type",
+        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > source_restore_failed is shown and preserves source editor and catalog state",
         "node:tests/test_save_source_snapshot_contract.cjs::a definitive delete commit rejection restores the exact materialized source bytes"
       ]
     },
@@ -1493,7 +1500,7 @@
       "observation": "4xx後は永続化snapshotから復元し、復元不能時は成功表示しない。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_save_source_snapshot_contract.cjs::a source snapshot reads durable bytes before destructive work and restores the original name and type",
+        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > source_restore_failed is shown and preserves source editor and catalog state",
         "node:tests/test_save_source_snapshot_contract.cjs::a definitive delete commit rejection restores the exact materialized source bytes"
       ]
     },

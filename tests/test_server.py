@@ -486,6 +486,18 @@ class MozarieTests(unittest.TestCase):
                 self.assertEqual(db.execute("SELECT expand_px FROM candidate_metadata WHERE image_id=? AND candidate_id=?", (image_id, "candidate")).fetchone()["expand_px"], 3)
             self.assertGreater(state.set_candidate_state(image_id, "candidate", {"expandPx": 3}), revision)
 
+    def test_exported_mask_contains_the_configured_candidate_expansion(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); Image.new("RGB", (16, 10), "white").save(root / "source.png")
+            state = self.new_state(); image_id = state.set_root(str(root))[0]["id"]
+            mask_path = state.cache_dir / image_id / "candidate.png"; mask_path.parent.mkdir(parents=True)
+            mask = np.zeros((10, 16), dtype=np.uint8); mask[5, 8] = 255; Image.fromarray(mask).save(mask_path)
+            state.candidates[image_id] = [Candidate("candidate", "penis", 0.9, mask_path, expand_px=3)]
+            self.commit_candidates(state, image_id)
+            with Image.open(io.BytesIO(state.export_mask_png(image_id, "mosaic"))) as exported:
+                bbox = exported.convert("L").getbbox()
+            self.assertEqual(bbox, (5, 2, 12, 9), "export includes the configured three-pixel candidate expansion")
+
     def test_batch_candidate_padding_updates_one_role_without_rewriting_pngs(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory); Image.new("RGB", (16, 10), "white").save(root / "source.png")

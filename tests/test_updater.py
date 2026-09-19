@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+import hashlib
 import importlib.util
 import json
 import os
@@ -161,6 +162,20 @@ class UpdaterTests(unittest.TestCase):
                 updater.download_archive("https://example.test/release.zip", destination, "0" * 64, len(body), lambda *_args, **_kwargs: Response(body))
             with self.assertRaises(updater.UpdateError):
                 updater.download_archive("https://example.test/release.zip", destination, digest, len(body) + 1, lambda *_args, **_kwargs: Response(body))
+
+    def test_download_capacity_failure_preserves_existing_archive_and_retry_replaces_it(self):
+        with tempfile.TemporaryDirectory() as directory:
+            destination = Path(directory) / "release.zip"
+            destination.write_bytes(b"existing")
+            body = b"verified archive"
+            digest = hashlib.sha256(body).hexdigest()
+            with patch("updater._require_free_space", side_effect=updater.UpdateError(updater.tr("archive_disk_space"))):
+                with self.assertRaisesRegex(updater.UpdateError, re.escape(updater.tr("archive_disk_space"))):
+                    updater.download_archive("https://example.test/release.zip", destination, digest, len(body), lambda *_args, **_kwargs: Response(body))
+            self.assertEqual(destination.read_bytes(), b"existing")
+            self.assertFalse((destination.parent / ".release.zip.download").exists())
+            updater.download_archive("https://example.test/release.zip", destination, digest, len(body), lambda *_args, **_kwargs: Response(body))
+            self.assertEqual(destination.read_bytes(), body)
 
     def test_requirements_install_uses_the_app_venv_not_the_updater_runtime(self):
         with tempfile.TemporaryDirectory() as directory:

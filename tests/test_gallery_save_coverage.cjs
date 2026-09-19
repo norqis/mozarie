@@ -358,7 +358,7 @@ async function saveFormatMetadataPreferencesAreScopedAndEphemeral() {
   assert.equal(reloaded.nodes.get("#singleSaveKeepMetadata").checked, true, "reload starts from the documented metadata default");
 }
 
-function batchSaveFiltersCountAndSelectTheExactVisibleSet() {
+async function batchSaveFiltersCountAndSelectTheExactVisibleSet() {
   const runtime = makeSaveRuntime();
   runtime.state.images = Array.from({ length: 400 }, (_, index) => ({
     id: `reviewed-${index}`, relativePath: `${index}.png`, reviewed: true, hidden: false,
@@ -366,18 +366,33 @@ function batchSaveFiltersCountAndSelectTheExactVisibleSet() {
     masked: Boolean(index % 2), previouslySaved: true,
   }));
   runtime.state.images.push({ id: "hidden", relativePath: "hidden.png", reviewed: true, hidden: true, masked: true });
+  const savedSets = [];
+  runtime.context.runBrowserSave = async (imageIds) => { savedSets.push([...imageIds]); };
+  runtime.setHandler(async (url, options) => {
+    if (url === "/api/settings?status=0") return { settings: runtime.state.settings };
+    if (url === "/api/save/prepare") return { entries: JSON.parse(options.body).imageIds.map((imageId) => ({ imageId, candidateRevision: 1 })) };
+    return {};
+  });
   runtime.nodes.get("#applyFilterReviewed").checked = true;
   runtime.refreshApplyTargets();
   assert.equal(runtime.state.applyTargetIds.length, 400, "reviewed includes saved visible images and excludes hidden images");
   assert.equal(runtime.nodes.get("#applyTargetCount").textContent, "apply.target:400", "reviewed count equals the selected output set");
+  await runtime.startApplyFromDialog({ preventDefault() {} });
+  assert.deepEqual(savedSets.pop(), runtime.state.images.filter((image) => !image.hidden && image.reviewed).map((image) => image.id), "reviewed count and actual save use the identical visible reviewed set");
+  runtime.state.saving = false; runtime.state.applyRunning = false; runtime.state.saveStarting = false;
   runtime.nodes.get("#applyFilterReviewed").checked = false;
   runtime.nodes.get("#applyFilterMasked").checked = true;
   runtime.refreshApplyTargets();
   assert.equal(runtime.state.applyTargetIds.length, 200, "masked selects exactly the visible images with a mask");
   assert.equal(runtime.nodes.get("#applyTargetCount").textContent, "apply.target:200", "masked count equals the selected output set");
+  await runtime.startApplyFromDialog({ preventDefault() {} });
+  assert.deepEqual(savedSets.pop(), runtime.state.images.filter((image) => !image.hidden && image.masked).map((image) => image.id), "masked count and actual save use the identical visible masked set");
+  runtime.state.saving = false; runtime.state.applyRunning = false; runtime.state.saveStarting = false;
   runtime.nodes.get("#applyFilterMasked").checked = false;
   runtime.refreshApplyTargets();
   assert.equal(runtime.state.applyTargetIds.length, 400, "no filter selects every visible image and excludes hidden images");
+  await runtime.startApplyFromDialog({ preventDefault() {} });
+  assert.deepEqual(savedSets.pop(), runtime.state.images.filter((image) => !image.hidden).map((image) => image.id), "no-filter count and actual save use every visible image, including previously saved ones");
 }
 
 async function saveInteractions() {

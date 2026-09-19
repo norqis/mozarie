@@ -184,10 +184,10 @@ function createRuntime({ commit, copy = null, deleteOriginal = false, renderBina
     new vm.Script(fs.readFileSync(appPath, "utf8"), { filename: appPath }).runInContext(runtimeContext);
   }
   new vm.Script(
-    "globalThis.__browserSaveRuntime = { state, beginSaveSourcePreparation, ensureSaveSources, finishApplyJob, runBrowserSave, saveTargets, processableImages, isBusy, catalogStagingEditsActive, selectedSaveMode, chooseOutputDirectory, startApplyFromDialog, startSingleSave, writeSourceHandle, restoreSourceHandle, renderOutputDirectory, pickOutputDirectory, reserveSaveRender, renderDefaultCopy, renderStreamedSave, commitBrowserSaveWithRetry, acknowledgePendingBrowserSave, translate: t };",
+    "globalThis.__browserSaveRuntime = { state, beginSaveSourcePreparation, ensureSaveSources, finishApplyJob, runBrowserSave, saveTargets, processableImages, isBusy, catalogStagingEditsActive, selectedSaveMode, chooseOutputDirectory, startApplyFromDialog, startSingleSave, writeSourceHandle, restoreSourceHandle, renderOutputDirectory, pickOutputDirectory, reserveSaveRender, renderDefaultCopy, renderStreamedSave, commitBrowserSaveWithRetry, acknowledgePendingBrowserSave, nextVisibleImage, translate: t };",
     { filename: "test-browser-save-exports.js" },
   ).runInContext(runtimeContext);
-  const { state, beginSaveSourcePreparation, ensureSaveSources, finishApplyJob, runBrowserSave, saveTargets, processableImages, isBusy, catalogStagingEditsActive, selectedSaveMode, chooseOutputDirectory, startApplyFromDialog, startSingleSave, writeSourceHandle, restoreSourceHandle, renderOutputDirectory, pickOutputDirectory: pickOutputDirectoryApi, reserveSaveRender, renderDefaultCopy, renderStreamedSave, commitBrowserSaveWithRetry, acknowledgePendingBrowserSave, translate } = context.__browserSaveRuntime;
+  const { state, beginSaveSourcePreparation, ensureSaveSources, finishApplyJob, runBrowserSave, saveTargets, processableImages, isBusy, catalogStagingEditsActive, selectedSaveMode, chooseOutputDirectory, startApplyFromDialog, startSingleSave, writeSourceHandle, restoreSourceHandle, renderOutputDirectory, pickOutputDirectory: pickOutputDirectoryApi, reserveSaveRender, renderDefaultCopy, renderStreamedSave, commitBrowserSaveWithRetry, acknowledgePendingBrowserSave, nextVisibleImage, translate } = context.__browserSaveRuntime;
   state.images = initialImages || [{ id: "image-1", relativePath: "nested/source.png", width: 32, height: 32, candidateCount: 1, enabledCandidateCount: 1 }];
   state.settings = { saving: { parallelism: 1, default_output_directory: "G:/output", preserve_directory_structure: true }, confirmations: { overwriteSource: false, deleteSourceAfterCopy: false } };
   getElement("#applyPreserveDirectoryStructure").checked = true;
@@ -202,7 +202,7 @@ function createRuntime({ commit, copy = null, deleteOriginal = false, renderBina
     "gallery.detectAll": "detect all",
     "apply.outputDirectoryUnset": "Save location: not selected",
   };
-  return { element: getElement, elements, beginSaveSourcePreparation, ensureSaveSources, finishApplyJob, imageFetches: () => imageFetches, lockRequests, navigator: browserNavigator, requests, runBrowserSave, saveTargets, processableImages, isBusy, catalogStagingEditsActive, selectedSaveMode, chooseOutputDirectory, startApplyFromDialog, startSingleSave, writeSourceHandle, restoreSourceHandle, renderOutputDirectory, pickOutputDirectory: pickOutputDirectoryApi, reserveSaveRender, renderDefaultCopy, renderStreamedSave, commitBrowserSaveWithRetry, acknowledgePendingBrowserSave, state, translate, window: browserWindow };
+  return { element: getElement, elements, beginSaveSourcePreparation, ensureSaveSources, finishApplyJob, imageFetches: () => imageFetches, lockRequests, navigator: browserNavigator, requests, runBrowserSave, saveTargets, processableImages, isBusy, catalogStagingEditsActive, selectedSaveMode, chooseOutputDirectory, startApplyFromDialog, startSingleSave, writeSourceHandle, restoreSourceHandle, renderOutputDirectory, pickOutputDirectory: pickOutputDirectoryApi, reserveSaveRender, renderDefaultCopy, renderStreamedSave, commitBrowserSaveWithRetry, acknowledgePendingBrowserSave, nextVisibleImage, state, translate, window: browserWindow };
 }
 
 async function runOutputDirectoryPermissionCases() {
@@ -498,7 +498,7 @@ async function runBrowserCopyPoolAndWriteOverlapCases() {
 }
 
 async function runBrowserCopyPoolAtScaleCases() {
-  for (const parallelism of [1, 2, 4, 8]) {
+  for (const parallelism of [1, 2, 4, 8, 16]) {
     const entries = Array.from({ length: 400 }, (_, index) => ({
       imageId: `image-${index}`, relativePath: "nested/same.png", candidateRevision: 7,
     }));
@@ -670,6 +670,28 @@ async function runSingleSaveKeepsReviewAndDraftCase() {
   reviewedRuntime.state.singleSave = { imageId: reviewed.id, generation: reviewedRuntime.state.imageGeneration, divisor: 100, draft: { add: "manual" } };
   await reviewedRuntime.startSingleSave({ preventDefault() {} });
   assert.equal(reviewedRuntime.state.images[0].reviewed, true, "single save keeps an already reviewed image reviewed");
+}
+
+async function runSourceRestoreFailurePresentationAndStateCase() {
+  const image = { id: "image-1", sourceKind: "session", relativePath: "source.png", width: 32, height: 32, candidateCount: 1, enabledCandidateCount: 1 };
+  let writableOpens = 0;
+  const unreadable = new File([Uint8Array.from([1, 2, 3])], "source.png", { type: "image/png", lastModified: 7 });
+  unreadable.arrayBuffer = async () => { throw new Error("source read failed"); };
+  const handle = { name: "source.png", async getFile() { return unreadable; }, async queryPermission() { return "granted"; }, async createWritable() { writableOpens += 1; throw new Error("must not write"); } };
+  const runtime = createRuntime({ initialImages: [image], commit: () => jsonResponse({ cleared: true, stale: false }) });
+  runtime.state.currentId = image.id; runtime.state.currentImage = { sentinel: "image" };
+  runtime.state.singleSave = { imageId: image.id, generation: runtime.state.imageGeneration, divisor: 100, draft: { add: "manual" } };
+  runtime.state.candidates = [{ id: "candidate" }]; runtime.state.drafts.set(image.id, { add: "manual" });
+  runtime.state.sourceAccess.set(image.id, { fileHandle: handle, name: unreadable.name, size: unreadable.size, lastModified: unreadable.lastModified });
+  runtime.element('input[name="singleSaveMode"]:checked').value = "overwrite";
+  runtime.element("#singleSaveOutputFormat").value = "original";
+  const before = { images: runtime.state.images, currentImage: runtime.state.currentImage, candidates: runtime.state.candidates, drafts: runtime.state.drafts, sourceAccess: runtime.state.sourceAccess };
+  await runtime.startSingleSave({ preventDefault() {} });
+  assert.equal(runtime.element("#errorDialog").open, true, "source_restore_failed is presented in the real error dialog");
+  assert.equal(writableOpens, 0, "an unreadable source is never opened for destructive writing");
+  assert.equal(runtime.requests.some((request) => request.path === "/api/save/commit"), false, "source_restore_failed never reports a committed overwrite");
+  for (const [key, value] of Object.entries(before)) assert.equal(runtime.state[key], value, `source_restore_failed preserves ${key}`);
+  assert.equal(runtime.state.drafts.get(image.id).add, "manual", "source_restore_failed preserves the hand-drawn draft");
 }
 
 function runOutputDirectoryDisplayCase() {
@@ -846,6 +868,28 @@ async function runRemoveAfterSaveUiCleanupCase() {
   assert.equal(runtime.state.prefetchQueue.length, 0, "removing a pending image cancels every stale prefetch request");
   assert.equal(runtime.element("#gallery").scrollTop, 43, "gallery scroll restores without forcing an invalid center jump");
   assert.equal(runtime.element("#overviewGrid").scrollTop, 17, "overview scroll restores without forcing an invalid center jump");
+
+  for (const scenario of [
+    { name: "first", order: ["remove", "next", "last"], current: "remove", expected: "next" },
+    { name: "last", order: ["first", "previous", "remove"], current: "remove", expected: "previous" },
+    { name: "unrelated", order: ["first", "remove", "shown"], current: "shown", expected: "shown" },
+  ]) {
+    const images = scenario.order.map((id) => ({ id, relativePath: `${id}.png`, width: 32, height: 32, candidateCount: 1, enabledCandidateCount: 1 }));
+    const kept = images.filter((image) => image.id !== "remove");
+    const selectionRuntime = createRuntime({
+      initialImages: images,
+      entries: [{ imageId: "remove", relativePath: "remove.png", candidateRevision: 1 }],
+      commit: () => jsonResponse({ cleared: true, stale: false, images }),
+      removeCatalog: () => jsonResponse({ images: kept, removedImageIds: ["remove"] }),
+    });
+    selectionRuntime.state.currentId = scenario.current;
+    selectionRuntime.state.currentImage = { id: scenario.current };
+    const expectedNeighbor = selectionRuntime.nextVisibleImage(images, "remove", { excludedImageIds: new Set(["remove"]), fallback: true });
+    assert.equal(expectedNeighbor?.id, scenario.current === "remove" ? scenario.expected : "shown", `${scenario.name} removal computes the specified next, previous, or retained target from the pre-save order`);
+    await selectionRuntime.runBrowserSave(["remove"], "", false, "copy", true);
+    assert.deepEqual(selectionRuntime.state.images, kept, `${scenario.name} removal publishes the actual post-save catalog`);
+    if (scenario.current !== "remove") assert.equal(selectionRuntime.state.currentId, scenario.expected, "removing an unrelated saved image keeps the displayed image selected");
+  }
 }
 
 async function runCopyFailureCase() {
@@ -1165,6 +1209,27 @@ async function runEditedHandleOverwriteCase() {
   assert.equal(access.relativePath, "nested/edited-name.png", "the live access keeps the canonical directory with the edited basename");
 }
 
+async function runEditedNameCopyUsesSelectedFormatAndKeepsSourceCase() {
+  const image = { id: "image-1", sourceKind: "session", relativePath: "nested/source.png", editedFilename: "chosen-name.png", width: 32, height: 32, candidateCount: 1, enabledCandidateCount: 1 };
+  const source = sourceBlob("source.png", 3, 9);
+  const handle = { name: source.name, async getFile() { return source; }, async queryPermission() { return "granted"; } };
+  const runtime = createRuntime({
+    initialImages: [image],
+    copy: ({ options }) => {
+      const payload = JSON.parse(options.body);
+      assert.equal(payload.format, "jpg", "copy render receives the selected JPG format");
+      return binaryResponse([4, 5, 6], "edited-copy-token", null, "G:/output/chosen-name.jpg");
+    },
+    commit: () => jsonResponse({ cleared: false, stale: false, images: [image] }),
+  });
+  runtime.state.sourceAccess.set(image.id, { fileHandle: handle, name: source.name, size: source.size, lastModified: source.lastModified });
+  runtime.element("#applyOutputFormat").value = "jpg";
+  await runtime.runBrowserSave([image.id], "", false, "copy");
+  assert.equal(runtime.requests.find((request) => request.path === "/api/save/commit") !== undefined, true, "edited-name copy commits successfully");
+  assert.equal(runtime.state.images[0].editedFilename, "chosen-name.png", "copy keeps the edited name for later saves");
+  assert.equal(runtime.state.sourceAccess.get(image.id).fileHandle, handle, "copy keeps the original source handle");
+}
+
 async function runJpegFormattedHandlePreservationCase() {
   const sourceFile = sourceBlob('source.jpeg', 12, 34); let writes = 0;
   const sourceHandle = {
@@ -1397,6 +1462,16 @@ async function runRemoveAfterSaveCases() {
   });
   await stale.runBrowserSave([saved.id], "_censored", false, "copy", true);
   assert.equal(stale.requests.some((request) => request.path === "/api/catalog/remove"), false, "stale saves remain in the catalog");
+
+  const removalFailure = createRuntime({
+    initialImages: [saved, retained],
+    commit: () => jsonResponse({ cleared: true, stale: false, images: [saved, retained] }),
+    removeCatalog: () => jsonResponse({ error_code: "workspace_database_error" }, 500),
+  });
+  await removalFailure.runBrowserSave([saved.id], "_censored", false, "copy", true);
+  assert.equal(removalFailure.requests.some((request) => request.path === "/api/save/commit"), true, "catalog removal failure does not roll back committed output");
+  assert.deepEqual(removalFailure.state.images, [saved, retained], "catalog removal failure keeps the saved image in the list");
+  assert.equal(removalFailure.element("#errorDialog").open, true, "catalog removal failure displays that saving succeeded but list removal failed");
 }
 
 async function runNoEffectRemovalEligibilityCases() {
@@ -1554,6 +1629,7 @@ nodeTest("browser save runtime contracts", async (t) => {
   await t.test("parentless browser source preparation preserves edited metadata", runParentlessBrowserSourcePreparationCase);
   await t.test("single copy preserves editor state", runSingleCopyKeepsEditorStateCase);
   await t.test("single save preserves review and draft state", runSingleSaveKeepsReviewAndDraftCase);
+  await t.test("source_restore_failed is shown and preserves source editor and catalog state", runSourceRestoreFailurePresentationAndStateCase);
   await t.test("pause and terminal completion reset controls", runPauseResetAfterTerminalBrowserSaveCase);
   await t.test("output permission submission locks settle", runOutputPermissionSubmissionLockCases);
   await t.test("copy reserve render commit acknowledgement succeeds", runSuccessCase);
@@ -1573,6 +1649,7 @@ nodeTest("browser save runtime contracts", async (t) => {
   await t.test("formatted overwrite old-name removal failure preserves both files", runFormattedHandleOldRemoveFailureCase);
   await t.test("single formatted overwrite uses selected format", runSingleFormattedHandleOverwriteCase);
   await t.test("edited filename overwrite persists", runEditedHandleOverwriteCase);
+  await t.test("edited-name copy uses selected format and keeps source metadata", runEditedNameCopyUsesSelectedFormatAndKeepsSourceCase);
   await t.test("JPEG formatted overwrite preserves metadata choice", runJpegFormattedHandlePreservationCase);
   await t.test("source change during render rejects overwrite", runHandleOverwriteChangedDuringRenderCase);
   await t.test("repeated overwrite remains coherent", runRepeatedHandleOverwriteCase);
