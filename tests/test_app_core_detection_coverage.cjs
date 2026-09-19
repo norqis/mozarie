@@ -99,6 +99,7 @@ async function testBoundApplicationEvents() {
   group("[data-model-toggle]", ["toggle-hand"]); element("toggle-hand").dataset.modelToggle = "hand_detection"; element("toggle-hand").checked = true;
   group("#detectTargetPenis, #detectTargetPussy, #dialogTargetPenis, #dialogTargetPussy", ["dialogTargetPussy", "targetPenis"]); element("dialogTargetPussy").checked = true; element("targetPenis").checked = true;
   group("[data-detection-image-filter]", ["detectionFilter"]); element("detectionFilter").dataset.detectionImageFilter = "unreviewed"; element("detectionFilter").checked = true;
+  group("[data-apply-image-filter]", ["applyFilter"]); element("applyFilter").dataset.applyImageFilter = "masked"; element("applyFilter").checked = true;
   group('input[name="batchSaveMode"]', ["batchMode"]); group('input[name="singleSaveMode"]', ["singleMode"]);
   group("[data-selection-action]", ["selectionAction"]); element("selectionAction").dataset.selectionAction = "review";
   group("[data-candidate-batch]", ["candidateBatch"]); element("candidateBatch").dataset.candidateBatch = "apply:toggle";
@@ -155,7 +156,7 @@ async function testBoundApplicationEvents() {
   await fire("#settingsProvider", "change"); await fire("modelControl", "input"); await fire("modelControl", "change"); await fire("samVariant", "change"); await fire("toggle-hand", "change"); await fire("#settingsPrecisionToggle", "change"); await fire("#settingsFluidToggle", "change");
   await fire("#folderPath", "keydown", { key: "Enter" }); await fire("galleryFilter", "change"); await fire("overviewFilter", "change"); await fire("#overviewQuery", "input", { target: { value: "cowgirl" } }); await fire("#overviewFolder", "change", { target: { value: "folder" } });
   await fire("#brushSize", "input"); await fire("#divisor", "input"); await fire("#applyDivisor", "input"); await fire("#confidence", "input"); await fire("#detectConfidenceRange", "input"); await fire("#detectConfidenceNumber", "input"); await fire("dialogTargetPussy", "change"); await fire("targetPenis", "change"); await fire("detectionFilter", "change");
-  await fire("#detectForm", "submit"); await fire("#detectCancelButton", "click"); await fire("#applyForm", "submit"); await fire("batchMode", "change"); await fire("#applyTargetMode", "change"); await fire("#singleSaveForm", "submit"); await fire("singleMode", "change"); await fire("#settingsLanguage", "change", { target: { value: "en" } });
+  await fire("#detectForm", "submit"); await fire("#detectCancelButton", "click"); await fire("#applyForm", "submit"); await fire("batchMode", "change"); await fire("applyFilter", "change"); await fire("#singleSaveForm", "submit"); await fire("singleMode", "change"); await fire("#settingsLanguage", "change", { target: { value: "en" } });
   state.processing = { kind: "import", state: "running" }; state.importSession = {}; await fire("#processingPauseButton", "click"); await fire("#processingCancelButton", "click"); state.processing = { kind: "detect", state: "paused" }; element("#processingCancelButton").disabled = false; await fire("#processingPauseButton", "click"); await fire("#processingCancelButton", "click");
   await fire("#gallery", "dragenter", { dataTransfer: { types: ["Files"] } }); await fire("#gallery", "dragover", { dataTransfer: { types: ["Files"] } }); await fire("#gallery", "dragleave", { relatedTarget: null }); await fire("#gallery", "drop", { dataTransfer: { files: [{}] } });
   const canvas = context.canvas; await canvas.listeners.get("contextmenu")(event()); state.tool = "brush"; await canvas.listeners.get("pointerdown")(event()); await canvas.listeners.get("pointermove")(event({ getCoalescedEvents: () => [event()] })); await canvas.listeners.get("pointerup")(event()); await canvas.listeners.get("pointerdown")(event({ button: 1 })); await canvas.listeners.get("pointermove")(event()); await canvas.listeners.get("pointercancel")(event());
@@ -612,7 +613,7 @@ async function testDetectionImportAndSaveBehaviour() {
     state, $: (selector) => element(selector),
     isBusy: () => false, activeDetection: () => false, currentImageActionPending: () => false, catalogStagingEditsActive: () => false, isProcessableImage: (image) => Boolean(image && !image.hidden), flushAllImageMutations: async () => {}, flushAllWorkspaceMutations: async () => {}, processableImages: (images = state.images) => images.filter((image) => !image.hidden), imageMatchesStateFilter: () => true, updateActionButtons() {}, updateProgress() {}, showUserError() {}, setStatusKey() {}, closeProcessing() {},
     saveDraft: () => calls.push("draft"), refreshMaskStatus: () => calls.push("refresh"), saveTargets: () => ["one"],
-    openApplyDialog: async (options) => calls.push(options.initialMode), openSingleSaveDialog: async (id) => calls.push(`single:${id}`), waitForCandidateMutations: async () => { calls.push("wait"); }, imageHasMask: () => true,
+    openApplyDialog: async () => calls.push("apply"), openSingleSaveDialog: async (id) => calls.push(`single:${id}`), waitForCandidateMutations: async () => { calls.push("wait"); }, imageHasMask: () => true,
     detectionConfidence: () => 0.5, normaliseDetectionConfidence: Number, setDetectionConfidence() {}, showModalFromInvoker() {},
     t: (key) => key, api: async () => ({}), isCurrentGeneration: () => true, setSettingsForm() {}, scheduleJobPoll() {}, showProcessing() {}, syncDetectionTargetSwitch() {}, syncDetectionFluidColorFill() {},
   };
@@ -663,7 +664,7 @@ async function testDetectionImportAndSaveBehaviour() {
   assert.equal(state.detectCancelRequested, true, "cancelling detection records the in-flight cancellation");
   context.activeDetection = () => false; state.detectCancelRequested = false;
   await context.detectionCoverage.saveAll();
-  assert.deepEqual(calls.slice(-3), ["draft", "refresh", "all"]);
+  assert.deepEqual(calls.slice(-3), ["draft", "refresh", "apply"]);
   context.busy = true; context.isBusy = () => context.busy;
   await context.detectionCoverage.saveAll();
   context.busy = false; state.importing = true;

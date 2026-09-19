@@ -48,6 +48,26 @@ function mergeSavingSettings(response, fields) {
     if (Object.prototype.hasOwnProperty.call(saving, field)) state.settings.saving[field] = saving[field];
   }
 }
+const APPLY_IMAGE_FILTERS = ["masked", "unmasked", "reviewed", "unreviewed"];
+function applyImageFilters() {
+  return APPLY_IMAGE_FILTERS.filter((name) => $(`[data-apply-image-filter="${name}"]`).checked);
+}
+function setApplyImageFilters(filters) {
+  const selected = new Set(filters || []);
+  for (const name of APPLY_IMAGE_FILTERS) {
+    const input = $(`[data-apply-image-filter="${name}"]`);
+    input.checked = selected.has(name);
+    syncDetectionTargetSwitch(input);
+  }
+}
+async function persistApplyImageFilters(filters) {
+  const current = state.settings?.saving?.image_filters || [];
+  if (current.length === filters.length && current.every((filter, index) => filter === filters[index])) return;
+  const response = await api("/api/settings?status=0", {
+    method: "POST", body: JSON.stringify({ saving: { image_filters: filters } }),
+  });
+  mergeSavingSettings(response, ["image_filters"]);
+}
 function renderDirectoryStructurePreference() {
   const preserve = preserveDirectoryStructure();
   $("#applyPreserveDirectoryStructure").checked = preserve;
@@ -141,7 +161,9 @@ function syncApplyMode() {
   $("#applyPreserveDirectoryStructureRow").hidden = !copying;
   const outputDirectoryPending = state.outputDirectoryPicking || state.outputDirectoryCommitPending;
   $("#applySuffix").disabled = state.applyRunning || state.outputDirectoryPicking;
-  $("#applyTargetMode").disabled = state.applyRunning || state.saveStarting || state.outputDirectoryPicking;
+  document.querySelectorAll("[data-apply-image-filter]").forEach((input) => {
+    input.disabled = state.applyRunning || state.saveStarting || state.outputDirectoryPicking;
+  });
   $("#chooseOutputDirectoryButton").disabled = outputDirectoryPending || state.applyRunning || state.saveStarting;
   $("#applyOutputDirectoryStatus").disabled = outputDirectoryPending || state.applyRunning || state.saveStarting;
   $("#applyRemoveSaved").disabled = state.outputDirectoryPicking || state.applyRunning || state.saveStarting;
@@ -159,20 +181,19 @@ function syncApplyMode() {
 }
 
 function refreshApplyTargets() {
-  const mode = $("#applyTargetMode").value;
-  state.applyTargetMode = mode; state.applyTargetIds = saveTargets(mode);
+  const filters = new Set(applyImageFilters());
+  state.applyTargetIds = processableImages().filter((image) => imageMatchesStateFilter(image, filters)).map((image) => image.id);
   $("#applyTargetCount").textContent = t("apply.target", { count: state.applyTargetIds.length });
   syncApplyMode();
 }
 
-async function openApplyDialog(options = {}) {
+async function openApplyDialog() {
   const invoker = document.activeElement;
   if (state.candidateUpdateChains.size) await waitForCandidateMutations();
-  const initialMode = Array.isArray(options) ? "current" : options.initialMode;
   if (isBusy() || state.importing) return;
   try { await flushDraftSaves(); }
   catch (error) { showUserError(error); return; }
-  if (!state.applyDialogInitialized || initialMode) $("#applyTargetMode").value = initialMode || "masked";
+  if (!state.applyDialogInitialized) setApplyImageFilters(state.settings?.saving?.image_filters || []);
   refreshApplyTargets();
   state.applyRunning = false;
   if (!state.applyDialogInitialized) {
@@ -562,8 +583,8 @@ function renderOutputDirectory() {
   $("#singleSaveOutputDirectoryStatus").placeholder = t("apply.outputDirectoryUnset");
 }
 
-async function commitOutputDirectory(input) {
-  if (state.outputDirectoryPicking || state.outputDirectoryCommitPending || state.applyRunning || state.saveStarting || state.saving) return false;
+async function commitOutputDirectory(input, { duringSaveStart = false } = {}) {
+  if (state.outputDirectoryPicking || state.outputDirectoryCommitPending || state.applyRunning || (state.saveStarting && !duringSaveStart) || state.saving) return false;
   const directory = input.value.trim();
   if (directory === (state.settings?.saving?.default_output_directory || "")) return true;
   state.outputDirectoryCommitPending = true;
@@ -1296,7 +1317,7 @@ async function runBrowserSave(imageIds, suffix, deleteOriginal, mode = "copy", r
       $("#applyPauseButton").disabled = false;
       $("#applyCancelButton").hidden = true;
       $("#applyCloseButton").hidden = false;
-      renderCandidates(); updateActionButtons();
+      refreshApplyTargets(); renderCandidates(); updateActionButtons();
     }
   }
 }
@@ -1344,28 +1365,32 @@ function isDefinitiveCommitRejection(error) { return Number.isInteger(error?.sta
 async function startApplyFromDialog(event) {
   event.preventDefault();
   if (state.saveStarting || state.saving || isBusy() || state.importing || catalogStagingEditsActive()) return;
+  refreshApplyTargets();
+  const filters = applyImageFilters();
+  const capturedImageIds = [...state.applyTargetIds];
+  if (!capturedImageIds.length) return;
   const mode = selectedSaveMode();
   const copy = mode === "copy";
-  const initialSourcePreparation = beginSaveSourcePreparation(state.applyTargetIds, mode, copy && $("#deleteOriginal").checked, selectedApplyOutputFormat());
+  const initialSourcePreparation = beginSaveSourcePreparation(capturedImageIds, mode, copy && $("#deleteOriginal").checked, selectedApplyOutputFormat());
   const removeSaved = $("#applyRemoveSaved").checked;
   const outputDirectory = $("#applyOutputDirectoryStatus");
-  if (copy && outputDirectory.value.trim() !== (state.settings?.saving?.default_output_directory || "") && !await commitOutputDirectory(outputDirectory)) return;
-  if (state.saveStarting || state.saving || isBusy()) return;
-  const processableIds = new Set(processableImages().map((image) => image.id));
-  const imageIds = state.applyTargetIds.filter((imageId) => processableIds.has(imageId));
-  if (imageIds.length !== state.applyTargetIds.length) {
-    state.applyTargetIds = imageIds;
-    $("#applyTargetCount").textContent = t("apply.target", { count: imageIds.length });
-    syncApplyMode();
-  }
-  if (!imageIds.length || state.saveStarting || isBusy() || state.importing || catalogStagingEditsActive()) return;
   const suffix = $("#applySuffix").value;
   const format = selectedApplyOutputFormat();
   const sourcePreparation = initialSourcePreparation;
-  if (copy && !state.settings?.saving?.default_output_directory) { syncApplyMode(); return; }
   state.saveStarting = true;
   syncApplyMode();
   try {
+    if (copy && outputDirectory.value.trim() !== (state.settings?.saving?.default_output_directory || "") && !await commitOutputDirectory(outputDirectory, { duringSaveStart: true })) return;
+    await persistApplyImageFilters(filters);
+    const processableIds = new Set(processableImages().map((image) => image.id));
+    const imageIds = capturedImageIds.filter((imageId) => processableIds.has(imageId));
+    if (imageIds.length !== state.applyTargetIds.length) {
+      state.applyTargetIds = imageIds;
+      $("#applyTargetCount").textContent = t("apply.target", { count: imageIds.length });
+      syncApplyMode();
+    }
+    if (!imageIds.length || state.saving || state.importing || catalogStagingEditsActive()) return;
+    if (copy && !state.settings?.saving?.default_output_directory) { syncApplyMode(); return; }
     if (!copy && !await confirmAction(t("confirm.overwriteSource.title"), t("confirm.overwriteSource.message"), "overwriteSource")) return;
     if (copy && $("#deleteOriginal").checked && !await confirmAction(t("confirm.deleteSourceAfterCopy.title"), t("confirm.deleteSourceAfterCopy.message"), "deleteSourceAfterCopy")) return;
     state.saving = true;
@@ -1402,7 +1427,7 @@ function finishSaveStart() {
   state.saving = false;
   state.applyRunning = false;
   state.applyCatalogSnapshot = null;
-  renderCandidates(); updateActionButtons();
+  syncApplyMode(); renderCandidates(); updateActionButtons();
 }
 
 async function controlApply(action) {
@@ -1471,7 +1496,7 @@ async function finishApplyJob(job) {
     if (job.state === "complete") setApplyResult(t("apply.complete", { completed: job.completed }));
     else if (job.state === "cancelled") setApplyResult(t("apply.cancelled", { completed: job.completed }));
     else showApplyError({ code: job.errorCode || "internal_error" });
-    renderCandidates(); updateActionButtons();
+    refreshApplyTargets(); renderCandidates(); updateActionButtons();
     reconciled = true;
   } finally {
     if (reconciled && job.startedAt != null) state.handledApplyStartedAt = job.startedAt;

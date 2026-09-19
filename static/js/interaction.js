@@ -116,6 +116,13 @@ function confirmAction(title, message, key = null, onConfirm = null) {
     $("#confirmAccept").addEventListener("click", accept, { once: true });
     dialog.addEventListener("close", finish);
     showModalFromInvoker(dialog);
+    if (state.saveStarting) {
+      for (const control of dialog.querySelectorAll("button, input, select, textarea")) {
+        if (control.dataset.disabledByLock !== "true") continue;
+        control.disabled = false;
+        delete control.dataset.disabledByLock;
+      }
+    }
   });
 }
 function confirmationRequired(key) {

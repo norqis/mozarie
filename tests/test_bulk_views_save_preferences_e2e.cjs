@@ -126,7 +126,12 @@ async function main() {
     await page.locator("#saveAllButton").click();
     await page.waitForFunction(() => $("#applyDialog").open);
     assert.equal(await page.locator("#applyRemoveSaved").isChecked(), false, "batch remove-after-save defaults off");
-    await page.locator("#applyTargetMode").selectOption("all");
+    await page.locator("[data-apply-image-filter]").evaluateAll((inputs) => {
+      for (const input of inputs) {
+        input.checked = ["reviewed", "unmasked"].includes(input.dataset.applyImageFilter);
+        input.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+    });
     await page.locator("#applyDivisor").fill("23");
     await page.locator("#applyOutputFormat").selectOption("png");
     await page.locator("#applyKeepMetadata").uncheck();
@@ -134,7 +139,7 @@ async function main() {
     await page.locator("#applyCloseButton").click();
     await page.locator("#saveAllButton").click();
     await page.waitForFunction(() => $("#applyDialog").open);
-    assert.deepEqual(await page.evaluate(() => ({ target: $("#applyTargetMode").value, divisor: $("#applyDivisor").value, format: $("#applyOutputFormat").value, metadata: $("#applyKeepMetadata").checked, remove: $("#applyRemoveSaved").checked })), { target: "all", divisor: "23", format: "png", metadata: false, remove: true }, "batch choices persist after its first opening");
+    assert.deepEqual(await page.evaluate(() => ({ filters: [...document.querySelectorAll("[data-apply-image-filter]:checked")].map((input) => input.dataset.applyImageFilter), divisor: $("#applyDivisor").value, format: $("#applyOutputFormat").value, metadata: $("#applyKeepMetadata").checked, remove: $("#applyRemoveSaved").checked })), { filters: ["unmasked", "reviewed"], divisor: "23", format: "png", metadata: false, remove: true }, "batch choices persist after its first opening");
     await page.locator("#applyCloseButton").click();
 
     // A real settings response held after the path blur must not swallow the
@@ -181,17 +186,24 @@ async function main() {
     await page.waitForFunction(() => state.outputDirectoryCommitPending);
     assert.equal(await page.locator("#applyRemoveSaved").isChecked(), true, "batch remove-after-save click survives its output-path blur");
     assert.equal(await page.locator("#applySuffix").isDisabled(), false, "batch suffix remains editable while the path commit waits");
-    assert.equal(await page.locator("#applyTargetMode").isDisabled(), false, "batch target remains editable while the path commit waits");
+    assert.equal(await page.locator('[data-apply-image-filter="masked"]').isDisabled(), false, "batch filters remain editable while the path commit waits");
     await page.locator("#applySuffix").fill("_pending");
-    await page.locator("#applyTargetMode").selectOption("masked");
+    await page.locator("[data-apply-image-filter]").evaluateAll((inputs) => {
+      for (const input of inputs) {
+        input.checked = input.dataset.applyImageFilter === "masked";
+        input.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+    });
     assert.equal(await page.locator("#applyOutputDirectoryStatus").isDisabled(), true, "batch output path remains locked while its commit waits");
     assert.equal(await page.locator("#chooseOutputDirectoryButton").isDisabled(), true, "batch path picker remains locked while its commit waits");
     assert.equal(await page.locator("#applyStartButton").isDisabled(), true, "batch save start remains locked while its path commit waits");
     batchSettings.release();
     await page.waitForFunction(() => !state.outputDirectoryCommitPending);
     await batchSettings.stop();
-    assert.deepEqual(await page.evaluate(() => ({ path: $("#applyOutputDirectoryStatus").value, suffix: $("#applySuffix").value, target: $("#applyTargetMode").value, remove: $("#applyRemoveSaved").checked })), { path: "G:\\fixture-output-batch", suffix: "_pending", target: "masked", remove: true }, "batch path response preserves choices changed while it waited");
-    await page.locator("#applyTargetMode").selectOption("all");
+    assert.deepEqual(await page.evaluate(() => ({ path: $("#applyOutputDirectoryStatus").value, suffix: $("#applySuffix").value, filters: [...document.querySelectorAll("[data-apply-image-filter]:checked")].map((input) => input.dataset.applyImageFilter), remove: $("#applyRemoveSaved").checked })), { path: "G:\\fixture-output-batch", suffix: "_pending", filters: ["masked"], remove: true }, "batch path response preserves choices changed while it waited");
+    await page.locator("[data-apply-image-filter]").evaluateAll((inputs) => {
+      for (const input of inputs) { input.checked = false; input.dispatchEvent(new Event("change", { bubbles: true })); }
+    });
     assert.equal(await page.locator("#applyStartButton").isDisabled(), false, "batch save start unlocks after the path commit");
     await page.locator("#applyCloseButton").click();
 

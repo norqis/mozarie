@@ -53,7 +53,8 @@
   "saving": {
     "parallelism": 2,
     "default_output_directory": "",
-    "preserve_directory_structure": true
+    "preserve_directory_structure": true,
+    "image_filters": []
   },
   "shortcuts": {
     "enabled": true,
