@@ -1159,6 +1159,7 @@ function bindEvents() {
       else if (event.key === "End") updatePaneWidth(side, Number.MAX_SAFE_INTEGER);
       else return;
       event.preventDefault();
+      event.stopPropagation();
     });
   };
   bindPaneSplitter($("#gallerySplitter"), "gallery");
