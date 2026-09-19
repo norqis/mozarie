@@ -940,6 +940,7 @@
       "observation": "候補公開前でも進捗は1/NからN/Nへ進み、処理中の画像名と残り時間を表示する",
       "status": "automated",
       "testIds": [
+        "node:tests/test_detection_progress_ui.cjs::SD-148 detection progress shows staged work and locks pause only while publication is pending",
         "python:tests.test_server.MozarieTests.test_detection_staging_reports_every_success_before_atomic_publication",
         "python:tests.test_server.MozarieTests.test_detection_staging_reports_processed_without_publishing_on_failure",
         "python:tests.test_server.MozarieTests.test_detection_rejects_cancel_after_publication_starts_and_completes"
@@ -953,6 +954,7 @@
       "observation": "公開までは完了ID・候補一覧を増やさず、全件推論済みの公開待ち状態では一時停止を無効表示にして、取消は公開開始まで使える",
       "status": "automated",
       "testIds": [
+        "node:tests/test_detection_progress_ui.cjs::SD-148 detection progress shows staged work and locks pause only while publication is pending",
         "python:tests.test_server.MozarieTests.test_detection_staging_reports_every_success_before_atomic_publication",
         "python:tests.test_server.MozarieTests.test_detection_staging_reports_processed_without_publishing_on_failure",
         "python:tests.test_server.MozarieTests.test_detection_rejects_cancel_after_publication_starts_and_completes"
@@ -966,6 +968,7 @@
       "observation": "失敗時は処理済み件数を表示しても候補IDと候補内容を一切公開しない",
       "status": "automated",
       "testIds": [
+        "node:tests/test_detection_progress_ui.cjs::SD-148 detection progress shows staged work and locks pause only while publication is pending",
         "python:tests.test_server.MozarieTests.test_detection_staging_reports_every_success_before_atomic_publication",
         "python:tests.test_server.MozarieTests.test_detection_staging_reports_processed_without_publishing_on_failure",
         "python:tests.test_server.MozarieTests.test_detection_rejects_cancel_after_publication_starts_and_completes"
@@ -979,6 +982,7 @@
       "observation": "公開後の取消は受け付けず、公開済み候補を残して完了する",
       "status": "automated",
       "testIds": [
+        "node:tests/test_detection_progress_ui.cjs::SD-148 detection progress shows staged work and locks pause only while publication is pending",
         "python:tests.test_server.MozarieTests.test_detection_staging_reports_every_success_before_atomic_publication",
         "python:tests.test_server.MozarieTests.test_detection_staging_reports_processed_without_publishing_on_failure",
         "python:tests.test_server.MozarieTests.test_detection_rejects_cancel_after_publication_starts_and_completes"
