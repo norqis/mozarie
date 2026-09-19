@@ -348,16 +348,23 @@ test("preview buttons and carousel geometry work across supported viewports", { 
         const reachWithTab = async (target) => {
           for (let attempt = 0; attempt < 30; attempt += 1) {
             await page.keyboard.press("Tab");
-            if (await target.evaluate((element) => document.activeElement === element && element.matches(":focus-visible"))) return true;
+            const state = await target.evaluate((element) => ({
+              reached: document.activeElement === element && element.matches(":focus-visible"),
+              outlineColor: getComputedStyle(element).outlineColor,
+            }));
+            if (state.reached) return state;
           }
-          return false;
+          return null;
         };
-        assert.equal(await reachWithTab(previews.nth(1)), true, "keyboard reaches the dark feature");
-        assert.equal(await previews.nth(1).evaluate((element) => getComputedStyle(element).outlineColor), "rgb(114, 214, 173)", "dark feature uses the light focus color");
-        assert.equal(await reachWithTab(previews.nth(0)), true, "keyboard returns to the first light feature");
-        assert.equal(await previews.nth(0).evaluate((element) => getComputedStyle(element).outlineColor), "rgb(36, 92, 72)", "first light feature uses the dark focus color");
-        assert.equal(await reachWithTab(previews.nth(2)), true, "keyboard reaches the second light feature");
-        assert.equal(await previews.nth(2).evaluate((element) => getComputedStyle(element).outlineColor), "rgb(36, 92, 72)", "second light feature uses the dark focus color");
+        const darkFocus = await reachWithTab(previews.nth(1));
+        assert.ok(darkFocus, "keyboard reaches the dark feature");
+        assert.equal(darkFocus.outlineColor, "rgb(114, 214, 173)", "dark feature uses the light focus color");
+        const firstLightFocus = await reachWithTab(previews.nth(0));
+        assert.ok(firstLightFocus, "keyboard returns to the first light feature");
+        assert.equal(firstLightFocus.outlineColor, "rgb(36, 92, 72)", "first light feature uses the dark focus color");
+        const secondLightFocus = await reachWithTab(previews.nth(2));
+        assert.ok(secondLightFocus, "keyboard reaches the second light feature");
+        assert.equal(secondLightFocus.outlineColor, "rgb(36, 92, 72)", "second light feature uses the dark focus color");
       }
       if (viewport.width >= 1440) {
         assert.equal(await page.locator(".intro").evaluate((element) => element.scrollHeight <= Number.parseFloat(getComputedStyle(element).lineHeight) * 1.2), true, `hero introduction does not leave an orphan line at ${viewport.width}px`);
