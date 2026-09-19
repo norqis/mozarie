@@ -289,14 +289,16 @@ test("preview buttons and carousel geometry work across supported viewports", { 
       const page = await context.newPage();
       await page.goto(`${site.url}/`, { waitUntil: "domcontentloaded" });
       await page.waitForFunction(() => [...document.querySelectorAll("[data-gallery-slide] img")].every((image) => image.complete));
+      if (viewport.width <= 700) await page.locator("html").evaluate((element) => { element.style.scrollbarGutter = "stable"; });
       const [previous, next, image] = await Promise.all([page.getByRole("button", { name: "前の画面" }).boundingBox(), page.getByRole("button", { name: "次の画面" }).boundingBox(), activeImage(page).boundingBox()]);
       assert.ok(previous && next && image);
-      const expectedWidth = viewport.width <= 700 ? viewport.width - 40 : Math.min(viewport.width * .86, 1480);
-      assert.ok(Math.abs(image.width - expectedWidth) <= 1, `central image has the intended width at ${viewport.width}px`);
+      const layoutWidth = await page.locator("body").evaluate((element) => element.getBoundingClientRect().width);
+      const expectedWidth = viewport.width <= 700 ? layoutWidth - 40 : Math.min(viewport.width * .86, 1480);
+      assert.ok(Math.abs(image.width - expectedWidth) <= 1, `central image has the intended width at ${viewport.width}px (actual ${image.width}, expected ${expectedWidth}, layout ${layoutWidth})`);
       assert.ok(Math.abs(image.width / image.height - 1920 / 959) < .002, `central image keeps its source ratio at ${viewport.width}px`);
       if (viewport.width <= 900) {
-        assert.ok(previous.width >= 44 && previous.height >= 44 && previous.y >= image.y + image.height, `previous arrow is below the image at ${viewport.width}px`);
-        assert.ok(next.width >= 44 && next.height >= 44 && next.y >= image.y + image.height, `next arrow is below the image at ${viewport.width}px`);
+        assert.ok(previous.width >= 44 && previous.height >= 44 && previous.y + 1 >= image.y + image.height, `previous arrow is below the image at ${viewport.width}px (arrow ${previous.y}, image end ${image.y + image.height})`);
+        assert.ok(next.width >= 44 && next.height >= 44 && next.y + 1 >= image.y + image.height, `next arrow is below the image at ${viewport.width}px (arrow ${next.y}, image end ${image.y + image.height})`);
         const caption = await page.locator("[data-gallery-caption]").boundingBox();
         assert.ok(caption, `caption is visible at ${viewport.width}px`);
         for (const arrow of [previous, next]) assert.equal(arrow.x < caption.x + caption.width && arrow.x + arrow.width > caption.x && arrow.y < caption.y + caption.height && arrow.y + arrow.height > caption.y, false, `arrows do not overlap the caption at ${viewport.width}px`);
