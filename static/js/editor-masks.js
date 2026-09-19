@@ -26,6 +26,8 @@ function refreshManualLayerPresence(...layers) {
 }
 
 let candidatePaddingSession = null;
+const CANDIDATE_PADDING_PREVIEW_DELAY_MS = 80;
+const CANDIDATE_PADDING_PREVIEW_CONCURRENCY = 4;
 
 function candidatePaddingLimit() {
   const record = currentRecord();
@@ -46,12 +48,37 @@ function validateCandidatePadding() {
   return value;
 }
 
-function closeCandidatePadding({ restoreFocus = false } = {}) {
+function releaseCandidatePaddingPreviewImages(images) {
+  for (const image of images?.values?.() || []) closeBitmap(image);
+  images?.clear?.();
+}
+
+function refreshCandidatePaddingPreview() {
+  invalidateMaskComposition(); requestMosaicPreview(); render();
+}
+
+function clearCandidatePaddingPreview(session = candidatePaddingSession) {
+  if (!session) return;
+  clearTimeout(session.previewTimer); session.previewTimer = null;
+  session.previewController?.abort(); session.previewController = null;
+  if (state.candidatePaddingPreviewImages === session.previewImages) state.candidatePaddingPreviewImages = new Map();
+  const hadPreview = Boolean(session.previewImages?.size);
+  releaseCandidatePaddingPreviewImages(session.previewImages); session.previewImages = new Map();
+  if (hadPreview) refreshCandidatePaddingPreview();
+}
+
+function closeCandidatePadding({ restoreFocus = false, commit = false } = {}) {
   const session = candidatePaddingSession;
   candidatePaddingSession = null;
+  if (session) {
+    clearTimeout(session.previewTimer); session.previewTimer = null;
+    session.previewController?.abort(); session.previewController = null;
+    if (!commit) clearCandidatePaddingPreview(session);
+  }
   const popover = $("#candidatePaddingPopover");
   if (popover.matches?.(":popover-open")) popover.hidePopover();
   if (restoreFocus && session?.trigger?.isConnected) session.trigger.focus();
+  return session;
 }
 
 function positionCandidatePadding(trigger) {
@@ -73,7 +100,7 @@ function openCandidatePadding(candidateId, trigger) {
   const value = candidate.expandPx || 0;
   input.removeAttribute("max"); input.value = String(value); input.placeholder = "";
   input.setAttribute("aria-invalid", "false"); $("#candidatePaddingValidation").textContent = "";
-  candidatePaddingSession = { mode: "single", imageId: state.currentId, candidateId, original: value, trigger, committing: false, catalogEpoch: state.catalogEpoch, record: currentRecord() };
+  candidatePaddingSession = { mode: "single", imageId: state.currentId, candidateId, original: value, trigger, committing: false, catalogEpoch: state.catalogEpoch, record: currentRecord(), revision: Number(currentRecord()?.candidateRevision || 0), sequence: 0, previewTimer: null, previewController: null, previewImages: new Map() };
   const popover = $("#candidatePaddingPopover"); popover.showPopover(); positionCandidatePadding(trigger);
   input.focus(); input.select();
 }
@@ -88,7 +115,7 @@ function openBatchCandidatePadding(role, trigger) {
   input.removeAttribute("max"); input.value = values.size === 1 ? String(values.values().next().value) : "";
   input.placeholder = values.size === 1 ? "" : t("candidates.paddingMixed");
   input.setAttribute("aria-invalid", "false"); $("#candidatePaddingValidation").textContent = "";
-  candidatePaddingSession = { mode: "batch", imageId: state.currentId, role, original: values.size === 1 ? values.values().next().value : null, trigger, committing: false, catalogEpoch: state.catalogEpoch, record: currentRecord() };
+  candidatePaddingSession = { mode: "batch", imageId: state.currentId, role, original: values.size === 1 ? values.values().next().value : null, trigger, committing: false, catalogEpoch: state.catalogEpoch, record: currentRecord(), revision: Number(currentRecord()?.candidateRevision || 0), sequence: 0, previewTimer: null, previewController: null, previewImages: new Map() };
   const popover = $("#candidatePaddingPopover"); popover.showPopover(); positionCandidatePadding(trigger);
   input.focus(); input.select();
 }
@@ -111,8 +138,10 @@ async function commitCandidatePadding() {
   const generation = state.imageGeneration;
   candidate.expandPx = appliedValue; setEditorUnreviewed();
   const editorState = historyEditorState(); syncCurrentCandidateRecord(); renderCandidates();
-  closeCandidatePadding();
-  if (await updateCandidate(candidate, candidate.enabled, previousMaskStatus, candidate.forced, session.original)) {
+  closeCandidatePadding({ commit: true });
+  const updated = await updateCandidate(candidate, candidate.enabled, previousMaskStatus, candidate.forced, session.original);
+  clearCandidatePaddingPreview(session);
+  if (updated) {
     recordHistoryOperation({ kind: "candidateState", editorState });
     return true;
   }
@@ -127,7 +156,7 @@ async function commitBatchCandidatePadding(session, value) {
   }
   session.committing = true;
   const imageId = session.imageId; const generation = state.imageGeneration;
-  state.candidateBatchPending.add(imageId); closeCandidatePadding(); renderCandidates();
+  state.candidateBatchPending.add(imageId); closeCandidatePadding({ commit: true }); renderCandidates();
   try {
     const result = await enqueueCandidateMutation(imageId, async () => {
       const result = await api("/api/candidates/batch", { method: "POST", body: JSON.stringify({ imageId, role: session.role, operation: "set_padding", expandPx: value }) });
@@ -146,6 +175,7 @@ async function commitBatchCandidatePadding(session, value) {
     }
     return false;
   } finally {
+    clearCandidatePaddingPreview(session);
     state.candidateBatchPending.delete(imageId);
     if (state.currentId === imageId && isCurrentGeneration(generation)) renderCandidates();
     updateActionButtons();
@@ -157,7 +187,57 @@ function changeCandidatePaddingDraft(delta) {
   const value = candidatePaddingValue(input);
   const base = value === null ? candidatePaddingSession?.original || 0 : value;
   input.value = String(Math.max(0, Math.min(Number.MAX_SAFE_INTEGER, base + delta)));
-  validateCandidatePadding(); input.focus(); input.select();
+  validateCandidatePadding(); scheduleCandidatePaddingPreview(); input.focus(); input.select();
+}
+
+function candidatePaddingPreviewTargets(session) {
+  if (session.mode === "single") return state.candidates.filter((candidate) => candidate.id === session.candidateId);
+  return state.candidates.filter((candidate) => candidate.role === session.role && !state.removedCandidateIds.has(candidate.id));
+}
+
+async function loadCandidatePaddingPreviewImages(session, value, sequence, controller) {
+  const targets = candidatePaddingPreviewTargets(session);
+  const images = new Map(); let next = 0;
+  const worker = async () => {
+    while (next < targets.length) {
+      const candidate = targets[next++];
+      const bitmap = await fetchBitmap(candidatePaddingPreviewUrl(session.imageId, candidate.id, session.revision, value), controller.signal);
+      if (controller.signal.aborted || candidatePaddingSession !== session || session.sequence !== sequence) { closeBitmap(bitmap); continue; }
+      images.set(candidate.id, bitmap);
+    }
+  };
+  try {
+    await Promise.all(Array.from({ length: Math.min(CANDIDATE_PADDING_PREVIEW_CONCURRENCY, targets.length) }, worker));
+    if (controller.signal.aborted || candidatePaddingSession !== session || session.sequence !== sequence
+      || state.currentId !== session.imageId || Number(currentRecord()?.candidateRevision || 0) !== session.revision) {
+      releaseCandidatePaddingPreviewImages(images); return;
+    }
+    const previous = session.previewImages;
+    session.previewImages = images; state.candidatePaddingPreviewImages = images;
+    releaseCandidatePaddingPreviewImages(previous); refreshCandidatePaddingPreview();
+  } catch (error) {
+    controller.abort();
+    releaseCandidatePaddingPreviewImages(images);
+    if (error?.name === "AbortError" || candidatePaddingSession !== session || session.sequence !== sequence) return;
+    clearCandidatePaddingPreview(session); showUserError(error);
+  } finally {
+    if (session.previewController === controller) session.previewController = null;
+  }
+}
+
+function scheduleCandidatePaddingPreview() {
+  const session = candidatePaddingSession;
+  if (!session || session.committing) return;
+  const value = validateCandidatePadding();
+  if (value === null) { clearCandidatePaddingPreview(session); return; }
+  const appliedValue = Math.min(value, candidatePaddingLimit());
+  clearTimeout(session.previewTimer); session.previewController?.abort();
+  const sequence = ++session.sequence;
+  session.previewTimer = setTimeout(() => {
+    session.previewTimer = null;
+    const controller = new AbortController(); session.previewController = controller;
+    void loadCandidatePaddingPreviewImages(session, appliedValue, sequence, controller);
+  }, CANDIDATE_PADDING_PREVIEW_DELAY_MS);
 }
 
 function handleCandidatePaddingKeydown(event) {
@@ -174,31 +254,22 @@ function initCandidatePaddingPopover() {
     });
   }
   document.querySelectorAll("[data-candidate-padding-batch]").forEach((trigger) => trigger.addEventListener("click", () => openBatchCandidatePadding(trigger.dataset.candidatePaddingBatch, trigger)));
-  $("#candidatePaddingInput").addEventListener("input", validateCandidatePadding);
+  $("#candidatePaddingInput").addEventListener("input", scheduleCandidatePaddingPreview);
   $("#candidatePaddingInput").addEventListener("keydown", handleCandidatePaddingKeydown);
   $("#candidatePaddingForm").addEventListener("submit", (event) => { event.preventDefault(); void commitCandidatePadding(); });
   $("#candidatePaddingDecrease").addEventListener("click", () => changeCandidatePaddingDraft(-1));
   $("#candidatePaddingIncrease").addEventListener("click", () => changeCandidatePaddingDraft(1));
-  $("#candidatePaddingReset").addEventListener("click", () => { $("#candidatePaddingInput").value = "0"; validateCandidatePadding(); $("#candidatePaddingInput").focus(); });
+  $("#candidatePaddingReset").addEventListener("click", () => { $("#candidatePaddingInput").value = "0"; validateCandidatePadding(); scheduleCandidatePaddingPreview(); $("#candidatePaddingInput").focus(); });
   $("#candidatePaddingPopover").addEventListener("keydown", (event) => {
     if (event.key === "Escape") { event.preventDefault(); closeCandidatePadding({ restoreFocus: true }); }
+  });
+  $("#candidatePaddingPopover").addEventListener("toggle", (event) => {
+    if (event.newState === "closed" && candidatePaddingSession) closeCandidatePadding();
   });
   document.addEventListener("pointerdown", (event) => {
     const popover = $("#candidatePaddingPopover");
     if (!candidatePaddingSession || popover.contains(event.target) || candidatePaddingSession.trigger === event.target) return;
-    if (validateCandidatePadding() === null) { event.preventDefault(); event.stopPropagation(); $("#candidatePaddingInput").focus(); return; }
-    const nextTrigger = event.target.closest?.("[data-candidate-padding-id]");
-    if (nextTrigger) {
-      const nextId = nextTrigger.dataset.candidatePaddingId;
-      event.preventDefault(); event.stopPropagation();
-      void commitCandidatePadding().then(() => {
-        const replacement = document.querySelector(`[data-candidate-padding-id="${CSS.escape(nextId)}"]`);
-        if (replacement) openCandidatePadding(nextId, replacement);
-      });
-      return;
-    }
-    event.preventDefault(); event.stopPropagation();
-    void commitCandidatePadding();
+    closeCandidatePadding();
   }, true);
 }
 

@@ -121,7 +121,7 @@ async function testBoundApplicationEvents() {
     requestAnimationFrame(callback) { callback(); }, setTimeout(callback) { callback(); return 1; }, clearTimeout() {},
     isBusy: () => Boolean(context.busy), activeDetection: () => Boolean(context.detecting), t: (key) => key,
     setTimeout(callback) { callback(); return 1; }, api: async () => ({ kind: "detect", state: "running" }), currentRecord: () => state.currentImage,
-    isHidden: (image) => Boolean(image?.hidden), isReviewed: () => false, currentImageActionPending: () => false, hasDurableHistory: () => false, isProcessableImage: (image) => Boolean(image && !image.hidden), processableImages: (images = state.images) => images.filter((image) => !image.hidden), pointFromEvent: (event) => ({ x: event.clientX || 1, y: event.clientY || 1 }),
+    isHidden: (image) => Boolean(image?.hidden), isReviewed: () => false, currentImageActionPending: () => false, hasDurableHistory: () => false, isProcessableImage: (image) => Boolean(image && !image.hidden), processableImages: (images = state.images) => images.filter((image) => !image.hidden), allImageDetectionTargets: (images = state.images) => images.filter((image) => !image.hidden), pointFromEvent: (event) => ({ x: event.clientX || 1, y: event.clientY || 1 }),
     clampPoint: (point) => point, compareEventSide: () => "right", compareEventOffset: () => 0, normaliseDivisor: () => 32,
     compareSplitLimits: () => ({ fixed: false, minimum: .2, maximum: .8 }), clampCompareSplit: (value) => Math.max(.2, Math.min(.8, value)), persistCompareSplit: note("persistCompareSplit"),
     detectionTargets: () => ["penis"], detectionConfidence: () => .5, canDetectBoundary: () => Boolean(context.canBoundary),

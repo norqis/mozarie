@@ -20,6 +20,7 @@ state.imageCache = new StateResourceCache(closeBitmap, isOwnedImage);
 state.candidateBundleCache = new StateResourceCache(releaseCandidateBitmapBundle, isOwnedCandidateBundle);
 function imageUrl(record) { const version = imageAssetVersion(record); return `/api/image/${encodeURIComponent(record.id)}${version ? `?v=${encodeURIComponent(version)}` : ""}`; }
 function maskUrl(imageId, candidateId, revision) { return `/api/mask/${encodeURIComponent(imageId)}/${encodeURIComponent(candidateId)}?v=${encodeURIComponent(`${revision}-${candidateId}`)}`; }
+function candidatePaddingPreviewUrl(imageId, candidateId, revision, expandPx) { return `${maskUrl(imageId, candidateId, revision)}&expandPx=${encodeURIComponent(expandPx)}`; }
 async function fetchBitmap(url, signal) { const response = await fetch(url, { signal, headers: { "X-Mozarie-Token": document.querySelector('meta[name="mozarie-token"]')?.content || "" } }); if (!response.ok) throw responseError(response, await response.json().catch(() => ({}))); return createImageBitmap(await response.blob()); }
 function desiredImageResourceKeys(extra = []) {
   const keys = new Set(extra);

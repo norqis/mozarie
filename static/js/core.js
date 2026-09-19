@@ -5,7 +5,7 @@ const state = {
   viewMode: "edit", displayMode: "single", compareSplit: .5, overviewFilter: new Set(), overviewQuery: "", overviewFolder: "", reviewedImageIds: new Set(), hiddenImageIds: new Set(), reviewRoot: "",
   selectedImageIds: new Set(), selectionAnchorId: null, batchMode: false,
   navigationShortcutsEnabled: true,
-  candidates: [], candidateImages: new Map(), drafts: new Map(),
+  candidates: [], candidateImages: new Map(), candidatePaddingPreviewImages: new Map(), drafts: new Map(),
   tool: "brush", panning: false, drawing: false, gestureDisplaySide: null, hoverDisplaySide: "left", boundaryPending: false,
   boundaryRoi: null, boundaryStart: null, boundaryStartClient: null, boundaryPoint: null, boundaryPromptPoint: null, boundaryDragging: false, boundaryDisplaySide: "left",
   boundaryDrafts: [], boundaryDraftSequence: 0, boundaryActiveId: null, boundaryBrushStroke: null,
@@ -574,6 +574,7 @@ function saveTargets(mode = "all") {
 }
 function normaliseReviewRoot(value) { return String(value || "").trim().replaceAll("/", "\\").replace(/\\+$/, "").toLowerCase(); }
 function isReviewed(image) { return state.reviewedImageIds.has(image.id); }
+function allImageDetectionTargets(images = state.images) { return processableImages(images).filter((image) => !isReviewed(image)); }
 function isHidden(image) { return state.hiddenImageIds.has(image.id); }
 function loadReviewedPaths() {
   state.reviewedImageIds = new Set(state.images.filter((image) => image.reviewed).map((image) => image.id));
@@ -803,7 +804,7 @@ function updateActionButtons() {
   $("#pickFolder").disabled = busyLocked || mutationLocked || catalogStaging;
   const detectAllButton = $("#detectAllButton");
   detectAllButton.textContent = t("gallery.detectAll");
-  detectAllButton.disabled = busyLocked || mutationLocked || catalogStaging || processableImages().length === 0;
+  detectAllButton.disabled = busyLocked || mutationLocked || catalogStaging || allImageDetectionTargets().length === 0;
   $("#detectCurrentButton").disabled = busyLocked || mutationLocked || catalogStaging || switchingImages || !currentProcessable;
   $("#clearCurrentMasksButton").disabled = busyLocked || mutationLocked || catalogStaging || switchingImages || candidateLocked || !currentProcessable
     || !(current.candidateCount || state.manualMaskPresent || presence?.hasManualExclude || presence?.hasManualExclusionErase || imageHasMask(current));

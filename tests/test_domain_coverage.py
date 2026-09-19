@@ -424,6 +424,20 @@ class HttpCoverageTests(unittest.TestCase):
             handler._stream_file(file, None, "application/octet-stream", "no-store")
         self.assertTrue(handler.close_connection)
 
+    def test_candidate_padding_preview_is_not_cached_or_persisted(self) -> None:
+        state = MagicMock()
+        state.lock = nullcontext()
+        state.images = {"image": object()}
+        state._candidate_revision.return_value = 7
+        state.read_candidate_mask_png.return_value = b"png"
+        handler = self.handler(); handler._binary = Mock()
+        with patch("mozarie.http.STATE", state):
+            handler._send_candidate_mask("image", "candidate", "7-candidate", 9)
+        state.read_candidate_mask_png.assert_called_once_with(
+            "image", "candidate", expected_revision=7, expand_px_override=9,
+        )
+        self.assertEqual(handler._binary.call_args.kwargs["cache_control"], "no-store")
+
     def test_http_routes_dispatch_json_operations_without_a_live_server(self) -> None:
         state = MagicMock()
         state.settings = {"detection": {"threshold": .5, "parallelism": 1}}
@@ -487,13 +501,13 @@ class HttpCoverageTests(unittest.TestCase):
         handler._require_local_host = Mock(); handler._json = Mock(); handler._client_error = Mock()
         handler._send_image = Mock(); handler._send_candidate_mask = Mock()
         with patch("mozarie.http.STATE", state), patch("mozarie.http._local_version", return_value="0.4.11"), patch("mozarie.http._update_status", return_value={"available": False}):
-            for path in ("/api/health", "/api/settings?status=0", "/api/model-download", "/api/update/status", "/api/images", "/api/job", "/api/candidates/x", "/api/workspace/manual/x", "/api/image/x?v=one", "/api/thumbnail/x?v=two", "/api/mask/x/y?v=3"):
+            for path in ("/api/health", "/api/settings?status=0", "/api/model-download", "/api/update/status", "/api/images", "/api/job", "/api/candidates/x", "/api/workspace/manual/x", "/api/image/x?v=one", "/api/thumbnail/x?v=two", "/api/mask/x/y?v=3&expandPx=12"):
                 with self.subTest(path=path):
                     handler.path = path
                     handler.do_GET()
         handler._send_image.assert_any_call("x", thumbnail=False, version="one")
         handler._send_image.assert_any_call("x", thumbnail=True, version="two")
-        handler._send_candidate_mask.assert_called_once_with("x", "y", "3")
+        handler._send_candidate_mask.assert_called_once_with("x", "y", "3", 12)
 
     def test_http_post_routes_cover_settings_models_saves_and_jobs(self) -> None:
         state = MagicMock()

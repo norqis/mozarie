@@ -125,7 +125,7 @@ const state = {
     { id: "apply", role: "apply", enabled: true, labelToken: "penis", source: "target", refinement: null, color: "#fff" },
     { id: "exclude", role: "exclude", enabled: true, forced: true, labelToken: "hand", source: "hand_exclusion", refinement: null, color: "#000" },
   ],
-  removedCandidateIds: new Set(), candidateImages: new Map(), blinkCandidateIds: new Set(), blinkModes: new Map(), blinkRoleModes: new Map(), blinkPhase: false, blinkTimer: null,
+  removedCandidateIds: new Set(), candidateImages: new Map(), candidatePaddingPreviewImages: new Map(), blinkCandidateIds: new Set(), blinkModes: new Map(), blinkRoleModes: new Map(), blinkPhase: false, blinkTimer: null,
   manualMaskPresent: true, manualExclusionPresent: true, manualExclusionErasePresent: true, manualEnabled: true, manualExclusionEnabled: true, manualExclusionEraseEnabled: true, manualExclusionForced: false,
   candidateUpdateChains: new Map(), candidateUpdateVersions: new Map(), candidateDeleting: new Set(), candidateBatchPending: new Set(),
   maskStatus: new Map(), images: [{ id: "image", assetVersion: "a", candidateRevision: 4, candidateCount: 0, enabledCandidateCount: 0 }],
@@ -159,7 +159,7 @@ const context = {
     },
     createElement: () => element(`node-${elements.size}`),
   },
-  setInterval: (callback) => { blinkTick = callback; return 1; }, clearInterval() {}, requestAnimationFrame: (callback) => { callback(); return 1; }, cancelAnimationFrame() {},
+  setInterval: (callback) => { blinkTick = callback; return 1; }, clearInterval() {}, setTimeout: (callback) => { callback(); return 1; }, clearTimeout() {}, AbortController, requestAnimationFrame: (callback) => { callback(); return 1; }, cancelAnimationFrame() {},
   isBusy: () => false, isGestureActive: () => false, catalogStagingEditsActive: () => false, currentImageActionPending: () => Boolean(state.pendingImageId), candidateControlLocked: () => false, isProcessableImage: () => true, manualCanvasInputLocked: () => false, hasDurableHistory: () => false, isCurrentCatalogEpoch: (epoch) => epoch === state.catalogEpoch, isCurrentGeneration: (generation) => generation === state.imageGeneration,
   catalogRecordMatches: () => true, currentRecord: () => state.images.find((record) => record.id === state.currentId),
   imageAssetVersion: (record) => record?.assetVersion || "", imageHasMask: () => true, canvasHasPixels: (ctx) => ctx.pixels,
@@ -173,7 +173,7 @@ const context = {
   fillUiRefreshes: [], renderCandidates: () => events.push("candidates"), render: () => events.push("render"), renderCatalogViews: () => events.push("catalog"), updateActionButtons: () => context.fillUiRefreshes.push("actions"),
   updateCandidateBatchButtons(...args) { batchPresences.push(args[2]); },
   syncCurrentCandidateRecord() {}, syncCandidateRecord() {}, retainCurrentCandidateBundle() {}, refreshCandidateRecord: async () => {}, reconcileCurrentCandidates: async () => true,
-  fetchBitmap: async () => ({ close() {} }), maskUrl: (_imageId, candidateId, revision) => `${candidateId}:${revision}`, closeBitmap(bitmap) { bitmap.close(); },
+  fetchBitmap: async () => ({ close() {} }), maskUrl: (_imageId, candidateId, revision) => `${candidateId}:${revision}`, candidatePaddingPreviewUrl: (_imageId, candidateId, revision, expandPx) => `${candidateId}:${revision}:${expandPx}`, closeBitmap(bitmap) { bitmap.close(); },
   releaseCandidateBitmap() {}, releaseCandidateBundles() {}, invalidateCandidateBundles: () => events.push("invalidate"), markImagesUnreviewed: () => events.push("unreview"),
   clearBoundaryInteraction: () => events.push("boundary-clear"), updateBoundaryActions() {}, setStatusKey: () => events.push("status"), showUserError: (error) => events.push(`error:${error}`),
   canDetectBoundary: () => true, compareEventSide: () => "right", compareSideOffset: () => 100, inverseTransformImagePoint: (point) => point,
@@ -185,7 +185,7 @@ const context = {
 const masksPath = path.join(__dirname, "..", "static", "js", "editor-masks.js");
 const source = fs.readFileSync(masksPath, "utf8");
 vm.runInNewContext(source, context, { filename: masksPath });
-vm.runInNewContext("globalThis.masksTest = { candidateLabel, manualLayerPresence, renderCandidateRows: renderCandidates, candidatePaddingLimit, candidatePaddingValue, validateCandidatePadding, openCandidatePadding, openBatchCandidatePadding, closeCandidatePadding, commitCandidatePadding, commitBatchCandidatePadding, changeCandidatePaddingDraft, candidateDisplayMode, candidateDisplayIdsForRole, syncCandidateDisplayButtons, syncCandidateBlinkTimer, setCandidateDisplayMode, toggleCandidateDisplay, toggleCandidateEffective, candidateDisplayToggle, candidateEffectiveToggle, clearCandidateBlink, clearCandidateMutationState, candidateMutationKey, nextCandidateMutationVersion, enqueueCandidateMutation, waitForCandidateMutations, updateCandidate, deleteCandidate, deleteManualMask, deleteManualExclusion, deleteManualExclusionErase, shouldBlinkNewManual, batchCandidateOperation, escapeHtml, pointFromEvent, clampPoint, boundaryDragStarted, polygonVertexAt, completedPolygonVertexAt, rectangleDraftAt, paintStrokeOnContexts, paintStrokePath, paintFillSpans, applyFillSpans, enableManualLayerForTool, beginManualStroke, appendManualStrokePoint, paintPendingManualStroke, completeManualStroke, cancelManualStroke, replayManualStroke, historyWeight, trimHistory, rebuildManualMaskFromHistory, recordHistoryOperation, resetHistoryToCurrentManualMask, refreshProjectHistory, restoreProjectHistory, restoreSnapshot, buildCombinedMask, addBoundaryCandidate, cancelBoundary, fillAt };\nrenderCandidates = () => globalThis.fillUiRefreshes.push(\"candidates\"); render = globalThis.render;", context, { filename: "test-editor-masks-exports.js" });
+vm.runInNewContext("globalThis.masksTest = { candidateLabel, manualLayerPresence, renderCandidateRows: renderCandidates, candidatePaddingLimit, candidatePaddingValue, validateCandidatePadding, openCandidatePadding, openBatchCandidatePadding, closeCandidatePadding, commitCandidatePadding, commitBatchCandidatePadding, changeCandidatePaddingDraft, scheduleCandidatePaddingPreview, candidateDisplayMode, candidateDisplayIdsForRole, syncCandidateDisplayButtons, syncCandidateBlinkTimer, setCandidateDisplayMode, toggleCandidateDisplay, toggleCandidateEffective, candidateDisplayToggle, candidateEffectiveToggle, clearCandidateBlink, clearCandidateMutationState, candidateMutationKey, nextCandidateMutationVersion, enqueueCandidateMutation, waitForCandidateMutations, updateCandidate, deleteCandidate, deleteManualMask, deleteManualExclusion, deleteManualExclusionErase, shouldBlinkNewManual, batchCandidateOperation, escapeHtml, pointFromEvent, clampPoint, boundaryDragStarted, polygonVertexAt, completedPolygonVertexAt, rectangleDraftAt, paintStrokeOnContexts, paintStrokePath, paintFillSpans, applyFillSpans, enableManualLayerForTool, beginManualStroke, appendManualStrokePoint, paintPendingManualStroke, completeManualStroke, cancelManualStroke, replayManualStroke, historyWeight, trimHistory, rebuildManualMaskFromHistory, recordHistoryOperation, resetHistoryToCurrentManualMask, refreshProjectHistory, restoreProjectHistory, restoreSnapshot, buildCombinedMask, addBoundaryCandidate, cancelBoundary, fillAt };\nrenderCandidates = () => globalThis.fillUiRefreshes.push(\"candidates\"); render = globalThis.render;", context, { filename: "test-editor-masks-exports.js" });
 const test = context.masksTest;
 
 const candidateLabelFixtures = [
@@ -526,6 +526,39 @@ nodeTest("editor masks, fill, candidates, and history", async () => {
   context.api = async (path, options) => { candidateCalls.push({ path, body: JSON.parse(options.body) }); return { candidateRevision: 11 }; };
   assert.equal(await test.commitCandidatePadding(), false, "a candidate edit remains guarded until its prior mutation settles");
   assert.equal(candidateCalls.length, callsBeforeInvalidPadding + 1, "the candidate edit submits its requested padding once before reconciliation");
+  await test.waitForCandidateMutations();
+
+  resetCandidateState(); test.renderCandidateRows(); state.candidatePaddingPreviewImages = new Map();
+  const previewButton = lastRow("candidate-row candidate-row-apply").children[1].children.find((node) => node.className === "candidate-padding-button");
+  const previewRequests = [];
+  context.fetchBitmap = (url, signal) => new Promise((resolve) => previewRequests.push({ url, signal, resolve }));
+  test.openCandidatePadding("apply", previewButton);
+  paddingInput.value = "2"; test.scheduleCandidatePaddingPreview();
+  paddingInput.value = "3"; test.scheduleCandidatePaddingPreview();
+  assert.equal(previewRequests.length, 2, "a new padding value starts one replacement preview request");
+  assert.equal(previewRequests[0].signal.aborted, true, "a newer padding value aborts the older preview request");
+  let staleClosed = 0; let currentClosed = 0;
+  previewRequests[0].resolve({ close() { staleClosed += 1; } });
+  previewRequests[1].resolve({ close() { currentClosed += 1; } });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(staleClosed, 1, "a bitmap returned by an aborted preview is closed");
+  assert.equal(state.candidatePaddingPreviewImages.has("apply"), true, "only the latest padding preview becomes visible");
+  test.closeCandidatePadding();
+  assert.equal(currentClosed, 1, "cancelling padding closes the visible preview bitmap");
+  assert.equal(state.candidatePaddingPreviewImages.size, 0, "cancelling padding restores canonical candidate images");
+
+  state.candidates = Array.from({ length: 6 }, (_, index) => ({ id: `apply-${index}`, role: "apply", enabled: true, expandPx: 0, labelToken: "penis", source: "target", refinement: null, color: "#fff" }));
+  const batchPreviewRequests = [];
+  context.fetchBitmap = (url, signal) => new Promise((resolve) => batchPreviewRequests.push({ url, signal, resolve, resolved: false }));
+  test.openBatchCandidatePadding("apply", previewButton);
+  paddingInput.value = "4"; test.scheduleCandidatePaddingPreview();
+  assert.equal(batchPreviewRequests.length, 4, "batch padding preview limits simultaneous mask requests to four");
+  batchPreviewRequests[0].resolved = true; batchPreviewRequests[0].resolve({ close() {} });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(batchPreviewRequests.length, 5, "batch padding preview starts the next request only after one slot finishes");
+  test.closeCandidatePadding();
+  for (const request of batchPreviewRequests) if (!request.resolved) { request.resolved = true; request.resolve({ close() {} }); }
+  await new Promise((resolve) => setImmediate(resolve));
 
   const manualRows = [
     lastRow("candidate-row candidate-row-manual candidate-row-manual-apply"),

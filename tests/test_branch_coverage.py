@@ -276,6 +276,11 @@ class HttpBranchTests(unittest.TestCase):
             with self.subTest(path=path):
                 with self.assertRaises(ClientError):
                     http_module._route_ids(path, "/api/mask/")
+        self.assertIsNone(http_module._request_preview_expand("v=1"))
+        self.assertEqual(http_module._request_preview_expand("expandPx=12"), 12)
+        for query in ("expandPx=", "expandPx=-1", "expandPx=1.5", "expandPx=1&expandPx=2"):
+            with self.subTest(query=query), self.assertRaises(ClientError):
+                http_module._request_preview_expand(query)
         self.assertEqual(http_module._read_candidate_revision(0), 0)
         for value in (True, "1", -1):
             with self.subTest(value=value):

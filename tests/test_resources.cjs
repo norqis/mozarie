@@ -18,7 +18,7 @@ const context = {
   cachedImage: async (image) => ({ id: image.id, close() {} }), document: { querySelector: () => null }, fetch: async () => ({ ok: true, blob: async () => ({}) }), createImageBitmap: async () => ({}), responseError: () => new Error("image request failed"),
 };
 vm.runInNewContext(fs.readFileSync(resourcesPath, "utf8"), context, { filename: resourcesPath });
-vm.runInNewContext("globalThis.resourceTest = { StateResourceCache, syncResourceOwnership, desiredImageResourceKeys, desiredCandidateResourceKeys, imageUrl, maskUrl, schedulePrefetch };", context, { filename: "resource-contract-exports.js" });
+vm.runInNewContext("globalThis.resourceTest = { StateResourceCache, syncResourceOwnership, desiredImageResourceKeys, desiredCandidateResourceKeys, imageUrl, maskUrl, candidatePaddingPreviewUrl, schedulePrefetch };", context, { filename: "resource-contract-exports.js" });
 const test = context.resourceTest;
 
 const released = [];
@@ -45,4 +45,5 @@ assert.equal(cache.has(oldKey), false, "ownership is released when the navigatio
 assert.deepEqual(released, ["previous", "previous-retained"]);
 assert.equal(test.imageUrl({ id: "a b", assetVersion: "v/1" }), "/api/image/a%20b?v=v%2F1");
 assert.equal(test.maskUrl("image/id", "candidate id", 4), "/api/mask/image%2Fid/candidate%20id?v=4-candidate%20id");
+assert.equal(test.candidatePaddingPreviewUrl("image/id", "candidate id", 4, 12), "/api/mask/image%2Fid/candidate%20id?v=4-candidate%20id&expandPx=12");
 nodeTest("resource contracts", async () => { await test.schedulePrefetch(state.images[2]); });

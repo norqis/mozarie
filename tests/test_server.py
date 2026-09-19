@@ -5950,10 +5950,10 @@ class MozarieTests(unittest.TestCase):
             snapshotted = threading.Event()
             release = threading.Event()
 
-            def delayed_read(requested_id, candidate_id, *, expected_revision=None):
+            def delayed_read(requested_id, candidate_id, *, expected_revision=None, expand_px_override=None):
                 snapshotted.set()
                 self.assertTrue(release.wait(THREAD_TIMEOUT))
-                return original_read(requested_id, candidate_id, expected_revision=expected_revision)
+                return original_read(requested_id, candidate_id, expected_revision=expected_revision, expand_px_override=expand_px_override)
 
             with patch.object(http_module, "STATE", state), \
                  patch.object(state, "read_candidate_mask_png", side_effect=delayed_read):

@@ -87,6 +87,60 @@ test("all-image detection submits the fluid color-fill settings with default tol
   }
 });
 
+test("all-image detection skips reviewed images and disables only the all-image action when none remain", { timeout: 60000 }, async () => {
+  const fixture = await startFixtureServer();
+  fixture.setCatalog([
+    { id: "sample", relativePath: "sample.png", sourceKind: "filesystem", width: 100, height: 80, candidateCount: 1, enabledCandidateCount: 1, reviewed: true, hidden: false, hasEffectiveMask: true },
+    { id: "sample-two", relativePath: "sample-two.png", sourceKind: "session", width: 100, height: 80, candidateCount: 0, enabledCandidateCount: 0, reviewed: false, hidden: false, hasEffectiveMask: false },
+  ]);
+  const browser = await chromium.launch({ headless: true });
+  let context; let page;
+  try {
+    ({ context, page } = await freshPage(browser, fixture));
+    await page.locator("#detectAllButton").click();
+    await page.waitForFunction(() => document.querySelector("#detectDialog").open);
+    assert.match(await page.locator("#detectTargetCount").textContent(), /1件$/, "the dialog counts only unreviewed images");
+    const detectRequest = page.waitForRequest((request) => new URL(request.url()).pathname === "/api/detect");
+    await page.locator("#detectStartButton").click();
+    assert.deepEqual(JSON.parse((await detectRequest).postData()).imageIds, ["sample-two"], "the all-image request excludes the reviewed image");
+    await context.close();
+    fixture.resetJob();
+
+    fixture.setCatalog([
+      { id: "sample", relativePath: "sample.png", sourceKind: "filesystem", width: 100, height: 80, candidateCount: 1, enabledCandidateCount: 1, reviewed: true, hidden: false, hasEffectiveMask: true },
+      { id: "sample-two", relativePath: "sample-two.png", sourceKind: "session", width: 100, height: 80, candidateCount: 0, enabledCandidateCount: 0, reviewed: true, hidden: false, hasEffectiveMask: false },
+    ]);
+    ({ context, page } = await freshPage(browser, fixture));
+    await page.evaluate(() => pollJob());
+    await page.waitForFunction(() => state.job?.state === "idle");
+    await page.locator('.gallery-item[data-id="sample"]').click();
+    await page.waitForFunction(() => state.currentId === "sample" && state.currentImage);
+    assert.equal(await page.locator("#detectAllButton").isDisabled(), true, "all-image detection is disabled when every processable image is reviewed");
+    assert.equal(await page.locator("#detectCurrentButton").isEnabled(), true, "the explicit current-image action still permits detection of a reviewed image");
+    let explicitRequest = page.waitForRequest((request) => new URL(request.url()).pathname === "/api/detect");
+    await page.locator("#detectCurrentButton").click();
+    assert.deepEqual(JSON.parse((await explicitRequest).postData()).imageIds, ["sample"], "current-image detection submits the reviewed image explicitly");
+    await context.close();
+    fixture.resetJob();
+
+    ({ context, page } = await freshPage(browser, fixture));
+    await page.evaluate(() => pollJob());
+    await page.waitForFunction(() => state.job?.state === "idle");
+    await page.evaluate(() => setViewMode("overview"));
+    await page.locator("#batchModeButton").click();
+    await page.locator('.overview-item[data-id="sample-two"]').click();
+    await page.locator("#selectionActionsButton").click();
+    explicitRequest = page.waitForRequest((request) => new URL(request.url()).pathname === "/api/detect");
+    await page.locator('[data-selection-action="detect"]').click();
+    await page.locator("#detectStartButton").click();
+    assert.deepEqual(JSON.parse((await explicitRequest).postData()).imageIds, ["sample-two"], "selected-image detection submits the reviewed image explicitly");
+  } finally {
+    await context?.close();
+    await browser.close();
+    await closeServer(fixture.server);
+  }
+});
+
 test("hiding an image removes it from the visible all-image detection and save targets", { timeout: 60000 }, async () => {
   const fixture = await startFixtureServer();
   const browser = await chromium.launch({ headless: true });

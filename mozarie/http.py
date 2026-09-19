@@ -5,6 +5,7 @@ import mimetypes
 import os
 import sqlite3
 import subprocess
+import sys
 import tempfile
 import threading
 import time
@@ -670,7 +671,7 @@ class MosaicHandler(BaseHTTPRequestHandler):
                 self._json({"draft": STATE.manual_workspace(path.removeprefix("/api/workspace/manual/"))})
             elif path.startswith("/api/mask/"):
                 image_id, candidate_id = _route_ids(path, "/api/mask/")
-                self._send_candidate_mask(image_id, candidate_id, _request_version(parsed.query))
+                self._send_candidate_mask(image_id, candidate_id, _request_version(parsed.query), _request_preview_expand(parsed.query))
             elif path.startswith("/api/project/mask/"):
                 image_id, kind = _route_ids(path, "/api/project/mask/")
                 image = STATE.workspace_store.project_image(image_id)
@@ -1405,7 +1406,8 @@ class MosaicHandler(BaseHTTPRequestHandler):
             except FileNotFoundError as exc:
                 raise ClientError("サムネイルを作成できませんでした。", "image_read_failed") from exc
 
-    def _send_candidate_mask(self, image_id: str, candidate_id: str, version: str | None) -> None:
+    def _send_candidate_mask(self, image_id: str, candidate_id: str, version: str | None,
+                             preview_expand_px: int | None = None) -> None:
         with STATE.lock:
             if image_id not in STATE.images:
                 raise StaleMaskError("検出候補は既に更新されています。")
@@ -1413,9 +1415,12 @@ class MosaicHandler(BaseHTTPRequestHandler):
         mask_version = f"{revision}-{candidate_id}"
         if version is not None and version != mask_version:
             raise StaleMaskError("検出候補は既に更新されています。")
-        cache_control = "private, max-age=31536000, immutable" if version == mask_version else "no-store"
+        cache_control = "private, max-age=31536000, immutable" if version == mask_version and preview_expand_px is None else "no-store"
         self._binary(
-            STATE.read_candidate_mask_png(image_id, candidate_id, expected_revision=revision),
+            STATE.read_candidate_mask_png(
+                image_id, candidate_id, expected_revision=revision,
+                expand_px_override=preview_expand_px,
+            ),
             "image/png",
             cache_control=cache_control,
         )
@@ -1539,6 +1544,18 @@ def _request_version(query: str) -> str | None:
     if len(values) != 1 or not values[0]:
         raise ClientError("画像の版番号が不正です。", "stale_asset")
     return values[0]
+
+
+def _request_preview_expand(query: str) -> int | None:
+    values = parse_qs(query, keep_blank_values=True).get("expandPx")
+    if values is None:
+        return None
+    if len(values) != 1 or not values[0].isdecimal():
+        raise ClientError("候補の枠pxは0以上の整数で指定してください。", "input_invalid")
+    value = int(values[0])
+    if value > sys.maxsize:
+        raise ClientError("候補の枠pxは0以上の整数で指定してください。", "input_invalid")
+    return value
 
 
 def _route_ids(path: str, prefix: str) -> tuple[str, str]:
