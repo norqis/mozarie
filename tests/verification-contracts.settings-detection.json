@@ -216,7 +216,6 @@
       "observation": "設定値を保持し、全画像の読み込み完了後に操作を再有効化する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_app_core_detection_coverage.cjs::application startup, catalog state, and detection controls",
         "python:tests.test_server.MozarieTests.test_import_session_records_requested_and_effective_parallelism_without_a_fixed_cap"
       ]
     },
@@ -239,7 +238,6 @@
       "observation": "送信対象が陰茎だけとなり、未選択クラスの新規候補を作らない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_app_core_detection_coverage.cjs::application startup, catalog state, and detection controls",
         "python:tests.test_server.MozarieTests.test_detection_start_passes_explicit_target_subset"
       ]
     },
@@ -251,7 +249,6 @@
       "observation": "送信対象が膣だけとなり、未選択クラスの新規候補を作らない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_app_core_detection_coverage.cjs::application startup, catalog state, and detection controls",
         "python:tests.test_server.MozarieTests.test_detection_start_passes_explicit_target_subset"
       ]
     },
@@ -263,7 +260,6 @@
       "observation": "両対象を送信して処理を開始できる",
       "status": "automated",
       "testIds": [
-        "node:tests/test_app_core_detection_coverage.cjs::application startup, catalog state, and detection controls",
         "python:tests.test_server.MozarieTests.test_detection_start_passes_explicit_target_subset"
       ]
     },
@@ -275,7 +271,6 @@
       "observation": "対象の選択を求め、検出を開始しない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_app_core_detection_coverage.cjs::application startup, catalog state, and detection controls",
         "python:tests.test_server.MozarieTests.test_detection_start_passes_explicit_target_subset"
       ]
     },
@@ -287,7 +282,7 @@
       "observation": "NTD11の設定がOFFで送られ、そのモデル由来の新規候補・除外を生成しない",
       "status": "automated",
       "testIds": [
-        "python:tests.test_server.MozarieTests.test_model_logic_matrix_uses_only_enabled_models"
+        "python:tests.test_server.MozarieTests.test_disabled_optional_onnx_paths_are_never_constructed"
       ]
     },
     {
@@ -298,7 +293,7 @@
       "observation": "既存候補の存在を新規検出と混同しない",
       "status": "automated",
       "testIds": [
-        "python:tests.test_server.MozarieTests.test_model_logic_matrix_uses_only_enabled_models"
+        "python:tests.test_server.MozarieTests.test_redetection_preserves_boundary_candidates_and_replaces_auto_candidates"
       ]
     },
     {
@@ -309,7 +304,7 @@
       "observation": "NTD11がONで保存・送信され、利用可能なら準備・実行される",
       "status": "automated",
       "testIds": [
-        "python:tests.test_server.MozarieTests.test_model_logic_matrix_uses_only_enabled_models"
+        "python:tests.test_server.MozarieTests.test_enabled_auxiliaries_load_in_priority_order"
       ]
     },
     {
@@ -343,7 +338,7 @@
       "observation": "NTD11のOFFが維持される",
       "status": "automated",
       "testIds": [
-        "python:tests.test_server.MozarieTests.test_model_logic_matrix_uses_only_enabled_models"
+        "python:tests.test_config.SettingsTests.test_valid_settings_are_persisted_only_to_local_file"
       ]
     },
     {
@@ -365,7 +360,7 @@
       "observation": "Sensitiveの設定がOFFで送られ、そのモデル由来の新規候補・除外を生成しない",
       "status": "automated",
       "testIds": [
-        "python:tests.test_server.MozarieTests.test_model_logic_matrix_uses_only_enabled_models"
+        "python:tests.test_server.MozarieTests.test_disabled_optional_onnx_paths_are_never_constructed"
       ]
     },
     {
@@ -376,7 +371,7 @@
       "observation": "既存候補の存在を新規検出と混同しない",
       "status": "automated",
       "testIds": [
-        "python:tests.test_server.MozarieTests.test_model_logic_matrix_uses_only_enabled_models"
+        "python:tests.test_server.MozarieTests.test_redetection_preserves_boundary_candidates_and_replaces_auto_candidates"
       ]
     },
     {
@@ -387,7 +382,7 @@
       "observation": "SensitiveがONで保存・送信され、利用可能なら準備・実行される",
       "status": "automated",
       "testIds": [
-        "python:tests.test_server.MozarieTests.test_model_logic_matrix_uses_only_enabled_models"
+        "python:tests.test_server.MozarieTests.test_enabled_auxiliaries_load_in_priority_order"
       ]
     },
     {
@@ -421,7 +416,7 @@
       "observation": "SensitiveのOFFが維持される",
       "status": "automated",
       "testIds": [
-        "python:tests.test_server.MozarieTests.test_model_logic_matrix_uses_only_enabled_models"
+        "python:tests.test_config.SettingsTests.test_valid_settings_are_persisted_only_to_local_file"
       ]
     },
     {
@@ -443,7 +438,7 @@
       "observation": "手検出の設定がOFFで送られ、そのモデル由来の新規候補・除外を生成しない",
       "status": "automated",
       "testIds": [
-        "python:tests.test_server.MozarieTests.test_model_logic_matrix_uses_only_enabled_models"
+        "python:tests.test_server.MozarieTests.test_disabled_optional_onnx_paths_are_never_constructed"
       ]
     },
     {
@@ -454,7 +449,7 @@
       "observation": "既存候補の存在を新規検出と混同しない",
       "status": "automated",
       "testIds": [
-        "python:tests.test_server.MozarieTests.test_model_logic_matrix_uses_only_enabled_models"
+        "python:tests.test_server.MozarieTests.test_redetection_preserves_boundary_candidates_and_replaces_auto_candidates"
       ]
     },
     {
@@ -465,7 +460,7 @@
       "observation": "手検出がONで保存・送信され、利用可能なら準備・実行される",
       "status": "automated",
       "testIds": [
-        "python:tests.test_server.MozarieTests.test_model_logic_matrix_uses_only_enabled_models"
+        "python:tests.test_server.MozarieTests.test_hand_model_verification_occurs_once_after_first_load"
       ]
     },
     {
@@ -499,7 +494,7 @@
       "observation": "手検出と、それに依存する手領域分割がOFFで維持される",
       "status": "automated",
       "testIds": [
-        "python:tests.test_server.MozarieTests.test_model_logic_matrix_uses_only_enabled_models"
+        "python:tests.test_config.SettingsTests.test_hand_segmentation_requires_hand_detection"
       ]
     },
     {
@@ -510,7 +505,7 @@
       "observation": "NTD11・Sensitive・白い液の設定は保持する",
       "status": "automated",
       "testIds": [
-        "python:tests.test_server.MozarieTests.test_model_logic_matrix_uses_only_enabled_models"
+        "python:tests.test_config.SettingsTests.test_hand_segmentation_requires_hand_detection"
       ]
     },
     {
@@ -521,7 +516,7 @@
       "observation": "手領域分割の設定がOFFで送られ、そのモデル由来の新規候補・除外を生成しない",
       "status": "automated",
       "testIds": [
-        "python:tests.test_server.MozarieTests.test_model_logic_matrix_uses_only_enabled_models"
+        "python:tests.test_server.MozarieTests.test_disabled_optional_onnx_paths_are_never_constructed"
       ]
     },
     {
@@ -532,7 +527,7 @@
       "observation": "既存候補の存在を新規検出と混同しない",
       "status": "automated",
       "testIds": [
-        "python:tests.test_server.MozarieTests.test_model_logic_matrix_uses_only_enabled_models"
+        "python:tests.test_server.MozarieTests.test_redetection_preserves_boundary_candidates_and_replaces_auto_candidates"
       ]
     },
     {
@@ -543,7 +538,7 @@
       "observation": "両方のONが保存される",
       "status": "automated",
       "testIds": [
-        "python:tests.test_server.MozarieTests.test_model_logic_matrix_uses_only_enabled_models"
+        "python:tests.test_config.SettingsTests.test_hand_segmentation_settings_have_safe_defaults"
       ]
     },
     {
@@ -554,7 +549,7 @@
       "observation": "手候補がある場合に手領域分割を実行する",
       "status": "automated",
       "testIds": [
-        "python:tests.test_server.MozarieTests.test_model_logic_matrix_uses_only_enabled_models"
+        "python:tests.test_server.MozarieTests.test_specialist_hand_segmentation_success_never_uses_generic_sam"
       ]
     },
     {
@@ -588,7 +583,7 @@
       "observation": "手領域分割のOFFが維持される",
       "status": "automated",
       "testIds": [
-        "python:tests.test_server.MozarieTests.test_model_logic_matrix_uses_only_enabled_models"
+        "python:tests.test_config.SettingsTests.test_hand_segmentation_settings_have_safe_defaults"
       ]
     },
     {
@@ -610,7 +605,7 @@
       "observation": "白い液の設定がOFFで送られ、そのモデル由来の新規候補・除外を生成しない",
       "status": "automated",
       "testIds": [
-        "python:tests.test_server.MozarieTests.test_model_logic_matrix_uses_only_enabled_models"
+        "python:tests.test_server.MozarieTests.test_finalization_skips_fluid_search_for_empty_apply_masks_and_when_disabled"
       ]
     },
     {
@@ -621,7 +616,7 @@
       "observation": "既存候補の存在を新規検出と混同しない",
       "status": "automated",
       "testIds": [
-        "python:tests.test_server.MozarieTests.test_model_logic_matrix_uses_only_enabled_models"
+        "python:tests.test_server.MozarieTests.test_redetection_preserves_boundary_candidates_and_replaces_auto_candidates"
       ]
     },
     {
@@ -632,7 +627,7 @@
       "observation": "ONが保存・送信される",
       "status": "automated",
       "testIds": [
-        "python:tests.test_server.MozarieTests.test_model_logic_matrix_uses_only_enabled_models"
+        "python:tests.test_server.MozarieTests.test_finalization_applies_fluid_to_every_nonempty_target_once"
       ]
     },
     {
@@ -643,7 +638,7 @@
       "observation": "性器候補がある場合に白色領域処理を実行する",
       "status": "automated",
       "testIds": [
-        "python:tests.test_server.MozarieTests.test_model_logic_matrix_uses_only_enabled_models"
+        "python:tests.test_server.MozarieTests.test_finalization_applies_fluid_to_every_nonempty_target_once"
       ]
     },
     {
@@ -654,7 +649,7 @@
       "observation": "性器候補0件なら実行確認済みとしない",
       "status": "automated",
       "testIds": [
-        "python:tests.test_server.MozarieTests.test_model_logic_matrix_uses_only_enabled_models"
+        "python:tests.test_server.MozarieTests.test_finalization_skips_fluid_search_for_empty_apply_masks_and_when_disabled"
       ]
     },
     {
@@ -665,7 +660,7 @@
       "observation": "白い液のOFFが維持される",
       "status": "automated",
       "testIds": [
-        "python:tests.test_server.MozarieTests.test_model_logic_matrix_uses_only_enabled_models"
+        "python:tests.test_server.MozarieTests.test_finalization_skips_fluid_search_for_empty_apply_masks_and_when_disabled"
       ]
     },
     {
@@ -687,7 +682,7 @@
       "observation": "SAMの準備を要求せず、輪郭補正なしで完了する",
       "status": "automated",
       "testIds": [
-        "python:tests.test_server.MozarieTests.test_model_logic_matrix_uses_only_enabled_models"
+        "python:tests.test_server.MozarieTests.test_standard_detection_never_loads_sam_and_keeps_handseg_evidence"
       ]
     },
     {
@@ -698,7 +693,8 @@
       "observation": "選択したSAMを利用し、未準備ならモデル準備の案内を出す",
       "status": "automated",
       "testIds": [
-        "python:tests.test_server.MozarieTests.test_model_logic_matrix_uses_only_enabled_models"
+        "python:tests.test_server.MozarieTests.test_high_precision_loads_sam_once_only_when_targets_exist",
+        "python:tests.test_server.MozarieTests.test_missing_sam_checkpoint_has_a_specific_error_code"
       ]
     },
     {
@@ -721,7 +717,7 @@
       "observation": "vit_bだけが選択され、再表示後も保持される",
       "status": "automated",
       "testIds": [
-        "python:tests.test_server.MozarieTests.test_model_logic_matrix_uses_only_enabled_models"
+        "python:tests.test_config.SettingsTests.test_sam_checkpoint_variants_are_persisted_as_a_map"
       ]
     },
     {
@@ -732,7 +728,7 @@
       "observation": "未準備ファイルを別の種類で代用しない",
       "status": "automated",
       "testIds": [
-        "python:tests.test_server.MozarieTests.test_model_logic_matrix_uses_only_enabled_models"
+        "python:tests.test_server.MozarieTests.test_missing_sam_checkpoint_has_a_specific_error_code"
       ]
     },
     {
@@ -743,7 +739,7 @@
       "observation": "vit_lだけが選択され、再表示後も保持される",
       "status": "automated",
       "testIds": [
-        "python:tests.test_server.MozarieTests.test_model_logic_matrix_uses_only_enabled_models"
+        "python:tests.test_config.SettingsTests.test_sam_checkpoint_variants_are_persisted_as_a_map"
       ]
     },
     {
@@ -754,7 +750,7 @@
       "observation": "未準備ファイルを別の種類で代用しない",
       "status": "automated",
       "testIds": [
-        "python:tests.test_server.MozarieTests.test_model_logic_matrix_uses_only_enabled_models"
+        "python:tests.test_server.MozarieTests.test_missing_sam_checkpoint_has_a_specific_error_code"
       ]
     },
     {
@@ -765,7 +761,7 @@
       "observation": "vit_hだけが選択され、再表示後も保持される",
       "status": "automated",
       "testIds": [
-        "python:tests.test_server.MozarieTests.test_model_logic_matrix_uses_only_enabled_models"
+        "python:tests.test_config.SettingsTests.test_sam_checkpoint_variants_are_persisted_as_a_map"
       ]
     },
     {
@@ -776,7 +772,7 @@
       "observation": "未準備ファイルを別の種類で代用しない",
       "status": "automated",
       "testIds": [
-        "python:tests.test_server.MozarieTests.test_model_logic_matrix_uses_only_enabled_models"
+        "python:tests.test_server.MozarieTests.test_missing_sam_checkpoint_has_a_specific_error_code"
       ]
     },
     {
@@ -955,7 +951,6 @@
       "observation": "非表示を除く対象数に対して進捗が進み、準備表示とファイル名を交互に点滅させない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_app_core_detection_coverage.cjs::application startup, catalog state, and detection controls",
         "python:tests.test_server.MozarieTests.test_detection_staging_reports_every_success_before_atomic_publication"
       ]
     },
@@ -967,7 +962,6 @@
       "observation": "開始時から60件の対象・進捗を表示し、処理終了後に画面操作を再有効化する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_app_core_detection_coverage.cjs::application startup, catalog state, and detection controls",
         "python:tests.test_server.MozarieTests.test_detection_staging_reports_every_success_before_atomic_publication"
       ]
     },
@@ -979,7 +973,6 @@
       "observation": "検出精度は評価しない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_app_core_detection_coverage.cjs::application startup, catalog state, and detection controls",
         "python:tests.test_server.MozarieTests.test_detection_staging_reports_every_success_before_atomic_publication"
       ]
     },
@@ -991,7 +984,6 @@
       "observation": "新規画像処理を止め、一時停止状態を表示する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_app_core_detection_coverage.cjs::application startup, catalog state, and detection controls",
         "python:tests.test_server.MozarieTests.test_detection_can_pause_and_resume"
       ]
     },
@@ -1003,7 +995,6 @@
       "observation": "未処理対象から再開し、完了済み画像を二重追加しない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_app_core_detection_coverage.cjs::application startup, catalog state, and detection controls",
         "python:tests.test_server.MozarieTests.test_detection_can_pause_and_resume"
       ]
     },
@@ -1015,7 +1006,6 @@
       "observation": "処理を停止し、完了済みと未処理を混同せず、編集を再有効化する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_app_core_detection_coverage.cjs::application startup, catalog state, and detection controls",
         "python:tests.test_server.MozarieTests.test_detect_cancel_between_inference_and_commit_preserves_existing_candidates"
       ]
     },
@@ -1027,7 +1017,6 @@
       "observation": "候補公開前でも進捗は1/NからN/Nへ進み、処理中の画像名と残り時間を表示する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_app_core_detection_coverage.cjs::application startup, catalog state, and detection controls",
         "python:tests.test_server.MozarieTests.test_detection_staging_reports_every_success_before_atomic_publication",
         "python:tests.test_server.MozarieTests.test_detection_staging_reports_processed_without_publishing_on_failure",
         "python:tests.test_server.MozarieTests.test_detection_rejects_cancel_after_publication_starts_and_completes"
@@ -1041,7 +1030,6 @@
       "observation": "公開までは完了ID・候補一覧を増やさず、全件推論済みの公開待ち状態では一時停止を無効表示にして、取消は公開開始まで使える",
       "status": "automated",
       "testIds": [
-        "node:tests/test_app_core_detection_coverage.cjs::application startup, catalog state, and detection controls",
         "python:tests.test_server.MozarieTests.test_detection_staging_reports_every_success_before_atomic_publication",
         "python:tests.test_server.MozarieTests.test_detection_staging_reports_processed_without_publishing_on_failure",
         "python:tests.test_server.MozarieTests.test_detection_rejects_cancel_after_publication_starts_and_completes"
@@ -1055,7 +1043,6 @@
       "observation": "失敗時は処理済み件数を表示しても候補IDと候補内容を一切公開しない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_app_core_detection_coverage.cjs::application startup, catalog state, and detection controls",
         "python:tests.test_server.MozarieTests.test_detection_staging_reports_every_success_before_atomic_publication",
         "python:tests.test_server.MozarieTests.test_detection_staging_reports_processed_without_publishing_on_failure",
         "python:tests.test_server.MozarieTests.test_detection_rejects_cancel_after_publication_starts_and_completes"
@@ -1069,7 +1056,6 @@
       "observation": "公開後の取消は受け付けず、公開済み候補を残して完了する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_app_core_detection_coverage.cjs::application startup, catalog state, and detection controls",
         "python:tests.test_server.MozarieTests.test_detection_staging_reports_every_success_before_atomic_publication",
         "python:tests.test_server.MozarieTests.test_detection_staging_reports_processed_without_publishing_on_failure",
         "python:tests.test_server.MozarieTests.test_detection_rejects_cancel_after_publication_starts_and_completes"
@@ -1208,7 +1194,6 @@
       "observation": "APPLYと手のEXCLUDEを別々の候補として表示する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_app_core_detection_coverage.cjs::application startup, catalog state, and detection controls",
         "python:tests.test_server.MozarieTests.test_boundary_candidate_keeps_hand_fluid_as_an_independent_exclusion"
       ]
     },
@@ -1220,7 +1205,6 @@
       "observation": "手だけをON/OFFしてもAPPLY候補の候補行・ON/OFF・手描き範囲を変えず、保存後のモザイク範囲だけを更新する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_app_core_detection_coverage.cjs::application startup, catalog state, and detection controls",
         "python:tests.test_server.MozarieTests.test_boundary_candidate_keeps_hand_fluid_as_an_independent_exclusion"
       ]
     },
