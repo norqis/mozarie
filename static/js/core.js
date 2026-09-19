@@ -173,6 +173,10 @@ async function loadTranslations(languageOverride = null) {
   if (sectionHeadings[1]) sectionHeadings[1].textContent = t("candidates.excludeRanges");
   renderModelStatus();
   renderLocalizedDynamicState();
+  const modelHelpDialog = $("#modelHelpDialog");
+  if (modelHelpDialog?.open && modelHelpDialog.dataset.modelHelpKey && typeof openModelHelp === "function") {
+    openModelHelp(modelHelpDialog.dataset.modelHelpKey);
+  }
   document.querySelectorAll(".target-chip input").forEach((input) => syncDetectionTargetSwitch(input));
   updateBoundaryActions();
   renderCatalogViews(); renderCandidates(); render();

@@ -522,6 +522,32 @@ class MozarieTests(unittest.TestCase):
                     ("candidate-0", 0), ("candidate-1", 9), ("candidate-2", 0),
                 ])
 
+    def test_sd_071_high_precision_candidate_mask_and_toggle_survive_each_restart(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); Image.new("RGB", (16, 16), "white").save(root / "source.png")
+            state = self.new_state(); image_id = state.set_root(str(root))[0]["id"]
+            mask_path = state.cache_dir / image_id / "refined.png"; mask_path.parent.mkdir(parents=True, exist_ok=True)
+            refined = np.zeros((16, 16), dtype=np.uint8); refined[3:13, 5:11] = 255
+            Image.fromarray(refined).save(mask_path)
+            state.candidates[image_id] = [Candidate("refined", "penis", .9, mask_path, refinement="sam_high_precision")]
+            self.commit_candidates(state, image_id); project = self.persist_project(state)
+            original_png = state.workspace_store.candidate_png(image_id, "refined")
+
+            reopened = self.new_state(); reopened.open_project(project)
+            snapshot = reopened.candidate_snapshot(image_id)["candidates"][0]
+            self.assertEqual(snapshot["refinement"], "sam_high_precision"); self.assertTrue(snapshot["enabled"])
+            self.assertEqual(reopened.workspace_store.candidate_png(image_id, "refined"), original_png)
+            reopened.set_candidate_state(image_id, "refined", {"enabled": False})
+
+            disabled = self.new_state(); disabled.open_project(project)
+            self.assertFalse(disabled.candidate_snapshot(image_id)["candidates"][0]["enabled"])
+            self.assertEqual(disabled.workspace_store.candidate_png(image_id, "refined"), original_png)
+            disabled.set_candidate_state(image_id, "refined", {"enabled": True})
+
+            enabled = self.new_state(); enabled.open_project(project)
+            self.assertTrue(enabled.candidate_snapshot(image_id)["candidates"][0]["enabled"])
+            self.assertEqual(enabled.workspace_store.candidate_png(image_id, "refined"), original_png)
+
     def test_candidate_mutation_does_not_publish_when_workspace_write_fails(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory); Image.new("RGB", (16, 16), "white").save(root / "source.png")
@@ -9727,3 +9753,4 @@ image_io._stage_record_replacement(record, rendered, (source.stat().st_mtime_ns,
 
 if __name__ == "__main__":
     unittest.main()
+

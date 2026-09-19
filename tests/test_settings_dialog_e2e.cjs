@@ -148,11 +148,28 @@ test("SD-066 model download confirmation names the selected model and exposes st
 
 test("SD-009 changing Japanese to English retranslates the open interface", { timeout: 60000 }, async () => {
   await withSettingsPage(async (page) => {
-    await page.locator("#settingsLanguage").selectOption("en");
+    await page.locator("#settingsCloseButton").click();
+    await page.locator('.gallery-item[data-id="sample"]').click();
+    await page.waitForFunction(() => state.currentId === "sample");
+    await page.evaluate(() => {
+      state.candidates = [{ id: "translation-candidate", className: "penis", source: "main", enabled: true, role: "apply", confidence: 0.9, expandPx: 0 }];
+      renderCandidates();
+    });
+    const candidateBefore = await page.locator(".candidate-toggle").first().getAttribute("aria-label");
+    await page.locator("#settingsButton").click();
+    await page.locator('[data-settings-tab="models"]').click();
+    await page.locator('[data-model-help="ntd11"]').click({ force: true });
+    const helpBefore = await page.locator("#modelHelpText").textContent();
+    await page.locator("#settingsLanguage").evaluate((select) => {
+      select.value = "en"; select.dispatchEvent(new Event("change", { bubbles: true }));
+    });
     await page.waitForFunction(() => document.documentElement.lang === "en");
     assert.equal(await page.locator("#settingsDialogTitle").textContent(), "Settings");
     assert.equal(await page.locator("#settingsSaveButton").textContent(), "Save settings");
     assert.equal(await page.locator("#confirmCancel").textContent(), "Cancel");
+    assert.notEqual(await page.locator("#modelHelpText").textContent(), helpBefore);
+    assert.notEqual(await page.locator(".candidate-toggle").first().getAttribute("aria-label"), candidateBefore);
+    assert.equal(await page.locator("#modelHelpDialog").evaluate((dialog) => dialog.open), true);
   });
 });
 
@@ -271,6 +288,14 @@ function verifyOptionalModelSwitch(model) {
   return async () => {
     await withSettingsPage(async (page, fixture) => {
       await page.locator('[data-settings-tab="models"]').click();
+      const untouched = await page.evaluate((enabled) => ({
+        ntd11: Boolean(state.settings.models.ntd11_enabled),
+        sensitive: Boolean(state.settings.models.sensitive_enabled),
+        hand: Boolean(state.settings.models.hand_detection_enabled),
+        handSegmentation: Boolean(state.settings.models.hand_segmentation_enabled),
+        fluid: Boolean(state.settings.detection.fluid_exclusion_enabled),
+        enabled,
+      }), model.enabled);
       await page.locator(model.input).fill(model.path);
       await page.locator(`${model.card} label.model-switch`).click();
       assert.equal(await page.locator(model.toggle).isChecked(), true);
@@ -279,6 +304,13 @@ function verifyOptionalModelSwitch(model) {
       assert.equal(fixture.settingsPayloads.at(-1).body.models[model.value], model.path);
       assert.equal(await page.locator(model.toggle).isChecked(), true);
       assert.equal(await page.locator(model.input).inputValue(), model.path);
+      for (const [key, value] of Object.entries(untouched)) {
+        if (key === "enabled" || key === model.value.replace("hand_detection", "hand")) continue;
+        const modelKeys = { ntd11: "ntd11_enabled", sensitive: "sensitive_enabled", hand: "hand_detection_enabled", handSegmentation: "hand_segmentation_enabled" };
+        const actual = key === "fluid" ? fixture.settingsPayloads.at(-1).body.detection.fluid_exclusion_enabled
+          : fixture.settingsPayloads.at(-1).body.models[modelKeys[key]];
+        assert.equal(actual, value, `${model.label} does not alter ${key}`);
+      }
       await page.locator(`${model.card} label.model-switch`).click();
       await saveSettingsAndReload(page);
       assert.equal(fixture.settingsPayloads.at(-1).body.models[model.enabled], false);
@@ -293,6 +325,7 @@ test("SD-031 SD-032 hand detection switch saves its path and survives reload in 
 test("SD-034 SD-035 hand segmentation is gated by hand detection and persists independently", { timeout: 60000 }, async () => {
   await withSettingsPage(async (page, fixture) => {
     await page.locator('[data-settings-tab="models"]').click();
+    const untouched = await page.evaluate(() => ({ ntd11: state.settings.models.ntd11_enabled, sensitive: state.settings.models.sensitive_enabled, fluid: state.settings.detection.fluid_exclusion_enabled }));
     assert.equal(await page.locator("#settingsHandSegmentationToggle").isDisabled(), true);
     await page.locator("#settingsHandModel").fill("G:\\models\\hand.onnx");
     await page.locator("#settingsHandCard label.model-switch").click();
@@ -308,6 +341,11 @@ test("SD-034 SD-035 hand segmentation is gated by hand detection and persists in
     await saveSettingsAndReload(page);
     assert.equal(fixture.settingsPayloads.at(-1).body.models.hand_segmentation_enabled, false);
     assert.equal(fixture.settingsPayloads.at(-1).body.models.hand_detection_enabled, true);
+    assert.deepEqual({
+      ntd11: fixture.settingsPayloads.at(-1).body.models.ntd11_enabled,
+      sensitive: fixture.settingsPayloads.at(-1).body.models.sensitive_enabled,
+      fluid: fixture.settingsPayloads.at(-1).body.detection.fluid_exclusion_enabled,
+    }, untouched);
   });
 });
 

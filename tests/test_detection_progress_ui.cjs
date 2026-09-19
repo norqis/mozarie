@@ -56,6 +56,44 @@ test("SD-148 detection progress shows staged work and locks pause only while pub
   }
 });
 
+test("SD-055 SD-056 sixty visible images start at zero complete at sixty and restore controls", { timeout: 60000 }, async () => {
+  const fixture = await startFixtureServer();
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+    await page.goto(fixture.url, { waitUntil: "domcontentloaded" });
+    await page.waitForFunction(() => Boolean(state.settings) && state.images.length === 2);
+    await page.evaluate(() => {
+      const prototype = state.images[0];
+      state.images = Array.from({ length: 61 }, (_, index) => ({
+        ...prototype, id: `progress-${index}`, relativePath: `progress-${index}.png`, hidden: index === 60,
+        reviewed: false, candidates: [], candidateCount: 0, enabledCandidateCount: 0,
+      }));
+      state.hiddenImageIds = new Set(["progress-60"]);
+      renderCatalogViews(); updateActionButtons();
+    });
+    await page.locator("#detectAllButton").click();
+    assert.match(await page.locator("#detectTargetCount").textContent(), /60/);
+    await page.locator("#detectStartButton").click();
+    await page.waitForFunction(() => state.processing?.kind === "detect");
+    assert.deepEqual(fixture.detectRequests.at(-1).imageIds, Array.from({ length: 60 }, (_, index) => `progress-${index}`));
+    assert.equal(await page.locator("#processingProgress").getAttribute("max"), "60");
+    assert.match(await page.locator("#processingProgressText").textContent(), /0\s*\/\s*60/);
+    await page.evaluate(() => showProcessing({
+      kind: "detect", state: "complete", startedAt: 1, total: 60, processed: 60, completed: 60,
+      current: "", imageIds: Array.from({ length: 60 }, (_, index) => `progress-${index}`),
+      completedImageIds: Array.from({ length: 60 }, (_, index) => `progress-${index}`), activeElapsed: 10,
+    }));
+    assert.match(await page.locator("#processingProgressText").textContent(), /60\s*\/\s*60/);
+    await page.evaluate(() => { state.job = null; closeProcessing(); });
+    assert.equal(await page.locator("#detectAllButton").isEnabled(), true);
+    assert.equal(await page.locator("#settingsButton").isEnabled(), true);
+  } finally {
+    await browser.close();
+    await closeServer(fixture.server);
+  }
+});
+
 async function withHeldDetection(run) {
   const fixture = await startFixtureServer();
   fixture.holdDetection(true);

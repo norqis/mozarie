@@ -139,7 +139,7 @@
       "observation": "各保存値を復元する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_settings_dialog_e2e.cjs::SD-012 saved settings survive a browser reload"
+        "python:tests.test_server.MozarieTests.test_sd_012_saved_settings_survive_complete_state_restart"
       ]
     },
     {
@@ -217,8 +217,7 @@
       "observation": "設定値を保持し、全画像の読み込み完了後に操作を再有効化する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_settings_dialog_e2e.cjs::SD-016 SD-018 SD-019 general execution settings save their exact values and survive reload",
-        "python:tests.test_server.MozarieTests.test_import_session_records_requested_and_effective_parallelism_without_a_fixed_cap"
+        "node:tests/test_settings_detection_completion_e2e.cjs::SD-018 a complete parallel import restores every primary control"
       ]
     },
     {
@@ -229,8 +228,7 @@
       "observation": "設定値を保持し、出力の重複・欠落が発生しない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_settings_dialog_e2e.cjs::SD-016 SD-018 SD-019 general execution settings save their exact values and survive reload",
-        "python:tests.test_config.SettingsTests.test_valid_settings_are_persisted_only_to_local_file"
+        "node:tests/test_browser_save_runtime.cjs::SD-019 parallel browser save has no missing or duplicate outputs"
       ]
     },
     {
@@ -285,7 +283,7 @@
       "observation": "NTD11の設定がOFFで送られ、そのモデル由来の新規候補・除外を生成しない",
       "status": "automated",
       "testIds": [
-        "python:tests.test_server.MozarieTests.test_disabled_optional_onnx_paths_are_never_constructed"
+        "python:tests.test_server.MozarieTests.test_sd_024_disabled_ntd11_current_detection_creates_no_auxiliary_candidate"
       ]
     },
     {
@@ -308,7 +306,7 @@
       "status": "automated",
       "testIds": [
         "node:tests/test_settings_dialog_e2e.cjs::SD-025 SD-026 NTD11 switch saves its path and survives reload in both states",
-        "python:tests.test_server.MozarieTests.test_enabled_auxiliaries_load_in_priority_order"
+        "python:tests.test_server.MozarieTests.test_sd_025_enabled_ntd11_runs_inference_and_creates_its_candidate"
       ]
     },
     {
@@ -331,8 +329,7 @@
       "observation": "NTD11のOFFが維持される",
       "status": "automated",
       "testIds": [
-        "node:tests/test_settings_dialog_e2e.cjs::SD-025 SD-026 NTD11 switch saves its path and survives reload in both states",
-        "python:tests.test_config.SettingsTests.test_valid_settings_are_persisted_only_to_local_file"
+        "node:tests/test_settings_dialog_e2e.cjs::SD-025 SD-026 NTD11 switch saves its path and survives reload in both states"
       ]
     },
     {
@@ -354,7 +351,7 @@
       "observation": "Sensitiveの設定がOFFで送られ、そのモデル由来の新規候補・除外を生成しない",
       "status": "automated",
       "testIds": [
-        "python:tests.test_server.MozarieTests.test_disabled_optional_onnx_paths_are_never_constructed"
+        "python:tests.test_server.MozarieTests.test_sd_027_disabled_sensitive_current_detection_creates_no_auxiliary_candidate"
       ]
     },
     {
@@ -377,7 +374,7 @@
       "status": "automated",
       "testIds": [
         "node:tests/test_settings_dialog_e2e.cjs::SD-028 SD-029 Sensitive switch saves its path and survives reload in both states",
-        "python:tests.test_server.MozarieTests.test_enabled_auxiliaries_load_in_priority_order"
+        "python:tests.test_server.MozarieTests.test_sd_028_enabled_sensitive_runs_inference_and_creates_its_candidate"
       ]
     },
     {
@@ -400,8 +397,7 @@
       "observation": "SensitiveのOFFが維持される",
       "status": "automated",
       "testIds": [
-        "node:tests/test_settings_dialog_e2e.cjs::SD-028 SD-029 Sensitive switch saves its path and survives reload in both states",
-        "python:tests.test_config.SettingsTests.test_valid_settings_are_persisted_only_to_local_file"
+        "node:tests/test_settings_dialog_e2e.cjs::SD-028 SD-029 Sensitive switch saves its path and survives reload in both states"
       ]
     },
     {
@@ -423,7 +419,7 @@
       "observation": "手検出の設定がOFFで送られ、そのモデル由来の新規候補・除外を生成しない",
       "status": "automated",
       "testIds": [
-        "python:tests.test_server.MozarieTests.test_disabled_optional_onnx_paths_are_never_constructed"
+        "python:tests.test_server.MozarieTests.test_sd_030_disabled_hand_current_detection_creates_no_hand_exclusion"
       ]
     },
     {
@@ -446,7 +442,7 @@
       "status": "automated",
       "testIds": [
         "node:tests/test_settings_dialog_e2e.cjs::SD-031 SD-032 hand detection switch saves its path and survives reload in both states",
-        "python:tests.test_server.MozarieTests.test_hand_model_verification_occurs_once_after_first_load"
+        "python:tests.test_server.MozarieTests.test_sd_031_enabled_hand_runs_box_inference_during_current_detection"
       ]
     },
     {
@@ -481,7 +477,7 @@
       "observation": "NTD11・Sensitive・白い液の設定は保持する",
       "status": "automated",
       "testIds": [
-        "python:tests.test_config.SettingsTests.test_hand_segmentation_requires_hand_detection"
+        "node:tests/test_settings_dialog_e2e.cjs::SD-031 SD-032 hand detection switch saves its path and survives reload in both states"
       ]
     },
     {
@@ -492,7 +488,7 @@
       "observation": "手領域分割の設定がOFFで送られ、そのモデル由来の新規候補・除外を生成しない",
       "status": "automated",
       "testIds": [
-        "python:tests.test_server.MozarieTests.test_disabled_optional_onnx_paths_are_never_constructed"
+        "python:tests.test_server.MozarieTests.test_sd_033_disabled_hand_segmentation_never_creates_a_specialist_exclusion"
       ]
     },
     {
@@ -549,8 +545,7 @@
       "observation": "手領域分割のOFFが維持される",
       "status": "automated",
       "testIds": [
-        "node:tests/test_settings_dialog_e2e.cjs::SD-034 SD-035 hand segmentation is gated by hand detection and persists independently",
-        "python:tests.test_config.SettingsTests.test_hand_segmentation_settings_have_safe_defaults"
+        "node:tests/test_settings_dialog_e2e.cjs::SD-034 SD-035 hand segmentation is gated by hand detection and persists independently"
       ]
     },
     {
@@ -617,8 +612,7 @@
       "observation": "白い液のOFFが維持される",
       "status": "automated",
       "testIds": [
-        "node:tests/test_settings_dialog_e2e.cjs::SD-037 SD-038 fluid exclusion switch persists without changing model switches",
-        "python:tests.test_server.MozarieTests.test_finalization_skips_fluid_search_for_empty_apply_masks_and_when_disabled"
+        "node:tests/test_settings_dialog_e2e.cjs::SD-037 SD-038 fluid exclusion switch persists without changing model switches"
       ]
     },
     {
@@ -688,7 +682,7 @@
       "observation": "未準備ファイルを別の種類で代用しない",
       "status": "automated",
       "testIds": [
-        "python:tests.test_server.MozarieTests.test_missing_sam_checkpoint_has_a_specific_error_code"
+        "python:tests.test_server.MozarieTests.test_sd_041_vit_b_missing_and_wrong_kind_never_substitutes_another_variant"
       ]
     },
     {
@@ -711,7 +705,7 @@
       "observation": "未準備ファイルを別の種類で代用しない",
       "status": "automated",
       "testIds": [
-        "python:tests.test_server.MozarieTests.test_missing_sam_checkpoint_has_a_specific_error_code"
+        "python:tests.test_server.MozarieTests.test_sd_042_vit_l_missing_and_wrong_kind_never_substitutes_another_variant"
       ]
     },
     {
@@ -734,7 +728,7 @@
       "observation": "未準備ファイルを別の種類で代用しない",
       "status": "automated",
       "testIds": [
-        "python:tests.test_server.MozarieTests.test_missing_sam_checkpoint_has_a_specific_error_code"
+        "python:tests.test_server.MozarieTests.test_sd_043_vit_h_missing_and_wrong_kind_never_substitutes_another_variant"
       ]
     },
     {
@@ -907,8 +901,7 @@
       "observation": "非表示を除く対象数に対して進捗が進み、準備表示とファイル名を交互に点滅させない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_detection_progress_ui.cjs::SD-148 detection progress shows staged work and locks pause only while publication is pending",
-        "python:tests.test_server.MozarieTests.test_detection_staging_reports_every_success_before_atomic_publication"
+        "node:tests/test_detection_progress_ui.cjs::SD-055 SD-056 sixty visible images start at zero complete at sixty and restore controls"
       ]
     },
     {
@@ -919,8 +912,7 @@
       "observation": "開始時から60件の対象・進捗を表示し、処理終了後に画面操作を再有効化する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_detection_progress_ui.cjs::SD-148 detection progress shows staged work and locks pause only while publication is pending",
-        "python:tests.test_server.MozarieTests.test_detection_staging_reports_every_success_before_atomic_publication"
+        "node:tests/test_detection_progress_ui.cjs::SD-055 SD-056 sixty visible images start at zero complete at sixty and restore controls"
       ]
     },
     {
@@ -932,7 +924,7 @@
       "status": "automated",
       "testIds": [
         "node:tests/test_detection_progress_ui.cjs::SD-057 SD-058 pause and resume preserve the same detection job and visible progress",
-        "python:tests.test_server.MozarieTests.test_detection_can_pause_and_resume"
+        "python:tests.test_server.MozarieTests.test_sd_057_sd_058_pause_stops_new_claims_then_resume_processes_each_remaining_image_once"
       ]
     },
     {
@@ -944,7 +936,7 @@
       "status": "automated",
       "testIds": [
         "node:tests/test_detection_progress_ui.cjs::SD-057 SD-058 pause and resume preserve the same detection job and visible progress",
-        "python:tests.test_server.MozarieTests.test_detection_can_pause_and_resume"
+        "python:tests.test_server.MozarieTests.test_sd_057_sd_058_pause_stops_new_claims_then_resume_processes_each_remaining_image_once"
       ]
     },
     {
@@ -1047,8 +1039,7 @@
       "observation": "初回候補と手が重なる場合は、初回のpoint・box・low-res maskを保った再推定で、重なり内へ既存分と合計3点までのnegative点を空間分散して追加する",
       "status": "automated",
       "testIds": [
-        "python:tests.test_server.MozarieTests.test_high_precision_refinement_forwards_prompts_and_only_keeps_improved_retry",
-        "python:tests.test_server.MozarieTests.test_semantic_sam_refinement_uses_safe_points_and_rejects_hand_overlap"
+        "python:tests.test_server.MozarieTests.test_high_precision_refinement_forwards_prompts_and_only_keeps_improved_retry"
       ]
     },
     {
@@ -1139,8 +1130,7 @@
       "observation": "検出器マスクへ戻さず、候補の保存・再読込・ON/OFFを維持する",
       "status": "automated",
       "testIds": [
-        "python:tests.test_server.MozarieTests.test_detect_image_persists_the_refined_apply_mask",
-        "python:tests.test_server.MozarieTests.test_lazy_workspace_candidates_survive_toggle_and_delete_after_restart"
+        "python:tests.test_server.MozarieTests.test_sd_071_high_precision_candidate_mask_and_toggle_survive_each_restart"
       ]
     },
     {
@@ -1505,8 +1495,7 @@
       "observation": "対象と元画像ファイルを保持する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_source_delete_e2e.cjs::Delete shortcut keeps a durable source-delete intent through claim and acknowledges the committed receipt",
-        "node:tests/test_source_delete_e2e.cjs::source-delete confirmation can be skipped, restored in settings, and cancelled without changing the preference"
+        "python:tests.test_server.MozarieTests.test_sd_111_sd_112_source_exists_through_prepare_then_integrated_delete_removes_file_and_state"
       ]
     },
     {
@@ -1517,8 +1506,7 @@
       "observation": "元画像ファイルと一覧・DB上の対象を完全削除し、次の表示対象へ移る",
       "status": "automated",
       "testIds": [
-        "python:tests.test_workspace.WorkspaceTests.test_commit_source_delete_removes_claimed_images",
-        "node:tests/test_source_delete_e2e.cjs::visible delete control selects next for first and middle, previous for last, and clears every view after an all-image batch"
+        "python:tests.test_server.MozarieTests.test_sd_111_sd_112_source_exists_through_prepare_then_integrated_delete_removes_file_and_state"
       ]
     },
     {
@@ -2094,8 +2082,7 @@
       "observation": "画像ごとに候補の有無が異なっても別の役割の値を流用しない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_detection_dialog_contracts.cjs::SD-130 all-image run persists and uses the dialog apply and exclusion padding for every visible image",
-        "python:tests.test_server.MozarieTests.test_sd_127_detect_and_boundary_candidates_receive_distinct_apply_and_exclude_padding"
+        "python:tests.test_server.MozarieTests.test_sd_130_per_image_candidate_roles_keep_their_own_padding_without_leakage"
       ]
     },
     {

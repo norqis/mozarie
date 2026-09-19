@@ -42,6 +42,7 @@ function modelHelpInfo(key) {
 
 function openModelHelp(key) {
   const info = modelHelpInfo(key);
+  $("#modelHelpDialog").dataset.modelHelpKey = key;
   $("#modelHelpTitle").textContent = t(`modelHelp.${key}.title`);
   $("#modelHelpText").hidden = false;
   $("#modelHelpText").textContent = t(`modelHelp.${key}.text`);
