@@ -20,7 +20,7 @@ function element(id) {
   }
   return elements.get(id);
 }
-const tabs = ["general", "models", "display"].map((name, index) => {
+const tabs = ["general", "models", "display", "shortcuts", "confirm", "info"].map((name, index) => {
   const tab = element(`tab-${name}`); tab.dataset.settingsTab = name; tab.tabIndex = index === 0 ? 0 : -1;
   return tab;
 });
@@ -314,10 +314,20 @@ nodeTest("settings, model pickers, and download state", async () => {
   assert.equal(checked, true, "starting without an available update refreshes the status instead");
 
   // Exercise the alternate settings controls as compact, table-driven runtime cases.
+  for (const selected of ["general", "models", "display", "shortcuts", "confirm", "info"]) {
+    context.settingsTest.selectSettingsTab(selected);
+    for (const tab of tabs) {
+      const active = tab.dataset.settingsTab === selected;
+      assert.equal(tab.classList.contains("active"), active, `${selected} selects only its settings tab`);
+      assert.equal(tab.getAttribute("aria-selected"), String(active), `${selected} exposes the selected tab`);
+      assert.equal(tab.tabIndex, active ? 0 : -1, `${selected} owns the tab stop`);
+    }
+    for (const panel of panels) assert.equal(panel.hidden, panel.dataset.settingsPanel !== selected, `${selected} shows only its panel`);
+  }
   for (const { key, expected } of [
     { key: "ArrowRight", expected: "models" },
     { key: "Home", expected: "general" },
-    { key: "End", expected: "display" },
+    { key: "End", expected: "info" },
   ]) {
     context.settingsTest.moveSettingsTab({ currentTarget: tabs[0], key, preventDefault() {} });
     assert.equal(tabs.find((tab) => tab.classList.contains("active")).dataset.settingsTab, expected);

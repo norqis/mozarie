@@ -1,0 +1,2657 @@
+{
+  "version": 1,
+  "domain": "settings-detection",
+  "source": {
+    "path": "docs/manual-verification/settings-detection.md",
+    "commit": "264f70d"
+  },
+  "baseline": {
+    "rows": 149,
+    "observations": 221
+  },
+  "observations": [
+    {
+      "key": "SD-001.1",
+      "sourceIds": [
+        "SD-001"
+      ],
+      "observation": "設定タブと保存・初期値・閉じるを表示する",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state"
+      ]
+    },
+    {
+      "key": "SD-002.1",
+      "sourceIds": [
+        "SD-002"
+      ],
+      "observation": "一般の項目だけが表示され、タブの選択表示が移る",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state"
+      ]
+    },
+    {
+      "key": "SD-003.1",
+      "sourceIds": [
+        "SD-003"
+      ],
+      "observation": "検出の項目だけが表示され、タブの選択表示が移る",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state"
+      ]
+    },
+    {
+      "key": "SD-004.1",
+      "sourceIds": [
+        "SD-004"
+      ],
+      "observation": "各モデルのスイッチ・説明・準備操作を表示する",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state"
+      ]
+    },
+    {
+      "key": "SD-005.1",
+      "sourceIds": [
+        "SD-005"
+      ],
+      "observation": "表示・操作の項目だけが表示され、タブの選択表示が移る",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state"
+      ]
+    },
+    {
+      "key": "SD-006.1",
+      "sourceIds": [
+        "SD-006"
+      ],
+      "observation": "ショートカットの項目だけが表示され、タブの選択表示が移る",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state"
+      ]
+    },
+    {
+      "key": "SD-007.1",
+      "sourceIds": [
+        "SD-007"
+      ],
+      "observation": "確認の項目だけが表示され、タブの選択表示が移る",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state"
+      ]
+    },
+    {
+      "key": "SD-008.1",
+      "sourceIds": [
+        "SD-008"
+      ],
+      "observation": "情報の項目だけが表示され、タブの選択表示が移る",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state"
+      ]
+    },
+    {
+      "key": "SD-009.1",
+      "sourceIds": [
+        "SD-009"
+      ],
+      "observation": "開いている画面と候補・ダイアログの表示が英語へ切り替わる",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state"
+      ]
+    },
+    {
+      "key": "SD-010.1",
+      "sourceIds": [
+        "SD-010"
+      ],
+      "observation": "画面が日本語へ切り替わり、翻訳キーを表示しない",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state"
+      ]
+    },
+    {
+      "key": "SD-011.1",
+      "sourceIds": [
+        "SD-011"
+      ],
+      "observation": "保存完了後に設定を開き直すと保存値が表示される",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state"
+      ]
+    },
+    {
+      "key": "SD-012.1",
+      "sourceIds": [
+        "SD-012"
+      ],
+      "observation": "各保存値を復元する",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state"
+      ]
+    },
+    {
+      "key": "SD-013.1",
+      "sourceIds": [
+        "SD-013"
+      ],
+      "observation": "初期値が表示され、保存後の再表示にも反映される",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state"
+      ]
+    },
+    {
+      "key": "SD-014.1",
+      "sourceIds": [
+        "SD-014"
+      ],
+      "observation": "設定画面が消えて元の画像へ戻る",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state"
+      ]
+    },
+    {
+      "key": "SD-015.1",
+      "sourceIds": [
+        "SD-015"
+      ],
+      "observation": "設定画面が消え、背景の描画を実行しない",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state"
+      ]
+    },
+    {
+      "key": "SD-016.1",
+      "sourceIds": [
+        "SD-016"
+      ],
+      "observation": "自動で新しいブラウザーを開かない",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_server.MozarieTests.test_main_uses_saved_port_and_respects_open_browser_setting"
+      ]
+    },
+    {
+      "key": "SD-016.2",
+      "sourceIds": [
+        "SD-016"
+      ],
+      "observation": "URLを手動で開くと利用できる",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_server.MozarieTests.test_main_uses_saved_port_and_respects_open_browser_setting"
+      ]
+    },
+    {
+      "key": "SD-017.1",
+      "sourceIds": [
+        "SD-017"
+      ],
+      "observation": "起動URLのブラウザーを開く",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_server.MozarieTests.test_main_uses_saved_port_and_respects_open_browser_setting"
+      ]
+    },
+    {
+      "key": "SD-018.1",
+      "sourceIds": [
+        "SD-018"
+      ],
+      "observation": "設定値を保持し、全画像の読み込み完了後に操作を再有効化する",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_app_core_detection_coverage.cjs::application startup, catalog state, and detection controls",
+        "python:tests.test_server.MozarieTests.test_import_session_records_requested_and_effective_parallelism_without_a_fixed_cap"
+      ]
+    },
+    {
+      "key": "SD-019.1",
+      "sourceIds": [
+        "SD-019"
+      ],
+      "observation": "設定値を保持し、出力の重複・欠落が発生しない",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_config.SettingsTests.test_valid_settings_are_persisted_only_to_local_file"
+      ]
+    },
+    {
+      "key": "SD-020.1",
+      "sourceIds": [
+        "SD-020"
+      ],
+      "observation": "送信対象が陰茎だけとなり、未選択クラスの新規候補を作らない",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_app_core_detection_coverage.cjs::application startup, catalog state, and detection controls",
+        "python:tests.test_server.MozarieTests.test_detection_start_passes_explicit_target_subset"
+      ]
+    },
+    {
+      "key": "SD-021.1",
+      "sourceIds": [
+        "SD-021"
+      ],
+      "observation": "送信対象が膣だけとなり、未選択クラスの新規候補を作らない",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_app_core_detection_coverage.cjs::application startup, catalog state, and detection controls",
+        "python:tests.test_server.MozarieTests.test_detection_start_passes_explicit_target_subset"
+      ]
+    },
+    {
+      "key": "SD-022.1",
+      "sourceIds": [
+        "SD-022"
+      ],
+      "observation": "両対象を送信して処理を開始できる",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_app_core_detection_coverage.cjs::application startup, catalog state, and detection controls",
+        "python:tests.test_server.MozarieTests.test_detection_start_passes_explicit_target_subset"
+      ]
+    },
+    {
+      "key": "SD-023.1",
+      "sourceIds": [
+        "SD-023"
+      ],
+      "observation": "対象の選択を求め、検出を開始しない",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_app_core_detection_coverage.cjs::application startup, catalog state, and detection controls",
+        "python:tests.test_server.MozarieTests.test_detection_start_passes_explicit_target_subset"
+      ]
+    },
+    {
+      "key": "SD-024.1",
+      "sourceIds": [
+        "SD-024"
+      ],
+      "observation": "NTD11の設定がOFFで送られ、そのモデル由来の新規候補・除外を生成しない",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
+        "python:tests.test_server.MozarieTests.test_model_logic_matrix_uses_only_enabled_models"
+      ]
+    },
+    {
+      "key": "SD-024.2",
+      "sourceIds": [
+        "SD-024"
+      ],
+      "observation": "既存候補の存在を新規検出と混同しない",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
+        "python:tests.test_server.MozarieTests.test_model_logic_matrix_uses_only_enabled_models"
+      ]
+    },
+    {
+      "key": "SD-025.1",
+      "sourceIds": [
+        "SD-025"
+      ],
+      "observation": "NTD11がONで保存・送信され、利用可能なら準備・実行される",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
+        "python:tests.test_server.MozarieTests.test_model_logic_matrix_uses_only_enabled_models"
+      ]
+    },
+    {
+      "key": "SD-025.2",
+      "sourceIds": [
+        "SD-025"
+      ],
+      "observation": "検出精度と候補数の最低値は要求しない",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
+        "python:tests.test_server.MozarieTests.test_model_logic_matrix_uses_only_enabled_models"
+      ]
+    },
+    {
+      "key": "SD-025.3",
+      "sourceIds": [
+        "SD-025"
+      ],
+      "observation": "実際に配布されたNTD11モデルを読み込み、実画像への推論を開始できる",
+      "status": "manual",
+      "manual": {
+        "environment": "Windows + 配布版NTD11モデル",
+        "reason": "配布モデル本体と実推論結果はCI fixtureへ置換できない"
+      }
+    },
+    {
+      "key": "SD-026.1",
+      "sourceIds": [
+        "SD-026"
+      ],
+      "observation": "NTD11のOFFが維持される",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
+        "python:tests.test_server.MozarieTests.test_model_logic_matrix_uses_only_enabled_models"
+      ]
+    },
+    {
+      "key": "SD-026.2",
+      "sourceIds": [
+        "SD-026"
+      ],
+      "observation": "他モデルのスイッチを変えない",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
+        "python:tests.test_server.MozarieTests.test_model_logic_matrix_uses_only_enabled_models"
+      ]
+    },
+    {
+      "key": "SD-027.1",
+      "sourceIds": [
+        "SD-027"
+      ],
+      "observation": "Sensitiveの設定がOFFで送られ、そのモデル由来の新規候補・除外を生成しない",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
+        "python:tests.test_server.MozarieTests.test_model_logic_matrix_uses_only_enabled_models"
+      ]
+    },
+    {
+      "key": "SD-027.2",
+      "sourceIds": [
+        "SD-027"
+      ],
+      "observation": "既存候補の存在を新規検出と混同しない",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
+        "python:tests.test_server.MozarieTests.test_model_logic_matrix_uses_only_enabled_models"
+      ]
+    },
+    {
+      "key": "SD-028.1",
+      "sourceIds": [
+        "SD-028"
+      ],
+      "observation": "SensitiveがONで保存・送信され、利用可能なら準備・実行される",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
+        "python:tests.test_server.MozarieTests.test_model_logic_matrix_uses_only_enabled_models"
+      ]
+    },
+    {
+      "key": "SD-028.2",
+      "sourceIds": [
+        "SD-028"
+      ],
+      "observation": "検出精度と候補数の最低値は要求しない",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
+        "python:tests.test_server.MozarieTests.test_model_logic_matrix_uses_only_enabled_models"
+      ]
+    },
+    {
+      "key": "SD-028.3",
+      "sourceIds": [
+        "SD-028"
+      ],
+      "observation": "実際に配布されたSensitiveモデルを読み込み、実画像への推論を開始できる",
+      "status": "manual",
+      "manual": {
+        "environment": "Windows + 配布版Sensitiveモデル",
+        "reason": "配布モデル本体と実推論結果はCI fixtureへ置換できない"
+      }
+    },
+    {
+      "key": "SD-029.1",
+      "sourceIds": [
+        "SD-029"
+      ],
+      "observation": "SensitiveのOFFが維持される",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
+        "python:tests.test_server.MozarieTests.test_model_logic_matrix_uses_only_enabled_models"
+      ]
+    },
+    {
+      "key": "SD-029.2",
+      "sourceIds": [
+        "SD-029"
+      ],
+      "observation": "他モデルのスイッチを変えない",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
+        "python:tests.test_server.MozarieTests.test_model_logic_matrix_uses_only_enabled_models"
+      ]
+    },
+    {
+      "key": "SD-030.1",
+      "sourceIds": [
+        "SD-030"
+      ],
+      "observation": "手検出の設定がOFFで送られ、そのモデル由来の新規候補・除外を生成しない",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
+        "python:tests.test_server.MozarieTests.test_model_logic_matrix_uses_only_enabled_models"
+      ]
+    },
+    {
+      "key": "SD-030.2",
+      "sourceIds": [
+        "SD-030"
+      ],
+      "observation": "既存候補の存在を新規検出と混同しない",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
+        "python:tests.test_server.MozarieTests.test_model_logic_matrix_uses_only_enabled_models"
+      ]
+    },
+    {
+      "key": "SD-031.1",
+      "sourceIds": [
+        "SD-031"
+      ],
+      "observation": "手検出がONで保存・送信され、利用可能なら準備・実行される",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
+        "python:tests.test_server.MozarieTests.test_model_logic_matrix_uses_only_enabled_models"
+      ]
+    },
+    {
+      "key": "SD-031.2",
+      "sourceIds": [
+        "SD-031"
+      ],
+      "observation": "検出精度と候補数の最低値は要求しない",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
+        "python:tests.test_server.MozarieTests.test_model_logic_matrix_uses_only_enabled_models"
+      ]
+    },
+    {
+      "key": "SD-031.3",
+      "sourceIds": [
+        "SD-031"
+      ],
+      "observation": "実際に配布された手検出モデルを読み込み、実画像への推論を開始できる",
+      "status": "manual",
+      "manual": {
+        "environment": "Windows + 配布版手検出モデル",
+        "reason": "配布モデル本体と実推論結果はCI fixtureへ置換できない"
+      }
+    },
+    {
+      "key": "SD-032.1",
+      "sourceIds": [
+        "SD-032"
+      ],
+      "observation": "手検出と、それに依存する手領域分割がOFFで維持される",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
+        "python:tests.test_server.MozarieTests.test_model_logic_matrix_uses_only_enabled_models"
+      ]
+    },
+    {
+      "key": "SD-032.2",
+      "sourceIds": [
+        "SD-032"
+      ],
+      "observation": "NTD11・Sensitive・白い液の設定は保持する",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
+        "python:tests.test_server.MozarieTests.test_model_logic_matrix_uses_only_enabled_models"
+      ]
+    },
+    {
+      "key": "SD-033.1",
+      "sourceIds": [
+        "SD-033"
+      ],
+      "observation": "手領域分割の設定がOFFで送られ、そのモデル由来の新規候補・除外を生成しない",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
+        "python:tests.test_server.MozarieTests.test_model_logic_matrix_uses_only_enabled_models"
+      ]
+    },
+    {
+      "key": "SD-033.2",
+      "sourceIds": [
+        "SD-033"
+      ],
+      "observation": "既存候補の存在を新規検出と混同しない",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
+        "python:tests.test_server.MozarieTests.test_model_logic_matrix_uses_only_enabled_models"
+      ]
+    },
+    {
+      "key": "SD-034.1",
+      "sourceIds": [
+        "SD-034"
+      ],
+      "observation": "両方のONが保存される",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
+        "python:tests.test_server.MozarieTests.test_model_logic_matrix_uses_only_enabled_models"
+      ]
+    },
+    {
+      "key": "SD-034.2",
+      "sourceIds": [
+        "SD-034"
+      ],
+      "observation": "手候補がある場合に手領域分割を実行する",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
+        "python:tests.test_server.MozarieTests.test_model_logic_matrix_uses_only_enabled_models"
+      ]
+    },
+    {
+      "key": "SD-034.3",
+      "sourceIds": [
+        "SD-034"
+      ],
+      "observation": "手候補0件なら実行確認済みとしない",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
+        "python:tests.test_server.MozarieTests.test_model_logic_matrix_uses_only_enabled_models"
+      ]
+    },
+    {
+      "key": "SD-034.4",
+      "sourceIds": [
+        "SD-034"
+      ],
+      "observation": "実際に配布された手領域分割モデルを読み込み、実画像の手候補を分割できる",
+      "status": "manual",
+      "manual": {
+        "environment": "Windows + 配布版手領域分割モデル",
+        "reason": "配布モデル本体と実推論結果はCI fixtureへ置換できない"
+      }
+    },
+    {
+      "key": "SD-035.1",
+      "sourceIds": [
+        "SD-035"
+      ],
+      "observation": "手領域分割のOFFが維持される",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
+        "python:tests.test_server.MozarieTests.test_model_logic_matrix_uses_only_enabled_models"
+      ]
+    },
+    {
+      "key": "SD-035.2",
+      "sourceIds": [
+        "SD-035"
+      ],
+      "observation": "他モデルのスイッチを変えない",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
+        "python:tests.test_server.MozarieTests.test_model_logic_matrix_uses_only_enabled_models"
+      ]
+    },
+    {
+      "key": "SD-036.1",
+      "sourceIds": [
+        "SD-036"
+      ],
+      "observation": "白い液の設定がOFFで送られ、そのモデル由来の新規候補・除外を生成しない",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
+        "python:tests.test_server.MozarieTests.test_model_logic_matrix_uses_only_enabled_models"
+      ]
+    },
+    {
+      "key": "SD-036.2",
+      "sourceIds": [
+        "SD-036"
+      ],
+      "observation": "既存候補の存在を新規検出と混同しない",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
+        "python:tests.test_server.MozarieTests.test_model_logic_matrix_uses_only_enabled_models"
+      ]
+    },
+    {
+      "key": "SD-037.1",
+      "sourceIds": [
+        "SD-037"
+      ],
+      "observation": "ONが保存・送信される",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
+        "python:tests.test_server.MozarieTests.test_model_logic_matrix_uses_only_enabled_models"
+      ]
+    },
+    {
+      "key": "SD-037.2",
+      "sourceIds": [
+        "SD-037"
+      ],
+      "observation": "性器候補がある場合に白色領域処理を実行する",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
+        "python:tests.test_server.MozarieTests.test_model_logic_matrix_uses_only_enabled_models"
+      ]
+    },
+    {
+      "key": "SD-037.3",
+      "sourceIds": [
+        "SD-037"
+      ],
+      "observation": "性器候補0件なら実行確認済みとしない",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
+        "python:tests.test_server.MozarieTests.test_model_logic_matrix_uses_only_enabled_models"
+      ]
+    },
+    {
+      "key": "SD-038.1",
+      "sourceIds": [
+        "SD-038"
+      ],
+      "observation": "白い液のOFFが維持される",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
+        "python:tests.test_server.MozarieTests.test_model_logic_matrix_uses_only_enabled_models"
+      ]
+    },
+    {
+      "key": "SD-038.2",
+      "sourceIds": [
+        "SD-038"
+      ],
+      "observation": "他モデルのスイッチを変えない",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
+        "python:tests.test_server.MozarieTests.test_model_logic_matrix_uses_only_enabled_models"
+      ]
+    },
+    {
+      "key": "SD-039.1",
+      "sourceIds": [
+        "SD-039"
+      ],
+      "observation": "SAMの準備を要求せず、輪郭補正なしで完了する",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
+        "python:tests.test_server.MozarieTests.test_model_logic_matrix_uses_only_enabled_models"
+      ]
+    },
+    {
+      "key": "SD-040.1",
+      "sourceIds": [
+        "SD-040"
+      ],
+      "observation": "選択したSAMを利用し、未準備ならモデル準備の案内を出す",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
+        "python:tests.test_server.MozarieTests.test_model_logic_matrix_uses_only_enabled_models"
+      ]
+    },
+    {
+      "key": "SD-040.2",
+      "sourceIds": [
+        "SD-040"
+      ],
+      "observation": "実際のSAMチェックポイントを各種類で読み込み、実画像の輪郭補正を実行できる",
+      "status": "manual",
+      "manual": {
+        "environment": "Windows + SAM vit_b/vit_l/vit_h実チェックポイント",
+        "reason": "実チェックポイントの読込とVRAM使用はCI fixtureへ置換できない"
+      }
+    },
+    {
+      "key": "SD-041.1",
+      "sourceIds": [
+        "SD-041"
+      ],
+      "observation": "vit_bだけが選択され、再表示後も保持される",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
+        "python:tests.test_server.MozarieTests.test_model_logic_matrix_uses_only_enabled_models"
+      ]
+    },
+    {
+      "key": "SD-041.2",
+      "sourceIds": [
+        "SD-041"
+      ],
+      "observation": "未準備ファイルを別の種類で代用しない",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
+        "python:tests.test_server.MozarieTests.test_model_logic_matrix_uses_only_enabled_models"
+      ]
+    },
+    {
+      "key": "SD-042.1",
+      "sourceIds": [
+        "SD-042"
+      ],
+      "observation": "vit_lだけが選択され、再表示後も保持される",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
+        "python:tests.test_server.MozarieTests.test_model_logic_matrix_uses_only_enabled_models"
+      ]
+    },
+    {
+      "key": "SD-042.2",
+      "sourceIds": [
+        "SD-042"
+      ],
+      "observation": "未準備ファイルを別の種類で代用しない",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
+        "python:tests.test_server.MozarieTests.test_model_logic_matrix_uses_only_enabled_models"
+      ]
+    },
+    {
+      "key": "SD-043.1",
+      "sourceIds": [
+        "SD-043"
+      ],
+      "observation": "vit_hだけが選択され、再表示後も保持される",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
+        "python:tests.test_server.MozarieTests.test_model_logic_matrix_uses_only_enabled_models"
+      ]
+    },
+    {
+      "key": "SD-043.2",
+      "sourceIds": [
+        "SD-043"
+      ],
+      "observation": "未準備ファイルを別の種類で代用しない",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
+        "python:tests.test_server.MozarieTests.test_model_logic_matrix_uses_only_enabled_models"
+      ]
+    },
+    {
+      "key": "SD-044.1",
+      "sourceIds": [
+        "SD-044"
+      ],
+      "observation": "CPUで処理し、GPU必須エラーを表示しない",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_onnx_adapters.OnnxAdapterTests.test_cpu_provider_contract_does_not_depend_on_gpu_runtime"
+      ]
+    },
+    {
+      "key": "SD-045.1",
+      "sourceIds": [
+        "SD-045"
+      ],
+      "observation": "選択した物理GPUで処理する",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
+        "python:tests.test_directml_gpu_identity.DirectMlGpuIdentityTests.test_reverse_enumeration_maps_selected_physical_gpu"
+      ]
+    },
+    {
+      "key": "SD-045.2",
+      "sourceIds": [
+        "SD-045"
+      ],
+      "observation": "CUDA環境で選択した物理GPU上に実セッションを作成し、実モデル推論を完了できる",
+      "status": "manual",
+      "manual": {
+        "environment": "Windows + CUDA対応物理GPU + 実モデル",
+        "reason": "物理GPUの割当、VRAM、ドライバー、実モデル推論はCIでは再現できない"
+      }
+    },
+    {
+      "key": "SD-046.1",
+      "sourceIds": [
+        "SD-046"
+      ],
+      "observation": "選択した物理GPUで処理する",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
+        "python:tests.test_directml_gpu_identity.DirectMlGpuIdentityTests.test_reverse_enumeration_maps_selected_physical_gpu"
+      ]
+    },
+    {
+      "key": "SD-046.2",
+      "sourceIds": [
+        "SD-046"
+      ],
+      "observation": "環境にDirectMLがなければ未実施と報告する",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
+        "python:tests.test_directml_gpu_identity.DirectMlGpuIdentityTests.test_reverse_enumeration_maps_selected_physical_gpu"
+      ]
+    },
+    {
+      "key": "SD-046.3",
+      "sourceIds": [
+        "SD-046"
+      ],
+      "observation": "DirectML環境で選択した物理GPU上に実セッションを作成し、実モデル推論を完了できる",
+      "status": "manual",
+      "manual": {
+        "environment": "Windows + DirectML対応物理GPU + 実モデル",
+        "reason": "物理GPUの割当、DirectML DLL、VRAM、実モデル推論はCIでは再現できない"
+      }
+    },
+    {
+      "key": "SD-047.1",
+      "sourceIds": [
+        "SD-047"
+      ],
+      "observation": "GPU失敗として案内し、CPU専用セッションへ切り替えない",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
+        "python:tests.test_server.MozarieTests.test_detection_rejects_an_unsupported_gpu_before_loading_models"
+      ]
+    },
+    {
+      "key": "SD-048.1",
+      "sourceIds": [
+        "SD-048"
+      ],
+      "observation": "選択した実行モードを保存して検出へ渡す",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
+        "python:tests.test_server.MozarieTests.test_detection_mode_is_read_only_from_saved_settings"
+      ]
+    },
+    {
+      "key": "SD-048.2",
+      "sourceIds": [
+        "SD-048"
+      ],
+      "observation": "精度の比較評価は実施しない",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
+        "python:tests.test_server.MozarieTests.test_detection_mode_is_read_only_from_saved_settings"
+      ]
+    },
+    {
+      "key": "SD-049.1",
+      "sourceIds": [
+        "SD-049"
+      ],
+      "observation": "数値表示と送信値が一致する",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_app_core_detection_coverage.cjs::application startup, catalog state, and detection controls",
+        "node:tests/test_detection_refresh_runtime.cjs::detection refresh runtime contracts"
+      ]
+    },
+    {
+      "key": "SD-050.1",
+      "sourceIds": [
+        "SD-050"
+      ],
+      "observation": "スライダーと数値が一致し、その値で開始する",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_app_core_detection_coverage.cjs::application startup, catalog state, and detection controls",
+        "node:tests/test_detection_refresh_runtime.cjs::detection refresh runtime contracts"
+      ]
+    },
+    {
+      "key": "SD-051.1",
+      "sourceIds": [
+        "SD-051"
+      ],
+      "observation": "新規候補へ指定値を反映し、閉じて再表示しても保持する",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_filters_and_fluid_e2e.cjs::all-image detection filters images with independent OR checkboxes and persists the selection",
+        "python:tests.test_server.MozarieTests.test_detect_and_boundary_candidates_receive_the_current_padding_default"
+      ]
+    },
+    {
+      "key": "SD-052.1",
+      "sourceIds": [
+        "SD-052"
+      ],
+      "observation": "現在画像だけを対象に進捗画面を表示し、完了後に編集できる",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_app_core_detection_coverage.cjs::application startup, catalog state, and detection controls",
+        "node:tests/test_detection_refresh_runtime.cjs::detection refresh runtime contracts"
+      ]
+    },
+    {
+      "key": "SD-053.1",
+      "sourceIds": [
+        "SD-053"
+      ],
+      "observation": "非表示を除く対象数と設定を表示し、開始前は画像を処理しない",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_app_core_detection_coverage.cjs::application startup, catalog state, and detection controls",
+        "node:tests/test_detection_refresh_runtime.cjs::detection refresh runtime contracts"
+      ]
+    },
+    {
+      "key": "SD-054.1",
+      "sourceIds": [
+        "SD-054"
+      ],
+      "observation": "設定画面が閉じ、検出を実行しない",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_app_core_detection_coverage.cjs::application startup, catalog state, and detection controls",
+        "node:tests/test_detection_refresh_runtime.cjs::detection refresh runtime contracts"
+      ]
+    },
+    {
+      "key": "SD-055.1",
+      "sourceIds": [
+        "SD-055"
+      ],
+      "observation": "非表示を除く対象数に対して進捗が進み、準備表示とファイル名を交互に点滅させない",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_app_core_detection_coverage.cjs::application startup, catalog state, and detection controls",
+        "python:tests.test_server.MozarieTests.test_detection_staging_reports_every_success_before_atomic_publication"
+      ]
+    },
+    {
+      "key": "SD-056.1",
+      "sourceIds": [
+        "SD-056"
+      ],
+      "observation": "開始時から60件の対象・進捗を表示し、処理終了後に画面操作を再有効化する",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_app_core_detection_coverage.cjs::application startup, catalog state, and detection controls",
+        "python:tests.test_server.MozarieTests.test_detection_staging_reports_every_success_before_atomic_publication"
+      ]
+    },
+    {
+      "key": "SD-056.2",
+      "sourceIds": [
+        "SD-056"
+      ],
+      "observation": "検出精度は評価しない",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_app_core_detection_coverage.cjs::application startup, catalog state, and detection controls",
+        "python:tests.test_server.MozarieTests.test_detection_staging_reports_every_success_before_atomic_publication"
+      ]
+    },
+    {
+      "key": "SD-057.1",
+      "sourceIds": [
+        "SD-057"
+      ],
+      "observation": "新規画像処理を止め、一時停止状態を表示する",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_app_core_detection_coverage.cjs::application startup, catalog state, and detection controls",
+        "python:tests.test_server.MozarieTests.test_detection_can_pause_and_resume"
+      ]
+    },
+    {
+      "key": "SD-058.1",
+      "sourceIds": [
+        "SD-058"
+      ],
+      "observation": "未処理対象から再開し、完了済み画像を二重追加しない",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_app_core_detection_coverage.cjs::application startup, catalog state, and detection controls",
+        "python:tests.test_server.MozarieTests.test_detection_can_pause_and_resume"
+      ]
+    },
+    {
+      "key": "SD-059.1",
+      "sourceIds": [
+        "SD-059"
+      ],
+      "observation": "処理を停止し、完了済みと未処理を混同せず、編集を再有効化する",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_app_core_detection_coverage.cjs::application startup, catalog state, and detection controls",
+        "python:tests.test_server.MozarieTests.test_detect_cancel_between_inference_and_commit_preserves_existing_candidates"
+      ]
+    },
+    {
+      "key": "SD-148.1",
+      "sourceIds": [
+        "SD-148"
+      ],
+      "observation": "候補公開前でも進捗は1/NからN/Nへ進み、処理中の画像名と残り時間を表示する",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_app_core_detection_coverage.cjs::application startup, catalog state, and detection controls",
+        "python:tests.test_server.MozarieTests.test_detection_staging_reports_every_success_before_atomic_publication",
+        "python:tests.test_server.MozarieTests.test_detection_staging_reports_processed_without_publishing_on_failure",
+        "python:tests.test_server.MozarieTests.test_detection_rejects_cancel_after_publication_starts_and_completes"
+      ]
+    },
+    {
+      "key": "SD-148.2",
+      "sourceIds": [
+        "SD-148"
+      ],
+      "observation": "公開までは完了ID・候補一覧を増やさず、全件推論済みの公開待ち状態では一時停止を無効表示にして、取消は公開開始まで使える",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_app_core_detection_coverage.cjs::application startup, catalog state, and detection controls",
+        "python:tests.test_server.MozarieTests.test_detection_staging_reports_every_success_before_atomic_publication",
+        "python:tests.test_server.MozarieTests.test_detection_staging_reports_processed_without_publishing_on_failure",
+        "python:tests.test_server.MozarieTests.test_detection_rejects_cancel_after_publication_starts_and_completes"
+      ]
+    },
+    {
+      "key": "SD-148.3",
+      "sourceIds": [
+        "SD-148"
+      ],
+      "observation": "失敗時は処理済み件数を表示しても候補IDと候補内容を一切公開しない",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_app_core_detection_coverage.cjs::application startup, catalog state, and detection controls",
+        "python:tests.test_server.MozarieTests.test_detection_staging_reports_every_success_before_atomic_publication",
+        "python:tests.test_server.MozarieTests.test_detection_staging_reports_processed_without_publishing_on_failure",
+        "python:tests.test_server.MozarieTests.test_detection_rejects_cancel_after_publication_starts_and_completes"
+      ]
+    },
+    {
+      "key": "SD-148.4",
+      "sourceIds": [
+        "SD-148"
+      ],
+      "observation": "公開後の取消は受け付けず、公開済み候補を残して完了する",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_app_core_detection_coverage.cjs::application startup, catalog state, and detection controls",
+        "python:tests.test_server.MozarieTests.test_detection_staging_reports_every_success_before_atomic_publication",
+        "python:tests.test_server.MozarieTests.test_detection_staging_reports_processed_without_publishing_on_failure",
+        "python:tests.test_server.MozarieTests.test_detection_rejects_cancel_after_publication_starts_and_completes"
+      ]
+    },
+    {
+      "key": "SD-060.1",
+      "sourceIds": [
+        "SD-060"
+      ],
+      "observation": "検出前の各画像の確認状態を保持する",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_server.MozarieTests.test_redetection_preserves_boundary_candidates_and_replaces_auto_candidates"
+      ]
+    },
+    {
+      "key": "SD-061.1",
+      "sourceIds": [
+        "SD-061"
+      ],
+      "observation": "通常選択不能時だけ、手との重なりが少ないSAM候補を優先する",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_server.MozarieTests.test_detect_image_persists_the_refined_apply_mask",
+        "python:tests.test_detection_regressions.DetectionIntegrityRegressionTests.test_broad_auxiliary_mask_confirms_only_the_best_matching_target"
+      ]
+    },
+    {
+      "key": "SD-061.2",
+      "sourceIds": [
+        "SD-061"
+      ],
+      "observation": "初回候補と手が重なる場合は、初回のpoint・box・low-res maskを保った再推定で、重なり内へ既存分と合計3点までのnegative点を空間分散して追加する",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_server.MozarieTests.test_detect_image_persists_the_refined_apply_mask",
+        "python:tests.test_detection_regressions.DetectionIntegrityRegressionTests.test_broad_auxiliary_mask_confirms_only_the_best_matching_target"
+      ]
+    },
+    {
+      "key": "SD-061.3",
+      "sourceIds": [
+        "SD-061"
+      ],
+      "observation": "SAMは輪郭補正だけに使い、通常の検出器thresholdを通過したAPPLY候補はSAMの選択不成立でも保持する",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_server.MozarieTests.test_detect_image_persists_the_refined_apply_mask",
+        "python:tests.test_detection_regressions.DetectionIntegrityRegressionTests.test_broad_auxiliary_mask_confirms_only_the_best_matching_target"
+      ]
+    },
+    {
+      "key": "SD-061.4",
+      "sourceIds": [
+        "SD-061"
+      ],
+      "observation": "手は独立したEXCLUDE候補として操作できる",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_server.MozarieTests.test_detect_image_persists_the_refined_apply_mask",
+        "python:tests.test_detection_regressions.DetectionIntegrityRegressionTests.test_broad_auxiliary_mask_confirms_only_the_best_matching_target"
+      ]
+    },
+    {
+      "key": "SD-062.1",
+      "sourceIds": [
+        "SD-062"
+      ],
+      "observation": "各実行でauto候補を新しい結果へ置換する",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_server.MozarieTests.test_redetection_preserves_boundary_candidates_and_replaces_auto_candidates"
+      ]
+    },
+    {
+      "key": "SD-062.2",
+      "sourceIds": [
+        "SD-062"
+      ],
+      "observation": "境界候補・手描き範囲・別画像の候補を消さない",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_server.MozarieTests.test_redetection_preserves_boundary_candidates_and_replaces_auto_candidates"
+      ]
+    },
+    {
+      "key": "SD-070.1",
+      "sourceIds": [
+        "SD-070"
+      ],
+      "observation": "検出器の候補を`sam_fallback`として残す",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_detection_regressions.SamFallbackRegressionTests.test_nonempty_detector_mask_is_preserved_when_sam_selects_nothing"
+      ]
+    },
+    {
+      "key": "SD-070.2",
+      "sourceIds": [
+        "SD-070"
+      ],
+      "observation": "空候補に置換せず、他候補・別画像・手描き範囲を変更しない",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_detection_regressions.SamFallbackRegressionTests.test_nonempty_detector_mask_is_preserved_when_sam_selects_nothing"
+      ]
+    },
+    {
+      "key": "SD-071.1",
+      "sourceIds": [
+        "SD-071"
+      ],
+      "observation": "`sam_high_precision`の補正済み候補を作る",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_server.MozarieTests.test_detect_image_persists_the_refined_apply_mask"
+      ]
+    },
+    {
+      "key": "SD-071.2",
+      "sourceIds": [
+        "SD-071"
+      ],
+      "observation": "検出器マスクへ戻さず、候補の保存・再読込・ON/OFFを維持する",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_server.MozarieTests.test_detect_image_persists_the_refined_apply_mask"
+      ]
+    },
+    {
+      "key": "SD-143.1",
+      "sourceIds": [
+        "SD-143"
+      ],
+      "observation": "APPLYと手のEXCLUDEを別々の候補として表示する",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_app_core_detection_coverage.cjs::application startup, catalog state, and detection controls",
+        "python:tests.test_server.MozarieTests.test_boundary_candidate_keeps_hand_fluid_as_an_independent_exclusion"
+      ]
+    },
+    {
+      "key": "SD-143.2",
+      "sourceIds": [
+        "SD-143"
+      ],
+      "observation": "手だけをON/OFFしてもAPPLY候補の候補行・ON/OFF・手描き範囲を変えず、保存後のモザイク範囲だけを更新する",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_app_core_detection_coverage.cjs::application startup, catalog state, and detection controls",
+        "python:tests.test_server.MozarieTests.test_boundary_candidate_keeps_hand_fluid_as_an_independent_exclusion"
+      ]
+    },
+    {
+      "key": "SD-146.1",
+      "sourceIds": [
+        "SD-146"
+      ],
+      "observation": "推論は透明外側を黒の背景として扱い、APPLY・手・白い液を含む全候補マスクはalphaが0の画素へ出ない",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_detection_regressions.DetectionIntegrityRegressionTests.test_transparent_pixels_use_black_inference_background_and_clip_every_candidate"
+      ]
+    },
+    {
+      "key": "SD-146.2",
+      "sourceIds": [
+        "SD-146"
+      ],
+      "observation": "候補数や検出精度は評価しない",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_detection_regressions.DetectionIntegrityRegressionTests.test_transparent_pixels_use_black_inference_background_and_clip_every_candidate"
+      ]
+    },
+    {
+      "key": "SD-147.1",
+      "sourceIds": [
+        "SD-147"
+      ],
+      "observation": "補助候補は重なり・包含率・source優先度で最も近い1候補だけの合意として扱い、別候補へ合意状態を広げない",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_detection_regressions.DetectionIntegrityRegressionTests.test_broad_auxiliary_mask_confirms_only_the_best_matching_target"
+      ]
+    },
+    {
+      "key": "SD-147.2",
+      "sourceIds": [
+        "SD-147"
+      ],
+      "observation": "多数候補時も手領域の対象範囲を処理し、全マスク配列の積み上げにより処理を停止しない",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_detection_regressions.DetectionIntegrityRegressionTests.test_broad_auxiliary_mask_confirms_only_the_best_matching_target"
+      ]
+    },
+    {
+      "key": "SD-063.1",
+      "sourceIds": [
+        "SD-063"
+      ],
+      "observation": "基本モデルの用途・正式名称・ONNX形式・配布元を表示する",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
+        "python:tests.test_server.MozarieTests.test_model_download_api_uses_existing_mutation_guards_and_allowlist"
+      ]
+    },
+    {
+      "key": "SD-097.1",
+      "sourceIds": [
+        "SD-097"
+      ],
+      "observation": "NTD11の用途・配布元・変換コマンドを表示する",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
+        "python:tests.test_server.MozarieTests.test_model_download_api_uses_existing_mutation_guards_and_allowlist"
+      ]
+    },
+    {
+      "key": "SD-098.1",
+      "sourceIds": [
+        "SD-098"
+      ],
+      "observation": "Sensitiveの用途・配布元・変換コマンドを表示する",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
+        "python:tests.test_server.MozarieTests.test_model_download_api_uses_existing_mutation_guards_and_allowlist"
+      ]
+    },
+    {
+      "key": "SD-099.1",
+      "sourceIds": [
+        "SD-099"
+      ],
+      "observation": "SAMの用途・配布元とvit_b・vit_l・vit_hの比較表を表示する",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
+        "python:tests.test_server.MozarieTests.test_model_download_api_uses_existing_mutation_guards_and_allowlist"
+      ]
+    },
+    {
+      "key": "SD-100.1",
+      "sourceIds": [
+        "SD-100"
+      ],
+      "observation": "画像全体から手を検出する用途・ONNX形式・配布元を表示する",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
+        "python:tests.test_server.MozarieTests.test_model_download_api_uses_existing_mutation_guards_and_allowlist"
+      ]
+    },
+    {
+      "key": "SD-101.1",
+      "sourceIds": [
+        "SD-101"
+      ],
+      "observation": "検出した手の輪郭を補正する用途・safetensors形式・配布元を表示する",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
+        "python:tests.test_server.MozarieTests.test_model_download_api_uses_existing_mutation_guards_and_allowlist"
+      ]
+    },
+    {
+      "key": "SD-102.1",
+      "sourceIds": [
+        "SD-102"
+      ],
+      "observation": "性器候補内の白色領域を対象とし、追加モデルが不要であることを表示する",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
+        "python:tests.test_server.MozarieTests.test_model_download_api_uses_existing_mutation_guards_and_allowlist"
+      ]
+    },
+    {
+      "key": "SD-064.1",
+      "sourceIds": [
+        "SD-064"
+      ],
+      "observation": "設定画面へ戻り、選択モデルの値を保持する",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
+        "python:tests.test_server.MozarieTests.test_model_download_api_uses_existing_mutation_guards_and_allowlist"
+      ]
+    },
+    {
+      "key": "SD-065.1",
+      "sourceIds": [
+        "SD-065"
+      ],
+      "observation": "表示しているコマンドとコピー内容が一致する",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
+        "python:tests.test_server.MozarieTests.test_model_download_api_uses_existing_mutation_guards_and_allowlist"
+      ]
+    },
+    {
+      "key": "SD-066.1",
+      "sourceIds": [
+        "SD-066"
+      ],
+      "observation": "対象モデル名と開始操作を表示する",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
+        "python:tests.test_server.MozarieTests.test_model_download_api_uses_existing_mutation_guards_and_allowlist"
+      ]
+    },
+    {
+      "key": "SD-067.1",
+      "sourceIds": [
+        "SD-067"
+      ],
+      "observation": "進捗を表示し、完了後に利用可能状態になる",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
+        "python:tests.test_server.MozarieTests.test_model_download_api_uses_existing_mutation_guards_and_allowlist"
+      ]
+    },
+    {
+      "key": "SD-068.1",
+      "sourceIds": [
+        "SD-068"
+      ],
+      "observation": "中止を表示し、未完了ファイルを利用可能と表示しない",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
+        "python:tests.test_server.MozarieTests.test_model_download_api_uses_existing_mutation_guards_and_allowlist"
+      ]
+    },
+    {
+      "key": "SD-069.1",
+      "sourceIds": [
+        "SD-069"
+      ],
+      "observation": "サーバーとの通信失敗を表示し、未取得モデルを利用可能と表示しない",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
+        "python:tests.test_server.MozarieTests.test_model_download_api_uses_existing_mutation_guards_and_allowlist"
+      ]
+    },
+    {
+      "key": "SD-072.1",
+      "sourceIds": [
+        "SD-072"
+      ],
+      "observation": "範囲表示の不透明度だけが変わり、保存画像のモザイク範囲は変わらない",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
+        "node:tests/test_editor_masks_behavior.cjs::editor masks, fill, candidates, and history"
+      ]
+    },
+    {
+      "key": "SD-073.1",
+      "sourceIds": [
+        "SD-073"
+      ],
+      "observation": "編集中画像のモザイク表示が切り替わり、保存対象範囲は保持する",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
+        "node:tests/test_editor_masks_behavior.cjs::editor masks, fill, candidates, and history"
+      ]
+    },
+    {
+      "key": "SD-074.1",
+      "sourceIds": [
+        "SD-074"
+      ],
+      "observation": "変更後に追加される除外候補に初期値を適用し、既存候補を一括変更しない",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
+        "node:tests/test_editor_masks_behavior.cjs::editor masks, fill, candidates, and history"
+      ]
+    },
+    {
+      "key": "SD-075.1",
+      "sourceIds": [
+        "SD-075"
+      ],
+      "observation": "描画と履歴位置が変わらない",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_app_core_detection_coverage.cjs::application startup, catalog state, and detection controls",
+        "node:tests/test_project_history_browser_e2e.cjs::history completion recreates every candidate control after success, no-op, and failure"
+      ]
+    },
+    {
+      "key": "SD-075.2",
+      "sourceIds": [
+        "SD-075"
+      ],
+      "observation": "画面のUndoボタンは使用できる",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_app_core_detection_coverage.cjs::application startup, catalog state, and detection controls",
+        "node:tests/test_project_history_browser_e2e.cjs::history completion recreates every candidate control after success, no-op, and failure"
+      ]
+    },
+    {
+      "key": "SD-103.1",
+      "sourceIds": [
+        "SD-103"
+      ],
+      "observation": "キーではRedoせず、画面のRedoボタンでだけ描画を復元できる",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_app_core_detection_coverage.cjs::application startup, catalog state, and detection controls",
+        "node:tests/test_project_history_browser_e2e.cjs::history completion recreates every candidate control after success, no-op, and failure"
+      ]
+    },
+    {
+      "key": "SD-104.1",
+      "sourceIds": [
+        "SD-104"
+      ],
+      "observation": "表示画像と画像番号が変わらない",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_app_core_detection_coverage.cjs::application startup, catalog state, and detection controls",
+        "node:tests/test_project_history_browser_e2e.cjs::history completion recreates every candidate control after success, no-op, and failure"
+      ]
+    },
+    {
+      "key": "SD-104.2",
+      "sourceIds": [
+        "SD-104"
+      ],
+      "observation": "画面の前へ・次へボタンは使用できる",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_app_core_detection_coverage.cjs::application startup, catalog state, and detection controls",
+        "node:tests/test_project_history_browser_e2e.cjs::history completion recreates every candidate control after success, no-op, and failure"
+      ]
+    },
+    {
+      "key": "SD-105.1",
+      "sourceIds": [
+        "SD-105"
+      ],
+      "observation": "削除ショートカットは Delete・ONである",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
+        "python:tests.test_config.SettingsTests.test_legacy_shortcuts_gain_per_action_defaults"
+      ]
+    },
+    {
+      "key": "SD-106.1",
+      "sourceIds": [
+        "SD-106"
+      ],
+      "observation": "保存値を表示する",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
+        "python:tests.test_config.SettingsTests.test_legacy_shortcuts_gain_per_action_defaults"
+      ]
+    },
+    {
+      "key": "SD-107.1",
+      "sourceIds": [
+        "SD-107"
+      ],
+      "observation": "保存値を復元する",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
+        "python:tests.test_config.SettingsTests.test_legacy_shortcuts_gain_per_action_defaults"
+      ]
+    },
+    {
+      "key": "SD-108.1",
+      "sourceIds": [
+        "SD-108"
+      ],
+      "observation": "削除ショートカットは Delete・ONに戻る",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
+        "python:tests.test_config.SettingsTests.test_legacy_shortcuts_gain_per_action_defaults"
+      ]
+    },
+    {
+      "key": "SD-109.1",
+      "sourceIds": [
+        "SD-109"
+      ],
+      "observation": "削除ショートカットは Delete・ONで補完される",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
+        "python:tests.test_config.SettingsTests.test_legacy_shortcuts_gain_per_action_defaults"
+      ]
+    },
+    {
+      "key": "SD-110.1",
+      "sourceIds": [
+        "SD-110"
+      ],
+      "observation": "正規化後の既存 Delete を保ち、削除ショートカットは未使用の修飾キー付き Delete・OFFで補完され、設定を保存できる",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
+        "python:tests.test_config.SettingsTests.test_legacy_shortcuts_gain_per_action_defaults"
+      ]
+    },
+    {
+      "key": "SD-111.1",
+      "sourceIds": [
+        "SD-111"
+      ],
+      "observation": "対象と元画像ファイルを保持する",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_source_delete_e2e.cjs::Delete shortcut keeps a durable source-delete intent through claim and acknowledges the committed receipt",
+        "node:tests/test_source_delete_e2e.cjs::source-delete confirmation can be skipped, restored in settings, and cancelled without changing the preference",
+        "node:tests/test_source_delete_e2e.cjs::visible delete control selects next for first and middle, previous for last, and clears every view after an all-image batch"
+      ]
+    },
+    {
+      "key": "SD-112.1",
+      "sourceIds": [
+        "SD-112"
+      ],
+      "observation": "元画像ファイルと一覧・DB上の対象を完全削除し、次の表示対象へ移る",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_source_delete_e2e.cjs::Delete shortcut keeps a durable source-delete intent through claim and acknowledges the committed receipt",
+        "node:tests/test_source_delete_e2e.cjs::source-delete confirmation can be skipped, restored in settings, and cancelled without changing the preference",
+        "node:tests/test_source_delete_e2e.cjs::visible delete control selects next for first and middle, previous for last, and clears every view after an all-image batch"
+      ]
+    },
+    {
+      "key": "SD-113.1",
+      "sourceIds": [
+        "SD-113"
+      ],
+      "observation": "Delete で削除・確認を開始しない",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_source_delete_e2e.cjs::Delete shortcut keeps a durable source-delete intent through claim and acknowledges the committed receipt",
+        "node:tests/test_source_delete_e2e.cjs::source-delete confirmation can be skipped, restored in settings, and cancelled without changing the preference",
+        "node:tests/test_source_delete_e2e.cjs::visible delete control selects next for first and middle, previous for last, and clears every view after an all-image batch"
+      ]
+    },
+    {
+      "key": "SD-114.1",
+      "sourceIds": [
+        "SD-114"
+      ],
+      "observation": "Delete で削除・確認を開始しない",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_source_delete_e2e.cjs::Delete shortcut keeps a durable source-delete intent through claim and acknowledges the committed receipt",
+        "node:tests/test_source_delete_e2e.cjs::source-delete confirmation can be skipped, restored in settings, and cancelled without changing the preference",
+        "node:tests/test_source_delete_e2e.cjs::visible delete control selects next for first and middle, previous for last, and clears every view after an all-image batch"
+      ]
+    },
+    {
+      "key": "SD-115.1",
+      "sourceIds": [
+        "SD-115"
+      ],
+      "observation": "新しい割当だけが削除を開始する",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_source_delete_e2e.cjs::Delete shortcut keeps a durable source-delete intent through claim and acknowledges the committed receipt",
+        "node:tests/test_source_delete_e2e.cjs::source-delete confirmation can be skipped, restored in settings, and cancelled without changing the preference",
+        "node:tests/test_source_delete_e2e.cjs::visible delete control selects next for first and middle, previous for last, and clears every view after an all-image batch"
+      ]
+    },
+    {
+      "key": "SD-116.1",
+      "sourceIds": [
+        "SD-116"
+      ],
+      "observation": "重複を案内し、複数操作を同時実行しない",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_source_delete_e2e.cjs::Delete shortcut keeps a durable source-delete intent through claim and acknowledges the committed receipt",
+        "node:tests/test_source_delete_e2e.cjs::source-delete confirmation can be skipped, restored in settings, and cancelled without changing the preference",
+        "node:tests/test_source_delete_e2e.cjs::visible delete control selects next for first and middle, previous for last, and clears every view after an all-image batch"
+      ]
+    },
+    {
+      "key": "SD-117.1",
+      "sourceIds": [
+        "SD-117"
+      ],
+      "observation": "通常の編集・操作を妨げず、削除しない",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_source_delete_e2e.cjs::Delete shortcut keeps a durable source-delete intent through claim and acknowledges the committed receipt",
+        "node:tests/test_source_delete_e2e.cjs::source-delete confirmation can be skipped, restored in settings, and cancelled without changing the preference",
+        "node:tests/test_source_delete_e2e.cjs::visible delete control selects next for first and middle, previous for last, and clears every view after an all-image batch"
+      ]
+    },
+    {
+      "key": "SD-118.1",
+      "sourceIds": [
+        "SD-118"
+      ],
+      "observation": "割当欄に Delete を記録し、画像を削除しない",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_source_delete_e2e.cjs::Delete shortcut keeps a durable source-delete intent through claim and acknowledges the committed receipt",
+        "node:tests/test_source_delete_e2e.cjs::source-delete confirmation can be skipped, restored in settings, and cancelled without changing the preference",
+        "node:tests/test_source_delete_e2e.cjs::visible delete control selects next for first and middle, previous for last, and clears every view after an all-image batch"
+      ]
+    },
+    {
+      "key": "SD-119.1",
+      "sourceIds": [
+        "SD-119"
+      ],
+      "observation": "ダイアログ外の削除を開始しない",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_source_delete_e2e.cjs::Delete shortcut keeps a durable source-delete intent through claim and acknowledges the committed receipt",
+        "node:tests/test_source_delete_e2e.cjs::source-delete confirmation can be skipped, restored in settings, and cancelled without changing the preference",
+        "node:tests/test_source_delete_e2e.cjs::visible delete control selects next for first and middle, previous for last, and clears every view after an all-image batch"
+      ]
+    },
+    {
+      "key": "SD-120.1",
+      "sourceIds": [
+        "SD-120"
+      ],
+      "observation": "画像を削除しない",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_source_delete_e2e.cjs::Delete shortcut keeps a durable source-delete intent through claim and acknowledges the committed receipt",
+        "node:tests/test_source_delete_e2e.cjs::source-delete confirmation can be skipped, restored in settings, and cancelled without changing the preference",
+        "node:tests/test_source_delete_e2e.cjs::visible delete control selects next for first and middle, previous for last, and clears every view after an all-image batch"
+      ]
+    },
+    {
+      "key": "SD-121.1",
+      "sourceIds": [
+        "SD-121"
+      ],
+      "observation": "削除を開始しない",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_source_delete_e2e.cjs::Delete shortcut keeps a durable source-delete intent through claim and acknowledges the committed receipt",
+        "node:tests/test_source_delete_e2e.cjs::source-delete confirmation can be skipped, restored in settings, and cancelled without changing the preference",
+        "node:tests/test_source_delete_e2e.cjs::visible delete control selects next for first and middle, previous for last, and clears every view after an all-image batch"
+      ]
+    },
+    {
+      "key": "SD-122.1",
+      "sourceIds": [
+        "SD-122"
+      ],
+      "observation": "削除を開始しない",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_source_delete_e2e.cjs::Delete shortcut keeps a durable source-delete intent through claim and acknowledges the committed receipt",
+        "node:tests/test_source_delete_e2e.cjs::source-delete confirmation can be skipped, restored in settings, and cancelled without changing the preference",
+        "node:tests/test_source_delete_e2e.cjs::visible delete control selects next for first and middle, previous for last, and clears every view after an all-image batch"
+      ]
+    },
+    {
+      "key": "SD-123.1",
+      "sourceIds": [
+        "SD-123"
+      ],
+      "observation": "最初の有効な1回だけ削除確認を開き、繰返しで削除要求を増やさない",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_source_delete_e2e.cjs::Delete shortcut keeps a durable source-delete intent through claim and acknowledges the committed receipt",
+        "node:tests/test_source_delete_e2e.cjs::source-delete confirmation can be skipped, restored in settings, and cancelled without changing the preference",
+        "node:tests/test_source_delete_e2e.cjs::visible delete control selects next for first and middle, previous for last, and clears every view after an all-image batch"
+      ]
+    },
+    {
+      "key": "SD-124.1",
+      "sourceIds": [
+        "SD-124"
+      ],
+      "observation": "削除せず、画面と選択状態を整合させる",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_source_delete_e2e.cjs::Delete shortcut keeps a durable source-delete intent through claim and acknowledges the committed receipt",
+        "node:tests/test_source_delete_e2e.cjs::source-delete confirmation can be skipped, restored in settings, and cancelled without changing the preference",
+        "node:tests/test_source_delete_e2e.cjs::visible delete control selects next for first and middle, previous for last, and clears every view after an all-image batch"
+      ]
+    },
+    {
+      "key": "SD-125.1",
+      "sourceIds": [
+        "SD-125"
+      ],
+      "observation": "画面と選択状態を整合させる",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_source_delete_e2e.cjs::Delete shortcut keeps a durable source-delete intent through claim and acknowledges the committed receipt",
+        "node:tests/test_source_delete_e2e.cjs::source-delete confirmation can be skipped, restored in settings, and cancelled without changing the preference",
+        "node:tests/test_source_delete_e2e.cjs::visible delete control selects next for first and middle, previous for last, and clears every view after an all-image batch"
+      ]
+    },
+    {
+      "key": "SD-126.1",
+      "sourceIds": [
+        "SD-126"
+      ],
+      "observation": "既存の削除確認を開く",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_source_delete_e2e.cjs::Delete shortcut keeps a durable source-delete intent through claim and acknowledges the committed receipt",
+        "node:tests/test_source_delete_e2e.cjs::source-delete confirmation can be skipped, restored in settings, and cancelled without changing the preference",
+        "node:tests/test_source_delete_e2e.cjs::visible delete control selects next for first and middle, previous for last, and clears every view after an all-image batch"
+      ]
+    },
+    {
+      "key": "SD-126.2",
+      "sourceIds": [
+        "SD-126"
+      ],
+      "observation": "確認後は対象画像だけを削除する",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_source_delete_e2e.cjs::Delete shortcut keeps a durable source-delete intent through claim and acknowledges the committed receipt",
+        "node:tests/test_source_delete_e2e.cjs::source-delete confirmation can be skipped, restored in settings, and cancelled without changing the preference",
+        "node:tests/test_source_delete_e2e.cjs::visible delete control selects next for first and middle, previous for last, and clears every view after an all-image batch"
+      ]
+    },
+    {
+      "key": "SD-126.3",
+      "sourceIds": [
+        "SD-126"
+      ],
+      "observation": "他のbutton、現在画像以外のカード、一覧表示、ダイアログ中では削除を開始しない",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_source_delete_e2e.cjs::Delete shortcut keeps a durable source-delete intent through claim and acknowledges the committed receipt",
+        "node:tests/test_source_delete_e2e.cjs::source-delete confirmation can be skipped, restored in settings, and cancelled without changing the preference",
+        "node:tests/test_source_delete_e2e.cjs::visible delete control selects next for first and middle, previous for last, and clears every view after an all-image batch"
+      ]
+    },
+    {
+      "key": "SD-076.1",
+      "sourceIds": [
+        "SD-076"
+      ],
+      "observation": "有効な登録キーで対応操作を実行する",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_app_core_detection_coverage.cjs::application startup, catalog state, and detection controls",
+        "node:tests/test_project_history_browser_e2e.cjs::history completion recreates every candidate control after success, no-op, and failure"
+      ]
+    },
+    {
+      "key": "SD-077.1",
+      "sourceIds": [
+        "SD-077"
+      ],
+      "observation": "ONでは前へを実行し、OFFでは同じキーで実行しない",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_app_core_detection_coverage.cjs::application startup, catalog state, and detection controls",
+        "node:tests/test_project_history_browser_e2e.cjs::history completion recreates every candidate control after success, no-op, and failure"
+      ]
+    },
+    {
+      "key": "SD-078.1",
+      "sourceIds": [
+        "SD-078"
+      ],
+      "observation": "ONでは次へを実行し、OFFでは同じキーで実行しない",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_app_core_detection_coverage.cjs::application startup, catalog state, and detection controls",
+        "node:tests/test_project_history_browser_e2e.cjs::history completion recreates every candidate control after success, no-op, and failure"
+      ]
+    },
+    {
+      "key": "SD-079.1",
+      "sourceIds": [
+        "SD-079"
+      ],
+      "observation": "ONでは前の表示画像を実行し、OFFでは同じキーで実行しない",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_app_core_detection_coverage.cjs::application startup, catalog state, and detection controls",
+        "node:tests/test_project_history_browser_e2e.cjs::history completion recreates every candidate control after success, no-op, and failure"
+      ]
+    },
+    {
+      "key": "SD-080.1",
+      "sourceIds": [
+        "SD-080"
+      ],
+      "observation": "ONでは次の表示画像を実行し、OFFでは同じキーで実行しない",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_app_core_detection_coverage.cjs::application startup, catalog state, and detection controls",
+        "node:tests/test_project_history_browser_e2e.cjs::history completion recreates every candidate control after success, no-op, and failure"
+      ]
+    },
+    {
+      "key": "SD-081.1",
+      "sourceIds": [
+        "SD-081"
+      ],
+      "observation": "ONでは先頭を実行し、OFFでは同じキーで実行しない",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_app_core_detection_coverage.cjs::application startup, catalog state, and detection controls",
+        "node:tests/test_project_history_browser_e2e.cjs::history completion recreates every candidate control after success, no-op, and failure"
+      ]
+    },
+    {
+      "key": "SD-082.1",
+      "sourceIds": [
+        "SD-082"
+      ],
+      "observation": "ONでは末尾を実行し、OFFでは同じキーで実行しない",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_app_core_detection_coverage.cjs::application startup, catalog state, and detection controls",
+        "node:tests/test_project_history_browser_e2e.cjs::history completion recreates every candidate control after success, no-op, and failure"
+      ]
+    },
+    {
+      "key": "SD-083.1",
+      "sourceIds": [
+        "SD-083"
+      ],
+      "observation": "ONでは確認済みにして次へを実行し、OFFでは同じキーで実行しない",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_app_core_detection_coverage.cjs::application startup, catalog state, and detection controls",
+        "node:tests/test_project_history_browser_e2e.cjs::history completion recreates every candidate control after success, no-op, and failure"
+      ]
+    },
+    {
+      "key": "SD-084.1",
+      "sourceIds": [
+        "SD-084"
+      ],
+      "observation": "ONでは一覧表示を実行し、OFFでは同じキーで実行しない",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_app_core_detection_coverage.cjs::application startup, catalog state, and detection controls",
+        "node:tests/test_project_history_browser_e2e.cjs::history completion recreates every candidate control after success, no-op, and failure"
+      ]
+    },
+    {
+      "key": "SD-085.1",
+      "sourceIds": [
+        "SD-085"
+      ],
+      "observation": "ONでは元に戻すを実行し、OFFでは同じキーで実行しない",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_app_core_detection_coverage.cjs::application startup, catalog state, and detection controls",
+        "node:tests/test_project_history_browser_e2e.cjs::history completion recreates every candidate control after success, no-op, and failure"
+      ]
+    },
+    {
+      "key": "SD-086.1",
+      "sourceIds": [
+        "SD-086"
+      ],
+      "observation": "ONではやり直すを実行し、OFFでは同じキーで実行しない",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_app_core_detection_coverage.cjs::application startup, catalog state, and detection controls",
+        "node:tests/test_project_history_browser_e2e.cjs::history completion recreates every candidate control after success, no-op, and failure"
+      ]
+    },
+    {
+      "key": "SD-087.1",
+      "sourceIds": [
+        "SD-087"
+      ],
+      "observation": "重複を案内し、競合したまま複数操作を同時実行しない",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_app_core_detection_coverage.cjs::application startup, catalog state, and detection controls",
+        "node:tests/test_project_history_browser_e2e.cjs::history completion recreates every candidate control after success, no-op, and failure"
+      ]
+    },
+    {
+      "key": "SD-088.1",
+      "sourceIds": [
+        "SD-088"
+      ],
+      "observation": "テキスト編集を行い、背後の画像移動・描画を実行しない",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_app_core_detection_coverage.cjs::application startup, catalog state, and detection controls",
+        "node:tests/test_project_history_browser_e2e.cjs::history completion recreates every candidate control after success, no-op, and failure"
+      ]
+    },
+    {
+      "key": "SD-089.1",
+      "sourceIds": [
+        "SD-089"
+      ],
+      "observation": "ONでは実行前に確認し、OFFでは確認を省略する",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
+        "node:tests/test_source_delete_e2e.cjs::source-delete confirmation can be skipped, restored in settings, and cancelled without changing the preference"
+      ]
+    },
+    {
+      "key": "SD-089.2",
+      "sourceIds": [
+        "SD-089"
+      ],
+      "observation": "実行対象は同じ",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
+        "node:tests/test_source_delete_e2e.cjs::source-delete confirmation can be skipped, restored in settings, and cancelled without changing the preference"
+      ]
+    },
+    {
+      "key": "SD-090.1",
+      "sourceIds": [
+        "SD-090"
+      ],
+      "observation": "ONでは実行前に確認し、OFFでは確認を省略する",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
+        "node:tests/test_source_delete_e2e.cjs::source-delete confirmation can be skipped, restored in settings, and cancelled without changing the preference"
+      ]
+    },
+    {
+      "key": "SD-090.2",
+      "sourceIds": [
+        "SD-090"
+      ],
+      "observation": "実行対象は同じ",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
+        "node:tests/test_source_delete_e2e.cjs::source-delete confirmation can be skipped, restored in settings, and cancelled without changing the preference"
+      ]
+    },
+    {
+      "key": "SD-091.1",
+      "sourceIds": [
+        "SD-091"
+      ],
+      "observation": "ONでは実行前に確認し、OFFでは確認を省略する",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
+        "node:tests/test_source_delete_e2e.cjs::source-delete confirmation can be skipped, restored in settings, and cancelled without changing the preference"
+      ]
+    },
+    {
+      "key": "SD-091.2",
+      "sourceIds": [
+        "SD-091"
+      ],
+      "observation": "実行対象は同じ",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
+        "node:tests/test_source_delete_e2e.cjs::source-delete confirmation can be skipped, restored in settings, and cancelled without changing the preference"
+      ]
+    },
+    {
+      "key": "SD-092.1",
+      "sourceIds": [
+        "SD-092"
+      ],
+      "observation": "ONでは実行前に確認し、OFFでは確認を省略する",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
+        "node:tests/test_source_delete_e2e.cjs::source-delete confirmation can be skipped, restored in settings, and cancelled without changing the preference"
+      ]
+    },
+    {
+      "key": "SD-092.2",
+      "sourceIds": [
+        "SD-092"
+      ],
+      "observation": "実行対象は同じ",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
+        "node:tests/test_source_delete_e2e.cjs::source-delete confirmation can be skipped, restored in settings, and cancelled without changing the preference"
+      ]
+    },
+    {
+      "key": "SD-093.1",
+      "sourceIds": [
+        "SD-093"
+      ],
+      "observation": "ONでは実行前に確認し、OFFでは確認を省略する",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
+        "node:tests/test_source_delete_e2e.cjs::source-delete confirmation can be skipped, restored in settings, and cancelled without changing the preference"
+      ]
+    },
+    {
+      "key": "SD-093.2",
+      "sourceIds": [
+        "SD-093"
+      ],
+      "observation": "実行対象は同じ",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
+        "node:tests/test_source_delete_e2e.cjs::source-delete confirmation can be skipped, restored in settings, and cancelled without changing the preference"
+      ]
+    },
+    {
+      "key": "SD-094.1",
+      "sourceIds": [
+        "SD-094"
+      ],
+      "observation": "ONでは実行前に確認し、OFFでは確認を省略する",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
+        "node:tests/test_source_delete_e2e.cjs::source-delete confirmation can be skipped, restored in settings, and cancelled without changing the preference"
+      ]
+    },
+    {
+      "key": "SD-094.2",
+      "sourceIds": [
+        "SD-094"
+      ],
+      "observation": "実行対象は同じ",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
+        "node:tests/test_source_delete_e2e.cjs::source-delete confirmation can be skipped, restored in settings, and cancelled without changing the preference"
+      ]
+    },
+    {
+      "key": "SD-095.1",
+      "sourceIds": [
+        "SD-095"
+      ],
+      "observation": "ONでは実行前に確認し、OFFでは確認を省略する",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
+        "node:tests/test_source_delete_e2e.cjs::source-delete confirmation can be skipped, restored in settings, and cancelled without changing the preference"
+      ]
+    },
+    {
+      "key": "SD-095.2",
+      "sourceIds": [
+        "SD-095"
+      ],
+      "observation": "実行対象は同じ",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
+        "node:tests/test_source_delete_e2e.cjs::source-delete confirmation can be skipped, restored in settings, and cancelled without changing the preference"
+      ]
+    },
+    {
+      "key": "SD-096.1",
+      "sourceIds": [
+        "SD-096"
+      ],
+      "observation": "現在版と確認結果を表示し、更新がある場合だけ更新操作を案内する",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
+        "python:tests.test_updater.UpdaterTests.test_fetch_latest_release_validates_payload"
+      ]
+    },
+    {
+      "key": "SD-127.1",
+      "sourceIds": [
+        "SD-127"
+      ],
+      "observation": "2つの入力を区別して表示し、新規のモザイク候補だけに3px、新規の手・白い液などの除外候補だけに11pxを設定する",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_filters_and_fluid_e2e.cjs::all-image detection filters images with independent OR checkboxes and persists the selection",
+        "python:tests.test_server.MozarieTests.test_detect_and_boundary_candidates_receive_the_current_padding_default"
+      ]
+    },
+    {
+      "key": "SD-127.2",
+      "sourceIds": [
+        "SD-127"
+      ],
+      "observation": "候補がない種類は精度確認済みと扱わない",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_filters_and_fluid_e2e.cjs::all-image detection filters images with independent OR checkboxes and persists the selection",
+        "python:tests.test_server.MozarieTests.test_detect_and_boundary_candidates_receive_the_current_padding_default"
+      ]
+    },
+    {
+      "key": "SD-128.1",
+      "sourceIds": [
+        "SD-128"
+      ],
+      "observation": "保存済みの2値を使い、新規のモザイク候補だけに3px、新規の除外候補だけに11pxを設定する",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_filters_and_fluid_e2e.cjs::all-image detection filters images with independent OR checkboxes and persists the selection",
+        "python:tests.test_server.MozarieTests.test_detect_and_boundary_candidates_receive_the_current_padding_default"
+      ]
+    },
+    {
+      "key": "SD-128.2",
+      "sourceIds": [
+        "SD-128"
+      ],
+      "observation": "対象外画像、既存の境界候補、手描き範囲は変更しない",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_filters_and_fluid_e2e.cjs::all-image detection filters images with independent OR checkboxes and persists the selection",
+        "python:tests.test_server.MozarieTests.test_detect_and_boundary_candidates_receive_the_current_padding_default"
+      ]
+    },
+    {
+      "key": "SD-129.1",
+      "sourceIds": [
+        "SD-129"
+      ],
+      "observation": "選択対象だけを処理し、新規候補へ役割別の値を反映する",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_filters_and_fluid_e2e.cjs::all-image detection filters images with independent OR checkboxes and persists the selection",
+        "python:tests.test_server.MozarieTests.test_detect_and_boundary_candidates_receive_the_current_padding_default"
+      ]
+    },
+    {
+      "key": "SD-129.2",
+      "sourceIds": [
+        "SD-129"
+      ],
+      "observation": "選択外画像と既存の境界候補・手描き範囲は変更しない",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_filters_and_fluid_e2e.cjs::all-image detection filters images with independent OR checkboxes and persists the selection",
+        "python:tests.test_server.MozarieTests.test_detect_and_boundary_candidates_receive_the_current_padding_default"
+      ]
+    },
+    {
+      "key": "SD-130.1",
+      "sourceIds": [
+        "SD-130"
+      ],
+      "observation": "非表示を除く全対象を処理し、各画像の新規候補へ役割別の値を反映する",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_filters_and_fluid_e2e.cjs::all-image detection filters images with independent OR checkboxes and persists the selection",
+        "python:tests.test_server.MozarieTests.test_detect_and_boundary_candidates_receive_the_current_padding_default"
+      ]
+    },
+    {
+      "key": "SD-130.2",
+      "sourceIds": [
+        "SD-130"
+      ],
+      "observation": "画像ごとに候補の有無が異なっても別の役割の値を流用しない",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_filters_and_fluid_e2e.cjs::all-image detection filters images with independent OR checkboxes and persists the selection",
+        "python:tests.test_server.MozarieTests.test_detect_and_boundary_candidates_receive_the_current_padding_default"
+      ]
+    },
+    {
+      "key": "SD-131.1",
+      "sourceIds": [
+        "SD-131"
+      ],
+      "observation": "各経路の新規候補を0pxで作成し、元の候補マスクを広げない",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_filters_and_fluid_e2e.cjs::all-image detection filters images with independent OR checkboxes and persists the selection",
+        "python:tests.test_server.MozarieTests.test_detect_and_boundary_candidates_receive_the_current_padding_default"
+      ]
+    },
+    {
+      "key": "SD-131.2",
+      "sourceIds": [
+        "SD-131"
+      ],
+      "observation": "負数・小数・空欄では開始せず、0以上の整数を求める",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_filters_and_fluid_e2e.cjs::all-image detection filters images with independent OR checkboxes and persists the selection",
+        "python:tests.test_server.MozarieTests.test_detect_and_boundary_candidates_receive_the_current_padding_default"
+      ]
+    },
+    {
+      "key": "SD-132.1",
+      "sourceIds": [
+        "SD-132"
+      ],
+      "observation": "旧値をモザイク候補と除外候補の両方へ引き継ぎ、既存候補の値を変更せず、新形式で保存できる",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_config.SettingsTests.test_valid_settings_are_persisted_only_to_local_file",
+        "python:tests.test_server.MozarieTests.test_detect_and_boundary_candidates_receive_the_current_padding_default"
+      ]
+    },
+    {
+      "key": "SD-133.1",
+      "sourceIds": [
+        "SD-133"
+      ],
+      "observation": "再起動前の2値をそれぞれ復元し、入れ替えたり一方をもう一方で上書きしたりしない",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_config.SettingsTests.test_valid_settings_are_persisted_only_to_local_file",
+        "python:tests.test_server.MozarieTests.test_detect_and_boundary_candidates_receive_the_current_padding_default"
+      ]
+    },
+    {
+      "key": "SD-134.1",
+      "sourceIds": [
+        "SD-134"
+      ],
+      "observation": "固定16384pxでは拒否しない",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_candidate_expand.CandidateExpandTests.test_large_padding_uses_image_space_and_saturates_without_a_large_kernel"
+      ]
+    },
+    {
+      "key": "SD-134.2",
+      "sourceIds": [
+        "SD-134"
+      ],
+      "observation": "画像内で効果がある値はそのまま候補へ設定し、対角線を超える値は画像寸法から求めた最大有効値として扱い、巨大な処理用配列を確保しない",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_candidate_expand.CandidateExpandTests.test_large_padding_uses_image_space_and_saturates_without_a_large_kernel"
+      ]
+    },
+    {
+      "key": "SD-135.1",
+      "sourceIds": [
+        "SD-135"
+      ],
+      "observation": "同じ設定モーダルに「精液候補を色で広げる」と0〜255の許容範囲を表示する",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_filters_and_fluid_e2e.cjs::all-image detection submits the fluid color-fill settings with default tolerance 26",
+        "python:tests.test_fluid.FluidTests.test_expand_white_fluid_mask_respects_alpha_and_tolerance_boundaries"
+      ]
+    },
+    {
+      "key": "SD-135.2",
+      "sourceIds": [
+        "SD-135"
+      ],
+      "observation": "初期値はON・26で、手動塗りつぶしの許容範囲を変更しない",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_filters_and_fluid_e2e.cjs::all-image detection submits the fluid color-fill settings with default tolerance 26",
+        "python:tests.test_fluid.FluidTests.test_expand_white_fluid_mask_respects_alpha_and_tolerance_boundaries"
+      ]
+    },
+    {
+      "key": "SD-136.1",
+      "sourceIds": [
+        "SD-136"
+      ],
+      "observation": "0〜255の整数だけを受け付け、設定値を保存・再表示する",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_filters_and_fluid_e2e.cjs::all-image detection submits the fluid color-fill settings with default tolerance 26",
+        "python:tests.test_fluid.FluidTests.test_expand_white_fluid_mask_respects_alpha_and_tolerance_boundaries"
+      ]
+    },
+    {
+      "key": "SD-136.2",
+      "sourceIds": [
+        "SD-136"
+      ],
+      "observation": "0では既存の精液候補だけを保持し、各検出で対象候補またはメタデータ検索範囲の外へ広がらない",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_filters_and_fluid_e2e.cjs::all-image detection submits the fluid color-fill settings with default tolerance 26",
+        "python:tests.test_fluid.FluidTests.test_expand_white_fluid_mask_respects_alpha_and_tolerance_boundaries"
+      ]
+    },
+    {
+      "key": "SD-137.1",
+      "sourceIds": [
+        "SD-137"
+      ],
+      "observation": "OFFでは既存の白い液候補検出だけを使い、ONでは開始時の設定値だけを全対象へ一貫して使う",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_filters_and_fluid_e2e.cjs::all-image detection submits the fluid color-fill settings with default tolerance 26",
+        "python:tests.test_fluid.FluidTests.test_expand_white_fluid_mask_respects_alpha_and_tolerance_boundaries"
+      ]
+    },
+    {
+      "key": "SD-137.2",
+      "sourceIds": [
+        "SD-137"
+      ],
+      "observation": "検出中の設定変更で途中画像だけの値を変えない",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_filters_and_fluid_e2e.cjs::all-image detection submits the fluid color-fill settings with default tolerance 26",
+        "python:tests.test_fluid.FluidTests.test_expand_white_fluid_mask_respects_alpha_and_tolerance_boundaries"
+      ]
+    },
+    {
+      "key": "SD-138.1",
+      "sourceIds": [
+        "SD-138"
+      ],
+      "observation": "完全透明画素へ候補が広がらず、RGB画像および既存の白い液候補検出の条件は変わらない",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_filters_and_fluid_e2e.cjs::all-image detection submits the fluid color-fill settings with default tolerance 26",
+        "python:tests.test_fluid.FluidTests.test_expand_white_fluid_mask_respects_alpha_and_tolerance_boundaries"
+      ]
+    },
+    {
+      "key": "SD-139.1",
+      "sourceIds": [
+        "SD-139"
+      ],
+      "observation": "精液候補を色で広げるスイッチと許容範囲を操作不可にし、OFF中は許容範囲欄の無効な文字列で開始を妨げない",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_filters_and_fluid_e2e.cjs::all-image detection submits the fluid color-fill settings with default tolerance 26",
+        "python:tests.test_fluid.FluidTests.test_expand_white_fluid_mask_respects_alpha_and_tolerance_boundaries"
+      ]
+    },
+    {
+      "key": "SD-140.1",
+      "sourceIds": [
+        "SD-140"
+      ],
+      "observation": "現在画像は従来どおり直ちに検出を開始し、モーダルを開かない",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_filters_and_fluid_e2e.cjs::all-image detection submits the fluid color-fill settings with default tolerance 26",
+        "python:tests.test_fluid.FluidTests.test_expand_white_fluid_mask_respects_alpha_and_tolerance_boundaries"
+      ]
+    },
+    {
+      "key": "SD-140.2",
+      "sourceIds": [
+        "SD-140"
+      ],
+      "observation": "保存済みの色拡張ON/OFFと許容範囲を開始時に使用する",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_filters_and_fluid_e2e.cjs::all-image detection submits the fluid color-fill settings with default tolerance 26",
+        "python:tests.test_fluid.FluidTests.test_expand_white_fluid_mask_respects_alpha_and_tolerance_boundaries"
+      ]
+    },
+    {
+      "key": "SD-141.1",
+      "sourceIds": [
+        "SD-141"
+      ],
+      "observation": "CIで相対形式の拒否と旧設定移行を確認する",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
+        "python:tests.test_absolute_path_regression.AbsolutePathRegressionTests.test_relative_model_and_output_paths_are_rejected_for_new_settings"
+      ]
+    },
+    {
+      "key": "SD-141.2",
+      "sourceIds": [
+        "SD-141"
+      ],
+      "observation": "相対パスでは該当する設定タブと入力欄を示し「絶対パス」を案内して保存しない",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
+        "python:tests.test_absolute_path_regression.AbsolutePathRegressionTests.test_relative_model_and_output_paths_are_rejected_for_new_settings"
+      ]
+    },
+    {
+      "key": "SD-141.3",
+      "sourceIds": [
+        "SD-141"
+      ],
+      "observation": "成功時は正規化済みの絶対形式を表示し、モデル選択・案内・現在の設定を混ぜない",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
+        "python:tests.test_absolute_path_regression.AbsolutePathRegressionTests.test_relative_model_and_output_paths_are_rejected_for_new_settings"
+      ]
+    },
+    {
+      "key": "SD-142.1",
+      "sourceIds": [
+        "SD-142"
+      ],
+      "observation": "CIで一回限りの絶対化と保存を確認する",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_absolute_path_regression.AbsolutePathRegressionTests.test_legacy_relative_paths_are_migrated_to_absolute_paths_once",
+        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state"
+      ]
+    },
+    {
+      "key": "SD-142.2",
+      "sourceIds": [
+        "SD-142"
+      ],
+      "observation": "実機では起動後の設定表示、利用者の作業フォルダー、モデル読込案内を確認する",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_absolute_path_regression.AbsolutePathRegressionTests.test_legacy_relative_paths_are_migrated_to_absolute_paths_once",
+        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state"
+      ]
+    },
+    {
+      "key": "SD-144.1",
+      "sourceIds": [
+        "SD-144"
+      ],
+      "observation": "保存先だけを更新し、未保存の各入力値を保持する",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
+        "node:tests/test_project_history_browser_e2e.cjs::manual output-directory commits lock every save entry point until the settings response settles"
+      ]
+    },
+    {
+      "key": "SD-144.2",
+      "sourceIds": [
+        "SD-144"
+      ],
+      "observation": "OSの選択取消・失敗でも各入力値を保持し、保存時の送信内容へ含める",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
+        "node:tests/test_project_history_browser_e2e.cjs::manual output-directory commits lock every save entry point until the settings response settles"
+      ]
+    },
+    {
+      "key": "SD-145.1",
+      "sourceIds": [
+        "SD-145"
+      ],
+      "observation": "サーバーを開始せず、ONNX Runtimeの状態が一致しないことと`setup.bat`で修復する案内をCMDへ表示する",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_updater.UpdaterTests.test_marker_and_runtime_mismatch_fails_before_pip_or_ready_change"
+      ]
+    },
+    {
+      "key": "SD-145.2",
+      "sourceIds": [
+        "SD-145"
+      ],
+      "observation": "実GPU・モデルは読み込まない",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_updater.UpdaterTests.test_marker_and_runtime_mismatch_fails_before_pip_or_ready_change"
+      ]
+    },
+    {
+      "key": "SD-145.3",
+      "sourceIds": [
+        "SD-145"
+      ],
+      "observation": "実際のWindows仮想環境でONNX Runtime DLLと選択プロファイルの不一致を検出して起動を止める",
+      "status": "manual",
+      "manual": {
+        "environment": "配布構成のWindows仮想環境 + 実ONNX Runtime DLL",
+        "reason": "実DLLのロード結果はCI fixtureへ置換できない"
+      }
+    },
+    {
+      "key": "SD-149.1",
+      "sourceIds": [
+        "SD-149"
+      ],
+      "observation": "保存先だけの変更ではGPUの診断やモデル読込を始めず、実在する絶対パスだけを保存する",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
+        "python:tests.test_server.MozarieTests.test_output_directory_only_update_does_not_probe_an_unchanged_gpu"
+      ]
+    },
+    {
+      "key": "SD-149.2",
+      "sourceIds": [
+        "SD-149"
+      ],
+      "observation": "取消・失敗後も選択ボタンを再度使える",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
+        "python:tests.test_server.MozarieTests.test_output_directory_only_update_does_not_probe_an_unchanged_gpu"
+      ]
+    },
+    {
+      "key": "SD-149.3",
+      "sourceIds": [
+        "SD-149"
+      ],
+      "observation": "OSの初期フォルダーは既存の絶対パスだけを使う",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
+        "python:tests.test_server.MozarieTests.test_output_directory_only_update_does_not_probe_an_unchanged_gpu"
+      ]
+    }
+  ]
+}
