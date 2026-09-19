@@ -1985,6 +1985,7 @@
       "observation": "保存済みの2値を使い、新規のモザイク候補だけに3px、新規の除外候補だけに11pxを設定する",
       "status": "automated",
       "testIds": [
+        "node:tests/test_filters_and_fluid_e2e.cjs::all-image detection filters images with independent OR checkboxes and persists the selection",
         "python:tests.test_server.MozarieTests.test_sd_127_detect_and_boundary_candidates_receive_distinct_apply_and_exclude_padding"
       ]
     },
@@ -1996,7 +1997,8 @@
       "observation": "対象外画像、既存の境界候補、手描き範囲は変更しない",
       "status": "automated",
       "testIds": [
-        "python:tests.test_server.MozarieTests.test_sd_127_detect_and_boundary_candidates_receive_distinct_apply_and_exclude_padding"
+        "node:tests/test_detection_dialog_contracts.cjs::SD-052 current-image detection targets only the selected image and restores editing",
+        "python:tests.test_server.MozarieTests.test_sd_060_062_redetection_preserves_review_manual_boundary_and_other_image"
       ]
     },
     {
@@ -2007,6 +2009,7 @@
       "observation": "選択対象だけを処理し、新規候補へ役割別の値を反映する",
       "status": "automated",
       "testIds": [
+        "node:tests/test_filters_and_fluid_e2e.cjs::all-image detection filters images with independent OR checkboxes and persists the selection",
         "python:tests.test_server.MozarieTests.test_sd_127_detect_and_boundary_candidates_receive_distinct_apply_and_exclude_padding"
       ]
     },
@@ -2018,7 +2021,8 @@
       "observation": "選択外画像と既存の境界候補・手描き範囲は変更しない",
       "status": "automated",
       "testIds": [
-        "python:tests.test_server.MozarieTests.test_sd_127_detect_and_boundary_candidates_receive_distinct_apply_and_exclude_padding"
+        "node:tests/test_filters_and_fluid_e2e.cjs::all-image detection filters images with independent OR checkboxes and persists the selection",
+        "python:tests.test_server.MozarieTests.test_sd_060_062_redetection_preserves_review_manual_boundary_and_other_image"
       ]
     },
     {
@@ -2029,6 +2033,7 @@
       "observation": "非表示を除く全対象を処理し、各画像の新規候補へ役割別の値を反映する",
       "status": "automated",
       "testIds": [
+        "node:tests/test_filters_and_fluid_e2e.cjs::hiding an image removes it from the visible all-image detection and save targets",
         "python:tests.test_server.MozarieTests.test_sd_127_detect_and_boundary_candidates_receive_distinct_apply_and_exclude_padding"
       ]
     },
@@ -2052,7 +2057,8 @@
       "status": "automated",
       "testIds": [
         "node:tests/test_detection_dialog_contracts.cjs::SD-131 invalid padding blocks detection while zero remains valid",
-        "python:tests.test_server.MozarieTests.test_sd_127_detect_and_boundary_candidates_receive_distinct_apply_and_exclude_padding"
+        "node:tests/test_filters_and_fluid_e2e.cjs::all-image detection filters images with independent OR checkboxes and persists the selection",
+        "python:tests.test_server.MozarieTests.test_sd_131_zero_padding_keeps_new_apply_and_exclude_masks_unexpanded"
       ]
     },
     {
@@ -2074,8 +2080,8 @@
       "observation": "旧値をモザイク候補と除外候補の両方へ引き継ぎ、既存候補の値を変更せず、新形式で保存できる",
       "status": "automated",
       "testIds": [
-        "python:tests.test_config.SettingsTests.test_valid_settings_are_persisted_only_to_local_file",
-        "python:tests.test_server.MozarieTests.test_sd_127_detect_and_boundary_candidates_receive_distinct_apply_and_exclude_padding"
+        "python:tests.test_config.SettingsTests.test_sd_132_133_legacy_candidate_padding_migrates_and_distinct_values_round_trip",
+        "python:tests.test_server.MozarieTests.test_sd_060_062_redetection_preserves_review_manual_boundary_and_other_image"
       ]
     },
     {
@@ -2086,8 +2092,7 @@
       "observation": "再起動前の2値をそれぞれ復元し、入れ替えたり一方をもう一方で上書きしたりしない",
       "status": "automated",
       "testIds": [
-        "python:tests.test_config.SettingsTests.test_valid_settings_are_persisted_only_to_local_file",
-        "python:tests.test_server.MozarieTests.test_sd_127_detect_and_boundary_candidates_receive_distinct_apply_and_exclude_padding"
+        "python:tests.test_config.SettingsTests.test_sd_132_133_legacy_candidate_padding_migrates_and_distinct_values_round_trip"
       ]
     },
     {

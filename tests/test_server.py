@@ -708,6 +708,29 @@ class MozarieTests(unittest.TestCase):
                 ("apply", "boundary", 7), ("exclude", "hand", 11), ("exclude", "fluid", 11),
             ])
 
+    def test_sd_131_zero_padding_keeps_new_apply_and_exclude_masks_unexpanded(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); Image.new("RGB", (20, 12), "white").save(root / "source.png")
+            state = self.new_state(); image_id = state.set_root(str(root))[0]["id"]; record = state.image_for_id(image_id)
+            state.settings["detection"]["default_candidate_padding_px"] = 0
+            state.settings["detection"]["default_exclude_candidate_padding_px"] = 0
+            apply_mask = np.zeros((12, 20), dtype=np.uint8); apply_mask[5, 9] = 255
+            exclude_mask = np.zeros_like(apply_mask); exclude_mask[5, 10] = 255
+            segments = [{"class_name": "penis", "confidence": .9, "mask": apply_mask, "source": "target",
+                         "image_exclusions": {"hand": exclude_mask}}]
+            with patch.object(state, "_detect_arbitrated_segments", return_value=segments), \
+                 patch.object(state, "_hand_refinement_context", return_value=(segments, np.zeros_like(apply_mask), [])), \
+                 patch.object(state, "_attach_hand_evidence", side_effect=lambda items, *_args: items), \
+                 patch.object(state, "_finalize_exclusions", side_effect=lambda _rgb, items, *_args, **_kwargs: items):
+                candidates = state._detect_image(Mock(), record, .5, default_padding=0, default_exclude_padding=0)
+            self.assertEqual([(item.role.value, item.expand_px) for item in candidates], [("exclude", 0), ("apply", 0)])
+            stored = []
+            for candidate in candidates:
+                with Image.open(candidate.mask_path) as image:
+                    stored.append(np.asarray(image.convert("L")).copy())
+            self.assertTrue(np.array_equal(stored[0], exclude_mask))
+            self.assertTrue(np.array_equal(stored[1], apply_mask))
+
     def test_detector_epoch_stat_and_explicit_padding_guards_preserve_catalogue_state(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory); Image.new("RGB", (20, 12), "white").save(root / "source.png")

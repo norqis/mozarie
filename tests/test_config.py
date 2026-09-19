@@ -37,18 +37,27 @@ class SettingsTests(unittest.TestCase):
                 with self.subTest(saving=value), self.assertRaises(SettingsError):
                     store.validate_update({"saving": {"image_filters": value}})
 
-    def test_default_candidate_padding_round_trips_and_rejects_non_integer_values(self):
+    def test_sd_132_133_legacy_candidate_padding_migrates_and_distinct_values_round_trip(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory); config = root / "config"; config.mkdir()
             (config / "defaults.json").write_text(json.dumps(default_settings()), encoding="utf-8")
+            (config / "local.json").write_text(json.dumps({"detection": {"default_candidate_padding_px": 9}}), encoding="utf-8")
             store = SettingsStore(root)
-            self.assertEqual(store.load()["detection"]["default_candidate_padding_px"], 0)
-            saved = store.save({"detection": {"default_candidate_padding_px": 12}})
-            self.assertEqual(saved["detection"]["default_candidate_padding_px"], 12)
-            self.assertEqual(SettingsStore(root).load()["detection"]["default_candidate_padding_px"], 12)
+            migrated = store.load()
+            self.assertEqual(migrated["detection"]["default_candidate_padding_px"], 9)
+            self.assertEqual(migrated["detection"]["default_exclude_candidate_padding_px"], 9)
+            store.save(migrated)
+            persisted = json.loads((config / "local.json").read_text(encoding="utf-8"))
+            self.assertEqual(persisted["detection"]["default_candidate_padding_px"], 9)
+            self.assertEqual(persisted["detection"]["default_exclude_candidate_padding_px"], 9)
+            saved = store.save({"detection": {"default_candidate_padding_px": 3, "default_exclude_candidate_padding_px": 11}})
+            self.assertEqual((saved["detection"]["default_candidate_padding_px"], saved["detection"]["default_exclude_candidate_padding_px"]), (3, 11))
+            reloaded = SettingsStore(root).load()
+            self.assertEqual((reloaded["detection"]["default_candidate_padding_px"], reloaded["detection"]["default_exclude_candidate_padding_px"]), (3, 11))
             for value in (True, 1.5, "12", -1):
-                with self.subTest(value=value), self.assertRaises(SettingsError):
-                    store.validate_update({"detection": {"default_candidate_padding_px": value}})
+                for key in ("default_candidate_padding_px", "default_exclude_candidate_padding_px"):
+                    with self.subTest(key=key, value=value), self.assertRaises(SettingsError):
+                        store.validate_update({"detection": {key: value}})
             saved = store.validate_update({"detection": {"default_candidate_padding_px": 16385}})
             self.assertEqual(saved["detection"]["default_candidate_padding_px"], 16385)
 
