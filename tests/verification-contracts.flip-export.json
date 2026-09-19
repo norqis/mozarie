@@ -27,11 +27,10 @@
         "FE-001"
       ],
       "observation": "他のボタンや文字と重ならない",
-      "status": "manual",
-      "manual": {
-        "environment": "実ブラウザーを表示したWindowsデスクトップ",
-        "reason": "文字や隣接ボタンとの視覚的な重なりは実フォント、DPI、描画結果を人が観測する必要があるため"
-      }
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_flip_export_ui_contracts_e2e.cjs::flip and save controls keep their text, hit targets, and current filename unobscured"
+      ]
     },
     {
       "key": "FE-002.1",
@@ -63,7 +62,7 @@
       "observation": "元の向きに戻る",
       "status": "automated",
       "testIds": [
-        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_all_flip_combinations_preserve_dimensions_and_exact_pixel_coordinates"
+        "node:tests/test_flip_export_ui_contracts_e2e.cjs::flip actions are reversible, isolated per image, and store bounded non-pixel history"
       ]
     },
     {
@@ -96,7 +95,7 @@
       "observation": "元の向きに戻る",
       "status": "automated",
       "testIds": [
-        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_all_flip_combinations_preserve_dimensions_and_exact_pixel_coordinates"
+        "node:tests/test_flip_export_ui_contracts_e2e.cjs::flip actions are reversible, isolated per image, and store bounded non-pixel history"
       ]
     },
     {
@@ -129,8 +128,7 @@
       "observation": "元の加工対象と一緒にモザイクが左右反転する",
       "status": "automated",
       "testIds": [
-        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_mosaic_pixels_and_image_are_flipped_together",
-        "node:tests/test_ui_operation_lifecycle_e2e.cjs::boundary, fill, transform, undo, and redo recover from pending work without stale locks"
+        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_mosaic_pixels_and_image_are_flipped_together"
       ]
     },
     {
@@ -141,8 +139,7 @@
       "observation": "元の対象と一緒に除外が上下反転する",
       "status": "automated",
       "testIds": [
-        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_mosaic_pixels_and_image_are_flipped_together",
-        "node:tests/test_ui_operation_lifecycle_e2e.cjs::boundary, fill, transform, undo, and redo recover from pending work without stale locks"
+        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_mosaic_pixels_and_image_are_flipped_together"
       ]
     },
     {
@@ -153,8 +150,7 @@
       "observation": "ポインターのある位置にモザイクを追加する",
       "status": "automated",
       "testIds": [
-        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_mosaic_pixels_and_image_are_flipped_together",
-        "node:tests/test_ui_operation_lifecycle_e2e.cjs::boundary, fill, transform, undo, and redo recover from pending work without stale locks"
+        "node:tests/test_flip_export_ui_contracts_e2e.cjs::flipped editor coordinates keep manual masks, boundaries, compare panes, zoom, and pan aligned"
       ]
     },
     {
@@ -165,8 +161,7 @@
       "observation": "ポインターのある位置に除外を追加し",
       "status": "automated",
       "testIds": [
-        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_mosaic_pixels_and_image_are_flipped_together",
-        "node:tests/test_ui_operation_lifecycle_e2e.cjs::boundary, fill, transform, undo, and redo recover from pending work without stale locks"
+        "node:tests/test_flip_export_ui_contracts_e2e.cjs::flipped editor coordinates keep manual masks, boundaries, compare panes, zoom, and pan aligned"
       ]
     },
     {
@@ -177,8 +172,7 @@
       "observation": "モザイク手描きは追加しない",
       "status": "automated",
       "testIds": [
-        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_mosaic_pixels_and_image_are_flipped_together",
-        "node:tests/test_ui_operation_lifecycle_e2e.cjs::boundary, fill, transform, undo, and redo recover from pending work without stale locks"
+        "node:tests/test_flip_export_ui_contracts_e2e.cjs::flipped editor coordinates keep manual masks, boundaries, compare panes, zoom, and pan aligned"
       ]
     },
     {
@@ -189,8 +183,7 @@
       "observation": "ポインター位置のモザイク手描きだけを消す",
       "status": "automated",
       "testIds": [
-        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_mosaic_pixels_and_image_are_flipped_together",
-        "node:tests/test_ui_operation_lifecycle_e2e.cjs::boundary, fill, transform, undo, and redo recover from pending work without stale locks"
+        "node:tests/test_flip_export_ui_contracts_e2e.cjs::flipped editor coordinates keep manual masks, boundaries, compare panes, zoom, and pan aligned"
       ]
     },
     {
@@ -201,8 +194,7 @@
       "observation": "ポインター位置の除外を消す",
       "status": "automated",
       "testIds": [
-        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_mosaic_pixels_and_image_are_flipped_together",
-        "node:tests/test_ui_operation_lifecycle_e2e.cjs::boundary, fill, transform, undo, and redo recover from pending work without stale locks"
+        "node:tests/test_flip_export_ui_contracts_e2e.cjs::flipped editor coordinates keep manual masks, boundaries, compare panes, zoom, and pan aligned"
       ]
     },
     {
@@ -213,8 +205,8 @@
       "observation": "押した位置の色を起点としてモザイク範囲を追加する",
       "status": "automated",
       "testIds": [
-        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_mosaic_pixels_and_image_are_flipped_together",
-        "node:tests/test_ui_operation_lifecycle_e2e.cjs::boundary, fill, transform, undo, and redo recover from pending work without stale locks"
+        "node:tests/test_editor_masks_behavior.cjs::editor masks, fill, candidates, and history",
+        "node:tests/test_flip_export_ui_contracts_e2e.cjs::flipped editor coordinates keep manual masks, boundaries, compare panes, zoom, and pan aligned"
       ]
     },
     {
@@ -225,8 +217,8 @@
       "observation": "押した位置の色を起点として除外範囲を追加する",
       "status": "automated",
       "testIds": [
-        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_mosaic_pixels_and_image_are_flipped_together",
-        "node:tests/test_ui_operation_lifecycle_e2e.cjs::boundary, fill, transform, undo, and redo recover from pending work without stale locks"
+        "node:tests/test_editor_masks_behavior.cjs::editor masks, fill, candidates, and history",
+        "node:tests/test_flip_export_ui_contracts_e2e.cjs::flipped editor coordinates keep manual masks, boundaries, compare panes, zoom, and pan aligned"
       ]
     },
     {
@@ -237,8 +229,7 @@
       "observation": "表示中の指定位置を対象とし",
       "status": "automated",
       "testIds": [
-        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_mosaic_pixels_and_image_are_flipped_together",
-        "node:tests/test_ui_operation_lifecycle_e2e.cjs::boundary, fill, transform, undo, and redo recover from pending work without stale locks"
+        "node:tests/test_flip_export_ui_contracts_e2e.cjs::flipped editor coordinates keep manual masks, boundaries, compare panes, zoom, and pan aligned"
       ]
     },
     {
@@ -249,8 +240,7 @@
       "observation": "左右反対の位置を処理しない",
       "status": "automated",
       "testIds": [
-        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_mosaic_pixels_and_image_are_flipped_together",
-        "node:tests/test_ui_operation_lifecycle_e2e.cjs::boundary, fill, transform, undo, and redo recover from pending work without stale locks"
+        "node:tests/test_flip_export_ui_contracts_e2e.cjs::flipped editor coordinates keep manual masks, boundaries, compare panes, zoom, and pan aligned"
       ]
     },
     {
@@ -261,8 +251,7 @@
       "observation": "左の画像と右の範囲を同じ向きに反転する",
       "status": "automated",
       "testIds": [
-        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_mosaic_pixels_and_image_are_flipped_together",
-        "node:tests/test_ui_operation_lifecycle_e2e.cjs::boundary, fill, transform, undo, and redo recover from pending work without stale locks"
+        "node:tests/test_flip_export_ui_contracts_e2e.cjs::flipped editor coordinates keep manual masks, boundaries, compare panes, zoom, and pan aligned"
       ]
     },
     {
@@ -273,8 +262,7 @@
       "observation": "左の画像と右の範囲を同じ向きに反転する",
       "status": "automated",
       "testIds": [
-        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_mosaic_pixels_and_image_are_flipped_together",
-        "node:tests/test_ui_operation_lifecycle_e2e.cjs::boundary, fill, transform, undo, and redo recover from pending work without stale locks"
+        "node:tests/test_flip_export_ui_contracts_e2e.cjs::flipped editor coordinates keep manual masks, boundaries, compare panes, zoom, and pan aligned"
       ]
     },
     {
@@ -285,8 +273,7 @@
       "observation": "画像と範囲が同じ座標を維持し",
       "status": "automated",
       "testIds": [
-        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_mosaic_pixels_and_image_are_flipped_together",
-        "node:tests/test_ui_operation_lifecycle_e2e.cjs::boundary, fill, transform, undo, and redo recover from pending work without stale locks"
+        "node:tests/test_flip_export_ui_contracts_e2e.cjs::flipped editor coordinates keep manual masks, boundaries, compare panes, zoom, and pan aligned"
       ]
     },
     {
@@ -297,8 +284,7 @@
       "observation": "左右の画面が同期する",
       "status": "automated",
       "testIds": [
-        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_mosaic_pixels_and_image_are_flipped_together",
-        "node:tests/test_ui_operation_lifecycle_e2e.cjs::boundary, fill, transform, undo, and redo recover from pending work without stale locks"
+        "node:tests/test_flip_export_ui_contracts_e2e.cjs::flipped editor coordinates keep manual masks, boundaries, compare panes, zoom, and pan aligned"
       ]
     },
     {
@@ -309,8 +295,7 @@
       "observation": "反転前の向きへ戻り",
       "status": "automated",
       "testIds": [
-        "node:tests/test_project_history_browser_e2e.cjs::project Ctrl+Z flushes the durable edit and keeps browser history canvases released",
-        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_all_flip_combinations_preserve_dimensions_and_exact_pixel_coordinates"
+        "node:tests/test_flip_export_ui_contracts_e2e.cjs::flip actions are reversible, isolated per image, and store bounded non-pixel history"
       ]
     },
     {
@@ -321,8 +306,7 @@
       "observation": "範囲と画像の位置関係を保持する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_project_history_browser_e2e.cjs::project Ctrl+Z flushes the durable edit and keeps browser history canvases released",
-        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_all_flip_combinations_preserve_dimensions_and_exact_pixel_coordinates"
+        "node:tests/test_flip_export_ui_contracts_e2e.cjs::flip actions are reversible, isolated per image, and store bounded non-pixel history"
       ]
     },
     {
@@ -333,8 +317,7 @@
       "observation": "反転後の向きを再適用する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_project_history_browser_e2e.cjs::project Ctrl+Z flushes the durable edit and keeps browser history canvases released",
-        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_all_flip_combinations_preserve_dimensions_and_exact_pixel_coordinates"
+        "node:tests/test_flip_export_ui_contracts_e2e.cjs::flip actions are reversible, isolated per image, and store bounded non-pixel history"
       ]
     },
     {
@@ -345,7 +328,7 @@
       "observation": "Aの向きを保持し",
       "status": "automated",
       "testIds": [
-        "python:tests.test_project_http_coverage.ProjectHttpCoverageTests.test_project_switch_restores_only_its_durable_candidate_manual_history_and_flags"
+        "node:tests/test_flip_export_ui_contracts_e2e.cjs::flip actions are reversible, isolated per image, and store bounded non-pixel history"
       ]
     },
     {
@@ -356,7 +339,7 @@
       "observation": "Bの向きは変わらない",
       "status": "automated",
       "testIds": [
-        "python:tests.test_project_http_coverage.ProjectHttpCoverageTests.test_project_switch_restores_only_its_durable_candidate_manual_history_and_flags"
+        "node:tests/test_flip_export_ui_contracts_e2e.cjs::flip actions are reversible, isolated per image, and store bounded non-pixel history"
       ]
     },
     {
@@ -367,7 +350,7 @@
       "observation": "各画像の反転状態を復元する",
       "status": "automated",
       "testIds": [
-        "python:tests.test_project_http_coverage.ProjectHttpCoverageTests.test_project_switch_restores_only_its_durable_candidate_manual_history_and_flags"
+        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_projectless_flip_survives_project_naming_reopen_readonly_and_mask_clear"
       ]
     },
     {
@@ -378,7 +361,7 @@
       "observation": "反転状態を表示するが",
       "status": "automated",
       "testIds": [
-        "python:tests.test_project_http_coverage.ProjectHttpCoverageTests.test_project_switch_restores_only_its_durable_candidate_manual_history_and_flags"
+        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_projectless_flip_survives_project_naming_reopen_readonly_and_mask_clear"
       ]
     },
     {
@@ -389,7 +372,7 @@
       "observation": "反転操作はできない",
       "status": "automated",
       "testIds": [
-        "python:tests.test_project_http_coverage.ProjectHttpCoverageTests.test_project_switch_restores_only_its_durable_candidate_manual_history_and_flags"
+        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_projectless_flip_survives_project_naming_reopen_readonly_and_mask_clear"
       ]
     },
     {
@@ -400,9 +383,7 @@
       "observation": "モザイク範囲がなくても保存操作が可能",
       "status": "automated",
       "testIds": [
-        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_all_flip_combinations_preserve_dimensions_and_exact_pixel_coordinates",
-        "python:tests.test_project_export_mask_alpha.ProjectExportMaskAlphaTests.test_project_zip_export_uses_rgba_alpha_for_manual_mosaic_and_exclude_masks",
-        "python:tests.test_http_live_endpoints.LiveHttpEndpointTests.test_live_detect_edit_and_copy_save_preserves_png_metadata"
+        "node:tests/test_flip_export_ui_contracts_e2e.cjs::flip actions are reversible, isolated per image, and store bounded non-pixel history"
       ]
     },
     {
@@ -413,9 +394,7 @@
       "observation": "出力を反転した向きで保存し",
       "status": "automated",
       "testIds": [
-        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_all_flip_combinations_preserve_dimensions_and_exact_pixel_coordinates",
-        "python:tests.test_project_export_mask_alpha.ProjectExportMaskAlphaTests.test_project_zip_export_uses_rgba_alpha_for_manual_mosaic_and_exclude_masks",
-        "python:tests.test_http_live_endpoints.LiveHttpEndpointTests.test_live_detect_edit_and_copy_save_preserves_png_metadata"
+        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_flip_only_copy_save_writes_visible_direction_and_never_changes_source"
       ]
     },
     {
@@ -426,9 +405,7 @@
       "observation": "元画像ファイルを変えない",
       "status": "automated",
       "testIds": [
-        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_all_flip_combinations_preserve_dimensions_and_exact_pixel_coordinates",
-        "python:tests.test_project_export_mask_alpha.ProjectExportMaskAlphaTests.test_project_zip_export_uses_rgba_alpha_for_manual_mosaic_and_exclude_masks",
-        "python:tests.test_http_live_endpoints.LiveHttpEndpointTests.test_live_detect_edit_and_copy_save_preserves_png_metadata"
+        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_flip_only_copy_save_writes_visible_direction_and_never_changes_source"
       ]
     },
     {
@@ -439,9 +416,7 @@
       "observation": "出力と編集画面の向きが一致し",
       "status": "automated",
       "testIds": [
-        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_all_flip_combinations_preserve_dimensions_and_exact_pixel_coordinates",
-        "python:tests.test_project_export_mask_alpha.ProjectExportMaskAlphaTests.test_project_zip_export_uses_rgba_alpha_for_manual_mosaic_and_exclude_masks",
-        "python:tests.test_http_live_endpoints.LiveHttpEndpointTests.test_live_detect_edit_and_copy_save_preserves_png_metadata"
+        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_overwrite_records_native_flip_once_and_keeps_transform_undo_redo"
       ]
     },
     {
@@ -452,9 +427,7 @@
       "observation": "反転を二重適用しない",
       "status": "automated",
       "testIds": [
-        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_all_flip_combinations_preserve_dimensions_and_exact_pixel_coordinates",
-        "python:tests.test_project_export_mask_alpha.ProjectExportMaskAlphaTests.test_project_zip_export_uses_rgba_alpha_for_manual_mosaic_and_exclude_masks",
-        "python:tests.test_http_live_endpoints.LiveHttpEndpointTests.test_live_detect_edit_and_copy_save_preserves_png_metadata"
+        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_overwrite_records_native_flip_once_and_keeps_transform_undo_redo"
       ]
     },
     {
@@ -465,9 +438,7 @@
       "observation": "向きが再び逆にならない",
       "status": "automated",
       "testIds": [
-        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_all_flip_combinations_preserve_dimensions_and_exact_pixel_coordinates",
-        "python:tests.test_project_export_mask_alpha.ProjectExportMaskAlphaTests.test_project_zip_export_uses_rgba_alpha_for_manual_mosaic_and_exclude_masks",
-        "python:tests.test_http_live_endpoints.LiveHttpEndpointTests.test_live_detect_edit_and_copy_save_preserves_png_metadata"
+        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_overwrite_records_native_flip_once_and_keeps_transform_undo_redo"
       ]
     },
     {
@@ -478,9 +449,7 @@
       "observation": "各画像の向きをそれぞれ出力へ反映する",
       "status": "automated",
       "testIds": [
-        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_all_flip_combinations_preserve_dimensions_and_exact_pixel_coordinates",
-        "python:tests.test_project_export_mask_alpha.ProjectExportMaskAlphaTests.test_project_zip_export_uses_rgba_alpha_for_manual_mosaic_and_exclude_masks",
-        "python:tests.test_http_live_endpoints.LiveHttpEndpointTests.test_live_detect_edit_and_copy_save_preserves_png_metadata"
+        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_mixed_format_batch_outputs_each_requested_container_with_its_own_geometry_transform_and_masks"
       ]
     },
     {
@@ -491,9 +460,7 @@
       "observation": "保存画像と同じ向きで除外差引き後の範囲を出力する",
       "status": "automated",
       "testIds": [
-        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_all_flip_combinations_preserve_dimensions_and_exact_pixel_coordinates",
-        "python:tests.test_project_export_mask_alpha.ProjectExportMaskAlphaTests.test_project_zip_export_uses_rgba_alpha_for_manual_mosaic_and_exclude_masks",
-        "python:tests.test_http_live_endpoints.LiveHttpEndpointTests.test_live_detect_edit_and_copy_save_preserves_png_metadata"
+        "python:tests.test_project_export_mask_alpha.ProjectExportMaskAlphaTests.test_project_zip_export_uses_rgba_alpha_for_manual_mosaic_and_exclude_masks"
       ]
     },
     {
@@ -517,7 +484,7 @@
       "observation": "最後は元の向き",
       "status": "automated",
       "testIds": [
-        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_all_flip_combinations_preserve_dimensions_and_exact_pixel_coordinates"
+        "node:tests/test_flip_export_ui_contracts_e2e.cjs::flip actions are reversible, isolated per image, and store bounded non-pixel history"
       ]
     },
     {
@@ -528,7 +495,7 @@
       "observation": "反転ごとの全画素コピーを履歴へ蓄積せず",
       "status": "automated",
       "testIds": [
-        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_all_flip_combinations_preserve_dimensions_and_exact_pixel_coordinates"
+        "node:tests/test_flip_export_ui_contracts_e2e.cjs::flip actions are reversible, isolated per image, and store bounded non-pixel history"
       ]
     },
     {
@@ -560,11 +527,10 @@
         "FE-032"
       ],
       "observation": "現在画像名と各欄が重ならない",
-      "status": "manual",
-      "manual": {
-        "environment": "実ブラウザーを表示したWindowsデスクトップ",
-        "reason": "画像名と各欄の視覚的な重なりは実フォント、DPI、描画結果を人が観測する必要があるため"
-      }
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_flip_export_ui_contracts_e2e.cjs::flip and save controls keep their text, hit targets, and current filename unobscured"
+      ]
     },
     {
       "key": "FE-033.1",
@@ -574,7 +540,7 @@
       "observation": "対象選択とは別に保存形式とメタ情報保持を表示する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_ui_operation_lifecycle_e2e.cjs::flip availability, toolbar keyboard order, and save metadata format states use the live UI"
+        "node:tests/test_flip_export_ui_contracts_e2e.cjs::flip and save controls keep their text, hit targets, and current filename unobscured"
       ]
     },
     {
@@ -596,7 +562,7 @@
       "observation": "保持欄の文字も灰色で無効状態を示す",
       "status": "automated",
       "testIds": [
-        "node:tests/test_ui_operation_lifecycle_e2e.cjs::flip availability, toolbar keyboard order, and save metadata format states use the live UI"
+        "node:tests/test_flip_export_ui_contracts_e2e.cjs::flip and save controls keep their text, hit targets, and current filename unobscured"
       ]
     },
     {
@@ -607,7 +573,7 @@
       "observation": "赤字で「JPG形式ではメタ情報を保持しません",
       "status": "automated",
       "testIds": [
-        "node:tests/test_ui_operation_lifecycle_e2e.cjs::flip availability, toolbar keyboard order, and save metadata format states use the live UI"
+        "node:tests/test_flip_export_ui_contracts_e2e.cjs::flip and save controls keep their text, hit targets, and current filename unobscured"
       ]
     },
     {
@@ -640,7 +606,7 @@
       "observation": "保持欄の文字も灰色で無効状態を示す",
       "status": "automated",
       "testIds": [
-        "node:tests/test_ui_operation_lifecycle_e2e.cjs::flip availability, toolbar keyboard order, and save metadata format states use the live UI"
+        "node:tests/test_flip_export_ui_contracts_e2e.cjs::flip and save controls keep their text, hit targets, and current filename unobscured"
       ]
     },
     {
@@ -651,7 +617,7 @@
       "observation": "同じ赤字警告を表示する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_ui_operation_lifecycle_e2e.cjs::flip availability, toolbar keyboard order, and save metadata format states use the live UI"
+        "node:tests/test_flip_export_ui_contracts_e2e.cjs::flip and save controls keep their text, hit targets, and current filename unobscured"
       ]
     },
     {
@@ -673,7 +639,7 @@
       "observation": "JPG選択前のON/OFFを復元し",
       "status": "automated",
       "testIds": [
-        "node:tests/test_ui_operation_lifecycle_e2e.cjs::flip availability, toolbar keyboard order, and save metadata format states use the live UI"
+        "node:tests/test_flip_export_ui_contracts_e2e.cjs::flip and save controls keep their text, hit targets, and current filename unobscured"
       ]
     },
     {
@@ -684,7 +650,7 @@
       "observation": "JPG警告が消える",
       "status": "automated",
       "testIds": [
-        "node:tests/test_ui_operation_lifecycle_e2e.cjs::flip availability, toolbar keyboard order, and save metadata format states use the live UI"
+        "node:tests/test_flip_export_ui_contracts_e2e.cjs::flip and save controls keep their text, hit targets, and current filename unobscured"
       ]
     },
     {
@@ -695,7 +661,7 @@
       "observation": "OFFのままでONにできない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_ui_operation_lifecycle_e2e.cjs::flip availability, toolbar keyboard order, and save metadata format states use the live UI"
+        "node:tests/test_flip_export_ui_contracts_e2e.cjs::flip and save controls keep their text, hit targets, and current filename unobscured"
       ]
     },
     {
@@ -706,7 +672,7 @@
       "observation": "保持欄を有効化せず",
       "status": "automated",
       "testIds": [
-        "node:tests/test_ui_operation_lifecycle_e2e.cjs::flip availability, toolbar keyboard order, and save metadata format states use the live UI"
+        "node:tests/test_flip_export_ui_contracts_e2e.cjs::flip and save controls keep their text, hit targets, and current filename unobscured"
       ]
     },
     {
@@ -717,7 +683,7 @@
       "observation": "他の操作可能な欄へ移動する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_ui_operation_lifecycle_e2e.cjs::flip availability, toolbar keyboard order, and save metadata format states use the live UI"
+        "node:tests/test_flip_export_ui_contracts_e2e.cjs::flip and save controls keep their text, hit targets, and current filename unobscured"
       ]
     },
     {
@@ -915,7 +881,7 @@
       "observation": "対象全件がPNGとなり",
       "status": "automated",
       "testIds": [
-        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_cross_format_export_does_not_invent_png_text_and_respects_requested_container"
+        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_mixed_format_batch_outputs_each_requested_container_with_its_own_geometry_transform_and_masks"
       ]
     },
     {
@@ -926,7 +892,7 @@
       "observation": "各寸法・反転・モザイク・除外を反映する",
       "status": "automated",
       "testIds": [
-        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_cross_format_export_does_not_invent_png_text_and_respects_requested_container"
+        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_mixed_format_batch_outputs_each_requested_container_with_its_own_geometry_transform_and_masks"
       ]
     },
     {
@@ -937,7 +903,7 @@
       "observation": "対象全件がJPEGとなり",
       "status": "automated",
       "testIds": [
-        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_cross_format_export_does_not_invent_png_text_and_respects_requested_container"
+        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_mixed_format_batch_outputs_each_requested_container_with_its_own_geometry_transform_and_masks"
       ]
     },
     {
@@ -948,7 +914,7 @@
       "observation": "元のメタ情報を引き継がない",
       "status": "automated",
       "testIds": [
-        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_cross_format_export_does_not_invent_png_text_and_respects_requested_container"
+        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_mixed_format_batch_outputs_each_requested_container_with_its_own_geometry_transform_and_masks"
       ]
     },
     {
@@ -959,7 +925,7 @@
       "observation": "出力名が衝突せず",
       "status": "automated",
       "testIds": [
-        "python:tests.test_recursive_save_rename.RecursiveSaveTests.test_flatten_selected_set_collision_after_format_and_suffix_has_no_output_probe"
+        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_flat_copy_of_same_stem_mixed_extensions_keeps_every_distinct_output"
       ]
     },
     {
@@ -970,7 +936,7 @@
       "observation": "対象全件を個別ファイルで残す",
       "status": "automated",
       "testIds": [
-        "python:tests.test_recursive_save_rename.RecursiveSaveTests.test_flatten_selected_set_collision_after_format_and_suffix_has_no_output_probe"
+        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_flat_copy_of_same_stem_mixed_extensions_keeps_every_distinct_output"
       ]
     },
     {
@@ -981,7 +947,7 @@
       "observation": "ファイルを出力せず",
       "status": "automated",
       "testIds": [
-        "node:tests/test_ui_operation_lifecycle_e2e.cjs::single and batch saves hold native controls, then complete or cancel through their real HTTP lifecycle"
+        "node:tests/test_flip_export_ui_contracts_e2e.cjs::flip and save controls keep their text, hit targets, and current filename unobscured"
       ]
     },
     {
@@ -992,7 +958,7 @@
       "observation": "元画像と編集内容を変えない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_ui_operation_lifecycle_e2e.cjs::single and batch saves hold native controls, then complete or cancel through their real HTTP lifecycle"
+        "node:tests/test_flip_export_ui_contracts_e2e.cjs::flip and save controls keep their text, hit targets, and current filename unobscured"
       ]
     },
     {
@@ -1015,8 +981,7 @@
       "observation": "保存済みファイルは選択した形式で開ける",
       "status": "automated",
       "testIds": [
-        "python:tests.test_server.MozarieTests.test_cancelled_or_failed_apply_reports_only_successfully_completed_images",
-        "node:tests/test_ui_operation_lifecycle_e2e.cjs::single and batch saves hold native controls, then complete or cancel through their real HTTP lifecycle"
+        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_cancelled_jpg_batch_counts_only_completed_files_and_keeps_their_selected_format"
       ]
     },
     {
@@ -1025,11 +990,10 @@
         "FE-053"
       ],
       "observation": "完了後に全出力分のデコード画像・バッファを保持しない",
-      "status": "manual",
-      "manual": {
-        "environment": "4K画像を繰り返し変換できる実Windowsプロセスとタスクマネージャー",
-        "reason": "OS codecとGCを含むデコードバッファ解放後の常駐メモリは隔離CIの小fixtureでは再現できないため"
-      }
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_render_releases_every_source_decoder_and_temporary_output_between_repeated_conversions"
+      ]
     },
     {
       "key": "FE-053.2",
@@ -1084,7 +1048,7 @@
       "observation": "各画像を同stemの`.png`へ変換して旧拡張子をなくし",
       "status": "automated",
       "testIds": [
-        "python:tests.test_http_live_endpoints.LiveHttpEndpointTests.test_live_browser_overwrite_converts_png_to_jpg_and_persists_the_new_path"
+        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_mixed_png_jpeg_overwrite_replaces_old_extensions_and_opens_every_result_as_png"
       ]
     },
     {
@@ -1095,7 +1059,7 @@
       "observation": "全件がPNGとして開ける",
       "status": "automated",
       "testIds": [
-        "python:tests.test_http_live_endpoints.LiveHttpEndpointTests.test_live_browser_overwrite_converts_png_to_jpg_and_persists_the_new_path"
+        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_mixed_png_jpeg_overwrite_replaces_old_extensions_and_opens_every_result_as_png"
       ]
     },
     {
@@ -1106,7 +1070,7 @@
       "observation": "上書き可能で",
       "status": "automated",
       "testIds": [
-        "python:tests.test_http_live_endpoints.LiveHttpEndpointTests.test_live_browser_overwrite_converts_png_to_jpg_and_persists_the_new_path"
+        "python:tests.test_recursive_save_rename.StudioStateNativeRenameTests.test_edited_name_keeps_jpeg_and_png_casing_for_copy_and_original_overwrite"
       ]
     },
     {
@@ -1117,7 +1081,7 @@
       "observation": "元の.jpeg名を維持したJPEGを保存する",
       "status": "automated",
       "testIds": [
-        "python:tests.test_http_live_endpoints.LiveHttpEndpointTests.test_live_browser_overwrite_converts_png_to_jpg_and_persists_the_new_path"
+        "python:tests.test_recursive_save_rename.StudioStateNativeRenameTests.test_edited_name_keeps_jpeg_and_png_casing_for_copy_and_original_overwrite"
       ]
     },
     {
@@ -1128,7 +1092,7 @@
       "observation": "コピーの拡張子を.jpgにする",
       "status": "automated",
       "testIds": [
-        "python:tests.test_http_live_endpoints.LiveHttpEndpointTests.test_live_browser_overwrite_converts_png_to_jpg_and_persists_the_new_path"
+        "python:tests.test_recursive_save_rename.StudioStateNativeRenameTests.test_edited_name_keeps_jpeg_and_png_casing_for_copy_and_original_overwrite"
       ]
     },
     {
@@ -1139,8 +1103,7 @@
       "observation": "メタ情報保持を操作でき",
       "status": "automated",
       "testIds": [
-        "python:tests.test_server.MozarieTests.test_jpeg_metadata_is_preserved_after_save",
-        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_original_jpeg_preserves_exif_and_icc_but_normalizes_orientation"
+        "node:tests/test_flip_export_ui_contracts_e2e.cjs::flip and save controls keep their text, hit targets, and current filename unobscured"
       ]
     },
     {
@@ -1151,8 +1114,7 @@
       "observation": "明示的なJPG選択時だけ強制OFFとなる",
       "status": "automated",
       "testIds": [
-        "python:tests.test_server.MozarieTests.test_jpeg_metadata_is_preserved_after_save",
-        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_original_jpeg_preserves_exif_and_icc_but_normalizes_orientation"
+        "node:tests/test_flip_export_ui_contracts_e2e.cjs::flip and save controls keep their text, hit targets, and current filename unobscured"
       ]
     },
     {
@@ -1209,8 +1171,7 @@
       "observation": "保存で履歴が失われず",
       "status": "automated",
       "testIds": [
-        "node:tests/test_project_history_browser_e2e.cjs::project Ctrl+Z flushes the durable edit and keeps browser history canvases released",
-        "python:tests.test_http_live_endpoints.LiveHttpEndpointTests.test_live_browser_overwrite_converts_png_to_jpg_and_persists_the_new_path"
+        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_overwrite_records_native_flip_once_and_keeps_transform_undo_redo"
       ]
     },
     {
@@ -1221,8 +1182,7 @@
       "observation": "画面は反転操作前の向きに戻る",
       "status": "automated",
       "testIds": [
-        "node:tests/test_project_history_browser_e2e.cjs::project Ctrl+Z flushes the durable edit and keeps browser history canvases released",
-        "python:tests.test_http_live_endpoints.LiveHttpEndpointTests.test_live_browser_overwrite_converts_png_to_jpg_and_persists_the_new_path"
+        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_overwrite_records_native_flip_once_and_keeps_transform_undo_redo"
       ]
     },
     {
@@ -1233,8 +1193,7 @@
       "observation": "画像と範囲が同じ向きで戻り",
       "status": "automated",
       "testIds": [
-        "node:tests/test_project_history_browser_e2e.cjs::project Ctrl+Z flushes the durable edit and keeps browser history canvases released",
-        "python:tests.test_http_live_endpoints.LiveHttpEndpointTests.test_live_browser_overwrite_converts_png_to_jpg_and_persists_the_new_path"
+        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_overwrite_records_native_flip_once_and_keeps_transform_undo_redo"
       ]
     },
     {
@@ -1245,8 +1204,7 @@
       "observation": "再び保存済みの向きへ進む",
       "status": "automated",
       "testIds": [
-        "node:tests/test_project_history_browser_e2e.cjs::project Ctrl+Z flushes the durable edit and keeps browser history canvases released",
-        "python:tests.test_http_live_endpoints.LiveHttpEndpointTests.test_live_browser_overwrite_converts_png_to_jpg_and_persists_the_new_path"
+        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_overwrite_records_native_flip_once_and_keeps_transform_undo_redo"
       ]
     },
     {
@@ -1257,8 +1215,7 @@
       "observation": "モザイクと除外だけが消え",
       "status": "automated",
       "testIds": [
-        "python:tests.test_server.MozarieTests.test_clear_masks_removes_candidates_without_touching_image",
-        "python:tests.test_project_http_coverage.ProjectHttpCoverageTests.test_project_switch_restores_only_its_durable_candidate_manual_history_and_flags"
+        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_projectless_flip_survives_project_naming_reopen_readonly_and_mask_clear"
       ]
     },
     {
@@ -1269,8 +1226,7 @@
       "observation": "画像の反転状態を保持する",
       "status": "automated",
       "testIds": [
-        "python:tests.test_server.MozarieTests.test_clear_masks_removes_candidates_without_touching_image",
-        "python:tests.test_project_http_coverage.ProjectHttpCoverageTests.test_project_switch_restores_only_its_durable_candidate_manual_history_and_flags"
+        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_projectless_flip_survives_project_naming_reopen_readonly_and_mask_clear"
       ]
     },
     {
@@ -1336,8 +1292,7 @@
       "observation": "PJ作成前でも各操作が画像の向きに反映される",
       "status": "automated",
       "testIds": [
-        "node:tests/test_project_history_browser_e2e.cjs::project Ctrl+Z flushes the durable edit and keeps browser history canvases released",
-        "python:tests.test_project_http_coverage.ProjectHttpCoverageTests.test_project_switch_restores_only_its_durable_candidate_manual_history_and_flags"
+        "node:tests/test_flip_export_ui_contracts_e2e.cjs::flip actions are reversible, isolated per image, and store bounded non-pixel history"
       ]
     },
     {
@@ -1348,8 +1303,7 @@
       "observation": "PJ作成前の反転状態を保持する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_project_history_browser_e2e.cjs::project Ctrl+Z flushes the durable edit and keeps browser history canvases released",
-        "python:tests.test_project_http_coverage.ProjectHttpCoverageTests.test_project_switch_restores_only_its_durable_candidate_manual_history_and_flags"
+        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_projectless_flip_survives_project_naming_reopen_readonly_and_mask_clear"
       ]
     },
     {
@@ -1371,7 +1325,7 @@
       "observation": "JPG選択前のON/OFFを復元する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_ui_operation_lifecycle_e2e.cjs::flip availability, toolbar keyboard order, and save metadata format states use the live UI"
+        "node:tests/test_flip_export_ui_contracts_e2e.cjs::flip and save controls keep their text, hit targets, and current filename unobscured"
       ]
     },
     {
@@ -1426,7 +1380,8 @@
       "observation": "変換先の画像を出力した後にだけ元画像を削除する",
       "status": "automated",
       "testIds": [
-        "python:tests.test_server.MozarieTests.test_browser_copy_delete_removes_the_durable_workspace_row"
+        "node:tests/test_browser_save_runtime.cjs::copy-delete requests source deletion only after the rendered copy succeeds",
+        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
       ]
     },
     {
@@ -1437,8 +1392,8 @@
       "observation": "コピー失敗を表示し",
       "status": "automated",
       "testIds": [
-        "python:tests.test_server.MozarieTests.test_browser_copy_delete_stays_committed_when_journal_decision_fails",
-        "python:tests.test_http_live_endpoints.LiveHttpEndpointTests.test_live_format_overwrite_database_failure_restores_the_original_source_and_catalogue_path"
+        "node:tests/test_flip_export_ui_contracts_e2e.cjs::failed copy is shown and leaves the source image in the catalog",
+        "node:tests/test_browser_save_runtime.cjs::failed copy reports failure and never deletes its original source"
       ]
     },
     {
@@ -1449,8 +1404,8 @@
       "observation": "元画像を削除しない",
       "status": "automated",
       "testIds": [
-        "python:tests.test_server.MozarieTests.test_browser_copy_delete_stays_committed_when_journal_decision_fails",
-        "python:tests.test_http_live_endpoints.LiveHttpEndpointTests.test_live_format_overwrite_database_failure_restores_the_original_source_and_catalogue_path"
+        "node:tests/test_flip_export_ui_contracts_e2e.cjs::failed copy is shown and leaves the source image in the catalog",
+        "node:tests/test_browser_save_runtime.cjs::failed copy reports failure and never deletes its original source"
       ]
     },
     {
@@ -1461,8 +1416,7 @@
       "observation": "表示中に指定した位置へ候補を作り",
       "status": "automated",
       "testIds": [
-        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_mosaic_pixels_and_image_are_flipped_together",
-        "node:tests/test_ui_operation_lifecycle_e2e.cjs::boundary, fill, transform, undo, and redo recover from pending work without stale locks"
+        "node:tests/test_flip_export_ui_contracts_e2e.cjs::flipped editor coordinates keep manual masks, boundaries, compare panes, zoom, and pan aligned"
       ]
     },
     {
@@ -1473,8 +1427,7 @@
       "observation": "画像と候補がずれない",
       "status": "automated",
       "testIds": [
-        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_mosaic_pixels_and_image_are_flipped_together",
-        "node:tests/test_ui_operation_lifecycle_e2e.cjs::boundary, fill, transform, undo, and redo recover from pending work without stale locks"
+        "node:tests/test_flip_export_ui_contracts_e2e.cjs::flipped editor coordinates keep manual masks, boundaries, compare panes, zoom, and pan aligned"
       ]
     },
     {
@@ -1483,11 +1436,10 @@
         "FE-077"
       ],
       "observation": "元座標へ戻して処理する",
-      "status": "manual",
-      "manual": {
-        "environment": "配布対象の実検出モデルと利用可能なCPUまたはGPU",
-        "reason": "実モデル推論を反転上書き済み画像へ実行した候補位置はCIのモックモデルでは再現できないため"
-      }
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_overwritten_flip_is_unwound_for_detection_and_reapplied_to_the_candidate_display"
+      ]
     },
     {
       "key": "FE-077.2",
@@ -1495,11 +1447,10 @@
         "FE-077"
       ],
       "observation": "得られた候補を表示中の向きで重ねる",
-      "status": "manual",
-      "manual": {
-        "environment": "配布対象の実検出モデルと利用可能なCPUまたはGPU",
-        "reason": "実モデル推論を反転上書き済み画像へ実行した候補位置はCIのモックモデルでは再現できないため"
-      }
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_overwritten_flip_is_unwound_for_detection_and_reapplied_to_the_candidate_display"
+      ]
     },
     {
       "key": "FE-077.3",
@@ -1507,11 +1458,7 @@
         "FE-077"
       ],
       "observation": "検出精度の良否は判定しない",
-      "status": "manual",
-      "manual": {
-        "environment": "配布対象の実検出モデルと利用可能なCPUまたはGPU",
-        "reason": "実モデル推論を反転上書き済み画像へ実行した候補位置はCIのモックモデルでは再現できないため"
-      }
+      "status": "retired"
     },
     {
       "key": "FE-078.1",
@@ -1521,8 +1468,7 @@
       "observation": "保存した向きと範囲を維持し",
       "status": "automated",
       "testIds": [
-        "python:tests.test_project_http_coverage.ProjectHttpCoverageTests.test_project_switch_restores_only_its_durable_candidate_manual_history_and_flags",
-        "python:tests.test_http_live_endpoints.LiveHttpEndpointTests.test_live_browser_overwrite_converts_png_to_jpg_and_persists_the_new_path"
+        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_overwrite_flip_and_range_reopen_in_saved_direction_without_double_transform"
       ]
     },
     {
@@ -1533,8 +1479,7 @@
       "observation": "画像を二重反転しない",
       "status": "automated",
       "testIds": [
-        "python:tests.test_project_http_coverage.ProjectHttpCoverageTests.test_project_switch_restores_only_its_durable_candidate_manual_history_and_flags",
-        "python:tests.test_http_live_endpoints.LiveHttpEndpointTests.test_live_browser_overwrite_converts_png_to_jpg_and_persists_the_new_path"
+        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_overwrite_flip_and_range_reopen_in_saved_direction_without_double_transform"
       ]
     },
     {
@@ -1545,7 +1490,7 @@
       "observation": "一覧サムネイルと中央画像が同じ向きになる",
       "status": "automated",
       "testIds": [
-        "node:tests/test_project_history_browser_e2e.cjs::project Ctrl+Z flushes the durable edit and keeps browser history canvases released"
+        "node:tests/test_flip_export_ui_contracts_e2e.cjs::flip actions are reversible, isolated per image, and store bounded non-pixel history"
       ]
     },
     {
@@ -1556,8 +1501,7 @@
       "observation": "EXIF由来の回転と左右反転が各1回だけ適用される",
       "status": "automated",
       "testIds": [
-        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_original_jpeg_preserves_exif_and_icc_but_normalizes_orientation",
-        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_mosaic_pixels_and_image_are_flipped_together"
+        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_original_jpeg_orientation_and_each_user_flip_are_applied_exactly_once"
       ]
     },
     {
@@ -1568,8 +1512,7 @@
       "observation": "EXIF由来の回転と上下反転が各1回だけ適用される",
       "status": "automated",
       "testIds": [
-        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_original_jpeg_preserves_exif_and_icc_but_normalizes_orientation",
-        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_mosaic_pixels_and_image_are_flipped_together"
+        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_original_jpeg_orientation_and_each_user_flip_are_applied_exactly_once"
       ]
     },
     {
@@ -1668,7 +1611,7 @@
       "observation": "操作不可のボタンは飛ばす",
       "status": "automated",
       "testIds": [
-        "node:tests/test_ui_operation_lifecycle_e2e.cjs::flip availability, toolbar keyboard order, and save metadata format states use the live UI"
+        "node:tests/test_flip_export_ui_contracts_e2e.cjs::flip and save controls keep their text, hit targets, and current filename unobscured"
       ]
     },
     {
@@ -1679,7 +1622,7 @@
       "observation": "メタ情報を保持しない警告と無効な保持欄を表示し",
       "status": "automated",
       "testIds": [
-        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_all_flip_combinations_preserve_dimensions_and_exact_pixel_coordinates"
+        "node:tests/test_flip_export_ui_contracts_e2e.cjs::flip and save controls keep their text, hit targets, and current filename unobscured"
       ]
     },
     {
@@ -1688,11 +1631,10 @@
         "FE-086"
       ],
       "observation": "文字が切れない",
-      "status": "manual",
-      "manual": {
-        "environment": "実ブラウザーを表示したWindowsデスクトップ",
-        "reason": "翻訳文の切れは実フォント、DPI、ブラウザー描画結果を人が観測する必要があるため"
-      }
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_flip_export_ui_contracts_e2e.cjs::flip and save controls keep their text, hit targets, and current filename unobscured"
+      ]
     },
     {
       "key": "FE-086.3",
@@ -1702,7 +1644,7 @@
       "observation": "元画像への適用またはコピー保存の選択は維持する",
       "status": "automated",
       "testIds": [
-        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_all_flip_combinations_preserve_dimensions_and_exact_pixel_coordinates"
+        "node:tests/test_flip_export_ui_contracts_e2e.cjs::flip and save controls keep their text, hit targets, and current filename unobscured"
       ]
     },
     {
@@ -1713,9 +1655,7 @@
       "observation": "一覧・編集画面の回転後座標と同じ位置にモザイクを出力し",
       "status": "automated",
       "testIds": [
-        "python:tests.test_image_validation.InputImageValidationTests.test_pillow_pixel_guard_is_disabled_only_while_opening",
-        "python:tests.test_server.MozarieTests.test_exif_rotated_jpeg_uses_normalized_mask_coordinates",
-        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_mosaic_pixels_and_image_are_flipped_together"
+        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_over_limit_oriented_jpeg_flip_keeps_mask_in_normalized_visible_coordinates"
       ]
     },
     {

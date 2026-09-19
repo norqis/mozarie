@@ -45,6 +45,12 @@ class RecursiveSaveTests(unittest.TestCase):
             _SavingState._copy_relative_path(record, "_done", "jpg", True).as_posix(),
             "nested/edited_done.jpg",
         )
+        jpeg = ImageRecord("jpeg", Path("C:/source.jpeg"), "nested/source.jpeg", 1, 1, 1, 1)
+        self.assertEqual(
+            _SavingState._copy_relative_path(jpeg, "_copy", "jpg", True).as_posix(),
+            "nested/source_copy.jpg",
+            "a .jpeg source copied as explicit JPG uses the .jpg output extension",
+        )
 
     def test_flatten_collision_stops_before_output_probe_or_job(self):
         with tempfile.TemporaryDirectory() as raw:
@@ -254,6 +260,13 @@ class StudioStateNativeRenameTests(unittest.TestCase):
         images = {image["relativePath"]: image["id"] for image in state.set_root(str(self.source_root))}
         jpeg_id = images["nested/original.jpeg"]
         state.rename_catalog_image(jpeg_id, "new.jpeg")
+        jpeg_output = self.root / "jpeg-output"; jpeg_output.mkdir(); state.settings["saving"]["default_output_directory"] = str(jpeg_output)
+        state.reserve_browser_save(jpeg_id, 0, "jpeg-copy-casing", copy_to_default=True, suffix="_copy", output_format="jpg", keep_metadata=False)
+        jpeg_copy = state.render_browser_save(jpeg_id, 0, 100, None, client_save_token="jpeg-copy-casing", copy_to_default=True, suffix="_copy", output_format="jpg", keep_metadata=False)
+        state.commit_browser_save(jpeg_id, 0, jpeg_copy.save_token, "keep")
+        with Image.open(jpeg_output / "nested" / "new_copy.jpg") as saved:
+            self.assertEqual(saved.format, "JPEG", "an explicit JPG copy from .jpeg uses a .jpg destination")
+        self.assertTrue(jpeg.exists(), "copy saving keeps the .jpeg source")
         state.reserve_browser_save(jpeg_id, 0, "jpeg-casing", copy_to_default=False, suffix="_censored", output_format="jpg", keep_metadata=False)
         rendered = state.render_browser_save(jpeg_id, 0, 100, None, client_save_token="jpeg-casing", output_format="jpg", keep_metadata=False)
         state.commit_browser_save(jpeg_id, 0, rendered.save_token, "overwrite")

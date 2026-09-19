@@ -1734,6 +1734,14 @@ async function runSaveKeepsCatalogueAndEditorStateCase() {
   assert.equal(runtime.requests.some((request) => request.path === "/api/catalog/remove"), false, "saving never removes list entries");
 }
 
+nodeTest("copy-delete requests source deletion only after the rendered copy succeeds", async () => {
+  await runDeleteOriginalCase();
+});
+
+nodeTest("failed copy reports failure and never deletes its original source", async () => {
+  await runCopyFailureCase();
+});
+
 nodeTest("browser save runtime contracts", async (t) => {
   await t.test("output directory picker preserves absolute path and cancellation", runOutputDirectoryPermissionCases);
   await t.test("browser source preflight rejects cancel denial mismatch and changes", runBrowserSourcePreflightFailureCases);

@@ -177,8 +177,12 @@ test("single and batch saves hold native controls, then complete or cancel throu
     await page.waitForFunction(() => document.querySelector("#singleSaveDialog").open && !document.querySelector("#singleSaveStartButton").disabled);
     await page.locator("#singleSaveStartButton").click();
     await page.waitForFunction(() => state.saving);
+    const singleSaveTransform = await page.evaluate(() => ({ flipH: currentRecord().flipH === true, flipV: currentRecord().flipV === true }));
     await rerenderCandidateUi(page);
     await assertNativeControlsLocked(page, "single save");
+    assert.equal(await page.locator("#flipHorizontalButton").isDisabled(), true, "saving disables horizontal flip before the render completes");
+    assert.equal(await page.locator("#flipVerticalButton").isDisabled(), true, "saving disables vertical flip before the render completes");
+    assert.deepEqual(await page.evaluate(() => ({ flipH: currentRecord().flipH === true, flipV: currentRecord().flipV === true })), singleSaveTransform, "a pending save cannot change the target image direction");
     const saveToken = (await renderGate.routeReady).postDataJSON().clientSaveToken;
     renderGate.release({ status: 200, contentType: "application/json", headers: { "X-Mozarie-Save-Token": saveToken }, body: JSON.stringify({ saveToken }) });
     await assertSettled(page, "single save", ["#saveButton", "#saveAllButton", "#detectCurrentButton"]);
@@ -256,12 +260,14 @@ test("boundary, fill, transform, undo, and redo recover from pending work withou
     })), { filledAlpha: true, untouchedAlpha: 0, history: { tool: "bucket", spans: [0, 0, 2] } }, "the real fill completion paints only the returned span and records that span for undo");
 
     const transformGate = await installResponseGate(page, "**/api/images/sample/transform");
+    const transformBeforeFailure = await page.evaluate(() => ({ flipH: currentRecord().flipH === true, flipV: currentRecord().flipV === true }));
     await page.locator("#flipHorizontalButton").click();
     await page.waitForFunction(() => state.transformPending);
     await rerenderCandidateUi(page);
     await assertNativeControlsLocked(page, "transform failure");
     transformGate.release({ status: 500, contentType: "application/json", body: JSON.stringify({ error_code: "internal_error" }) });
     await assertSettled(page, "transform failure");
+    assert.deepEqual(await page.evaluate(() => ({ flipH: currentRecord().flipH === true, flipV: currentRecord().flipV === true })), transformBeforeFailure, "a failed transform leaves no browser-only flip behind");
     await page.locator("#errorDialogClose").click();
     await assertCandidateControlsEnabledAfterSettle(page, "transform failure");
 

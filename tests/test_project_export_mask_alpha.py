@@ -51,12 +51,14 @@ class ProjectExportMaskAlphaTests(unittest.TestCase):
         source = self.root / "images"
         source.mkdir()
         Image.new("RGB", (4, 4), "white").save(source / "source.png")
+        Image.new("RGB", (4, 4), "gray").save(source / "static.png")
         with patch.object(state_module, "APP_DIR", self.app_dir):
             self.state = StudioState(self.root / "cache", self.root / "sessions")
         project = self.state.create_project("alpha export")
-        image_id = self.state.set_root(str(source))[0]["id"]
+        loaded = {item["relativePath"]: item["id"] for item in self.state.set_root(str(source))}
+        image_id = loaded["source.png"]; static_id = loaded["static.png"]
         add = self.rgba_mask((1, 2))
-        exclusion = self.rgba_mask((3, 0))
+        exclusion = self.rgba_mask((0, 3))
         data_uri = lambda value: "data:image/png;base64," + base64.b64encode(value).decode("ascii")
         self.state.save_manual_workspace(image_id, {
             "add": data_uri(add),
@@ -69,7 +71,11 @@ class ProjectExportMaskAlphaTests(unittest.TestCase):
             "manualExclusionEraseEnabled": True,
             "manualExclusionForced": True,
         })
-        replacement_add = self.rgba_mask((0, 3))
+        replacement_image = Image.new("RGBA", (4, 4), (255, 255, 255, 0))
+        replacement_image.putpixel((0, 3), (255, 255, 255, 255))
+        replacement_image.putpixel((1, 2), (255, 255, 255, 255))
+        replacement_buffer = io.BytesIO(); replacement_image.save(replacement_buffer, format="PNG")
+        replacement_add = replacement_buffer.getvalue()
         self.state.save_manual_workspace(image_id, {
             "add": data_uri(replacement_add),
             "exclusion": data_uri(exclusion),
@@ -85,14 +91,27 @@ class ProjectExportMaskAlphaTests(unittest.TestCase):
         self.assertEqual(self.state.restore_project_history(image_id, "redo")["changedImageIds"], [image_id])
         self.state.set_image_transform(image_id, {"flipH": True, "flipV": False})
 
-        mosaic = list(self.state.iter_project_mask_exports(project["id"], "mosaic"))[0][1]
-        excluded = list(self.state.iter_project_mask_exports(project["id"], "exclude"))[0][1]
-        for exported, pixel in ((mosaic, (3, 3)), (excluded, (0, 0))):
+        static_add = self.rgba_mask((0, 1))
+        self.state.save_manual_workspace(static_id, {
+            "add": data_uri(static_add), "exclusion": "", "exclusionErase": "", "removedCandidateIds": [],
+            "candidateRevision": self.state._candidate_revision(static_id), "manualEnabled": True,
+            "manualExclusionEnabled": True, "manualExclusionEraseEnabled": True, "manualExclusionForced": True,
+        })
+
+        mosaics = {item["id"]: payload for item, payload in self.state.iter_project_mask_exports(project["id"], "mosaic")}
+        exclusions = {item["id"]: payload for item, payload in self.state.iter_project_mask_exports(project["id"], "exclude")}
+        mosaic = mosaics[image_id]
+        excluded = exclusions[image_id]
+        # The canonical (0,3) exclusion removes the overlapping mosaic pixel;
+        # both exports then move with the same horizontal flip as the image.
+        for exported, pixel in ((mosaic, (2, 2)), (excluded, (3, 3))):
             with Image.open(io.BytesIO(exported)) as image:
                 mask = image.convert("L")
                 self.assertEqual(mask.size, (4, 4))
                 self.assertEqual(mask.getbbox(), (pixel[0], pixel[1], pixel[0] + 1, pixel[1] + 1))
                 self.assertEqual(sum(value > 0 for value in mask.getdata()), 1)
+        with Image.open(io.BytesIO(mosaics[static_id])) as unflipped:
+            self.assertEqual(unflipped.convert("L").getbbox(), (0, 1, 1, 2), "an unflipped project image retains its original mask direction")
 
     def test_rgba_and_la_candidates_use_alpha_for_preview_save_and_exports(self) -> None:
         source = self.root / "candidate-images"
