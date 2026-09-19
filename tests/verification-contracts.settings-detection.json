@@ -195,7 +195,7 @@
       "observation": "URLを手動で開くと利用できる",
       "status": "automated",
       "testIds": [
-        "python:tests.test_server.MozarieTests.test_main_uses_saved_port_and_respects_open_browser_setting"
+        "python:tests.test_server.MozarieTests.test_browser_opener_logs_result_without_raising"
       ]
     },
     {
@@ -206,7 +206,7 @@
       "observation": "起動URLのブラウザーを開く",
       "status": "automated",
       "testIds": [
-        "python:tests.test_server.MozarieTests.test_main_uses_saved_port_and_respects_open_browser_setting"
+        "python:tests.test_server.MozarieTests.test_main_configures_logging_and_schedules_one_browser_open"
       ]
     },
     {
