@@ -6,44 +6,96 @@ const vm = require("node:vm");
 const nodeTest = require("node:test");
 
 const resourcesPath = path.join(__dirname, "..", "static", "js", "resources.js");
-const state = {
-  images: [{ id: "previous", assetVersion: "a", candidateRevision: 1 }, { id: "current", assetVersion: "b", candidateRevision: 2 }, { id: "next", assetVersion: "c", candidateRevision: 3 }],
-  currentId: "current", pendingImageId: null, pendingImageKey: null, pendingCandidateKey: null, currentImage: null, candidateImages: new Map(), hoverPrefetchId: null,
-  imageInflight: new Map(), candidateInflight: new Map(), imageLoadControllers: new Map(), candidateLoadControllers: new Map(), resourceImageKeys: new Set(), resourceCandidateKeys: new Set(),
-};
-const context = {
-  state, Map, Set, Promise, AbortController, encodeURIComponent,
-  imageAssetVersion: (image) => image?.assetVersion || "", imageCacheKey: (image) => `${image.id}:${image.assetVersion || ""}`, candidateCacheKey: (id, revision) => `${id}:${revision}`,
-  galleryNavigationNeighbors: (id) => id === "current" ? [state.images[0], state.images[2]] : [], galleryFilteredImages: () => state.images,
-  cachedImage: async (image) => ({ id: image.id, close() {} }), document: { querySelector: () => null }, fetch: async () => ({ ok: true, blob: async () => ({}) }), createImageBitmap: async () => ({}), responseError: () => new Error("image request failed"),
-};
-vm.runInNewContext(fs.readFileSync(resourcesPath, "utf8"), context, { filename: resourcesPath });
-vm.runInNewContext("globalThis.resourceTest = { StateResourceCache, syncResourceOwnership, desiredImageResourceKeys, desiredCandidateResourceKeys, imageUrl, maskUrl, candidatePaddingPreviewUrl, schedulePrefetch };", context, { filename: "resource-contract-exports.js" });
-const test = context.resourceTest;
 
-const released = [];
-const cache = new test.StateResourceCache((value) => { if (value) released.push(value.id); }, (key) => state.resourceImageKeys.has(key));
-const currentKey = "current:b"; const oldKey = "previous:a"; const nextKey = "next:c";
-state.resourceImageKeys = new Set([currentKey]);
-cache.set(currentKey, { id: "current" }); cache.set(oldKey, { id: "previous" });
-assert.equal(cache.has(currentKey), true, "the current decoded image is retained");
-assert.equal(cache.has(oldKey), false, "unowned decoded images are released immediately");
-assert.deepEqual(released, ["previous"]);
+function createResourceRuntime(images) {
+  const released = [];
+  const prefetched = [];
+  let filtered = images;
+  const state = {
+    images, currentId: null, pendingImageId: null, pendingImageKey: null, pendingCandidateKey: null,
+    currentImage: null, candidateImages: new Map(), hoverPrefetchId: null,
+    imageInflight: new Map(), candidateInflight: new Map(), imageLoadControllers: new Map(),
+    candidateLoadControllers: new Map(), resourceImageKeys: new Set(), resourceCandidateKeys: new Set(),
+  };
+  const imageCacheKey = (image) => `${image.id}:${image.assetVersion || ""}`;
+  const navigationNeighbors = (id) => {
+    const index = filtered.findIndex((image) => image.id === id);
+    if (index < 0) return [...new Set([filtered.at(-1), filtered[0]].filter(Boolean))];
+    return [filtered[index - 1], filtered[index + 1]].filter(Boolean);
+  };
+  const context = {
+    state, Map, Set, Promise, AbortController, encodeURIComponent,
+    imageAssetVersion: (image) => image?.assetVersion || "", imageCacheKey,
+    candidateCacheKey: (id, revision) => `${id}:${revision}`,
+    galleryNavigationNeighbors: navigationNeighbors, galleryFilteredImages: () => filtered,
+    cachedImage: async (image) => { const bitmap = { id: image.id, close() { released.push(image.id); } }; prefetched.push(image.id); return bitmap; },
+    document: { querySelector: () => null }, fetch: async () => ({ ok: true, blob: async () => ({}) }),
+    createImageBitmap: async () => ({}), responseError: () => new Error("image request failed"),
+  };
+  vm.runInNewContext(fs.readFileSync(resourcesPath, "utf8"), context, { filename: resourcesPath });
+  vm.runInNewContext("globalThis.resourceTest = { StateResourceCache, syncResourceOwnership, desiredImageResourceKeys, desiredCandidateResourceKeys, imageUrl, maskUrl, candidatePaddingPreviewUrl, schedulePrefetch };", context, { filename: "resource-contract-exports.js" });
+  return { context, state, test: context.resourceTest, released, prefetched, imageCacheKey, setFiltered(value) { filtered = value; } };
+}
 
-state.pendingImageId = "next"; state.hoverPrefetchId = "previous";
-assert.deepEqual([...test.desiredImageResourceKeys()].sort(), [oldKey, currentKey, nextKey].sort(), "ownership includes filtered navigation, pending, and hovered images");
-state.pendingCandidateKey = "next:3";
-assert.deepEqual([...test.desiredCandidateResourceKeys()].sort(), ["current:2", "next:3"], "candidate ownership keeps current and pending bundles");
+nodeTest("resource ownership contracts", async (t) => {
+  await t.test("current pending filtered neighbors and hover are the only retained images", () => {
+    const images = [
+      { id: "previous", assetVersion: "a", candidateRevision: 1 },
+      { id: "current", assetVersion: "b", candidateRevision: 2 },
+      { id: "next", assetVersion: "c", candidateRevision: 3 },
+      { id: "hover", assetVersion: "d", candidateRevision: 4 },
+      { id: "after", assetVersion: "e", candidateRevision: 5 },
+    ];
+    const runtime = createResourceRuntime(images);
+    const { state, test } = runtime;
+    state.currentId = "current"; state.pendingImageId = "current"; state.pendingImageKey = "current:b"; state.hoverPrefetchId = "hover";
+    state.pendingCandidateKey = "current:2";
+    assert.deepEqual([...test.desiredImageResourceKeys()].sort(), ["previous:a", "current:b", "next:c", "hover:d"].sort(), "transition ownership includes actual neighbors and an independent hovered image while retaining the current image");
+    assert.deepEqual([...test.desiredCandidateResourceKeys()].sort(), ["current:2"]);
+    assert.equal(test.imageUrl({ id: "a b", assetVersion: "v/1" }), "/api/image/a%20b?v=v%2F1");
+    assert.equal(test.maskUrl("image/id", "candidate id", 4), "/api/mask/image%2Fid/candidate%20id?v=4-candidate%20id");
+    assert.equal(test.candidatePaddingPreviewUrl("image/id", "candidate id", 4, 12), "/api/mask/image%2Fid/candidate%20id?v=4-candidate%20id&expandPx=12");
+  });
 
-const controller = new AbortController(); state.imageLoadControllers.set(oldKey, controller); test.syncResourceOwnership(); cache.set(oldKey, { id: "previous-retained" });
-assert.equal(cache.has(oldKey), true, "a hovered filtered image remains cached");
-state.hoverPrefetchId = null; state.pendingImageId = null; test.syncResourceOwnership();
-assert.equal(cache.has(oldKey), true, "filtered navigation retains the previous image after hover ends");
-const owned = cache.take(currentKey); assert.equal(owned.id, "current", "take transfers an owned image without closing it");
-state.currentId = null; test.syncResourceOwnership(); cache.trim();
-assert.equal(cache.has(oldKey), false, "ownership is released when the navigation context ends"); assert.equal(controller.signal.aborted, true, "an unowned image request is cancelled");
-assert.deepEqual(released, ["previous", "previous-retained"]);
-assert.equal(test.imageUrl({ id: "a b", assetVersion: "v/1" }), "/api/image/a%20b?v=v%2F1");
-assert.equal(test.maskUrl("image/id", "candidate id", 4), "/api/mask/image%2Fid/candidate%20id?v=4-candidate%20id");
-assert.equal(test.candidatePaddingPreviewUrl("image/id", "candidate id", 4, 12), "/api/mask/image%2Fid/candidate%20id?v=4-candidate%20id&expandPx=12");
-nodeTest("resource contracts", async () => { await test.schedulePrefetch(state.images[2]); });
+  await t.test("400 selections keep decoded image ownership bounded", () => {
+    const images = Array.from({ length: 400 }, (_, index) => ({ id: `image-${index}`, assetVersion: `v${index}`, candidateRevision: index }));
+    const runtime = createResourceRuntime(images);
+    const { state, test, released, imageCacheKey } = runtime;
+    for (let index = 0; index < images.length; index += 1) {
+      state.currentId = images[index].id;
+      test.syncResourceOwnership();
+      state.imageCache.set(imageCacheKey(images[index]), { id: images[index].id, close() { released.push(images[index].id); } });
+      assert.ok(state.imageCache.items.size <= 3, `selection ${index} retains only current and actual neighbors`);
+    }
+    state.currentId = null; runtime.setFiltered([]); test.syncResourceOwnership();
+    assert.equal(state.imageCache.items.size, 0, "leaving the catalogue releases every decoded image");
+    assert.equal(released.length, 400, "each decoded image is released exactly once rather than accumulating with selection count");
+  });
+
+  await t.test("filter and hover changes close stale bitmaps and abort stale requests", async () => {
+    const images = [
+      { id: "old", assetVersion: "a" }, { id: "current", assetVersion: "b" },
+      { id: "next", assetVersion: "c" }, { id: "hover", assetVersion: "d" },
+    ];
+    const runtime = createResourceRuntime(images);
+    const { state, test, released, imageCacheKey } = runtime;
+    state.currentId = "current"; state.hoverPrefetchId = "hover";
+    test.syncResourceOwnership();
+    for (const image of images) state.imageCache.set(imageCacheKey(image), { id: image.id, close() { released.push(image.id); } });
+    const oldRequest = new AbortController(); const hoverRequest = new AbortController();
+    state.imageLoadControllers.set("old:a", oldRequest); state.imageLoadControllers.set("hover:d", hoverRequest);
+
+    runtime.setFiltered([images[1], images[2]]);
+    state.hoverPrefetchId = null;
+    test.syncResourceOwnership();
+    assert.equal(oldRequest.signal.aborted, true, "a filter change cancels a request outside the new filtered neighbors");
+    assert.equal(hoverRequest.signal.aborted, true, "ending hover cancels its request after the image leaves the filtered view");
+    assert.equal(state.imageCache.has("old:a"), false, "a stale filtered bitmap is closed");
+    assert.equal(state.imageCache.has("hover:d"), false, "a stale hover bitmap is closed");
+    assert.deepEqual(released.sort(), ["hover", "old"], "only stale ownership is released while current and next remain");
+
+    state.currentId = null; runtime.setFiltered([]); test.syncResourceOwnership();
+    assert.equal(state.imageCache.items.size, 0, "switching away releases the remaining catalogue bitmaps");
+    await test.schedulePrefetch(null);
+  });
+});

@@ -99,7 +99,7 @@ function makeGalleryRuntime() {
     imageAssetVersion(image) { return image.assetVersion || ""; },
     isHidden(image) { return Boolean(image?.hidden); }, isReviewed(image) { return Boolean(image?.reviewed); }, imageHasMask(image) { return Boolean(image?.masked); }, currentImageActionPending() { return Boolean(state.pendingImageId); }, hasDurableHistory() { return false; },
     selectCatalogImage(id) { selected.push(id); }, schedulePrefetch(image) { prefetched.push(`schedule:${image.id}`); }, prefetchNeighbors(image) { prefetched.push(`neighbors:${image.id}`); },
-    openCatalogContextMenu(_event, id) { menus.push(id); }, updateActionButtons() { calls.push("actions"); }, updateSelectionActionBar() { calls.push("selection"); }, updateFilterMenuButtons() {}, syncResourceOwnership() {}, closeFilterPopovers() {},
+    openCatalogContextMenu(_event, id) { menus.push(id); }, updateActionButtons() { calls.push("actions"); }, updateSelectionActionBar() { calls.push("selection"); }, updateFilterMenuButtons() {}, syncResourceOwnership() { calls.push("sync-resources"); }, closeFilterPopovers() {},
     setViewMode(mode) { calls.push(`stub-view:${mode}`); }, closeBatchMoreMenus() { calls.push("close-menu"); }, clearBatchSelection() { state.selectedImageIds.clear(); calls.push("clear-selection"); },
     discardCatalogNodes(map, parent) { for (const node of map.values()) node.remove(); map.clear(); parent.discarded = true; }, resizeRenderCanvas() { calls.push("resize"); }, focusCanvas() { calls.push("focus-canvas"); }, focusElement(node) { node.focused = true; },
     requestAnimationFrame(callback) { frames.push(callback); }, isGestureActive() { return Boolean(context.gesture); }, currentRecord() { return state.images.find((image) => image.id === state.currentId) || null; },
@@ -110,7 +110,7 @@ function makeGalleryRuntime() {
   vm.runInNewContext(imageDisplayPathSource, context, { filename: path.join(jsRoot, "core.js") });
   const source = fs.readFileSync(path.join(jsRoot, "gallery.js"), "utf8");
   vm.runInNewContext(source, context, { filename: path.join(jsRoot, "gallery.js") });
-  vm.runInNewContext("globalThis.__galleryTest = { thumbnailObserver, thumbnailSource, loadThumbnail, retryThumbnail, observeThumbnail, forgetThumbnail, catalogWindow, focusCatalogIndex, renderGallery, imageMatchesGalleryFilter, updateGalleryCurrent, overviewFolderOptions, overviewImages, syncOverviewFolders, selectOverviewImage, renderOverview, renderCatalogViews, setViewMode, moveCurrentBy, reviewAndMoveNext, hideAndMoveNext, runNavigationAction, updateNavigationControls, thumbnailObservers, catalogWindows, catalogMoveIndex, resetCatalogWindows, scrollCatalogImage };", context, { filename: "test-gallery-exports.js" });
+  vm.runInNewContext("globalThis.__galleryTest = { thumbnailObserver, thumbnailSource, loadThumbnail, retryThumbnail, observeThumbnail, forgetThumbnail, catalogWindow, focusCatalogIndex, renderGallery, imageMatchesGalleryFilter, galleryFilteredImages, galleryNavigationNeighbors, updateGalleryCurrent, overviewFolderOptions, overviewImages, syncOverviewFolders, selectOverviewImage, renderOverview, renderCatalogViews, setViewMode, moveCurrentBy, reviewAndMoveNext, hideAndMoveNext, runNavigationAction, updateNavigationControls, thumbnailObservers, catalogWindows, catalogMoveIndex, resetCatalogWindows, scrollCatalogImage };", context, { filename: "test-gallery-exports.js" });
   return { ...context.__galleryTest, calls, context, document, frames, gallery, menus, nodes, observers, overviewGrid, prefetched, selected, state };
 }
 
@@ -249,6 +249,34 @@ async function galleryInteractions() {
   state.currentId = "one"; runtime.updateNavigationControls(); assert.match(runtime.nodes.get("#imagePosition").textContent, /1/); first.reviewed = false; runtime.updateNavigationControls(); state.currentId = null; runtime.updateNavigationControls(); assert.equal(runtime.nodes.get("#imagePosition").textContent, "- / 3", "navigation keeps the filtered-image count when no item is selected");
 }
 
+async function filteredNavigationUsesOnlyActualVisibleNeighbors() {
+  const runtime = makeGalleryRuntime();
+  const images = [
+    { id: "outside-before", relativePath: "outside-before.png", masked: false },
+    { id: "first", relativePath: "first.png", masked: true },
+    { id: "middle", relativePath: "middle.png", masked: true },
+    { id: "last", relativePath: "last.png", masked: true },
+    { id: "outside-after", relativePath: "outside-after.png", masked: false },
+  ];
+  runtime.state.images = images;
+  runtime.state.galleryFilter = new Set(["masked"]);
+  assert.deepEqual(runtime.galleryFilteredImages().map((image) => image.id), ["first", "middle", "last"]);
+  assert.deepEqual(Array.from(runtime.galleryNavigationNeighbors("middle"), (image) => image.id), ["first", "last"], "the selected filtered image owns only its real previous and next images");
+  assert.deepEqual(Array.from(runtime.galleryNavigationNeighbors("outside-before"), (image) => image.id), ["last", "first"], "a selection outside the filter owns only the wrap destinations");
+
+  runtime.state.currentId = "outside-before";
+  runtime.moveCurrentBy(1); runtime.moveCurrentBy(-1);
+  assert.deepEqual(runtime.selected.slice(-2), ["image:first", "image:last"], "outside-filter navigation wraps to the filtered first or last image");
+  runtime.state.currentId = "middle"; runtime.moveCurrentBy(1);
+  assert.equal(runtime.selected.at(-1), "image:last", "navigation inside the filter uses the next filtered image");
+
+  const syncsBefore = runtime.calls.filter((call) => call === "sync-resources").length;
+  runtime.renderGallery(true);
+  runtime.state.galleryFilter = new Set(["unmasked"]);
+  runtime.renderGallery(true);
+  assert.ok(runtime.calls.filter((call) => call === "sync-resources").length >= syncsBefore + 2, "each filter render resynchronizes decoded-image and request ownership");
+}
+
 function makeSaveRuntime() {
   const nodes = new Map();
   const ids = ["#applyResult", "#applyStartButton", "#applyCopyMode", "#deleteOriginal", "#applyRemoveSaved", "#applySuffix", "#applyFilterMasked", "#applyFilterUnmasked", "#applyFilterReviewed", "#applyFilterUnreviewed", "#applyTargetCount", "#applyDivisor", "#divisor", "#applySuffixRow", "#deleteOriginalRow", "#applyOutputDirectoryRow", "#applyPreserveDirectoryStructureRow", "#chooseOutputDirectoryButton", "#applyOutputDirectoryStatus", "#applyPreserveDirectoryStructure", "#applyTemporarySourceNote", "#applyOverwriteMode", "#applyOverwriteRow", "#applyOutputFormat", "#applyKeepMetadata", "#applyFormatNote", "#settingsDefaultOutputDirectory", "#settingsChooseOutputDirectory", "#applyProgress", "#applyCurrentName", "#applyProgressText", "#applyPauseButton", "#applyCancelButton", "#applyCloseButton", "#applySettings", "#applyProgressPanel", "#applyDialog", "#singleSaveTarget", "#singleSaveOutputDirectoryStatus", "#singleSavePreserveDirectoryStructure", "#singleSaveResult", "#singleSaveSuffixRow", "#singleSaveDeleteOriginalRow", "#singleSaveOutputDirectoryRow", "#singleSavePreserveDirectoryStructureRow", "#singleSaveOverwriteMode", "#singleSaveOverwriteRow", "#singleSaveDeleteOriginal", "#singleSaveRemoveSaved", "#singleSaveChooseOutputDirectoryButton", "#singleSaveStartButton", "#singleSaveSettings", "#singleSaveCopyMode", "#singleSaveSuffix", "#singleSaveOutputFormat", "#singleSaveKeepMetadata", "#singleSaveFormatNote", "#singleSaveDialog"];
@@ -295,8 +323,61 @@ function makeSaveRuntime() {
   vm.runInNewContext(imageDisplayPathSource, context, { filename: path.join(jsRoot, "core.js") });
   const source = fs.readFileSync(path.join(jsRoot, "save.js"), "utf8");
   vm.runInNewContext(source, context, { filename: path.join(jsRoot, "save.js") });
-  vm.runInNewContext("globalThis.__saveTest = { setApplyResult, showApplyError, isTerminalApply, selectedSaveMode, applyImageFilters, setApplyImageFilters, persistApplyImageFilters, sourceAccessFor, sourceCanOverwrite, sourceCanDelete, applyTargetsSupport, applyRestrictionMessage, syncApplyMode, refreshApplyTargets, openApplyDialog, selectedSingleSaveMode, setSingleSaveResult, syncSingleSaveMode, openSingleSaveDialog, chooseSingleOutputDirectory, renderSingleSave, startSingleSave, draftPayload, renderOutputDirectory, commitOutputDirectory, saveDirectoryStructurePreference, setOutputDirectoryPickerBusy, pickOutputDirectory, reserveSaveRender, renderDefaultCopy, renderStreamedSave, chooseOutputDirectory, waitForBrowserSave, showBrowserSaveProgress, reconcileStoredMaskStatuses, reconcileBrowserSaveState, ensureHandlePermission, ensureSaveSources, writeSourceHandle, snapshotSourceHandle, restoreSourceHandle, runBrowserSave, commitBrowserSaveWithRetry, cancelBrowserSave, acknowledgePendingBrowserSave, isDefinitiveCommitRejection, startApplyFromDialog, finishSaveStart, controlApply, showRunningApply, finishApplyJob, isTerminalDetection, finishDetectionJob, pollJob, scheduleJobPoll };", context, { filename: "test-save-exports.js" });
+  vm.runInNewContext("globalThis.__saveTest = { setApplyResult, showApplyError, isTerminalApply, selectedSaveMode, applyImageFilters, setApplyImageFilters, persistApplyImageFilters, sourceAccessFor, sourceCanOverwrite, sourceCanDelete, applyTargetsSupport, applyRestrictionMessage, syncApplyMode, syncApplyOutputOptions, refreshApplyTargets, openApplyDialog, selectedSingleSaveMode, setSingleSaveResult, syncSingleSaveMode, syncSingleOutputOptions, openSingleSaveDialog, chooseSingleOutputDirectory, renderSingleSave, startSingleSave, draftPayload, renderOutputDirectory, commitOutputDirectory, saveDirectoryStructurePreference, setOutputDirectoryPickerBusy, pickOutputDirectory, reserveSaveRender, renderDefaultCopy, renderStreamedSave, chooseOutputDirectory, waitForBrowserSave, showBrowserSaveProgress, reconcileStoredMaskStatuses, reconcileBrowserSaveState, ensureHandlePermission, ensureSaveSources, writeSourceHandle, snapshotSourceHandle, restoreSourceHandle, runBrowserSave, commitBrowserSaveWithRetry, cancelBrowserSave, acknowledgePendingBrowserSave, isDefinitiveCommitRejection, startApplyFromDialog, finishSaveStart, controlApply, showRunningApply, finishApplyJob, isTerminalDetection, finishDetectionJob, pollJob, scheduleJobPoll };", context, { filename: "test-save-exports.js" });
   return { ...context.__saveTest, calls, context, errors, nodes, requests, saveMode, singleSaveMode, state, setHandler(fn) { handler = fn; } };
+}
+
+async function saveFormatMetadataPreferencesAreScopedAndEphemeral() {
+  const runtime = makeSaveRuntime();
+  runtime.state.currentId = "file"; runtime.state.currentImage = { width: 1, height: 1 };
+  await runtime.openSingleSaveDialog("file");
+  runtime.nodes.get("#singleSaveKeepMetadata").checked = true;
+  runtime.nodes.get("#singleSaveOutputFormat").value = "png";
+  runtime.syncSingleOutputOptions();
+  runtime.nodes.get("#singleSaveOutputFormat").value = "jpg";
+  runtime.syncSingleOutputOptions();
+  assert.equal(runtime.nodes.get("#singleSaveKeepMetadata").checked, false, "JPG forces metadata off without changing the remembered preference");
+  assert.equal(runtime.nodes.get("#singleSaveKeepMetadata").disabled, true, "JPG visibly disables metadata retention");
+  runtime.nodes.get("#singleSaveOutputFormat").value = "png";
+  runtime.syncSingleOutputOptions();
+  assert.equal(runtime.nodes.get("#singleSaveKeepMetadata").checked, true, "PNG restores the pre-JPG metadata choice on the same page");
+
+  runtime.nodes.get("#applyOutputFormat").value = "png";
+  runtime.nodes.get("#applyKeepMetadata").checked = false;
+  runtime.syncApplyOutputOptions();
+  runtime.nodes.get("#applyOutputFormat").value = "jpg";
+  runtime.syncApplyOutputOptions();
+  runtime.nodes.get("#applyOutputFormat").value = "png";
+  runtime.syncApplyOutputOptions();
+  assert.equal(runtime.nodes.get("#applyKeepMetadata").checked, false, "batch PNG to JPG to PNG restores its own prior metadata choice");
+
+  const reloaded = makeSaveRuntime();
+  reloaded.state.currentId = "file"; reloaded.state.currentImage = { width: 1, height: 1 };
+  await reloaded.openSingleSaveDialog("file");
+  assert.equal(reloaded.nodes.get("#singleSaveOutputFormat").value, "original", "reload starts from the documented single-save format default");
+  assert.equal(reloaded.nodes.get("#singleSaveKeepMetadata").checked, true, "reload starts from the documented metadata default");
+}
+
+function batchSaveFiltersCountAndSelectTheExactVisibleSet() {
+  const runtime = makeSaveRuntime();
+  runtime.state.images = Array.from({ length: 400 }, (_, index) => ({
+    id: `reviewed-${index}`, relativePath: `${index}.png`, reviewed: true, hidden: false,
+    width: 32, height: 32, candidateCount: index % 2, enabledCandidateCount: index % 2,
+    masked: Boolean(index % 2), previouslySaved: true,
+  }));
+  runtime.state.images.push({ id: "hidden", relativePath: "hidden.png", reviewed: true, hidden: true, masked: true });
+  runtime.nodes.get("#applyFilterReviewed").checked = true;
+  runtime.refreshApplyTargets();
+  assert.equal(runtime.state.applyTargetIds.length, 400, "reviewed includes saved visible images and excludes hidden images");
+  assert.equal(runtime.nodes.get("#applyTargetCount").textContent, "apply.target:400", "reviewed count equals the selected output set");
+  runtime.nodes.get("#applyFilterReviewed").checked = false;
+  runtime.nodes.get("#applyFilterMasked").checked = true;
+  runtime.refreshApplyTargets();
+  assert.equal(runtime.state.applyTargetIds.length, 200, "masked selects exactly the visible images with a mask");
+  assert.equal(runtime.nodes.get("#applyTargetCount").textContent, "apply.target:200", "masked count equals the selected output set");
+  runtime.nodes.get("#applyFilterMasked").checked = false;
+  runtime.refreshApplyTargets();
+  assert.equal(runtime.state.applyTargetIds.length, 400, "no filter selects every visible image and excludes hidden images");
 }
 
 async function saveInteractions() {
@@ -479,6 +560,9 @@ async function saveCoverageMatrix() {
 
 nodeTest("gallery and save interactions", async (t) => {
   await t.test("gallery selection filters and navigation", galleryInteractions);
+  await t.test("filtered navigation owns only actual neighbors and wrap destinations", filteredNavigationUsesOnlyActualVisibleNeighbors);
   await t.test("single and batch save modal preferences and controls", saveInteractions);
+  await t.test("batch save filters count and select the exact visible set", batchSaveFiltersCountAndSelectTheExactVisibleSet);
+  await t.test("PNG JPG PNG restores metadata preference and reload restores defaults", saveFormatMetadataPreferencesAreScopedAndEphemeral);
   await t.test("save lifecycle orders prepare reserve render commit and ack", saveCoverageMatrix);
 });

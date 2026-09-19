@@ -42,12 +42,17 @@ class SaveReleaseVerificationContractTests(unittest.TestCase):
                 self.assertTrue(item["testIds"])
                 for test_id in item["testIds"]:
                     self._assert_test_id_is_discovered(test_id)
-            else:
+            elif item["status"] == "manual":
                 self.assertEqual(item["status"], "manual")
                 self.assertNotIn("testIds", item)
                 self.assertTrue(item["manual"]["environment"].strip())
-                self.assertRegex(item["manual"]["reason"], r"(?:Windowsダイアログ|OS.*権限|実UNC|実ドライブ|ファイルシステム固有)")
+                self.assertRegex(item["manual"]["reason"], r"(?:Windowsダイアログ|OS.*権限|実UNC|実ドライブ|ファイルシステム固有|実GPU)")
                 self.assertIn("CI", item["manual"]["reason"])
+            else:
+                self.assertEqual(item["status"], "retired")
+                self.assertNotIn("testIds", item)
+                self.assertNotIn("manual", item)
+                self.assertIn("検証対象外", item["retired"]["reason"])
 
     def test_manual_document_contains_exactly_the_external_observations(self) -> None:
         documented = {}

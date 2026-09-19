@@ -7,7 +7,7 @@
   },
   "baseline": {
     "rows": 93,
-    "observations": 134
+    "observations": 137
   },
   "observations": [
     {
@@ -77,7 +77,7 @@
       "observation": "既存ファイルを保持し、連番名で保存する。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > exclusive output reservation prevents overwrite"
+        "python:tests.test_server.MozarieTests.test_copy_destination_keeps_existing_files_and_has_no_numeric_search_cap"
       ]
     },
     {
@@ -178,8 +178,7 @@
       "observation": "非表示を除く一覧全件を含み、以前保存した表示画像も含む。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_gallery_save_coverage.cjs::gallery and save interactions > single and batch save modal preferences and controls",
-        "node:tests/test_bulk_views_save_preferences_e2e.cjs::bulk displays and save preferences in Chromium"
+        "node:tests/test_gallery_save_coverage.cjs::gallery and save interactions > batch save filters count and select the exact visible set"
       ]
     },
     {
@@ -190,8 +189,7 @@
       "observation": "非表示を除くモザイクのある画像だけを数え、同じ対象を保存する。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_gallery_save_coverage.cjs::gallery and save interactions > single and batch save modal preferences and controls",
-        "node:tests/test_bulk_views_save_preferences_e2e.cjs::bulk displays and save preferences in Chromium"
+        "node:tests/test_gallery_save_coverage.cjs::gallery and save interactions > batch save filters count and select the exact visible set"
       ]
     },
     {
@@ -202,8 +200,7 @@
       "observation": "非表示を除く確認済み画像だけを数え、出力済みでも除外しない。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_gallery_save_coverage.cjs::gallery and save interactions > single and batch save modal preferences and controls",
-        "node:tests/test_bulk_views_save_preferences_e2e.cjs::bulk displays and save preferences in Chromium"
+        "node:tests/test_gallery_save_coverage.cjs::gallery and save interactions > batch save filters count and select the exact visible set"
       ]
     },
     {
@@ -214,8 +211,7 @@
       "observation": "非表示を除いた件数だけを表示・出力する。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_gallery_save_coverage.cjs::gallery and save interactions > single and batch save modal preferences and controls",
-        "node:tests/test_bulk_views_save_preferences_e2e.cjs::bulk displays and save preferences in Chromium"
+        "node:tests/test_gallery_save_coverage.cjs::gallery and save interactions > batch save filters count and select the exact visible set"
       ]
     },
     {
@@ -226,7 +222,7 @@
       "observation": "対象画像をそれぞれ出力し、元画像を保持する。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > copy reserve render commit acknowledgement succeeds"
+        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > 400 browser copies stay bounded by configured parallelism"
       ]
     },
     {
@@ -248,7 +244,7 @@
       "observation": "空欄を許容し、同名競合時は連番にする。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > exclusive output reservation prevents overwrite"
+        "python:tests.test_server.MozarieTests.test_copy_destination_keeps_existing_files_and_has_no_numeric_search_cap"
       ]
     },
     {
@@ -271,7 +267,7 @@
       "observation": "進行中の処理が落ち着いた後に新規出力を開始しない。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > pause cancellation and submission locks settle"
+        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > pause and terminal completion reset controls"
       ]
     },
     {
@@ -282,7 +278,7 @@
       "observation": "未処理画像を保存し、完了済み画像を重複出力しない。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > pause cancellation and submission locks settle"
+        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > pause and terminal completion reset controls"
       ]
     },
     {
@@ -293,7 +289,8 @@
       "observation": "未処理分を成功扱いにせず、操作を再有効化する。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > save cancellation stops unstarted work"
+        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > save cancellation stops unstarted work",
+        "python:tests.test_server.MozarieTests.test_cancelled_or_failed_apply_reports_only_successfully_completed_images"
       ]
     },
     {
@@ -326,8 +323,7 @@
       "observation": "同じページの間は各モーダルの選択を保ち、JPGの強制OFFで利用者の保持選択を失わない。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_gallery_save_coverage.cjs::gallery and save interactions > single and batch save modal preferences and controls",
-        "node:tests/test_bulk_views_save_preferences_e2e.cjs::bulk displays and save preferences in Chromium"
+        "node:tests/test_gallery_save_coverage.cjs::gallery and save interactions > PNG JPG PNG restores metadata preference and reload restores defaults"
       ]
     },
     {
@@ -338,8 +334,7 @@
       "observation": "再読込後は既定値へ戻る。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_gallery_save_coverage.cjs::gallery and save interactions > single and batch save modal preferences and controls",
-        "node:tests/test_bulk_views_save_preferences_e2e.cjs::bulk displays and save preferences in Chromium"
+        "node:tests/test_gallery_save_coverage.cjs::gallery and save interactions > PNG JPG PNG restores metadata preference and reload restores defaults"
       ]
     },
     {
@@ -350,8 +345,7 @@
       "observation": "明示した一括対象だけは開くたびに反映する。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_gallery_save_coverage.cjs::gallery and save interactions > single and batch save modal preferences and controls",
-        "node:tests/test_bulk_views_save_preferences_e2e.cjs::bulk displays and save preferences in Chromium"
+        "node:tests/test_gallery_save_coverage.cjs::gallery and save interactions > single and batch save modal preferences and controls"
       ]
     },
     {
@@ -362,7 +356,7 @@
       "observation": "保存が確定した画像だけを一覧から外す。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > remove after save selects only committed images",
+        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > remove after save removes committed images only",
         "node:tests/test_bulk_views_save_preferences_e2e.cjs::bulk displays and save preferences in Chromium"
       ]
     },
@@ -374,8 +368,7 @@
       "observation": "先頭は次、末尾は前を選び、別の表示中画像は変えない。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > remove after save selects only committed images",
-        "node:tests/test_bulk_views_save_preferences_e2e.cjs::bulk displays and save preferences in Chromium"
+        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > remove after save updates selection and UI"
       ]
     },
     {
@@ -386,8 +379,7 @@
       "observation": "元ファイルと保存先出力は保持する。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > remove after save selects only committed images",
-        "node:tests/test_bulk_views_save_preferences_e2e.cjs::bulk displays and save preferences in Chromium"
+        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > remove after save removes committed images only"
       ]
     },
     {
@@ -398,7 +390,7 @@
       "observation": "完了済みだけを一回の一覧削除で外す。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > remove after save selects only committed images",
+        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > remove after save removes committed images only",
         "node:tests/test_bulk_views_save_preferences_e2e.cjs::bulk displays and save preferences in Chromium"
       ]
     },
@@ -410,8 +402,7 @@
       "observation": "保存失敗・取消で出力を巻き戻さず、一覧削除だけが失敗したときは保存済みだが削除できなかったことを表示する。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > remove after save selects only committed images",
-        "node:tests/test_bulk_views_save_preferences_e2e.cjs::bulk displays and save preferences in Chromium"
+        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > remove after save respects enablement and failures"
       ]
     },
     {
@@ -422,8 +413,7 @@
       "observation": "ONでは元フォルダーからの相対構成を保つ。",
       "status": "automated",
       "testIds": [
-        "python:tests.test_recursive_save_rename.RecursiveSaveTests.test_flatten_selected_set_collision_after_format_and_suffix_has_no_output_probe",
-        "python:tests.test_recursive_save_rename.RecursiveSaveTests.test_copy_uses_edited_basename_before_format_and_suffix"
+        "python:tests.test_recursive_save_rename.RecursiveSaveTests.test_preserve_structure_keeps_the_source_relative_parent_in_the_reserved_output"
       ]
     },
     {
@@ -434,8 +424,7 @@
       "observation": "OFFの最終名重複は保存・下書き確定・出力作成の前に原因と次の操作を示して停止し、連番を付けて続行しない。",
       "status": "automated",
       "testIds": [
-        "python:tests.test_recursive_save_rename.RecursiveSaveTests.test_flatten_selected_set_collision_after_format_and_suffix_has_no_output_probe",
-        "python:tests.test_recursive_save_rename.RecursiveSaveTests.test_copy_uses_edited_basename_before_format_and_suffix"
+        "python:tests.test_recursive_save_rename.RecursiveSaveTests.test_flatten_selected_set_collision_after_format_and_suffix_has_no_output_probe"
       ]
     },
     {
@@ -446,7 +435,7 @@
       "observation": "コピーは編集名と選んだ形式で出力し、元画像と編集名を保持する。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > format overwrite collision and failure preserve original",
+        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > edited filename overwrite persists",
         "python:tests.test_recursive_save_rename.StudioStateNativeRenameTests.test_edited_name_collision_keeps_original_and_edit"
       ]
     },
@@ -458,8 +447,8 @@
       "observation": "元画像への適用は指定名で保存できた後にだけ旧名を削除し、元名を更新する。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > format overwrite collision and failure preserve original",
-        "python:tests.test_recursive_save_rename.StudioStateNativeRenameTests.test_edited_name_collision_keeps_original_and_edit"
+        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > formatted overwrite replaces source after success",
+        "python:tests.test_recursive_save_rename.WorkspaceRenameTests.test_original_save_retargets_native_aliases_and_keeps_alias_edit"
       ]
     },
     {
@@ -470,7 +459,7 @@
       "observation": "競合・保存失敗では旧画像を残す。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > format overwrite collision and failure preserve original",
+        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > formatted overwrite collision preserves original",
         "python:tests.test_recursive_save_rename.StudioStateNativeRenameTests.test_edited_name_collision_keeps_original_and_edit"
       ]
     },
@@ -482,7 +471,7 @@
       "observation": "再接続の取消・拒否・不一致では出力と削除を開始せず、許可後だけコピー成功後の元画像削除を確定する。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > output directory permissions and browser source preflight"
+        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > browser source preflight rejects cancel denial mismatch and changes"
       ]
     },
     {
@@ -491,10 +480,9 @@
         "SV-096"
       ],
       "observation": "元フォルダー再接続のWindowsダイアログで許可、取消、別フォルダー選択を行ったとき、表示とOS権限UIが正しい。",
-      "status": "manual",
-      "manual": {
-        "environment": "Windows Explorer形式の実フォルダーダイアログとブラウザーFile System Access権限UI",
-        "reason": "Windowsダイアログの外観とOS権限UIはヘッドレスCIから再現・判定できない。"
+      "status": "retired",
+      "retired": {
+        "reason": "WindowsダイアログとFile System Access権限UIの外観確認は、利用者指定により検証対象外とする。機能上の取消・拒否・不一致はSV-096.1で自動検証する。"
       }
     },
     {
@@ -539,8 +527,7 @@
       "observation": "透過部分を保持し、加工対象以外の透過を塗りつぶさない。",
       "status": "automated",
       "testIds": [
-        "python:tests.test_server.MozarieTests.test_decode_mask_uses_alpha_not_transparent_rgb",
-        "python:tests.test_mozarie_domain.MozarieDomainTests.test_apply_union_minus_exclude_and_manual_masks"
+        "python:tests.test_server.MozarieTests.test_transparent_png_save_preserves_size_alpha_and_unmasked_pixels"
       ]
     },
     {
@@ -562,7 +549,7 @@
       "observation": "除外後の合成範囲だけにモザイクがかかる。",
       "status": "automated",
       "testIds": [
-        "python:tests.test_server.MozarieTests.test_combined_mask_always_applies_auto_exclusions_before_manual_add"
+        "python:tests.test_server.MozarieTests.test_candidate_exclusion_render_preserves_excluded_pixels_dimensions_and_state"
       ]
     },
     {
@@ -573,8 +560,7 @@
       "observation": "全候補を除外した画像はモザイク画素を出力せず、一部除外した画像は除外部分を除いた候補範囲だけにモザイクを出力する。",
       "status": "automated",
       "testIds": [
-        "python:tests.test_server.MozarieTests.test_apply_all_empty_masks_completes_without_changing_images",
-        "python:tests.test_server.MozarieTests.test_browser_save_skips_disabled_candidate_mask_files"
+        "python:tests.test_server.MozarieTests.test_candidate_exclusion_render_preserves_excluded_pixels_dimensions_and_state"
       ]
     },
     {
@@ -585,8 +571,7 @@
       "observation": "対象外画像・候補・除外状態を変えない。",
       "status": "automated",
       "testIds": [
-        "python:tests.test_server.MozarieTests.test_apply_all_empty_masks_completes_without_changing_images",
-        "python:tests.test_server.MozarieTests.test_browser_save_skips_disabled_candidate_mask_files"
+        "python:tests.test_server.MozarieTests.test_candidate_exclusion_render_preserves_excluded_pixels_dimensions_and_state"
       ]
     },
     {
@@ -598,7 +583,7 @@
       "status": "automated",
       "testIds": [
         "python:tests.test_server.MozarieTests.test_apply_all_empty_masks_completes_without_changing_images",
-        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > remove after save selects only committed images"
+        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > remove after save removes committed images only"
       ]
     },
     {
@@ -609,7 +594,7 @@
       "observation": "元画像寸法のPNGで、除外を差し引いた範囲を出力する。",
       "status": "automated",
       "testIds": [
-        "python:tests.test_project_http_coverage.ProjectHttpCoverageTests.test_project_mask_png_zip_and_cleanup"
+        "python:tests.test_server.MozarieTests.test_candidate_exclusion_render_preserves_excluded_pixels_dimensions_and_state"
       ]
     },
     {
@@ -686,8 +671,8 @@
       "observation": "現在PJを切り替えず、指定行のPJだけを出力する。",
       "status": "automated",
       "testIds": [
-        "python:tests.test_project_http_coverage.ProjectHttpCoverageTests.test_project_mask_png_zip_and_cleanup",
-        "node:tests/test_project_ui_runtime.cjs::project dialogs, source recovery, and project switching"
+        "node:tests/test_project_ui_runtime.cjs::project dialogs, source recovery, and project switching > project mask exports preserve project state across empty read-only failure and retry cases",
+        "python:tests.test_project_http_coverage.ProjectHttpCoverageTests.test_project_mask_png_zip_and_cleanup"
       ]
     },
     {
@@ -698,8 +683,8 @@
       "observation": "直前の候補編集もZIPに反映する。",
       "status": "automated",
       "testIds": [
-        "python:tests.test_project_http_coverage.ProjectHttpCoverageTests.test_project_mask_png_zip_and_cleanup",
-        "node:tests/test_project_ui_runtime.cjs::project dialogs, source recovery, and project switching"
+        "node:tests/test_project_ui_runtime.cjs::project dialogs, source recovery, and project switching > project mask exports preserve project state across empty read-only failure and retry cases",
+        "python:tests.test_project_http_coverage.ProjectHttpCoverageTests.test_project_mask_png_zip_and_cleanup"
       ]
     },
     {
@@ -710,8 +695,7 @@
       "observation": "閲覧専用を維持したまま保存できる。",
       "status": "automated",
       "testIds": [
-        "python:tests.test_project_http_coverage.ProjectHttpCoverageTests.test_project_mask_png_zip_and_cleanup",
-        "node:tests/test_project_ui_runtime.cjs::project dialogs, source recovery, and project switching"
+        "node:tests/test_project_ui_runtime.cjs::project dialogs, source recovery, and project switching > project mask exports preserve project state across empty read-only failure and retry cases"
       ]
     },
     {
@@ -722,8 +706,7 @@
       "observation": "2種類のZIP操作だけ無効となり、PJを開く・削除は操作できる。",
       "status": "automated",
       "testIds": [
-        "python:tests.test_project_http_coverage.ProjectHttpCoverageTests.test_project_mask_png_zip_and_cleanup",
-        "node:tests/test_project_ui_runtime.cjs::project dialogs, source recovery, and project switching"
+        "node:tests/test_project_ui_runtime.cjs::project dialogs, source recovery, and project switching > project mask exports preserve project state across empty read-only failure and retry cases"
       ]
     },
     {
@@ -734,8 +717,7 @@
       "observation": "通信エラーを表示し、PJ管理表と対象PJを保持する。",
       "status": "automated",
       "testIds": [
-        "python:tests.test_project_http_coverage.ProjectHttpCoverageTests.test_project_mask_png_zip_and_cleanup",
-        "node:tests/test_project_ui_runtime.cjs::project dialogs, source recovery, and project switching"
+        "node:tests/test_project_ui_runtime.cjs::project dialogs, source recovery, and project switching > project mask exports preserve project state across empty read-only failure and retry cases"
       ]
     },
     {
@@ -746,8 +728,7 @@
       "observation": "再度ZIPを保存できる。",
       "status": "automated",
       "testIds": [
-        "python:tests.test_project_http_coverage.ProjectHttpCoverageTests.test_project_mask_png_zip_and_cleanup",
-        "node:tests/test_project_ui_runtime.cjs::project dialogs, source recovery, and project switching"
+        "node:tests/test_project_ui_runtime.cjs::project dialogs, source recovery, and project switching > project mask exports preserve project state across empty read-only failure and retry cases"
       ]
     },
     {
@@ -778,10 +759,10 @@
         "SV-046"
       ],
       "observation": "アクセス許可を求めるOS操作は実施しない。",
-      "status": "automated",
-      "testIds": [
-        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > copy render failure preserves source and state"
-      ]
+      "status": "retired",
+      "retired": {
+        "reason": "検証対象外: OS permission UI is excluded from verification by the user; functional permission denial and cancellation remain automated in SV-096.1."
+      }
     },
     {
       "key": "SV-047.1",
@@ -791,7 +772,7 @@
       "observation": "元画像変更を案内し、無確認で上書きしない。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > source changes and repeated overwrite remain coherent",
+        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > source change during render rejects overwrite",
         "python:tests.test_server.MozarieTests.test_filesystem_save_rejects_change_during_source_read"
       ]
     },
@@ -803,7 +784,7 @@
       "observation": "対象画像の不足を案内し、別画像の不具合と表示しない。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > output directory permissions and browser source preflight"
+        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > browser source preflight rejects cancel denial mismatch and changes"
       ]
     },
     {
@@ -814,7 +795,7 @@
       "observation": "未取得の保存結果を成功表示しない。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > recoverable and retryable commit failures reconcile"
+        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > recoverable commit failures reconcile token state"
       ]
     },
     {
@@ -825,7 +806,7 @@
       "observation": "再接続後はサーバーの進捗を表示する。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > recoverable and retryable commit failures reconcile"
+        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > retryable commit reuses the same token"
       ]
     },
     {
@@ -836,7 +817,7 @@
       "observation": "通信エラーを表示し、現在の作業画面を維持する。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_project_ui_runtime.cjs::project dialogs, source recovery, and project switching"
+        "node:tests/test_project_ui_runtime.cjs::project dialogs, source recovery, and project switching > project network failures preserve list order editor state and selected project"
       ]
     },
     {
@@ -847,7 +828,7 @@
       "observation": "通信エラーを表示し、取得済みの行順と昇降順表示を保持する。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_project_ui_runtime.cjs::project dialogs, source recovery, and project switching"
+        "node:tests/test_project_ui_runtime.cjs::project dialogs, source recovery, and project switching > project network failures preserve list order editor state and selected project"
       ]
     },
     {
@@ -858,7 +839,7 @@
       "observation": "通信エラーを表示し、対象PJと現在の編集を保持する。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_project_ui_runtime.cjs::project dialogs, source recovery, and project switching"
+        "node:tests/test_project_ui_runtime.cjs::project dialogs, source recovery, and project switching > project network failures preserve list order editor state and selected project"
       ]
     },
     {
@@ -869,7 +850,7 @@
       "observation": "通信エラーを表示し、保存前のPJ名・候補・手描き・確認状態を保持する。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_project_ui_runtime.cjs::project dialogs, source recovery, and project switching"
+        "node:tests/test_project_ui_runtime.cjs::project dialogs, source recovery, and project switching > project network failures preserve list order editor state and selected project"
       ]
     },
     {
@@ -880,7 +861,7 @@
       "observation": "削除成功と表示せず、一覧とPJを保持する。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_project_ui_runtime.cjs::project dialogs, source recovery, and project switching"
+        "node:tests/test_project_ui_runtime.cjs::project dialogs, source recovery, and project switching > project network failures preserve list order editor state and selected project"
       ]
     },
     {
@@ -899,7 +880,18 @@
       "sourceIds": [
         "SV-057"
       ],
-      "observation": "描画がリアルタイムで反映され、履歴回数に応じて応答が鈍化し続けない。",
+      "observation": "4K画像の手描きがpointerup前に反映され、ROI描画がフレーム予算内に収まる。",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_mosaic_4k_e2e.cjs::4K drag renders a preview before pointerup with one bounded worker"
+      ]
+    },
+    {
+      "key": "SV-057.2",
+      "sourceIds": [
+        "SV-057"
+      ],
+      "observation": "履歴回数を増やしても履歴canvasを解放し、応答を鈍化させる保持物を残さない。",
       "status": "automated",
       "testIds": [
         "node:tests/test_project_history_browser_e2e.cjs::project Ctrl+Z flushes the durable edit and keeps browser history canvases released"
@@ -913,7 +905,8 @@
       "observation": "DOMとメモリが繰り返しで増え続けず、全件の画像本体を再取得し続けない。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_bulk_views_save_preferences_e2e.cjs::bulk displays and save preferences in Chromium"
+        "node:tests/test_gallery_performance_e2e.cjs::20k gallery DOM decoded cache and full-image requests stay bounded",
+        "node:tests/test_resources.cjs::resource ownership contracts > 400 selections keep decoded image ownership bounded"
       ]
     },
     {
@@ -921,11 +914,24 @@
       "sourceIds": [
         "SV-059"
       ],
-      "observation": "処理後に推論用VRAMが減り、終了後の基準値が回数に応じて増え続けない。",
+      "observation": "検出の終了時に推論モデルとGPUキャッシュの解放処理を実行する。",
       "status": "automated",
       "testIds": [
-        "python:tests.test_server.MozarieTests.test_gpu_oom_discards_all_cached_models_once"
+        "python:tests.test_server.MozarieTests.test_gpu_oom_discards_all_cached_models_once",
+        "python:tests.test_server.MozarieTests.test_terminal_gpu_release_allows_detection_models_to_reload"
       ]
+    },
+    {
+      "key": "SV-059.2",
+      "sourceIds": [
+        "SV-059"
+      ],
+      "observation": "実GPUで検出を5回繰り返し、終了後のVRAM基準値が回数に応じて増え続けない。",
+      "status": "manual",
+      "manual": {
+        "environment": "対応GPUと実検出モデルを使用するWindows環境",
+        "reason": "実GPUドライバーのVRAM割当と解放後の基準値はCIのCPU環境では再現できない。"
+      }
     },
     {
       "key": "SV-060.1",
@@ -955,11 +961,10 @@
         "SV-062"
       ],
       "observation": "バックエンド・フロントエンドの全テストと静的確認が成功している。",
-      "status": "automated",
-      "testIds": [
-        "python:tests.test_unittest_shard_runner.UnittestShardRunnerTests.test_skipped_suite_records_skip_for_ci_policy",
-        "python:tests.test_test_environment.TestEnvironmentTests.test_import_time_state_uses_the_disposable_test_app_directory"
-      ]
+      "status": "retired",
+      "retired": {
+        "reason": "検証対象外: A checklist observation that the complete test command passed is release-run evidence, not stable product behavior; CI executes the suites directly."
+      }
     },
     {
       "key": "SV-062.2",
@@ -967,11 +972,10 @@
         "SV-062"
       ],
       "observation": "失敗・skip・対象外のテストを残していない。",
-      "status": "automated",
-      "testIds": [
-        "python:tests.test_unittest_shard_runner.UnittestShardRunnerTests.test_skipped_suite_records_skip_for_ci_policy",
-        "python:tests.test_test_environment.TestEnvironmentTests.test_import_time_state_uses_the_disposable_test_app_directory"
-      ]
+      "status": "retired",
+      "retired": {
+        "reason": "検証対象外: A checklist observation about the absence of skips is enforced by the CI test policy and contract validator rather than a product test."
+      }
     },
     {
       "key": "SV-063.1",
@@ -1026,11 +1030,10 @@
         "SV-066"
       ],
       "observation": "PRと説明は日本語、リリース名はバージョンだけ。",
-      "status": "automated",
-      "testIds": [
-        "python:tests.test_updater.UpdaterTests.test_next_release_archive_is_accepted_by_v0513_updater",
-        "python:tests.test_runtime_contract.RuntimeContractTests.test_release_archive_excludes_development_only_files"
-      ]
+      "status": "retired",
+      "retired": {
+        "reason": "検証対象外: PR language and release-title wording are repository publishing conventions, not executable product behavior."
+      }
     },
     {
       "key": "SV-066.2",
@@ -1038,11 +1041,10 @@
         "SV-066"
       ],
       "observation": "説明は変更内容を簡潔に記載する。",
-      "status": "automated",
-      "testIds": [
-        "python:tests.test_updater.UpdaterTests.test_next_release_archive_is_accepted_by_v0513_updater",
-        "python:tests.test_runtime_contract.RuntimeContractTests.test_release_archive_excludes_development_only_files"
-      ]
+      "status": "retired",
+      "retired": {
+        "reason": "検証対象外: Release-note prose quality is a publishing review concern and cannot be asserted meaningfully by a stable product test."
+      }
     },
     {
       "key": "SV-067.1",
@@ -1050,11 +1052,10 @@
         "SV-067"
       ],
       "observation": "マージ後のコミットが一致し、マージ済み作業ブランチが残らない。",
-      "status": "automated",
-      "testIds": [
-        "python:tests.test_updater.UpdaterTests.test_next_release_archive_is_accepted_by_v0513_updater",
-        "python:tests.test_runtime_contract.RuntimeContractTests.test_release_archive_excludes_development_only_files"
-      ]
+      "status": "retired",
+      "retired": {
+        "reason": "検証対象外: Merged commit and branch cleanup are transient repository state verified by the release workflow, not product behavior."
+      }
     },
     {
       "key": "SV-068.1",
@@ -1064,7 +1065,7 @@
       "observation": "空いている連番を探索して保存する。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > exclusive output reservation prevents overwrite"
+        "python:tests.test_server.MozarieTests.test_copy_destination_keeps_existing_files_and_has_no_numeric_search_cap"
       ]
     },
     {
@@ -1075,7 +1076,7 @@
       "observation": "固定の連番上限で失敗せず、既存ファイルを上書きしない。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > exclusive output reservation prevents overwrite"
+        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > exclusive writable never replaces an existing output"
       ]
     },
     {
@@ -1086,8 +1087,12 @@
       "observation": "Release assetの状態、SHA-256、サイズ、ZIP構造、容量見積り、失敗時の非変更、再試行を隔離fixtureで検証する。",
       "status": "automated",
       "testIds": [
-        "python:tests.test_updater.UpdaterTests.test_next_release_archive_is_accepted_by_v0513_updater",
-        "python:tests.test_runtime_contract.RuntimeContractTests.test_release_archive_excludes_development_only_files"
+        "python:tests.test_updater.UpdaterTests.test_release_asset_must_be_the_immutable_mozarie_asset",
+        "python:tests.test_updater.UpdaterTests.test_download_rejects_a_digest_or_size_mismatch",
+        "python:tests.test_updater.UpdaterTests.test_safe_extract_accepts_github_wrapper_directory",
+        "python:tests.test_updater.UpdaterTests.test_apply_backup_failure_leaves_install_unchanged",
+        "python:tests.test_updater.UpdaterTests.test_apply_rolls_back_only_mutated_files_on_failure",
+        "python:tests.test_updater.UpdaterTests.test_dependency_update_apply_failure_keeps_a_retryable_pending_update"
       ]
     },
     {
@@ -1110,7 +1115,7 @@
       "observation": "実効並列数は対象数と利用者設定だけで決め、8件・メモリ量による固定上限を適用しない。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > parallel browser copies obey configured target count",
+        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > 400 browser copies stay bounded by configured parallelism",
         "python:tests.test_server.MozarieTests.test_import_session_records_requested_and_effective_parallelism_without_a_fixed_cap"
       ]
     },
@@ -1122,7 +1127,7 @@
       "observation": "Networkの同時要求数は実効並列数を超えず、全対象が完了する。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > parallel browser copies obey configured target count",
+        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > 400 browser copies stay bounded by configured parallelism",
         "python:tests.test_server.MozarieTests.test_import_session_records_requested_and_effective_parallelism_without_a_fixed_cap"
       ]
     },
@@ -1134,7 +1139,7 @@
       "observation": "メモリ不足時は既存の明示エラーで停止する。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > parallel browser copies obey configured target count",
+        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > 400 browser copies stay bounded by configured parallelism",
         "python:tests.test_server.MozarieTests.test_import_session_records_requested_and_effective_parallelism_without_a_fixed_cap"
       ]
     },
@@ -1147,7 +1152,7 @@
       "status": "automated",
       "testIds": [
         "python:tests.test_http_live_endpoints.LiveHttpEndpointTests.test_live_browser_save_render_streams_a_stable_image_response",
-        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > partial output and failed render are cleaned"
+        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > partial streamed output is aborted and removed"
       ]
     },
     {
@@ -1159,7 +1164,7 @@
       "status": "automated",
       "testIds": [
         "python:tests.test_http_live_endpoints.LiveHttpEndpointTests.test_live_browser_save_render_streams_a_stable_image_response",
-        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > partial output and failed render are cleaned"
+        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > partial streamed output is aborted and removed"
       ]
     },
     {
@@ -1170,7 +1175,8 @@
       "observation": "現在・切替中・隣接・ホバー中の画像だけを保持し、古い画像・候補要求を取消してBitmapを解放する。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_bulk_views_save_preferences_e2e.cjs::bulk displays and save preferences in Chromium"
+        "node:tests/test_resources.cjs::resource ownership contracts > current pending filtered neighbors and hover are the only retained images",
+        "node:tests/test_resources.cjs::resource ownership contracts > filter and hover changes close stale bitmaps and abort stale requests"
       ]
     },
     {
@@ -1181,7 +1187,7 @@
       "observation": "画像数に比例する固定容量キャッシュ、固定prefetch件数・固定並列枠を持たず、選択回数ごとにRAMが増え続けない。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_bulk_views_save_preferences_e2e.cjs::bulk displays and save preferences in Chromium"
+        "node:tests/test_resources.cjs::resource ownership contracts > 400 selections keep decoded image ownership bounded"
       ]
     },
     {
@@ -1214,7 +1220,8 @@
       "observation": "現在表示・切替中・`galleryFilteredImages()`上の実際の前後だけを保持・先読みする。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_bulk_views_save_preferences_e2e.cjs::bulk displays and save preferences in Chromium"
+        "node:tests/test_gallery_save_coverage.cjs::gallery and save interactions > filtered navigation owns only actual neighbors and wrap destinations",
+        "node:tests/test_resources.cjs::resource ownership contracts > current pending filtered neighbors and hover are the only retained images"
       ]
     },
     {
@@ -1225,7 +1232,8 @@
       "observation": "絞り込み外では既存の前へ末尾・次へ先頭の移動先だけを保持し、切替直後に旧フィルターのBitmapと要求を解放・取消する。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_bulk_views_save_preferences_e2e.cjs::bulk displays and save preferences in Chromium"
+        "node:tests/test_gallery_save_coverage.cjs::gallery and save interactions > filtered navigation owns only actual neighbors and wrap destinations",
+        "node:tests/test_resources.cjs::resource ownership contracts > filter and hover changes close stale bitmaps and abort stale requests"
       ]
     },
     {
@@ -1233,14 +1241,27 @@
       "sourceIds": [
         "SV-075"
       ],
-      "observation": "ホバーと画面切替で画像保持と要求を解放し、書込失敗で一時ファイルを残さない。",
+      "observation": "ホバーと画面切替で画像保持と要求を解放する。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_bulk_views_save_preferences_e2e.cjs::bulk displays and save preferences in Chromium"
+        "node:tests/test_resources.cjs::resource ownership contracts > filter and hover changes close stale bitmaps and abort stale requests"
       ]
     },
     {
       "key": "SV-075.2",
+      "sourceIds": [
+        "SV-075"
+      ],
+      "observation": "書込失敗を保存失敗として扱い、途中の一時ファイルを残さない。",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > partial streamed output is aborted and removed",
+        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > browser copy render failure cancels its reservation",
+        "python:tests.test_server.MozarieTests.test_browser_copy_render_keeps_source_and_candidates_when_output_sync_fails"
+      ]
+    },
+    {
+      "key": "SV-075.3",
       "sourceIds": [
         "SV-075"
       ],
@@ -1259,8 +1280,8 @@
       "observation": "未作成の展開先を作成し、管理対象だけを安全に展開する。",
       "status": "automated",
       "testIds": [
-        "python:tests.test_updater.UpdaterTests.test_next_release_archive_is_accepted_by_v0513_updater",
-        "python:tests.test_runtime_contract.RuntimeContractTests.test_release_archive_excludes_development_only_files"
+        "python:tests.test_updater.UpdaterTests.test_safe_extract_accepts_github_wrapper_directory",
+        "python:tests.test_updater.UpdaterTests.test_apply_updates_code_and_preserves_user_data_and_batch"
       ]
     },
     {
@@ -1319,7 +1340,7 @@
       "observation": "相対形式を拒否し、日本語を含む正規化済み絶対パスを設定と保存画面へ同期する。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_gallery_save_coverage.cjs::gallery and save interactions > single and batch save modal preferences and controls",
+        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > normalized output directory is displayed",
         "python:tests.test_server.MozarieTests.test_output_directory_picker_normalizes_existing_absolute_hint_and_releases_lock"
       ]
     },
@@ -1367,7 +1388,7 @@
       "observation": "クライアント生成UUIDトークンでpending/commit/cancelを再開し、通信不明だけでトークンを捨てない。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > recoverable and retryable commit failures reconcile"
+        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > retryable commit reuses the same token"
       ]
     },
     {
@@ -1484,7 +1505,7 @@
       "observation": "確定済みの元画像・出力・一覧を巻き戻さず成功を表示する。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > recoverable and retryable commit failures reconcile",
+        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > recoverable commit failures reconcile token state",
         "python:tests.test_server.MozarieTests.test_browser_overwrite_keeps_the_committed_receipt_when_journal_finishing_is_unavailable"
       ]
     },
@@ -1496,7 +1517,7 @@
       "observation": "未回収のreceiptだけを保持し、journal復旧後のackまたは起動時回復で後処理を完了する。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > recoverable and retryable commit failures reconcile",
+        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > recoverable commit failures reconcile token state",
         "python:tests.test_server.MozarieTests.test_browser_overwrite_keeps_the_committed_receipt_when_journal_finishing_is_unavailable"
       ]
     },
@@ -1508,7 +1529,7 @@
       "observation": "確定前のjournal失敗では出力予約を解放して失敗を表示する。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > recoverable and retryable commit failures reconcile",
+        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > recoverable commit failures reconcile token state",
         "python:tests.test_server.MozarieTests.test_browser_overwrite_keeps_the_committed_receipt_when_journal_finishing_is_unavailable"
       ]
     },
@@ -1520,8 +1541,8 @@
       "observation": "更新途中の状態を保持し、同じVERSIONでも更新を再試行する。",
       "status": "automated",
       "testIds": [
-        "python:tests.test_updater.UpdaterTests.test_next_release_archive_is_accepted_by_v0513_updater",
-        "python:tests.test_runtime_contract.RuntimeContractTests.test_release_archive_excludes_development_only_files"
+        "python:tests.test_updater.UpdaterTests.test_dependency_update_apply_failure_keeps_a_retryable_pending_update",
+        "python:tests.test_updater.UpdaterTests.test_gpu_smoke_failure_retries_the_same_version"
       ]
     },
     {
@@ -1532,8 +1553,8 @@
       "observation": "成功後は更新途中の印を消し、設定・モデル・作業データを保持する。",
       "status": "automated",
       "testIds": [
-        "python:tests.test_updater.UpdaterTests.test_next_release_archive_is_accepted_by_v0513_updater",
-        "python:tests.test_runtime_contract.RuntimeContractTests.test_release_archive_excludes_development_only_files"
+        "python:tests.test_updater.UpdaterTests.test_dependency_update_success_marks_ready_and_clears_pending_update",
+        "python:tests.test_updater.UpdaterTests.test_apply_updates_code_and_preserves_user_data_and_batch"
       ]
     },
     {

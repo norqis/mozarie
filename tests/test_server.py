@@ -1493,11 +1493,6 @@ class MozarieTests(unittest.TestCase):
         return b"\xff" + bytes([marker]) + (len(payload) + 2).to_bytes(2, "big") + payload
 
     def test_windows_locked_source_rejects_overwrite_and_preserves_original(self):
-        if os.name != "nt":
-            return
-        import ctypes
-        from ctypes import wintypes
-
         with tempfile.TemporaryDirectory() as directory:
             source = Path(directory) / "source.png"
             rendered = Path(directory) / "rendered.png"
@@ -1507,25 +1502,53 @@ class MozarieTests(unittest.TestCase):
             record = self._record(source, 16, 16)
             fingerprint = (record.mtime_ns, record.size_bytes)
 
-            kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
-            create_file = kernel32.CreateFileW
-            create_file.argtypes = (
-                wintypes.LPCWSTR, wintypes.DWORD, wintypes.DWORD, wintypes.LPVOID,
-                wintypes.DWORD, wintypes.DWORD, wintypes.HANDLE,
-            )
-            create_file.restype = wintypes.HANDLE
-            handle = create_file(str(source), 0x80000000, 0, None, 3, 0x80, None)
-            self.assertNotEqual(handle, wintypes.HANDLE(-1).value)
-            try:
-                with self.assertRaises(PermissionError):
-                    image_io_module._stage_record_replacement(record, rendered, fingerprint)
-            finally:
-                kernel32.CloseHandle(handle)
+            if os.name == "nt":
+                import ctypes
+                from ctypes import wintypes
+                kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+                create_file = kernel32.CreateFileW
+                create_file.argtypes = (
+                    wintypes.LPCWSTR, wintypes.DWORD, wintypes.DWORD, wintypes.LPVOID,
+                    wintypes.DWORD, wintypes.DWORD, wintypes.HANDLE,
+                )
+                create_file.restype = wintypes.HANDLE
+                handle = create_file(str(source), 0x80000000, 0, None, 3, 0x80, None)
+                self.assertNotEqual(handle, wintypes.HANDLE(-1).value)
+                try:
+                    with self.assertRaises(PermissionError):
+                        image_io_module._stage_record_replacement(record, rendered, fingerprint)
+                finally:
+                    kernel32.CloseHandle(handle)
+            else:
+                # POSIX advisory locks do not reproduce Windows' share-mode
+                # failure. Exercise the same product cleanup branch explicitly
+                # instead of returning a false-positive pass.
+                with patch.object(image_io_module.shutil, "copy2", side_effect=PermissionError("locked")):
+                    with self.assertRaises(PermissionError):
+                        image_io_module._stage_record_replacement(record, rendered, fingerprint)
 
             self.assertEqual(source.read_bytes(), original)
             self.assertEqual(record.path, source)
             self.assertFalse(list(source.parent.glob(".source.png.mozarie-backup-*")))
             self.assertFalse(list(source.parent.glob("*.mozarie.tmp")))
+
+    def test_copy_destination_keeps_existing_files_and_has_no_numeric_search_cap(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); source = root / "source.png"; output = root / "output"
+            output.mkdir(); Image.new("RGB", (4, 4), "white").save(source)
+            state = self.new_state(); image_id = state.set_root(str(root))[0]["id"]
+            record = state.image_for_id(image_id)
+            existing = []
+            for index in range(1, 260):
+                name = "source.png" if index == 1 else f"source_{index}.png"
+                path = output / name; path.write_bytes(f"existing-{index}".encode()); existing.append((path, path.read_bytes()))
+
+            destination = state._reserve_output_destination(record, "", output, "original", True)
+
+            self.assertEqual(destination.name, "source_260.png")
+            self.assertFalse(destination.exists(), "reservation does not overwrite or create the final before rendering")
+            self.assertTrue(all(path.read_bytes() == body for path, body in existing), "every existing numbered file is preserved")
+            state._release_output_destination(destination)
 
     def test_block_size_uses_image_specific_divisor_and_minimum(self):
         self.assertEqual(calculate_block_size(300, 200, 100), 4)
@@ -1903,18 +1926,47 @@ class MozarieTests(unittest.TestCase):
             path = Path(directory) / "source.webp"
             exif = Image.Exif()
             exif[0x010E] = "Mozarie test"
-            Image.new("RGB", (16, 16), "#6688aa").save(
+            source_pixels = np.zeros((16, 16, 3), dtype=np.uint8)
+            source_pixels[..., 0] = np.arange(16, dtype=np.uint8)[None, :] * 15
+            source_pixels[..., 1] = np.arange(16, dtype=np.uint8)[:, None] * 15
+            source_pixels[..., 2] = 0xaa
+            Image.fromarray(source_pixels).save(
                 path,
                 format="WEBP",
                 exif=exif.tobytes(),
                 icc_profile=b"Mozarie ICC profile",
                 xmp=b"<x:xmpmeta>Mozarie</x:xmpmeta>",
             )
+            with Image.open(path) as original_image:
+                original_pixels = np.asarray(original_image.convert("RGB"))
             save_with_mask(self._record(path, 16, 16), self._mask(16, 16), 4)
             with Image.open(path) as image:
+                self.assertEqual(image.format, "WEBP")
+                self.assertEqual(image.size, (16, 16))
                 self.assertEqual(image.info["icc_profile"], b"Mozarie ICC profile")
                 self.assertEqual(image.info["xmp"], b"<x:xmpmeta>Mozarie</x:xmpmeta>")
-                image.load()
+                pixels = np.asarray(image.convert("RGB"))
+            centre_delta = np.abs(pixels[5:11, 5:11].astype(int) - original_pixels[5:11, 5:11]).mean()
+            corner_delta = np.abs(pixels[:4, :4].astype(int) - original_pixels[:4, :4]).mean()
+            self.assertGreater(centre_delta, corner_delta, "saved WebP contains the mosaic only in the masked range")
+
+    def test_transparent_png_save_preserves_size_alpha_and_unmasked_pixels(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "source.png"
+            pixels = np.zeros((16, 16, 4), dtype=np.uint8)
+            pixels[..., :3] = np.arange(16, dtype=np.uint8)[None, :, None] * 15
+            pixels[..., 3] = np.arange(16, dtype=np.uint8)[:, None] * 16
+            Image.fromarray(pixels).save(path, format="PNG")
+            mask = np.zeros((16, 16), dtype=np.uint8); mask[4:12, 4:12] = 255
+
+            save_with_mask(self._record(path, 16, 16), mask, 4)
+
+            with Image.open(path) as image:
+                self.assertEqual(image.format, "PNG")
+                self.assertEqual(image.size, (16, 16))
+                saved = np.asarray(image.convert("RGBA"))
+            self.assertTrue(np.array_equal(saved[..., 3], pixels[..., 3]), "mosaic never fills transparent pixels")
+            self.assertTrue(np.array_equal(saved[:4], pixels[:4]), "unmasked pixels remain byte-identical")
 
     def test_exif_rotated_png_swaps_dimensions_and_preserves_other_metadata(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -3382,6 +3434,44 @@ class MozarieTests(unittest.TestCase):
             ]
             combined = state.combined_candidate_mask(image_id)
             self.assertEqual(combined[4, 4], 0)
+
+    def test_candidate_exclusion_render_preserves_excluded_pixels_dimensions_and_state(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "source.png"
+            pixels = np.zeros((16, 16, 3), dtype=np.uint8)
+            pixels[..., 0] = np.arange(16, dtype=np.uint8)[None, :] * 15
+            pixels[..., 1] = np.arange(16, dtype=np.uint8)[:, None] * 15
+            Image.fromarray(pixels).save(path)
+            state = self.new_state(); image_id = state.set_root(directory)[0]["id"]
+            record = state.image_for_id(image_id)
+            apply = np.zeros((16, 16), dtype=np.uint8); apply[2:14, 2:14] = 255
+            exclude = np.zeros((16, 16), dtype=np.uint8); exclude[6:10, 6:10] = 255
+            cache = state.cache_dir / image_id; cache.mkdir(parents=True)
+            apply_path, exclude_path = cache / "apply.png", cache / "exclude.png"
+            Image.fromarray(apply).save(apply_path); Image.fromarray(exclude).save(exclude_path)
+            candidates = [
+                Candidate("apply", "penis", 0.9, apply_path),
+                Candidate("exclude", "hand", None, exclude_path, source="hand_exclusion", role=domain_module.CandidateRole.EXCLUDE),
+            ]
+            state.candidates[image_id] = candidates
+
+            combined = state.combined_candidate_mask(image_id)
+            rendered = image_io_module.render_with_mask(record, combined, 4)
+            with Image.open(io.BytesIO(rendered)) as image:
+                self.assertEqual(image.size, (16, 16))
+                actual = np.asarray(image.convert("RGB"))
+            self.assertTrue(np.array_equal(actual[6:10, 6:10], pixels[6:10, 6:10]), "excluded pixels are not mosaicked")
+            self.assertFalse(np.array_equal(actual[2:6, 2:6], pixels[2:6, 2:6]), "the remaining candidate range is mosaicked")
+            self.assertTrue(np.array_equal(actual[:2], pixels[:2]), "pixels outside the candidate remain unchanged")
+            self.assertEqual(state.candidates[image_id], candidates)
+            self.assertTrue(apply_path.is_file()); self.assertTrue(exclude_path.is_file())
+
+            Image.fromarray(apply).save(exclude_path)
+            fully_excluded = state.combined_candidate_mask(image_id)
+            self.assertEqual(np.count_nonzero(fully_excluded), 0)
+            with Image.open(io.BytesIO(image_io_module.render_with_mask(record, fully_excluded, 4))) as image:
+                self.assertTrue(np.array_equal(np.asarray(image.convert("RGB")), pixels), "fully excluded candidates output no mosaic pixels")
+            self.assertEqual(state.candidates[image_id], candidates, "rendering does not alter candidates or exclusion state")
 
     def test_tile_layout_restores_masks_to_original_coordinates(self):
         specs = detection_tiles(100, 80)

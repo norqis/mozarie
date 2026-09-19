@@ -31,6 +31,14 @@ class _SavingState(SavingMixin):
 
 
 class RecursiveSaveTests(unittest.TestCase):
+    def test_preserve_structure_keeps_the_source_relative_parent_in_the_reserved_output(self):
+        with tempfile.TemporaryDirectory() as raw:
+            output = Path(raw) / "output"
+            record = ImageRecord("one", Path("C:/source.png"), "chapter/scene/source.png", 1, 1, 1, 1)
+            state = _SavingState(record, output)
+            destination = state._reserve_output_destination(record, "_done", output, "jpg", True)
+            self.assertEqual(destination, output / "chapter" / "scene" / "source_done.jpg")
+
     def test_copy_uses_edited_basename_before_format_and_suffix(self):
         record = ImageRecord("one", Path("C:/source.png"), "nested/source.png", 1, 1, 1, 1, edited_filename="edited.png")
         self.assertEqual(

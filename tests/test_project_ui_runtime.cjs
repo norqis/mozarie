@@ -25,8 +25,19 @@ class Element {
   setAttribute(name, value) { this[name] = value; }
   contains(node) { return node === this || this.children.includes(node); }
   closest() { return null; }
-  querySelector() { return this.submitControl || (this.submitControl = new Element("submit")); }
-  querySelectorAll() { return []; }
+  querySelector(selector) {
+    if (selector?.includes("[data-project-")) return this.querySelectorAll(selector)[0] || null;
+    return this.submitControl || (this.submitControl = new Element("submit"));
+  }
+  querySelectorAll(selector) {
+    const descendants = [];
+    const visit = (node) => { for (const child of node.children || []) { descendants.push(child); visit(child); } };
+    visit(this);
+    const actions = [...String(selector || "").matchAll(/\[data-project-action="([^"]+)"\]/g)].map((match) => match[1]);
+    if (actions.length) return descendants.filter((node) => actions.includes(node.dataset?.projectAction));
+    if (selector === "tr[data-project-id]") return descendants.filter((node) => node.id === "tr" && node.dataset?.projectId);
+    return [];
+  }
   getBoundingClientRect() { return { left: 0, top: 0, right: 100, bottom: 100, width: 100, height: 100 }; }
 }
 
@@ -38,7 +49,7 @@ const document = {
   body: new Element("body"), activeElement: null, visibilityState: "hidden",
   querySelector(selector) { return element(selector); },
   querySelectorAll(selector) { return selector === "dialog" ? dialogIds.map(element) : []; },
-  createElement() { return new Element("created"); }, createDocumentFragment() { const fragment = new Element("fragment"); fragment.isFragment = true; return fragment; }, addEventListener() {},
+  createElement(tag) { return new Element(tag || "created"); }, createDocumentFragment() { const fragment = new Element("fragment"); fragment.isFragment = true; return fragment; }, addEventListener() {},
 };
 
 const calls = [];
@@ -92,10 +103,10 @@ const corePath = path.join(__dirname, "..", "static", "js", "core.js");
 const imageDisplayPathSource = fs.readFileSync(corePath, "utf8").match(/function imageDisplayPath\(image\) \{[\s\S]*?\n\}/)?.[0];
 vm.runInNewContext(imageDisplayPathSource, context, { filename: corePath });
 vm.runInNewContext(fs.readFileSync(appPath, "utf8"), context, { filename: appPath });
-vm.runInNewContext("globalThis.projectTest={projectTitle,projectDate,projectSource,renderProjectCurrent,renderNativeRelinkDialog,showSameSourceDialog,openProjectNameDialog,showProjectList,showSourceMismatches,openProject,downloadProjectArtifact,resumeCurrentProject,openSameSourceDialog,openProjectDeleteDialog,deleteProject,bindEvents,setPendingBrowserProjectSources:(sources)=>{ pendingBrowserProjectSources=sources; },pendingBrowserProjectSources:()=>pendingBrowserProjectSources};", context, { filename: "project-ui-exports.js" });
+vm.runInNewContext("globalThis.projectTest={projectTitle,projectDate,projectSource,renderProjectCurrent,renderNativeRelinkDialog,showSameSourceDialog,openProjectNameDialog,showProjectList,showSourceMismatches,openProject,downloadProjectArtifact,downloadProjectMasks,renderProjectTableControls,resumeCurrentProject,openSameSourceDialog,openProjectDeleteDialog,deleteProject,bindEvents,setPendingBrowserProjectSources:(sources)=>{ pendingBrowserProjectSources=sources; },pendingBrowserProjectSources:()=>pendingBrowserProjectSources};", context, { filename: "project-ui-exports.js" });
 const test = context.projectTest;
 
-nodeTest("project dialogs, source recovery, and project switching", async () => {
+nodeTest("project dialogs, source recovery, and project switching", async (t) => {
   await new Promise((resolve) => setImmediate(resolve));
   for (const key of ["project.open", "project.new", "project.name", "project.openList", "project.complete", "project.close", "project.resume", "project.sourceChangedClear", "project.downloadMosaic", "project.downloadExclude", "project.downloadMosaicZip", "project.downloadExcludeZip", "project.delete", "project.deleteData", "project.deleteSource", "project.deleteIrreversible"]) {
     assert.equal(typeof japanese[key], "string", `Japanese includes ${key}`); assert.equal(typeof english[key], "string", `English includes ${key}`);
@@ -255,4 +266,86 @@ nodeTest("project dialogs, source recovery, and project switching", async () => 
   await fire("#sameSourceOpen");
   assert.equal(sameSourceOpenedProjectId, "separate", "a same-source list choice directs Open to its selected project");
   await fire("#sameSourceSeparate"); await fire("#sameSourceCancel");
+
+  await t.test("project mask exports preserve project state across empty read-only failure and retry cases", async () => {
+    const empty = { id: "empty", name: "Empty", status: "working", imageCount: 0, sourceRoot: "C:/empty", updatedAt: 3_000_000 };
+    const readonly = { id: "readonly", name: "Read only", status: "completed", imageCount: 2, sourceRoot: "C:/readonly", updatedAt: 4_000_000 };
+    projects = [empty, readonly];
+    context.api = async (url) => url.startsWith("/api/projects?") ? { projects } : {};
+    element("#projectOpenList").listeners.get("click")();
+    await new Promise((resolve) => setImmediate(resolve));
+    const rows = element("#projectListBody").children;
+    const emptyRow = rows.find((row) => row.dataset.projectId === empty.id);
+    assert.equal(emptyRow.querySelector('[data-project-action="mosaic"]').disabled, true, "an empty project disables mosaic ZIP only");
+    assert.equal(emptyRow.querySelector('[data-project-action="exclude"]').disabled, true, "an empty project disables exclusion ZIP only");
+    assert.equal(emptyRow.querySelector('[data-project-action="open"]').disabled, false, "an empty project can still be opened");
+    assert.equal(emptyRow.querySelector('[data-project-action="delete"]').disabled, false, "an empty project can still be deleted");
+
+    const working = { id: "working-export", name: "Working", status: "working", imageCount: 1 };
+    state.project = working; state.projectReadOnly = false; state.images = [{ id: "draft" }]; state.currentId = "draft";
+    const exportOrder = [];
+    context.flushAllImageMutations = async () => exportOrder.push("image-flush");
+    context.flushAllWorkspaceMutations = async () => exportOrder.push("workspace-flush");
+    context.fetch = async () => { exportOrder.push("fetch"); return { ok: true, blob: async () => new Blob(["zip"]) }; };
+    await test.downloadProjectMasks(working, "mosaic");
+    assert.deepEqual(exportOrder, ["image-flush", "workspace-flush", "fetch"], "the active project flushes candidate and workspace edits before ZIP export");
+
+    state.project = readonly; state.projectReadOnly = true; state.images = [{ id: "kept" }]; state.currentId = "kept";
+    const stateBefore = { project: state.project, images: state.images, currentId: state.currentId, readOnly: state.projectReadOnly };
+    let attempts = 0;
+    context.fetch = async (url) => {
+      calls.push(["project-export-fetch", url]); attempts += 1;
+      if (attempts === 1) throw new Error("offline");
+      return { ok: true, blob: async () => new Blob(["zip"]) };
+    };
+    const errorsBefore = calls.filter(([kind]) => kind === "error").length;
+    await test.downloadProjectMasks(readonly, "exclude");
+    assert.equal(calls.filter(([kind]) => kind === "error").length, errorsBefore + 1, "an offline export reports one error");
+    assert.deepEqual({ project: state.project, images: state.images, currentId: state.currentId, readOnly: state.projectReadOnly }, stateBefore, "a failed export preserves the selected project and read-only editor state");
+    await test.downloadProjectMasks(readonly, "exclude");
+    assert.equal(attempts, 2, "the same project ZIP export can be retried after reconnecting");
+    assert.deepEqual({ project: state.project, images: state.images, currentId: state.currentId, readOnly: state.projectReadOnly }, stateBefore, "a completed read-only export never switches the current project");
+  });
+
+  await t.test("project network failures preserve list order editor state and selected project", async () => {
+    projects = [
+      { id: "first", name: "First", status: "working", imageCount: 1, updatedAt: 2 },
+      { id: "second", name: "Second", status: "working", imageCount: 1, updatedAt: 1 },
+    ];
+    context.api = async (url) => url.startsWith("/api/projects?") ? { projects } : {};
+    element("#projectSort").value = "updated_desc";
+    await test.showProjectList();
+    const priorRows = [...element("#projectListBody").children];
+    const priorErrors = calls.filter(([kind]) => kind === "error").length;
+    context.api = async () => { throw new Error("offline"); };
+    element("#projectOpenList").listeners.get("click")();
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.deepEqual(element("#projectListBody").children, priorRows, "a failed list refresh keeps the fetched row order");
+    assert.equal(element("#projectSort").value, "updated_desc", "a failed list refresh keeps its sort direction");
+
+    const project = projects[0];
+    const image = { id: "kept", relativePath: "kept.png" };
+    state.project = project; state.images = [image]; state.currentId = image.id;
+    state.candidates = [{ id: "candidate" }]; state.drafts = new Map([[image.id, { add: "manual" }]]);
+    state.reviewedImageIds = new Set([image.id]);
+    const editorBefore = { project: state.project, images: state.images, currentId: state.currentId, candidates: state.candidates, drafts: state.drafts, reviewed: state.reviewedImageIds };
+    await test.openProject(projects[1]);
+    assert.deepEqual({ project: state.project, images: state.images, currentId: state.currentId, candidates: state.candidates, drafts: state.drafts, reviewed: state.reviewedImageIds }, editorBefore, "a failed project open keeps the selected project and editor state");
+
+    element("#projectNameInput").value = "Changed";
+    element("#projectNameDialog").dataset.projectId = project.id;
+    element("#projectNameForm").listeners.get("submit")({ preventDefault() {} });
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(state.project, project, "a failed rename keeps the prior project object and name");
+    assert.equal(state.candidates, editorBefore.candidates, "a failed rename keeps candidates");
+    assert.equal(state.drafts, editorBefore.drafts, "a failed rename keeps manual edits");
+    assert.equal(state.reviewedImageIds, editorBefore.reviewed, "a failed rename keeps review state");
+
+    test.openProjectDeleteDialog(project.id);
+    element("#projectDeleteConfirm").listeners.get("click")();
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(state.project, project, "a failed delete keeps the selected project");
+    assert.deepEqual(element("#projectListBody").children, priorRows, "a failed delete does not report success by removing the existing rows");
+    assert.ok(calls.filter(([kind]) => kind === "error").length >= priorErrors + 4, "each failed project operation reports an error");
+  });
 });

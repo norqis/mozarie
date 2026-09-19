@@ -694,6 +694,11 @@ async function runSuccessCase() {
   const commitPayload = JSON.parse(runtime.requests.find((request) => request.path === "/api/save/commit").options.body);
   assert.equal(commitPayload.saveToken, "runtime-render-token");
   assert.equal(commitPayload.sourceAction, "keep");
+  const preparePayload = JSON.parse(runtime.requests.find((request) => request.path === "/api/save/prepare").options.body);
+  const renderPayload = JSON.parse(runtime.requests.find((request) => request.path === "/api/save/render").options.body);
+  assert.deepEqual(preparePayload.imageIds, ["image-1"], "single copy prepares only the current image");
+  assert.equal(renderPayload.outputFormat || "original", "original", "single copy retains the source format");
+  assert.match(runtime.requests.find((request) => request.path === "/api/save/render").path, /\/api\/save\/render$/);
   assert.equal(runtime.imageFetches(), 0, "a keep-source batch does not reload an unchanged catalogue");
   assert.equal(runtime.requests.some((request) => request.path.startsWith("/api/project/")), false, "a project batch save does not issue per-image project requests");
   assert.equal(runtime.elements.get("#applyResult").textContent, "complete 1");
@@ -979,7 +984,7 @@ async function runDeleteOriginalCase() {
 }
 
 async function runHandleOverwriteCase() {
-    let written = null;
+    let written = null; let untouchedWrites = 0;
   const sourceFile = sourceBlob("source.png", 12, 34);
   const sourceHandle = {
     async getFile() { return sourceFile; },
@@ -987,11 +992,21 @@ async function runHandleOverwriteCase() {
       return { async write(bytes) { written = [...new Uint8Array(bytes)]; }, async close() {}, async abort() {} };
     },
   };
+  const untouchedFile = sourceBlob("untouched.png", 9, 35);
+  const untouchedHandle = {
+    async getFile() { return untouchedFile; },
+    async createWritable() { untouchedWrites += 1; return { async write() {}, async close() {}, async abort() {} }; },
+  };
   const runtime = createRuntime({ commit: () => jsonResponse({ cleared: true, stale: false, images: [] }) });
-  runtime.state.images = [{ id: "image-1", sourceKind: "session", relativePath: "source.png", width: 32, height: 32, candidateCount: 1, enabledCandidateCount: 1 }];
+  runtime.state.images = [
+    { id: "image-1", sourceKind: "session", relativePath: "source.png", width: 32, height: 32, candidateCount: 1, enabledCandidateCount: 1 },
+    { id: "untouched", sourceKind: "session", relativePath: "untouched.png", width: 32, height: 32, candidateCount: 1, enabledCandidateCount: 1 },
+  ];
   runtime.state.sourceAccess.set("image-1", { fileHandle: sourceHandle, name: sourceFile.name, size: sourceFile.size, lastModified: sourceFile.lastModified });
+  runtime.state.sourceAccess.set("untouched", { fileHandle: untouchedHandle, name: untouchedFile.name, size: untouchedFile.size, lastModified: untouchedFile.lastModified });
   await runtime.runBrowserSave(["image-1"], "_censored", false, "overwrite");
   assert.deepEqual(written, [4, 5, 6]);
+  assert.equal(untouchedWrites, 0, "a batch overwrite never opens a writer for an image outside its target set");
   assert.equal(JSON.parse(runtime.requests.find((request) => request.path === "/api/save/commit").options.body).sourceAction, "overwrite");
 }
 
@@ -1534,28 +1549,51 @@ async function runSaveKeepsCatalogueAndEditorStateCase() {
 }
 
 nodeTest("browser save runtime contracts", async (t) => {
-  await t.test("output directory permissions and browser source preflight", async () => { await runOutputDirectoryPermissionCases(); await runBrowserSourcePreflightFailureCases(); await runParentlessBrowserSourcePreparationCase(); });
-  await t.test("single copy preserves editor review and draft state", async () => { await runSingleCopyKeepsEditorStateCase(); await runSingleSaveKeepsReviewAndDraftCase(); });
-  await t.test("pause cancellation and submission locks settle", async () => { await runPauseResetAfterTerminalBrowserSaveCase(); await runOutputPermissionSubmissionLockCases(); });
+  await t.test("output directory picker preserves absolute path and cancellation", runOutputDirectoryPermissionCases);
+  await t.test("browser source preflight rejects cancel denial mismatch and changes", runBrowserSourcePreflightFailureCases);
+  await t.test("parentless browser source preparation preserves edited metadata", runParentlessBrowserSourcePreparationCase);
+  await t.test("single copy preserves editor state", runSingleCopyKeepsEditorStateCase);
+  await t.test("single save preserves review and draft state", runSingleSaveKeepsReviewAndDraftCase);
+  await t.test("pause and terminal completion reset controls", runPauseResetAfterTerminalBrowserSaveCase);
+  await t.test("output permission submission locks settle", runOutputPermissionSubmissionLockCases);
   await t.test("copy reserve render commit acknowledgement succeeds", runSuccessCase);
   await t.test("pending drafts flush before save", runDraftBarrierBeforeDefaultApplyCase);
   await t.test("stale save commit is rejected", runStaleCommitCase);
   await t.test("copy render failure preserves source and state", runCopyFailureCase);
   await t.test("commit failure preserves source and output ownership", runCommitFailureCase);
-  await t.test("recoverable and retryable commit failures reconcile", async () => { await runRecoverableCommitFailureCases(); await runRetryableCommitCase(); });
+  await t.test("recoverable commit failures reconcile token state", runRecoverableCommitFailureCases);
+  await t.test("retryable commit reuses the same token", runRetryableCommitCase);
   await t.test("save cancellation stops unstarted work", runCancelCase);
   await t.test("copy success deletes original only after commit", runDeleteOriginalCase);
   await t.test("browser overwrite replaces only the selected source", runHandleOverwriteCase);
-  await t.test("format overwrite collision and failure preserve original", async () => { await runFormattedHandleOverwriteCase(); await runFormattedHandleCollisionCase(); await runFormattedHandleWriteFailureCase(); await runFormattedHandleCommitRejectionCase(); await runFormattedHandleOldRemoveFailureCase(); });
-  await t.test("single format overwrite and edited names persist", async () => { await runSingleFormattedHandleOverwriteCase(); await runEditedHandleOverwriteCase(); await runJpegFormattedHandlePreservationCase(); });
-  await t.test("source changes and repeated overwrite remain coherent", async () => { await runHandleOverwriteChangedDuringRenderCase(); await runRepeatedHandleOverwriteCase(); await runQueuedHandleChangeCases(); });
+  await t.test("formatted overwrite replaces source after success", runFormattedHandleOverwriteCase);
+  await t.test("formatted overwrite collision preserves original", runFormattedHandleCollisionCase);
+  await t.test("formatted overwrite write failure preserves original", runFormattedHandleWriteFailureCase);
+  await t.test("formatted overwrite commit rejection restores original", runFormattedHandleCommitRejectionCase);
+  await t.test("formatted overwrite old-name removal failure preserves both files", runFormattedHandleOldRemoveFailureCase);
+  await t.test("single formatted overwrite uses selected format", runSingleFormattedHandleOverwriteCase);
+  await t.test("edited filename overwrite persists", runEditedHandleOverwriteCase);
+  await t.test("JPEG formatted overwrite preserves metadata choice", runJpegFormattedHandlePreservationCase);
+  await t.test("source change during render rejects overwrite", runHandleOverwriteChangedDuringRenderCase);
+  await t.test("repeated overwrite remains coherent", runRepeatedHandleOverwriteCase);
+  await t.test("queued source changes serialize", runQueuedHandleChangeCases);
   await t.test("copy then source delete follows durable commit", runHandleDeleteAfterCopyCase);
   await t.test("catalog epoch rejects stale save", runCatalogEpochGuardCase);
-  await t.test("remove after save selects only committed images", async () => { await runRemoveAfterSaveCase(); await runRemoveAfterSaveAlreadyAbsentCase(); await runRemoveAfterSavePartialAndStaleCase(); await runRemoveAfterSaveUiCleanupCase(); await runRemoveAfterSaveCases(); await runNoEffectRemovalEligibilityCases(); await runCancelledBatchRemovalAfterSettledWorkersCase(); });
+  await t.test("remove after save removes committed images only", runRemoveAfterSaveCase);
+  await t.test("remove after save tolerates an already absent entry", runRemoveAfterSaveAlreadyAbsentCase);
+  await t.test("remove after save excludes partial and stale results", runRemoveAfterSavePartialAndStaleCase);
+  await t.test("remove after save updates selection and UI", runRemoveAfterSaveUiCleanupCase);
+  await t.test("remove after save respects enablement and failures", runRemoveAfterSaveCases);
+  await t.test("no-effect save removal eligibility follows save mode", runNoEffectRemovalEligibilityCases);
+  await t.test("cancelled batch removes only settled committed images", runCancelledBatchRemovalAfterSettledWorkersCase);
   await t.test("saving twice keeps catalog masks flags and candidates", runSaveKeepsCatalogueAndEditorStateCase);
-  await t.test("exclusive output reservation prevents overwrite", async () => { await runExclusiveWritableCases(); await runConcurrentOutputLockCases(); });
-  await t.test("partial output and failed render are cleaned", async () => { await runPartialOutputCleanupCases(); await runBrowserCopyRenderFailureCancelsReservationCase(); });
-  await t.test("parallel browser copies obey configured target count", async () => { await runBrowserCopyPoolAndWriteOverlapCases(); await runBrowserCopyPoolAtScaleCases(); await runBrowserHandleOverwritePoolAtScaleCase(); });
+  await t.test("exclusive writable never replaces an existing output", runExclusiveWritableCases);
+  await t.test("concurrent output lock serializes colliding names", runConcurrentOutputLockCases);
+  await t.test("partial streamed output is aborted and removed", runPartialOutputCleanupCases);
+  await t.test("browser copy render failure cancels its reservation", runBrowserCopyRenderFailureCancelsReservationCase);
+  await t.test("browser copy pool obeys configured parallelism", runBrowserCopyPoolAndWriteOverlapCases);
+  await t.test("400 browser copies stay bounded by configured parallelism", runBrowserCopyPoolAtScaleCases);
+  await t.test("browser overwrite pool obeys configured parallelism", runBrowserHandleOverwritePoolAtScaleCase);
   await t.test("browser source snapshots serialize destructive writes", runBrowserHandleSnapshotSerializationCase);
   await t.test("normalized output directory is displayed", async () => { runOutputDirectoryDisplayCase(); });
 });
