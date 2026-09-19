@@ -177,6 +177,20 @@ class UpdaterTests(unittest.TestCase):
             updater.download_archive("https://example.test/release.zip", destination, digest, len(body), lambda *_args, **_kwargs: Response(body))
             self.assertEqual(destination.read_bytes(), body)
 
+    def test_download_publish_failure_preserves_existing_archive_and_retry_replaces_it(self):
+        with tempfile.TemporaryDirectory() as directory:
+            destination = Path(directory) / "release.zip"
+            destination.write_bytes(b"existing")
+            body = b"verified archive"
+            digest = hashlib.sha256(body).hexdigest()
+            with patch.object(Path, "replace", side_effect=PermissionError("locked")):
+                with self.assertRaisesRegex(updater.UpdateError, re.escape(updater.tr("archive_download"))):
+                    updater.download_archive("https://example.test/release.zip", destination, digest, len(body), lambda *_args, **_kwargs: Response(body))
+            self.assertEqual(destination.read_bytes(), b"existing")
+            self.assertFalse((destination.parent / ".release.zip.download").exists())
+            updater.download_archive("https://example.test/release.zip", destination, digest, len(body), lambda *_args, **_kwargs: Response(body))
+            self.assertEqual(destination.read_bytes(), body)
+
     def test_requirements_install_uses_the_app_venv_not_the_updater_runtime(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

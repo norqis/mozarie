@@ -395,7 +395,11 @@ def download_archive(url: str, destination: Path, expected_digest: str, expected
     if not hmac.compare_digest(digest.hexdigest(), expected_digest):
         staged.unlink(missing_ok=True)
         raise UpdateError(tr("archive_digest"))
-    staged.replace(destination)
+    try:
+        staged.replace(destination)
+    except OSError as exc:
+        staged.unlink(missing_ok=True)
+        raise UpdateError(tr("archive_download")) from exc
     print()
 
 

@@ -46,7 +46,7 @@ class SaveReleaseVerificationContractTests(unittest.TestCase):
                 self.assertEqual(item["status"], "manual")
                 self.assertNotIn("testIds", item)
                 self.assertTrue(item["manual"]["environment"].strip())
-                self.assertRegex(item["manual"]["reason"], r"(?:Windowsダイアログ|OS.*権限|実UNC|実ドライブ|ファイルシステム固有|実GPU)")
+                self.assertRegex(item["manual"]["reason"], r"(?:Windowsダイアログ|OS.*権限|実UNC|実ドライブ|ファイルシステム固有|実GPU|公開|実ブラウザー|実起動|機械判定)")
                 self.assertIn("CI", item["manual"]["reason"])
             else:
                 self.assertEqual(item["status"], "retired")
@@ -60,7 +60,7 @@ class SaveReleaseVerificationContractTests(unittest.TestCase):
             documented[match.group(1)] = match.group(2)
         expected = {item["key"]: item["observation"] for item in self.contract["observations"] if item["status"] == "manual"}
         self.assertEqual(documented, expected)
-        self.assertEqual(len(documented), 7)
+        self.assertEqual(len(documented), sum(item["status"] == "manual" for item in self.contract["observations"]))
 
     def _assert_test_id_is_discovered(self, test_id: str) -> None:
         kind, target = test_id.split(":", 1)

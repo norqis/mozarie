@@ -7,7 +7,7 @@
   },
   "baseline": {
     "rows": 93,
-    "observations": 137
+    "observations": 138
   },
   "observations": [
     {
@@ -606,7 +606,7 @@
       "observation": "非表示画像では開始できない。",
       "status": "automated",
       "testIds": [
-        "python:tests.test_server.MozarieTests.test_workspace_restores_flags_masks_and_manual_edits_after_restart"
+        "python:tests.test_project_http_coverage.ProjectHttpCoverageTests.test_project_mask_png_zip_and_cleanup"
       ]
     },
     {
@@ -628,7 +628,7 @@
       "observation": "非表示画像では開始できない。",
       "status": "automated",
       "testIds": [
-        "python:tests.test_server.MozarieTests.test_workspace_restores_flags_masks_and_manual_edits_after_restart"
+        "python:tests.test_project_http_coverage.ProjectHttpCoverageTests.test_project_mask_png_zip_and_cleanup"
       ]
     },
     {
@@ -984,11 +984,23 @@
       "sourceIds": [
         "SV-063"
       ],
-      "observation": "タグとZIP内VERSIONが一致し、`server.py`、`mozarie`、`static`、`config/defaults.json`、`run.bat`、`setup.bat`、`update.bat`、`VERSION`、`README.md`、`LICENSE`、`.gitignore`、`.gitattributes`を含む。",
+      "observation": "公開Releaseのタグ、リリース名、ZIP内VERSIONが同じバージョンである。",
+      "status": "manual",
+      "manual": {
+        "environment": "公開GitHub Releaseと公開済みmozarie.zip",
+        "reason": "CIでは未公開Releaseの最終タグ、リリース名、公開assetを観測できないため。"
+      }
+    },
+    {
+      "key": "SV-063.3",
+      "sourceIds": [
+        "SV-063"
+      ],
+      "observation": "公開用ZIPは`server.py`、`mozarie`、`static`、`config/defaults.json`、`run.bat`、`setup.bat`、`update.bat`、`VERSION`、`README.md`、`LICENSE`、`.gitignore`、`.gitattributes`を含む。",
       "status": "automated",
       "testIds": [
-        "python:tests.test_release_policy.ReleasePolicyTests.test_release_archive_version_matches_the_tag",
-        "python:tests.test_runtime_contract.RuntimeContractTests.test_release_archive_excludes_development_only_files"
+        "python:tests.test_runtime_contract.RuntimeContractTests.test_release_archive_excludes_development_only_files",
+        "python:tests.test_updater.UpdaterTests.test_next_release_archive_is_accepted_by_v0513_updater"
       ]
     },
     {
@@ -1009,11 +1021,11 @@
         "SV-064"
       ],
       "observation": "セットアップが完了し、新しい版の画面を開ける。",
-      "status": "automated",
-      "testIds": [
-        "python:tests.test_updater.UpdaterTests.test_setup_and_run_select_only_supported_64_bit_launchers",
-        "python:tests.test_updater.UpdaterTests.test_setup_uses_module_runtime_validation_and_reports_each_failed_stage"
-      ]
+      "status": "manual",
+      "manual": {
+        "environment": "クリーンなWindows環境へ展開した公開Release ZIP",
+        "reason": "CIでは公開ZIPからの対話セットアップ完了と、新版UIの実起動を同じ利用環境で観測できないため。"
+      }
     },
     {
       "key": "SV-065.1",
@@ -1032,11 +1044,11 @@
         "SV-066"
       ],
       "observation": "PRと説明は日本語、リリース名はバージョンだけ。",
-      "status": "automated",
-      "testIds": [
-        "python:tests.test_release_policy.ReleasePolicyTests.test_release_tag_name_and_version_are_identical",
-        "python:tests.test_release_policy.ReleasePolicyTests.test_pull_request_and_release_description_use_concise_japanese"
-      ]
+      "status": "manual",
+      "manual": {
+        "environment": "公開GitHub Pull RequestとRelease",
+        "reason": "CIでは公開前のPR本文と最終Release名を公開状態として観測できないため。"
+      }
     },
     {
       "key": "SV-066.2",
@@ -1044,10 +1056,11 @@
         "SV-066"
       ],
       "observation": "説明は変更内容を簡潔に記載する。",
-      "status": "automated",
-      "testIds": [
-        "python:tests.test_release_policy.ReleasePolicyTests.test_pull_request_and_release_description_use_concise_japanese"
-      ]
+      "status": "manual",
+      "manual": {
+        "environment": "公開GitHub Pull RequestとRelease notes",
+        "reason": "CIでは説明が実際の変更内容と一致し簡潔であるかを機械判定できないため。"
+      }
     },
     {
       "key": "SV-067.1",
@@ -1055,10 +1068,11 @@
         "SV-067"
       ],
       "observation": "マージ後のコミットが一致し、マージ済み作業ブランチが残らない。",
-      "status": "automated",
-      "testIds": [
-        "python:tests.test_release_policy.ReleasePolicyTests.test_merge_commit_matches_and_merged_branch_is_removed"
-      ]
+      "status": "manual",
+      "manual": {
+        "environment": "GitHubのマージ済みPR、main、remote branch一覧",
+        "reason": "CIではマージ後SHAと`refs/heads`、`refs/remotes/origin`を含むremote作業ブランチ削除を公開状態で確定できないため。"
+      }
     },
     {
       "key": "SV-068.1",
@@ -1094,6 +1108,7 @@
         "python:tests.test_updater.UpdaterTests.test_release_asset_must_be_the_immutable_mozarie_asset",
         "python:tests.test_updater.UpdaterTests.test_download_rejects_a_digest_or_size_mismatch",
         "python:tests.test_updater.UpdaterTests.test_download_capacity_failure_preserves_existing_archive_and_retry_replaces_it",
+        "python:tests.test_updater.UpdaterTests.test_download_publish_failure_preserves_existing_archive_and_retry_replaces_it",
         "python:tests.test_updater.UpdaterTests.test_safe_extract_rejects_invalid_paths_without_writing_outside_destination",
         "python:tests.test_updater.UpdaterTests.test_safe_extract_rejects_precreated_directory_symlink",
         "python:tests.test_updater.UpdaterTests.test_apply_rolls_back_only_mutated_files_on_failure",
@@ -1213,12 +1228,11 @@
         "SV-073"
       ],
       "observation": "実ブラウザーでは途中で別版・空応答・404へ変わらず、応答終了後に一時ファイルを解放し、tokenの版不一致を案内することを確認する。",
-      "status": "automated",
-      "testIds": [
-        "python:tests.test_http_live_endpoints.LiveHttpEndpointTests.test_live_browser_save_render_streams_a_stable_image_response",
-        "python:tests.test_server.MozarieTests.test_browser_save_token_render_file_is_removed_when_expired_and_cannot_be_reused",
-        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > stale save commit is rejected"
-      ]
+      "status": "manual",
+      "manual": {
+        "environment": "実ChromiumとWindowsローカル保存先",
+        "reason": "CIの合成HTTPクライアントでは実ブラウザーのストリーム途中応答、応答終了時の一時ファイル解放、版不一致表示を一続きに観測できないため。"
+      }
     },
     {
       "key": "SV-074.1",
@@ -1322,10 +1336,11 @@
         "SV-077"
       ],
       "observation": "実ブラウザーでは`source_restore_failed`を表示し、コピー、元画像、候補、手描き、一覧を保持する。",
-      "status": "automated",
-      "testIds": [
-        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > source_restore_failed is shown and preserves source editor and catalog state"
-      ]
+      "status": "manual",
+      "manual": {
+        "environment": "File System Access APIを利用できる実ChromiumとWindowsローカル元画像",
+        "reason": "CIの模擬FileSystemHandleでは実ブラウザーの復元失敗表示と元画像、候補、手描き、一覧の同時保持を観測できないため。"
+      }
     },
     {
       "key": "SV-077.3",

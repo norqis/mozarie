@@ -147,6 +147,10 @@ class ProjectHttpCoverageTests(unittest.TestCase):
         status, _headers, body = self.request("POST", f"/api/workspace/image/{hidden_id}", {"hidden": True}, authorized=True)
         self.assertEqual(status, 200, body.decode("utf-8"))
         for kind in ("mosaic", "exclude"):
+            status, _headers, body = self.request("GET", f"/api/project/mask/{hidden_id}/{kind}")
+            self.assertEqual(status, 400)
+            self.assertEqual(json.loads(body)["error_code"], "image_hidden")
+        for kind in ("mosaic", "exclude"):
             status, headers, body = self.request("GET", f"/api/project/mask/{image_id}/{kind}")
             self.assertEqual(status, 200)
             self.assertEqual(headers["Content-Type"], "image/png")
