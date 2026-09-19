@@ -285,6 +285,15 @@
         <label class="target-chip"><input id="dialogTargetPenis" type="checkbox" checked><span>penis</span></label>
         <label class="target-chip"><input id="dialogTargetPussy" type="checkbox" checked><span>pussy</span></label>
       </div>
+      <fieldset id="detectImageFilters" class="detection-image-filters">
+        <legend data-i18n="detectDialog.imageFilters">検出する画像</legend>
+        <div class="target-choices">
+          <label class="target-chip"><input id="detectFilterMasked" type="checkbox" data-detection-image-filter="masked"><span data-i18n="gallery.tabMasked">モザイクあり</span></label>
+          <label class="target-chip"><input id="detectFilterUnmasked" type="checkbox" data-detection-image-filter="unmasked"><span data-i18n="gallery.tabUnmasked">モザイクなし</span></label>
+          <label class="target-chip"><input id="detectFilterReviewed" type="checkbox" data-detection-image-filter="reviewed"><span data-i18n="gallery.tabReviewed">確認済</span></label>
+          <label class="target-chip"><input id="detectFilterUnreviewed" type="checkbox" data-detection-image-filter="unreviewed" checked><span data-i18n="gallery.tabUnreviewed">未確認</span></label>
+        </div>
+      </fieldset>
        <label class="form-row">
         <span data-i18n="detection.confidence">判定しきい値</span>
         <span class="threshold-dialog-control">

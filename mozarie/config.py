@@ -125,6 +125,16 @@ def _expect_color(value: Any, name: str) -> str:
     return value.lower()
 
 
+_DETECTION_IMAGE_FILTERS = ("masked", "unmasked", "reviewed", "unreviewed")
+
+
+def _validate_detection_image_filters(value: Any) -> list[str]:
+    if not isinstance(value, list) or any(not isinstance(item, str) or item not in _DETECTION_IMAGE_FILTERS for item in value):
+        raise SettingsError("detection.image_filters contains an unknown filter")
+    selected = set(value)
+    return [item for item in _DETECTION_IMAGE_FILTERS if item in selected]
+
+
 def _migrate_candidate_padding(settings: dict[str, Any]) -> None:
     """Split the former shared candidate padding without losing local settings."""
     detection = settings.get("detection")
@@ -236,6 +246,7 @@ def validate_settings(value: Any) -> dict[str, Any]:
             "threshold": _expect_number(detection.get("threshold"), "detection.threshold", 0.1, 1),
             "parallelism": int(_expect_number(detection.get("parallelism"), "detection.parallelism", 1, float("inf"))),
             "targets": _validate_targets(detection.get("targets", ["penis", "pussy"])),
+            "image_filters": _validate_detection_image_filters(detection.get("image_filters", ["unreviewed"])),
         },
         "saving": {
             "parallelism": int(_expect_number(saving.get("parallelism", 2), "saving.parallelism", 1, float("inf"))),

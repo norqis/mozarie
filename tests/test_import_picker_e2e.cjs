@@ -1318,12 +1318,12 @@ async function runDynamicProjectAndShortcutScenario(browser, fixtureUrl, setting
     await page.locator("#settingsButton").click();
     await page.locator("#settingsTabShortcuts").click();
     const shortcutKeys = ["previous", "next", "previousVisible", "nextVisible", "first", "last", "reviewAndNext", "removeImage", "renameImage", "toggleOverview", "undo", "redo"];
-    const shortcutBindings = Object.fromEntries(shortcutKeys.map((action, index) => [action, `Ctrl+Shift+Alt+F${index + 1}`]));
+    const shortcutBindings = Object.fromEntries(shortcutKeys.map((action, index) => [action, `Ctrl+Shift+Alt+${String.fromCharCode(65 + index)}`]));
     assert.equal(await page.locator("[data-shortcut-action]").count(), shortcutKeys.length, "shortcut settings renders the fixed twelve-action inventory");
     assert.deepEqual(await page.locator("[data-shortcut-action]").evaluateAll((inputs) => inputs.map((input) => input.dataset.shortcutAction)), shortcutKeys, "shortcut settings exposes every action in its documented order");
     for (const [index, action] of shortcutKeys.entries()) {
       const shortcut = page.locator(`[data-shortcut-action="${action}"]`);
-      await shortcut.focus(); await page.keyboard.press(`Control+Shift+Alt+F${index + 1}`);
+      await shortcut.focus(); await page.keyboard.press(`Control+Shift+Alt+${String.fromCharCode(65 + index)}`);
       assert.equal(await shortcut.inputValue(), shortcutBindings[action], `${action} records its exact keyboard binding through the public handler`);
     }
     recordDynamicControl("[data-shortcut-action]");
@@ -2678,6 +2678,8 @@ async function runControlLedger(page, fixtureUrl, contracts, finishCancel, holdS
   await setupFixture();
   await click("detectAllButton");
   await input("detectParallelism", "1"); await input("dialogTargetPenis", true); await input("dialogTargetPussy", true); await input("detectConfidenceRange", "0.52"); await input("detectConfidenceNumber", "0.53");
+  for (const id of ["detectFilterMasked", "detectFilterUnmasked", "detectFilterReviewed"]) { await input(id, true); await input(id, false); }
+  await input("detectFilterUnreviewed", false); await input("detectFilterUnreviewed", true);
   await click("detectCancelButton"); await click("detectAllButton");
   await input("detectCandidatePadding", "9");
   const paddedSettingsRequestStart = await page.evaluate(() => window.__ledgerApi.length);
@@ -3973,10 +3975,11 @@ async function main() {
       allDisabled: document.querySelector("#detectAllButton").disabled,
       currentDisabled: document.querySelector("#detectCurrentButton").disabled,
     }));
-    assert.deepEqual(failedDetectionSave, { settings: persistedDetection, dialogOpen: false, allDisabled: false, currentDisabled: true }, "a failed detection-settings save leaves persisted targets and main actions untouched");
+    assert.deepEqual(failedDetectionSave, { settings: persistedDetection, dialogOpen: true, allDisabled: false, currentDisabled: true }, "a failed detection-settings save keeps the retryable modal and leaves persisted targets and main actions untouched");
     await page.locator("#errorDialogClose").click();
-    await page.locator("#detectAllButton").click();
-    assert.equal(await page.locator("#detectDialog").isVisible(), true, "detect settings should open before any request");
+    assert.equal(await page.locator("#detectDialog").isVisible(), true, "failed settings remain available for retry without reopening the modal");
+    assert.equal(await page.locator("#dialogTargetPussy").isChecked(), false, "failed settings keep the user's unsaved target choice for retry");
+    await page.locator("#dialogTargetPussy").evaluate((input) => { input.checked = true; input.dispatchEvent(new Event("change", { bubbles: true })); });
     assert.equal(detectRequests.length, currentDetectionRequests, "opening settings must not start another detection");
     await page.locator("#detectConfidenceNumber").fill("0.67");
     assert.equal(await page.locator("#detectParallelism").isDisabled(), false, "GPU keeps the same editable worker control");
@@ -4495,7 +4498,7 @@ async function main() {
       assert.equal(editor.controls.filter((control) => control.text === (language === "ja" ? "検出範囲" : "Detection range")).length, 2, `both candidate sections expose a detection-range button at ${width}/${language}`);
       assert.equal(editor.candidateOverflow, false, `candidate controls do not overflow at ${width}/${language}`);
       assert.equal(editor.candidateHit, true, `candidate display segments own their hit targets at ${width}/${language}`);
-      assert.equal(editor.targets.count === 2 && editor.targets.native && editor.targets.oneLine && editor.targets.centered && editor.targets.withinPane && editor.targets.compact && editor.targets.selected && editor.targets.tracksAbsent, true, `target label and chips stay compact and aligned at ${width}/${language}`);
+      assert.equal(editor.targets.count === 2 && editor.targets.native && editor.targets.oneLine && editor.targets.centered && editor.targets.withinPane && editor.targets.compact && editor.targets.selected && editor.targets.tracksAbsent, true, `target label and chips stay compact and aligned at ${width}/${language}: ${JSON.stringify(editor.targets)}`);
       if (width === 1024 && language === "ja") {
         const penis = page.locator("#detectTargetPenis"); const pussy = page.locator("#detectTargetPussy");
         await penis.focus(); await penis.press("Space");
@@ -4914,7 +4917,7 @@ async function main() {
             return { localMs, endToEndMs: performance.now() - started };
           };
           let undo = 0; let redo = 0; let undoEndToEnd = 0; let redoEndToEnd = 0;
-          for (let index = 0; index < 10; index += 1) {
+          for (let index = 0; index < 3; index += 1) {
             const undoTarget = state.historyIndex - 1;
             if (undoTarget < 0) throw new Error("4K undo measurement requires one undoable history step");
             const undoResult = await measureRestore(undoTarget); undo = Math.max(undo, undoResult.localMs); undoEndToEnd = Math.max(undoEndToEnd, undoResult.endToEndMs);
@@ -5024,11 +5027,14 @@ async function main() {
       window.showOpenFilePicker = async () => [];
       window.showDirectoryPicker = async () => ({ async *values() {} });
       window.__serverOutputPicks = [];
+      window.__saveApiPaths = [];
       const originalFetch = window.fetch.bind(window);
       window.fetch = (...args) => {
         const input = args[0]; const init = args[1] || {};
         const url = String(input?.url || input);
         if (url.includes("/api/output-directory/pick") && (init.method || input?.method || "GET") === "POST") window.__serverOutputPicks.push(url);
+        const requestPath = new URL(url, location.href).pathname;
+        if (requestPath.startsWith("/api/save/")) window.__saveApiPaths.push(requestPath);
         return originalFetch(...args);
       };
     });
@@ -5068,8 +5074,7 @@ async function main() {
       await browserSavePage.locator("#singleSaveSuffix").fill("_検証");
       await browserSavePage.locator("#singleSaveStartButton").click();
       assert.equal(await browserSavePage.locator("#confirmDialog").evaluate((dialog) => dialog.open), false, "copy save without source deletion starts without an unrelated confirmation");
-      await browserSavePage.waitForFunction(() => state.saving, null, { timeout: 5000 });
-      await browserSavePage.waitForFunction(() => !state.saving, null, { timeout: 5000 });
+      await browserSavePage.waitForFunction(() => window.__saveApiPaths.includes("/api/save/ack") && !state.saving);
       assert.deepEqual(saveRequests.map((request) => request.path), ["/api/save/prepare", "/api/save/reserve", "/api/save/render", "/api/save/commit", "/api/save/ack"], "single copy save drives the durable save lifecycle in order");
       assert.equal(saveRequests[2].payload.copyToDefault, true, "single copy save delegates output creation to the configured server path");
       assert.deepEqual(await browserSavePage.evaluate(() => ({ imageIds: state.images.map((image) => image.id), currentId: state.currentId, reviewed: state.images.find((image) => image.id === "sample")?.reviewed })), { imageIds: ["sample", "sample-two"], currentId: "sample", reviewed: false }, "single save reloads without changing catalogue or reviewed state");

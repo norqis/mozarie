@@ -130,6 +130,7 @@
   "detection.help": "高いほど誤検出は減りますが、見逃しは増えます。",
   "detectDialog.title": "自動検出の設定",
   "detectDialog.target": "対象: {count}件",
+  "detectDialog.imageFilters": "検出する画像",
   "detectDialog.help": "高いほど誤検出は減りますが、見逃しは増えます。",
   "detectDialog.parallelism": "同時処理数",
   "detectDialog.confidenceSlider": "判定しきい値",

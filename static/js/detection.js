@@ -12,6 +12,55 @@ function setDetectionTargets(targets, prefix = "detectTarget") {
   }
 }
 
+const DETECTION_IMAGE_FILTERS = ["masked", "unmasked", "reviewed", "unreviewed"];
+
+function detectionImageFilters() {
+  return DETECTION_IMAGE_FILTERS.filter((name) => $(`[data-detection-image-filter="${name}"]`).checked);
+}
+
+function setDetectionImageFilters(filters) {
+  const selected = new Set(filters || []);
+  for (const name of DETECTION_IMAGE_FILTERS) {
+    const input = $(`[data-detection-image-filter="${name}"]`);
+    input.checked = selected.has(name);
+    syncDetectionTargetSwitch(input);
+  }
+}
+
+function detectionDialogTargetImages() {
+  const baseIds = new Set(state.detectionDialogBaseIds || []);
+  const images = processableImages().filter((image) => baseIds.has(image.id));
+  if (!state.detectionDialogFilterable) return images;
+  const filters = new Set(detectionImageFilters());
+  return images.filter((image) => imageMatchesStateFilter(image, filters));
+}
+
+function syncDetectionDialog() {
+  const imageIds = detectionDialogTargetImages().map((image) => image.id);
+  state.pendingDetectionTargetIds = imageIds;
+  $("#detectTargetCount").textContent = t("detectDialog.target", { count: imageIds.length });
+  const targetsValid = validateDetectionTargets(detectionTargets("dialogTarget"), $("#detectTargetValidation"));
+  $("#detectStartButton").disabled = state.detectionDialogSubmitting || !targetsValid || imageIds.length === 0;
+  return imageIds;
+}
+
+function resetDetectionDialogState() {
+  state.pendingDetectionTargetIds = [];
+  state.detectionDialogBaseIds = [];
+  state.detectionDialogFilterable = false;
+  state.detectionDialogSubmitting = false;
+  $("#detectTargetValidation").hidden = true;
+}
+
+function setDetectionDialogSubmitting(submitting) {
+  state.detectionDialogSubmitting = submitting;
+  for (const control of $("#detectForm").querySelectorAll("input, button")) control.disabled = submitting;
+  if (!submitting) {
+    syncDetectionFluidColorFill();
+    syncDetectionDialog();
+  }
+}
+
 function persistedDetectionTargets() { return state.settings?.detection?.targets || []; }
 function detectionCandidatePadding(selector = "#detectCandidatePadding") {
   const text = String($(selector).value).trim();
@@ -62,7 +111,6 @@ function syncDetectionTargetSwitch(input) {
 function validateDetectionTargets(targetClasses, target = null) {
   const message = targetClasses.length ? "" : t("error.detectionTargetsRequired");
   if (target) { target.textContent = message; target.hidden = !message; }
-  if (target?.id === "detectTargetValidation") $("#detectStartButton").disabled = !targetClasses.length;
   return !message;
 }
 
@@ -76,11 +124,15 @@ function importParallelism() {
   return normaliseImportParallelism(state.settings?.importing?.parallelism);
 }
 
-function openDetectionDialog(imageIds) {
+function openDetectionDialog(imageIds, { filterable = false } = {}) {
   const ids = new Set(processableImages().map((image) => image.id));
   imageIds = [...new Set(imageIds)].filter((imageId) => ids.has(imageId));
   if (!imageIds.length || isBusy() || state.importing || catalogStagingEditsActive()) return;
-  state.pendingDetectionTargetIds = [...imageIds];
+  state.detectionDialogBaseIds = [...imageIds];
+  state.detectionDialogFilterable = filterable;
+  state.detectionDialogSubmitting = false;
+  $("#detectImageFilters").hidden = !filterable;
+  setDetectionImageFilters(state.settings?.detection?.image_filters || ["unreviewed"]);
   setDetectionConfidence(detectionConfidence());
   $("#detectParallelism").value = String(detectionParallelism());
   $("#detectCandidatePadding").value = String(state.settings?.detection?.default_candidate_padding_px || 0);
@@ -91,22 +143,27 @@ function openDetectionDialog(imageIds) {
   syncDetectionFluidColorFill();
   $("#detectParallelism").disabled = false;
   setDetectionTargets(state.settings?.detection?.targets, "dialogTarget");
-  validateDetectionTargets(detectionTargets("dialogTarget"), $("#detectTargetValidation"));
-  $("#detectTargetCount").textContent = t("detectDialog.target", { count: imageIds.length });
+  syncDetectionDialog();
   showModalFromInvoker($("#detectDialog"));
 }
 
-async function runDetection(imageIds, confidence = detectionConfidence(), parallelism = 1, targetClasses = persistedDetectionTargets(), fluidColorFill = null) {
-  const ids = new Set(processableImages().map((image) => image.id));
-  imageIds = [...new Set(imageIds)].filter((imageId) => ids.has(imageId));
+async function runDetection(imageIds, confidence = detectionConfidence(), parallelism = 1, targetClasses = persistedDetectionTargets(), fluidColorFill = null, prepared = false) {
+  if (!prepared) {
+    const ids = new Set(processableImages().map((image) => image.id));
+    imageIds = [...new Set(imageIds)].filter((imageId) => ids.has(imageId));
+  } else {
+    imageIds = [...imageIds];
+  }
   if (!imageIds.length || catalogStagingEditsActive() || (!state.detectionStarting && (isBusy() || state.importing))) return;
   if (!validateDetectionTargets(targetClasses, $("#detectionTargetValidation"))) return;
   if (!state.detectionStarting) beginDetectionStart(imageIds);
   updateActionButtons();
   try {
-    await flushAllImageMutations();
-    await saveDraft();
-    await flushAllWorkspaceMutations();
+    if (!prepared) {
+      await flushAllImageMutations();
+      await saveDraft();
+      await flushAllWorkspaceMutations();
+    }
     const payload = { imageIds, confidence, parallelism: Math.max(1, Math.round(parallelism)), targetClasses };
     if (fluidColorFill) Object.assign(payload, fluidColorFill);
     await api("/api/detect", { method: "POST", body: JSON.stringify(payload) });
@@ -137,10 +194,7 @@ function failDetectionStart(error) {
 
 async function startDetectionFromDialog(event) {
   event.preventDefault();
-  if (catalogStagingEditsActive()) return;
-  const ids = new Set(processableImages().map((image) => image.id));
-  const imageIds = state.pendingDetectionTargetIds.filter((imageId) => ids.has(imageId));
-  if (!imageIds.length) return;
+  if (catalogStagingEditsActive() || state.detectionDialogSubmitting) return;
   const confidence = normaliseDetectionConfidence($("#detectConfidenceNumber").value);
   const parallelism = detectionParallelism();
   const targetClasses = detectionTargets("dialogTarget");
@@ -154,32 +208,43 @@ async function startDetectionFromDialog(event) {
   const fluidColorFillTolerance = detectionFluidColorFillTolerance()
     ?? state.settings?.detection?.fluid_color_fill_tolerance
     ?? 26;
-  $("#detectDialog").close();
-  state.pendingDetectionTargetIds = [];
-  beginDetectionStart(imageIds);
-  if (state.settings) {
-    const settings = structuredClone(state.settings);
-    settings.detection = {
-      ...settings.detection,
-      threshold: confidence,
-      parallelism,
-      targets: targetClasses,
-      default_candidate_padding_px: defaultCandidatePadding,
-      default_exclude_candidate_padding_px: defaultExcludeCandidatePadding,
-      fluid_color_fill_enabled: fluidColorFillEnabled,
-      fluid_color_fill_tolerance: fluidColorFillTolerance,
-    };
-    try {
+  setDetectionDialogSubmitting(true);
+  try {
+    await flushAllImageMutations();
+    await saveDraft();
+    await flushAllWorkspaceMutations();
+    const imageIds = syncDetectionDialog();
+    if (!imageIds.length) { setDetectionDialogSubmitting(false); return; }
+    if (state.settings) {
+      const settings = structuredClone(state.settings);
+      settings.detection = {
+        ...settings.detection,
+        threshold: confidence,
+        parallelism,
+        targets: targetClasses,
+        default_candidate_padding_px: defaultCandidatePadding,
+        default_exclude_candidate_padding_px: defaultExcludeCandidatePadding,
+        fluid_color_fill_enabled: fluidColorFillEnabled,
+        fluid_color_fill_tolerance: fluidColorFillTolerance,
+        ...(state.detectionDialogFilterable ? { image_filters: detectionImageFilters() } : {}),
+      };
       const saved = await api("/api/settings?status=0", { method: "POST", body: JSON.stringify(settings) });
       state.settings = saved.settings;
       setSettingsForm(saved.settings, state.settingsStatus);
     }
-    catch (error) { setSettingsForm(state.settings, state.settingsStatus); failDetectionStart(error); state.detectionStarting = false; updateActionButtons(); return; }
+    setDetectionDialogSubmitting(false);
+    $("#detectDialog").close();
+    resetDetectionDialogState();
+    beginDetectionStart(imageIds);
+    await runDetection(imageIds, confidence, parallelism, targetClasses, {
+      fluidColorFillEnabled,
+      fluidColorFillTolerance,
+    }, true);
+  } catch (error) {
+    setSettingsForm(state.settings, state.settingsStatus);
+    setDetectionDialogSubmitting(false);
+    showUserError(error);
   }
-  await runDetection(imageIds, confidence, parallelism, targetClasses, {
-    fluidColorFillEnabled,
-    fluidColorFillTolerance,
-  });
 }
 
 async function cancelDetection() {

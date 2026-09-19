@@ -15,7 +15,7 @@ const state = {
   catalogMutation: false, imageGeneration: 0, catalogEpoch: 0, serverCatalogGeneration: null, catalogTransition: null, viewGeneration: 0, historyRestoreBusy: false, projectHistoryRefreshTokens: new Map(), workspaceId: null, historyDurable: false, translations: {},
   applyTargetIds: [], applyTargetMode: "masked", applyCatalogSnapshot: null, applyRunning: false, applyFinishing: false, handledApplyStartedAt: null, importing: false, mosaicPreviewEnabled: true, mosaicPreviewGeneration: 0, mosaicWorker: null, mosaicPreviewRequested: false, mosaicWorkerBusy: false, mosaicPending: null, mosaicPreviewRoi: null, mosaicPreviewFull: false, mosaicSourceImage: null, mosaicSourceId: "", mosaicSourcePromise: null, mosaicPreviewFailureReported: false,
   outputDirectoryPicking: false, outputDirectoryCommitPending: false, singleSave: null, applyDialogInitialized: false, singleSaveDialogInitialized: false,
-  detectionTargetIds: [], pendingDetectionTargetIds: [], detectCancelRequested: false,
+  detectionTargetIds: [], pendingDetectionTargetIds: [], detectionDialogBaseIds: [], detectionDialogFilterable: false, detectionDialogSubmitting: false, detectCancelRequested: false,
   pageLoadedAt: Date.now() / 1000, handledDetectionStartedAt: null, importSession: null,
   candidateUpdateChains: new Map(), candidateUpdateVersions: new Map(), candidateDeleting: new Set(), candidateBatchPending: new Set(), imageMutationChains: new Map(), candidateControlLocks: new Map(),
   manualMaskPresent: false, manualExclusionPresent: false, manualExclusionErasePresent: false, manualEnabled: true, manualExclusionEnabled: true, manualExclusionForced: true, manualExclusionEraseEnabled: true,
@@ -574,7 +574,7 @@ function saveTargets(mode = "all") {
 }
 function normaliseReviewRoot(value) { return String(value || "").trim().replaceAll("/", "\\").replace(/\\+$/, "").toLowerCase(); }
 function isReviewed(image) { return state.reviewedImageIds.has(image.id); }
-function allImageDetectionTargets(images = state.images) { return processableImages(images).filter((image) => !isReviewed(image)); }
+function allImageDetectionTargets(images = state.images) { return processableImages(images); }
 function isHidden(image) { return state.hiddenImageIds.has(image.id); }
 function loadReviewedPaths() {
   state.reviewedImageIds = new Set(state.images.filter((image) => image.reviewed).map((image) => image.id));
