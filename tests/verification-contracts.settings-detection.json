@@ -2247,6 +2247,7 @@
       "observation": "相対パスでは該当する設定タブと入力欄を示し「絶対パス」を案内して保存しない",
       "status": "automated",
       "testIds": [
+        "node:tests/test_settings_dialog_e2e.cjs::SD-141 relative paths select the owning tab while absolute paths preserve unrelated settings",
         "python:tests.test_absolute_path_regression.AbsolutePathRegressionTests.test_relative_model_and_output_paths_are_rejected_for_new_settings"
       ]
     },
@@ -2258,6 +2259,7 @@
       "observation": "成功時は正規化済みの絶対形式を表示し、モデル選択・案内・現在の設定を混ぜない",
       "status": "automated",
       "testIds": [
+        "node:tests/test_settings_dialog_e2e.cjs::SD-141 relative paths select the owning tab while absolute paths preserve unrelated settings",
         "python:tests.test_absolute_path_regression.AbsolutePathRegressionTests.test_relative_model_and_output_paths_are_rejected_for_new_settings"
       ]
     },
@@ -2358,7 +2360,7 @@
       "observation": "取消・失敗後も選択ボタンを再度使える",
       "status": "automated",
       "testIds": [
-        "python:tests.test_server.MozarieTests.test_output_directory_only_update_does_not_probe_an_unchanged_gpu"
+        "node:tests/test_settings_dialog_e2e.cjs::SD-149 output picker sends the absolute current path and remains reusable after cancel and failure"
       ]
     },
     {
@@ -2369,7 +2371,7 @@
       "observation": "OSの初期フォルダーは既存の絶対パスだけを使う",
       "status": "automated",
       "testIds": [
-        "python:tests.test_server.MozarieTests.test_output_directory_only_update_does_not_probe_an_unchanged_gpu"
+        "node:tests/test_settings_dialog_e2e.cjs::SD-149 output picker sends the absolute current path and remains reusable after cancel and failure"
       ]
     }
   ]

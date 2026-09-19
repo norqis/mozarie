@@ -396,3 +396,61 @@ test("SD-144.2 output picker cancellation and failure preserve unsaved fields fo
     assert.equal(payload.confirmations.removeImage, false);
   });
 });
+
+test("SD-141 relative paths select the owning tab while absolute paths preserve unrelated settings", { timeout: 60000 }, async () => {
+  await withSettingsPage(async (page, fixture) => {
+    const before = fixture.settingsPayloads.length;
+    await page.locator("#settingsPort").fill("9123");
+    await page.locator("#settingsDefaultOutputDirectory").fill("relative-output");
+    await page.locator("#settingsSaveButton").click();
+    assert.equal(fixture.settingsPayloads.length, before);
+    assert.equal(await page.locator('[data-settings-tab="general"]').getAttribute("aria-selected"), "true");
+    assert.equal(await page.locator("#settingsDefaultOutputDirectory").getAttribute("aria-invalid"), "true");
+    assert.match(await page.locator("#settingsResult").textContent(), /absolute|絶対/i);
+
+    await page.locator("#settingsDefaultOutputDirectory").fill("G:\\absolute-output");
+    await page.locator('[data-settings-tab="models"]').click();
+    await page.locator("#settingsTargetModel").fill("models\\target.onnx");
+    await page.locator("#settingsSaveButton").click();
+    assert.equal(fixture.settingsPayloads.length, before);
+    assert.equal(await page.locator('[data-settings-tab="models"]').getAttribute("aria-selected"), "true");
+    assert.equal(await page.locator("#settingsTargetModel").getAttribute("aria-invalid"), "true");
+    assert.equal(await page.locator("#settingsPort").inputValue(), "9123");
+    assert.equal(await page.locator("#settingsDefaultOutputDirectory").inputValue(), "G:\\absolute-output");
+
+    await page.locator("#settingsTargetModel").fill("G:\\models\\target.onnx");
+    await page.locator("#settingsSaveButton").click();
+    await page.waitForFunction(() => state.settings.general.port === 9123);
+    const payload = fixture.settingsPayloads.at(-1).body;
+    assert.equal(payload.general.port, 9123);
+    assert.equal(payload.saving.default_output_directory, "G:\\absolute-output");
+    assert.equal(payload.models.target_segmentation, "G:\\models\\target.onnx");
+  });
+});
+
+test("SD-149 output picker sends the absolute current path and remains reusable after cancel and failure", { timeout: 60000 }, async () => {
+  await withSettingsPage(async (page) => {
+    const requests = [];
+    let attempt = 0;
+    await page.route("**/api/output-directory/pick", async (route) => {
+      requests.push(JSON.parse(route.request().postData()));
+      attempt += 1;
+      if (attempt === 1) return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ cancelled: true }) });
+      if (attempt === 2) return route.fulfill({ status: 500, contentType: "application/json", body: JSON.stringify({ error_code: "internal_error" }) });
+      return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ path: "G:\\chosen-output", settings: { saving: { default_output_directory: "G:\\chosen-output" } } }) });
+    });
+    const initial = await page.locator("#settingsDefaultOutputDirectory").inputValue();
+    assert.match(initial, /^(?:[A-Za-z]:\\|\\\\)/);
+    await page.locator("#settingsChooseOutputDirectory").click();
+    await page.waitForFunction(() => !state.outputDirectoryPicking);
+    assert.equal(await page.locator("#settingsChooseOutputDirectory").isEnabled(), true);
+    await page.locator("#settingsChooseOutputDirectory").click();
+    await page.waitForFunction(() => document.querySelector("#errorDialog").open);
+    await page.locator("#errorDialogClose").click();
+    assert.equal(await page.locator("#settingsChooseOutputDirectory").isEnabled(), true);
+    await page.locator("#settingsChooseOutputDirectory").click();
+    await page.waitForFunction(() => document.querySelector("#settingsDefaultOutputDirectory").value === "G:\\chosen-output");
+    assert.deepEqual(requests, [{ currentPath: initial }, { currentPath: initial }, { currentPath: initial }]);
+    assert.equal(await page.locator("#settingsChooseOutputDirectory").isEnabled(), true);
+  });
+});
