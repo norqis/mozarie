@@ -9753,4 +9753,3 @@ image_io._stage_record_replacement(record, rendered, (source.stat().st_mtime_ns,
 
 if __name__ == "__main__":
     unittest.main()
-
