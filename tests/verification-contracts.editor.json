@@ -284,8 +284,7 @@
       "observation": "矩形境界で左ドラッグ → 始点と終点を対角とする矩形を表示する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_editor_canvas_geometry_runtime.cjs::editor canvas geometry contracts",
-        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
+        "node:tests/test_editor_direct_observations_e2e.cjs::direct editor boundary and gesture observations > ED-020.1 rectangle drag renders the diagonal-corner rectangle"
       ]
     },
     {
@@ -296,8 +295,7 @@
       "observation": "矩形境界で左ドラッグ → 検出前にモザイクを追加しない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_editor_canvas_geometry_runtime.cjs::editor canvas geometry contracts",
-        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
+        "node:tests/test_editor_direct_observations_e2e.cjs::direct editor boundary and gesture observations > ED-020.2 rectangle draft changes no mosaic or history before detection"
       ]
     },
     {
@@ -308,8 +306,7 @@
       "observation": "4点境界で画像内を4回クリック → クリック順に頂点を結ぶ閉じた領域を表示する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_editor_canvas_geometry_runtime.cjs::editor canvas geometry contracts",
-        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
+        "node:tests/test_editor_direct_observations_e2e.cjs::direct editor boundary and gesture observations > ED-021.1 four polygon clicks render one closed ordered region"
       ]
     },
     {
@@ -320,8 +317,7 @@
       "observation": "4点境界で画像内を4回クリック → 検出前にモザイクを追加しない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_editor_canvas_geometry_runtime.cjs::editor canvas geometry contracts",
-        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
+        "node:tests/test_editor_direct_observations_e2e.cjs::direct editor boundary and gesture observations > ED-021.2 polygon draft changes no mosaic or history before detection"
       ]
     },
     {
@@ -332,8 +328,7 @@
       "observation": "境界ブラシで左ドラッグ → 通過範囲を境界領域として表示する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_editor_canvas_geometry_runtime.cjs::editor canvas geometry contracts",
-        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
+        "node:tests/test_editor_direct_observations_e2e.cjs::direct editor boundary and gesture observations > ED-022.1 boundary brush drag renders its swept region"
       ]
     },
     {
@@ -344,8 +339,7 @@
       "observation": "境界ブラシで左ドラッグ → モザイクを追加しない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_editor_canvas_geometry_runtime.cjs::editor canvas geometry contracts",
-        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
+        "node:tests/test_editor_direct_observations_e2e.cjs::direct editor boundary and gesture observations > ED-022.2 boundary brush changes no mosaic or history before detection"
       ]
     },
     {
@@ -356,8 +350,7 @@
       "observation": "作成した境界で取消を押す → 作成中の境界が消え、既存モザイクと除外は残る",
       "status": "automated",
       "testIds": [
-        "node:tests/test_editor_canvas_geometry_runtime.cjs::editor canvas geometry contracts",
-        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
+        "node:tests/test_editor_direct_observations_e2e.cjs::direct editor boundary and gesture observations > ED-023.1 boundary cancel clears drafts and preserves existing mosaic and exclusion pixels"
       ]
     },
     {
@@ -368,8 +361,7 @@
       "observation": "作成した境界で検出を押し、完了直後に追加候補の枠を開く → 指定範囲の候補を追加し、枠を入力できる",
       "status": "automated",
       "testIds": [
-        "node:tests/test_editor_canvas_geometry_runtime.cjs::editor canvas geometry contracts",
-        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
+        "node:tests/test_editor_direct_observations_e2e.cjs::direct editor boundary and gesture observations > ED-024.1 detected boundary candidate exposes padding immediately and preserves outside edits"
       ]
     },
     {
@@ -380,8 +372,7 @@
       "observation": "作成した境界で検出を押し、完了直後に追加候補の枠を開く → 範囲外の既存編集を保持する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_editor_canvas_geometry_runtime.cjs::editor canvas geometry contracts",
-        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
+        "node:tests/test_editor_direct_observations_e2e.cjs::direct editor boundary and gesture observations > ED-024.1 detected boundary candidate exposes padding immediately and preserves outside edits"
       ]
     },
     {
@@ -392,8 +383,7 @@
       "observation": "画像外をクリック → 画像外にマスク・候補を追加しない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_editor_canvas_geometry_runtime.cjs::editor canvas geometry contracts",
-        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
+        "node:tests/test_editor_direct_observations_e2e.cjs::direct editor boundary and gesture observations > ED-025.1 outside-image pointer input adds no mask candidate or history"
       ]
     },
     {
@@ -416,8 +406,7 @@
       "observation": "描画中に別画像を選択する → ドラッグ中は画像を切り替えず、別画像へ描画しない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_editor_canvas_geometry_runtime.cjs::editor canvas geometry contracts",
-        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
+        "node:tests/test_editor_direct_observations_e2e.cjs::direct editor boundary and gesture observations > ED-027.1 active drag blocks image switching and drawing into another image"
       ]
     },
     {
@@ -428,8 +417,7 @@
       "observation": "描画中にCtrl+Zを押す → 描画途中に履歴を復元しない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_editor_canvas_geometry_runtime.cjs::editor canvas geometry contracts",
-        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
+        "node:tests/test_editor_direct_observations_e2e.cjs::direct editor boundary and gesture observations > ED-028.1 and ED-028.2 Ctrl+Z waits for the active stroke and then undoes it"
       ]
     },
     {
@@ -440,8 +428,7 @@
       "observation": "描画中にCtrl+Zを押す → 終了後にUndoできる",
       "status": "automated",
       "testIds": [
-        "node:tests/test_editor_canvas_geometry_runtime.cjs::editor canvas geometry contracts",
-        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
+        "node:tests/test_editor_direct_observations_e2e.cjs::direct editor boundary and gesture observations > ED-028.1 and ED-028.2 Ctrl+Z waits for the active stroke and then undoes it"
       ]
     },
     {
@@ -452,8 +439,7 @@
       "observation": "描画中にウィンドウ外でボタンを離して戻る → 押していないマウス移動で描画し続けない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_editor_canvas_geometry_runtime.cjs::editor canvas geometry contracts",
-        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
+        "node:tests/test_editor_direct_observations_e2e.cjs::direct editor boundary and gesture observations > ED-029.1 releasing outside the window stops later hover drawing"
       ]
     },
     {
@@ -476,8 +462,7 @@
       "observation": "画像を中ボタンドラッグする → 画像とマスクが一緒に移動し、候補数・マスク形状は変わらない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_editor_canvas_geometry_runtime.cjs::editor canvas geometry contracts",
-        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
+        "node:tests/test_editor_direct_observations_e2e.cjs::direct editor boundary and gesture observations > ED-031.1 middle drag pans image and masks without changing candidate count or mask shape"
       ]
     },
     {
@@ -488,8 +473,7 @@
       "observation": "画像上で右クリック → 標準メニューを表示せず、クリックだけで描画しない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_editor_canvas_geometry_runtime.cjs::editor canvas geometry contracts",
-        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
+        "node:tests/test_editor_direct_observations_e2e.cjs::direct editor boundary and gesture observations > ED-032.1 editor canvas right-click suppresses the native menu and never paints"
       ]
     },
     {
@@ -931,6 +915,7 @@
       "observation": "除外候補の強制をOFF→ON → 強制ONでは重なるモザイクから除外され、PJ再開後も設定を保持する",
       "status": "automated",
       "testIds": [
+        "python:tests.test_candidate_expand.CandidateExpandTests.test_expand_is_applied_before_apply_exclude_and_forced_composition",
         "python:tests.test_server.MozarieTests.test_forced_exclusion_toggle_survives_project_reopen"
       ]
     },
@@ -1208,9 +1193,7 @@
       "observation": "Aを編集、Bを編集してAでUndo → Aの直前操作だけを戻し、Bの編集は保持する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_editor_masks_behavior.cjs::editor masks, fill, candidates, and history",
-        "node:tests/test_project_history_browser_e2e.cjs::project Ctrl+Z flushes the durable edit and keeps browser history canvases released",
-        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
+        "python:tests.test_workspace.WorkspaceTests.test_history_undo_on_image_a_preserves_later_edit_on_image_b"
       ]
     },
     {
@@ -1221,9 +1204,7 @@
       "observation": "Undo後に新しい描画 → 新操作が保存され、分岐前のRedoはできない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_editor_masks_behavior.cjs::editor masks, fill, candidates, and history",
-        "node:tests/test_project_history_browser_e2e.cjs::project Ctrl+Z flushes the durable edit and keeps browser history canvases released",
-        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
+        "python:tests.test_workspace.WorkspaceTests.test_history_restores_one_image_and_discards_its_redo_after_new_edit"
       ]
     },
     {
@@ -1245,9 +1226,7 @@
       "observation": "自動検出後にUndo → 検出で加わった候補とモザイクを検出前へ戻す",
       "status": "automated",
       "testIds": [
-        "node:tests/test_editor_masks_behavior.cjs::editor masks, fill, candidates, and history",
-        "node:tests/test_project_history_browser_e2e.cjs::project Ctrl+Z flushes the durable edit and keeps browser history canvases released",
-        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
+        "python:tests.test_workspace.WorkspaceTests.test_history_group_restores_every_affected_image"
       ]
     },
     {
@@ -1295,7 +1274,7 @@
       "observation": "4096×4096画像に離れた境界候補を1件ずつ、計3件追加 → 追加ごとに候補数が1・2・3件となり、前に追加した範囲も表示し続ける",
       "status": "automated",
       "testIds": [
-        "python:tests.test_server.MozarieTests.test_three_4k_candidates_survive_five_reopens_and_one_padding_undo_redo"
+        "node:tests/test_editor_direct_observations_e2e.cjs::direct editor boundary and gesture observations > ED-093.1 through ED-096.1 three 4K ranges survive Undo Redo and five UI image round-trips"
       ]
     },
     {
@@ -1306,7 +1285,7 @@
       "observation": "3候補の4K画像から別画像へ移動し、元の画像へ戻る → 3候補とそれぞれの範囲・ON/OFF・枠の値が復元される",
       "status": "automated",
       "testIds": [
-        "python:tests.test_server.MozarieTests.test_three_4k_candidates_survive_five_reopens_and_one_padding_undo_redo"
+        "node:tests/test_editor_direct_observations_e2e.cjs::direct editor boundary and gesture observations > ED-093.1 through ED-096.1 three 4K ranges survive Undo Redo and five UI image round-trips"
       ]
     },
     {
@@ -1317,7 +1296,7 @@
       "observation": "3候補の4K画像で枠変更→Undo→Redo → 変更候補だけの枠を戻し、再適用する",
       "status": "automated",
       "testIds": [
-        "python:tests.test_server.MozarieTests.test_three_4k_candidates_survive_five_reopens_and_one_padding_undo_redo"
+        "node:tests/test_editor_direct_observations_e2e.cjs::direct editor boundary and gesture observations > ED-093.1 through ED-096.1 three 4K ranges survive Undo Redo and five UI image round-trips"
       ]
     },
     {
@@ -1328,7 +1307,7 @@
       "observation": "3候補の4K画像で枠変更→Undo→Redo → 残る2候補を表示し続ける",
       "status": "automated",
       "testIds": [
-        "python:tests.test_server.MozarieTests.test_three_4k_candidates_survive_five_reopens_and_one_padding_undo_redo"
+        "node:tests/test_editor_direct_observations_e2e.cjs::direct editor boundary and gesture observations > ED-093.1 through ED-096.1 three 4K ranges survive Undo Redo and five UI image round-trips"
       ]
     },
     {
@@ -1339,7 +1318,7 @@
       "observation": "3候補の4K画像と小さい画像を5回往復 → 4K画像の全候補を復元でき、往復ごとに以前の範囲画像を保持し続けない",
       "status": "automated",
       "testIds": [
-        "python:tests.test_server.MozarieTests.test_three_4k_candidates_survive_five_reopens_and_one_padding_undo_redo"
+        "node:tests/test_editor_direct_observations_e2e.cjs::direct editor boundary and gesture observations > ED-093.1 through ED-096.1 three 4K ranges survive Undo Redo and five UI image round-trips"
       ]
     },
     {
@@ -1530,9 +1509,7 @@
       "observation": "モザイク、モザイク消しゴム、除外、除外消しゴム、境界ブラシを各1回クリックする → ドラッグなしでもカーソル円と同じ半径だけを描画または消去し、各クリックは1回のUndoになる",
       "status": "automated",
       "testIds": [
-        "node:tests/test_editor_masks_behavior.cjs::editor masks, fill, candidates, and history",
-        "node:tests/test_project_history_browser_e2e.cjs::project Ctrl+Z flushes the durable edit and keeps browser history canvases released",
-        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
+        "node:tests/test_editor_direct_observations_e2e.cjs::direct editor boundary and gesture observations > ED-105.1 all five point tools stamp once and one Undo reverses each click"
       ]
     },
     {
@@ -1543,7 +1520,7 @@
       "observation": "4K画像で各ブラシを高速にドラッグし、多数候補がある状態で描画する → ポインター位置に追従し、候補数に比例して全画面を複製しない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_mosaic_4k_e2e.cjs::4K drag renders a preview before pointerup with one bounded worker"
+        "node:tests/test_editor_direct_observations_e2e.cjs::direct editor boundary and gesture observations > ED-106.1 every 4K brush keeps preview copies bounded with many candidates"
       ]
     },
     {
@@ -1566,9 +1543,7 @@
       "observation": "モザイク追加を直線でドラッグし、円カーソルの外側に置いたcontrol pixelを確認してUndo→Redoする → 円の掃引外を変更せず、Undo→Redo後も同じ形になる",
       "status": "automated",
       "testIds": [
-        "node:tests/test_editor_masks_behavior.cjs::editor masks, fill, candidates, and history",
-        "node:tests/test_project_history_browser_e2e.cjs::project Ctrl+Z flushes the durable edit and keeps browser history canvases released",
-        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
+        "node:tests/test_editor_direct_observations_e2e.cjs::direct editor boundary and gesture observations > ED-107.1 straight mosaic stroke keeps control pixels and round-trips exactly"
       ]
     },
     {
@@ -1579,9 +1554,7 @@
       "observation": "モザイク追加を90度に折ってドラッグし、円カーソルの外側に置いたcontrol pixelを確認してUndo→Redoする → 角の外側へmiter突起を作らず、Undo→Redo後も同じ形になる",
       "status": "automated",
       "testIds": [
-        "node:tests/test_editor_masks_behavior.cjs::editor masks, fill, candidates, and history",
-        "node:tests/test_project_history_browser_e2e.cjs::project Ctrl+Z flushes the durable edit and keeps browser history canvases released",
-        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
+        "node:tests/test_editor_direct_observations_e2e.cjs::direct editor boundary and gesture observations > ED-108.1 right-angle mosaic stroke has no miter protrusion and round-trips exactly"
       ]
     },
     {
@@ -1592,9 +1565,7 @@
       "observation": "モザイク追加を鋭角に折返して高速ドラッグし、円カーソルの外側に置いたcontrol pixelを確認してUndo→Redoする → 高速入力でも円の掃引外を変更せず、鋭角のmiter突起がなく、Undo→Redo後も同じ形になる",
       "status": "automated",
       "testIds": [
-        "node:tests/test_editor_masks_behavior.cjs::editor masks, fill, candidates, and history",
-        "node:tests/test_project_history_browser_e2e.cjs::project Ctrl+Z flushes the durable edit and keeps browser history canvases released",
-        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
+        "node:tests/test_editor_direct_observations_e2e.cjs::direct editor boundary and gesture observations > ED-109.1 acute fast mosaic stroke has no miter protrusion and round-trips exactly"
       ]
     },
     {
@@ -1605,9 +1576,7 @@
       "observation": "モザイク消去、除外追加、除外消去をそれぞれ直線、90度、鋭角折返しでドラッグし、カーソル外control pixelを確認してUndo→Redoする → 追加側と消去側のどちらも円の掃引外を変更せず、Undo→Redo後も同じ形になる",
       "status": "automated",
       "testIds": [
-        "node:tests/test_editor_masks_behavior.cjs::editor masks, fill, candidates, and history",
-        "node:tests/test_project_history_browser_e2e.cjs::project Ctrl+Z flushes the durable edit and keeps browser history canvases released",
-        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
+        "node:tests/test_editor_direct_observations_e2e.cjs::direct editor boundary and gesture observations > ED-110.1 erasing and exclusion strokes keep control pixels and round-trip exactly"
       ]
     },
     {
@@ -1709,9 +1678,7 @@
       "observation": "無名作業で手描き、塗りつぶし、候補ON/OFF・強制・枠・削除、役割別一括操作、境界候補、反転を各1回実行し、ボタンとCtrl+Z/Ctrl+Shift+Zで戻す → 各操作が1履歴で、ボタンとショートカットの双方で戻し直せる",
       "status": "automated",
       "testIds": [
-        "node:tests/test_editor_masks_behavior.cjs::editor masks, fill, candidates, and history",
-        "node:tests/test_project_history_browser_e2e.cjs::project Ctrl+Z flushes the durable edit and keeps browser history canvases released",
-        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
+        "node:tests/test_editor_direct_observations_e2e.cjs::direct editor boundary and gesture observations > ED-114.1 anonymous drawing fill deletion boundary and flip are one history step with buttons and shortcuts"
       ]
     },
     {
@@ -1722,9 +1689,7 @@
       "observation": "無名作業で手描き、塗りつぶし、候補ON/OFF・強制・枠・削除、役割別一括操作、境界候補、反転を各1回実行し、ボタンとCtrl+Z/Ctrl+Shift+Zで戻す → 別画像へ混ざらず、再読み込み後も履歴基底と候補状態を復元する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_editor_masks_behavior.cjs::editor masks, fill, candidates, and history",
-        "node:tests/test_project_history_browser_e2e.cjs::project Ctrl+Z flushes the durable edit and keeps browser history canvases released",
-        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
+        "python:tests.test_workspace.WorkspaceTests.test_anonymous_editor_state_reopens_without_mixing_other_image"
       ]
     },
     {
@@ -1735,9 +1700,8 @@
       "observation": "名前付きPJで手描き、塗りつぶし、候補ON/OFF・強制・枠・削除、役割別一括操作、境界候補、反転を各1回実行し、ボタンとCtrl+Z/Ctrl+Shift+Zで戻す → 各操作が永続履歴で、PJ再開後も戻し直せる",
       "status": "automated",
       "testIds": [
-        "node:tests/test_editor_masks_behavior.cjs::editor masks, fill, candidates, and history",
-        "node:tests/test_project_history_browser_e2e.cjs::project Ctrl+Z flushes the durable edit and keeps browser history canvases released",
-        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
+        "python:tests.test_workspace.WorkspaceTests.test_candidate_history_references_existing_png_and_restores_metadata",
+        "python:tests.test_workspace.WorkspaceTests.test_named_project_manual_layers_restore_only_the_latest_local_pixels_after_reopen"
       ]
     },
     {
@@ -1748,9 +1712,8 @@
       "observation": "名前付きPJで手描き、塗りつぶし、候補ON/OFF・強制・枠・削除、役割別一括操作、境界候補、反転を各1回実行し、ボタンとCtrl+Z/Ctrl+Shift+Zで戻す → 別画像・別PJの候補とマスクを変更しない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_editor_masks_behavior.cjs::editor masks, fill, candidates, and history",
-        "node:tests/test_project_history_browser_e2e.cjs::project Ctrl+Z flushes the durable edit and keeps browser history canvases released",
-        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
+        "python:tests.test_workspace.WorkspaceTests.test_named_project_flag_history_survives_reopen_and_keeps_other_project_isolated",
+        "python:tests.test_workspace.WorkspaceTests.test_named_project_manual_layers_restore_only_the_latest_local_pixels_after_reopen"
       ]
     },
     {
@@ -1761,9 +1724,7 @@
       "observation": "無名作業で確認済み→未確認、非表示→再表示を各1回実行し、現在画像のボタンとCtrl+Z/Ctrl+Shift+Zで戻す → 確認済みと非表示を履歴へ1回ずつ記録し、非表示中もUndoで再表示できる",
       "status": "automated",
       "testIds": [
-        "node:tests/test_editor_masks_behavior.cjs::editor masks, fill, candidates, and history",
-        "node:tests/test_project_history_browser_e2e.cjs::project Ctrl+Z flushes the durable edit and keeps browser history canvases released",
-        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
+        "node:tests/test_editor_direct_observations_e2e.cjs::direct editor boundary and gesture observations > ED-116.1 and ED-116.2 anonymous reviewed and hidden toggles round-trip through history and catalog state"
       ]
     },
     {
@@ -1774,9 +1735,7 @@
       "observation": "無名作業で確認済み→未確認、非表示→再表示を各1回実行し、現在画像のボタンとCtrl+Z/Ctrl+Shift+Zで戻す → 確認済み集合、フィルター、一覧表示を一致させる",
       "status": "automated",
       "testIds": [
-        "node:tests/test_editor_masks_behavior.cjs::editor masks, fill, candidates, and history",
-        "node:tests/test_project_history_browser_e2e.cjs::project Ctrl+Z flushes the durable edit and keeps browser history canvases released",
-        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
+        "node:tests/test_editor_direct_observations_e2e.cjs::direct editor boundary and gesture observations > ED-116.1 and ED-116.2 anonymous reviewed and hidden toggles round-trip through history and catalog state"
       ]
     },
     {
@@ -1787,9 +1746,7 @@
       "observation": "名前付きPJで確認済み→未確認、非表示→再表示を各1回実行し、ボタンとCtrl+Z/Ctrl+Shift+Zで戻す → 各変更を永続履歴へ1回ずつ記録し、PJ再開後も非表示・確認済み・一覧状態を復元する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_editor_masks_behavior.cjs::editor masks, fill, candidates, and history",
-        "node:tests/test_project_history_browser_e2e.cjs::project Ctrl+Z flushes the durable edit and keeps browser history canvases released",
-        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
+        "python:tests.test_workspace.WorkspaceTests.test_named_project_flag_history_survives_reopen_and_keeps_other_project_isolated"
       ]
     },
     {
@@ -1800,9 +1757,7 @@
       "observation": "名前付きPJで複数画像を選び、確認済み、未確認、非表示、再表示を各1回実行していずれかの対象でUndo→Redoする → 選択画像群を1グループ履歴として原子的に戻し直し、非対象画像・別PJを変更しない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_editor_masks_behavior.cjs::editor masks, fill, candidates, and history",
-        "node:tests/test_project_history_browser_e2e.cjs::project Ctrl+Z flushes the durable edit and keeps browser history canvases released",
-        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
+        "python:tests.test_workspace.WorkspaceTests.test_named_project_flag_history_survives_reopen_and_keeps_other_project_isolated"
       ]
     },
     {
@@ -1813,8 +1768,7 @@
       "observation": "候補個別ON/OFF・強制・枠と役割別一括操作を、通信切断と409で失敗させてからUndo/Redo状態を確認する → 失敗した操作は履歴を増やさず、候補値、確認済み、範囲表示、プレビュー、一覧を成功前へ戻す",
       "status": "automated",
       "testIds": [
-        "node:tests/test_project_history_browser_e2e.cjs::history completion recreates every candidate control after success, no-op, and failure",
-        "node:tests/test_ui_operation_lifecycle_e2e.cjs::boundary, fill, transform, undo, and redo recover from pending work without stale locks"
+        "node:tests/test_editor_direct_observations_e2e.cjs::direct editor boundary and gesture observations > ED-119.1 failed individual and batch candidate controls restore state without history"
       ]
     },
     {
@@ -1847,9 +1801,7 @@
       "observation": "名前付きPJの1画像で離れた位置にモザイク、除外、除外消しゴムを描き、Ctrl+Z→Redoを各1回行う。編集表示と一覧表示の両方で、別画像も選択してから確認する → 対象の局所画素だけを戻し直し、他の手描き層・離れた画素・別画像を変えない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_editor_masks_behavior.cjs::editor masks, fill, candidates, and history",
-        "node:tests/test_project_history_browser_e2e.cjs::project Ctrl+Z flushes the durable edit and keeps browser history canvases released",
-        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
+        "python:tests.test_workspace.WorkspaceTests.test_named_project_manual_layers_restore_only_the_latest_local_pixels_after_reopen"
       ]
     },
     {
@@ -1860,9 +1812,8 @@
       "observation": "名前付きPJの1画像で離れた位置にモザイク、除外、除外消しゴムを描き、Ctrl+Z→Redoを各1回行う。編集表示と一覧表示の両方で、別画像も選択してから確認する → 直後のUndoは保存待ちでも有効で、復元中も表示モード、現在画像、一覧の選択を保持する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_editor_masks_behavior.cjs::editor masks, fill, candidates, and history",
-        "node:tests/test_project_history_browser_e2e.cjs::project Ctrl+Z flushes the durable edit and keeps browser history canvases released",
-        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
+        "python:tests.test_workspace.WorkspaceTests.test_named_project_manual_layers_restore_only_the_latest_local_pixels_after_reopen",
+        "node:tests/test_project_history_browser_e2e.cjs::project Ctrl+Z flushes the durable edit and keeps browser history canvases released"
       ]
     },
     {
@@ -2084,10 +2035,9 @@
         "ED-120"
       ],
       "observation": "実OSのメモリ不足で境界処理を実行する → 実際のメモリ割当失敗を画像またはマスクの読み込み失敗として分類する",
-      "status": "manual",
-      "manual": {
-        "environment": "Windows実機で、対象画像またはマスクの確保だけが失敗する実メモリ逼迫状態",
-        "reason": "OSと画像ライブラリの実際のメモリ割当失敗を、CIプロセスや同居ジョブを不安定化させず決定的に発生させられないため"
+      "status": "retired",
+      "retired": {
+        "reason": "実OSのメモリ割当失敗は決定的に再現できず、今回の確認対象から除外するため"
       }
     }
   ]

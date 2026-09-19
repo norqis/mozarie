@@ -1242,6 +1242,12 @@ nodeTest("editor masks, fill, candidates, and history", async (t) => {
   deferredHistory[0]({ canUndo: true, canRedo: false }); await olderHistory;
   assert.deepEqual({ ...state.projectHistory.get("image") }, { canUndo: false, canRedo: true }, "a late history response cannot overwrite the newer undo and redo state");
 
+  await t.test("state-only editor history entries replay without requiring brush points", () => {
+    for (const kind of ["candidateState", "candidateBatch", "manualState", "workspaceFlag", "transform"]) {
+      assert.doesNotThrow(() => test.replayManualStroke({ kind }), `${kind} is restored through its editor snapshot without brush geometry`);
+    }
+  });
+
   await t.test("ED-120 boundary read failure preserves state and a later normal image recovers", async () => {
     const originalHooks = {
       api: context.api,

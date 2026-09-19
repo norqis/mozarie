@@ -159,6 +159,19 @@ class WorkspaceTests(unittest.TestCase):
             store.record_history(image_id, before, store.history_state(image_id))
             self.assertEqual(store.history_status(image_id), {"canUndo": True, "canRedo": False})
 
+    def test_history_undo_on_image_a_preserves_later_edit_on_image_b(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = WorkspaceStore(Path(directory)); catalog = self._new_catalog(store)
+            records = [SimpleNamespace(relative_path=f"{name}.png", size_bytes=1, mtime_ns=1, width=4, height=4) for name in ("a", "b")]
+            ids = {path: str(value["image_id"]) for path, value in store.reconcile_images(catalog, records).items()}
+            image_a, image_b = ids["a.png"], ids["b.png"]
+            before_a = store.history_state(image_a); store.set_image_flags(image_a, hidden=True); store.record_history(image_a, before_a, store.history_state(image_a))
+            before_b = store.history_state(image_b); store.set_image_flags(image_b, reviewed=True); store.record_history(image_b, before_b, store.history_state(image_b))
+
+            self.assertEqual(store.restore_history(image_a, "undo"), [image_a])
+            self.assertEqual(store.image_state(image_a), (False, False))
+            self.assertEqual(store.image_state(image_b), (False, True))
+
     def test_history_group_restores_every_affected_image(self):
         with tempfile.TemporaryDirectory() as directory:
             store = WorkspaceStore(Path(directory)); catalog = self._new_catalog(store)
@@ -172,6 +185,88 @@ class WorkspaceTests(unittest.TestCase):
             self.assertEqual(set(store.restore_history(ids[0], "undo")), set(ids))
             self.assertTrue(all(store.manual(image_id, lambda value: value) is None for image_id in ids))
             self.assertEqual(set(store.restore_history(ids[1], "redo")), set(ids))
+
+    def test_named_project_flag_history_survives_reopen_and_keeps_other_project_isolated(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); store = WorkspaceStore(root)
+            project_a = self._new_catalog(store, "project-a")
+            records = [SimpleNamespace(relative_path=f"{name}.png", size_bytes=1, mtime_ns=1, width=4, height=4) for name in ("a", "b", "outside")]
+            ids = {path: str(value["image_id"]) for path, value in store.reconcile_images(project_a, records).items()}
+            project_b = self._new_catalog(store, "project-b")
+            other = str(store.reconcile_images(project_b, [SimpleNamespace(relative_path="other.png", size_bytes=1, mtime_ns=1, width=4, height=4)])["other.png"]["image_id"])
+            store.set_image_flags(ids["outside.png"], reviewed=True)
+            store.set_image_flags(other, hidden=True)
+            group = "selected-flags"
+            for image_id in (ids["a.png"], ids["b.png"]):
+                before = store.history_state(image_id)
+                store.set_image_flags(image_id, hidden=True, reviewed=True)
+                store.record_history(image_id, before, store.history_state(image_id), group_id=group)
+
+            reopened = WorkspaceStore(root)
+            self.assertEqual(set(reopened.restore_history(ids["a.png"], "undo")), {ids["a.png"], ids["b.png"]})
+            self.assertEqual(reopened.image_state(ids["a.png"]), (False, False))
+            self.assertEqual(reopened.image_state(ids["b.png"]), (False, False))
+            self.assertEqual(reopened.image_state(ids["outside.png"]), (False, True))
+            self.assertEqual(reopened.image_state(other), (True, False))
+            self.assertEqual(set(reopened.restore_history(ids["b.png"], "redo")), {ids["a.png"], ids["b.png"]})
+            self.assertEqual(reopened.image_state(ids["a.png"]), (True, True))
+            self.assertEqual(reopened.image_state(ids["b.png"]), (True, True))
+
+    def test_named_project_manual_layers_restore_only_the_latest_local_pixels_after_reopen(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); store = WorkspaceStore(root); project = self._new_catalog(store, "layers")
+            records = [SimpleNamespace(relative_path=f"{name}.png", size_bytes=1, mtime_ns=1, width=8, height=8) for name in ("edited", "other")]
+            ids = {path: str(value["image_id"]) for path, value in store.reconcile_images(project, records).items()}
+            edited, other = ids["edited.png"], ids["other.png"]
+            masks = {
+                "add": Image.new("L", (8, 8), 0),
+                "exclusion": Image.new("L", (8, 8), 0),
+                "exclusionErase": Image.new("L", (8, 8), 0),
+            }
+            def encode(value):
+                if not value: return None
+                output = io.BytesIO(); masks[value].save(output, format="PNG"); return output.getvalue()
+            payload = lambda: {"add": "add", "exclusion": "exclusion", "exclusionErase": "exclusionErase", "removedCandidateIds": [], "hasEffectiveMask": True, "history": {}}
+            for layer, point in (("add", (1, 1)), ("exclusion", (4, 4)), ("exclusionErase", (6, 6))):
+                before = store.history_state(edited); masks[layer].putpixel(point, 255)
+                store.save_manual(edited, payload(), encode); store.record_history(edited, before, store.history_state(edited))
+            other_before = store.history_state(other); store.set_image_flags(other, reviewed=True); store.record_history(other, other_before, store.history_state(other))
+
+            reopened = WorkspaceStore(root)
+            self.assertEqual(reopened.restore_history(edited, "undo"), [edited])
+            restored = reopened.manual(edited, lambda value: value)
+            alpha = lambda raw, point: Image.open(io.BytesIO(raw)).convert("RGBA").getpixel(point)[3]
+            self.assertEqual(alpha(restored["add"], (1, 1)), 255)
+            self.assertEqual(alpha(restored["exclusion"], (4, 4)), 255)
+            self.assertEqual(alpha(restored["exclusionErase"], (6, 6)), 0)
+            self.assertEqual(reopened.image_state(other), (False, True))
+            self.assertEqual(reopened.restore_history(edited, "redo"), [edited])
+            redone = reopened.manual(edited, lambda value: value)
+            self.assertEqual(alpha(redone["exclusionErase"], (6, 6)), 255)
+
+    def test_anonymous_editor_state_reopens_without_mixing_other_image(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); store = WorkspaceStore(root); project = self._new_catalog(store)
+            records = [SimpleNamespace(relative_path=f"{name}.png", size_bytes=1, mtime_ns=1, width=4, height=4) for name in ("edited", "other")]
+            ids = {path: str(value["image_id"]) for path, value in store.reconcile_images(project, records).items()}
+            edited, other = ids["edited.png"], ids["other.png"]
+            db = sqlite3.connect(store.path); db.execute("INSERT INTO candidates VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)", (edited, "detected", "penis", .9, self._png(), 1, "#fff", "auto", "auto", None, "apply", 0, 0)); db.commit(); db.close()
+            before = store.history_state(edited); other_before = store.history_state(other)
+            mask = Image.new("L", (4, 4), 0); mask.putpixel((1, 1), 255); output = io.BytesIO(); mask.save(output, format="PNG")
+            store.save_manual(edited, {"add": "add", "exclusion": "", "exclusionErase": "", "removedCandidateIds": [], "hasEffectiveMask": True, "history": {}}, lambda value: output.getvalue() if value else None)
+            store.commit_candidate_state(edited, 1, [SimpleNamespace(candidate_id="detected", label_token="penis", confidence=.9, mask_path=Path("missing"), enabled=False, color="#fff", source="auto", origin="auto", refinement=None, role=SimpleNamespace(value="apply"), forced=False, expand_px=6)], True, replace=False)
+            store.set_image_transform(edited, True, False)
+            after = store.history_state(edited); store.record_history(edited, before, after)
+
+            reopened = WorkspaceStore(root)
+            semantic = lambda state: {key: value for key, value in state.items() if key != "_manual_raw"}
+            self.assertEqual(semantic(reopened.history_state(edited)), semantic(after))
+            self.assertEqual(reopened.history_state(other), other_before)
+            self.assertEqual(reopened.restore_history(edited, "undo"), [edited]); self.assertEqual(reopened.history_state(edited), before)
+            self.assertEqual(reopened.history_state(other), other_before)
+            self.assertEqual(reopened.restore_history(edited, "redo"), [edited]); redone = reopened.history_state(edited)
+            self.assertEqual(semantic(redone), semantic(after))
+            self.assertEqual(Image.open(io.BytesIO(redone["_manual_raw"]["add"])).convert("RGBA").getpixel((1, 1))[3], 255)
 
     def test_history_uses_manual_xor_delta_without_candidate_blob_copies(self):
         with tempfile.TemporaryDirectory() as directory:

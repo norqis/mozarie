@@ -860,7 +860,14 @@ function rectangleDraftAt(point) {
 }
 function cancelBoundary() {
   if (catalogStagingEditsActive()) return;
-  clearBoundaryInteraction(); render();
+  clearBoundaryInteraction(); updateHistoryButtons(); render();
+}
+function undoBoundaryDraft() {
+  if (catalogStagingEditsActive() || !state.boundaryDrafts.length) return false;
+  state.boundaryDrafts.pop();
+  state.boundaryActiveId = state.boundaryDrafts.at(-1)?.id || null;
+  updateBoundaryActions(); updateHistoryButtons(); render();
+  return true;
 }
 function copyCanvas(source, target) {
   target.width = source.width; target.height = source.height;
@@ -869,13 +876,14 @@ function copyCanvas(source, target) {
 
 function updateHistoryButtons() {
   const locked = !currentRecord() || currentImageActionPending() || isBusy() || state.importing;
+  const canUndoBoundary = state.boundaryDrafts.length > 0;
   if (hasDurableHistory()) {
     const history = state.projectHistory.get(state.currentId) || {};
-    $("#undoButton").disabled = locked || state.projectReadOnly || state.projectHistoryBusy || history.canUndo !== true;
+    $("#undoButton").disabled = locked || state.projectReadOnly || state.projectHistoryBusy || (!canUndoBoundary && history.canUndo !== true);
     $("#redoButton").disabled = locked || state.projectReadOnly || state.projectHistoryBusy || history.canRedo !== true;
     return;
   }
-  $("#undoButton").disabled = locked || state.historyIndex <= 0;
+  $("#undoButton").disabled = locked || (!canUndoBoundary && state.historyIndex <= 0);
   $("#redoButton").disabled = locked || state.historyIndex >= state.history.length;
 }
 
@@ -1162,7 +1170,7 @@ function cancelManualStroke() {
 }
 
 function replayManualStroke(stroke, addContext = addCtx, exclusionContext = exclusionCtx, exclusionEraseContext = exclusionEraseCtx) {
-  if (stroke.kind === "transform") return;
+  if (["transform", "candidateState", "candidateBatch", "manualState", "workspaceFlag"].includes(stroke.kind)) return;
   if (stroke.kind === "clearCandidateRole") {
     stroke.ids.forEach((id) => state.removedCandidateIds.add(id));
     for (const role of stroke.manualRoles) {

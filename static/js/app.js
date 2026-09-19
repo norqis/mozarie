@@ -1083,7 +1083,7 @@ function bindEvents() {
   $("#detectCancelButton").addEventListener("click", () => { if (!state.detectionDialogSubmitting) { $("#detectDialog").close(); resetDetectionDialogState(); } });
   $("#detectDialog").addEventListener("cancel", (event) => { event.preventDefault(); if (!state.detectionDialogSubmitting) { $("#detectDialog").close(); resetDetectionDialogState(); } });
   lightDismiss($("#detectDialog"), () => { if (!state.detectionDialogSubmitting) { $("#detectDialog").close(); resetDetectionDialogState(); } });
-  $("#undoButton").addEventListener("click", () => { if (hasDurableHistory()) void restoreProjectHistory("undo"); else restoreSnapshot(state.historyIndex - 1); }); $("#redoButton").addEventListener("click", () => { if (hasDurableHistory()) void restoreProjectHistory("redo"); else restoreSnapshot(state.historyIndex + 1); });
+  $("#undoButton").addEventListener("click", () => { if (undoBoundaryDraft()) return; if (hasDurableHistory()) void restoreProjectHistory("undo"); else restoreSnapshot(state.historyIndex - 1); }); $("#redoButton").addEventListener("click", () => { if (hasDurableHistory()) void restoreProjectHistory("redo"); else restoreSnapshot(state.historyIndex + 1); });
   const grid = $(".studio-grid");
   const paneStorage = { gallery: "mozarie.galleryWidth", inspector: "mozarie.inspectorWidth" };
   const paneDefaultsForWidth = (width) => width >= 1600 ? { gallery: 260, inspector: 320 } : width >= 1280 ? { gallery: 216, inspector: 292 } : { gallery: 190, inspector: 270 };

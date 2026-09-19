@@ -1072,6 +1072,7 @@ function handleEditorKeydown(event) {
   const historyBinding = (binding === shortcuts.undo && enabled.undo !== false) || (binding === shortcuts.redo && enabled.redo !== false);
   if (!currentImageActionPending() && !state.projectReadOnly && currentRecord() && !currentRecord()?.sourceDimensionsChanged && historyBinding) {
     event.preventDefault();
+    if (direction === "undo" && undoBoundaryDraft()) return true;
     if (hasDurableHistory()) {
       if (canRestoreProjectHistory(direction)) void restoreProjectHistory(direction);
     } else if (direction === "undo" ? state.historyIndex > 0 : state.historyIndex < state.history.length) {

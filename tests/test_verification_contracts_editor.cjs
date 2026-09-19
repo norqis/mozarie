@@ -43,7 +43,7 @@ test("editor verification contract matches its residual manual checklist", () =>
   assert.deepEqual(contract.source, { path: "docs/manual-verification/editor.md", commit: "264f70d" });
   assert.equal(contract.baseline.rows, 129);
   assert.equal(contract.baseline.observations, 171, "baseline preserves the source observation count before deterministic splits");
-  assert.equal(contract.observations.length, 174, "the ledger contains every split deterministic observation");
+  assert.equal(contract.observations.length, 174, "the ledger contains every split or retired observation");
 
   const keys = new Set();
   for (const observation of contract.observations) {
@@ -57,11 +57,15 @@ test("editor verification contract matches its residual manual checklist", () =>
       assert.ok(Array.isArray(observation.testIds) && observation.testIds.length > 0, `${observation.key} has no executable evidence`);
       assert.equal(observation.manual, undefined);
       observation.testIds.forEach(referencedTestExists);
-    } else {
-      assert.equal(observation.status, "manual");
+    } else if (observation.status === "manual") {
       assert.equal(observation.testIds, undefined);
       assert.ok(observation.manual?.environment);
       assert.ok(observation.manual?.reason);
+    } else {
+      assert.equal(observation.status, "retired");
+      assert.equal(observation.testIds, undefined);
+      assert.equal(observation.manual, undefined);
+      assert.ok(observation.retired?.reason);
     }
   }
 
