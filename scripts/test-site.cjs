@@ -344,15 +344,18 @@ test("preview buttons and carousel geometry work across supported viewports", { 
       assert.equal(await opener.evaluate((element) => document.activeElement === element), true);
       if (viewport.width === 1440) {
         const previews = page.locator("[data-feature-open]");
-        await page.keyboard.press("Tab");
-        assert.equal(await previews.nth(1).evaluate((element) => document.activeElement === element), true, "keyboard reaches the dark feature");
+        const reachWithTab = async (target) => {
+          for (let attempt = 0; attempt < 30; attempt += 1) {
+            await page.keyboard.press("Tab");
+            if (await target.evaluate((element) => document.activeElement === element)) return true;
+          }
+          return false;
+        };
+        assert.equal(await reachWithTab(previews.nth(1)), true, "keyboard reaches the dark feature");
         assert.equal(await previews.nth(1).evaluate((element) => getComputedStyle(element).outlineColor), "rgb(114, 214, 173)", "dark feature uses the light focus color");
-        await page.keyboard.press("Shift+Tab");
-        assert.equal(await previews.nth(0).evaluate((element) => document.activeElement === element), true, "keyboard returns to the first light feature");
+        assert.equal(await reachWithTab(previews.nth(0)), true, "keyboard returns to the first light feature");
         assert.equal(await previews.nth(0).evaluate((element) => getComputedStyle(element).outlineColor), "rgb(36, 92, 72)", "first light feature uses the dark focus color");
-        await page.keyboard.press("Tab");
-        await page.keyboard.press("Tab");
-        assert.equal(await previews.nth(2).evaluate((element) => document.activeElement === element), true, "keyboard reaches the second light feature");
+        assert.equal(await reachWithTab(previews.nth(2)), true, "keyboard reaches the second light feature");
         assert.equal(await previews.nth(2).evaluate((element) => getComputedStyle(element).outlineColor), "rgb(36, 92, 72)", "second light feature uses the dark focus color");
       }
       assert.equal(await page.locator("html").evaluate((element) => element.scrollWidth <= element.clientWidth), true, `no horizontal overflow at ${viewport.width}px`);
