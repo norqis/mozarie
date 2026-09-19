@@ -98,6 +98,12 @@ test("the rebuilt product page is complete without JavaScript and has no horizon
         hero: Number.parseFloat(getComputedStyle(document.querySelector("h1")).fontSize),
         feature: Number.parseFloat(getComputedStyle(document.querySelector(".story h2")).fontSize),
       }));
+      if (viewport.width === 390) {
+        assert.ok(typography.hero <= 35 && typography.feature <= 33, `mobile display type stays compact (${typography.hero}/${typography.feature})`);
+      }
+      if (viewport.width >= 1440) {
+        assert.ok(typography.hero <= 76 && typography.feature <= 60, `desktop display type stays subordinate to product imagery (${typography.hero}/${typography.feature})`);
+      }
       if (viewport.width === 700) boundaryTypography = typography;
       if (viewport.width === 701) {
         assert.ok(boundaryTypography, "700px typography was measured before 701px");
