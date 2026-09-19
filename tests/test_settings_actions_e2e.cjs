@@ -135,10 +135,15 @@ test("SD-087 duplicate shortcut values are rejected by the settings form without
 
 test("SD-088 a focused text field receives navigation keys without moving the current image", { timeout: 60000 }, async () => {
   await select("sample"); await configureShortcut("next", "ArrowRight", true);
+  await page.waitForFunction(() => !currentImageActionPending());
   await page.locator("#settingsButton").click();
   const port = page.locator("#settingsPort"); await port.focus(); await page.keyboard.press("ArrowRight");
   assert.equal(await page.evaluate(() => state.currentId), "sample");
-  await page.locator("#settingsCloseButton").click(); await page.locator("#editorCanvas").focus(); await page.keyboard.press("ArrowRight");
+  await page.locator("#settingsCloseButton").click();
+  await page.waitForFunction(() => !document.querySelector("#settingsDialog").open && !currentImageActionPending());
+  await page.locator("#editorCanvas").focus();
+  assert.equal(await page.evaluate(() => document.activeElement?.id), "editorCanvas");
+  await page.keyboard.press("ArrowRight");
   await page.waitForFunction(() => state.currentId === "sample-two");
 });
 

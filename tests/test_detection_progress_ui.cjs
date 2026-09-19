@@ -55,4 +55,3 @@ test("SD-148 detection progress shows staged work and locks pause only while pub
     await closeServer(fixture.server);
   }
 });
-

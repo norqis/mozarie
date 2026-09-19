@@ -117,13 +117,19 @@ test("SD-064 closing model preparation returns to settings with its value intact
 });
 
 test("SD-066 model download confirmation names the selected model and exposes start", { timeout: 60000 }, async () => {
-  await withSettingsPage(async (page) => {
+  await withSettingsPage(async (page, fixture) => {
     await page.locator('[data-settings-tab="models"]').click();
-    await page.locator("#settingsPrecisionToggle").check();
+    await page.locator("#settingsPrecisionCard label.model-switch").click();
+    assert.equal(await page.locator("#settingsPrecisionToggle").isChecked(), true);
     await page.locator('[data-model-download="sam"]').click();
     await page.waitForFunction(() => document.querySelector("#modelDownloadDialog").open);
     assert.match(await page.locator("#modelDownloadItems").textContent(), /SAM.*vit_b/i);
     assert.equal(await page.locator("#modelDownloadStart").isVisible(), true);
+    assert.equal(fixture.modelDownloadRequests.length, 0, "opening confirmation does not start a download");
+    const response = page.waitForResponse((item) => new URL(item.url()).pathname === "/api/model-download/start" && item.request().method() === "POST");
+    await page.locator("#modelDownloadStart").click();
+    await response;
+    assert.deepEqual(fixture.modelDownloadRequests.at(-1), { modelKey: "sam_vit_b", samType: "vit_b" });
   });
 });
 
