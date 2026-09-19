@@ -180,7 +180,11 @@
         "WS-003"
       ],
       "observation": "run.batから実ブラウザーが開き、ページへ接続できることを確認する。",
-      "status": "retired"
+      "status": "manual",
+      "manual": {
+        "environment": "Windowsデスクトップと既定ブラウザー",
+        "reason": "既定ブラウザーの起動と実ウィンドウ表示はheadless CIから観測できない。"
+      }
     },
     {
       "key": "WS-004.1",
@@ -399,7 +403,7 @@
       "observation": "サムネイルと編集画像の向きが一致する",
       "status": "automated",
       "testIds": [
-        "python:tests.test_server.MozarieTests.test_exif_rotated_jpeg_uses_normalized_mask_coordinates"
+        "python:tests.test_http_live_endpoints.LiveHttpEndpointTests.test_exif_rotated_thumbnail_and_editor_asset_have_identical_visual_orientation"
       ]
     },
     {
@@ -421,7 +425,7 @@
       "observation": "両画像を別の画像として扱い、片方の編集をもう片方へ反映しない",
       "status": "automated",
       "testIds": [
-        "python:tests.test_server.MozarieTests.test_import_preserves_safe_nested_relative_paths_and_same_names"
+        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_same_named_images_from_different_paths_keep_edits_isolated"
       ]
     },
     {
@@ -693,7 +697,7 @@
       "observation": "対象の元画像・一覧・PJデータを完全削除し、表示中フィルターの次画像へ移動する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_filters_and_fluid_e2e.cjs::filtered review and hide keep their tail, while deletion selects the previous filtered image"
+        "node:tests/test_source_delete_e2e.cjs::Delete shortcut keeps a durable source-delete intent through claim and acknowledges the committed receipt"
       ]
     },
     {
@@ -783,7 +787,7 @@
       "observation": "非表示ではなく、更新後に有効なモザイク範囲が0の画像だけを表示し、更新前のモザイク状態を残さない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_filters_and_fluid_e2e.cjs::all-image detection filters images with independent OR checkboxes and persists the selection"
+        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_candidate_update_refreshes_no_mosaic_membership_without_stale_state"
       ]
     },
     {
@@ -1013,7 +1017,7 @@
       "observation": "選択数・一覧・PJデータが変わらない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_workspace_contract_browser.cjs::batch detection cancel and processing locks preserve selection, catalog, and project state"
+        "node:tests/test_workspace_contract_browser.cjs::batch source deletion cancel sends no delete and preserves selection, list, and project"
       ]
     },
     {
@@ -1024,7 +1028,7 @@
       "observation": "指定2画像のPJデータだけを消し、元ファイルと未選択画像を保持する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_workspace_contract_browser.cjs::batch mask clear retains source records, unselected images, and project identity"
+        "node:tests/test_workspace_contract_browser.cjs::batch mask clear removes project data for exactly two selected images and preserves sources and the unselected image"
       ]
     },
     {
@@ -1035,7 +1039,7 @@
       "observation": "現在画像操作が無効になり、切替前の画像へ遅れて処理しない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_workspace_contract_browser.cjs::pending selection mutation disables controls and a stale delayed result cannot change the replacement catalog"
+        "node:tests/test_workspace_contract_browser.cjs::image switching disables save detection and candidate editing until the new image is authoritative"
       ]
     },
     {
@@ -1057,7 +1061,7 @@
       "observation": "入力名のPJを作り、元PJの編集を保持する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_project_ui_runtime.cjs::project creation, cancellation, duplicate rejection, table columns, and relink payload preserve workspace state"
+        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_project_switch_close_restart_and_rename_restore_rich_state_without_cross_project_leakage"
       ]
     },
     {
@@ -1068,6 +1072,7 @@
       "observation": "一覧と現在PJの名前が更新され、画像・履歴は残る",
       "status": "automated",
       "testIds": [
+        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_project_switch_close_restart_and_rename_restore_rich_state_without_cross_project_leakage",
         "node:tests/test_project_ui_runtime.cjs::project creation, cancellation, duplicate rejection, table columns, and relink payload preserve workspace state"
       ]
     },
@@ -1079,7 +1084,8 @@
       "observation": "重複名を案内し、既存PJを置換しない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_project_ui_runtime.cjs::project creation, cancellation, duplicate rejection, table columns, and relink payload preserve workspace state"
+        "node:tests/test_project_ui_runtime.cjs::duplicate project guidance asks for another name while the current project remains intact",
+        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_normalized_duplicate_project_names_are_rejected_without_replacing_current_work"
       ]
     },
     {
@@ -1090,7 +1096,7 @@
       "observation": "同一名として拒否し、現在の作業を保持する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_project_ui_runtime.cjs::project creation, cancellation, duplicate rejection, table columns, and relink payload preserve workspace state"
+        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_normalized_duplicate_project_names_are_rejected_without_replacing_current_work"
       ]
     },
     {
@@ -1211,7 +1217,7 @@
       "observation": "画像一覧を閉じ、PJと画像データを保持する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_project_ui_runtime.cjs::project close, complete, resume, and delete produce exact workspace outcomes"
+        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_project_switch_close_restart_and_rename_restore_rich_state_without_cross_project_leakage"
       ]
     },
     {
@@ -1222,7 +1228,7 @@
       "observation": "画像一覧・候補・手描き・確認状態・非表示を復元する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_project_ui_runtime.cjs::project dialogs, A-B-A switching, failed-open recovery, and duplicate transition guards"
+        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_project_switch_close_restart_and_rename_restore_rich_state_without_cross_project_leakage"
       ]
     },
     {
@@ -1233,7 +1239,7 @@
       "observation": "保存済み状態を復元し、別PJのデータを混ぜない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_project_ui_runtime.cjs::project dialogs, A-B-A switching, failed-open recovery, and duplicate transition guards"
+        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_project_switch_close_restart_and_rename_restore_rich_state_without_cross_project_leakage"
       ]
     },
     {
@@ -1244,7 +1250,7 @@
       "observation": "作業中のまま画像一覧を保持する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_project_ui_runtime.cjs::project close, complete, resume, and delete produce exact workspace outcomes"
+        "node:tests/test_project_ui_runtime.cjs::project completion and deletion cancellation preserve the exact project and image list"
       ]
     },
     {
@@ -1255,7 +1261,9 @@
       "observation": "一覧を閉じ、PJ管理に完了と表示する。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_project_ui_runtime.cjs::project close, complete, resume, and delete produce exact workspace outcomes"
+        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_project_completion_and_deletion_have_exact_persistent_outcomes",
+        "node:tests/test_project_ui_runtime.cjs::project close, complete, resume, and delete produce exact workspace outcomes",
+        "node:tests/test_project_ui_runtime.cjs::project creation, cancellation, duplicate rejection, table columns, and relink payload preserve workspace state"
       ]
     },
     {
@@ -1266,7 +1274,7 @@
       "observation": "画像データは保持する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_project_ui_runtime.cjs::project close, complete, resume, and delete produce exact workspace outcomes"
+        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_project_completion_and_deletion_have_exact_persistent_outcomes"
       ]
     },
     {
@@ -1289,7 +1297,8 @@
       "observation": "作業中になり、候補と描画の操作を再有効化する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_project_ui_runtime.cjs::project close, complete, resume, and delete produce exact workspace outcomes"
+        "node:tests/test_workspace_contract_browser.cjs::completed projects keep browsing and exports enabled while every mutation stays disabled",
+        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_project_switch_close_restart_and_rename_restore_rich_state_without_cross_project_leakage"
       ]
     },
     {
@@ -1311,7 +1320,7 @@
       "observation": "対象PJを保持する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_project_ui_runtime.cjs::project close, complete, resume, and delete produce exact workspace outcomes"
+        "node:tests/test_project_ui_runtime.cjs::project completion and deletion cancellation preserve the exact project and image list"
       ]
     },
     {
@@ -1322,7 +1331,7 @@
       "observation": "そのPJだけ消え、現在のPJと編集は保持する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_project_ui_runtime.cjs::project close, complete, resume, and delete produce exact workspace outcomes"
+        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_project_completion_and_deletion_have_exact_persistent_outcomes"
       ]
     },
     {
@@ -1333,7 +1342,7 @@
       "observation": "現在PJと関連データが消え、空の作業画面へ戻る",
       "status": "automated",
       "testIds": [
-        "node:tests/test_project_ui_runtime.cjs::project close, complete, resume, and delete produce exact workspace outcomes"
+        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_project_completion_and_deletion_have_exact_persistent_outcomes"
       ]
     },
     {
@@ -1344,8 +1353,7 @@
       "observation": "既存PJを示す警告と、既存PJを開く・別に作成の選択肢を表示する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_project_ui_runtime.cjs::project dialogs, A-B-A switching, failed-open recovery, and duplicate transition guards",
-        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_project_lifecycle_sources_exports_mismatch_and_read_only"
+        "node:tests/test_project_ui_runtime.cjs::same-source warning offers open separate and cancel without changing work until chosen"
       ]
     },
     {
@@ -1356,7 +1364,8 @@
       "observation": "選択PJを開き、新規PJを増やさない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_project_ui_runtime.cjs::project dialogs, A-B-A switching, failed-open recovery, and duplicate transition guards"
+        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_project_switch_close_restart_and_rename_restore_rich_state_without_cross_project_leakage",
+        "node:tests/test_project_ui_runtime.cjs::same-source warning offers open separate and cancel without changing work until chosen"
       ]
     },
     {
@@ -1367,7 +1376,8 @@
       "observation": "既存PJを変更せず、別PJとして作業できる",
       "status": "automated",
       "testIds": [
-        "node:tests/test_project_ui_runtime.cjs::project dialogs, A-B-A switching, failed-open recovery, and duplicate transition guards"
+        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_project_switch_close_restart_and_rename_restore_rich_state_without_cross_project_leakage",
+        "node:tests/test_project_ui_runtime.cjs::same-source warning offers open separate and cancel without changing work until chosen"
       ]
     },
     {
@@ -1378,7 +1388,7 @@
       "observation": "読み込み先PJと画像一覧を変えない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_project_ui_runtime.cjs::project dialogs, A-B-A switching, failed-open recovery, and duplicate transition guards"
+        "node:tests/test_project_ui_runtime.cjs::same-source warning offers open separate and cancel without changing work until chosen"
       ]
     },
     {
@@ -1449,7 +1459,7 @@
       "observation": "利用可能画像は表示し、不足したnative-folderだけの再指定を案内する。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_project_ui_runtime.cjs::project dialogs, A-B-A switching, failed-open recovery, and duplicate transition guards"
+        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_project_open_refetches_usable_images_sources_and_only_missing_native_folders"
       ]
     },
     {
@@ -1460,7 +1470,7 @@
       "observation": "再取得後もPJ・画像・source一覧と不足表示が一致する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_project_ui_runtime.cjs::project dialogs, A-B-A switching, failed-open recovery, and duplicate transition guards"
+        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_project_open_refetches_usable_images_sources_and_only_missing_native_folders"
       ]
     },
     {
@@ -1531,7 +1541,7 @@
       "observation": "一覧とPJデータを保持する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_workspace_contract_browser.cjs::catalog clear cancel preserves workspace and confirmation removes only image data"
+        "node:tests/test_workspace_contract_browser.cjs::catalog clear cancel preserves rich project workspace data"
       ]
     },
     {
@@ -1564,7 +1574,7 @@
       "observation": "操作中のPJ操作は重複開始できない。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_project_ui_runtime.cjs::project dialogs, A-B-A switching, failed-open recovery, and duplicate transition guards"
+        "node:tests/test_project_ui_runtime.cjs::project operations issue one request per start and the last completed start owns the catalog"
       ]
     },
     {
@@ -1575,7 +1585,7 @@
       "observation": "完了PJの再開と開くは1要求で完了し、失敗時に完了状態だけが作業中へ残らない。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_project_ui_runtime.cjs::project dialogs, A-B-A switching, failed-open recovery, and duplicate transition guards"
+        "node:tests/test_project_ui_runtime.cjs::project operations issue one request per start and the last completed start owns the catalog"
       ]
     },
     {
@@ -1586,7 +1596,7 @@
       "observation": "最後に表示したPJまたは無名作業だけが一覧と編集対象に残る",
       "status": "automated",
       "testIds": [
-        "node:tests/test_project_ui_runtime.cjs::project dialogs, A-B-A switching, failed-open recovery, and duplicate transition guards"
+        "node:tests/test_project_ui_runtime.cjs::project operations issue one request per start and the last completed start owns the catalog"
       ]
     },
     {
@@ -1715,7 +1725,11 @@
         "WS-101"
       ],
       "observation": "file sourceとdirectory sourceの許可済み自動復元、拒否、明示復元を実ブラウザーで確認する。",
-      "status": "retired"
+      "status": "manual",
+      "manual": {
+        "environment": "Chromiumの永続プロファイルとFile System Access許可UI",
+        "reason": "ブラウザー再起動をまたぐhandle許可状態とユーザー許可UIはheadless fixtureで制御できない。"
+      }
     },
     {
       "key": "WS-102.1",
@@ -1855,7 +1869,7 @@
       "observation": "チェック項目は複数選べ、ボタンに選択数を表示する。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_workspace_contract_browser.cjs::batch flag actions change only selected images and report the selection count"
+        "node:tests/test_workspace_contract_browser.cjs::filter popovers close accessibly and retain search, folder, and checkbox state across views"
       ]
     },
     {
@@ -1998,7 +2012,11 @@
         "WS-114"
       ],
       "observation": "実ブラウザーでフォルダー選択時に読込み権限だけが要求されることを確認する。",
-      "status": "retired"
+      "status": "manual",
+      "manual": {
+        "environment": "ChromiumのFile System Access許可UI",
+        "reason": "showDirectoryPickerの実許可プロンプトは自動化APIから操作・観測できない。"
+      }
     },
     {
       "key": "WS-115.1",
@@ -2028,7 +2046,11 @@
         "WS-115"
       ],
       "observation": "実ブラウザーで選択取消と権限拒否を行い、案内と一覧保持を確認する。",
-      "status": "retired"
+      "status": "manual",
+      "manual": {
+        "environment": "ChromiumのFile System Access許可UI",
+        "reason": "OS・ブラウザー所有の拒否表示と許可状態はheadless fixtureで再現できない。"
+      }
     },
     {
       "key": "WS-116.1",

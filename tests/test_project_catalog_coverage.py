@@ -382,6 +382,130 @@ class ProjectCatalogCoverageTests(unittest.TestCase):
         self.assertIsNotNone(state.workspace_store.project(project["id"]), "the empty project remains listed")
         self.assertTrue(original.is_file(), "clearing project data keeps original source files")
 
+    def test_same_named_images_from_different_paths_keep_edits_isolated(self) -> None:
+        source = self.root / "same-name"
+        self.image(source, "left/page.png"); self.image(source, "right/page.png")
+        state = self.state(); state.create_project("same names")
+        by_path = {item["relativePath"]: item["id"] for item in state.set_root(str(source))}
+        left_id, right_id = by_path["left/page.png"], by_path["right/page.png"]
+        self.commit_candidates(state, left_id, [self.candidate(state, left_id, "left-only")])
+        state.save_manual_workspace(left_id, {
+            "add": "data:image/png;base64," + base64.b64encode(self.png(pixel=(4, 4))).decode("ascii"),
+            "exclusion": "", "exclusionErase": "", "removedCandidateIds": [],
+            "candidateRevision": state._candidate_revision(left_id), "hasEffectiveMask": True,
+        })
+        reopened = self.state().open_project(state.catalog_id or "")
+        self.assertNotEqual(left_id, right_id)
+        self.assertEqual([item["id"] for item in reopened["images"]], [left_id, right_id])
+        self.assertEqual([item.candidate_id for item in self.states[-1].candidates[left_id]], ["left-only"])
+        self.assertEqual(self.states[-1].candidates[right_id], [])
+        self.assertIsNotNone(self.states[-1].manual_workspace(left_id))
+        self.assertIsNone(self.states[-1].manual_workspace(right_id))
+
+    def test_candidate_update_refreshes_no_mosaic_membership_without_stale_state(self) -> None:
+        source = self.root / "candidate-refresh"; self.image(source, "image.png")
+        state = self.state(); state.create_project("candidate refresh")
+        image_id = state.set_root(str(source))[0]["id"]
+        candidate = self.candidate(state, image_id, "candidate")
+        self.commit_candidates(state, image_id, [candidate])
+        masked = next(item for item in state.list_images() if item["id"] == image_id)
+        self.assertEqual((masked["enabledCandidateCount"], masked["hasEffectiveMask"]), (1, True))
+        state.set_candidate_state(image_id, "candidate", {"enabled": False})
+        refreshed = next(item for item in state.list_images() if item["id"] == image_id)
+        self.assertEqual((refreshed["enabledCandidateCount"], refreshed["hasEffectiveMask"]), (0, False))
+        self.assertFalse(state.workspace_store.image_state(image_id)[1], "durable reviewed/mask state must not preserve the old effective mask")
+
+    def test_project_switch_close_restart_and_rename_restore_rich_state_without_cross_project_leakage(self) -> None:
+        first_root = self.root / "project-a"; second_root = self.root / "project-b"
+        self.image(first_root, "a.png"); self.image(second_root, "b.png")
+        state = self.state(); project_a = state.create_project("Project A")
+        image_a = state.set_root(str(first_root))[0]["id"]
+        self.commit_candidates(state, image_a, [self.candidate(state, image_a, "a-candidate")])
+        state.save_manual_workspace(image_a, {
+            "add": "data:image/png;base64," + base64.b64encode(self.png(pixel=(2, 2))).decode("ascii"),
+            "exclusion": "", "exclusionErase": "", "removedCandidateIds": [],
+            "candidateRevision": state._candidate_revision(image_a), "hasEffectiveMask": True,
+        })
+        state.set_image_flags(image_a, {"reviewed": True, "hidden": True})
+        project_b = state.create_project("Project B"); image_b = state.set_root(str(second_root))[0]["id"]
+        opened_a = state.open_project(project_a["id"])
+        self.assertEqual([item["id"] for item in opened_a["images"]], [image_a])
+        restored_a = opened_a["images"][0]
+        self.assertTrue(restored_a["reviewed"]); self.assertTrue(restored_a["hidden"])
+        self.assertEqual([item.candidate_id for item in state.candidates[image_a]], ["a-candidate"])
+        self.assertIsNotNone(state.manual_workspace(image_a)); self.assertTrue(state.project_history_status(image_a)["canUndo"])
+        state.name_current_project("Renamed A")
+        self.assertEqual(state.workspace_store.project(project_a["id"])["name"], "Renamed A")
+        self.assertEqual([item["id"] for item in state.list_images()], [image_a])
+        state.close_project()
+        self.assertIsNone(state.catalog_id); self.assertEqual(state.list_images(), [])
+        restarted = self.state(); reopened_a = restarted.open_project(project_a["id"])
+        self.assertEqual(reopened_a["project"]["name"], "Renamed A")
+        self.assertEqual([item["id"] for item in reopened_a["images"]], [image_a])
+        self.assertEqual([item.candidate_id for item in restarted.candidates[image_a]], ["a-candidate"])
+        self.assertIsNotNone(restarted.manual_workspace(image_a)); self.assertTrue(restarted.project_history_status(image_a)["canUndo"])
+        reopened_b = restarted.open_project(project_b["id"])
+        self.assertEqual([item["id"] for item in reopened_b["images"]], [image_b])
+        self.assertNotIn(image_a, restarted.candidates, "Project A state never leaks into Project B")
+
+    def test_normalized_duplicate_project_names_are_rejected_without_replacing_current_work(self) -> None:
+        source = self.root / "duplicate-current"; self.image(source, "current.png")
+        state = self.state(); current = state.create_project("Alpha Project")
+        image_id = state.set_root(str(source))[0]["id"]
+        before = state.catalog_snapshot()
+        for duplicate in ("alpha project", "  Alpha Project  "):
+            with self.assertRaises(ClientError) as rejected:
+                state.create_project(duplicate)
+            self.assertEqual(rejected.exception.error_code, "project_name_duplicate")
+            self.assertEqual(state.catalog_id, current["id"])
+            self.assertEqual([item["id"] for item in state.list_images()], [image_id])
+            self.assertEqual(state.catalog_snapshot()["project"], before["project"])
+
+    def test_project_completion_and_deletion_have_exact_persistent_outcomes(self) -> None:
+        first_root = self.root / "delete-first"; second_root = self.root / "delete-second"
+        first_source = self.image(first_root, "first.png"); second_source = self.image(second_root, "second.png")
+        state = self.state(); first = state.create_project("First")
+        first_id = state.set_root(str(first_root))[0]["id"]
+        self.commit_candidates(state, first_id, [self.candidate(state, first_id, "first-candidate")])
+        completed = state.complete_project()
+        self.assertEqual(completed["status"], "completed"); self.assertIsNone(state.catalog_id); self.assertEqual(state.list_images(), [])
+        self.assertEqual(state.workspace_store.project(first["id"])["status"], "completed")
+        self.assertEqual([item["id"] for item in state.open_project(first["id"])["images"]], [first_id])
+        self.assertTrue(state.project_read_only); self.assertEqual([item.candidate_id for item in state.candidates[first_id]], ["first-candidate"])
+
+        state.resume_project(first["id"]); self.assertFalse(state.project_read_only)
+        second = state.create_project("Second"); second_id = state.set_root(str(second_root))[0]["id"]
+        state.delete_project(first["id"])
+        self.assertIsNone(state.workspace_store.project(first["id"])); self.assertIsNotNone(state.workspace_store.project(second["id"])); self.assertEqual(state.catalog_id, second["id"])
+        self.assertEqual([item["id"] for item in state.list_images()], [second_id]); self.assertTrue(first_source.exists()); self.assertTrue(second_source.exists())
+        state.delete_project(second["id"])
+        self.assertIsNone(state.workspace_store.project(second["id"])); self.assertIsNone(state.catalog_id); self.assertEqual(state.list_images(), [])
+        self.assertTrue(second_source.exists())
+
+    def test_project_open_refetches_usable_images_sources_and_only_missing_native_folders(self) -> None:
+        available_root = self.root / "available-source"; missing_root = self.root / "missing-source"
+        self.image(available_root, "available.png"); self.image(missing_root, "missing.png")
+        state = self.state(); project = state.create_project("mixed sources")
+        available_id = state.set_root(str(available_root))[0]["id"]
+        missing_path = missing_root / "missing.png"; missing_stat = missing_path.stat()
+        missing_source_id = state.workspace_store.ensure_project_source(
+            project["id"], kind="native-folder", display_name=missing_root.name, identity=str(missing_root.resolve()),
+        )
+        missing_record = state.workspace_store.reconcile_images(project["id"], [SimpleNamespace(
+            relative_path="missing.png", size_bytes=missing_stat.st_size, mtime_ns=missing_stat.st_mtime_ns, width=8, height=8,
+        )], missing_source_id)["missing.png"]
+        missing_id = str(missing_record["image_id"])
+        sources_before = state.workspace_store.project_sources(project["id"])
+        shutil.rmtree(missing_root)
+        reopened = self.state().open_project(project["id"])
+        self.assertEqual([item["id"] for item in reopened["images"]], [available_id], "usable source images remain visible")
+        self.assertNotIn(missing_id, [item["id"] for item in reopened["images"]])
+        self.assertTrue(reopened["needsSource"], reopened)
+        sources = {item["id"]: item for item in reopened["sources"]}
+        self.assertEqual(set(sources), {item["id"] for item in sources_before}, "the authoritative source list is refetched in full")
+        self.assertEqual([item["displayName"] for item in sources.values() if not item["exists"]], [missing_root.name], "only the unavailable native folder is reported missing")
+        self.assertEqual(reopened["project"]["id"], project["id"])
+
     def test_delete_project_handles_current_read_only_noncurrent_and_thumbnail_failure(self) -> None:
         first_root = self.root / "first-project"; second_root = self.root / "second-project"
         first_source = self.image(first_root, "first.png")

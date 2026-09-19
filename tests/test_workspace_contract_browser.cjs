@@ -14,7 +14,7 @@ async function openFixture(fixture) {
   });
   const page = await context.newPage();
   await page.goto(fixture.url, { waitUntil: "domcontentloaded" });
-  await page.waitForFunction(() => state.settings && state.images.length === 2 && document.querySelectorAll(".gallery-item").length === 2);
+  await page.waitForFunction(() => state.settings && state.images.length >= 2 && document.querySelectorAll(".gallery-item").length === state.images.length);
   return { browser, context, page };
 }
 
@@ -27,21 +27,38 @@ async function closeFixture(fixture, opened) {
 test("filter popovers close accessibly and retain search, folder, and checkbox state across views", { timeout: 60000 }, async () => {
   const fixture = await startFixtureServer(); let opened;
   try {
+    fixture.setCatalog([
+      { id: "sample", relativePath: "alpha/sample.png", sourceKind: "filesystem", sourcePath: "G:\\fixture\\alpha\\sample.png", width: 100, height: 80, candidateCount: 0, enabledCandidateCount: 0, reviewed: true, hidden: false },
+      { id: "sample-two", relativePath: "beta/sample-two.png", sourceKind: "session", width: 100, height: 80, candidateCount: 0, enabledCandidateCount: 0, reviewed: false, hidden: true },
+    ]);
     opened = await openFixture(fixture); const { page } = opened; await page.setViewportSize({ width: 420, height: 760 });
     const button = page.locator("#galleryFilterButton"); const popover = page.locator("#galleryFilterMenu");
-    await button.click(); assert.equal(await popover.evaluate((node) => node.matches(":popover-open")), true);
+    await button.focus(); await page.keyboard.press("Enter"); assert.equal(await popover.evaluate((node) => node.matches(":popover-open")), true, "Enter opens the gallery filter menu");
     const menuBox = await popover.boundingBox(); assert.ok(menuBox && menuBox.x >= 0 && menuBox.y >= 0 && menuBox.x + menuBox.width <= 420 && menuBox.y + menuBox.height <= 760, "the narrow-screen menu stays inside the viewport below its button");
-    await page.keyboard.press("Tab"); assert.equal((await page.evaluate(() => document.activeElement?.closest("#galleryFilterMenu") != null)), true, "Tab enters the open filter menu");
+    assert.equal(await popover.locator("label").evaluateAll((labels) => labels.every((label, index) => index === 0 || label.getBoundingClientRect().top > labels[index - 1].getBoundingClientRect().top)), true, "gallery filter choices form one vertical column");
+    for (let index = 0; index < 6; index += 1) await page.keyboard.press("Tab");
+    assert.equal(await page.evaluate(() => document.activeElement?.id), "overviewButton", "Tab reaches the following action after every gallery checkbox");
     await page.keyboard.press("Escape"); assert.equal(await popover.evaluate((node) => node.matches(":popover-open")), false, "Escape closes the filter menu");
     await button.click(); await page.locator("#canvasStage").click({ position: { x: 20, y: 20 } });
     assert.equal(await popover.evaluate((node) => node.matches(":popover-open")), false, "outside click closes the filter menu");
-    await button.click(); await page.locator('[data-gallery-filter="reviewed"]').check();
+    await button.click(); await page.locator('[data-gallery-filter="reviewed"]').focus(); await page.keyboard.press("Space");
+    assert.equal(await button.textContent(), "絞り込み (1)", "Space selects a gallery filter and updates the button count");
     await page.locator("#collapseGalleryButton").click(); assert.equal(await popover.evaluate((node) => node.matches(":popover-open")), false, "collapsing the gallery closes its menu");
     await page.locator("#collapseGalleryButton").click(); await page.locator("#overviewButton").click();
-    await page.locator("#overviewQuery").fill("sample"); await page.locator("#overviewFolder").selectOption("");
-    await page.locator("#overviewFilterButton").click(); await page.locator('[data-overview-filter="reviewed"]').check();
+    await page.locator("#overviewQuery").fill("sample"); await page.locator("#overviewFolder").selectOption("beta");
+    assert.deepEqual(await page.locator(".overview-item").evaluateAll((items) => items.map((item) => item.dataset.id)), ["sample-two"], "the real folder selector filters the overview to the chosen directory");
+    await page.locator("#overviewFilterButton").focus(); await page.keyboard.press("Space");
+    const overviewPopover = page.locator("#overviewFilterMenu");
+    assert.equal(await overviewPopover.evaluate((node) => node.matches(":popover-open")), true, "Space opens the overview filter menu");
+    assert.equal(await overviewPopover.locator("label").evaluateAll((labels) => labels.every((label, index) => index === 0 || label.getBoundingClientRect().top > labels[index - 1].getBoundingClientRect().top)), true, "overview filter choices form one vertical column");
+    await page.locator('[data-overview-filter="hidden"]').focus(); await page.keyboard.press("Space");
+    assert.equal(await page.locator("#overviewFilterButton").textContent(), "絞り込み (1)", "Space selects an overview filter and updates the button count");
+    await page.locator('[data-overview-filter="hidden"]').focus(); await page.keyboard.press("Space");
+    await page.locator("#overviewQuery").fill(""); await page.locator("#overviewFolder").selectOption("");
+    assert.deepEqual((await page.locator(".overview-item").evaluateAll((items) => items.map((item) => item.dataset.id))).sort(), ["sample", "sample-two"], "clearing every overview condition displays all images including hidden images");
+    await page.locator('[data-overview-filter="reviewed"]').check(); await page.locator("#overviewQuery").fill("sample"); await page.locator("#overviewFolder").selectOption("alpha");
     await page.locator("#closeOverviewButton").click();
-    assert.deepEqual(await page.evaluate(() => ({ gallery: [...state.galleryFilter], overview: [...state.overviewFilter], query: state.overviewQuery, folder: state.overviewFolder })), { gallery: ["reviewed"], overview: ["reviewed"], query: "sample", folder: "" });
+    assert.deepEqual(await page.evaluate(() => ({ gallery: [...state.galleryFilter], overview: [...state.overviewFilter], query: state.overviewQuery, folder: state.overviewFolder })), { gallery: ["reviewed"], overview: ["reviewed"], query: "sample", folder: "alpha" });
     assert.equal(await page.locator("#overviewFilterMenu").evaluate((node) => node.matches(":popover-open")), false, "switching views closes the old menu");
   } finally { await closeFixture(fixture, opened); }
 });
@@ -53,9 +70,26 @@ test("returning to an edited image restores its manual pixels and history", { ti
     await page.locator('.gallery-item[data-id="sample"]').click(); await page.waitForFunction(() => state.currentId === "sample" && state.currentImage);
     await page.evaluate(async () => { resetCurrentDraft(); state.drafts.delete("sample"); beginManualStroke({ x: 12, y: 12 }); completeManualStroke(); await saveDraft(); });
     await page.waitForFunction(() => state.history.length === 1 && state.historyIndex === 1 && canvasHasPixels(addCtx, addCanvas));
+    await page.locator("#overviewButton").click(); await page.waitForFunction(() => state.viewMode === "overview");
+    await page.locator("#closeOverviewButton").click(); await page.waitForFunction(() => state.viewMode === "edit" && state.currentId === "sample");
+    assert.deepEqual(await page.evaluate(() => ({ history: state.history.length, index: state.historyIndex, pixels: canvasHasPixels(addCtx, addCanvas) })), { history: 1, index: 1, pixels: true }, "closing the image overview returns to the edited image with its draft intact");
     await page.locator('.gallery-item[data-id="sample-two"]').click(); await page.waitForFunction(() => state.currentId === "sample-two" && state.currentImage);
     await page.locator('.gallery-item[data-id="sample"]').click(); await page.waitForFunction(() => state.currentId === "sample" && state.currentImage && state.history.length === 1 && canvasHasPixels(addCtx, addCanvas));
     assert.deepEqual(await page.evaluate(() => ({ history: state.history.length, index: state.historyIndex, pixels: canvasHasPixels(addCtx, addCanvas) })), { history: 1, index: 1, pixels: true });
+  } finally { await closeFixture(fixture, opened); }
+});
+
+test("batch source deletion cancel sends no delete and preserves selection, list, and project", { timeout: 60000 }, async () => {
+  const fixture = await startFixtureServer(); let opened;
+  try {
+    opened = await openFixture(fixture); const { page } = opened;
+    await page.evaluate(() => { state.project = { id: "cancel-project", name: "Cancel project", status: "working" }; state.projectReadOnly = false; renderCatalogViews(); });
+    await page.locator("#overviewButton").click(); await page.locator("#batchModeButton").click(); await page.locator('.overview-item[data-id="sample"]').click();
+    const before = await page.evaluate(() => ({ ids: state.images.map((image) => image.id), selected: [...state.selectedImageIds], project: structuredClone(state.project) }));
+    await page.locator("#selectionActionsButton").click(); await page.locator('[data-selection-action="remove"]').click();
+    await page.waitForFunction(() => document.querySelector("#confirmDialog").open); await page.locator("#confirmCancel").click();
+    assert.equal(fixture.catalogRemoveRequests.length, 0, "cancel sends no source or catalog deletion request");
+    assert.deepEqual(await page.evaluate(() => ({ ids: state.images.map((image) => image.id), selected: [...state.selectedImageIds], project: structuredClone(state.project) })), before);
   } finally { await closeFixture(fixture, opened); }
 });
 
@@ -100,6 +134,15 @@ test("batch detection cancel and processing locks preserve selection, catalog, a
     await page.waitForFunction(() => !document.querySelector('[data-selection-action="detect"]').disabled);
     assert.deepEqual(await page.evaluate(() => [...state.selectedImageIds]), before.selected, "completion re-enables actions without losing selection");
     await page.evaluate(() => document.querySelector("#processingDialog").close());
+    for (const mode of ["loading", "saving"]) {
+      await page.locator("#overviewFilterButton").click();
+      await page.evaluate((kind) => { if (kind === "loading") state.importing = true; else state.saving = true; closeFilterPopovers(); updateActionButtons(); }, mode);
+      assert.equal(await page.locator("#overviewFilterMenu").evaluate((node) => node.matches(":popover-open")), false, `${mode} start closes the open filter menu`);
+      assert.equal(await page.locator("#overviewFilterButton").isDisabled(), true, `${mode} start disables the filter button`);
+      assert.equal(await page.locator('[data-overview-filter="reviewed"]').isDisabled(), true, `${mode} start disables every filter choice`);
+      await page.evaluate((kind) => { if (kind === "loading") state.importing = false; else state.saving = false; updateActionButtons(); }, mode);
+      await page.waitForFunction(() => !document.querySelector("#overviewFilterButton").disabled);
+    }
     await page.locator("#overviewFilterButton").click(); await page.locator('[data-overview-filter="reviewed"]').check();
     assert.deepEqual(await page.evaluate(() => [...state.overviewFilter]), ["reviewed"], "completion allows the menu to reopen and change selection");
   } finally { await closeFixture(fixture, opened); }
@@ -144,9 +187,16 @@ test("completed projects keep browsing and exports enabled while every mutation 
     }
     await page.locator("#galleryFilterButton").click(); assert.equal(await page.locator("#galleryFilterMenu").evaluate((node) => node.matches(":popover-open")), true, "completed projects retain filtering");
     await page.locator('[data-gallery-filter="reviewed"]').check(); assert.deepEqual(await page.evaluate(() => [...state.galleryFilter]), ["reviewed"], "completed projects can change filter checkboxes");
-    await page.keyboard.press("Escape"); await page.locator("#projectButton").click();
+    await page.keyboard.press("Escape"); await page.locator("#overviewButton").click(); await page.locator("#overviewFilterButton").click();
+    assert.equal(await page.locator('[data-overview-filter="reviewed"]').isDisabled(), false, "completed projects retain overview filter checkboxes");
+    await page.locator('[data-overview-filter="reviewed"]').check(); assert.deepEqual(await page.evaluate(() => [...state.overviewFilter]), ["reviewed"]);
+    await page.locator("#closeOverviewButton").click(); await page.locator("#projectButton").click();
     assert.equal(await page.locator("#projectResume").isVisible(), true, "completed projects expose Resume work");
     assert.equal(await page.locator("#projectComplete").isDisabled(), true, "completed projects cannot be completed twice");
+    await page.evaluate(() => { state.project = { ...state.project, status: "working" }; state.projectReadOnly = false; updateActionButtons(); });
+    assert.equal(await page.locator("#brushTool").isDisabled(), false, "resuming re-enables drawing controls");
+    assert.equal(await page.locator("#detectCurrentButton").isDisabled(), false, "resuming re-enables current-image candidate detection");
+    assert.equal(await page.locator("#saveButton").isDisabled(), false, "resuming re-enables current-image saving");
   } finally { await closeFixture(fixture, opened); }
 });
 
@@ -170,39 +220,72 @@ test("pending selection mutation disables controls and a stale delayed result ca
   } finally { await closeFixture(fixture, opened); }
 });
 
-test("batch mask clear retains source records, unselected images, and project identity", { timeout: 60000 }, async () => {
+test("batch mask clear removes project data for exactly two selected images and preserves sources and the unselected image", { timeout: 60000 }, async () => {
   const fixture = await startFixtureServer(); let opened;
   try {
+    fixture.setCatalog([
+      { id: "sample", relativePath: "sample.png", sourceKind: "filesystem", sourcePath: "G:\\fixture\\sample.png", width: 100, height: 80, candidateCount: 1, enabledCandidateCount: 1, reviewed: false, hidden: false, hasEffectiveMask: true },
+      { id: "sample-two", relativePath: "sample-two.png", sourceKind: "session", width: 100, height: 80, candidateCount: 1, enabledCandidateCount: 1, reviewed: true, hidden: false, hasEffectiveMask: true },
+      { id: "sample-three", relativePath: "sample-three.png", sourceKind: "filesystem", sourcePath: "G:\\fixture\\sample-three.png", width: 100, height: 80, candidateCount: 1, enabledCandidateCount: 1, reviewed: true, hidden: true, hasEffectiveMask: true },
+    ]);
     opened = await openFixture(fixture); const { page } = opened;
     await page.evaluate(() => {
       state.project = { id: "mask-project", name: "Mask project", status: "working" }; state.projectReadOnly = false;
-      const target = state.images.find((image) => image.id === "sample"); Object.assign(target, { candidateCount: 1, enabledCandidateCount: 1, hasEffectiveMask: true });
-      state.maskStatus.set("sample", true); state.drafts.set("sample", { manualAdd: "mask", history: [{ kind: "brush" }] }); renderCatalogViews();
+      for (const id of ["sample", "sample-two", "sample-three"]) { state.maskStatus.set(id, true); state.drafts.set(id, { manualAdd: `mask-${id}`, history: [{ kind: "brush", id }] }); }
+      renderCatalogViews();
     });
-    await page.locator("#overviewButton").click(); await page.locator("#batchModeButton").click(); await page.locator('.overview-item[data-id="sample"]').click();
-    const before = await page.evaluate(() => ({ ids: state.images.map((image) => image.id), target: structuredClone(state.images.find((image) => image.id === "sample")), other: structuredClone(state.images.find((image) => image.id === "sample-two")), project: structuredClone(state.project) }));
-    assert.equal(before.target.candidateCount > 0 || before.target.hasEffectiveMask, true, "the selected project image starts with real mask data");
-    await page.route("**/api/images", async (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ images: [{ ...before.target, candidateCount: 0, enabledCandidateCount: 0, hasEffectiveMask: false }, before.other], project: before.project, readOnly: false }) }));
+    await page.locator("#overviewButton").click(); await page.locator("#batchModeButton").click(); await page.locator('.overview-item[data-id="sample"]').click(); await page.locator('.overview-item[data-id="sample-two"]').click();
+    const before = await page.evaluate(() => ({ ids: state.images.map((image) => image.id), targets: state.images.slice(0, 2).map((image) => structuredClone(image)), other: structuredClone(state.images[2]), project: structuredClone(state.project) }));
+    assert.equal(before.targets.every((image) => image.candidateCount > 0 && image.hasEffectiveMask), true, "both selected project images start with mask data");
+    await page.route("**/api/images", async (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ images: [...before.targets.map((image) => ({ ...image, candidateCount: 0, enabledCandidateCount: 0, hasEffectiveMask: false })), before.other], project: before.project, readOnly: false }) }));
     await page.locator("#selectionActionsButton").click(); await page.locator('[data-selection-action="clear"]').click();
     await page.waitForFunction(() => document.querySelector("#confirmDialog").open); await page.locator("#confirmAccept").click();
-    await page.waitForFunction(() => state.images.find((image) => image.id === "sample")?.candidateCount === 0 && !state.masksClearing);
-    const after = await page.evaluate(() => ({ ids: state.images.map((image) => image.id), target: structuredClone(state.images.find((image) => image.id === "sample")), other: structuredClone(state.images.find((image) => image.id === "sample-two")), project: structuredClone(state.project) }));
+    await page.waitForFunction(() => ["sample", "sample-two"].every((id) => state.images.find((image) => image.id === id)?.candidateCount === 0) && !state.masksClearing);
+    const after = await page.evaluate(() => ({ ids: state.images.map((image) => image.id), targets: state.images.slice(0, 2).map((image) => structuredClone(image)), other: structuredClone(state.images[2]), project: structuredClone(state.project) }));
     assert.deepEqual(after.ids, before.ids, "mask clearing keeps source-backed catalog records");
-    assert.deepEqual(after.other, before.other, "mask clearing leaves the unselected image untouched");
+    assert.deepEqual(after.other, before.other, "mask clearing leaves the unselected image record and mask metadata untouched");
     assert.deepEqual(after.project, before.project, "mask clearing keeps the project identity");
-    assert.deepEqual({ candidateCount: after.target.candidateCount, enabledCandidateCount: after.target.enabledCandidateCount, hasEffectiveMask: after.target.hasEffectiveMask }, { candidateCount: 0, enabledCandidateCount: 0, hasEffectiveMask: false }, "mask clearing removes selected project mask data");
+    assert.equal(after.targets.every((image) => image.candidateCount === 0 && image.enabledCandidateCount === 0 && !image.hasEffectiveMask), true, "mask clearing removes project mask data for both selected images");
   } finally { await closeFixture(fixture, opened); }
 });
 
-test("catalog clear cancel preserves workspace and confirmation removes only image data", { timeout: 60000 }, async () => {
+test("catalog clear cancel preserves rich project workspace data", { timeout: 60000 }, async () => {
   const fixture = await startFixtureServer(); let opened;
   try {
     opened = await openFixture(fixture); const { page } = opened;
-    const before = await page.evaluate(() => ({ ids: state.images.map((image) => image.id), project: structuredClone(state.project) }));
+    const before = await page.evaluate(() => {
+      state.project = { id: "rich-project", name: "Rich project", status: "working" }; state.projectReadOnly = false;
+      Object.assign(state.images[0], { candidateCount: 2, enabledCandidateCount: 1, reviewed: true, hidden: true, hasEffectiveMask: true });
+      state.drafts.set("sample", { manualAdd: "manual-mask", history: [{ kind: "brush", point: [4, 5] }] });
+      renderCatalogViews();
+      return { images: structuredClone(state.images), draft: structuredClone(state.drafts.get("sample")), project: structuredClone(state.project) };
+    });
     await page.locator("#batchMoreButton").click(); await page.locator("#clearCatalogButton").click(); await page.locator("#confirmCancel").click();
-    assert.deepEqual(await page.evaluate(() => ({ ids: state.images.map((image) => image.id), project: structuredClone(state.project) })), before, "cancel retains list and project data");
-    await page.locator("#batchMoreButton").click(); await page.locator("#clearCatalogButton").click(); await page.locator("#confirmAccept").click();
-    await page.waitForFunction(() => state.images.length === 0);
-    assert.deepEqual(await page.evaluate(() => ({ count: state.images.length, project: structuredClone(state.project) })), { count: 0, project: before.project }, "confirmation clears image data while retaining the project");
+    assert.deepEqual(await page.evaluate(() => ({ images: structuredClone(state.images), draft: structuredClone(state.drafts.get("sample")), project: structuredClone(state.project) })), before, "cancel retains candidates, drawing history, review/hidden flags, list, and project data");
   } finally { await closeFixture(fixture, opened); }
+});
+
+test("image switching disables save detection and candidate editing until the new image is authoritative", { timeout: 60000 }, async () => {
+  const fixture = await startFixtureServer(); let opened; let releaseImage; let started;
+  const imageStarted = new Promise((resolve) => { started = resolve; });
+  try {
+    opened = await openFixture(fixture); const { page } = opened;
+    await page.locator('.gallery-item[data-id="sample"]').click(); await page.waitForFunction(() => state.currentId === "sample" && state.currentImage);
+    const old = await page.evaluate(() => structuredClone(state.images.find((image) => image.id === "sample")));
+    await page.evaluate(() => {
+      abortCatalogLoads();
+      const record = state.images.find((image) => image.id === "sample-two");
+      state.imageCache.delete(imageCacheKey(record)); state.candidateBundleCache.delete(candidateCacheKey(record.id, Number(record.candidateRevision || 0)));
+      state.imageInflight.delete(imageCacheKey(record)); state.candidateInflight.delete(candidateCacheKey(record.id, Number(record.candidateRevision || 0)));
+    });
+    await page.route("**/api/image/sample-two*", async (route) => { started(); await new Promise((resolve) => { releaseImage = resolve; }); await route.continue(); });
+    const switching = page.locator('.gallery-item[data-id="sample-two"]').click(); await imageStarted;
+    assert.equal(await page.locator("#saveButton").isDisabled(), true, "save is disabled during an image switch");
+    assert.equal(await page.locator("#detectCurrentButton").isDisabled(), true, "current-image detection is disabled during an image switch");
+    assert.equal(await page.locator("#brushTool").isDisabled(), true, "drawing is disabled during an image switch");
+    assert.equal(await page.locator("#candidatePane button").evaluateAll((buttons) => buttons.every((button) => button.disabled)), true, "candidate editing controls are disabled during an image switch");
+    releaseImage(); await switching; await page.waitForFunction(() => state.currentId === "sample-two" && state.currentImage && !currentImageActionPending());
+    assert.deepEqual(await page.evaluate(() => structuredClone(state.images.find((image) => image.id === "sample"))), old, "the delayed new-image response never mutates the previous image");
+    assert.equal(await page.locator("#brushTool").isDisabled(), false, "drawing is restored only for the authoritative image");
+  } finally { releaseImage?.(); await closeFixture(fixture, opened); }
 });

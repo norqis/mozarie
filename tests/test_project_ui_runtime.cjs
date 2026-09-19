@@ -512,3 +512,63 @@ nodeTest("project close, complete, resume, and delete produce exact workspace ou
   assert.equal(state.project, null, "deleting the current project clears the live project");
   assert.equal(state.images.length, 0, "deleting the current project returns to an empty workspace");
 });
+
+nodeTest("project completion and deletion cancellation preserve the exact project and image list", async () => {
+  test.bindEvents();
+  const richImages = [{ id: "cancel-rich", candidates: [{ id: "candidate" }], manual: { add: "mask" }, reviewed: true, hidden: true, history: [{ kind: "brush" }] }];
+  state.project = projects[0]; state.projectReadOnly = false; state.images = richImages; state.currentId = "cancel-rich"; state.projectOperationPending = false; state.catalogTransition = null;
+  const beforeRequests = calls.filter(([kind]) => kind === "api").length;
+  context.confirmAction = async () => false;
+  await element("#projectComplete").listeners.get("click")(); await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(state.project, projects[0]); assert.equal(state.images, richImages); assert.equal(state.currentId, "cancel-rich");
+  assert.equal(calls.filter(([kind]) => kind === "api").length, beforeRequests, "completion cancellation sends no request");
+  test.openProjectDeleteDialog("working");
+  await element("#projectDeleteCancel").listeners.get("click")();
+  assert.equal(element("#projectDeleteDialog").open, false); assert.equal(state.project, projects[0]); assert.equal(state.images, richImages);
+  assert.equal(calls.filter(([kind]) => kind === "api").length, beforeRequests, "deletion cancellation sends no DELETE request");
+  context.confirmAction = async () => true;
+});
+
+nodeTest("same-source warning offers open separate and cancel without changing work until chosen", async () => {
+  test.bindEvents();
+  const currentImages = [{ id: "current", candidates: [{ id: "keep" }], history: [{ kind: "brush" }] }];
+  state.project = projects[0]; state.images = currentImages; state.currentId = "current"; state.projectOperationPending = false; state.catalogTransition = null;
+  test.showSameSourceDialog([projects[2]], { path: "C:/alpha" });
+  assert.equal(element("#sameSourceDialog").open, true); assert.equal(element("#sameSourceList").children.length, 1); assert.match(element("#sameSourceList").children[0].children[0].textContent, /Gamma/);
+  assert.equal(element("#sameSourceOpen").hidden, false); assert.equal(element("#sameSourceSeparate").hidden, false); assert.equal(element("#sameSourceCancel").hidden, false);
+  await element("#sameSourceCancel").listeners.get("click")();
+  assert.equal(state.project, projects[0]); assert.equal(state.images, currentImages); assert.equal(state.currentId, "current");
+});
+
+nodeTest("duplicate project guidance asks for another name while the current project remains intact", () => {
+  assert.match(japanese["errorDialog.project_name_duplicate.title"], /同じ名前/);
+  assert.match(japanese["errorDialog.project_name_duplicate.cause"], /すでに使われ/);
+  assert.match(japanese["errorDialog.project_name_duplicate.action"], /別の名前/);
+  assert.match(english["errorDialog.project_name_duplicate.action"], /different name/i);
+  const current = projects[0]; const images = [{ id: "duplicate-retained", history: [{ kind: "brush" }] }];
+  state.project = current; state.images = images;
+  context.showUserError(Object.assign(new Error("duplicate"), { code: "project_name_duplicate" }));
+  assert.equal(state.project, current); assert.equal(state.images, images);
+});
+
+nodeTest("project operations issue one request per start and the last completed start owns the catalog", async () => {
+  state.projectOperationPending = false; state.catalogTransition = null; state.project = projects[0]; state.images = [{ id: "original" }]; state.currentId = "original";
+  let releaseFirst; let openRequests = 0;
+  context.api = async (url, options = {}) => {
+    if (url !== "/api/project/open") return {};
+    openRequests += 1; const projectId = JSON.parse(options.body).projectId;
+    if (openRequests === 1) await new Promise((resolve) => { releaseFirst = resolve; });
+    const project = projects.find((item) => item.id === projectId);
+    return { project, images: [{ id: `${projectId}-image` }], needsSource: false, sources: [] };
+  };
+  const first = test.openProject(projects[1]);
+  await new Promise((resolve) => setImmediate(resolve));
+  const duplicate = test.openProject(projects[1]);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(openRequests, 1, "a duplicate start while the first project open is pending sends one request");
+  releaseFirst(); await Promise.all([first, duplicate]);
+  assert.equal(state.projectOperationPending, false); assert.equal(state.project.id, "completed"); assert.equal(state.images[0].id, "completed-image");
+  await test.openProject(projects[2]);
+  assert.equal(openRequests, 2, "a new start is accepted after the prior operation settles");
+  assert.equal(state.project.id, "separate"); assert.equal(state.images[0].id, "separate-image");
+});

@@ -24,6 +24,7 @@ test("Delete shortcut keeps a durable source-delete intent through claim and ack
     fixture.holdSourceDeletePrepare(true);
     fixture.holdSourceDeleteClaim(true);
     ({ context, page } = await freshPage(browser, fixture));
+    await page.evaluate(() => { state.project = { id: "delete-project", name: "Delete project", status: "working" }; state.projectReadOnly = false; renderCatalogViews(); });
     const card = page.locator('.gallery-item[data-id="sample"]');
     await card.click();
     await page.waitForFunction(() => state.currentId === "sample" && state.currentImage);
@@ -48,6 +49,8 @@ test("Delete shortcut keeps a durable source-delete intent through claim and ack
     fixture.releaseSourceDeleteClaims();
     await page.waitForFunction(() => !state.images.some((image) => image.id === "sample"));
     await page.waitForFunction(() => !state.catalogMutation);
+    assert.deepEqual(await page.evaluate(() => ({ ids: state.images.map((image) => image.id), currentId: state.currentId })), { ids: ["sample-two"], currentId: "sample-two" }, "source, catalogue, and project image state remove only the target and advance to the next filtered image");
+    assert.deepEqual(fixture.catalogImageIds(), ["sample-two"], "the fixture's durable project catalogue no longer contains the deleted image");
     assert.deepEqual(fixture.sourceDeleteRequests.map((request) => request.path), [
       "/api/catalog/delete-source/prepare",
       "/api/catalog/delete-source/claim",

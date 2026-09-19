@@ -19,7 +19,7 @@ import warnings
 from unittest.mock import patch
 from pathlib import Path
 
-from PIL import Image, PngImagePlugin
+from PIL import Image, ImageOps, PngImagePlugin
 
 import mozarie.http as http_module
 import mozarie.state as state_module
@@ -321,6 +321,29 @@ class LiveHttpEndpointTests(unittest.TestCase):
         self.assertIn(headers["Content-Type"], {"image/jpeg", "image/png"})
         with Image.open(io.BytesIO(body)) as image:
             self.assertEqual(image.size, (13, 9))
+
+    def test_exif_rotated_thumbnail_and_editor_asset_have_identical_visual_orientation(self) -> None:
+        rotated = self.source_dir / "rotated.jpg"
+        exif = Image.Exif(); exif[274] = 6
+        source = Image.new("RGB", (40, 20), "black")
+        for x in range(20):
+            for y in range(20): source.putpixel((x, y), (255, 0, 0))
+        source.save(rotated, format="JPEG", quality=100, exif=exif)
+        status, _headers, body = self.request("POST", "/api/folder", {"path": str(self.source_dir)}, authorized=True)
+        self.assertEqual(status, 200)
+        record = next(item for item in json.loads(body)["images"] if item["relativePath"] == "rotated.jpg")
+        self.assertEqual((record["width"], record["height"]), (20, 40))
+        status, _headers, editor_body = self.request("GET", f"/api/image/{record['id']}")
+        self.assertEqual(status, 200)
+        status, _headers, thumbnail_body = self.request("GET", f"/api/thumbnail/{record['id']}")
+        self.assertEqual(status, 200)
+        with Image.open(io.BytesIO(editor_body)) as raw_editor, Image.open(io.BytesIO(thumbnail_body)) as raw_thumbnail:
+            editor = ImageOps.exif_transpose(raw_editor).convert("RGB")
+            thumbnail = ImageOps.exif_transpose(raw_thumbnail).convert("RGB")
+            self.assertEqual(editor.size, thumbnail.size)
+            self.assertEqual(editor.size, (20, 40))
+            self.assertGreater(editor.crop((0, 0, 20, 20)).resize((1, 1)).getpixel((0, 0))[0], 200)
+            self.assertGreater(thumbnail.crop((0, 0, 20, 20)).resize((1, 1)).getpixel((0, 0))[0], 200)
 
     def test_live_manual_layer_transfer_persists_and_recovers_after_cancel_or_commit_failure(self) -> None:
         """Run the browser's begin/layer/commit protocol through a real server."""

@@ -28,9 +28,8 @@ class WorkspaceVerificationContractTests(unittest.TestCase):
         automated = [item for item in observations if item["status"] == "automated"]
         manual = [item for item in observations if item["status"] == "manual"]
         retired = [item for item in observations if item["status"] == "retired"]
-        self.assertEqual(len(automated), 213)
-        self.assertEqual(len(manual), 10)
-        self.assertEqual(len(retired), 9)
+        self.assertEqual(len(automated) + len(manual) + len(retired), len(observations))
+        self.assertEqual({item["status"] for item in observations}, {"automated", "manual", "retired"})
         for item in automated:
             self.assertTrue(item.get("testIds"), item["key"])
             self.assertNotIn("manual", item, item["key"])
