@@ -96,6 +96,22 @@ class DetectionIntegrityRegressionTests(unittest.TestCase):
         self.assertEqual(result[0]["_consensus_sources"], frozenset({"target", "ntd11"}))
         self.assertEqual(result[1]["_consensus_sources"], frozenset({"target"}))
 
+    def test_source_priority_beats_confidence_independent_of_input_order(self) -> None:
+        mask = np.zeros((12, 12), dtype=np.uint8); mask[2:10, 2:10] = 255
+        for ordered in (
+            [("sensitive", .99), ("ntd11", .98), ("target", .20)],
+            [("target", .20), ("sensitive", .99), ("ntd11", .98)],
+        ):
+            with self.subTest(order=[source for source, _confidence in ordered]):
+                result = arbitrate_segment_sources([
+                    {"class_name": "penis", "confidence": confidence, "mask": mask.copy(), "source": source}
+                    for source, confidence in ordered
+                ])
+                self.assertEqual(len(result), 1)
+                self.assertEqual(result[0]["source"], "target")
+                self.assertEqual(result[0]["confidence"], .20)
+                self.assertEqual(result[0]["_consensus_sources"], frozenset({"target", "ntd11", "sensitive"}))
+
     def test_single_auxiliary_duplicate_keeps_existing_consensus(self) -> None:
         mask = np.zeros((8, 8), dtype=np.uint8); mask[2:6, 2:6] = 255
         result = arbitrate_segment_sources([
@@ -122,6 +138,9 @@ class DetectionIntegrityRegressionTests(unittest.TestCase):
                 raise AssertionError("hand masks must not be materialized as an N-by-H-by-W array")
 
         self.assertEqual(StudioState._hand_boxes_over_apply(boxes, NoStackList([left, right])), expected)
+
+        many = NoStackList([left.copy() if index % 2 == 0 else right.copy() for index in range(256)])
+        self.assertEqual(StudioState._hand_boxes_over_apply(boxes, many), expected)
 
 
 if __name__ == "__main__":

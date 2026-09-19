@@ -1148,7 +1148,8 @@
       "observation": "補助候補は重なり・包含率・source優先度で最も近い1候補だけの合意として扱い、別候補へ合意状態を広げない",
       "status": "automated",
       "testIds": [
-        "python:tests.test_detection_regressions.DetectionIntegrityRegressionTests.test_broad_auxiliary_mask_confirms_only_the_best_matching_target"
+        "python:tests.test_detection_regressions.DetectionIntegrityRegressionTests.test_broad_auxiliary_mask_confirms_only_the_best_matching_target",
+        "python:tests.test_detection_regressions.DetectionIntegrityRegressionTests.test_source_priority_beats_confidence_independent_of_input_order"
       ]
     },
     {
