@@ -414,8 +414,7 @@
       "observation": "文字化けせず、名前が隣の操作へ重ならない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage",
-        "python:tests.test_server.MozarieTests.test_folder_scan_loads_every_normal_file_in_deterministic_order"
+        "node:tests/test_workspace_ui_browser.cjs::long Japanese gallery filename remains legible beside metadata"
       ]
     },
     {
