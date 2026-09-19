@@ -241,7 +241,7 @@
       "observation": "送信対象が陰茎だけとなり、未選択クラスの新規候補を作らない",
       "status": "automated",
       "testIds": [
-        "python:tests.test_server.MozarieTests.test_detection_start_passes_explicit_target_subset"
+        "node:tests/test_detection_dialog_contracts.cjs::SD-020 penis-only detection sends no unselected target class"
       ]
     },
     {
@@ -252,7 +252,7 @@
       "observation": "送信対象が膣だけとなり、未選択クラスの新規候補を作らない",
       "status": "automated",
       "testIds": [
-        "python:tests.test_server.MozarieTests.test_detection_start_passes_explicit_target_subset"
+        "node:tests/test_detection_dialog_contracts.cjs::SD-021 pussy-only detection sends no unselected target class"
       ]
     },
     {
@@ -263,7 +263,7 @@
       "observation": "両対象を送信して処理を開始できる",
       "status": "automated",
       "testIds": [
-        "python:tests.test_server.MozarieTests.test_detection_start_passes_explicit_target_subset"
+        "node:tests/test_detection_dialog_contracts.cjs::SD-022 both-target detection sends both selected target classes"
       ]
     },
     {
@@ -274,7 +274,7 @@
       "observation": "対象の選択を求め、検出を開始しない",
       "status": "automated",
       "testIds": [
-        "python:tests.test_server.MozarieTests.test_detection_start_passes_explicit_target_subset"
+        "node:tests/test_detection_dialog_contracts.cjs::SD-023 detection rejects an empty target selection without creating candidates"
       ]
     },
     {
@@ -2342,11 +2342,11 @@
         "SD-142"
       ],
       "observation": "実機では起動後の設定表示、利用者の作業フォルダー、モデル読込案内を確認する",
-      "status": "automated",
-      "testIds": [
-        "node:tests/test_settings_dialog_e2e.cjs::SD-142 startup UI displays migrated absolute model and output paths",
-        "python:tests.test_absolute_path_regression.AbsolutePathRegressionTests.test_legacy_relative_paths_are_migrated_to_absolute_paths_once"
-      ]
+      "status": "manual",
+      "manual": {
+        "environment": "Windows 配布版 + 利用者の実作業フォルダー + 実モデル",
+        "reason": "配布版のコピー配置、利用者固有フォルダー権限、実モデル読込案内の一連の確認はCIの一時環境では再現できない"
+      }
     },
     {
       "key": "SD-144.1",

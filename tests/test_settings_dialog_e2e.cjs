@@ -203,6 +203,11 @@ test("SD-013 resetting settings replaces edited controls with returned defaults"
     await page.locator("#settingsResetButton").click();
     await page.waitForFunction(() => document.querySelector("#settingsImportParallelism").value === "3");
     assert.equal(await page.locator("#settingsImportParallelism").inputValue(), "3");
+    await page.locator("#settingsSaveButton").click();
+    await page.waitForFunction(() => state.settings.importing.parallelism === 3);
+    await page.locator("#settingsCloseButton").click();
+    await page.locator("#settingsButton").click();
+    assert.equal(await page.locator("#settingsImportParallelism").inputValue(), "3");
   });
 });
 

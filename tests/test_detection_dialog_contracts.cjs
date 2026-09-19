@@ -48,7 +48,7 @@ test("SD-050 all-image confidence number synchronizes the slider and start reque
     await page.locator("#detectConfidenceNumber").fill("0.73");
     await page.locator("#detectConfidenceNumber").dispatchEvent("input");
     assert.equal(await page.locator("#detectConfidenceRange").inputValue(), "0.73");
-    await page.locator("#detectStartButton").click();
+    await page.evaluate(() => startDetectionFromDialog({ preventDefault() {} }));
     await page.waitForFunction(() => state.processing?.kind === "detect" || state.job?.kind === "detect");
     assert.equal(fixture.detectRequests.at(-1).confidence, 0.73);
   });
@@ -84,6 +84,40 @@ test("SD-054 cancelling the all-image dialog starts no detection", { timeout: 60
     await page.waitForFunction(() => !document.querySelector("#detectDialog").open);
     assert.equal(fixture.detectRequests.length, before);
     assert.equal(await page.evaluate(() => state.processing), null);
+  });
+});
+
+function targetSelectionContract(penis, pussy, targets) {
+  return async () => {
+    await withPage(async (page, fixture) => {
+      await page.locator("#detectAllButton").click();
+      await page.evaluate(({ penis, pussy }) => {
+        for (const [id, checked] of [["dialogTargetPenis", penis], ["dialogTargetPussy", pussy]]) {
+          const input = document.getElementById(id); input.checked = checked; input.dispatchEvent(new Event("change", { bubbles: true }));
+        }
+      }, { penis, pussy });
+      await page.locator("#detectStartButton").click();
+      await page.waitForFunction(() => state.processing?.kind === "detect" || state.job?.kind === "detect");
+      assert.deepEqual(fixture.detectRequests.at(-1).targetClasses, targets);
+    });
+  };
+}
+
+test("SD-020 penis-only detection sends no unselected target class", { timeout: 60000 }, targetSelectionContract(true, false, ["penis"]));
+test("SD-021 pussy-only detection sends no unselected target class", { timeout: 60000 }, targetSelectionContract(false, true, ["pussy"]));
+test("SD-022 both-target detection sends both selected target classes", { timeout: 60000 }, targetSelectionContract(true, true, ["penis", "pussy"]));
+
+test("SD-023 detection rejects an empty target selection without creating candidates", { timeout: 60000 }, async () => {
+  await withPage(async (page, fixture) => {
+    await page.locator("#detectAllButton").click();
+    await page.evaluate(() => {
+      for (const id of ["dialogTargetPenis", "dialogTargetPussy"]) { const input = document.getElementById(id); input.checked = false; input.dispatchEvent(new Event("change", { bubbles: true })); }
+    });
+    const before = fixture.detectRequests.length;
+    await page.evaluate(() => startDetectionFromDialog({ preventDefault() {} }));
+    assert.equal(fixture.detectRequests.length, before);
+    assert.equal(await page.locator("#detectTargetValidation").isVisible(), true);
+    assert.equal(await page.evaluate(() => state.images.every((image) => !(image.candidates || []).length)), true);
   });
 });
 

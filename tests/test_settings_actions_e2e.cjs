@@ -225,6 +225,17 @@ test("SD-117 editable controls and a noncurrent gallery card cannot start source
     await control.focus(); await page.keyboard.press("Delete"); exercisedEditor += 1;
   }
   assert.ok(exercisedEditor >= 10, "visible editor inputs selects and buttons are exercised");
+  await page.evaluate(() => {
+    const editable = document.createElement("div");
+    editable.id = "delete-guard-contenteditable";
+    editable.contentEditable = "true";
+    editable.textContent = "editable";
+    document.body.append(editable);
+  });
+  await page.locator("#delete-guard-contenteditable").focus();
+  await page.keyboard.press("Delete");
+  assert.notEqual(await page.locator("#delete-guard-contenteditable").textContent(), "editable");
+  assert.equal(fixture.sourceDeleteRequests.length, 0);
   await page.locator('.gallery-item[data-id="sample-two"]').focus(); await page.keyboard.press("Delete");
   await page.waitForTimeout(80); assert.equal(fixture.sourceDeleteRequests.length, 0); assert.equal(await page.evaluate(() => state.currentId), "sample");
 });
