@@ -12,6 +12,7 @@ function runFixture(source) {
   fs.writeFileSync(fixture, source);
   const environment = { ...process.env };
   delete environment.NODE_TEST_CONTEXT;
+  delete environment.MOZARIE_NODE_TEST_MANIFEST;
   return childProcess.spawnSync(process.execPath, ["--test", "--test-reporter=./scripts/strict-tap-reporter.cjs", fixture], { cwd: root, encoding: "utf8", env: environment });
 }
 

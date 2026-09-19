@@ -4,6 +4,7 @@ const os = require("node:os");
 const path = require("node:path");
 const { assertNoSkippedUnittestTests } = require("./test-result-policy.cjs");
 const { frontendPerformanceTestFiles, frontendTestArguments } = require("./test-discovery.cjs");
+const { loadContracts, readManifest, validateAutomatedExecution } = require("./verification-contracts.cjs");
 
 const root = path.resolve(__dirname, "..");
 const DEFAULT_COMMAND_TIMEOUT_MS = 5 * 60 * 1000;
@@ -296,6 +297,11 @@ async function runBackend(temporaryRoot, artifacts, shard = {}) {
   const env = backendEnvironment(temporaryRoot, coverageFile);
   const tests = await requiredCommand("backend tests", python, ["-m", "coverage", "run", path.join("scripts", "unittest-shard.py"), "--shard-index", String(shardIndex), "--shard-total", String(shardTotal), "--manifest", manifest], { env, artifactDirectory: directory });
   assertNoSkippedUnittestTests(tests);
+  validateAutomatedExecution(loadContracts(), {
+    languages: ["python"],
+    pythonManifests: [readManifest(manifest)],
+    requireAllExecuted: shardTotal === 1,
+  });
   await requiredCommand("backend coverage", python, ["-m", "coverage", "report"], { env, artifactDirectory: directory });
   await requiredCommand("backend coverage XML", python, ["-m", "coverage", "xml", "-o", coverageXml], { env, artifactDirectory: directory });
   const xml = fs.readFileSync(coverageXml, "utf8");
@@ -354,6 +360,7 @@ async function aggregateBackendShards(temporaryRoot, artifacts, shardArtifacts, 
   const manifestPaths = recursiveFiles(shardArtifacts, "backend-manifest.json");
   const entries = manifestPaths.map((manifestPath) => ({ path: manifestPath, manifest: JSON.parse(fs.readFileSync(manifestPath, "utf8")) }));
   const { discovered, manifests } = validateBackendShardManifests(entries.map((entry) => entry.manifest), expectedTotal);
+  validateAutomatedExecution(loadContracts(), { languages: ["python"], pythonManifests: manifests });
   const inputs = path.join(directory, "coverage-input");
   fs.mkdirSync(inputs, { recursive: true });
   for (const manifest of manifests) {
@@ -385,15 +392,19 @@ function performanceEnvironment(source = process.env) {
 
 async function runFrontend(temporaryRoot, artifacts, dependencies = {}) {
   const run = dependencies.requiredCommand || requiredCommand;
+  const verifyContracts = dependencies.verifyContracts || ((manifestPaths) => validateAutomatedExecution(loadContracts(), { languages: ["node"], nodeManifests: manifestPaths.map(readManifest) }));
   const directory = artifactDirectory(temporaryRoot, artifacts, "frontend");
+  const coverageManifest = path.join(directory, "frontend-node-manifest.json");
+  const performanceManifest = path.join(directory, "frontend-performance-manifest.json");
   await run("frontend syntax", process.platform === "win32" ? "npm.cmd" : "npm", ["run", "check"], { env: process.env, artifactDirectory: directory });
   const output = await run("frontend coverage", process.execPath, [path.join("scripts", "coverage-js.cjs")], {
-    env: { ...process.env, MOZARIE_JS_COVERAGE_DIR: directory }, artifactDirectory: directory,
+    env: { ...process.env, MOZARIE_JS_COVERAGE_DIR: directory, MOZARIE_NODE_TEST_MANIFEST: coverageManifest }, artifactDirectory: directory,
   });
   if (!fs.existsSync(path.join(directory, "report", "coverage-final.json"))) throw new Error("frontend coverage JSON was not created");
   const performance = await run("frontend performance", process.execPath, frontendTestArguments(frontendPerformanceTestFiles()), {
-    env: performanceEnvironment(), artifactDirectory: directory,
+    env: { ...performanceEnvironment(), MOZARIE_NODE_TEST_MANIFEST: performanceManifest }, artifactDirectory: directory,
   });
+  verifyContracts([coverageManifest, performanceManifest]);
   return `frontend: passed (${testCount(output)} coverage tests; ${testCount(performance)} performance tests; JavaScript coverage report created)`;
 }
 
