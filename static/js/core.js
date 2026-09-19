@@ -839,7 +839,7 @@ function updateActionButtons() {
   $("#saveAllButton").disabled = busyLocked || mutationLocked || catalogStaging || mutatingCandidates || processableImages().length === 0;
   const currentSaveDisabled = busyLocked || mutationLocked || catalogStaging || switchingImages || mutatingCandidates || !currentProcessable;
   $("#saveButton").disabled = currentSaveDisabled;
-  const editorControlsLocked = busyLocked || mutationLocked || switchingImages || !currentProcessable;
+  const editorControlsLocked = busyLocked || mutationLocked || switchingImages || (Boolean(state.currentId) && !currentProcessable);
   for (const control of document.querySelectorAll("[data-toolbar-item]:not(#singleViewButton):not(#compareViewButton):not(#fitButton):not(#mosaicPreviewButton), #rectangleTool, #polygonTool, #boundaryBrushTool, #brushSize, #bucketTolerance, #bucketToleranceDecrease, #bucketToleranceIncrease")) {
     if (editorControlsLocked && !control.disabled) { control.dataset.disabledByLock = "true"; control.disabled = true; }
   }

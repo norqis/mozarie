@@ -161,9 +161,50 @@ test("project folder restore retains each nested file's direct parent", { timeou
     await page.locator("#pickFolder").click(); await page.locator("#pickFolderFiles").click();
     await page.waitForFunction(() => !state.importing && state.sourceAccess.size === 3);
     assert.deepEqual(await page.evaluate(() => window.__folderPicker.calls.at(-1)), { mode: "readwrite", id: "mozarie-source", active: true }, "the initial folder picker also obtains write access inside the click");
+    assert.deepEqual(await page.evaluate(async () => {
+      const access = state.sourceAccess.get("folder-2");
+      await writeSourceHandle(access, new Response(new Uint8Array([7, 8, 9])));
+      const saved = [...new Uint8Array(await (await access.fileHandle.getFile()).arrayBuffer())];
+      await browserDeleteHandle({ parentHandle: access.parentHandle, fileHandle: access.fileHandle, name: access.fileHandle.name }, {
+        sizeBytes: access.size, mtimeNs: access.lastModified * 1_000_000,
+      });
+      const root = await (await navigator.storage.getDirectory()).getDirectoryHandle("mozarie-folder-permission-e2e");
+      const one = await root.getDirectoryHandle("one"); const deep = await one.getDirectoryHandle("deep");
+      const rootSame = await root.getFileHandle("same.png"); const childSame = await one.getFileHandle("same.png");
+      let grandchildExists = true; try { await deep.getFileHandle("same.png"); } catch (error) { grandchildExists = error.name !== "NotFoundError"; }
+      return { saved, rootSame: rootSame.name, childSame: childSame.name, grandchildExists };
+    }), { saved: [7, 8, 9], rootSame: "same.png", childSame: "same.png", grandchildExists: false }, "the restored grandchild saves and deletes through its direct parent without touching parent or child files with the same name");
   } finally {
     await context?.close(); await browser.close(); await closeServer(fixture.server);
   }
+});
+
+test("unnamed browser workspace promotion keeps its actual directory and file handles under the same workspace id", { timeout: 60000 }, async () => {
+  const fixture = await startFixtureServer(); const browser = await chromium.launch({ headless: true }); let context; let page;
+  try {
+    ({ context, page } = await freshPage(browser, fixture));
+    const result = await page.evaluate(async () => {
+      const root = await navigator.storage.getDirectory();
+      const directory = await root.getDirectoryHandle("unnamed-browser-workspace", { create: true });
+      const file = await directory.getFileHandle("source.png", { create: true });
+      const writable = await file.createWritable(); await writable.write(new Uint8Array([4, 5, 6])); await writable.close();
+      const workspaceId = "unnamed-browser-workspace-id";
+      state.project = null; state.workspaceId = workspaceId;
+      await rememberProjectSources(workspaceId, [
+        { sourceId: "directory-source", handle: directory },
+        { sourceId: "file-source", imageId: "unnamed-image", relativePath: "source.png", handle: file, parentHandle: directory },
+      ]);
+      const before = await rememberedProjectSources(workspaceId);
+      state.project = { id: workspaceId, name: "Promoted", status: "working" };
+      const after = await rememberedProjectSources(workspaceId);
+      return {
+        workspaceId: state.workspaceId, projectId: state.project.id,
+        directoryBefore: await before.directories[0].handle.isSameEntry(directory), directoryAfter: await after.directories[0].handle.isSameEntry(directory),
+        fileBefore: await before.files[0].handle.isSameEntry(file), fileAfter: await after.files[0].handle.isSameEntry(file),
+      };
+    });
+    assert.deepEqual(result, { workspaceId: "unnamed-browser-workspace-id", projectId: "unnamed-browser-workspace-id", directoryBefore: true, directoryAfter: true, fileBefore: true, fileAfter: true });
+  } finally { await context?.close(); await browser.close(); await closeServer(fixture.server); }
 });
 
 test("browser directory restore keeps canonical source paths separate", { timeout: 60000 }, async () => {

@@ -93,14 +93,16 @@ test("mosaic and no-mosaic filters use current effective masks and always exclud
   try {
     fixture.setCatalog([
       { id: "effective", relativePath: "effective.png", sourceKind: "filesystem", width: 10, height: 10, candidateCount: 2, enabledCandidateCount: 2, hasEffectiveMask: true, reviewed: false, hidden: false },
+      { id: "effective-reviewed", relativePath: "effective-reviewed.png", sourceKind: "filesystem", width: 10, height: 10, candidateCount: 1, enabledCandidateCount: 1, hasEffectiveMask: true, reviewed: true, hidden: false },
       { id: "empty", relativePath: "empty.png", sourceKind: "filesystem", width: 10, height: 10, candidateCount: 1, enabledCandidateCount: 0, hasEffectiveMask: false, reviewed: true, hidden: false },
+      { id: "empty-unreviewed", relativePath: "empty-unreviewed.png", sourceKind: "filesystem", width: 10, height: 10, candidateCount: 0, enabledCandidateCount: 0, hasEffectiveMask: false, reviewed: false, hidden: false },
       { id: "hidden-effective", relativePath: "hidden.png", sourceKind: "filesystem", width: 10, height: 10, candidateCount: 1, enabledCandidateCount: 1, hasEffectiveMask: true, reviewed: false, hidden: true },
     ]);
     opened = await openFixture(fixture); const { page } = opened;
     await page.locator("#galleryFilterButton").click(); await page.locator('[data-gallery-filter="masked"]').check();
-    assert.deepEqual(await page.locator(".gallery-item").evaluateAll((items) => items.map((item) => item.dataset.id)), ["effective"], "mosaic filter uses effective-mask state regardless of review and excludes hidden images");
+    assert.deepEqual(await page.locator(".gallery-item").evaluateAll((items) => items.map((item) => item.dataset.id)), ["effective", "effective-reviewed"], "mosaic filter uses effective-mask state for reviewed and unreviewed images while excluding hidden images");
     await page.locator('[data-gallery-filter="masked"]').uncheck(); await page.locator('[data-gallery-filter="unmasked"]').check();
-    assert.deepEqual(await page.locator(".gallery-item").evaluateAll((items) => items.map((item) => item.dataset.id)), ["empty"], "no-mosaic filter uses the refreshed zero-effective-mask state and excludes hidden images");
+    assert.deepEqual(await page.locator(".gallery-item").evaluateAll((items) => items.map((item) => item.dataset.id)), ["empty", "empty-unreviewed"], "no-mosaic filter uses refreshed zero-effective-mask state regardless of review and excludes hidden images");
   } finally { await closeFixture(fixture, opened); }
 });
 
@@ -312,5 +314,8 @@ test("image switching disables save detection and candidate editing until the ne
     releaseImage(); await switching; await page.waitForFunction(() => state.currentId === "sample-two" && state.currentImage && !currentImageActionPending());
     assert.deepEqual(await page.evaluate(() => structuredClone(state.images.find((image) => image.id === "sample"))), old, "the delayed new-image response never mutates the previous image");
     assert.equal(await page.locator("#brushTool").isDisabled(), false, "drawing is restored only for the authoritative image");
+    await page.evaluate(() => { state.currentId = null; state.currentImage = null; updateActionButtons(); });
+    assert.equal(await page.locator("#boundaryTool").isDisabled(), false, "an idle empty editor releases the transient image-switch lock from tool-mode controls");
+    assert.equal(await page.locator("#boundaryTool").getAttribute("data-disabled-by-lock"), null, "the released transient lock leaves no stale ownership marker");
   } finally { releaseImage?.(); await closeFixture(fixture, opened); }
 });

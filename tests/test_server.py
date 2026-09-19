@@ -278,11 +278,19 @@ class MozarieTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             source = Path(directory) / "source.png"; Image.new("RGB", (16, 16), "white").save(source)
             state = self.new_state(); image_id = state.set_root(directory)[0]["id"]
+            old_mask = state.cache_dir / image_id / "old.png"; old_mask.parent.mkdir(parents=True, exist_ok=True); Image.new("L", (16, 16), 255).save(old_mask)
+            state._commit_candidate_snapshot(image_id, [Candidate("old", "penis", .8, old_mask)], replace=True)
+            manual_buffer = io.BytesIO(); Image.new("L", (16, 16), 255).save(manual_buffer, format="PNG")
+            manual = "data:image/png;base64," + base64.b64encode(manual_buffer.getvalue()).decode("ascii")
+            state.save_manual_workspace(image_id, {"add": manual, "exclusion": "", "exclusionErase": "", "removedCandidateIds": [], "candidateRevision": state._candidate_revision(image_id), "hasEffectiveMask": True})
+            state.set_image_flags(image_id, {"reviewed": True})
+            before = state.workspace_store.export_state(image_id); before_history = state.project_history_status(image_id)
             record = replace(state.image_for_id(image_id))
             mask_path = state.cache_dir / image_id / "candidate.png"; mask_path.parent.mkdir(parents=True, exist_ok=True)
             Image.new("L", (16, 16), 255).save(mask_path)
             candidate = Candidate("candidate", "penis", .9, mask_path)
             generation = state.catalog_generation
+            revision = state._candidate_revision(image_id)
             prepare = state.workspace_store.prepare_candidate_state
 
             def prepare_then_reload(*args, **kwargs):
@@ -295,10 +303,12 @@ class MozarieTests(unittest.TestCase):
             with state.image_io_lock(image_id), patch.object(state.workspace_store, "prepare_candidate_state", side_effect=prepare_then_reload):
                 with self.assertRaises(ClientError):
                     state._commit_candidate_snapshot_outside_state_lock(
-                        image_id, [candidate], replace=True, expected_revision=0, expected_catalog_generation=generation,
+                        image_id, [candidate], replace=True, expected_revision=revision, expected_catalog_generation=generation,
                     )
-            self.assertEqual(state.workspace_store.hydrate_candidates(image_id, state.cache_dir, lambda *_: None), (0, []))
-            self.assertEqual(state.candidates.get(image_id, []), [])
+            self.assertEqual(state.workspace_store.export_state(image_id), before)
+            self.assertEqual(state.project_history_status(image_id), before_history)
+            self.assertEqual([item.candidate_id for item in state.candidates[image_id]], ["old"])
+            self.assertTrue(state.images[image_id].reviewed); self.assertEqual(state.images[image_id].image_id, image_id)
 
     def test_detector_preparation_does_not_block_catalog_polling(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -5699,6 +5709,9 @@ class MozarieTests(unittest.TestCase):
         state.clear_catalog()
         self.assertIsNone(state.workspace_id)
         self.assertFalse(state.workspace_store.catalog_exists(workspace_id))
+        state.shutdown(); self._states.remove(state)
+        restarted = self.new_state()
+        self.assertIsNone(restarted.workspace_id); self.assertEqual(restarted.list_images(), [])
 
     def test_mutation_api_rejects_invalid_request_context(self):
         from http.server import ThreadingHTTPServer
@@ -8869,7 +8882,9 @@ class MozarieTests(unittest.TestCase):
                     self.assertTrue(entered.wait(THREAD_TIMEOUT), "folder scan did not reach its controlled inspection")
                     self.assertTrue(state.import_lock.acquire(blocking=False))
                     state.import_lock.release()
-                    self.assertEqual([project["name"] for project in state.projects()], ["existing while scanning"], "existing project operations complete while folder inspection is blocked")
+                    started = time.perf_counter(); renamed = state.name_current_project("renamed while scanning"); elapsed = time.perf_counter() - started
+                    self.assertEqual(renamed["name"], "renamed while scanning")
+                    self.assertLess(elapsed, .25, "a committing existing-project operation does not wait for folder image I/O")
                     self.assertFalse(finished.is_set(), "folder reload finished before its controlled inspection was released")
                     release.set()
                 finally:
@@ -8877,6 +8892,7 @@ class MozarieTests(unittest.TestCase):
                     join_threads(loader)
                 self.assertTrue(finished.is_set())
                 self.assertEqual(failures, [])
+                self.assertEqual(state.workspace_store.project(state.catalog_id)["name"], "renamed while scanning")
 
     def test_folder_scan_rejects_a_catalogue_change_after_releasing_the_import_lock(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -8970,6 +8986,10 @@ class MozarieTests(unittest.TestCase):
             self.assertLess(len(enumerated), len(names))
             self.assertEqual(state.list_images(), [])
             self.assertEqual({thread.ident for thread in threading.enumerate() if thread.name.startswith("ThreadPoolExecutor")} - workers_before, set(), "cancelled scan leaves no newly running import worker")
+            state.shutdown(); self._states.remove(state)
+            restarted = self.new_state()
+            next_root = Path(directory) / "next-start"; next_root.mkdir(); Image.new("RGB", (8, 8), "white").save(next_root / "next.png")
+            self.assertEqual([image["relativePath"] for image in restarted.set_root(str(next_root))], ["next.png"], "the next startup begins a fresh scan and publishes no partial prior list")
 
     def test_browser_render_uses_one_source_read(self):
         with tempfile.TemporaryDirectory() as directory:

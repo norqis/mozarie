@@ -30,7 +30,6 @@
       "observation": "再読込後も保存済みrequest IDから同じbrowser-directory sourceのAPI正規IDへ復元し、孫画像だけを孫フォルダーから削除または保存して親・子の同名画像を残す。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_folder_permissions_e2e.cjs::browser directory restore keeps canonical source paths separate",
         "node:tests/test_folder_permissions_e2e.cjs::project folder restore retains each nested file's direct parent"
       ]
     },
@@ -261,7 +260,7 @@
       "status": "automated",
       "testIds": [
         "node:tests/test_import_picker_e2e.cjs::import picker browser coverage",
-        "python:tests.test_server.MozarieTests.test_folder_scan_loads_every_normal_file_in_deterministic_order"
+        "python:tests.test_server.MozarieTests.test_folder_scan_publishes_five_thousand_valid_images_sorted_and_reports_the_broken_file"
       ]
     },
     {
@@ -762,6 +761,7 @@
       "observation": "非表示ではなく、除外差引き後も有効なモザイク範囲がある画像を、確認状態に関係なく表示する",
       "status": "automated",
       "testIds": [
+        "node:tests/test_workspace_contract_browser.cjs::mosaic and no-mosaic filters use current effective masks and always exclude hidden images",
         "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_effective_mosaic_pixels_are_apply_plus_manual_minus_exclusion"
       ]
     },
@@ -2237,6 +2237,7 @@
       "observation": "取消・失敗・再読込では対象全件の候補、確認済み、画像ID、履歴を開始前のまま保持する",
       "status": "automated",
       "testIds": [
+        "python:tests.test_server.MozarieTests.test_detector_prepare_rolls_back_when_catalog_reloads_before_publish",
         "python:tests.test_server.MozarieTests.test_detection_staging_reports_processed_without_publishing_on_failure",
         "python:tests.test_server.MozarieTests.test_parallel_detection_cancellation_discards_all_inflight_candidates"
       ]
@@ -2260,7 +2261,7 @@
       "observation": "失敗・取消で内部workspaceを残さず、名前保存では同じworkspace IDへブラウザーhandleを保持する。",
       "status": "automated",
       "testIds": [
-        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_unnamed_restart_and_promotion_preserve_full_identity_state_and_history",
+        "node:tests/test_folder_permissions_e2e.cjs::unnamed browser workspace promotion keeps its actual directory and file handles under the same workspace id",
         "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_unnamed_workspace_switch_publishes_atomically_and_rolls_back_failed_replacement"
       ]
     },
@@ -2273,7 +2274,7 @@
       "status": "automated",
       "testIds": [
         "python:tests.test_server.MozarieTests.test_projectless_browser_workspace_detaches_without_leaving_an_active_record",
-        "python:tests.test_domain1_extra_coverage.StateCatalogExtraCoverageTests.test_workspace_recreate_replaces_or_preserves_the_recovery_state"
+        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_unnamed_workspace_switch_publishes_atomically_and_rolls_back_failed_replacement"
       ]
     },
     {

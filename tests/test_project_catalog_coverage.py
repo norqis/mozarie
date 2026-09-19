@@ -509,11 +509,16 @@ class ProjectCatalogCoverageTests(unittest.TestCase):
         before_project_update = state.workspace_store.project(project["id"])["updatedAt"]
         first_before = state.workspace_store.export_state(first)
         Image.new("RGB", (8, 8), "black").save(first_path)
+        accepted_stat = first_path.stat()
         state.set_root(str(source)); state.resolve_source_mismatches([first], False)
         first_kept = state.workspace_store.export_state(first)
         self.assertEqual([item["id"] for item in first_kept["candidates"]], [item["id"] for item in first_before["candidates"]])
         self.assertIsNotNone(first_kept["manual"]); self.assertTrue(state.project_history_status(first)["canUndo"])
         self.assertGreaterEqual(state.workspace_store.project(project["id"])["updatedAt"], before_project_update)
+        db = sqlite3.connect(state.workspace_store.path)
+        try: accepted_size, accepted_mtime = db.execute("SELECT size_bytes,mtime_ns FROM images WHERE image_id=?", (first,)).fetchone()
+        finally: db.close()
+        self.assertEqual((accepted_size, accepted_mtime), (accepted_stat.st_size, accepted_stat.st_mtime_ns), "Keep accepts the exact current source timestamp and size as the new mismatch baseline")
 
         Image.new("RGB", (12, 6), "gray").save(first_path)
         state.set_root(str(source)); state.resolve_source_mismatches([first], False)
