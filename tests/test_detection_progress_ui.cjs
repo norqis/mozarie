@@ -58,6 +58,7 @@ test("SD-148 detection progress shows staged work and locks pause only while pub
 
 test("SD-055 SD-056 sixty visible images start at zero complete at sixty and restore controls", { timeout: 60000 }, async () => {
   const fixture = await startFixtureServer();
+  fixture.holdDetection(true);
   const browser = await chromium.launch({ headless: true });
   try {
     const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
@@ -79,13 +80,11 @@ test("SD-055 SD-056 sixty visible images start at zero complete at sixty and res
     assert.deepEqual(fixture.detectRequests.at(-1).imageIds, Array.from({ length: 60 }, (_, index) => `progress-${index}`));
     assert.equal(await page.locator("#processingProgress").getAttribute("max"), "60");
     assert.match(await page.locator("#processingProgressText").textContent(), /0\s*\/\s*60/);
-    await page.evaluate(() => showProcessing({
-      kind: "detect", state: "complete", startedAt: 1, total: 60, processed: 60, completed: 60,
-      current: "", imageIds: Array.from({ length: 60 }, (_, index) => `progress-${index}`),
-      completedImageIds: Array.from({ length: 60 }, (_, index) => `progress-${index}`), activeElapsed: 10,
-    }));
-    assert.match(await page.locator("#processingProgressText").textContent(), /60\s*\/\s*60/);
-    await page.evaluate(() => { state.job = null; closeProcessing(); });
+    fixture.finishDetection();
+    await page.evaluate(() => pollJob());
+    await page.waitForFunction(() => !state.processing && !isBusy());
+    assert.equal(await page.locator("#processingDialog").evaluate((dialog) => dialog.open), false);
+    assert.match(await page.locator("#connectionStatus").textContent(), /検出が完了|Detection complete/i);
     assert.equal(await page.locator("#detectAllButton").isEnabled(), true);
     assert.equal(await page.locator("#settingsButton").isEnabled(), true);
   } finally {

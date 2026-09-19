@@ -152,7 +152,7 @@ test("SD-009 changing Japanese to English retranslates the open interface", { ti
     await page.locator('.gallery-item[data-id="sample"]').click();
     await page.waitForFunction(() => state.currentId === "sample");
     await page.evaluate(() => {
-      state.candidates = [{ id: "translation-candidate", className: "penis", source: "main", enabled: true, role: "apply", confidence: 0.9, expandPx: 0 }];
+      state.candidates = [{ id: "translation-candidate", labelToken: "penis", source: "main", enabled: true, role: "apply", confidence: 0.9, expandPx: 0 }];
       renderCandidates();
     });
     const candidateBefore = await page.locator(".candidate-toggle").first().getAttribute("aria-label");
@@ -163,12 +163,17 @@ test("SD-009 changing Japanese to English retranslates the open interface", { ti
     await page.locator("#settingsLanguage").evaluate((select) => {
       select.value = "en"; select.dispatchEvent(new Event("change", { bubbles: true }));
     });
-    await page.waitForFunction(() => document.documentElement.lang === "en");
+    await page.waitForFunction(() => document.documentElement.lang === "en"
+      && document.querySelector("#settingsDialogTitle")?.textContent === "Settings"
+      && document.querySelector("#modelHelpText")?.textContent === "An optional adult model. Sign in to Civitai.com and complete its age check, extract the ZIP, then convert its included .pt file to ONNX. Anonymous access may not work."
+      && document.querySelector(".candidate-toggle")?.getAttribute("aria-label") === "Enable Penis");
     assert.equal(await page.locator("#settingsDialogTitle").textContent(), "Settings");
     assert.equal(await page.locator("#settingsSaveButton").textContent(), "Save settings");
     assert.equal(await page.locator("#confirmCancel").textContent(), "Cancel");
-    assert.notEqual(await page.locator("#modelHelpText").textContent(), helpBefore);
-    assert.notEqual(await page.locator(".candidate-toggle").first().getAttribute("aria-label"), candidateBefore);
+    assert.equal(await page.locator("#modelHelpText").textContent(), "An optional adult model. Sign in to Civitai.com and complete its age check, extract the ZIP, then convert its included .pt file to ONNX. Anonymous access may not work.");
+    assert.equal(await page.locator(".candidate-toggle").first().getAttribute("aria-label"), "Enable Penis");
+    assert.notEqual(helpBefore, "An optional adult model. Sign in to Civitai.com and complete its age check, extract the ZIP, then convert its included .pt file to ONNX. Anonymous access may not work.");
+    assert.notEqual(candidateBefore, "Enable Penis");
     assert.equal(await page.locator("#modelHelpDialog").evaluate((dialog) => dialog.open), true);
   });
 });
