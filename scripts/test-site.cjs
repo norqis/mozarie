@@ -60,13 +60,14 @@ test("the rebuilt product page is complete without JavaScript and has no horizon
   let browser;
   try {
     browser = await chromium.launch({ headless: true });
+    let boundaryTypography;
     for (const viewport of viewports) {
       const context = await browser.newContext({ javaScriptEnabled: false, viewport });
       await context.route("**/*", localOnly(site));
       const page = await context.newPage();
       assert.equal((await page.goto(`${site.url}/`, { waitUntil: "load" })).status(), 200);
       assert.equal(await page.title(), "Mozarie | 自動検出・ブラシ編集・一括保存に対応したモザイク加工ソフト");
-      assert.equal(await page.locator("h1").innerText(), "検出から保存まで、\nひとつの画面で。");
+      assert.equal(await page.locator("h1").textContent(), "検出から保存まで、ひとつの画面で。");
       assert.equal(await page.locator('meta[name="description"]').getAttribute("content"), "Mozarieは、モザイク自動検出、ブラシツール、複数画像の一括保存、プロジェクトごとの履歴保持に対応したWindowsアプリです。");
       assert.equal(await page.locator('link[rel="canonical"]').getAttribute("href"), canonicalUrl);
       assert.equal(await page.locator('meta[name="google-site-verification"]').getAttribute("content"), "UrWwBw6iDkiGPFlWk3S4jrSsP7YfkvctuNVveYOJd_o");
@@ -93,6 +94,16 @@ test("the rebuilt product page is complete without JavaScript and has no horizon
         const lineHeight = Number.parseFloat(style.lineHeight);
         return style.whiteSpace === "nowrap" && chunk.getBoundingClientRect().height <= lineHeight + 1;
       })), true, `display headings only wrap at semantic boundaries at ${viewport.width}px`);
+      const typography = await page.evaluate(() => ({
+        hero: Number.parseFloat(getComputedStyle(document.querySelector("h1")).fontSize),
+        feature: Number.parseFloat(getComputedStyle(document.querySelector(".story h2")).fontSize),
+      }));
+      if (viewport.width === 700) boundaryTypography = typography;
+      if (viewport.width === 701) {
+        assert.ok(boundaryTypography, "700px typography was measured before 701px");
+        assert.ok(Math.abs(typography.hero - boundaryTypography.hero) <= 1, `hero type remains continuous across 700/701px (${boundaryTypography.hero}/${typography.hero})`);
+        assert.ok(Math.abs(typography.feature - boundaryTypography.feature) <= 1, `feature type remains continuous across 700/701px (${boundaryTypography.feature}/${typography.feature})`);
+      }
       assert.equal(await page.locator(".feature-index, .sequence, .retained-items").count(), 0);
       assert.equal(await page.locator(".resume-flow").count(), 0);
       for (const forbidden of ["Undo", "Redo", "範囲を調整", "Mozarieを閉じる", "プロジェクトを再開", "保存した範囲と履歴から続ける"]) assert.equal(await page.locator("body").innerText().then((text) => text.includes(forbidden)), false, `${forbidden} is not product-page copy`);
@@ -107,9 +118,8 @@ test("the rebuilt product page is complete without JavaScript and has no horizon
       assert.equal(await page.locator("[data-gallery-caption]").innerText(), "自動検出した候補を、処理結果と適用範囲で確認できます。");
       assert.equal(await page.locator("#final-cta-title").textContent(), "Mozarieで、画像をまとめて仕上げる。");
       assert.equal(await page.getByRole("link", { name: "最新版をダウンロード", exact: true }).count(), 2);
-      assert.equal(await page.getByRole("link", { name: "GitHubを見る", exact: true }).count(), 2);
+      assert.equal(await page.getByRole("link", { name: "GitHubを見る", exact: true }).count(), 0);
       assert.equal(await page.getByRole("link", { name: "最新版をダウンロード", exact: true }).first().getAttribute("href"), "https://github.com/norqis/mozarie/releases/latest");
-      assert.equal(await page.getByRole("link", { name: "GitHubを見る", exact: true }).first().getAttribute("href"), "https://github.com/norqis/mozarie");
       assert.equal(await page.getByRole("link", { name: "English README", exact: true }).getAttribute("href"), "https://github.com/norqis/mozarie/blob/main/README.en.md");
       const heroDownload = page.getByRole("link", { name: "最新版をダウンロード", exact: true }).first();
       await heroDownload.focus();
@@ -332,6 +342,19 @@ test("preview buttons and carousel geometry work across supported viewports", { 
       assert.equal(page.url(), url, "preview does not navigate");
       await page.getByRole("button", { name: "拡大表示を閉じる" }).click();
       assert.equal(await opener.evaluate((element) => document.activeElement === element), true);
+      if (viewport.width === 1440) {
+        const previews = page.locator("[data-feature-open]");
+        await page.keyboard.press("Tab");
+        assert.equal(await previews.nth(1).evaluate((element) => document.activeElement === element), true, "keyboard reaches the dark feature");
+        assert.equal(await previews.nth(1).evaluate((element) => getComputedStyle(element).outlineColor), "rgb(114, 214, 173)", "dark feature uses the light focus color");
+        await page.keyboard.press("Shift+Tab");
+        assert.equal(await previews.nth(0).evaluate((element) => document.activeElement === element), true, "keyboard returns to the first light feature");
+        assert.equal(await previews.nth(0).evaluate((element) => getComputedStyle(element).outlineColor), "rgb(36, 92, 72)", "first light feature uses the dark focus color");
+        await page.keyboard.press("Tab");
+        await page.keyboard.press("Tab");
+        assert.equal(await previews.nth(2).evaluate((element) => document.activeElement === element), true, "keyboard reaches the second light feature");
+        assert.equal(await previews.nth(2).evaluate((element) => getComputedStyle(element).outlineColor), "rgb(36, 92, 72)", "second light feature uses the dark focus color");
+      }
       assert.equal(await page.locator("html").evaluate((element) => element.scrollWidth <= element.clientWidth), true, `no horizontal overflow at ${viewport.width}px`);
       await context.close();
     }
@@ -372,7 +395,7 @@ test("each feature preview opens its original image, keeps the gallery stopped, 
         await dialog.waitFor({ state: "hidden" });
         await closeEvent;
         assert.equal(await opener.evaluate((element) => document.activeElement === element), true);
-        await page.getByRole("link", { name: "GitHubを見る", exact: true }).first().focus();
+        await page.getByRole("link", { name: "GitHub", exact: true }).focus();
         await page.clock.runFor(6000);
         assert.notEqual(await activeImage(page).getAttribute("src"), activeWhileOpen, `feature preview ${index + 1} restores autoplay after close`);
       }
