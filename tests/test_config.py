@@ -269,12 +269,18 @@ class SettingsTests(unittest.TestCase):
             }, "actions": {
                 key: value for key, value in defaults["shortcuts"]["actions"].items() if key != "removeImage"
             }}}
-            legacy["shortcuts"]["bindings"]["previous"] = "Delete"
+            legacy["shortcuts"]["bindings"]["previous"] = " Delete "
             (config / "local.json").write_text(json.dumps(legacy), encoding="utf-8")
-            settings = SettingsStore(root).load()
+            store = SettingsStore(root)
+            settings = store.load()
             self.assertEqual(settings["shortcuts"]["bindings"]["previous"], "Delete")
             self.assertEqual(settings["shortcuts"]["bindings"]["removeImage"], "Ctrl+Delete")
             self.assertFalse(settings["shortcuts"]["actions"]["removeImage"])
+            store.save(settings)
+            reloaded = SettingsStore(root).load()
+            self.assertEqual(reloaded["shortcuts"]["bindings"]["previous"], "Delete")
+            self.assertEqual(reloaded["shortcuts"]["bindings"]["removeImage"], "Ctrl+Delete")
+            self.assertFalse(reloaded["shortcuts"]["actions"]["removeImage"])
 
     def test_failed_atomic_replace_keeps_the_previous_local_json(self):
         with tempfile.TemporaryDirectory() as directory:

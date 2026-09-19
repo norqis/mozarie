@@ -665,11 +665,12 @@ class MozarieTests(unittest.TestCase):
             with state.workspace_store._connect() as db:
                 self.assertEqual(db.execute("SELECT COUNT(*) AS count FROM history_entries WHERE image_id=?", (image_id,)).fetchone()["count"], history_before + 1)
 
-    def test_detect_and_boundary_candidates_receive_the_current_padding_default(self):
+    def test_sd_127_detect_and_boundary_candidates_receive_distinct_apply_and_exclude_padding(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory); Image.new("RGB", (20, 12), "white").save(root / "source.png")
             state = self.new_state(); image_id = state.set_root(str(root))[0]["id"]; record = state.image_for_id(image_id)
             state.settings["detection"]["default_candidate_padding_px"] = 4; state._active_detection_default_padding = 4
+            state.settings["detection"]["default_exclude_candidate_padding_px"] = 11; state._active_detection_default_exclude_padding = 11
             mask = np.full((12, 20), 255, dtype=np.uint8)
             segments = [{"class_name": "penis", "confidence": .9, "mask": mask, "source": "target",
                          "image_exclusions": {"hand": mask}, "metadata_exclusions": {"fluid": mask}, "exclusions": {"hand": mask}}]
@@ -679,7 +680,7 @@ class MozarieTests(unittest.TestCase):
                  patch.object(state, "_finalize_exclusions", side_effect=lambda _rgb, items, *_args, **_kwargs: items):
                 detected = state._detect_image(Mock(), record, .5)
             self.assertEqual([(item.role.value, item.label_token, item.expand_px) for item in detected], [
-                ("exclude", "hand", 0), ("exclude", "fluid", 0), ("apply", "penis", 4), ("exclude", "hand", 0),
+                ("exclude", "hand", 11), ("exclude", "fluid", 11), ("apply", "penis", 4), ("exclude", "hand", 11),
             ])
             state.settings["detection"]["default_candidate_padding_px"] = 7; state._active_detection_default_padding = 7
             with patch.object(state, "_detect_arbitrated_segments", return_value=segments), \
@@ -687,8 +688,8 @@ class MozarieTests(unittest.TestCase):
                  patch.object(state, "_attach_hand_evidence", side_effect=lambda items, *_args: items), \
                  patch.object(state, "_finalize_exclusions", side_effect=lambda _rgb, items, *_args, **_kwargs: items):
                 refreshed = state._detect_image(Mock(), record, .5)
-            self.assertEqual([item.expand_px for item in detected], [0, 0, 4, 0])
-            self.assertEqual([item.expand_px for item in refreshed], [0, 0, 7, 0])
+            self.assertEqual([item.expand_px for item in detected], [11, 11, 4, 11])
+            self.assertEqual([item.expand_px for item in refreshed], [11, 11, 7, 11])
             predictor = Mock(); predictor.predict.return_value = (np.asarray([mask > 0]), np.asarray([.9]), None)
             boundary_segment = [{"class_name": "penis", "mask": mask, "source": "boundary", "image_exclusions": {"hand": mask}, "exclusions": {"fluid": mask}}]
             with patch.object(state, "_sam_predictor_for", return_value=predictor), \
@@ -696,7 +697,7 @@ class MozarieTests(unittest.TestCase):
                  patch.object(state, "_finalize_exclusions", return_value=boundary_segment):
                 boundary = state.add_boundary_candidate(image_id, {"roi": {"left": 0, "top": 0, "right": 20, "bottom": 12}, "point": {"x": 10, "y": 6}})
             self.assertEqual([(item["role"], item["labelToken"], item["expandPx"]) for item in boundary["candidates"]], [
-                ("apply", "boundary", 7), ("exclude", "hand", 0), ("exclude", "fluid", 0),
+                ("apply", "boundary", 7), ("exclude", "hand", 11), ("exclude", "fluid", 11),
             ])
 
     def test_detector_epoch_stat_and_explicit_padding_guards_preserve_catalogue_state(self):
