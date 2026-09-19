@@ -311,7 +311,9 @@ test("SD-125 an unknown browser deletion remains pending and does not commit the
     await resumePendingSourceDeletes();
   }, token);
   assert.deepEqual(await page.evaluate(async () => (await pendingSourceDeletes()).map((entry) => entry.browserEntries[0]?.state)), ["unknown"]);
-  assert.equal(fixture.sourceDeleteRequests.length, 0); assert.equal(await page.evaluate(() => state.images.length), 2);
+  assert.deepEqual(fixture.sourceDeleteRequests.map((request) => request.path), ["/api/catalog/delete-source/status"],
+    "unknown recovery checks durable status once without commit, cancel, or acknowledgement");
+  assert.equal(await page.evaluate(() => state.images.length), 2);
 });
 
 test("SD-125 a network disconnect during source deletion keeps the image and selection recoverable", { timeout: 60000 }, async () => {

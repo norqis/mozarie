@@ -140,9 +140,13 @@ function startFixtureServer() {
   let currentJob = { kind: "idle", state: "idle" };
   const saveTokens = new Map();
   const sourceDeletes = new Map();
+  let holdSourceDeletePrepare = false;
+  const pendingSourceDeletePrepares = [];
   const sourceDeleteRequests = [];
   let holdSourceDeleteClaim = false;
   let sourceDeleteCommitFailureIds = new Set();
+  let sourceDeleteCleanupPendingCount = 0;
+  let forceSourceDeletePrepareEmpty = false;
   const pendingSourceDeleteClaims = [];
   const saveRequests = [];
   const renameRequests = [];
@@ -314,9 +318,10 @@ function startFixtureServer() {
       const { imageIds = [], deleteToken, expectedProjectId, expectedCatalogGeneration } = JSON.parse(body);
       sourceDeleteRequests.push({ path: requestPath, expectedProjectId, expectedCatalogGeneration, headerProjectId: request.headers["x-mozarie-expected-project-id"], headerCatalogGeneration: request.headers["x-mozarie-expected-catalog-generation"] });
       if (expectedProjectId !== null || expectedCatalogGeneration !== catalogGeneration) { response.writeHead(409, { "Content-Type": "application/json" }); response.end(JSON.stringify({ error_code: "stale_catalog" })); return; }
-      const preparedImageIds = catalog.filter((image) => imageIds.includes(image.id)).map((image) => image.id);
+      const preparedImageIds = forceSourceDeletePrepareEmpty ? [] : catalog.filter((image) => imageIds.includes(image.id)).map((image) => image.id);
       const preparedSourceKinds = Object.fromEntries(catalog.filter((image) => preparedImageIds.includes(image.id)).map((image) => [image.id, image.sourceKind]));
       sourceDeletes.set(deleteToken, { state: "prepared", imageIds: preparedImageIds, preparedSourceKinds });
+      if (holdSourceDeletePrepare) await new Promise((resolve) => pendingSourceDeletePrepares.push(resolve));
       response.writeHead(200, { "Content-Type": "application/json" });
       response.end(JSON.stringify({ committed: false, deleteToken, state: "prepared", preparedImageIds, failed: [] }));
       return;
@@ -343,7 +348,7 @@ function startFixtureServer() {
       catalog = catalog.filter((image) => !removedImageIds.includes(image.id));
       if (removedImageIds.length) catalogGeneration += 1;
       const failed = imageIds.filter((imageId) => sourceDeleteCommitFailureIds.has(imageId)).map((imageId) => ({ imageId, reason: "source_changed" }));
-      const result = { state: "committed", images: catalog, catalogGeneration, removedImageIds, failed, prepareFailures: [], cleanupPendingCount: 0 };
+      const result = { state: "committed", images: catalog, catalogGeneration, removedImageIds, failed, prepareFailures: [], cleanupPendingCount: sourceDeleteCleanupPendingCount };
       if (operation) Object.assign(operation, result);
       response.writeHead(200, { "Content-Type": "application/json" }); response.end(JSON.stringify(result));
       return;
@@ -351,6 +356,7 @@ function startFixtureServer() {
     if ((requestPath === "/api/catalog/delete-source/status" || requestPath === "/api/catalog/delete-source/cancel" || requestPath === "/api/catalog/delete-source/release" || requestPath === "/api/catalog/delete-source/ack") && request.method === "POST") {
       let body = ""; for await (const chunk of request) body += chunk;
       const { deleteToken } = JSON.parse(body); const operation = sourceDeletes.get(deleteToken);
+      sourceDeleteRequests.push({ path: requestPath, deleteToken });
       if (!operation) { response.writeHead(409, { "Content-Type": "application/json" }); response.end(JSON.stringify({ error_code: "source_delete_not_prepared" })); return; }
       if (requestPath.endsWith("/cancel")) operation.state = "cancelled";
       if (requestPath.endsWith("/release")) operation.state = "prepared";
@@ -1366,14 +1372,14 @@ async function runDynamicProjectAndShortcutScenario(browser, fixtureUrl, setting
     await page.locator("#settingsSaveButton").click(); await page.waitForFunction(() => document.querySelector("#settingsResult").textContent === "設定を保存しました。"
       && !document.querySelector("#settingsSaveButton").disabled && state.settings?.shortcuts?.actions?.renameImage === false);
     assert.deepEqual(settingsPayloads.slice(renameDisabledSaveStart).filter((payload) => payload.search === "?status=0").map((payload) => payload.body.shortcuts.actions.renameImage), [false], "saving the disabled rename action posts its exact action state");
-    await page.locator("#settingsCloseButton").click(); await pressShortcut(shortcutBindings.renameImage);
+    await page.locator("#settingsCloseButton").click(); await page.locator('.gallery-item[data-id="sample"]').press(shortcutBindings.renameImage);
     assert.equal(await page.locator("#renameImageDialog").evaluate((dialog) => dialog.open), false, "a disabled custom rename shortcut does not open the dialog");
     await page.locator("#settingsButton").click(); await page.locator("#settingsTabShortcuts").click(); await page.locator('[data-shortcut-enabled="renameImage"]').check();
     const renameEnabledSaveStart = settingsPayloads.length;
     await page.locator("#settingsSaveButton").click(); await page.waitForFunction(() => document.querySelector("#settingsResult").textContent === "設定を保存しました。"
       && !document.querySelector("#settingsSaveButton").disabled && state.settings?.shortcuts?.actions?.renameImage === true);
     assert.deepEqual(settingsPayloads.slice(renameEnabledSaveStart).filter((payload) => payload.search === "?status=0").map((payload) => payload.body.shortcuts.actions.renameImage), [true], "saving the re-enabled rename action posts its exact action state");
-    await page.locator("#settingsCloseButton").click(); await pressShortcut(shortcutBindings.renameImage);
+    await page.locator("#settingsCloseButton").click(); await page.locator('.gallery-item[data-id="sample"]').press(shortcutBindings.renameImage);
     await page.waitForFunction(() => document.querySelector("#renameImageDialog").open && state.renameImage?.imageId === "sample");
     await page.locator("#renameImageCancel").click();
 

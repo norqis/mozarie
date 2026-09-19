@@ -255,10 +255,13 @@ test("missing originals and failed thumbnails stay local and recover only on exp
   const failedThumbnailId = images[2].id;
   let missingOriginalRequests = 0;
   let failedThumbnailRequests = 0;
+  let resolveFirstMissingOriginal;
+  const firstMissingOriginalCompleted = new Promise((resolve) => { resolveFirstMissingOriginal = resolve; });
   await openFixture(images, async ({ page, context, url }) => {
     await context.route(`**/api/image/${missingId}*`, async (route) => {
       missingOriginalRequests += 1;
       await route.fulfill({ status: 404, contentType: "application/json", body: JSON.stringify({ error_code: "image_not_found" }) });
+      if (missingOriginalRequests === 1) resolveFirstMissingOriginal();
     });
     await context.route(`**/api/thumbnail/${failedThumbnailId}*`, async (route) => {
       failedThumbnailRequests += 1;
@@ -278,6 +281,7 @@ test("missing originals and failed thumbnails stay local and recover only on exp
 
     await page.locator(`.gallery-item[data-id="${images[0].id}"]`).click();
     await page.waitForFunction((id) => state.currentId === id && state.currentImage, images[0].id);
+    await firstMissingOriginalCompleted;
     const beforeMissingSelection = missingOriginalRequests;
     await page.locator(`.gallery-item[data-id="${missingId}"]`).click();
     await page.waitForFunction(() => document.querySelector("#errorDialog").open);
