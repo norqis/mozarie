@@ -18,7 +18,7 @@
       "observation": "設定タブと保存・初期値・閉じるを表示する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state"
+        "node:tests/test_settings_dialog_e2e.cjs::SD-001 settings dialog exposes its tabs and footer actions"
       ]
     },
     {
@@ -29,7 +29,7 @@
       "observation": "一般の項目だけが表示され、タブの選択表示が移る",
       "status": "automated",
       "testIds": [
-        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state"
+        "node:tests/test_settings_dialog_e2e.cjs::SD-002 general tab exclusively exposes its panel"
       ]
     },
     {
@@ -40,7 +40,7 @@
       "observation": "検出の項目だけが表示され、タブの選択表示が移る",
       "status": "automated",
       "testIds": [
-        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state"
+        "node:tests/test_settings_dialog_e2e.cjs::SD-003 models tab exclusively exposes its panel"
       ]
     },
     {
@@ -51,7 +51,7 @@
       "observation": "各モデルのスイッチ・説明・準備操作を表示する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state"
+        "node:tests/test_settings_dialog_e2e.cjs::SD-004 detection tab exposes every model switch help and preparation action"
       ]
     },
     {
@@ -62,7 +62,7 @@
       "observation": "表示・操作の項目だけが表示され、タブの選択表示が移る",
       "status": "automated",
       "testIds": [
-        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state"
+        "node:tests/test_settings_dialog_e2e.cjs::SD-005 display tab exclusively exposes its panel"
       ]
     },
     {
@@ -73,7 +73,7 @@
       "observation": "ショートカットの項目だけが表示され、タブの選択表示が移る",
       "status": "automated",
       "testIds": [
-        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state"
+        "node:tests/test_settings_dialog_e2e.cjs::SD-006 shortcuts tab exclusively exposes its panel"
       ]
     },
     {
@@ -84,7 +84,7 @@
       "observation": "確認の項目だけが表示され、タブの選択表示が移る",
       "status": "automated",
       "testIds": [
-        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state"
+        "node:tests/test_settings_dialog_e2e.cjs::SD-007 confirm tab exclusively exposes its panel"
       ]
     },
     {
@@ -95,7 +95,7 @@
       "observation": "情報の項目だけが表示され、タブの選択表示が移る",
       "status": "automated",
       "testIds": [
-        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state"
+        "node:tests/test_settings_dialog_e2e.cjs::SD-008 info tab exclusively exposes its panel"
       ]
     },
     {
@@ -106,7 +106,7 @@
       "observation": "開いている画面と候補・ダイアログの表示が英語へ切り替わる",
       "status": "automated",
       "testIds": [
-        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state"
+        "node:tests/test_settings_dialog_e2e.cjs::SD-009 changing Japanese to English retranslates the open interface"
       ]
     },
     {
@@ -117,7 +117,7 @@
       "observation": "画面が日本語へ切り替わり、翻訳キーを表示しない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state"
+        "node:tests/test_settings_dialog_e2e.cjs::SD-010 changing English to Japanese leaves no translation key visible"
       ]
     },
     {
@@ -128,7 +128,7 @@
       "observation": "保存完了後に設定を開き直すと保存値が表示される",
       "status": "automated",
       "testIds": [
-        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state"
+        "node:tests/test_settings_dialog_e2e.cjs::SD-011 saved settings are shown after closing and reopening"
       ]
     },
     {
@@ -139,7 +139,7 @@
       "observation": "各保存値を復元する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state"
+        "node:tests/test_settings_dialog_e2e.cjs::SD-012 saved settings survive a browser reload"
       ]
     },
     {
@@ -150,7 +150,7 @@
       "observation": "初期値が表示され、保存後の再表示にも反映される",
       "status": "automated",
       "testIds": [
-        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state"
+        "node:tests/test_settings_dialog_e2e.cjs::SD-013 resetting settings replaces edited controls with returned defaults"
       ]
     },
     {
@@ -161,7 +161,7 @@
       "observation": "設定画面が消えて元の画像へ戻る",
       "status": "automated",
       "testIds": [
-        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state"
+        "node:tests/test_settings_dialog_e2e.cjs::SD-014 close returns to the editor image"
       ]
     },
     {
@@ -172,7 +172,7 @@
       "observation": "設定画面が消え、背景の描画を実行しない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state"
+        "node:tests/test_settings_dialog_e2e.cjs::SD-015 Escape closes settings without dispatching an editor pointer action"
       ]
     },
     {
@@ -934,8 +934,7 @@
       "observation": "数値表示と送信値が一致する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_app_core_detection_coverage.cjs::application startup, catalog state, and detection controls",
-        "node:tests/test_detection_refresh_runtime.cjs::detection refresh runtime contracts"
+        "node:tests/test_detection_dialog_contracts.cjs::SD-049 editor confidence slider keeps display and request value identical"
       ]
     },
     {
@@ -946,8 +945,7 @@
       "observation": "スライダーと数値が一致し、その値で開始する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_app_core_detection_coverage.cjs::application startup, catalog state, and detection controls",
-        "node:tests/test_detection_refresh_runtime.cjs::detection refresh runtime contracts"
+        "node:tests/test_detection_dialog_contracts.cjs::SD-050 all-image confidence number synchronizes the slider and start request"
       ]
     },
     {
@@ -970,8 +968,7 @@
       "observation": "現在画像だけを対象に進捗画面を表示し、完了後に編集できる",
       "status": "automated",
       "testIds": [
-        "node:tests/test_app_core_detection_coverage.cjs::application startup, catalog state, and detection controls",
-        "node:tests/test_detection_refresh_runtime.cjs::detection refresh runtime contracts"
+        "node:tests/test_detection_dialog_contracts.cjs::SD-052 current-image detection targets only the selected image and restores editing"
       ]
     },
     {
@@ -982,8 +979,7 @@
       "observation": "非表示を除く対象数と設定を表示し、開始前は画像を処理しない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_app_core_detection_coverage.cjs::application startup, catalog state, and detection controls",
-        "node:tests/test_detection_refresh_runtime.cjs::detection refresh runtime contracts"
+        "node:tests/test_detection_dialog_contracts.cjs::SD-053 all-image dialog counts only processable non-hidden images before start"
       ]
     },
     {
@@ -994,8 +990,7 @@
       "observation": "設定画面が閉じ、検出を実行しない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_app_core_detection_coverage.cjs::application startup, catalog state, and detection controls",
-        "node:tests/test_detection_refresh_runtime.cjs::detection refresh runtime contracts"
+        "node:tests/test_detection_dialog_contracts.cjs::SD-054 cancelling the all-image dialog starts no detection"
       ]
     },
     {
@@ -1483,8 +1478,7 @@
       "observation": "範囲表示の不透明度だけが変わり、保存画像のモザイク範囲は変わらない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
-        "node:tests/test_editor_masks_behavior.cjs::editor masks, fill, candidates, and history"
+        "node:tests/test_settings_dialog_e2e.cjs::SD-072 overlay opacity changes display settings without changing mask ownership"
       ]
     },
     {
@@ -1495,8 +1489,7 @@
       "observation": "編集中画像のモザイク表示が切り替わり、保存対象範囲は保持する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
-        "node:tests/test_editor_masks_behavior.cjs::editor masks, fill, candidates, and history"
+        "node:tests/test_settings_dialog_e2e.cjs::SD-073 mosaic preview switch changes preview state without changing saved mask targets"
       ]
     },
     {
@@ -1507,8 +1500,7 @@
       "observation": "変更後に追加される除外候補に初期値を適用し、既存候補を一括変更しない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
-        "node:tests/test_editor_masks_behavior.cjs::editor masks, fill, candidates, and history"
+        "python:tests.test_server.MozarieTests.test_sd_074_exclusion_default_applies_only_to_new_candidates"
       ]
     },
     {
@@ -1519,8 +1511,7 @@
       "observation": "描画と履歴位置が変わらない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_app_core_detection_coverage.cjs::application startup, catalog state, and detection controls",
-        "node:tests/test_project_history_browser_e2e.cjs::history completion recreates every candidate control after success, no-op, and failure"
+        "node:tests/test_interaction_coverage.cjs::SD-075 disabled shortcuts leave history keys inert while button actions remain callable"
       ]
     },
     {
@@ -1531,8 +1522,7 @@
       "observation": "画面のUndoボタンは使用できる",
       "status": "automated",
       "testIds": [
-        "node:tests/test_app_core_detection_coverage.cjs::application startup, catalog state, and detection controls",
-        "node:tests/test_project_history_browser_e2e.cjs::history completion recreates every candidate control after success, no-op, and failure"
+        "node:tests/test_interaction_coverage.cjs::SD-075 disabled shortcuts leave history keys inert while button actions remain callable"
       ]
     },
     {
@@ -1543,8 +1533,7 @@
       "observation": "キーではRedoせず、画面のRedoボタンでだけ描画を復元できる",
       "status": "automated",
       "testIds": [
-        "node:tests/test_app_core_detection_coverage.cjs::application startup, catalog state, and detection controls",
-        "node:tests/test_project_history_browser_e2e.cjs::history completion recreates every candidate control after success, no-op, and failure"
+        "node:tests/test_interaction_coverage.cjs::SD-103 global shortcut disable blocks redo keys but not the redo callable"
       ]
     },
     {
@@ -1555,8 +1544,7 @@
       "observation": "表示画像と画像番号が変わらない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_app_core_detection_coverage.cjs::application startup, catalog state, and detection controls",
-        "node:tests/test_project_history_browser_e2e.cjs::history completion recreates every candidate control after success, no-op, and failure"
+        "node:tests/test_interaction_coverage.cjs::SD-104 global shortcut disable blocks image arrow navigation but not button navigation"
       ]
     },
     {
@@ -1567,8 +1555,7 @@
       "observation": "画面の前へ・次へボタンは使用できる",
       "status": "automated",
       "testIds": [
-        "node:tests/test_app_core_detection_coverage.cjs::application startup, catalog state, and detection controls",
-        "node:tests/test_project_history_browser_e2e.cjs::history completion recreates every candidate control after success, no-op, and failure"
+        "node:tests/test_interaction_coverage.cjs::SD-104 global shortcut disable blocks image arrow navigation but not button navigation"
       ]
     },
     {
@@ -1651,9 +1638,7 @@
       "observation": "対象と元画像ファイルを保持する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_source_delete_e2e.cjs::Delete shortcut keeps a durable source-delete intent through claim and acknowledges the committed receipt",
-        "node:tests/test_source_delete_e2e.cjs::source-delete confirmation can be skipped, restored in settings, and cancelled without changing the preference",
-        "node:tests/test_source_delete_e2e.cjs::visible delete control selects next for first and middle, previous for last, and clears every view after an all-image batch"
+        "node:tests/test_source_delete_e2e.cjs::source-delete confirmation can be skipped, restored in settings, and cancelled without changing the preference"
       ]
     },
     {
@@ -1664,8 +1649,6 @@
       "observation": "元画像ファイルと一覧・DB上の対象を完全削除し、次の表示対象へ移る",
       "status": "automated",
       "testIds": [
-        "node:tests/test_source_delete_e2e.cjs::Delete shortcut keeps a durable source-delete intent through claim and acknowledges the committed receipt",
-        "node:tests/test_source_delete_e2e.cjs::source-delete confirmation can be skipped, restored in settings, and cancelled without changing the preference",
         "node:tests/test_source_delete_e2e.cjs::visible delete control selects next for first and middle, previous for last, and clears every view after an all-image batch"
       ]
     },
@@ -1677,9 +1660,7 @@
       "observation": "Delete で削除・確認を開始しない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_source_delete_e2e.cjs::Delete shortcut keeps a durable source-delete intent through claim and acknowledges the committed receipt",
-        "node:tests/test_source_delete_e2e.cjs::source-delete confirmation can be skipped, restored in settings, and cancelled without changing the preference",
-        "node:tests/test_source_delete_e2e.cjs::visible delete control selects next for first and middle, previous for last, and clears every view after an all-image batch"
+        "node:tests/test_interaction_coverage.cjs::SD-113 disabled remove-image action ignores Delete"
       ]
     },
     {
@@ -1690,9 +1671,7 @@
       "observation": "Delete で削除・確認を開始しない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_source_delete_e2e.cjs::Delete shortcut keeps a durable source-delete intent through claim and acknowledges the committed receipt",
-        "node:tests/test_source_delete_e2e.cjs::source-delete confirmation can be skipped, restored in settings, and cancelled without changing the preference",
-        "node:tests/test_source_delete_e2e.cjs::visible delete control selects next for first and middle, previous for last, and clears every view after an all-image batch"
+        "node:tests/test_interaction_coverage.cjs::SD-114 global shortcut disable ignores Delete"
       ]
     },
     {
@@ -1703,9 +1682,7 @@
       "observation": "新しい割当だけが削除を開始する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_source_delete_e2e.cjs::Delete shortcut keeps a durable source-delete intent through claim and acknowledges the committed receipt",
-        "node:tests/test_source_delete_e2e.cjs::source-delete confirmation can be skipped, restored in settings, and cancelled without changing the preference",
-        "node:tests/test_source_delete_e2e.cjs::visible delete control selects next for first and middle, previous for last, and clears every view after an all-image batch"
+        "node:tests/test_interaction_coverage.cjs::SD-115 remapped remove-image key replaces Delete"
       ]
     },
     {
@@ -1716,9 +1693,7 @@
       "observation": "重複を案内し、複数操作を同時実行しない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_source_delete_e2e.cjs::Delete shortcut keeps a durable source-delete intent through claim and acknowledges the committed receipt",
-        "node:tests/test_source_delete_e2e.cjs::source-delete confirmation can be skipped, restored in settings, and cancelled without changing the preference",
-        "node:tests/test_source_delete_e2e.cjs::visible delete control selects next for first and middle, previous for last, and clears every view after an all-image batch"
+        "node:tests/test_settings_dialog_e2e.cjs::SD-116 duplicate delete binding is explained without dispatching multiple actions"
       ]
     },
     {
@@ -1729,9 +1704,7 @@
       "observation": "通常の編集・操作を妨げず、削除しない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_source_delete_e2e.cjs::Delete shortcut keeps a durable source-delete intent through claim and acknowledges the committed receipt",
-        "node:tests/test_source_delete_e2e.cjs::source-delete confirmation can be skipped, restored in settings, and cancelled without changing the preference",
-        "node:tests/test_source_delete_e2e.cjs::visible delete control selects next for first and middle, previous for last, and clears every view after an all-image batch"
+        "node:tests/test_interaction_coverage.cjs::SD-117 editable controls and a noncurrent card do not start deletion"
       ]
     },
     {
@@ -1742,9 +1715,7 @@
       "observation": "割当欄に Delete を記録し、画像を削除しない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_source_delete_e2e.cjs::Delete shortcut keeps a durable source-delete intent through claim and acknowledges the committed receipt",
-        "node:tests/test_source_delete_e2e.cjs::source-delete confirmation can be skipped, restored in settings, and cancelled without changing the preference",
-        "node:tests/test_source_delete_e2e.cjs::visible delete control selects next for first and middle, previous for last, and clears every view after an all-image batch"
+        "node:tests/test_settings_dialog_e2e.cjs::SD-118 shortcut assignment records Delete without deleting an image"
       ]
     },
     {
@@ -1755,9 +1726,7 @@
       "observation": "ダイアログ外の削除を開始しない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_source_delete_e2e.cjs::Delete shortcut keeps a durable source-delete intent through claim and acknowledges the committed receipt",
-        "node:tests/test_source_delete_e2e.cjs::source-delete confirmation can be skipped, restored in settings, and cancelled without changing the preference",
-        "node:tests/test_source_delete_e2e.cjs::visible delete control selects next for first and middle, previous for last, and clears every view after an all-image batch"
+        "node:tests/test_interaction_coverage.cjs::SD-119 open dialogs suppress remove-image shortcuts"
       ]
     },
     {
@@ -1768,9 +1737,7 @@
       "observation": "画像を削除しない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_source_delete_e2e.cjs::Delete shortcut keeps a durable source-delete intent through claim and acknowledges the committed receipt",
-        "node:tests/test_source_delete_e2e.cjs::source-delete confirmation can be skipped, restored in settings, and cancelled without changing the preference",
-        "node:tests/test_source_delete_e2e.cjs::visible delete control selects next for first and middle, previous for last, and clears every view after an all-image batch"
+        "node:tests/test_interaction_coverage.cjs::SD-120 overview mode suppresses remove-image shortcuts"
       ]
     },
     {
@@ -1781,9 +1748,7 @@
       "observation": "削除を開始しない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_source_delete_e2e.cjs::Delete shortcut keeps a durable source-delete intent through claim and acknowledges the committed receipt",
-        "node:tests/test_source_delete_e2e.cjs::source-delete confirmation can be skipped, restored in settings, and cancelled without changing the preference",
-        "node:tests/test_source_delete_e2e.cjs::visible delete control selects next for first and middle, previous for last, and clears every view after an all-image batch"
+        "node:tests/test_interaction_coverage.cjs::SD-121 busy and import states suppress remove-image shortcuts"
       ]
     },
     {
@@ -1794,9 +1759,7 @@
       "observation": "削除を開始しない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_source_delete_e2e.cjs::Delete shortcut keeps a durable source-delete intent through claim and acknowledges the committed receipt",
-        "node:tests/test_source_delete_e2e.cjs::source-delete confirmation can be skipped, restored in settings, and cancelled without changing the preference",
-        "node:tests/test_source_delete_e2e.cjs::visible delete control selects next for first and middle, previous for last, and clears every view after an all-image batch"
+        "node:tests/test_interaction_coverage.cjs::SD-122 read-only pending and changed-source states suppress deletion"
       ]
     },
     {
@@ -1807,9 +1770,7 @@
       "observation": "最初の有効な1回だけ削除確認を開き、繰返しで削除要求を増やさない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_source_delete_e2e.cjs::Delete shortcut keeps a durable source-delete intent through claim and acknowledges the committed receipt",
-        "node:tests/test_source_delete_e2e.cjs::source-delete confirmation can be skipped, restored in settings, and cancelled without changing the preference",
-        "node:tests/test_source_delete_e2e.cjs::visible delete control selects next for first and middle, previous for last, and clears every view after an all-image batch"
+        "node:tests/test_interaction_coverage.cjs::SD-123 held Delete reports one repeat guard instead of another deletion"
       ]
     },
     {
@@ -1820,9 +1781,7 @@
       "observation": "削除せず、画面と選択状態を整合させる",
       "status": "automated",
       "testIds": [
-        "node:tests/test_source_delete_e2e.cjs::Delete shortcut keeps a durable source-delete intent through claim and acknowledges the committed receipt",
-        "node:tests/test_source_delete_e2e.cjs::source-delete confirmation can be skipped, restored in settings, and cancelled without changing the preference",
-        "node:tests/test_source_delete_e2e.cjs::visible delete control selects next for first and middle, previous for last, and clears every view after an all-image batch"
+        "node:tests/test_source_delete_e2e.cjs::batch source deletion keeps the current canvas when another selected image fails, then moves only after the current image commits"
       ]
     },
     {
@@ -1833,9 +1792,7 @@
       "observation": "画面と選択状態を整合させる",
       "status": "automated",
       "testIds": [
-        "node:tests/test_source_delete_e2e.cjs::Delete shortcut keeps a durable source-delete intent through claim and acknowledges the committed receipt",
-        "node:tests/test_source_delete_e2e.cjs::source-delete confirmation can be skipped, restored in settings, and cancelled without changing the preference",
-        "node:tests/test_source_delete_e2e.cjs::visible delete control selects next for first and middle, previous for last, and clears every view after an all-image batch"
+        "node:tests/test_source_delete_e2e.cjs::unknown browser-source deletion remains recoverable instead of silently committing or cancelling"
       ]
     },
     {
@@ -1846,9 +1803,7 @@
       "observation": "既存の削除確認を開く",
       "status": "automated",
       "testIds": [
-        "node:tests/test_source_delete_e2e.cjs::Delete shortcut keeps a durable source-delete intent through claim and acknowledges the committed receipt",
-        "node:tests/test_source_delete_e2e.cjs::source-delete confirmation can be skipped, restored in settings, and cancelled without changing the preference",
-        "node:tests/test_source_delete_e2e.cjs::visible delete control selects next for first and middle, previous for last, and clears every view after an all-image batch"
+        "node:tests/test_source_delete_e2e.cjs::Delete shortcut keeps a durable source-delete intent through claim and acknowledges the committed receipt"
       ]
     },
     {
@@ -1859,9 +1814,7 @@
       "observation": "確認後は対象画像だけを削除する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_source_delete_e2e.cjs::Delete shortcut keeps a durable source-delete intent through claim and acknowledges the committed receipt",
-        "node:tests/test_source_delete_e2e.cjs::source-delete confirmation can be skipped, restored in settings, and cancelled without changing the preference",
-        "node:tests/test_source_delete_e2e.cjs::visible delete control selects next for first and middle, previous for last, and clears every view after an all-image batch"
+        "node:tests/test_source_delete_e2e.cjs::Delete shortcut keeps a durable source-delete intent through claim and acknowledges the committed receipt"
       ]
     },
     {
@@ -1872,9 +1825,7 @@
       "observation": "他のbutton、現在画像以外のカード、一覧表示、ダイアログ中では削除を開始しない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_source_delete_e2e.cjs::Delete shortcut keeps a durable source-delete intent through claim and acknowledges the committed receipt",
-        "node:tests/test_source_delete_e2e.cjs::source-delete confirmation can be skipped, restored in settings, and cancelled without changing the preference",
-        "node:tests/test_source_delete_e2e.cjs::visible delete control selects next for first and middle, previous for last, and clears every view after an all-image batch"
+        "node:tests/test_interaction_coverage.cjs::SD-126 current card allows Delete while other focus and dialogs block it"
       ]
     },
     {
@@ -1885,8 +1836,7 @@
       "observation": "有効な登録キーで対応操作を実行する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_app_core_detection_coverage.cjs::application startup, catalog state, and detection controls",
-        "node:tests/test_project_history_browser_e2e.cjs::history completion recreates every candidate control after success, no-op, and failure"
+        "node:tests/test_interaction_coverage.cjs::SD-076 registered shortcut invokes its action"
       ]
     },
     {
@@ -1897,8 +1847,7 @@
       "observation": "ONでは前へを実行し、OFFでは同じキーで実行しない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_app_core_detection_coverage.cjs::application startup, catalog state, and detection controls",
-        "node:tests/test_project_history_browser_e2e.cjs::history completion recreates every candidate control after success, no-op, and failure"
+        "node:tests/test_interaction_coverage.cjs::SD-077 previous shortcut obeys its per-action switch"
       ]
     },
     {
@@ -1909,8 +1858,7 @@
       "observation": "ONでは次へを実行し、OFFでは同じキーで実行しない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_app_core_detection_coverage.cjs::application startup, catalog state, and detection controls",
-        "node:tests/test_project_history_browser_e2e.cjs::history completion recreates every candidate control after success, no-op, and failure"
+        "node:tests/test_interaction_coverage.cjs::SD-078 next shortcut obeys its per-action switch"
       ]
     },
     {
@@ -1921,8 +1869,7 @@
       "observation": "ONでは前の表示画像を実行し、OFFでは同じキーで実行しない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_app_core_detection_coverage.cjs::application startup, catalog state, and detection controls",
-        "node:tests/test_project_history_browser_e2e.cjs::history completion recreates every candidate control after success, no-op, and failure"
+        "node:tests/test_interaction_coverage.cjs::SD-079 previous-visible shortcut obeys its per-action switch"
       ]
     },
     {
@@ -1933,8 +1880,7 @@
       "observation": "ONでは次の表示画像を実行し、OFFでは同じキーで実行しない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_app_core_detection_coverage.cjs::application startup, catalog state, and detection controls",
-        "node:tests/test_project_history_browser_e2e.cjs::history completion recreates every candidate control after success, no-op, and failure"
+        "node:tests/test_interaction_coverage.cjs::SD-080 next-visible shortcut obeys its per-action switch"
       ]
     },
     {
@@ -1945,8 +1891,7 @@
       "observation": "ONでは先頭を実行し、OFFでは同じキーで実行しない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_app_core_detection_coverage.cjs::application startup, catalog state, and detection controls",
-        "node:tests/test_project_history_browser_e2e.cjs::history completion recreates every candidate control after success, no-op, and failure"
+        "node:tests/test_interaction_coverage.cjs::SD-081 first shortcut obeys its per-action switch"
       ]
     },
     {
@@ -1957,8 +1902,7 @@
       "observation": "ONでは末尾を実行し、OFFでは同じキーで実行しない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_app_core_detection_coverage.cjs::application startup, catalog state, and detection controls",
-        "node:tests/test_project_history_browser_e2e.cjs::history completion recreates every candidate control after success, no-op, and failure"
+        "node:tests/test_interaction_coverage.cjs::SD-082 last shortcut obeys its per-action switch"
       ]
     },
     {
@@ -1969,8 +1913,7 @@
       "observation": "ONでは確認済みにして次へを実行し、OFFでは同じキーで実行しない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_app_core_detection_coverage.cjs::application startup, catalog state, and detection controls",
-        "node:tests/test_project_history_browser_e2e.cjs::history completion recreates every candidate control after success, no-op, and failure"
+        "node:tests/test_interaction_coverage.cjs::SD-083 review-and-next shortcut obeys its per-action switch"
       ]
     },
     {
@@ -1981,8 +1924,7 @@
       "observation": "ONでは一覧表示を実行し、OFFでは同じキーで実行しない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_app_core_detection_coverage.cjs::application startup, catalog state, and detection controls",
-        "node:tests/test_project_history_browser_e2e.cjs::history completion recreates every candidate control after success, no-op, and failure"
+        "node:tests/test_interaction_coverage.cjs::SD-084 overview shortcut obeys its per-action switch"
       ]
     },
     {
@@ -1993,8 +1935,7 @@
       "observation": "ONでは元に戻すを実行し、OFFでは同じキーで実行しない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_app_core_detection_coverage.cjs::application startup, catalog state, and detection controls",
-        "node:tests/test_project_history_browser_e2e.cjs::history completion recreates every candidate control after success, no-op, and failure"
+        "node:tests/test_interaction_coverage.cjs::SD-085 undo shortcut obeys its per-action switch"
       ]
     },
     {
@@ -2005,8 +1946,7 @@
       "observation": "ONではやり直すを実行し、OFFでは同じキーで実行しない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_app_core_detection_coverage.cjs::application startup, catalog state, and detection controls",
-        "node:tests/test_project_history_browser_e2e.cjs::history completion recreates every candidate control after success, no-op, and failure"
+        "node:tests/test_interaction_coverage.cjs::SD-086 redo shortcut obeys its per-action switch"
       ]
     },
     {
@@ -2017,8 +1957,7 @@
       "observation": "重複を案内し、競合したまま複数操作を同時実行しない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_app_core_detection_coverage.cjs::application startup, catalog state, and detection controls",
-        "node:tests/test_project_history_browser_e2e.cjs::history completion recreates every candidate control after success, no-op, and failure"
+        "node:tests/test_settings_dialog_e2e.cjs::SD-087 duplicate shortcut bindings are rejected before settings submission"
       ]
     },
     {
@@ -2029,8 +1968,7 @@
       "observation": "テキスト編集を行い、背後の画像移動・描画を実行しない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_app_core_detection_coverage.cjs::application startup, catalog state, and detection controls",
-        "node:tests/test_project_history_browser_e2e.cjs::history completion recreates every candidate control after success, no-op, and failure"
+        "node:tests/test_interaction_coverage.cjs::SD-088 editable controls consume text keys without invoking navigation"
       ]
     },
     {
@@ -2041,8 +1979,7 @@
       "observation": "ONでは実行前に確認し、OFFでは確認を省略する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
-        "node:tests/test_source_delete_e2e.cjs::source-delete confirmation can be skipped, restored in settings, and cancelled without changing the preference"
+        "node:tests/test_interaction_coverage.cjs::SD-089 clear-masks confirmation changes only the prompt decision"
       ]
     },
     {
@@ -2053,8 +1990,7 @@
       "observation": "実行対象は同じ",
       "status": "automated",
       "testIds": [
-        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
-        "node:tests/test_source_delete_e2e.cjs::source-delete confirmation can be skipped, restored in settings, and cancelled without changing the preference"
+        "node:tests/test_interaction_coverage.cjs::SD-089 clear-masks confirmation changes only the prompt decision"
       ]
     },
     {
@@ -2065,8 +2001,7 @@
       "observation": "ONでは実行前に確認し、OFFでは確認を省略する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
-        "node:tests/test_source_delete_e2e.cjs::source-delete confirmation can be skipped, restored in settings, and cancelled without changing the preference"
+        "node:tests/test_interaction_coverage.cjs::SD-090 clear-catalog confirmation changes only the prompt decision"
       ]
     },
     {
@@ -2077,8 +2012,7 @@
       "observation": "実行対象は同じ",
       "status": "automated",
       "testIds": [
-        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
-        "node:tests/test_source_delete_e2e.cjs::source-delete confirmation can be skipped, restored in settings, and cancelled without changing the preference"
+        "node:tests/test_interaction_coverage.cjs::SD-090 clear-catalog confirmation changes only the prompt decision"
       ]
     },
     {
@@ -2089,8 +2023,7 @@
       "observation": "ONでは実行前に確認し、OFFでは確認を省略する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
-        "node:tests/test_source_delete_e2e.cjs::source-delete confirmation can be skipped, restored in settings, and cancelled without changing the preference"
+        "node:tests/test_interaction_coverage.cjs::SD-091 remove-image confirmation changes only the prompt decision"
       ]
     },
     {
@@ -2101,8 +2034,7 @@
       "observation": "実行対象は同じ",
       "status": "automated",
       "testIds": [
-        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
-        "node:tests/test_source_delete_e2e.cjs::source-delete confirmation can be skipped, restored in settings, and cancelled without changing the preference"
+        "node:tests/test_interaction_coverage.cjs::SD-091 remove-image confirmation changes only the prompt decision"
       ]
     },
     {
@@ -2113,8 +2045,7 @@
       "observation": "ONでは実行前に確認し、OFFでは確認を省略する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
-        "node:tests/test_source_delete_e2e.cjs::source-delete confirmation can be skipped, restored in settings, and cancelled without changing the preference"
+        "node:tests/test_interaction_coverage.cjs::SD-092 candidate-delete confirmation changes only the prompt decision"
       ]
     },
     {
@@ -2125,8 +2056,7 @@
       "observation": "実行対象は同じ",
       "status": "automated",
       "testIds": [
-        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
-        "node:tests/test_source_delete_e2e.cjs::source-delete confirmation can be skipped, restored in settings, and cancelled without changing the preference"
+        "node:tests/test_interaction_coverage.cjs::SD-092 candidate-delete confirmation changes only the prompt decision"
       ]
     },
     {
@@ -2137,8 +2067,7 @@
       "observation": "ONでは実行前に確認し、OFFでは確認を省略する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
-        "node:tests/test_source_delete_e2e.cjs::source-delete confirmation can be skipped, restored in settings, and cancelled without changing the preference"
+        "node:tests/test_interaction_coverage.cjs::SD-093 candidate-role confirmation changes only the prompt decision"
       ]
     },
     {
@@ -2149,8 +2078,7 @@
       "observation": "実行対象は同じ",
       "status": "automated",
       "testIds": [
-        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
-        "node:tests/test_source_delete_e2e.cjs::source-delete confirmation can be skipped, restored in settings, and cancelled without changing the preference"
+        "node:tests/test_interaction_coverage.cjs::SD-093 candidate-role confirmation changes only the prompt decision"
       ]
     },
     {
@@ -2161,8 +2089,7 @@
       "observation": "ONでは実行前に確認し、OFFでは確認を省略する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
-        "node:tests/test_source_delete_e2e.cjs::source-delete confirmation can be skipped, restored in settings, and cancelled without changing the preference"
+        "node:tests/test_interaction_coverage.cjs::SD-094 overwrite confirmation changes only the prompt decision"
       ]
     },
     {
@@ -2173,8 +2100,7 @@
       "observation": "実行対象は同じ",
       "status": "automated",
       "testIds": [
-        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
-        "node:tests/test_source_delete_e2e.cjs::source-delete confirmation can be skipped, restored in settings, and cancelled without changing the preference"
+        "node:tests/test_interaction_coverage.cjs::SD-094 overwrite confirmation changes only the prompt decision"
       ]
     },
     {
@@ -2185,8 +2111,7 @@
       "observation": "ONでは実行前に確認し、OFFでは確認を省略する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
-        "node:tests/test_source_delete_e2e.cjs::source-delete confirmation can be skipped, restored in settings, and cancelled without changing the preference"
+        "node:tests/test_interaction_coverage.cjs::SD-095 delete-after-copy confirmation changes only the prompt decision"
       ]
     },
     {
@@ -2197,8 +2122,7 @@
       "observation": "実行対象は同じ",
       "status": "automated",
       "testIds": [
-        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
-        "node:tests/test_source_delete_e2e.cjs::source-delete confirmation can be skipped, restored in settings, and cancelled without changing the preference"
+        "node:tests/test_interaction_coverage.cjs::SD-095 delete-after-copy confirmation changes only the prompt decision"
       ]
     },
     {
@@ -2567,8 +2491,7 @@
       "observation": "保存先だけを更新し、未保存の各入力値を保持する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
-        "node:tests/test_project_history_browser_e2e.cjs::manual output-directory commits lock every save entry point until the settings response settles"
+        "node:tests/test_settings_dialog_e2e.cjs::SD-144.1 output picker updates only its path and preserves every unsaved general setting"
       ]
     },
     {
@@ -2579,8 +2502,7 @@
       "observation": "OSの選択取消・失敗でも各入力値を保持し、保存時の送信内容へ含める",
       "status": "automated",
       "testIds": [
-        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
-        "node:tests/test_project_history_browser_e2e.cjs::manual output-directory commits lock every save entry point until the settings response settles"
+        "node:tests/test_settings_dialog_e2e.cjs::SD-144.2 output picker cancellation and failure preserve unsaved fields for the settings request"
       ]
     },
     {

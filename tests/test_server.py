@@ -5111,6 +5111,34 @@ class MozarieTests(unittest.TestCase):
             self.assertEqual([candidate["enabled"] for candidate in candidates], [True, True, True])
             self.assertTrue(all(candidate["origin"] == "boundary" for candidate in candidates))
 
+    def test_sd_074_exclusion_default_applies_only_to_new_candidates(self):
+        class FakePredictor:
+            def predict(self, **_kwargs):
+                masks = np.zeros((1, 12, 12), dtype=bool)
+                masks[0, 1:11, 1:11] = True
+                return masks, np.asarray([0.9]), None
+
+        with tempfile.TemporaryDirectory() as directory:
+            image_path = Path(directory) / "image.png"
+            Image.new("RGB", (12, 12), "white").save(image_path)
+            record = self._record(image_path, 12, 12)
+            state = self.new_state(); state.root = Path(directory); state.images = {record.image_id: record}; state.order = [record.image_id]
+            fluid = np.zeros((12, 12), dtype=np.uint8); fluid[6:8, 4:8] = 255
+            request = {"roi": {"left": 1, "top": 1, "right": 11, "bottom": 11}, "point": {"x": 5, "y": 5}}
+
+            with patch.object(state, "_sam_predictor_for", return_value=FakePredictor()), \
+                 patch.object(detection_module, "white_fluid_mask", return_value=fluid):
+                state.settings["detection"]["exclude_forced_default"] = False
+                state.add_boundary_candidate(record.image_id, request)
+                first_exclusion = next(candidate for candidate in state.list_candidates(record.image_id) if candidate["role"] == "exclude")
+                self.assertFalse(first_exclusion["forced"])
+
+                state.settings["detection"]["exclude_forced_default"] = True
+                state.add_boundary_candidate(record.image_id, request)
+
+            exclusions = [candidate for candidate in state.list_candidates(record.image_id) if candidate["role"] == "exclude"]
+            self.assertEqual([candidate["forced"] for candidate in exclusions], [False, True])
+
     def test_hand_refinement_skips_outside_boxes_and_clips_partial_boxes(self):
         mask = np.zeros((12, 12), dtype=np.uint8); mask[4:8, 4:8] = 255
         boxes = [(0, 0, 3, 3), (2, 5, 6, 7), (9, 9, 12, 12)]

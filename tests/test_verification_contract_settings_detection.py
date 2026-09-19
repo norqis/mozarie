@@ -53,8 +53,16 @@ class SettingsDetectionVerificationContractTests(unittest.TestCase):
                 self.assertIn("CI", item["manual"]["reason"])
                 manual_keys.add(item["key"])
 
-        documented_manual_keys = set(re.findall(r"^\| (SD-\d+\.\d+) \|", MANUAL.read_text(encoding="utf-8"), re.MULTILINE))
-        self.assertEqual(documented_manual_keys, manual_keys)
+        documented_manual: dict[str, str] = {}
+        for line in MANUAL.read_text(encoding="utf-8").splitlines():
+            columns = [column.strip() for column in line.split("|")]
+            if len(columns) >= 6 and re.fullmatch(r"SD-\d+\.\d+", columns[1]):
+                documented_manual[columns[1]] = columns[4]
+        self.assertEqual(set(documented_manual), manual_keys)
+        self.assertEqual(
+            documented_manual,
+            {item["key"]: item["observation"] for item in observations if item["status"] == "manual"},
+        )
 
 
 if __name__ == "__main__":
