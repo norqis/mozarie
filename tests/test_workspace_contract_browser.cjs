@@ -51,6 +51,8 @@ test("filter popovers close accessibly and retain search, folder, and checkbox s
     const overviewPopover = page.locator("#overviewFilterMenu");
     assert.equal(await overviewPopover.evaluate((node) => node.matches(":popover-open")), true, "Space opens the overview filter menu");
     assert.equal(await overviewPopover.locator("label").evaluateAll((labels) => labels.every((label, index) => index === 0 || label.getBoundingClientRect().top > labels[index - 1].getBoundingClientRect().top)), true, "overview filter choices form one vertical column");
+    for (let index = 0; index < 6; index += 1) await page.keyboard.press("Tab");
+    assert.equal(await page.evaluate(() => document.activeElement?.id), "overviewQuery", "Tab reaches the following search action after every overview checkbox");
     await page.locator('[data-overview-filter="hidden"]').focus(); await page.keyboard.press("Space");
     assert.equal(await page.locator("#overviewFilterButton").textContent(), "絞り込み (1)", "Space selects an overview filter and updates the button count");
     await page.locator('[data-overview-filter="hidden"]').focus(); await page.keyboard.press("Space");

@@ -428,7 +428,11 @@ class ProjectCatalogCoverageTests(unittest.TestCase):
         })
         state.set_image_flags(image_a, {"reviewed": True, "hidden": True})
         project_b = state.create_project("Project B"); image_b = state.set_root(str(second_root))[0]["id"]
+        project_ids = {item["id"] for item in state.projects()}
+        self.assertEqual(project_ids, {project_a["id"], project_b["id"]}, "creating Project B adds one project without replacing Project A")
+        self.assertEqual([item.candidate_id for item in state.workspace_store.hydrate_candidates(image_a, state.cache_dir, state._candidate_from_workspace)[1]], ["a-candidate"], "creating Project B leaves Project A edits durable")
         opened_a = state.open_project(project_a["id"])
+        self.assertEqual({item["id"] for item in state.projects()}, project_ids, "opening an existing project never creates another project")
         self.assertEqual([item["id"] for item in opened_a["images"]], [image_a])
         restored_a = opened_a["images"][0]
         self.assertTrue(restored_a["reviewed"]); self.assertTrue(restored_a["hidden"])
