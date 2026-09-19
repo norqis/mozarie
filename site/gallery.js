@@ -48,8 +48,8 @@
     const neighborImage = slides[(index + 1) % slides.length].querySelector("img");
     peeks.forEach((peek) => { peek.src = neighborImage.currentSrc || neighborImage.src; });
     if (caption) caption.textContent = index === 0
-      ? "自動検出した範囲を、モザイク結果と適用範囲で確認できます。"
-      : "画像一覧、ブラシ、候補、保存操作を1つの画面で扱えます。";
+      ? "自動検出した候補を、処理結果と適用範囲で確認できます。"
+      : "画像一覧、ブラシ、自動検出、一括保存を同じ画面から操作できます。";
     dots.forEach((dot, dotIndex) => dot.setAttribute("aria-current", String(dotIndex === index)));
   }
 

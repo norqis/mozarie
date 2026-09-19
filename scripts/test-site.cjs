@@ -12,7 +12,7 @@ const siteRoot = path.join(root, "site");
 const canonicalUrl = "https://norqis.github.io/mozarie/";
 const googleTagId = "G-BLX3GDM1WQ";
 const googleTagUrl = `https://www.googletagmanager.com/gtag/js?id=${googleTagId}`;
-const viewports = [{ width: 320, height: 720 }, { width: 390, height: 844 }, { width: 701, height: 800 }, { width: 720, height: 800 }, { width: 768, height: 800 }, { width: 1440, height: 900 }, { width: 1920, height: 960 }];
+const viewports = [{ width: 320, height: 720 }, { width: 390, height: 844 }, { width: 700, height: 800 }, { width: 701, height: 800 }, { width: 720, height: 800 }, { width: 768, height: 800 }, { width: 900, height: 900 }, { width: 1440, height: 900 }, { width: 1920, height: 960 }];
 const contentTypes = { ".css": "text/css; charset=utf-8", ".html": "text/html; charset=utf-8", ".js": "application/javascript; charset=utf-8", ".png": "image/png", ".xml": "application/xml; charset=utf-8" };
 
 function startSite() {
@@ -66,25 +66,32 @@ test("the four-pillar page is complete without JavaScript and has no horizontal 
       const page = await context.newPage();
       assert.equal((await page.goto(`${site.url}/`, { waitUntil: "load" })).status(), 200);
       assert.equal(await page.title(), "Mozarie | 自動検出・ブラシ編集・一括保存に対応したモザイク加工ソフト");
-      assert.equal(await page.locator("h1").innerText(), "モザイク範囲を自動検出。\nブラシで整え、まとめて保存。");
-      assert.equal(await page.locator('meta[name="description"]').getAttribute("content"), "Mozarieは、自動検出から手描き修正、複数画像の一括保存までを1つの画面で進められるWindowsアプリです。編集内容とUndo／Redo履歴はプロジェクトごとに残ります。");
+      assert.equal(await page.locator("h1").innerText(), "複数画像のモザイク処理を、\n検出・編集・保存まで。");
+      assert.equal(await page.locator('meta[name="description"]').getAttribute("content"), "Mozarieは、モザイク自動検出、ブラシツール、複数画像の一括保存、プロジェクトごとの履歴保持に対応したWindowsアプリです。");
       assert.equal(await page.locator('link[rel="canonical"]').getAttribute("href"), canonicalUrl);
       assert.equal(await page.locator('meta[name="google-site-verification"]').getAttribute("content"), "UrWwBw6iDkiGPFlWk3S4jrSsP7YfkvctuNVveYOJd_o");
-      assert.equal(await page.getByRole("link", { name: "できること", exact: true }).getAttribute("href"), "#features");
+      assert.equal(await page.getByRole("link", { name: "機能", exact: true }).getAttribute("href"), "#features");
       assert.equal(await page.getByRole("link", { name: "GitHub", exact: true }).getAttribute("href"), "https://github.com/norqis/mozarie");
-      assert.equal(await page.getByRole("heading", { name: "検出から保存までを、1つの画面で進めます。", exact: true }).count(), 1);
       assert.deepEqual(await page.locator("#features .visual-moment").evaluateAll((moments) => moments.map((moment) => ({
         sequence: moment.querySelector(".sequence")?.textContent.trim(),
         heading: moment.querySelector("h2")?.textContent.trim(),
         copy: moment.querySelector(".visual-copy p:last-child")?.textContent.trim(),
         image: moment.querySelector("img")?.getAttribute("src") || null,
       }))), [
-        { sequence: "01", heading: "モザイク自動検出", copy: "現在の画像または全画像に自動検出を実行できます。モザイク結果と適用範囲を見比べて確認できます。", image: "assets/demo3.png" },
-        { sequence: "02", heading: "ブラシツール", copy: "ブラシと消しゴムで、モザイクをかけたい範囲と残したい部分を整えられます。", image: "assets/demo1.png" },
-        { sequence: "03", heading: "複数画像をまとめて保存", copy: "保存対象を選び、コピー保存または元画像へ上書きします。", image: "assets/demo1.png" },
-        { sequence: "04", heading: "プロジェクトごとの履歴保持", copy: "候補、手描き範囲、確認状態、Undo／Redo履歴をプロジェクトごとに保持します。別のプロジェクトへ切り替えても作業内容は混ざりません。", image: null },
+        { sequence: "01", heading: "モザイク自動検出", copy: "現在の画像またはプロジェクト内の全画像を対象に、モザイク候補を自動検出できます。候補は画像ごとに確認し、適用する範囲を選べます。", image: "assets/demo3.png" },
+        { sequence: "02", heading: "ブラシツール", copy: "ブラシと消しゴムを使い、モザイクをかける範囲や除外する範囲を画像上で直接編集できます。", image: "assets/demo1.png" },
+        { sequence: "03", heading: "複数画像をまとめて保存", copy: "プロジェクト内の複数画像をまとめて保存できます。コピー保存と元画像への上書きを選び、PNG・JPEG・WebPで出力できます。", image: "assets/demo1.png" },
+        { sequence: "04", heading: "プロジェクトごとの履歴保持", copy: "候補、手描き範囲、確認状態、非表示状態、Undo／Redo履歴をプロジェクトごとに保持します。プロジェクトを切り替えても、それぞれの編集内容を維持します。", image: null },
       ]);
-      assert.deepEqual(await page.locator(".resume-flow li").allTextContents(), ["範囲を調整", "Mozarieを閉じる", "プロジェクトを再開", "保存した範囲と履歴から続ける"]);
+      assert.deepEqual(await page.locator(".feature-index a").evaluateAll((links) => links.map((link) => ({ href: link.getAttribute("href"), text: link.innerText.trim() }))), [
+        { href: "#detection", text: "01\nモザイク自動検出" },
+        { href: "#brush", text: "02\nブラシツール" },
+        { href: "#bulk-save", text: "03\n複数画像をまとめて保存" },
+        { href: "#project-history", text: "04\nプロジェクトごとの履歴保持" },
+      ]);
+      assert.deepEqual(await page.locator(".retained-items li").allTextContents(), ["候補", "手描き範囲", "確認状態", "非表示状態", "Undo・Redo履歴"]);
+      assert.equal(await page.locator(".resume-flow").count(), 0);
+      for (const forbidden of ["範囲を調整", "Mozarieを閉じる", "プロジェクトを再開", "保存した範囲と履歴から続ける"]) assert.equal(await page.locator("body").innerText().then((text) => text.includes(forbidden)), false, `${forbidden} is not a product story`);
       assert.equal(await page.getByRole("heading", { name: "画像の加工は、PC上で", exact: true }).count(), 0);
       assert.equal(await page.locator("body").innerText().then((text) => text.includes("画像の加工は、PC上で")), false);
       assert.equal(await page.locator("#install, #faq, .feature-list, .feature-lead").count(), 0);
@@ -93,23 +100,25 @@ test("the four-pillar page is complete without JavaScript and has no horizontal 
       assert.equal(await page.locator("[data-gallery-slide]:not([hidden]) img").getAttribute("src"), "assets/demo3.png");
       assert.equal(await page.locator("[data-gallery-open]").evaluateAll((buttons) => buttons.every((button) => button.disabled)), true);
       assert.equal(await page.locator("[data-gallery-controls]").evaluateAll((controls) => controls.every((control) => control.hidden && getComputedStyle(control).display === "none")), true);
-      assert.equal(await page.locator("[data-gallery-caption]").innerText(), "自動検出した範囲を、モザイク結果と適用範囲で確認できます。");
-      assert.equal(await page.getByRole("heading", { name: "検出から一括保存まで、Mozarieで進められます。", exact: true }).count(), 1);
+      assert.equal(await page.locator("[data-gallery-caption]").innerText(), "自動検出した候補を、処理結果と適用範囲で確認できます。");
+      assert.equal(await page.getByRole("heading", { name: "Mozarieをダウンロード", exact: true }).count(), 1);
       assert.equal(await page.getByRole("link", { name: "最新版をダウンロード", exact: true }).count(), 2);
-      assert.equal(await page.getByRole("link", { name: "動作環境と使い方", exact: true }).count(), 2);
+      assert.equal(await page.getByRole("link", { name: "GitHubで詳しく見る", exact: true }).count(), 1);
+      assert.equal(await page.getByRole("link", { name: "GitHubを見る", exact: true }).count(), 1);
       assert.equal(await page.getByRole("link", { name: "最新版をダウンロード", exact: true }).first().getAttribute("href"), "https://github.com/norqis/mozarie/releases/latest");
-      assert.equal(await page.getByRole("link", { name: "動作環境と使い方", exact: true }).first().getAttribute("href"), "https://github.com/norqis/mozarie#readme");
+      assert.equal(await page.getByRole("link", { name: "GitHubで詳しく見る", exact: true }).getAttribute("href"), "https://github.com/norqis/mozarie");
       assert.equal(await page.getByRole("link", { name: "English README", exact: true }).getAttribute("href"), "https://github.com/norqis/mozarie/blob/main/README.en.md");
       const heroDownload = page.getByRole("link", { name: "最新版をダウンロード", exact: true }).first();
       await heroDownload.focus();
       assert.equal(await heroDownload.evaluate((element) => getComputedStyle(element).outlineStyle), "solid");
       const heroDownloadBounds = await heroDownload.boundingBox();
       assert.ok(heroDownloadBounds && heroDownloadBounds.height >= 44 && heroDownloadBounds.y + heroDownloadBounds.height <= viewport.height, `initial download CTA is usable at ${viewport.width}px`);
+      assert.equal(await heroDownload.evaluate((element) => getComputedStyle(element).backgroundColor), "rgb(14, 14, 16)");
       const image = await page.locator("[data-gallery-slide]:not([hidden]) img").boundingBox();
-      const expectedWidth = viewport.width <= 700 ? viewport.width - 48 : Math.min(viewport.width * .82, 1480);
+      const expectedWidth = viewport.width <= 700 ? viewport.width - 40 : Math.min(viewport.width * .86, 1480);
       assert.ok(image && Math.abs(image.width - expectedWidth) <= 1, `central image width at ${viewport.width}px`);
       assert.ok(image && Math.abs(image.width / image.height - 1920 / 959) < .002, `central image ratio at ${viewport.width}px`);
-      if (viewport.width <= 390) assert.ok(image && image.x >= 24 && viewport.width - image.x - image.width >= 24, `mobile margins at ${viewport.width}px`);
+      if (viewport.width <= 390) assert.ok(image && image.x >= 20 && viewport.width - image.x - image.width >= 20, `mobile margins at ${viewport.width}px`);
       assert.equal(await page.locator("html").evaluate((element) => element.scrollWidth <= element.clientWidth), true, `no horizontal overflow at ${viewport.width}px`);
       await context.close();
     }
@@ -123,6 +132,12 @@ test("the published assets preserve the source logo and sitemap", { timeout: 30_
   const site = await startSite();
   let browser;
   try {
+    const styles = await fs.readFile(path.join(siteRoot, "styles.css"), "utf8");
+    assert.match(styles, /--background: #fff; --surface: #f5f5f3; --ink: #141416;/);
+    assert.match(styles, /\.download \{ background: var\(--strong\); color: #fff; \}/);
+    assert.equal(styles.includes("#f7f6f2"), false);
+    assert.equal(styles.includes("#7157a6"), false);
+    assert.equal(styles.includes("gradient"), false);
     for (const [file, type] of [["styles.css", /^text\/css/], ["gallery.js", /^application\/javascript/], ["sitemap.xml", /^application\/xml/]]) {
       const asset = await get(`${site.url}/${file}`);
       assert.equal(asset.status, 200);
@@ -160,19 +175,19 @@ test("the two-screen carousel rotates every six seconds and stops for focus, mod
     assert.equal(await page.locator("[data-gallery-slide]").count(), 2);
     assert.equal(await page.locator('[src="assets/demo2.png"]').count(), 0);
     assert.equal(await activeImage(page).getAttribute("src"), "assets/demo3.png");
-    assert.equal(await page.locator("[data-gallery-caption]").innerText(), "自動検出した範囲を、モザイク結果と適用範囲で確認できます。");
+    assert.equal(await page.locator("[data-gallery-caption]").innerText(), "自動検出した候補を、処理結果と適用範囲で確認できます。");
     const [previousBounds, nextBounds, imageBounds] = await Promise.all([previous.boundingBox(), next.boundingBox(), activeImage(page).boundingBox()]);
     assert.ok(previousBounds && nextBounds && imageBounds);
     assert.ok(previousBounds.x + previousBounds.width <= imageBounds.x && nextBounds.x >= imageBounds.x + imageBounds.width, "desktop arrows are outside the image");
     assert.equal(await page.locator("[data-gallery-peek-previous], [data-gallery-peek-next]").evaluateAll((peeks) => peeks.every((peek) => {
       const bounds = peek.getBoundingClientRect();
       const viewport = peek.parentElement.getBoundingClientRect();
-      return Number(getComputedStyle(peek).opacity) === .24 && bounds.right > viewport.left && bounds.left < viewport.right;
+      return Number(getComputedStyle(peek).opacity) === .16 && bounds.right > viewport.left && bounds.left < viewport.right;
     })), true, "both neighboring previews peek into the viewport");
 
     await page.clock.fastForward(6000);
     assert.equal(await activeImage(page).getAttribute("src"), "assets/demo1.png");
-    assert.equal(await page.locator("[data-gallery-caption]").innerText(), "画像一覧、ブラシ、候補、保存操作を1つの画面で扱えます。");
+    assert.equal(await page.locator("[data-gallery-caption]").innerText(), "画像一覧、ブラシ、自動検出、一括保存を同じ画面から操作できます。");
     await previous.click();
     assert.equal(await activeImage(page).getAttribute("src"), "assets/demo3.png");
     await page.getByRole("button", { name: "画面 2を表示" }).click();
@@ -276,7 +291,7 @@ test("preview buttons and carousel geometry work across supported viewports", { 
       await page.waitForFunction(() => [...document.querySelectorAll("[data-gallery-slide] img")].every((image) => image.complete));
       const [previous, next, image] = await Promise.all([page.getByRole("button", { name: "前の画面" }).boundingBox(), page.getByRole("button", { name: "次の画面" }).boundingBox(), activeImage(page).boundingBox()]);
       assert.ok(previous && next && image);
-      const expectedWidth = viewport.width <= 700 ? viewport.width - 48 : Math.min(viewport.width * .82, 1480);
+      const expectedWidth = viewport.width <= 700 ? viewport.width - 40 : Math.min(viewport.width * .86, 1480);
       assert.ok(Math.abs(image.width - expectedWidth) <= 1, `central image has the intended width at ${viewport.width}px`);
       assert.ok(Math.abs(image.width / image.height - 1920 / 959) < .002, `central image keeps its source ratio at ${viewport.width}px`);
       if (viewport.width <= 900) {
@@ -301,7 +316,7 @@ test("preview buttons and carousel geometry work across supported viewports", { 
       assert.equal(await page.locator("[data-gallery-peek-previous], [data-gallery-peek-next]").evaluateAll((peeks) => peeks.every((peek) => {
         const bounds = peek.getBoundingClientRect();
         const galleryViewport = peek.parentElement.getBoundingClientRect();
-        return Number(getComputedStyle(peek).opacity) === .24 && bounds.right > galleryViewport.left && bounds.left < galleryViewport.right;
+        return Number(getComputedStyle(peek).opacity) === .16 && bounds.right > galleryViewport.left && bounds.left < galleryViewport.right;
       })), true, `both neighbor previews peek at ${viewport.width}px`);
       const opener = page.locator("[data-feature-open]").first();
       const dialog = page.locator("[data-gallery-modal]");
@@ -351,7 +366,7 @@ test("each feature preview opens its original image, keeps the gallery stopped, 
         await dialog.waitFor({ state: "hidden" });
         await closeEvent;
         assert.equal(await opener.evaluate((element) => document.activeElement === element), true);
-        await page.getByRole("link", { name: "動作環境と使い方", exact: true }).first().focus();
+        await page.getByRole("link", { name: "GitHubで詳しく見る", exact: true }).focus();
         await page.clock.runFor(6000);
         assert.notEqual(await activeImage(page).getAttribute("src"), activeWhileOpen, `feature preview ${index + 1} restores autoplay after close`);
       }
