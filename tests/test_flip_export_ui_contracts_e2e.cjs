@@ -65,6 +65,13 @@ test("flip and save controls keep their text, hit targets, and current filename 
       }
       const modeName = open === "#saveButton" ? "singleSaveMode" : "batchSaveMode";
       const mode = await page.locator(`input[name="${modeName}"]:checked`).getAttribute("value");
+      if (dialog === "#applyDialog") {
+        assert.deepEqual(await page.evaluate(() => {
+          const targets = document.querySelector("#applyImageFilters"); const settings = document.querySelector("#applySettings");
+          const a = targets.getBoundingClientRect(); const b = settings.getBoundingClientRect();
+          return { separate: targets !== settings && !targets.contains(settings) && !settings.contains(targets), ordered: a.bottom <= b.top };
+        }), { separate: true, ordered: true }, "batch target selection is a distinct section before save format and metadata settings");
+      }
       await page.locator(format).selectOption("original");
       assert.equal(await page.locator(metadata).isDisabled(), false, "original format keeps metadata retention available, including for a JPEG source");
       await page.locator(format).selectOption("png");
@@ -73,17 +80,22 @@ test("flip and save controls keep their text, hit targets, and current filename 
       assert.equal(await page.locator(metadata).isDisabled(), true, "JPG disables metadata retention");
       assert.equal(await page.locator(metadata).isChecked(), false, "JPG forces metadata retention off");
       assert.equal(await page.locator(note).textContent(), "JPG形式ではメタ情報を保持しません。");
+      assert.equal(await page.locator(note).evaluate((node) => node.classList.contains("save-option-warning") && getComputedStyle(node).color === "rgb(255, 157, 146)"), true, "the JPG metadata warning is rendered in the product warning red");
       assert.equal(await page.locator(note).evaluate((node) => node.scrollWidth <= node.clientWidth && node.scrollHeight <= node.clientHeight), true, "the JPG warning is not clipped");
       assert.equal(await page.locator(`input[name="${modeName}"]:checked`).getAttribute("value"), mode, "format changes preserve overwrite/copy mode");
       assert.equal(await page.locator(metadata).evaluate((node) => getComputedStyle(node.closest("label")).color !== getComputedStyle(document.body).color), true, "the disabled metadata row is visually muted");
       await page.locator(format).focus(); await page.keyboard.press("Tab");
-      assert.notEqual(await page.evaluate((selector) => document.activeElement === document.querySelector(selector), metadata), true, "keyboard focus skips disabled metadata retention");
-      await page.keyboard.press("Shift+Tab"); await page.keyboard.press("Space");
-      assert.equal(await page.locator(metadata).isChecked(), false, "Space cannot enable metadata retention while JPG keeps the control disabled");
+      assert.deepEqual(await page.evaluate((selector) => ({ metadataFocused: document.activeElement === document.querySelector(selector), enabledActionable: Boolean(document.activeElement) && !document.activeElement.disabled && /^(INPUT|BUTTON|SELECT)$/.test(document.activeElement.tagName) }), metadata), { metadataFocused: false, enabledActionable: true }, "Tab skips disabled metadata retention and lands on an enabled actionable field");
+      await page.keyboard.press("Space");
+      assert.equal(await page.locator(metadata).isChecked(), false, "Space on the next actionable field cannot enable disabled metadata retention");
       await page.locator(format).selectOption("png");
       assert.equal(await page.locator(metadata).isDisabled(), false, "PNG restores metadata control");
       assert.equal(await page.locator(metadata).isChecked(), true, "PNG restores the pre-JPG preference");
       assert.equal((await page.locator(note).textContent()).trim(), "", "returning from JPG removes the JPG warning");
+      await page.locator(metadata).uncheck();
+      await page.locator(format).selectOption("jpg");
+      await page.locator(format).selectOption("png");
+      assert.equal(await page.locator(metadata).isChecked(), false, "returning from JPG restores a pre-JPG OFF preference as OFF");
       await page.locator(open === "#saveButton" ? "#singleSaveCloseButton" : "#applyCloseButton").click();
     }
     assert.deepEqual(await page.evaluate((before) => ({
@@ -214,6 +226,86 @@ test("flipped editor coordinates keep manual masks, boundaries, compare panes, z
     assert.deepEqual(boundaryPayload.roi, { left: 17, top: 18, right: 23, bottom: 22 }, "boundary detection sends the canonical unflipped ROI");
     assert.deepEqual(boundaryPayload.point, { x: 20, y: 20 }, "boundary detection sends the canonical unflipped seed point");
     assert.deepEqual(await page.evaluate(() => transformImagePoint({ x: 20, y: 20 })), result.displayedPointer, "the returned boundary candidate uses the same single display transform as the image");
+  });
+});
+
+test("compare canvas draws the flipped image and range together through vertical flip zoom and pan", { timeout: 60000 }, async () => {
+  await withPage(async (page) => {
+    await selectSample(page);
+    await page.evaluate(() => {
+      const source = document.createElement("canvas"); source.width = 20; source.height = 16;
+      const sourceContext = source.getContext("2d"); sourceContext.fillStyle = "#101010"; sourceContext.fillRect(0, 0, 20, 16); sourceContext.fillStyle = "#ffffff"; sourceContext.fillRect(4, 3, 3, 3);
+      state.currentImage = source; Object.assign(currentRecord(), { width: 20, height: 16 }); canvasSizeForImage(source); prepareOriginalImage();
+      addCtx.clearRect(0, 0, 20, 16); exclusionCtx.clearRect(0, 0, 20, 16); exclusionEraseCtx.clearRect(0, 0, 20, 16); addCtx.fillRect(4, 3, 3, 3); composeCurrentMask();
+      state.displayMode = "compare"; state.compareSplit = .5; state.mosaicPreviewEnabled = false; state.view = { scale: 8, x: 20, y: 18 }; updateCompareSplitter(); flushRender();
+    });
+    const sampleRenderedPair = () => page.evaluate(() => {
+      flushRender();
+      const canonical = { x: 5, y: 4 }; const displayed = transformImagePoint(canonical); const dpr = devicePixelRatio || 1; const split = stage.clientWidth * state.compareSplit;
+      const pixel = (x, y) => [...ctx.getImageData(Math.round(x * dpr), Math.round(y * dpr), 1, 1).data];
+      const x = state.view.x + displayed.x * state.view.scale; const y = state.view.y + displayed.y * state.view.scale;
+      return { displayed, view: { ...state.view }, left: pixel(x, y), right: pixel(split + x, y), oppositeRight: pixel(split + state.view.x + canonical.x * state.view.scale, state.view.y + canonical.y * state.view.scale) };
+    });
+    await page.locator("#flipHorizontalButton").click(); await page.waitForFunction(() => currentRecord()?.flipH === true && !state.transformPending);
+    const horizontal = await sampleRenderedPair();
+    assert.deepEqual(horizontal.displayed, { x: 15, y: 4 });
+    assert.ok(horizontal.left[0] > 220 && horizontal.left[1] > 220 && horizontal.left[2] > 220, "the left compare pane draws the horizontally flipped source feature");
+    assert.ok(horizontal.right[0] > horizontal.right[2] && horizontal.right[3] > 0, "the right compare pane draws the range at the same horizontal position");
+    assert.ok(horizontal.oppositeRight[0] < 40 && horizontal.oppositeRight[1] < 40, "the range is absent from the unflipped opposite position");
+
+    await page.locator("#flipVerticalButton").click(); await page.waitForFunction(() => currentRecord()?.flipV === true && !state.transformPending);
+    const vertical = await sampleRenderedPair();
+    assert.deepEqual(vertical.displayed, { x: 15, y: 12 });
+    assert.ok(vertical.left[0] > 220 && vertical.right[0] > vertical.right[2], "vertical flip moves both the left image feature and right range to the same lower position");
+
+    await page.evaluate(() => { state.view = { scale: 10, x: 31, y: 27 }; flushRender(); });
+    const moved = await sampleRenderedPair();
+    assert.deepEqual(moved.view, { scale: 10, x: 31, y: 27 });
+    assert.ok(moved.left[0] > 220 && moved.right[0] > moved.right[2], "zoom and pan keep both rendered compare panes synchronized at the transformed coordinate");
+  });
+});
+
+test("overwrite then Undo keeps the thumbnail and center image in the same direction", { timeout: 60000 }, async () => {
+  await withPage(async (page) => {
+    await selectSample(page);
+    await page.evaluate(() => {
+      const nativeFetch = window.fetch; const history = { undoRequested: false };
+      window.fetch = async (input, init = {}) => {
+        const url = String(input?.url || input); const method = init.method || "GET";
+        if (url.includes("/api/project/history/sample")) {
+          if (method === "POST" && url.endsWith("/undo")) { history.undoRequested = true; return new Response(JSON.stringify({ canUndo: false, canRedo: true, changedImageIds: ["sample"], current: { candidateRevision: 0 } }), { headers: { "Content-Type": "application/json" } }); }
+          return new Response(JSON.stringify({ canUndo: true, canRedo: false }), { headers: { "Content-Type": "application/json" } });
+        }
+        if (url.includes("/api/images") && method === "GET") {
+          const response = await nativeFetch(input, init); const snapshot = await response.json();
+          if (history.undoRequested) snapshot.images = snapshot.images.map((image) => image.id === "sample" ? { ...image, flipH: false, flipV: false } : image);
+          return new Response(JSON.stringify({ ...snapshot, project: { id: "fixture-project", status: "working" }, readOnly: false, historyDurable: true }), { headers: { "Content-Type": "application/json" } });
+        }
+        return nativeFetch(input, init);
+      };
+      state.project = { id: "fixture-project", status: "working" }; state.projectReadOnly = false; state.historyDurable = true; state.projectHistory = new Map([["sample", { canUndo: true, canRedo: false }]]);
+    });
+    await page.locator("#flipHorizontalButton").click(); await page.waitForFunction(() => currentRecord()?.flipH === true && !state.transformPending);
+    await page.locator("#saveButton").click();
+    await page.locator("#singleSaveOverwriteMode").check();
+    await page.locator("#singleSaveStartButton").click();
+    await page.waitForFunction(() => !state.saving && document.querySelector("#singleSaveCloseButton") && !document.querySelector("#singleSaveCloseButton").disabled);
+    await page.locator("#singleSaveCloseButton").click();
+    await page.evaluate(() => { state.projectHistory.set("sample", { canUndo: true, canRedo: false }); updateHistoryButtons(); });
+    await page.locator("#undoButton").click();
+    await page.waitForFunction(() => currentRecord()?.flipH === false && !state.historyRestoreBusy);
+    const restored = await page.evaluate(() => ({ thumbnail: document.querySelector('.gallery-item[data-id="sample"] img')?.style.transform || "", centerFlip: currentRecord().flipH === true, centerPoint: transformImagePoint({ x: 0, y: 0 }) }));
+    assert.equal(["", "scale(1, 1)"].includes(restored.thumbnail), true, "the thumbnail shows the unflipped direction");
+    assert.deepEqual({ centerFlip: restored.centerFlip, centerPoint: restored.centerPoint }, { centerFlip: false, centerPoint: { x: 0, y: 0 } }, "overwrite history Undo restores thumbnail and center editor to the same direction");
+  });
+});
+
+test("editor toolbar arrow navigation skips a disabled flip control", { timeout: 60000 }, async () => {
+  await withPage(async (page) => {
+    await selectSample(page);
+    await page.evaluate(() => { const redo = document.querySelector("#redoButton"); redo.disabled = false; const horizontal = document.querySelector("#flipHorizontalButton"); horizontal.disabled = true; setToolRailTabStop(redo); redo.focus(); });
+    await page.keyboard.press("ArrowRight");
+    assert.equal(await page.evaluate(() => document.activeElement?.id), "flipVerticalButton", "ArrowRight skips the disabled horizontal flip and lands on the next enabled editor action");
   });
 });
 

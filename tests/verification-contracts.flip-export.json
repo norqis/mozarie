@@ -139,7 +139,7 @@
       "observation": "元の対象と一緒に除外が上下反転する",
       "status": "automated",
       "testIds": [
-        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_mosaic_pixels_and_image_are_flipped_together"
+        "python:tests.test_project_export_mask_alpha.ProjectExportMaskAlphaTests.test_project_zip_export_uses_rgba_alpha_for_manual_mosaic_and_exclude_masks"
       ]
     },
     {
@@ -251,7 +251,7 @@
       "observation": "左の画像と右の範囲を同じ向きに反転する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_flip_export_ui_contracts_e2e.cjs::flipped editor coordinates keep manual masks, boundaries, compare panes, zoom, and pan aligned"
+        "node:tests/test_flip_export_ui_contracts_e2e.cjs::compare canvas draws the flipped image and range together through vertical flip zoom and pan"
       ]
     },
     {
@@ -262,7 +262,7 @@
       "observation": "左の画像と右の範囲を同じ向きに反転する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_flip_export_ui_contracts_e2e.cjs::flipped editor coordinates keep manual masks, boundaries, compare panes, zoom, and pan aligned"
+        "node:tests/test_flip_export_ui_contracts_e2e.cjs::compare canvas draws the flipped image and range together through vertical flip zoom and pan"
       ]
     },
     {
@@ -273,7 +273,7 @@
       "observation": "画像と範囲が同じ座標を維持し",
       "status": "automated",
       "testIds": [
-        "node:tests/test_flip_export_ui_contracts_e2e.cjs::flipped editor coordinates keep manual masks, boundaries, compare panes, zoom, and pan aligned"
+        "node:tests/test_flip_export_ui_contracts_e2e.cjs::compare canvas draws the flipped image and range together through vertical flip zoom and pan"
       ]
     },
     {
@@ -284,7 +284,7 @@
       "observation": "左右の画面が同期する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_flip_export_ui_contracts_e2e.cjs::flipped editor coordinates keep manual masks, boundaries, compare panes, zoom, and pan aligned"
+        "node:tests/test_flip_export_ui_contracts_e2e.cjs::compare canvas draws the flipped image and range together through vertical flip zoom and pan"
       ]
     },
     {
@@ -1490,7 +1490,7 @@
       "observation": "一覧サムネイルと中央画像が同じ向きになる",
       "status": "automated",
       "testIds": [
-        "node:tests/test_flip_export_ui_contracts_e2e.cjs::flip actions are reversible, isolated per image, and store bounded non-pixel history"
+        "node:tests/test_flip_export_ui_contracts_e2e.cjs::overwrite then Undo keeps the thumbnail and center image in the same direction"
       ]
     },
     {
@@ -1611,7 +1611,7 @@
       "observation": "操作不可のボタンは飛ばす",
       "status": "automated",
       "testIds": [
-        "node:tests/test_flip_export_ui_contracts_e2e.cjs::flip and save controls keep their text, hit targets, and current filename unobscured"
+        "node:tests/test_flip_export_ui_contracts_e2e.cjs::editor toolbar arrow navigation skips a disabled flip control"
       ]
     },
     {

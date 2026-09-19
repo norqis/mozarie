@@ -9,9 +9,11 @@ from __future__ import annotations
 
 import io
 import gc
+import base64
 import tempfile
 import time
 import unittest
+import weakref
 from pathlib import Path
 from unittest.mock import Mock, patch
 
@@ -189,63 +191,93 @@ class FlipExportContractTests(unittest.TestCase):
         np.testing.assert_array_equal(np.asarray(png.convert("RGB")), decoded_source, "cross-format PNG keeps the decoded source dimensions, direction, and pixels")
 
     def test_mixed_format_batch_outputs_each_requested_container_with_its_own_geometry_transform_and_masks(self) -> None:
+        source_root = self.root / "mixed-batch-source"; source_root.mkdir()
         sources: list[tuple[Path, str]] = []
-        first_pixels = np.zeros((5, 7, 3), dtype=np.uint8)
-        for y in range(5):
-            for x in range(7): first_pixels[y, x] = (x * 31, y * 41, (x + y) * 19)
-        png_info = PngImagePlugin.PngInfo(); png_info.add_text("parameters", "mixed png metadata")
-        Image.fromarray(first_pixels).save(self.root / "one.png", pnginfo=png_info); sources.append((self.root / "one.png", "PNG"))
-        jpeg_exif = Image.Exif(); jpeg_exif[270] = "mixed jpeg metadata"
-        Image.new("RGB", (6, 4), "#42668a").save(self.root / "two.jpg", exif=jpeg_exif, icc_profile=b"mixed jpeg ICC"); sources.append((self.root / "two.jpg", "JPEG"))
-        webp_exif = Image.Exif(); webp_exif[270] = "mixed webp metadata"
-        Image.new("RGB", (5, 3), "#53779b").save(self.root / "three.webp", exif=webp_exif, icc_profile=b"mixed webp ICC", xmp=b"mixed webp XMP"); sources.append((self.root / "three.webp", "WEBP"))
-        fourth_pixels = np.zeros((3, 4, 3), dtype=np.uint8)
-        fourth_pixels[:, :2] = (230, 40, 60); fourth_pixels[:, 2:] = (20, 80, 220)
-        Image.fromarray(fourth_pixels).save(self.root / "four.png"); sources.append((self.root / "four.png", "PNG"))
-        for output_format, expected_format in (("png", "PNG"), ("jpg", "JPEG")):
-            rendered: list[Image.Image] = []
-            try:
-                for index, (path, _source_format) in enumerate(sources):
-                    with Image.open(path) as source:
-                        source_size = source.size
-                    mask = np.zeros((source_size[1], source_size[0]), dtype=np.uint8)
-                    mask[0:2, 0:2] = 255
-                    mask[0, 0] = 0  # composed exclusion hole
-                    payload, suffix, mime = render_output(
-                        self.record(path, flip_h=index in {1, 3}, flip_v=index in {2, 3}), mask, 2, output_format, False,
-                    )
-                    image = self.decoded(payload); rendered.append(image)
-                    self.assertEqual(image.format, expected_format)
-                    self.assertEqual(suffix, ".png" if output_format == "png" else ".jpg")
-                    self.assertEqual(mime, "image/png" if output_format == "png" else "image/jpeg")
-                    self.assertEqual(image.size, source_size)
-                    self.assertFalse(bool(image.getexif()), "batch conversion with metadata disabled drops source EXIF")
-                    self.assertNotIn("icc_profile", image.info)
-                    self.assertNotIn("xmp", image.info)
-                    self.assertNotIn("parameters", image.info)
-                self.assertEqual(len(rendered), 4, "every mixed-format input and all four flip states produce their own output")
-                first_output = np.asarray(rendered[0].convert("RGB"))
-                self.assertLess(float(np.abs(first_output[0, 0].astype(np.int16) - first_pixels[0, 0].astype(np.int16)).mean()), 18.0, "the composed exclusion hole keeps its source pixel")
-                self.assertNotEqual(first_output[0, 1].tolist(), first_pixels[0, 1].tolist(), "the remaining mask applies its mosaic")
-            finally:
-                for image in rendered: image.close()
+        for index, (name, size, image_format) in enumerate((("one.png", (7, 5), "PNG"), ("two.jpg", (6, 4), "JPEG"), ("three.webp", (5, 3), "WEBP"), ("four.png", (4, 3), "PNG"))):
+            width, height = size; pixels = np.zeros((height, width, 3), dtype=np.uint8)
+            for y in range(height):
+                for x in range(width): pixels[y, x] = ((x * 37 + index * 19) % 256, (y * 53 + index * 23) % 256, ((x + y) * 29 + index * 17) % 256)
+            path = source_root / name
+            if image_format == "PNG":
+                info = PngImagePlugin.PngInfo(); info.add_text("parameters", f"mixed png metadata {index}"); Image.fromarray(pixels).save(path, pnginfo=info)
+            elif image_format == "JPEG":
+                exif = Image.Exif(); exif[270] = "mixed jpeg metadata"; Image.fromarray(pixels).save(path, quality=100, subsampling=0, exif=exif, icc_profile=b"mixed jpeg ICC")
+            else:
+                exif = Image.Exif(); exif[270] = "mixed webp metadata"; Image.fromarray(pixels).save(path, quality=100, exif=exif, icc_profile=b"mixed webp ICC", xmp=b"mixed webp XMP")
+            sources.append((path, image_format))
+        output = self.root / "mixed-batch-output"; output.mkdir()
+        state = StudioState(self.root / "mixed-batch-cache", self.root / "mixed-batch-sessions")
+        try:
+            loaded = {item["relativePath"]: item["id"] for item in state.set_root(str(source_root))}
+            records = [state.image_for_id(loaded[path.name]) for path, _format in sources]
+            flips = [(False, False), (True, False), (False, True), (True, True)]
+            decoded_sources: dict[str, np.ndarray] = {}
+            masks: dict[str, np.ndarray] = {}; drafts: dict[str, dict[str, object]] = {}
+            def encoded_mask(mask: np.ndarray) -> str:
+                payload = io.BytesIO(); Image.fromarray(mask).save(payload, format="PNG")
+                return "data:image/png;base64," + base64.b64encode(payload.getvalue()).decode("ascii")
+            for record, (horizontal, vertical) in zip(records, flips, strict=True):
+                state.set_image_transform(record.image_id, {"flipH": horizontal, "flipV": vertical})
+                with Image.open(record.path) as source: decoded_sources[record.image_id] = np.asarray(source.convert("RGB")).copy()
+                add = np.zeros((record.height, record.width), dtype=np.uint8); add[0:2, 0:2] = 255
+                exclusion = np.zeros_like(add); exclusion[0, 0] = 255
+                masks[record.image_id] = np.where(exclusion > 0, 0, add).astype(np.uint8)
+                drafts[record.image_id] = {
+                    "add": encoded_mask(add), "exclusion": encoded_mask(exclusion), "exclusionErase": "", "removedCandidateIds": [],
+                    "candidateRevision": state._candidate_revision(record.image_id), "manualEnabled": True,
+                    "manualExclusionEnabled": True, "manualExclusionEraseEnabled": True, "manualExclusionForced": True,
+                }
+            records = [state.image_for_id(record.image_id) for record in records]
+            for output_format, expected_format, keep_metadata in (("original", None, True), ("png", "PNG", False), ("jpg", "JPEG", False)):
+                suffix = f"_{output_format}"
+                state.job = Job(started_at=time.time(), kind="apply", state="running", total=4, image_ids=tuple(record.image_id for record in records))
+                state._apply_worker(records, 2, drafts, copy_to_default=True, suffix=suffix, output_directory=output, output_format=output_format, keep_metadata=keep_metadata, preserve_directory_structure=False)
+                self.assertEqual(state.job.state, "complete", f"the real {output_format} batch completes every record")
+                self.assertEqual(len(state.job.completed_image_ids), 4)
+                for record, (_path, source_format), (horizontal, vertical) in zip(records, sources, flips, strict=True):
+                    extension = record.path.suffix if output_format == "original" else f".{output_format}"
+                    saved_path = output / f"{record.path.stem}{suffix}{extension}"
+                    self.assertTrue(saved_path.is_file(), f"batch wrote {saved_path.name}")
+                    with Image.open(saved_path) as saved_image:
+                        saved = np.asarray(saved_image.convert("RGB")); self.assertEqual(saved_image.size, (record.width, record.height))
+                        self.assertEqual(saved_image.format, expected_format or source_format)
+                        if not keep_metadata:
+                            self.assertFalse(bool(saved_image.getexif())); self.assertNotIn("icc_profile", saved_image.info); self.assertNotIn("xmp", saved_image.info); self.assertNotIn("parameters", saved_image.info)
+                    expected = decoded_sources[record.image_id]
+                    if horizontal: expected = np.fliplr(expected)
+                    if vertical: expected = np.flipud(expected)
+                    transformed_mask = transform_mask(masks[record.image_id], horizontal, vertical) > 0
+                    tolerance = 20.0 if (expected_format or source_format) in {"JPEG", "WEBP"} else 1.0
+                    self.assertLess(float(np.abs(saved[~transformed_mask].astype(np.int16) - expected[~transformed_mask].astype(np.int16)).mean()), tolerance, "each real batch record keeps its own unmasked flipped geometry")
+                    self.assertGreater(float(np.abs(saved[transformed_mask].astype(np.int16) - expected[transformed_mask].astype(np.int16)).mean()), 1.0, "each real batch record applies its composed mosaic/exclusion mask")
+        finally:
+            state.shutdown()
 
     def test_render_releases_every_source_decoder_and_temporary_output_between_repeated_conversions(self) -> None:
-        path = self.root / "repeat.png"
-        Image.new("RGBA", (128, 96), (20, 40, 60, 128)).save(path)
-        record = self.record(path)
-        for index in range(5):
-            payload, suffix, _mime = render_output(record, None, 8, "jpg" if index % 2 else "png", False)
-            with Image.open(io.BytesIO(payload)) as decoded:
-                decoded.load(); self.assertEqual(decoded.size, (128, 96))
-            self.assertIn(suffix, {".png", ".jpg"})
-            del payload
-        gc.collect()
-        moved = self.root / "released.png"
-        path.replace(moved)
-        self.assertTrue(moved.is_file(), "the renderer closes the source after every conversion")
-        moved.unlink()
-        self.assertFalse(moved.exists(), "no conversion retains a source file or output decoder")
+        source_root = self.root / "release-source"; source_root.mkdir(); output = self.root / "release-output"; output.mkdir()
+        for index in range(5): Image.new("RGBA", (256, 192), (20 + index, 40, 60, 128)).save(source_root / f"repeat-{index}.png")
+        state = StudioState(self.root / "release-cache", self.root / "release-sessions")
+        opened: list[weakref.ReferenceType[Image.Image]] = []
+        original_open = Image.open
+        def tracked_open(*args, **kwargs):
+            image = original_open(*args, **kwargs); opened.append(weakref.ref(image)); return image
+        try:
+            records = [state.image_for_id(item["id"]) for item in state.set_root(str(source_root))]
+            masks = {record.image_id: np.ones((record.height, record.width), dtype=np.uint8) * 255 for record in records}
+            state.job = Job(started_at=time.time(), kind="apply", state="running", total=5, image_ids=tuple(record.image_id for record in records))
+            with patch("mozarie.image_io.Image.open", side_effect=tracked_open):
+                state._apply_worker(records, 8, masks, copy_to_default=True, suffix="_converted", output_directory=output, output_format="jpg", keep_metadata=False, preserve_directory_structure=False)
+            self.assertEqual((state.job.state, state.job.completed), ("complete", 5))
+            self.assertEqual(len(list(output.glob("*.jpg"))), 5)
+            gc.collect()
+            self.assertTrue(all(reference() is None or getattr(reference(), "fp", None) is None for reference in opened), "completed batch retains no open decoded source/output image")
+            retained_buffers = [value for value in vars(state).values() if isinstance(value, (Image.Image, io.BytesIO)) or (isinstance(value, np.ndarray) and value.nbytes >= 256 * 192)]
+            self.assertEqual(retained_buffers, [], "completed batch state retains no decoded image or full-size output buffer")
+            for path in [*source_root.glob("*.png"), *output.glob("*.jpg")]:
+                moved = path.with_suffix(path.suffix + ".released"); path.replace(moved); moved.unlink()
+            self.assertFalse(any(source_root.iterdir()) or any(output.iterdir()), "all source and output handles are released after the batch")
+        finally:
+            state.shutdown()
 
     def test_original_jpeg_orientation_and_each_user_flip_are_applied_exactly_once(self) -> None:
         pixels = np.zeros((4, 6, 3), dtype=np.uint8)
@@ -313,7 +345,19 @@ class FlipExportContractTests(unittest.TestCase):
             by_id = {image["id"]: image for image in opened["images"]}
             self.assertEqual((by_id[first_id]["flipH"], by_id[first_id]["flipV"]), (True, False), "naming and reopening a project retains the projectless flip")
             self.assertEqual((by_id[second_id]["flipH"], by_id[second_id]["flipV"]), (False, False), "the other image remains unflipped after reopen")
+            def data_uri(pixel: tuple[int, int]) -> str:
+                mask = Image.new("L", (9, 7), 0); mask.putpixel(pixel, 255); payload = io.BytesIO(); mask.save(payload, format="PNG")
+                return "data:image/png;base64," + base64.b64encode(payload.getvalue()).decode("ascii")
+            state.save_manual_workspace(first_id, {
+                "add": data_uri((1, 2)), "exclusion": data_uri((3, 4)), "exclusionErase": "", "removedCandidateIds": [],
+                "candidateRevision": state._candidate_revision(first_id), "manualEnabled": True,
+                "manualExclusionEnabled": True, "manualExclusionEraseEnabled": True, "manualExclusionForced": True,
+            })
+            before_clear = state.workspace_store.manual(first_id, state._encode_workspace_mask)
+            self.assertTrue(before_clear["add"] and before_clear["exclusion"], "mosaic and exclusion ranges exist before clear")
             state.clear_masks([first_id])
+            after_clear = state.workspace_store.manual(first_id, state._encode_workspace_mask)
+            self.assertTrue(after_clear is None or not (after_clear["add"] or after_clear["exclusion"]), "clear removes both mosaic and exclusion ranges")
             self.assertEqual((state.image_for_id(first_id).flip_horizontal, state.image_for_id(first_id).flip_vertical), (True, False), "clearing mosaic and exclusion state does not clear image direction")
             state.complete_project()
             reopened = StudioState(cache, sessions)
@@ -336,6 +380,11 @@ class FlipExportContractTests(unittest.TestCase):
         try:
             state.create_project("overwrite history")
             image_id = state.set_root(str(source_root))[0]["id"]
+            candidate_path = state.cache_dir / image_id / "history-range.png"; candidate_path.parent.mkdir(parents=True, exist_ok=True)
+            candidate_mask = np.zeros((2, 3), dtype=np.uint8); candidate_mask[:, :2] = 255; Image.fromarray(candidate_mask).save(candidate_path)
+            with state.image_io_lock(image_id):
+                with state.lock:
+                    state._commit_candidate_snapshot(image_id, [Candidate("history-range", "penis", .9, candidate_path)], replace=True)
             state.set_image_transform(image_id, {"flipH": True, "flipV": False})
             revision = state._candidate_revision(image_id)
             state.reserve_browser_save(image_id, revision, "flip-overwrite", copy_to_default=False, suffix="", output_format="original", keep_metadata=True)
@@ -344,24 +393,32 @@ class FlipExportContractTests(unittest.TestCase):
             state.acknowledge_browser_save(rendered.save_token)
             with Image.open(target) as saved:
                 saved_once = np.asarray(saved.convert("RGB")).copy()
-            np.testing.assert_array_equal(saved_once, np.fliplr(pixels), "overwrite writes the visible flipped direction")
+            visible_without_range = np.fliplr(pixels)
+            saved_delta = np.abs(saved_once.astype(np.int16) - visible_without_range.astype(np.int16)).sum(axis=2)
+            self.assertGreater(int(saved_delta[:, 1:3].sum()), int(saved_delta[:, :1].sum()), "overwrite writes the mosaic range on the visible flipped side")
             record = state.image_for_id(image_id)
             self.assertEqual((record.flip_horizontal, record.source_flip_horizontal), (True, True), "the saved native direction and desired direction agree after overwrite")
 
             revision = state._candidate_revision(image_id)
             state.reserve_browser_save(image_id, revision, "flip-overwrite-again", copy_to_default=False, suffix="", output_format="original", keep_metadata=True)
             rendered_again = state.render_browser_save(image_id, revision, 4, None, client_save_token="flip-overwrite-again", output_format="original", keep_metadata=True)
-            self.assertTrue(rendered_again.no_effect, "a second same-direction save recognizes that native pixels already match")
-            state.commit_browser_save(image_id, revision, rendered_again.save_token, "keep")
+            state.commit_browser_save(image_id, revision, rendered_again.save_token, "keep" if rendered_again.no_effect else "overwrite")
             state.acknowledge_browser_save(rendered_again.save_token)
             with Image.open(target) as saved:
                 saved_twice = np.asarray(saved.convert("RGB")).copy()
-            np.testing.assert_array_equal(saved_twice, saved_once, "a second overwrite does not double-apply the flip")
+            self.assertEqual((state.image_for_id(image_id).flip_horizontal, state.image_for_id(image_id).source_flip_horizontal), (True, True), "a second save keeps native and desired horizontal direction aligned")
+            np.testing.assert_array_equal(saved_twice[:, :1], saved_once[:, :1], "a second save does not reverse the unmasked edge")
 
             undone = state.restore_project_history(image_id, "undo")["current"]["image"]
             self.assertEqual((undone["flipH"], undone["flipV"]), (False, False), "undo remains available after overwrite and returns to the direction before the flip")
+            undo_record = state.image_for_id(image_id)
+            with Image.open(io.BytesIO(render_output(undo_record, None, 2, "original", True)[0])) as undo_image:
+                np.testing.assert_array_equal(np.asarray(undo_image.convert("RGB")), np.fliplr(saved_once), "Undo moves the baked image and mosaic range together to the pre-flip direction")
             redone = state.restore_project_history(image_id, "redo")["current"]["image"]
             self.assertEqual((redone["flipH"], redone["flipV"]), (True, False), "redo returns the image and masks to the saved direction")
+            redo_record = state.image_for_id(image_id)
+            with Image.open(io.BytesIO(render_output(redo_record, None, 2, "original", True)[0])) as redo_image:
+                np.testing.assert_array_equal(np.asarray(redo_image.convert("RGB")), saved_once, "Redo restores both image and baked mosaic range to the saved direction")
         finally:
             state.shutdown()
 

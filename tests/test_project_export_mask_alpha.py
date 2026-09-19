@@ -52,11 +52,12 @@ class ProjectExportMaskAlphaTests(unittest.TestCase):
         source.mkdir()
         Image.new("RGB", (4, 4), "white").save(source / "source.png")
         Image.new("RGB", (4, 4), "gray").save(source / "static.png")
+        Image.new("RGB", (4, 4), "navy").save(source / "vertical.png")
         with patch.object(state_module, "APP_DIR", self.app_dir):
             self.state = StudioState(self.root / "cache", self.root / "sessions")
         project = self.state.create_project("alpha export")
         loaded = {item["relativePath"]: item["id"] for item in self.state.set_root(str(source))}
-        image_id = loaded["source.png"]; static_id = loaded["static.png"]
+        image_id = loaded["source.png"]; static_id = loaded["static.png"]; vertical_id = loaded["vertical.png"]
         add = self.rgba_mask((1, 2))
         exclusion = self.rgba_mask((0, 3))
         data_uri = lambda value: "data:image/png;base64," + base64.b64encode(value).decode("ascii")
@@ -97,6 +98,13 @@ class ProjectExportMaskAlphaTests(unittest.TestCase):
             "candidateRevision": self.state._candidate_revision(static_id), "manualEnabled": True,
             "manualExclusionEnabled": True, "manualExclusionEraseEnabled": True, "manualExclusionForced": True,
         })
+        vertical_exclusion = self.rgba_mask((2, 0))
+        self.state.save_manual_workspace(vertical_id, {
+            "add": "", "exclusion": data_uri(vertical_exclusion), "exclusionErase": "", "removedCandidateIds": [],
+            "candidateRevision": self.state._candidate_revision(vertical_id), "manualEnabled": True,
+            "manualExclusionEnabled": True, "manualExclusionEraseEnabled": True, "manualExclusionForced": True,
+        })
+        self.state.set_image_transform(vertical_id, {"flipH": False, "flipV": True})
 
         mosaics = {item["id"]: payload for item, payload in self.state.iter_project_mask_exports(project["id"], "mosaic")}
         exclusions = {item["id"]: payload for item, payload in self.state.iter_project_mask_exports(project["id"], "exclude")}
@@ -112,6 +120,8 @@ class ProjectExportMaskAlphaTests(unittest.TestCase):
                 self.assertEqual(sum(value > 0 for value in mask.getdata()), 1)
         with Image.open(io.BytesIO(mosaics[static_id])) as unflipped:
             self.assertEqual(unflipped.convert("L").getbbox(), (0, 1, 1, 2), "an unflipped project image retains its original mask direction")
+        with Image.open(io.BytesIO(exclusions[vertical_id])) as vertical:
+            self.assertEqual(vertical.convert("L").getbbox(), (2, 3, 3, 4), "vertical flip moves the exclusion layer with its image")
 
     def test_rgba_and_la_candidates_use_alpha_for_preview_save_and_exports(self) -> None:
         source = self.root / "candidate-images"
