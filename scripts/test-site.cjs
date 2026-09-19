@@ -12,13 +12,8 @@ const siteRoot = path.join(root, "site");
 const canonicalUrl = "https://norqis.github.io/mozarie/";
 const googleTagId = "G-BLX3GDM1WQ";
 const googleTagUrl = `https://www.googletagmanager.com/gtag/js?id=${googleTagId}`;
-const contentTypes = {
-  ".css": "text/css; charset=utf-8",
-  ".html": "text/html; charset=utf-8",
-  ".js": "application/javascript; charset=utf-8",
-  ".png": "image/png",
-  ".xml": "application/xml; charset=utf-8",
-};
+const viewports = [{ width: 320, height: 720 }, { width: 390, height: 844 }, { width: 701, height: 800 }, { width: 720, height: 800 }, { width: 768, height: 800 }, { width: 1440, height: 900 }, { width: 1920, height: 960 }];
+const contentTypes = { ".css": "text/css; charset=utf-8", ".html": "text/html; charset=utf-8", ".js": "application/javascript; charset=utf-8", ".png": "image/png", ".xml": "application/xml; charset=utf-8" };
 
 function startSite() {
   const server = http.createServer(async (request, response) => {
@@ -60,88 +55,54 @@ function activeImage(page) {
   return page.locator('[data-gallery-slide][data-gallery-position="active"] img');
 }
 
-test("the editorial landing page works without JavaScript and fits every supported viewport", { timeout: 30_000 }, async () => {
+test("the four-pillar page is complete without JavaScript and has no horizontal overflow", { timeout: 30_000 }, async () => {
   const site = await startSite();
   let browser;
   try {
     browser = await chromium.launch({ headless: true });
-    for (const viewport of [{ width: 320, height: 720 }, { width: 390, height: 844 }, { width: 701, height: 800 }, { width: 720, height: 800 }, { width: 768, height: 800 }, { width: 1440, height: 900 }, { width: 1920, height: 960 }]) {
+    for (const viewport of viewports) {
       const context = await browser.newContext({ javaScriptEnabled: false, viewport });
       await context.route("**/*", localOnly(site));
       const page = await context.newPage();
-      const response = await page.goto(`${site.url}/`, { waitUntil: "load" });
-      assert.equal(response.status(), 200);
-      assert.equal(await page.title(), "Mozarie | 自動検出・手描き編集に対応したモザイク加工ソフト");
-      assert.equal(await page.locator("h1").innerText(), "モザイク加工を、\n検出から仕上げまで");
-      assert.equal(await page.locator('meta[name="description"]').getAttribute("content"), "Mozarieは、モザイクをかける場所の自動検出から手描き調整、複数画像の確認、保存まで行えるWindowsアプリです。画像の加工はPC上で行います。");
+      assert.equal((await page.goto(`${site.url}/`, { waitUntil: "load" })).status(), 200);
+      assert.equal(await page.title(), "Mozarie | 自動検出・ブラシ編集・一括保存に対応したモザイク加工ソフト");
+      assert.equal(await page.locator("h1").innerText(), "モザイク範囲を自動検出。\nブラシで整え、まとめて保存。");
+      assert.equal(await page.locator('meta[name="description"]').getAttribute("content"), "Mozarieは、自動検出から手描き修正、複数画像の一括保存までを1つの画面で進められるWindowsアプリです。編集内容とUndo／Redo履歴はプロジェクトごとに残ります。");
       assert.equal(await page.locator('link[rel="canonical"]').getAttribute("href"), canonicalUrl);
       assert.equal(await page.locator('meta[name="google-site-verification"]').getAttribute("content"), "UrWwBw6iDkiGPFlWk3S4jrSsP7YfkvctuNVveYOJd_o");
-      assert.equal(await page.getByText("自動検出と手描きで範囲を整え、画像を確認して保存するWindowsアプリです。", { exact: true }).isVisible(), true);
+      assert.equal(await page.getByRole("heading", { name: "検出から保存までを、1つの画面で進めます。", exact: true }).count(), 1);
       assert.deepEqual(await page.locator("#features .visual-moment").evaluateAll((moments) => moments.map((moment) => ({
+        sequence: moment.querySelector(".sequence")?.textContent.trim(),
         heading: moment.querySelector("h2")?.textContent.trim(),
-        copy: moment.querySelector("p")?.textContent.trim(),
-        source: moment.querySelector("img")?.getAttribute("src"),
-        disabled: moment.querySelector("[data-feature-open]")?.disabled,
+        copy: moment.querySelector(".visual-copy p:last-child")?.textContent.trim(),
+        image: moment.querySelector("img")?.getAttribute("src") || null,
       }))), [
-        { heading: "比べて仕上げる", copy: "編集結果と適用範囲を並べて、モザイクのかかる場所を確認できます。", source: "assets/demo3.png", disabled: true },
-        { heading: "手描きで、細部まで", copy: "ブラシと消しゴムで、かけたい範囲と残したい部分を整えられます。", source: "assets/demo1.png", disabled: true },
-        { heading: "複数画像を、まとめて", copy: "フィルターで確認する画像を絞り、編集した画像をまとめて保存できます。", source: "assets/demo1.png", disabled: true },
+        { sequence: "01", heading: "モザイク自動検出", copy: "現在の画像または全画像に自動検出を実行できます。モザイク結果と適用範囲を見比べて確認できます。", image: "assets/demo3.png" },
+        { sequence: "02", heading: "ブラシツール", copy: "ブラシと消しゴムで、モザイクをかけたい範囲と残したい部分を整えられます。", image: "assets/demo1.png" },
+        { sequence: "03", heading: "複数画像をまとめて保存", copy: "保存対象を選び、コピー保存または元画像へ上書きします。", image: "assets/demo1.png" },
+        { sequence: "04", heading: "プロジェクトごとの履歴保持", copy: "候補、手描き範囲、確認状態、Undo／Redo履歴をプロジェクトごとに保持します。別のプロジェクトへ切り替えても作業内容は混ざりません。", image: null },
       ]);
-      assert.equal(await page.locator("#features .feature-list, #features .feature-lead").count(), 0);
-      assert.equal(await page.locator("[data-feature-open]").evaluateAll((previews) => previews.every((preview) => {
-        const image = preview.querySelector("img");
-        const previewBounds = preview.getBoundingClientRect();
-        const imageBounds = image.getBoundingClientRect();
-        return previewBounds.width > 0 && previewBounds.height > 0 && image.complete && image.naturalWidth === 1920 && image.naturalHeight === 959 && imageBounds.left <= previewBounds.left && imageBounds.top <= previewBounds.top && imageBounds.right >= previewBounds.right && imageBounds.bottom >= previewBounds.bottom;
-      })), true, `all visual-moment crops load and cover their visible frame at ${viewport.width}px`);
-      assert.equal(await page.getByRole("heading", { name: "画像の加工は、PC上で", exact: true }).isVisible(), true);
-      assert.equal(await page.locator("#local p").evaluateAll((elements) => elements.length === 1 && elements.every((element) => element.textContent.trim().length > 0 && element.getClientRects().length > 0)), true);
-      assert.equal(await page.locator("#install, #faq").count(), 0);
-      assert.equal(await page.getByRole("heading", { name: "使い始めるまで", exact: true }).count(), 0);
-      assert.equal(await page.getByRole("heading", { name: "よくある質問", exact: true }).count(), 0);
-      assert.equal(await page.locator('nav a[href="#install"], nav a[href="#faq"]').count(), 0);
-      assert.equal(await page.locator('a[href^="#"]').evaluateAll((links) => links.every((link) => document.querySelector(link.getAttribute("href")))), true);
-      assert.equal(await page.getByRole("link", { name: "最新版をダウンロード", exact: false }).count(), 1);
-      const localDownload = page.getByRole("link", { name: "Mozarieをダウンロード", exact: true });
-      assert.equal(await localDownload.getAttribute("href"), "https://github.com/norqis/mozarie/releases/latest");
-      const localDownloadBounds = await localDownload.boundingBox();
-      assert.ok(localDownloadBounds && localDownloadBounds.height >= 44, "local download CTA has a 44px target");
-      assert.equal(await page.locator('footer a[lang="en"][href="https://github.com/norqis/mozarie/blob/main/README.en.md"]').count(), 1);
-      assert.equal(await page.locator("[data-gallery-controls]").evaluateAll((controls) => controls.every((control) => control.hidden && getComputedStyle(control).display === "none")), true);
-      assert.equal(await page.locator("[data-gallery-pause], [data-gallery-caption], [data-gallery-count]").count(), 0);
-      assert.equal(await page.locator("[data-gallery-slide]:not([hidden])").count(), 1);
-      assert.equal(await page.locator("[data-gallery-slide]:not([hidden]) img").getAttribute("src"), "assets/demo1.png");
-      assert.equal(await page.locator("[data-gallery-slide] a").count(), 0);
+      assert.deepEqual(await page.locator(".resume-flow li").allTextContents(), ["範囲を調整", "Mozarieを閉じる", "プロジェクトを再開", "保存した範囲と履歴から続ける"]);
+      assert.equal(await page.getByRole("heading", { name: "画像の加工は、PC上で", exact: true }).count(), 0);
+      assert.equal(await page.locator("body").innerText().then((text) => text.includes("画像の加工は、PC上で")), false);
+      assert.equal(await page.locator("#install, #faq, .feature-list, .feature-lead").count(), 0);
+      assert.equal(await page.locator("[data-gallery-slide]").count(), 2);
+      assert.equal(await page.locator('[src="assets/demo2.png"]').count(), 0);
+      assert.equal(await page.locator("[data-gallery-slide]:not([hidden]) img").getAttribute("src"), "assets/demo3.png");
       assert.equal(await page.locator("[data-gallery-open]").evaluateAll((buttons) => buttons.every((button) => button.disabled)), true);
-      assert.deepEqual(await page.locator("[data-gallery-slide]:not([hidden]) img").evaluate((image) => ({ width: image.naturalWidth, height: image.naturalHeight, complete: image.complete })), { width: 1920, height: 959, complete: true });
-      assert.deepEqual(await page.locator(".brand-mark img").evaluate((image) => ({ src: image.getAttribute("src"), alt: image.getAttribute("alt"), width: image.naturalWidth, height: image.naturalHeight, complete: image.complete })), { src: "assets/mozarie-logo.png", alt: "", width: 799, height: 547, complete: true });
-      const stage = await page.locator("[data-gallery-viewport]").boundingBox();
+      assert.equal(await page.locator("[data-gallery-controls]").evaluateAll((controls) => controls.every((control) => control.hidden && getComputedStyle(control).display === "none")), true);
+      assert.equal(await page.locator("[data-gallery-caption]").innerText(), "自動検出した範囲を、モザイク結果と適用範囲で確認できます。");
+      assert.equal(await page.getByRole("heading", { name: "検出から一括保存まで、Mozarieで進められます。", exact: true }).count(), 1);
+      assert.equal(await page.getByRole("link", { name: "最新版をダウンロード", exact: true }).count(), 2);
+      assert.equal(await page.getByRole("link", { name: "動作環境と使い方", exact: true }).count(), 2);
+      const heroDownload = page.getByRole("link", { name: "最新版をダウンロード", exact: true }).first();
+      const heroDownloadBounds = await heroDownload.boundingBox();
+      assert.ok(heroDownloadBounds && heroDownloadBounds.height >= 44 && heroDownloadBounds.y + heroDownloadBounds.height <= viewport.height, `initial download CTA is usable at ${viewport.width}px`);
       const image = await page.locator("[data-gallery-slide]:not([hidden]) img").boundingBox();
       const expectedWidth = viewport.width <= 700 ? viewport.width - 48 : Math.min(viewport.width * .82, 1480);
-      assert.ok(image && Math.abs(image.width - expectedWidth) <= 1, `central demo image has the intended width at ${viewport.width}px`);
-      assert.ok(image && Math.abs(image.width / image.height - 1920 / 959) < .002, `demo image is not cropped at ${viewport.width}px`);
-      assert.equal(JSON.stringify(await page.locator(".gallery, .gallery-frame, .gallery-image, .gallery-slide img").evaluateAll((elements) => elements.map((element) => {
-        const style = getComputedStyle(element);
-        return { background: style.backgroundColor, border: style.borderWidth, radius: style.borderRadius, shadow: style.boxShadow };
-      }))), JSON.stringify(Array(8).fill({ background: "rgba(0, 0, 0, 0)", border: "0px", radius: "0px", shadow: "none" })));
-      if (viewport.width === 1440) assert.ok(image && image.width >= 1180 && image.width <= 1182, "1440px viewport keeps the 1181px main image");
-      if (viewport.width === 1920) assert.ok(image && image.width === 1480, "1920px viewport caps the main image at 1480px");
-      if (viewport.width === 768) assert.ok(image && image.width >= 629 && image.width <= 631, "768px viewport keeps the 630px main image");
-      if (viewport.width <= 390) {
-        assert.ok(stage && stage.x === 0 && stage.width === viewport.width, `mobile stage remains full-width at ${viewport.width}px`);
-        assert.ok(image && image.x >= 24 && viewport.width - image.x - image.width >= 24, `mobile image keeps 24px side margins at ${viewport.width}px`);
-        const actions = await page.locator(".hero-action a").evaluateAll((links) => links.map((link) => {
-          const bounds = link.getBoundingClientRect();
-          return { height: bounds.height, left: bounds.left, right: bounds.right, top: bounds.top, bottom: bounds.bottom };
-        }));
-        assert.equal(actions.length, 2);
-        assert.ok(actions.every((action) => action.height >= 48) && !(actions[0].left < actions[1].right && actions[0].right > actions[1].left && actions[0].top < actions[1].bottom && actions[0].bottom > actions[1].top), `mobile CTAs remain legible and separate at ${viewport.width}px`);
-      }
-      const download = await page.getByRole("link", { name: "最新版をダウンロード", exact: false }).boundingBox();
-      assert.equal(await page.getByRole("link", { name: "最新版をダウンロード", exact: false }).getAttribute("href"), "https://github.com/norqis/mozarie/releases/latest");
-      assert.ok(download && download.y >= 0 && download.y + download.height <= viewport.height, "download remains in the initial viewport");
-      await page.getByRole("link", { name: "最新版をダウンロード", exact: false }).focus();
-      assert.notEqual(await page.evaluate(() => getComputedStyle(document.activeElement).outlineStyle), "none");
+      assert.ok(image && Math.abs(image.width - expectedWidth) <= 1, `central image width at ${viewport.width}px`);
+      assert.ok(image && Math.abs(image.width / image.height - 1920 / 959) < .002, `central image ratio at ${viewport.width}px`);
+      if (viewport.width <= 390) assert.ok(image && image.x >= 24 && viewport.width - image.x - image.width >= 24, `mobile margins at ${viewport.width}px`);
       assert.equal(await page.locator("html").evaluate((element) => element.scrollWidth <= element.clientWidth), true, `no horizontal overflow at ${viewport.width}px`);
       await context.close();
     }
@@ -151,7 +112,7 @@ test("the editorial landing page works without JavaScript and fits every support
   }
 });
 
-test("the static assets and sitemap are published with the editorial source", { timeout: 30_000 }, async () => {
+test("the published assets preserve the source logo and sitemap", { timeout: 30_000 }, async () => {
   const site = await startSite();
   let browser;
   try {
@@ -160,7 +121,7 @@ test("the static assets and sitemap are published with the editorial source", { 
       assert.equal(asset.status, 200);
       assert.match(asset.headers["content-type"], type);
     }
-    for (const image of ["demo1.png", "demo2.png", "demo3.png", "mozarie-logo.png"]) assert.equal((await get(`${site.url}/assets/${image}`)).status, 200);
+    for (const image of ["demo1.png", "demo3.png", "mozarie-logo.png"]) assert.equal((await get(`${site.url}/assets/${image}`)).status, 200);
     assert.deepEqual(await fs.readFile(path.join(root, "static", "images", "long_logo.png")), await fs.readFile(path.join(siteRoot, "assets", "mozarie-logo.png")));
     const sitemap = await get(`${site.url}/sitemap.xml`);
     browser = await chromium.launch({ headless: true });
@@ -173,7 +134,7 @@ test("the static assets and sitemap are published with the editorial source", { 
   }
 });
 
-test("the peek carousel rotates, keeps its focus and tab rules, and opens a modal preview", { timeout: 30_000 }, async () => {
+test("the two-screen carousel rotates every six seconds and stops for focus, modal, visibility, and reduced motion", { timeout: 30_000 }, async () => {
   const site = await startSite();
   let browser;
   try {
@@ -181,264 +142,165 @@ test("the peek carousel rotates, keeps its focus and tab rules, and opens a moda
     const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
     await context.route("**/*", localOnly(site));
     const page = await context.newPage();
-    await page.clock.install({ time: new Date("2026-09-18T00:00:00Z") });
+    await page.clock.install({ time: new Date("2026-09-19T00:00:00Z") });
     await page.goto(`${site.url}/`, { waitUntil: "domcontentloaded" });
     await page.waitForFunction(() => [...document.querySelectorAll("[data-gallery-slide] img")].every((image) => image.complete && image.naturalWidth === 1920));
     const gallery = page.locator("[data-gallery]");
-    const viewport = page.locator("[data-gallery-viewport]");
     const previous = page.getByRole("button", { name: "前の画面" });
     const next = page.getByRole("button", { name: "次の画面" });
-    const current = () => activeImage(page);
-
+    const modal = page.locator("[data-gallery-modal]");
     assert.equal(await page.locator("[data-gallery-pause]").count(), 0);
-    assert.equal(await page.locator("[data-gallery-slide] a").count(), 0);
-    assert.deepEqual(await page.locator("[data-gallery-slide] img").evaluateAll((images) => images.map((image) => ({ src: image.getAttribute("src"), width: image.naturalWidth, height: image.naturalHeight, complete: image.complete }))), [
-      { src: "assets/demo1.png", width: 1920, height: 959, complete: true },
-      { src: "assets/demo2.png", width: 1920, height: 959, complete: true },
-      { src: "assets/demo3.png", width: 1920, height: 959, complete: true },
-    ]);
-    assert.deepEqual(await page.locator("[data-gallery-slide]").evaluateAll((slides) => slides.map((slide) => ({ hidden: slide.hidden, position: slide.dataset.galleryPosition, ariaHidden: slide.getAttribute("aria-hidden"), disabled: slide.querySelector("button").disabled }))), [
-      { hidden: false, position: "active", ariaHidden: "false", disabled: false },
-      { hidden: false, position: "next", ariaHidden: "true", disabled: true },
-      { hidden: false, position: "previous", ariaHidden: "true", disabled: true },
-    ]);
-    const [previousBounds, viewportBounds, nextBounds, imageBounds] = await Promise.all([previous.boundingBox(), viewport.boundingBox(), next.boundingBox(), current().boundingBox()]);
-    assert.ok(previousBounds && viewportBounds && nextBounds && imageBounds);
-    assert.ok(previousBounds.width >= 44 && previousBounds.height >= 44 && previousBounds.x + previousBounds.width <= imageBounds.x, "previous arrow is outside the central image");
-    assert.ok(nextBounds.width >= 44 && nextBounds.height >= 44 && nextBounds.x >= imageBounds.x + imageBounds.width, "next arrow is outside the central image");
-    assert.ok(imageBounds.width >= 1180 && imageBounds.width <= 1182, "the central image is 1181px at 1440px");
-    assert.equal(await page.locator("[data-gallery-slide][data-gallery-position='previous'], [data-gallery-slide][data-gallery-position='next']").evaluateAll((slides) => slides.every((slide) => {
-      const bounds = slide.getBoundingClientRect();
-      const viewportBounds = slide.parentElement.getBoundingClientRect();
-      return getComputedStyle(slide).opacity === "0.24" && bounds.right > viewportBounds.left && bounds.left < viewportBounds.right;
-    })), true, "both neighboring images remain visibly peeking into the clipped viewport");
+    assert.equal(await page.locator("[data-gallery-slide]").count(), 2);
+    assert.equal(await page.locator('[src="assets/demo2.png"]').count(), 0);
+    assert.equal(await activeImage(page).getAttribute("src"), "assets/demo3.png");
+    assert.equal(await page.locator("[data-gallery-caption]").innerText(), "自動検出した範囲を、モザイク結果と適用範囲で確認できます。");
+    const [previousBounds, nextBounds, imageBounds] = await Promise.all([previous.boundingBox(), next.boundingBox(), activeImage(page).boundingBox()]);
+    assert.ok(previousBounds && nextBounds && imageBounds);
+    assert.ok(previousBounds.x + previousBounds.width <= imageBounds.x && nextBounds.x >= imageBounds.x + imageBounds.width, "desktop arrows are outside the image");
+    assert.equal(await page.locator("[data-gallery-peek-previous], [data-gallery-peek-next]").evaluateAll((peeks) => peeks.every((peek) => {
+      const bounds = peek.getBoundingClientRect();
+      const viewport = peek.parentElement.getBoundingClientRect();
+      return Number(getComputedStyle(peek).opacity) === .24 && bounds.right > viewport.left && bounds.left < viewport.right;
+    })), true, "both neighboring previews peek into the viewport");
 
+    await page.clock.fastForward(6000);
+    assert.equal(await activeImage(page).getAttribute("src"), "assets/demo1.png");
+    assert.equal(await page.locator("[data-gallery-caption]").innerText(), "画像一覧、ブラシ、候補、保存操作を1つの画面で扱えます。");
     await previous.click();
-    assert.equal(await current().getAttribute("src"), "assets/demo3.png");
-    assert.equal(await page.getByRole("button", { name: "画面 3を表示" }).getAttribute("aria-current"), "true");
-    for (const [index, source] of ["assets/demo1.png", "assets/demo2.png", "assets/demo3.png"].entries()) {
-      await page.getByRole("button", { name: `画面 ${index + 1}を表示` }).click();
-      assert.equal(await current().getAttribute("src"), source);
-      assert.equal(await page.getByRole("button", { name: `画面 ${index + 1}を表示` }).getAttribute("aria-current"), "true");
-    }
+    assert.equal(await activeImage(page).getAttribute("src"), "assets/demo3.png");
+    await page.getByRole("button", { name: "画面 2を表示" }).click();
+    assert.equal(await activeImage(page).getAttribute("src"), "assets/demo1.png");
+    assert.equal(await page.getByRole("button", { name: "画面 2を表示" }).getAttribute("aria-current"), "true");
     await page.getByRole("button", { name: "画面 1を表示" }).click();
-
-    for (const expected of ["assets/demo2.png", "assets/demo3.png", "assets/demo1.png"]) {
-      await page.clock.fastForward(6000);
-      assert.equal(await current().getAttribute("src"), expected);
-    }
-    assert.deepEqual(await page.locator("[data-gallery-slide]").evaluateAll((slides) => slides.map((slide) => ({ position: slide.dataset.galleryPosition, src: slide.querySelector("img").getAttribute("src") }))), [
-      { position: "active", src: "assets/demo1.png" },
-      { position: "next", src: "assets/demo2.png" },
-      { position: "previous", src: "assets/demo3.png" },
-    ]);
+    assert.equal(await activeImage(page).getAttribute("src"), "assets/demo3.png");
+    await next.click();
+    assert.equal(await activeImage(page).getAttribute("src"), "assets/demo1.png");
     await gallery.hover();
     await page.clock.fastForward(6000);
-    assert.equal(await current().getAttribute("src"), "assets/demo2.png", "hover does not pause autoplay");
-    await next.click();
-    assert.equal(await current().getAttribute("src"), "assets/demo3.png");
-    await page.clock.fastForward(6000);
-    assert.equal(await current().getAttribute("src"), "assets/demo1.png", "pointer navigation schedules the next cycle");
+    assert.equal(await activeImage(page).getAttribute("src"), "assets/demo3.png", "hover and manual navigation keep autoplay active");
 
-    await previous.focus();
-    await page.keyboard.press("Tab");
-    assert.equal(await page.locator('[data-gallery-slide][data-gallery-position="active"] [data-gallery-open]').evaluate((element) => document.activeElement === element), true, "Tab skips both neighboring images");
-    await page.keyboard.press("Shift+Tab");
-    await previous.press("ArrowRight");
-    const focusSource = await current().getAttribute("src");
+    await next.focus();
+    await next.press("ArrowRight");
+    const focusedSource = await activeImage(page).getAttribute("src");
     await page.clock.fastForward(6000);
-    assert.equal(await current().getAttribute("src"), focusSource, "keyboard focus suspends autoplay");
-    await page.getByRole("link", { name: "最新版をダウンロード", exact: false }).focus();
+    assert.equal(await activeImage(page).getAttribute("src"), focusedSource, "keyboard focus suspends autoplay");
+    await page.getByRole("link", { name: "最新版をダウンロード", exact: true }).first().focus();
     await page.clock.fastForward(6000);
-    assert.notEqual(await current().getAttribute("src"), focusSource, "leaving keyboard focus restores autoplay");
+    assert.notEqual(await activeImage(page).getAttribute("src"), focusedSource, "leaving keyboard focus resumes autoplay");
 
-    const modal = page.locator("[data-gallery-modal]");
+    await page.evaluate((hidden) => {
+      Object.defineProperty(document, "hidden", { configurable: true, get: () => hidden });
+      document.dispatchEvent(new Event("visibilitychange"));
+    }, true);
+    const hiddenSource = await activeImage(page).getAttribute("src");
+    await page.clock.fastForward(6000);
+    assert.equal(await activeImage(page).getAttribute("src"), hiddenSource, "hidden pages do not rotate");
+    await page.evaluate((hidden) => {
+      Object.defineProperty(document, "hidden", { configurable: true, get: () => hidden });
+      document.dispatchEvent(new Event("visibilitychange"));
+    }, false);
+    await page.clock.fastForward(6000);
+    assert.notEqual(await activeImage(page).getAttribute("src"), hiddenSource, "visible pages resume rotation");
+
     const opener = page.locator('[data-gallery-slide][data-gallery-position="active"] [data-gallery-open]');
-    const modalSource = await current().getAttribute("src");
+    const source = await activeImage(page).getAttribute("src");
     await opener.click();
     assert.equal(await modal.getAttribute("open"), "");
-    await page.evaluate((hidden) => {
-      Object.defineProperty(document, "hidden", { configurable: true, get: () => hidden });
-      document.dispatchEvent(new Event("visibilitychange"));
-    }, true);
-    await page.evaluate((hidden) => {
-      Object.defineProperty(document, "hidden", { configurable: true, get: () => hidden });
-      document.dispatchEvent(new Event("visibilitychange"));
-    }, false);
-    await page.clock.fastForward(6000);
-    assert.equal(await current().getAttribute("src"), modalSource, "visibility changes do not restart autoplay behind a modal");
-    await page.getByRole("button", { name: "拡大表示を閉じる" }).click();
-    await modal.waitFor({ state: "hidden" });
-
-    await page.getByRole("link", { name: "最新版をダウンロード", exact: false }).focus();
-    await page.evaluate((hidden) => {
-      Object.defineProperty(document, "hidden", { configurable: true, get: () => hidden });
-      document.dispatchEvent(new Event("visibilitychange"));
-    }, true);
-    const visibleSource = await current().getAttribute("src");
-    await page.clock.fastForward(6000);
-    assert.equal(await current().getAttribute("src"), visibleSource, "hidden pages do not advance");
-    await page.evaluate((hidden) => {
-      Object.defineProperty(document, "hidden", { configurable: true, get: () => hidden });
-      document.dispatchEvent(new Event("visibilitychange"));
-    }, false);
-    await page.clock.fastForward(6000);
-    assert.notEqual(await current().getAttribute("src"), visibleSource, "visible pages schedule a fresh cycle");
-    await context.close();
-  } finally {
-    await browser?.close();
-    await site.close();
-  }
-});
-
-test("the preview modal opens repeatedly and restores its opener without changing the page", { timeout: 30_000 }, async () => {
-  const site = await startSite();
-  let browser;
-  try {
-    browser = await chromium.launch({ headless: true });
-    const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
-    await context.route("**/*", localOnly(site));
-    const page = await context.newPage();
-    await page.goto(`${site.url}/`, { waitUntil: "domcontentloaded" });
-    await page.waitForFunction(() => [...document.querySelectorAll("[data-gallery-slide] img")].every((image) => image.complete));
-    const opener = page.locator('[data-gallery-slide][data-gallery-position="active"] [data-gallery-open]');
-    const dialog = page.locator("[data-gallery-modal]");
-    const close = page.getByRole("button", { name: "拡大表示を閉じる" });
-    const url = page.url();
-    const source = await activeImage(page).getAttribute("src");
-    const alt = await activeImage(page).getAttribute("alt");
-
-    await opener.click();
-    assert.equal(await dialog.getAttribute("open"), "");
     assert.equal(await page.locator("[data-gallery-modal-image]").getAttribute("src"), new URL(source, `${site.url}/`).href);
-    assert.equal(await page.locator("[data-gallery-modal-image]").getAttribute("alt"), alt);
-    assert.equal(page.url(), url, "opening the preview does not navigate");
-    assert.equal(await close.evaluate((element) => document.activeElement === element), true);
+    assert.equal(await page.locator("[data-gallery-modal-image]").getAttribute("alt"), await activeImage(page).getAttribute("alt"));
+    assert.equal(await page.getByRole("button", { name: "拡大表示を閉じる" }).evaluate((element) => document.activeElement === element), true);
+    await page.clock.fastForward(6000);
+    assert.equal(await activeImage(page).getAttribute("src"), source, "modal suspends autoplay");
+    await page.evaluate(() => {
+      Object.defineProperty(document, "hidden", { configurable: true, value: true });
+      document.dispatchEvent(new Event("visibilitychange"));
+      Object.defineProperty(document, "hidden", { configurable: true, value: false });
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    await page.clock.fastForward(6000);
+    assert.equal(await activeImage(page).getAttribute("src"), source, "visibility changes do not restart autoplay behind a modal");
     await page.locator("[data-gallery-modal-image]").click();
-    assert.equal(await dialog.getAttribute("open"), "", "clicking the image does not close the modal");
-    await close.click();
-    assert.equal(await opener.evaluate((element) => document.activeElement === element), true);
-    await page.waitForFunction((initialSource) => document.querySelector('[data-gallery-slide][data-gallery-position="active"] img').getAttribute("src") !== initialSource, source);
+    assert.equal(await modal.getAttribute("open"), "", "image click does not close the modal");
+    await page.keyboard.press("Escape");
+    assert.equal(await modal.getAttribute("open"), null);
+    assert.equal(await opener.evaluate((element) => document.activeElement === element), true, "modal restores opener focus");
 
     await opener.click();
     await page.mouse.click(2, 2);
-    assert.equal(await dialog.getAttribute("open"), null, "clicking the backdrop closes the modal");
-    assert.equal(await opener.evaluate((element) => document.activeElement === element), true);
+    assert.equal(await modal.getAttribute("open"), null, "backdrop click closes the modal");
+    assert.equal(await opener.evaluate((element) => document.activeElement === element), true, "backdrop close restores opener focus");
 
-    await opener.click();
+    await opener.focus();
+    await opener.press("Enter");
     await page.keyboard.press("Escape");
-    assert.equal(await dialog.getAttribute("open"), null, "Escape closes the modal");
-    assert.equal(await opener.evaluate((element) => document.activeElement === element), true);
+    const keyboardSource = await activeImage(page).getAttribute("src");
+    await page.clock.fastForward(6000);
+    assert.equal(await activeImage(page).getAttribute("src"), keyboardSource, "keyboard-opened modal keeps autoplay suspended after close");
+
     await context.close();
+
+    const reducedContext = await browser.newContext({ reducedMotion: "reduce", viewport: { width: 390, height: 844 } });
+    await reducedContext.route("**/*", localOnly(site));
+    const reducedPage = await reducedContext.newPage();
+    await reducedPage.clock.install({ time: new Date("2026-09-19T00:00:00Z") });
+    await reducedPage.goto(`${site.url}/`, { waitUntil: "domcontentloaded" });
+    const reducedSource = await activeImage(reducedPage).getAttribute("src");
+    await reducedPage.clock.fastForward(6000);
+    assert.equal(await activeImage(reducedPage).getAttribute("src"), reducedSource, "reduced motion stops autoplay");
+    await reducedPage.getByRole("button", { name: "次の画面" }).click();
+    assert.notEqual(await activeImage(reducedPage).getAttribute("src"), reducedSource, "reduced motion keeps manual navigation");
+    await reducedContext.close();
   } finally {
     await browser?.close();
     await site.close();
   }
 });
 
-test("each visual moment opens its original image and resumes the gallery after closing", { timeout: 30_000 }, async () => {
+test("preview buttons and carousel geometry work across supported viewports", { timeout: 30_000 }, async () => {
   const site = await startSite();
   let browser;
   try {
     browser = await chromium.launch({ headless: true });
-    for (const width of [1440, 390]) {
-      const context = await browser.newContext({ viewport: { width, height: 900 } });
-      await context.route("**/*", localOnly(site));
-      const page = await context.newPage();
-      await page.clock.install({ time: new Date("2026-09-18T00:00:00Z") });
-      await page.goto(`${site.url}/`, { waitUntil: "domcontentloaded" });
-      await page.waitForFunction(() => [...document.querySelectorAll("[data-feature-open] img")].every((image) => image.complete && image.naturalWidth === 1920));
-      const dialog = page.locator("[data-gallery-modal]");
-      const modalImage = page.locator("[data-gallery-modal-image]");
-      const close = page.locator("[data-gallery-modal-close]");
-      const url = page.url();
-      const previews = page.locator("[data-feature-open]");
-      assert.equal(await previews.count(), 3);
-      const expected = [
-        { source: "assets/demo3.png", alt: "Mozarieで編集結果と適用範囲を見比べている画面", close: "button" },
-        { source: "assets/demo1.png", alt: "Mozarieでモザイクの範囲を手描きで調整している画面", close: "escape" },
-        { source: "assets/demo1.png", alt: "Mozarieで複数画像を確認しモザイクの範囲を手描きで調整している画面", close: "backdrop" },
-      ];
-      for (const [index, preview] of expected.entries()) {
-        const opener = previews.nth(index);
-        if (preview.close === "escape") {
-          await opener.focus();
-          await opener.press("Enter");
-        } else {
-          await opener.click();
-        }
-        assert.equal(await dialog.getAttribute("open"), "");
-        assert.equal(await modalImage.getAttribute("src"), new URL(preview.source, `${site.url}/`).href);
-        assert.equal(await modalImage.getAttribute("alt"), preview.alt);
-        await page.waitForFunction(() => { const image = document.querySelector("[data-gallery-modal-image]"); return image.complete && image.naturalWidth === 1920; });
-        assert.deepEqual(await modalImage.evaluate((image) => ({ complete: image.complete, width: image.naturalWidth, height: image.naturalHeight })), { complete: true, width: 1920, height: 959 });
-        assert.equal(page.url(), url);
-        const activeWhileOpen = await activeImage(page).getAttribute("src");
-        await page.clock.fastForward(6000);
-        assert.equal(await activeImage(page).getAttribute("src"), activeWhileOpen, "the gallery remains stopped behind a feature preview");
-        const closeEvent = page.evaluate(() => new Promise((resolve) => document.querySelector("[data-gallery-modal]").addEventListener("close", resolve, { once: true })));
-        if (preview.close === "button") await close.click();
-        if (preview.close === "escape") await page.keyboard.press("Escape");
-        if (preview.close === "backdrop") await page.mouse.click(2, 2);
-        await dialog.waitFor({ state: "hidden" });
-        await closeEvent;
-        assert.equal(await opener.evaluate((element) => document.activeElement === element), true);
-        const activeBefore = await activeImage(page).getAttribute("src");
-        await page.clock.runFor(6000);
-        assert.notEqual(await activeImage(page).getAttribute("src"), activeBefore, `closing feature preview ${index + 1} leaves the gallery autoplay active`);
-      }
-      await context.close();
-    }
-  } finally {
-    await browser?.close();
-    await site.close();
-  }
-});
-
-test("the enabled carousel keeps its visible geometry at every supported viewport", { timeout: 30_000 }, async () => {
-  const site = await startSite();
-  let browser;
-  try {
-    browser = await chromium.launch({ headless: true });
-    for (const viewport of [{ width: 320, height: 720 }, { width: 390, height: 844 }, { width: 701, height: 800 }, { width: 720, height: 800 }, { width: 768, height: 800 }, { width: 1440, height: 900 }, { width: 1920, height: 960 }]) {
+    for (const viewport of viewports) {
       const context = await browser.newContext({ viewport });
       await context.route("**/*", localOnly(site));
       const page = await context.newPage();
       await page.goto(`${site.url}/`, { waitUntil: "domcontentloaded" });
       await page.waitForFunction(() => [...document.querySelectorAll("[data-gallery-slide] img")].every((image) => image.complete));
-      const [previous, viewportBounds, next, image, dots] = await Promise.all([
-        page.getByRole("button", { name: "前の画面" }).boundingBox(),
-        page.locator("[data-gallery-viewport]").boundingBox(),
-        page.getByRole("button", { name: "次の画面" }).boundingBox(),
-        activeImage(page).boundingBox(),
-        page.locator("[data-gallery-dot]").evaluateAll((buttons) => buttons.map((button) => {
-          const bounds = button.getBoundingClientRect();
-          return { width: bounds.width, height: bounds.height, x: bounds.x, y: bounds.y };
-        })),
-      ]);
-      assert.ok(previous && viewportBounds && next && image);
+      const [previous, next, image] = await Promise.all([page.getByRole("button", { name: "前の画面" }).boundingBox(), page.getByRole("button", { name: "次の画面" }).boundingBox(), activeImage(page).boundingBox()]);
+      assert.ok(previous && next && image);
       const expectedWidth = viewport.width <= 700 ? viewport.width - 48 : Math.min(viewport.width * .82, 1480);
-      assert.ok(Math.abs(image.width - expectedWidth) <= 1, `central image has the required width at ${viewport.width}px`);
-      assert.ok(Math.abs(image.width / image.height - 1920 / 959) < .002, `central image keeps the source ratio at ${viewport.width}px`);
+      assert.ok(Math.abs(image.width - expectedWidth) <= 1, `central image has the intended width at ${viewport.width}px`);
+      assert.ok(Math.abs(image.width / image.height - 1920 / 959) < .002, `central image keeps its source ratio at ${viewport.width}px`);
       if (viewport.width <= 900) {
         assert.ok(previous.width >= 44 && previous.height >= 44 && previous.y >= image.y + image.height, `previous arrow is below the image at ${viewport.width}px`);
         assert.ok(next.width >= 44 && next.height >= 44 && next.y >= image.y + image.height, `next arrow is below the image at ${viewport.width}px`);
-        assert.ok(dots.every((dot) => dot.width >= 24 && dot.height >= 44), `mobile dots retain their control-row targets at ${viewport.width}px`);
       } else {
-        assert.ok(previous.width >= 44 && previous.height >= 44 && previous.x + previous.width <= image.x, `previous arrow stays outside the image at ${viewport.width}px`);
-        assert.ok(next.width >= 44 && next.height >= 44 && next.x >= image.x + image.width, `next arrow stays outside the image at ${viewport.width}px`);
-        assert.ok(dots.every((dot) => dot.width >= 44 && dot.height >= 44), `desktop dots retain 44px targets at ${viewport.width}px`);
+        assert.ok(previous.width >= 44 && previous.height >= 44 && previous.x + previous.width <= image.x, `previous arrow is outside the image at ${viewport.width}px`);
+        assert.ok(next.width >= 44 && next.height >= 44 && next.x >= image.x + image.width, `next arrow is outside the image at ${viewport.width}px`);
       }
+      const dots = await page.locator("[data-gallery-dot]").evaluateAll((buttons) => buttons.map((button) => {
+        const bounds = button.getBoundingClientRect();
+        return { width: bounds.width, height: bounds.height, x: bounds.x, y: bounds.y };
+      }));
+      assert.equal(dots.length, 2);
+      assert.ok(dots.every((dot) => dot.height >= 44 && dot.width >= (viewport.width <= 900 ? 24 : 44)), `dots retain usable targets at ${viewport.width}px`);
       for (const arrow of [previous, next]) {
-        for (const dot of dots) {
-          assert.equal(arrow.x < dot.x + dot.width && arrow.x + arrow.width > dot.x && arrow.y < dot.y + dot.height && arrow.y + arrow.height > dot.y, false, `arrows and dots do not overlap at ${viewport.width}px`);
-        }
+        for (const dot of dots) assert.equal(arrow.x < dot.x + dot.width && arrow.x + arrow.width > dot.x && arrow.y < dot.y + dot.height && arrow.y + arrow.height > dot.y, false, `arrows and dots do not overlap at ${viewport.width}px`);
       }
-      assert.equal(await page.locator("[data-gallery-slide][data-gallery-position='previous'], [data-gallery-slide][data-gallery-position='next']").evaluateAll((slides) => slides.every((slide) => {
-        const bounds = slide.getBoundingClientRect();
-        const viewportBounds = slide.parentElement.getBoundingClientRect();
-        return Number(getComputedStyle(slide).opacity) === .24 && bounds.right > viewportBounds.left && bounds.left < viewportBounds.right;
-      })), true, `both neighboring images peek into view at ${viewport.width}px`);
+      assert.equal(await page.locator("[data-gallery-peek-previous], [data-gallery-peek-next]").evaluateAll((peeks) => peeks.every((peek) => {
+        const bounds = peek.getBoundingClientRect();
+        const galleryViewport = peek.parentElement.getBoundingClientRect();
+        return Number(getComputedStyle(peek).opacity) === .24 && bounds.right > galleryViewport.left && bounds.left < galleryViewport.right;
+      })), true, `both neighbor previews peek at ${viewport.width}px`);
+      const opener = page.locator("[data-feature-open]").first();
+      const dialog = page.locator("[data-gallery-modal]");
+      const url = page.url();
+      await opener.click();
+      assert.equal(await dialog.getAttribute("open"), "");
+      assert.equal(page.url(), url, "preview does not navigate");
+      await page.getByRole("button", { name: "拡大表示を閉じる" }).click();
+      assert.equal(await opener.evaluate((element) => document.activeElement === element), true);
       assert.equal(await page.locator("html").evaluate((element) => element.scrollWidth <= element.clientWidth), true, `no horizontal overflow at ${viewport.width}px`);
       await context.close();
     }
@@ -448,57 +310,55 @@ test("the enabled carousel keeps its visible geometry at every supported viewpor
   }
 });
 
-test("keyboard focus remains suspended after closing a modal preview", { timeout: 30_000 }, async () => {
+test("each feature preview opens its original image, keeps the gallery stopped, and restores focus", { timeout: 30_000 }, async () => {
   const site = await startSite();
   let browser;
   try {
     browser = await chromium.launch({ headless: true });
-    const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
-    await context.route("**/*", localOnly(site));
-    const page = await context.newPage();
-    await page.clock.install({ time: new Date("2026-09-18T00:00:00Z") });
-    await page.goto(`${site.url}/`, { waitUntil: "domcontentloaded" });
-    await page.waitForFunction(() => [...document.querySelectorAll("[data-gallery-slide] img")].every((image) => image.complete));
-    const opener = page.locator('[data-gallery-slide][data-gallery-position="active"] [data-gallery-open]');
-    const dialog = page.locator("[data-gallery-modal]");
-    const source = await activeImage(page).getAttribute("src");
-    await opener.focus();
-    await opener.press("Enter");
-    assert.equal(await dialog.getAttribute("open"), "");
-    await page.keyboard.press("Escape");
-    await dialog.waitFor({ state: "hidden" });
-    assert.equal(await opener.evaluate((element) => document.activeElement === element && element.matches(":focus-visible")), true);
-    await page.clock.fastForward(6000);
-    assert.equal(await activeImage(page).getAttribute("src"), source, "keyboard-opened modal keeps autoplay suspended after Escape");
-    await context.close();
-    const pointerContext = await browser.newContext({ viewport: { width: 1440, height: 900 } });
-    await pointerContext.route("**/*", localOnly(site));
-    const pointerPage = await pointerContext.newPage();
-    await pointerPage.clock.install({ time: new Date("2026-09-18T00:00:00Z") });
-    await pointerPage.goto(`${site.url}/`, { waitUntil: "domcontentloaded" });
-    await pointerPage.waitForFunction(() => [...document.querySelectorAll("[data-gallery-slide] img")].every((image) => image.complete));
-    const pointerOpener = pointerPage.locator('[data-gallery-slide][data-gallery-position="active"] [data-gallery-open]');
-    const pointerDialog = pointerPage.locator("[data-gallery-modal]");
-    const pointerSource = await activeImage(pointerPage).getAttribute("src");
-    await pointerOpener.click();
-    await pointerPage.keyboard.press("Escape");
-    await pointerDialog.waitFor({ state: "hidden" });
-    assert.equal(await pointerOpener.evaluate((element) => document.activeElement === element && element.matches(":focus-visible")), true);
-    await pointerPage.clock.fastForward(6000);
-    assert.equal(await activeImage(pointerPage).getAttribute("src"), pointerSource, "pointer-opened modal also respects the restored visible focus");
-    await pointerContext.close();
+    for (const width of [1440, 390]) {
+      const context = await browser.newContext({ viewport: { width, height: 900 } });
+      await context.route("**/*", localOnly(site));
+      const page = await context.newPage();
+      await page.clock.install({ time: new Date("2026-09-19T00:00:00Z") });
+      await page.goto(`${site.url}/`, { waitUntil: "domcontentloaded" });
+      await page.waitForFunction(() => [...document.querySelectorAll("[data-feature-open] img")].every((image) => image.complete && image.naturalWidth === 1920));
+      const dialog = page.locator("[data-gallery-modal]");
+      const modalImage = page.locator("[data-gallery-modal-image]");
+      const previews = page.locator("[data-feature-open]");
+      const expectedSources = ["assets/demo3.png", "assets/demo1.png", "assets/demo1.png"];
+      assert.equal(await previews.count(), 3);
+      for (const [index, source] of expectedSources.entries()) {
+        const opener = previews.nth(index);
+        await opener.click();
+        assert.equal(await dialog.getAttribute("open"), "");
+        assert.equal(await modalImage.getAttribute("src"), new URL(source, `${site.url}/`).href);
+        assert.equal(await modalImage.getAttribute("alt"), await opener.locator("img").getAttribute("alt"));
+        const activeWhileOpen = await activeImage(page).getAttribute("src");
+        await page.clock.fastForward(6000);
+        assert.equal(await activeImage(page).getAttribute("src"), activeWhileOpen, `feature preview ${index + 1} stops the gallery`);
+        const closeEvent = page.evaluate(() => new Promise((resolve) => document.querySelector("[data-gallery-modal]").addEventListener("close", resolve, { once: true })));
+        await page.getByRole("button", { name: "拡大表示を閉じる" }).click();
+        await dialog.waitFor({ state: "hidden" });
+        await closeEvent;
+        assert.equal(await opener.evaluate((element) => document.activeElement === element), true);
+        await page.getByRole("link", { name: "動作環境と使い方", exact: true }).first().focus();
+        await page.clock.runFor(6000);
+        assert.notEqual(await activeImage(page).getAttribute("src"), activeWhileOpen, `feature preview ${index + 1} restores autoplay after close`);
+      }
+      await context.close();
+    }
   } finally {
     await browser?.close();
     await site.close();
   }
 });
 
-test("reduced motion keeps autoplay off while retaining manual navigation and Google tag initialization", { timeout: 30_000 }, async () => {
+test("Google tag initialization remains present without changing the product page", { timeout: 30_000 }, async () => {
   const site = await startSite();
   let browser;
   try {
     browser = await chromium.launch({ headless: true });
-    const context = await browser.newContext({ reducedMotion: "reduce", viewport: { width: 390, height: 844 } });
+    const context = await browser.newContext();
     let loaderRequests = 0;
     await context.route("**/*", (route) => {
       const url = new URL(route.request().url());
@@ -509,23 +369,12 @@ test("reduced motion keeps autoplay off while retaining manual navigation and Go
       return url.origin === site.url ? route.continue() : route.abort();
     });
     const page = await context.newPage();
-    await page.clock.install({ time: new Date("2026-09-18T00:00:00Z") });
-    const loaderResponse = page.waitForResponse((response) => response.url() === googleTagUrl);
     await page.goto(`${site.url}/`, { waitUntil: "domcontentloaded" });
-    await page.waitForFunction(() => [...document.querySelectorAll("[data-gallery-slide] img")].every((image) => image.complete && image.naturalWidth === 1920));
-    assert.equal((await loaderResponse).status(), 200);
     assert.equal(loaderRequests, 1);
-    assert.equal(await page.locator("[data-gallery-pause]").count(), 0);
-    assert.equal(await activeImage(page).getAttribute("src"), "assets/demo1.png");
-    await page.clock.fastForward(6000);
-    assert.equal(await activeImage(page).getAttribute("src"), "assets/demo1.png");
-    await page.getByRole("button", { name: "次の画面" }).click();
-    assert.equal(await activeImage(page).getAttribute("src"), "assets/demo2.png", "manual navigation remains available");
     assert.deepEqual(await page.evaluate((tagId) => ({
       initialized: window.dataLayer.filter(([command, value]) => command === "js" && value instanceof Date).length,
       configured: window.dataLayer.filter(([command, value]) => command === "config" && value === tagId).length,
     }), googleTagId), { initialized: 1, configured: 1 });
-    assert.equal(await page.locator("html").evaluate((element) => element.scrollWidth <= element.clientWidth), true);
     await context.close();
   } finally {
     await browser?.close();

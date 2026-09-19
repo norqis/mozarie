@@ -12,8 +12,8 @@
   </script>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="google-site-verification" content="UrWwBw6iDkiGPFlWk3S4jrSsP7YfkvctuNVveYOJd_o">
-  <title>Mozarie | 自動検出・手描き編集に対応したモザイク加工ソフト</title>
-  <meta name="description" content="Mozarieは、モザイクをかける場所の自動検出から手描き調整、複数画像の確認、保存まで行えるWindowsアプリです。画像の加工はPC上で行います。">
+  <title>Mozarie | 自動検出・ブラシ編集・一括保存に対応したモザイク加工ソフト</title>
+  <meta name="description" content="Mozarieは、自動検出から手描き修正、複数画像の一括保存までを1つの画面で進められるWindowsアプリです。編集内容とUndo／Redo履歴はプロジェクトごとに残ります。">
   <link rel="canonical" href="https://norqis.github.io/mozarie/">
   <link rel="stylesheet" href="styles.css">
 </head>
@@ -24,40 +24,52 @@
   </header>
   <main>
     <section class="hero" aria-labelledby="page-title">
-      <div class="hero-copy"><h1 id="page-title"><span>モザイク加工を、</span><span>検出から仕上げまで</span></h1><p class="intro">自動検出と手描きで範囲を整え、画像を確認して保存するWindowsアプリです。</p></div>
-      <div class="hero-action"><a class="download" href="https://github.com/norqis/mozarie/releases/latest">最新版をダウンロード</a><a class="readme" href="https://github.com/norqis/mozarie#readme">詳しい使い方</a><p class="platform">Windows / PNG・JPEG・WebP / MIT License</p></div>
+      <div class="hero-copy">
+        <h1 id="page-title"><span>モザイク範囲を自動検出。</span><span>ブラシで整え、まとめて保存。</span></h1>
+        <p class="intro">Mozarieは、自動検出から手描き修正、複数画像の一括保存までを1つの画面で進められるWindowsアプリです。編集内容とUndo／Redo履歴はプロジェクトごとに残ります。</p>
+      </div>
+      <div class="hero-action"><a class="download" href="https://github.com/norqis/mozarie/releases/latest">最新版をダウンロード</a><a class="readme" href="https://github.com/norqis/mozarie#readme">動作環境と使い方</a><p class="platform">Windows / PNG・JPEG・WebP / MIT License</p></div>
     </section>
+
     <section class="gallery" aria-label="Mozarie の画面" aria-roledescription="carousel">
       <div class="gallery-frame" data-gallery>
         <div class="gallery-row">
           <button class="gallery-arrow gallery-arrow-previous" type="button" data-gallery-controls data-gallery-prev aria-label="前の画面" hidden><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m10 2-6 6 6 6"></path></svg></button>
           <div class="gallery-viewport" data-gallery-viewport>
-            <figure class="gallery-slide" data-gallery-slide data-gallery-position="active"><button class="gallery-image" type="button" data-gallery-open aria-label="Mozarieの作業画面 1を拡大表示" disabled><img src="assets/demo1.png" width="1920" height="959" alt="Mozarieでモザイクの範囲を手描きで調整している画面"></button></figure>
-            <figure class="gallery-slide" data-gallery-slide hidden><button class="gallery-image" type="button" data-gallery-open aria-label="Mozarieの作業画面 2を拡大表示" disabled><img src="assets/demo2.png" width="1920" height="959" alt="Mozarieで検出モデルと輪郭補正を設定している画面"></button></figure>
-            <figure class="gallery-slide" data-gallery-slide hidden><button class="gallery-image" type="button" data-gallery-open aria-label="Mozarieの作業画面 3を拡大表示" disabled><img src="assets/demo3.png" width="1920" height="959" alt="Mozarieで編集結果と適用範囲を見比べている画面"></button></figure>
+            <img class="gallery-peek gallery-peek-previous" data-gallery-peek-previous src="assets/demo1.png" width="1920" height="959" alt="" aria-hidden="true">
+            <figure class="gallery-slide" data-gallery-slide data-gallery-position="active"><button class="gallery-image" type="button" data-gallery-open aria-label="自動検出結果の画面を拡大表示" disabled><img src="assets/demo3.png" width="1920" height="959" alt="Mozarieで自動検出した範囲をモザイク結果と適用範囲で確認している画面"></button></figure>
+            <figure class="gallery-slide" data-gallery-slide hidden><button class="gallery-image" type="button" data-gallery-open aria-label="Mozarieの作業画面を拡大表示" disabled><img src="assets/demo1.png" width="1920" height="959" alt="Mozarieで画像一覧、ブラシ、候補、保存操作を扱っている画面"></button></figure>
+            <img class="gallery-peek gallery-peek-next" data-gallery-peek-next src="assets/demo1.png" width="1920" height="959" alt="" aria-hidden="true">
           </div>
           <button class="gallery-arrow gallery-arrow-next" type="button" data-gallery-controls data-gallery-next aria-label="次の画面" hidden><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m6 2 6 6-6 6"></path></svg></button>
         </div>
-        <div class="gallery-status" data-gallery-controls aria-label="画面表示の操作" hidden><div class="gallery-dots"><button type="button" data-gallery-dot="0" aria-label="画面 1を表示" aria-current="true"></button><button type="button" data-gallery-dot="1" aria-label="画面 2を表示"></button><button type="button" data-gallery-dot="2" aria-label="画面 3を表示"></button></div></div>
+        <div class="gallery-status"><p class="gallery-caption" data-gallery-caption>自動検出した範囲を、モザイク結果と適用範囲で確認できます。</p><div class="gallery-dots" data-gallery-controls aria-label="画面表示の操作" hidden><button type="button" data-gallery-dot="0" aria-label="画面 1を表示" aria-current="true"></button><button type="button" data-gallery-dot="1" aria-label="画面 2を表示"></button></div></div>
       </div>
     </section>
-    <section class="visual-moments" id="features" aria-label="できること">
-      <article class="visual-moment comparison">
-        <div class="visual-copy"><h2>比べて仕上げる</h2><p>編集結果と適用範囲を並べて、モザイクのかかる場所を確認できます。</p></div>
-        <button class="feature-preview crop-preview crop-comparison" type="button" data-feature-open aria-label="編集結果と適用範囲の画面を拡大表示" disabled><img src="assets/demo3.png" width="1920" height="959" alt="Mozarieで編集結果と適用範囲を見比べている画面"></button>
+
+    <section class="visual-moments" id="features" aria-labelledby="features-title">
+      <header class="features-intro"><h2 id="features-title">検出から保存までを、1つの画面で進めます。</h2></header>
+      <article class="visual-moment detection">
+        <div class="visual-copy"><p class="sequence">01</p><h2>モザイク自動検出</h2><p>現在の画像または全画像に自動検出を実行できます。モザイク結果と適用範囲を見比べて確認できます。</p></div>
+        <button class="feature-preview crop-preview crop-detection" type="button" data-feature-open aria-label="自動検出結果の画面を拡大表示" disabled><img src="assets/demo3.png" width="1920" height="959" alt="Mozarieで自動検出した範囲をモザイク結果と適用範囲で確認している画面"></button>
       </article>
-      <article class="visual-moment manual">
-        <button class="feature-preview crop-preview crop-manual" type="button" data-feature-open aria-label="手描き編集の画面を拡大表示" disabled><img src="assets/demo1.png" width="1920" height="959" alt="Mozarieでモザイクの範囲を手描きで調整している画面"></button>
-        <div class="visual-copy"><h2>手描きで、細部まで</h2><p>ブラシと消しゴムで、かけたい範囲と残したい部分を整えられます。</p></div>
+      <article class="visual-moment brush">
+        <div class="visual-copy"><p class="sequence">02</p><h2>ブラシツール</h2><p>ブラシと消しゴムで、モザイクをかけたい範囲と残したい部分を整えられます。</p></div>
+        <button class="feature-preview crop-preview crop-brush" type="button" data-feature-open aria-label="ブラシで範囲を整える画面を拡大表示" disabled><img src="assets/demo1.png" width="1920" height="959" alt="Mozarieでブラシを使いモザイクの範囲を手描きで調整している画面"></button>
       </article>
-      <article class="visual-moment collection">
-        <div class="visual-copy"><h2>複数画像を、まとめて</h2><p>フィルターで確認する画像を絞り、編集した画像をまとめて保存できます。</p></div>
-        <button class="feature-preview crop-preview crop-collection" type="button" data-feature-open aria-label="複数画像を確認する画面を拡大表示" disabled><img src="assets/demo1.png" width="1920" height="959" alt="Mozarieで複数画像を確認しモザイクの範囲を手描きで調整している画面"></button>
+      <article class="visual-moment bulk">
+        <div class="visual-copy"><p class="sequence">03</p><h2>複数画像をまとめて保存</h2><p>保存対象を選び、コピー保存または元画像へ上書きします。</p></div>
+        <button class="feature-preview crop-preview crop-bulk" type="button" data-feature-open aria-label="複数画像をまとめて保存する画面を拡大表示" disabled><img src="assets/demo1.png" width="1920" height="959" alt="Mozarieで画像一覧と一括保存操作を扱っている画面"></button>
+      </article>
+      <article class="visual-moment history">
+        <div class="visual-copy"><p class="sequence">04</p><h2>プロジェクトごとの履歴保持</h2><p>候補、手描き範囲、確認状態、Undo／Redo履歴をプロジェクトごとに保持します。別のプロジェクトへ切り替えても作業内容は混ざりません。</p></div>
+        <ol class="resume-flow" aria-label="プロジェクトを閉じて再開する流れ"><li>範囲を調整</li><li>Mozarieを閉じる</li><li>プロジェクトを再開</li><li>保存した範囲と履歴から続ける</li></ol>
       </article>
     </section>
-    <section class="local content-section" id="local" aria-labelledby="local-title">
-      <h2 id="local-title">画像の加工は、PC上で</h2>
-      <div class="local-content"><p>検出・編集・保存はWindowsのPC上で行います。</p><a class="download" href="https://github.com/norqis/mozarie/releases/latest">Mozarieをダウンロード</a></div>
+
+    <section class="final-cta content-section" aria-labelledby="final-cta-title">
+      <h2 id="final-cta-title">検出から一括保存まで、Mozarieで進められます。</h2>
+      <div class="final-cta-actions"><a class="download" href="https://github.com/norqis/mozarie/releases/latest">最新版をダウンロード</a><a class="readme" href="https://github.com/norqis/mozarie#readme">動作環境と使い方</a></div>
     </section>
   </main>
   <dialog class="gallery-modal" data-gallery-modal aria-labelledby="gallery-modal-title"><div class="gallery-modal-content"><button class="gallery-modal-close" type="button" data-gallery-modal-close aria-label="拡大表示を閉じる" autofocus><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m3 3 10 10M13 3 3 13"></path></svg></button><img data-gallery-modal-image alt=""><p id="gallery-modal-title" class="visually-hidden">Mozarieの作業画面を拡大表示</p></div></dialog>

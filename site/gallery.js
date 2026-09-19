@@ -8,6 +8,8 @@
   const previous = gallery.querySelector("[data-gallery-prev]");
   const next = gallery.querySelector("[data-gallery-next]");
   const dots = [...gallery.querySelectorAll("[data-gallery-dot]")];
+  const caption = gallery.querySelector("[data-gallery-caption]");
+  const peeks = [gallery.querySelector("[data-gallery-peek-previous]"), gallery.querySelector("[data-gallery-peek-next]")];
   const featurePreviews = [...document.querySelectorAll("[data-feature-open]")];
   const modalClose = modal.querySelector("[data-gallery-modal-close]");
   const modalImage = modal.querySelector("[data-gallery-modal-image]");
@@ -35,16 +37,19 @@
   function show(nextIndex) {
     index = (nextIndex + slides.length) % slides.length;
     slides.forEach((slide, slideIndex) => {
-      const distance = (slideIndex - index + slides.length) % slides.length;
-      const position = distance === 0 ? "active" : distance === 1 ? "next" : "previous";
-      const active = position === "active";
+      const active = slideIndex === index;
       const button = slide.querySelector("[data-gallery-open]");
-      slide.hidden = false;
-      slide.dataset.galleryPosition = position;
+      slide.hidden = !active;
+      slide.dataset.galleryPosition = active ? "active" : "inactive";
       slide.toggleAttribute("inert", !active);
       slide.setAttribute("aria-hidden", String(!active));
       button.disabled = !active;
     });
+    const neighborImage = slides[(index + 1) % slides.length].querySelector("img");
+    peeks.forEach((peek) => { peek.src = neighborImage.currentSrc || neighborImage.src; });
+    if (caption) caption.textContent = index === 0
+      ? "自動検出した範囲を、モザイク結果と適用範囲で確認できます。"
+      : "画像一覧、ブラシ、候補、保存操作を1つの画面で扱えます。";
     dots.forEach((dot, dotIndex) => dot.setAttribute("aria-current", String(dotIndex === index)));
   }
 
