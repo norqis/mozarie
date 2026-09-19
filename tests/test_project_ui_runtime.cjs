@@ -106,6 +106,25 @@ vm.runInNewContext(fs.readFileSync(appPath, "utf8"), context, { filename: appPat
 vm.runInNewContext("globalThis.projectTest={projectTitle,projectDate,projectSource,renderProjectCurrent,renderNativeRelinkDialog,showSameSourceDialog,openProjectNameDialog,showProjectList,showSourceMismatches,openProject,downloadProjectArtifact,downloadProjectMasks,renderProjectTableControls,resumeCurrentProject,openSameSourceDialog,openProjectDeleteDialog,deleteProject,bindEvents,setPendingBrowserProjectSources:(sources)=>{ pendingBrowserProjectSources=sources; },pendingBrowserProjectSources:()=>pendingBrowserProjectSources};", context, { filename: "project-ui-exports.js" });
 const test = context.projectTest;
 
+nodeTest("project deletion warning names every destructive consequence", () => {
+  const warningKeys = ["project.deleteData", "project.deleteSource", "project.deleteIrreversible"];
+  for (const key of warningKeys) {
+    assert.equal(typeof japanese[key], "string", `Japanese includes ${key}`);
+    assert.equal(typeof english[key], "string", `English includes ${key}`);
+    assert.match(indexHtml, new RegExp(`data-i18n="${key.replace(".", "\\.")}"`), `${key} is rendered in the deletion dialog`);
+  }
+  assert.match(japanese["project.deleteData"], /履歴|モザイク|除外/, "the Japanese warning names history and both mask kinds");
+  assert.match(japanese["project.deleteSource"], /元画像/, "the Japanese warning states what happens to source images");
+  assert.match(japanese["project.deleteIrreversible"], /元に戻|取り消/, "the Japanese warning states that deletion cannot be undone");
+});
+
+nodeTest("native source relink uses a typed path without an OS folder picker", () => {
+  const dialog = indexHtml.match(/<dialog id="nativeRelinkDialog"[\s\S]*?<\/dialog>/)?.[0] || "";
+  assert.match(dialog, /<input[^>]+id="nativeRelinkPath"/, "native relink provides an editable path field");
+  assert.match(dialog, /<button[^>]+id="nativeRelinkConfirm"/, "native relink submits the typed path explicitly");
+  assert.doesNotMatch(dialog, /showDirectoryPicker|type="file"|pickFolder/, "native relink does not expose an OS folder picker control");
+});
+
 nodeTest("project dialogs, source recovery, and project switching", async (t) => {
   await new Promise((resolve) => setImmediate(resolve));
   for (const key of ["project.open", "project.new", "project.name", "project.openList", "project.complete", "project.close", "project.resume", "project.sourceChangedClear", "project.downloadMosaic", "project.downloadExclude", "project.downloadMosaicZip", "project.downloadExcludeZip", "project.delete", "project.deleteData", "project.deleteSource", "project.deleteIrreversible"]) {

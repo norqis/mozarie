@@ -27,8 +27,10 @@ class WorkspaceVerificationContractTests(unittest.TestCase):
 
         automated = [item for item in observations if item["status"] == "automated"]
         manual = [item for item in observations if item["status"] == "manual"]
-        self.assertEqual(len(automated), 215)
-        self.assertEqual(len(manual), 17)
+        retired = [item for item in observations if item["status"] == "retired"]
+        self.assertEqual(len(automated), 213)
+        self.assertEqual(len(manual), 15)
+        self.assertEqual(len(retired), 4)
         for item in automated:
             self.assertTrue(item.get("testIds"), item["key"])
             self.assertNotIn("manual", item, item["key"])
@@ -38,6 +40,8 @@ class WorkspaceVerificationContractTests(unittest.TestCase):
             self.assertTrue(details.get("environment", "").strip(), item["key"])
             self.assertTrue(details.get("reason", "").strip(), item["key"])
             self.assertNotIn("testIds", item, item["key"])
+        for item in retired:
+            self.assertEqual(set(item), {"key", "sourceIds", "observation", "status"}, item["key"])
 
         retained = {}
         for match in re.finditer(r"^\| (WS-\d{3}\.\d+) \| ([^|]+) \| ([^|]+) \|$", MANUAL.read_text(encoding="utf-8"), re.MULTILINE):

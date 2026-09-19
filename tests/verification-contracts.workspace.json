@@ -180,11 +180,7 @@
         "WS-003"
       ],
       "observation": "run.batから実ブラウザーが開き、ページへ接続できることを確認する。",
-      "status": "manual",
-      "manual": {
-        "environment": "Windowsデスクトップと既定ブラウザー",
-        "reason": "既定ブラウザーの起動と実ウィンドウ表示はheadless CIから観測できない。"
-      }
+      "status": "retired"
     },
     {
       "key": "WS-004.1",
@@ -194,7 +190,7 @@
       "observation": "画像位置は未選択表示。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_app_core_detection_coverage.cjs::application startup, catalog state, and detection controls"
+        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
       ]
     },
     {
@@ -205,7 +201,7 @@
       "observation": "保存・検出は無効、設定・読み込みは有効",
       "status": "automated",
       "testIds": [
-        "node:tests/test_app_core_detection_coverage.cjs::application startup, catalog state, and detection controls"
+        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
       ]
     },
     {
@@ -216,7 +212,7 @@
       "observation": "設定ボタン左に「Mozarieに接続できません」を赤字で表示する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_app_core_detection_coverage.cjs::application startup, catalog state, and detection controls"
+        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
       ]
     },
     {
@@ -227,7 +223,7 @@
       "observation": "赤い接続案内が消え、再操作できる",
       "status": "automated",
       "testIds": [
-        "node:tests/test_app_core_detection_coverage.cjs::application startup, catalog state, and detection controls"
+        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
       ]
     },
     {
@@ -249,7 +245,7 @@
       "observation": "パス入力・画像選択・フォルダー選択が表示され、閉じると消える",
       "status": "automated",
       "testIds": [
-        "node:tests/test_app_core_detection_coverage.cjs::application startup, catalog state, and detection controls"
+        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
       ]
     },
     {
@@ -484,8 +480,7 @@
       "observation": "スクロール位置と編集中画像を変えず、その画像のメニューを開く",
       "status": "automated",
       "testIds": [
-        "node:tests/test_gallery_save_coverage.cjs::gallery and save interactions",
-        "node:tests/test_workspace_flags_runtime.cjs::workspace flag runtime contracts"
+        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
       ]
     },
     {
@@ -496,8 +491,7 @@
       "observation": "対象画像の元パスをコピーし、選択画像を変更しない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_gallery_save_coverage.cjs::gallery and save interactions",
-        "node:tests/test_workspace_flags_runtime.cjs::workspace flag runtime contracts"
+        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
       ]
     },
     {
@@ -556,8 +550,7 @@
       "observation": "表示順で1つ前の画像へ移動する。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_gallery_save_coverage.cjs::gallery and save interactions",
-        "node:tests/test_workspace_flags_runtime.cjs::workspace flag runtime contracts"
+        "node:tests/test_gallery_save_coverage.cjs::gallery and save interactions"
       ]
     },
     {
@@ -568,8 +561,7 @@
       "observation": "先頭を越えない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_gallery_save_coverage.cjs::gallery and save interactions",
-        "node:tests/test_workspace_flags_runtime.cjs::workspace flag runtime contracts"
+        "node:tests/test_gallery_save_coverage.cjs::gallery and save interactions"
       ]
     },
     {
@@ -580,8 +572,7 @@
       "observation": "表示順で1つ次の画像へ移動する。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_gallery_save_coverage.cjs::gallery and save interactions",
-        "node:tests/test_workspace_flags_runtime.cjs::workspace flag runtime contracts"
+        "node:tests/test_gallery_save_coverage.cjs::gallery and save interactions"
       ]
     },
     {
@@ -592,8 +583,7 @@
       "observation": "末尾を越えない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_gallery_save_coverage.cjs::gallery and save interactions",
-        "node:tests/test_workspace_flags_runtime.cjs::workspace flag runtime contracts"
+        "node:tests/test_gallery_save_coverage.cjs::gallery and save interactions"
       ]
     },
     {
@@ -604,8 +594,7 @@
       "observation": "押下時の左一覧フィルター順だけをスナップショットとして使う。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_filters_and_fluid_e2e.cjs::filter popover combines checked states and review-at-tail stays on the filtered image",
-        "node:tests/test_source_delete_e2e.cjs::visible delete control selects next for first and middle, previous for last, and clears every view after an all-image batch"
+        "node:tests/test_filters_and_fluid_e2e.cjs::OR filters move from an outside current image to the first match, through the middle, and keep a one-item tail selected"
       ]
     },
     {
@@ -616,8 +605,7 @@
       "observation": "現在画像が確認済み化で一覧から外れても、次の一致画像を飛ばさず開く。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_filters_and_fluid_e2e.cjs::filter popover combines checked states and review-at-tail stays on the filtered image",
-        "node:tests/test_source_delete_e2e.cjs::visible delete control selects next for first and middle, previous for last, and clears every view after an all-image batch"
+        "node:tests/test_filters_and_fluid_e2e.cjs::OR filters move from an outside current image to the first match, through the middle, and keep a one-item tail selected"
       ]
     },
     {
@@ -628,8 +616,7 @@
       "observation": "絞り込み外なら先頭の一致画像を開く。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_filters_and_fluid_e2e.cjs::filter popover combines checked states and review-at-tail stays on the filtered image",
-        "node:tests/test_source_delete_e2e.cjs::visible delete control selects next for first and middle, previous for last, and clears every view after an all-image batch"
+        "node:tests/test_filters_and_fluid_e2e.cjs::OR filters move from an outside current image to the first match, through the middle, and keep a one-item tail selected"
       ]
     },
     {
@@ -640,8 +627,7 @@
       "observation": "末尾と1件で次がなければ、確認済みになった現在画像とキャンバスを保持し、直前の画像へ戻らない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_filters_and_fluid_e2e.cjs::filter popover combines checked states and review-at-tail stays on the filtered image",
-        "node:tests/test_source_delete_e2e.cjs::visible delete control selects next for first and middle, previous for last, and clears every view after an all-image batch"
+        "node:tests/test_filters_and_fluid_e2e.cjs::OR filters move from an outside current image to the first match, through the middle, and keep a one-item tail selected"
       ]
     },
     {
@@ -652,8 +638,7 @@
       "observation": "押下時の左一覧フィルター順だけをスナップショットとして使う。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_filters_and_fluid_e2e.cjs::filter popover combines checked states and review-at-tail stays on the filtered image",
-        "node:tests/test_source_delete_e2e.cjs::visible delete control selects next for first and middle, previous for last, and clears every view after an all-image batch"
+        "node:tests/test_filters_and_fluid_e2e.cjs::filtered review and hide keep their tail, while deletion selects the previous filtered image"
       ]
     },
     {
@@ -664,8 +649,7 @@
       "observation": "次の一致画像を開き、絞り込み外なら先頭の一致画像を開く。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_filters_and_fluid_e2e.cjs::filter popover combines checked states and review-at-tail stays on the filtered image",
-        "node:tests/test_source_delete_e2e.cjs::visible delete control selects next for first and middle, previous for last, and clears every view after an all-image batch"
+        "node:tests/test_filters_and_fluid_e2e.cjs::filtered review and hide keep their tail, while deletion selects the previous filtered image"
       ]
     },
     {
@@ -676,8 +660,7 @@
       "observation": "末尾と1件で次がなければ、非表示になった現在画像とキャンバスを保持し、直前の画像へ戻らない。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_filters_and_fluid_e2e.cjs::filter popover combines checked states and review-at-tail stays on the filtered image",
-        "node:tests/test_source_delete_e2e.cjs::visible delete control selects next for first and middle, previous for last, and clears every view after an all-image batch"
+        "node:tests/test_filters_and_fluid_e2e.cjs::filtered review and hide keep their tail, while deletion selects the previous filtered image"
       ]
     },
     {
@@ -688,8 +671,7 @@
       "observation": "Hで表示する既に非表示の現在画像は閲覧できるが、処理対象にはしない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_filters_and_fluid_e2e.cjs::filter popover combines checked states and review-at-tail stays on the filtered image",
-        "node:tests/test_source_delete_e2e.cjs::visible delete control selects next for first and middle, previous for last, and clears every view after an all-image batch"
+        "node:tests/test_filters_and_fluid_e2e.cjs::filtered review and hide keep their tail, while deletion selects the previous filtered image"
       ]
     },
     {
@@ -700,8 +682,7 @@
       "observation": "現在画像と一覧・編集データを保持する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_filters_and_fluid_e2e.cjs::filter popover combines checked states and review-at-tail stays on the filtered image",
-        "node:tests/test_source_delete_e2e.cjs::visible delete control selects next for first and middle, previous for last, and clears every view after an all-image batch"
+        "node:tests/test_source_delete_e2e.cjs::source-delete confirmation can be skipped, restored in settings, and cancelled without changing the preference"
       ]
     },
     {
@@ -748,8 +729,7 @@
       "observation": "両画面でボタン直下に縦並びの項目が開き、画面端では表示域内へ収まる。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_gallery_save_coverage.cjs::gallery and save interactions",
-        "node:tests/test_filters_and_fluid_e2e.cjs::filter popover combines checked states and review-at-tail stays on the filtered image"
+        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
       ]
     },
     {
@@ -760,8 +740,7 @@
       "observation": "Esc・外側クリックで閉じ、Tabで項目と続く操作へ標準どおりフォーカス移動できる。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_gallery_save_coverage.cjs::gallery and save interactions",
-        "node:tests/test_filters_and_fluid_e2e.cjs::filter popover combines checked states and review-at-tail stays on the filtered image"
+        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
       ]
     },
     {
@@ -772,8 +751,7 @@
       "observation": "画面切替・ペイン折りたたみで浮いたメニューを残さない。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_gallery_save_coverage.cjs::gallery and save interactions",
-        "node:tests/test_filters_and_fluid_e2e.cjs::filter popover combines checked states and review-at-tail stays on the filtered image"
+        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
       ]
     },
     {
@@ -784,8 +762,7 @@
       "observation": "閉じた後も選択状態と検索・フォルダーの絞り込みを保持し、非表示も含む全画像を表示する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_gallery_save_coverage.cjs::gallery and save interactions",
-        "node:tests/test_filters_and_fluid_e2e.cjs::filter popover combines checked states and review-at-tail stays on the filtered image"
+        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
       ]
     },
     {
@@ -904,8 +881,7 @@
       "observation": "画像選択操作と選択数を表示する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_gallery_save_coverage.cjs::gallery and save interactions",
-        "node:tests/test_filters_and_fluid_e2e.cjs::filter popover combines checked states and review-at-tail stays on the filtered image"
+        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
       ]
     },
     {
@@ -952,8 +928,7 @@
       "observation": "選択画像だけを確認済みにする。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_gallery_save_coverage.cjs::gallery and save interactions",
-        "node:tests/test_filters_and_fluid_e2e.cjs::filter popover combines checked states and review-at-tail stays on the filtered image"
+        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
       ]
     },
     {
@@ -964,8 +939,7 @@
       "observation": "未選択画像の状態を保持する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_gallery_save_coverage.cjs::gallery and save interactions",
-        "node:tests/test_filters_and_fluid_e2e.cjs::filter popover combines checked states and review-at-tail stays on the filtered image"
+        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
       ]
     },
     {
@@ -976,8 +950,7 @@
       "observation": "選択画像だけを未確認にする。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_gallery_save_coverage.cjs::gallery and save interactions",
-        "node:tests/test_filters_and_fluid_e2e.cjs::filter popover combines checked states and review-at-tail stays on the filtered image"
+        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
       ]
     },
     {
@@ -988,8 +961,7 @@
       "observation": "未選択画像の状態を保持する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_gallery_save_coverage.cjs::gallery and save interactions",
-        "node:tests/test_filters_and_fluid_e2e.cjs::filter popover combines checked states and review-at-tail stays on the filtered image"
+        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
       ]
     },
     {
@@ -1000,8 +972,7 @@
       "observation": "選択画像だけを非表示にする。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_gallery_save_coverage.cjs::gallery and save interactions",
-        "node:tests/test_filters_and_fluid_e2e.cjs::filter popover combines checked states and review-at-tail stays on the filtered image"
+        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
       ]
     },
     {
@@ -1012,8 +983,7 @@
       "observation": "未選択画像の状態を保持する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_gallery_save_coverage.cjs::gallery and save interactions",
-        "node:tests/test_filters_and_fluid_e2e.cjs::filter popover combines checked states and review-at-tail stays on the filtered image"
+        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
       ]
     },
     {
@@ -1024,8 +994,7 @@
       "observation": "選択画像だけを再表示にする。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_gallery_save_coverage.cjs::gallery and save interactions",
-        "node:tests/test_filters_and_fluid_e2e.cjs::filter popover combines checked states and review-at-tail stays on the filtered image"
+        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
       ]
     },
     {
@@ -1036,8 +1005,7 @@
       "observation": "未選択画像の状態を保持する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_gallery_save_coverage.cjs::gallery and save interactions",
-        "node:tests/test_filters_and_fluid_e2e.cjs::filter popover combines checked states and review-at-tail stays on the filtered image"
+        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
       ]
     },
     {
@@ -1048,8 +1016,7 @@
       "observation": "選択数・一覧・PJデータが変わらない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_gallery_save_coverage.cjs::gallery and save interactions",
-        "node:tests/test_filters_and_fluid_e2e.cjs::filter popover combines checked states and review-at-tail stays on the filtered image"
+        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
       ]
     },
     {
@@ -1060,8 +1027,7 @@
       "observation": "指定2画像のPJデータだけを消し、元ファイルと未選択画像を保持する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_gallery_save_coverage.cjs::gallery and save interactions",
-        "node:tests/test_filters_and_fluid_e2e.cjs::filter popover combines checked states and review-at-tail stays on the filtered image"
+        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
       ]
     },
     {
@@ -1072,8 +1038,7 @@
       "observation": "現在画像操作が無効になり、切替前の画像へ遅れて処理しない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_gallery_save_coverage.cjs::gallery and save interactions",
-        "node:tests/test_filters_and_fluid_e2e.cjs::filter popover combines checked states and review-at-tail stays on the filtered image"
+        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
       ]
     },
     {
@@ -1085,7 +1050,7 @@
       "status": "automated",
       "testIds": [
         "node:tests/test_project_ui_runtime.cjs::project dialogs, source recovery, and project switching",
-        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_project_lifecycle_sources_exports_mismatch_and_read_only"
+        "python:tests.test_project_workspace_coverage.ProjectWorkspaceCoverageTests.test_catalog_source_project_listing_lifecycle_and_sorting"
       ]
     },
     {
@@ -1097,7 +1062,7 @@
       "status": "automated",
       "testIds": [
         "node:tests/test_project_ui_runtime.cjs::project dialogs, source recovery, and project switching",
-        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_project_lifecycle_sources_exports_mismatch_and_read_only"
+        "python:tests.test_project_workspace_coverage.ProjectWorkspaceCoverageTests.test_catalog_source_project_listing_lifecycle_and_sorting"
       ]
     },
     {
@@ -1109,7 +1074,7 @@
       "status": "automated",
       "testIds": [
         "node:tests/test_project_ui_runtime.cjs::project dialogs, source recovery, and project switching",
-        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_project_lifecycle_sources_exports_mismatch_and_read_only"
+        "python:tests.test_project_workspace_coverage.ProjectWorkspaceCoverageTests.test_catalog_source_project_listing_lifecycle_and_sorting"
       ]
     },
     {
@@ -1121,7 +1086,7 @@
       "status": "automated",
       "testIds": [
         "node:tests/test_project_ui_runtime.cjs::project dialogs, source recovery, and project switching",
-        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_project_lifecycle_sources_exports_mismatch_and_read_only"
+        "python:tests.test_project_workspace_coverage.ProjectWorkspaceCoverageTests.test_catalog_source_project_listing_lifecycle_and_sorting"
       ]
     },
     {
@@ -1133,7 +1098,7 @@
       "status": "automated",
       "testIds": [
         "node:tests/test_project_ui_runtime.cjs::project dialogs, source recovery, and project switching",
-        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_project_lifecycle_sources_exports_mismatch_and_read_only"
+        "python:tests.test_project_workspace_coverage.ProjectWorkspaceCoverageTests.test_catalog_source_project_listing_lifecycle_and_sorting"
       ]
     },
     {
@@ -1145,7 +1110,7 @@
       "status": "automated",
       "testIds": [
         "node:tests/test_project_ui_runtime.cjs::project dialogs, source recovery, and project switching",
-        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_project_lifecycle_sources_exports_mismatch_and_read_only"
+        "python:tests.test_project_workspace_coverage.ProjectWorkspaceCoverageTests.test_catalog_source_project_listing_lifecycle_and_sorting"
       ]
     },
     {
@@ -1157,7 +1122,7 @@
       "status": "automated",
       "testIds": [
         "node:tests/test_project_ui_runtime.cjs::project dialogs, source recovery, and project switching",
-        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_project_lifecycle_sources_exports_mismatch_and_read_only"
+        "python:tests.test_project_workspace_coverage.ProjectWorkspaceCoverageTests.test_catalog_source_project_listing_lifecycle_and_sorting"
       ]
     },
     {
@@ -1169,7 +1134,7 @@
       "status": "automated",
       "testIds": [
         "node:tests/test_project_ui_runtime.cjs::project dialogs, source recovery, and project switching",
-        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_project_lifecycle_sources_exports_mismatch_and_read_only"
+        "python:tests.test_project_workspace_coverage.ProjectWorkspaceCoverageTests.test_catalog_source_project_listing_lifecycle_and_sorting"
       ]
     },
     {
@@ -1181,7 +1146,7 @@
       "status": "automated",
       "testIds": [
         "node:tests/test_project_ui_runtime.cjs::project dialogs, source recovery, and project switching",
-        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_project_lifecycle_sources_exports_mismatch_and_read_only"
+        "python:tests.test_project_workspace_coverage.ProjectWorkspaceCoverageTests.test_catalog_source_project_listing_lifecycle_and_sorting"
       ]
     },
     {
@@ -1192,7 +1157,7 @@
       "observation": "名前の昇順に行を並べ、その列の昇順三角を表示する",
       "status": "automated",
       "testIds": [
-        "python:tests.test_project_workspace_coverage.ProjectWorkspaceCoverageTests.test_catalog_source_project_listing_lifecycle_and_sorting"
+        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
       ]
     },
     {
@@ -1203,7 +1168,7 @@
       "observation": "名前の降順に行を並べ、その列の降順三角を表示する",
       "status": "automated",
       "testIds": [
-        "python:tests.test_project_workspace_coverage.ProjectWorkspaceCoverageTests.test_catalog_source_project_listing_lifecycle_and_sorting"
+        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
       ]
     },
     {
@@ -1214,7 +1179,7 @@
       "observation": "作成日時の昇順に行を並べ、その列の昇順三角を表示する",
       "status": "automated",
       "testIds": [
-        "python:tests.test_project_workspace_coverage.ProjectWorkspaceCoverageTests.test_catalog_source_project_listing_lifecycle_and_sorting"
+        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
       ]
     },
     {
@@ -1225,7 +1190,7 @@
       "observation": "作成日時の降順に行を並べ、その列の降順三角を表示する",
       "status": "automated",
       "testIds": [
-        "python:tests.test_project_workspace_coverage.ProjectWorkspaceCoverageTests.test_catalog_source_project_listing_lifecycle_and_sorting"
+        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
       ]
     },
     {
@@ -1236,7 +1201,7 @@
       "observation": "更新日時の昇順に行を並べ、その列の昇順三角を表示する",
       "status": "automated",
       "testIds": [
-        "python:tests.test_project_workspace_coverage.ProjectWorkspaceCoverageTests.test_catalog_source_project_listing_lifecycle_and_sorting"
+        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
       ]
     },
     {
@@ -1247,7 +1212,7 @@
       "observation": "更新日時の降順に行を並べ、その列の降順三角を表示する",
       "status": "automated",
       "testIds": [
-        "python:tests.test_project_workspace_coverage.ProjectWorkspaceCoverageTests.test_catalog_source_project_listing_lifecycle_and_sorting"
+        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
       ]
     },
     {
@@ -1258,8 +1223,7 @@
       "observation": "画像一覧を閉じ、PJと画像データを保持する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_project_ui_runtime.cjs::project dialogs, source recovery, and project switching",
-        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_project_lifecycle_sources_exports_mismatch_and_read_only"
+        "node:tests/test_project_ui_runtime.cjs::project dialogs, source recovery, and project switching"
       ]
     },
     {
@@ -1270,8 +1234,7 @@
       "observation": "画像一覧・候補・手描き・確認状態・非表示を復元する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_project_ui_runtime.cjs::project dialogs, source recovery, and project switching",
-        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_project_lifecycle_sources_exports_mismatch_and_read_only"
+        "node:tests/test_project_ui_runtime.cjs::project dialogs, source recovery, and project switching"
       ]
     },
     {
@@ -1282,8 +1245,7 @@
       "observation": "保存済み状態を復元し、別PJのデータを混ぜない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_project_ui_runtime.cjs::project dialogs, source recovery, and project switching",
-        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_project_lifecycle_sources_exports_mismatch_and_read_only"
+        "node:tests/test_project_ui_runtime.cjs::project dialogs, source recovery, and project switching"
       ]
     },
     {
@@ -1294,8 +1256,7 @@
       "observation": "作業中のまま画像一覧を保持する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_project_ui_runtime.cjs::project dialogs, source recovery, and project switching",
-        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_project_lifecycle_sources_exports_mismatch_and_read_only"
+        "node:tests/test_project_ui_runtime.cjs::project dialogs, source recovery, and project switching"
       ]
     },
     {
@@ -1330,8 +1291,7 @@
       "observation": "閲覧・移動・範囲ダウンロードは有効、描画・検出・保存・Undoは無効",
       "status": "automated",
       "testIds": [
-        "node:tests/test_project_ui_runtime.cjs::project dialogs, source recovery, and project switching",
-        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_project_lifecycle_sources_exports_mismatch_and_read_only"
+        "node:tests/test_project_ui_runtime.cjs::project dialogs, source recovery, and project switching"
       ]
     },
     {
@@ -1342,8 +1302,7 @@
       "observation": "作業中になり、候補と描画の操作を再有効化する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_project_ui_runtime.cjs::project dialogs, source recovery, and project switching",
-        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_project_lifecycle_sources_exports_mismatch_and_read_only"
+        "node:tests/test_project_ui_runtime.cjs::project dialogs, source recovery, and project switching"
       ]
     },
     {
@@ -1354,8 +1313,7 @@
       "observation": "対象名と履歴・モザイク・除外削除、元画像保持、取消不能を明記する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_project_ui_runtime.cjs::project dialogs, source recovery, and project switching",
-        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_project_lifecycle_sources_exports_mismatch_and_read_only"
+        "node:tests/test_project_ui_runtime.cjs::project deletion warning names every destructive consequence"
       ]
     },
     {
@@ -1366,8 +1324,7 @@
       "observation": "対象PJを保持する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_project_ui_runtime.cjs::project dialogs, source recovery, and project switching",
-        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_project_lifecycle_sources_exports_mismatch_and_read_only"
+        "node:tests/test_project_ui_runtime.cjs::project dialogs, source recovery, and project switching"
       ]
     },
     {
@@ -1414,8 +1371,7 @@
       "observation": "選択PJを開き、新規PJを増やさない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_project_ui_runtime.cjs::project dialogs, source recovery, and project switching",
-        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_project_lifecycle_sources_exports_mismatch_and_read_only"
+        "node:tests/test_project_ui_runtime.cjs::project dialogs, source recovery, and project switching"
       ]
     },
     {
@@ -1426,8 +1382,7 @@
       "observation": "既存PJを変更せず、別PJとして作業できる",
       "status": "automated",
       "testIds": [
-        "node:tests/test_project_ui_runtime.cjs::project dialogs, source recovery, and project switching",
-        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_project_lifecycle_sources_exports_mismatch_and_read_only"
+        "node:tests/test_project_ui_runtime.cjs::project dialogs, source recovery, and project switching"
       ]
     },
     {
@@ -1438,8 +1393,7 @@
       "observation": "読み込み先PJと画像一覧を変えない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_project_ui_runtime.cjs::project dialogs, source recovery, and project switching",
-        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_project_lifecycle_sources_exports_mismatch_and_read_only"
+        "node:tests/test_project_ui_runtime.cjs::project dialogs, source recovery, and project switching"
       ]
     },
     {
@@ -1510,8 +1464,7 @@
       "observation": "利用可能画像は表示し、不足したnative-folderだけの再指定を案内する。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_project_ui_runtime.cjs::project dialogs, source recovery, and project switching",
-        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_project_lifecycle_sources_exports_mismatch_and_read_only"
+        "node:tests/test_project_ui_runtime.cjs::project dialogs, source recovery, and project switching"
       ]
     },
     {
@@ -1522,8 +1475,7 @@
       "observation": "再取得後もPJ・画像・source一覧と不足表示が一致する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_project_ui_runtime.cjs::project dialogs, source recovery, and project switching",
-        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_project_lifecycle_sources_exports_mismatch_and_read_only"
+        "node:tests/test_project_ui_runtime.cjs::project dialogs, source recovery, and project switching"
       ]
     },
     {
@@ -1560,9 +1512,7 @@
       "observation": "OSのフォルダー選択は使わない",
       "status": "automated",
       "testIds": [
-        "python:tests.test_project_native_relink_http.ProjectNativeRelinkHttpTests.test_source_status_and_native_reload_relink_keep_other_source_state",
-        "python:tests.test_project_native_relink_http.ProjectNativeRelinkHttpTests.test_relink_publish_failure_restores_durable_source_and_retries",
-        "python:tests.test_project_native_relink_http.ProjectNativeRelinkHttpTests.test_relink_rejections_leave_source_and_live_catalog_unchanged"
+        "node:tests/test_project_ui_runtime.cjs::native source relink uses a typed path without an OS folder picker"
       ]
     },
     {
@@ -1585,7 +1535,6 @@
       "observation": "元フォルダーにファイルがあっても削除済みのPJ画像を復活させない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_project_ui_runtime.cjs::project dialogs, source recovery, and project switching",
         "python:tests.test_project_http_coverage.ProjectHttpCoverageTests.test_project_switch_restores_only_its_durable_candidate_manual_history_and_flags"
       ]
     },
@@ -1597,8 +1546,7 @@
       "observation": "一覧とPJデータを保持する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_project_ui_runtime.cjs::project dialogs, source recovery, and project switching",
-        "python:tests.test_project_http_coverage.ProjectHttpCoverageTests.test_project_switch_restores_only_its_durable_candidate_manual_history_and_flags"
+        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
       ]
     },
     {
@@ -1609,8 +1557,7 @@
       "observation": "画像データを消してPJを閉じる。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_project_ui_runtime.cjs::project dialogs, source recovery, and project switching",
-        "python:tests.test_project_http_coverage.ProjectHttpCoverageTests.test_project_switch_restores_only_its_durable_candidate_manual_history_and_flags"
+        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
       ]
     },
     {
@@ -1621,8 +1568,7 @@
       "observation": "PJ自体は空で残り、元ファイルは残る",
       "status": "automated",
       "testIds": [
-        "node:tests/test_project_ui_runtime.cjs::project dialogs, source recovery, and project switching",
-        "python:tests.test_project_http_coverage.ProjectHttpCoverageTests.test_project_switch_restores_only_its_durable_candidate_manual_history_and_flags"
+        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
       ]
     },
     {
@@ -1634,7 +1580,7 @@
       "status": "automated",
       "testIds": [
         "node:tests/test_project_ui_runtime.cjs::project dialogs, source recovery, and project switching",
-        "python:tests.test_project_http_coverage.ProjectHttpCoverageTests.test_project_switch_restores_only_its_durable_candidate_manual_history_and_flags"
+        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
       ]
     },
     {
@@ -1646,7 +1592,7 @@
       "status": "automated",
       "testIds": [
         "node:tests/test_project_ui_runtime.cjs::project dialogs, source recovery, and project switching",
-        "python:tests.test_project_http_coverage.ProjectHttpCoverageTests.test_project_switch_restores_only_its_durable_candidate_manual_history_and_flags"
+        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
       ]
     },
     {
@@ -1658,7 +1604,7 @@
       "status": "automated",
       "testIds": [
         "node:tests/test_project_ui_runtime.cjs::project dialogs, source recovery, and project switching",
-        "python:tests.test_project_http_coverage.ProjectHttpCoverageTests.test_project_switch_restores_only_its_durable_candidate_manual_history_and_flags"
+        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
       ]
     },
     {
@@ -1729,8 +1675,8 @@
       "observation": "許可済みのfile sourceとdirectory sourceは自動で復元する。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_project_ui_runtime.cjs::project dialogs, source recovery, and project switching",
-        "node:tests/test_folder_permissions_e2e.cjs::browser directory restore keeps canonical source paths separate"
+        "node:tests/test_folder_permissions_e2e.cjs::browser directory restore keeps canonical source paths separate",
+        "node:tests/test_project_ui_runtime.cjs::project dialogs, source recovery, and project switching"
       ]
     },
     {
@@ -1741,8 +1687,8 @@
       "observation": "権威一覧への置換後も現PJの画像だけへ保存済みhandleとサイズ・更新時刻を対応付ける。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_project_ui_runtime.cjs::project dialogs, source recovery, and project switching",
-        "node:tests/test_folder_permissions_e2e.cjs::browser directory restore keeps canonical source paths separate"
+        "node:tests/test_folder_permissions_e2e.cjs::browser directory restore keeps canonical source paths separate",
+        "node:tests/test_project_ui_runtime.cjs::project dialogs, source recovery, and project switching"
       ]
     },
     {
@@ -1753,8 +1699,8 @@
       "observation": "最後に開始した復元だけが現PJのaccessと不足source表示を公開する。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_project_ui_runtime.cjs::project dialogs, source recovery, and project switching",
-        "node:tests/test_folder_permissions_e2e.cjs::browser directory restore keeps canonical source paths separate"
+        "node:tests/test_folder_permissions_e2e.cjs::browser directory restore keeps canonical source paths separate",
+        "node:tests/test_project_ui_runtime.cjs::project dialogs, source recovery, and project switching"
       ]
     },
     {
@@ -1765,8 +1711,8 @@
       "observation": "未許可・拒否・列挙失敗したsourceだけをPJ画面に列挙し、各「復元」操作から許可を求める。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_project_ui_runtime.cjs::project dialogs, source recovery, and project switching",
-        "node:tests/test_folder_permissions_e2e.cjs::browser directory restore keeps canonical source paths separate"
+        "node:tests/test_folder_permissions_e2e.cjs::browser directory restore keeps canonical source paths separate",
+        "node:tests/test_project_ui_runtime.cjs::project dialogs, source recovery, and project switching"
       ]
     },
     {
@@ -1777,8 +1723,8 @@
       "observation": "別PJのhandle・候補を混ぜない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_project_ui_runtime.cjs::project dialogs, source recovery, and project switching",
-        "node:tests/test_folder_permissions_e2e.cjs::browser directory restore keeps canonical source paths separate"
+        "node:tests/test_folder_permissions_e2e.cjs::browser directory restore keeps canonical source paths separate",
+        "node:tests/test_project_ui_runtime.cjs::project dialogs, source recovery, and project switching"
       ]
     },
     {
@@ -1787,11 +1733,7 @@
         "WS-101"
       ],
       "observation": "file sourceとdirectory sourceの許可済み自動復元、拒否、明示復元を実ブラウザーで確認する。",
-      "status": "manual",
-      "manual": {
-        "environment": "Chromiumの永続プロファイルとFile System Access許可UI",
-        "reason": "ブラウザー再起動をまたぐhandle許可状態とユーザー許可UIはheadless fixtureで制御できない。"
-      }
+      "status": "retired"
     },
     {
       "key": "WS-102.1",
@@ -1825,8 +1767,7 @@
       "observation": "完了したPJは必ず閲覧専用となり、検出開始と編集可能状態が残らない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_project_ui_runtime.cjs::project dialogs, source recovery, and project switching",
-        "python:tests.test_project_http_coverage.ProjectHttpCoverageTests.test_project_switch_restores_only_its_durable_candidate_manual_history_and_flags"
+        "node:tests/test_project_ui_runtime.cjs::project dialogs, source recovery, and project switching"
       ]
     },
     {
@@ -1837,8 +1778,7 @@
       "observation": "開く失敗後もPJは完了のままで、直前に開いていたPJの一覧・候補・編集状態を保持する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_project_ui_runtime.cjs::project dialogs, source recovery, and project switching",
-        "python:tests.test_project_native_relink_http.ProjectNativeRelinkHttpTests.test_relink_rejections_leave_source_and_live_catalog_unchanged"
+        "node:tests/test_project_ui_runtime.cjs::project dialogs, source recovery, and project switching"
       ]
     },
     {
@@ -1933,7 +1873,7 @@
       "status": "automated",
       "testIds": [
         "node:tests/test_filters_and_fluid_e2e.cjs::filter popover combines checked states and review-at-tail stays on the filtered image",
-        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
+        "node:tests/test_filters_and_fluid_e2e.cjs::OR filters move from an outside current image to the first match, through the middle, and keep a one-item tail selected"
       ]
     },
     {
@@ -1945,7 +1885,7 @@
       "status": "automated",
       "testIds": [
         "node:tests/test_filters_and_fluid_e2e.cjs::filter popover combines checked states and review-at-tail stays on the filtered image",
-        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
+        "node:tests/test_filters_and_fluid_e2e.cjs::OR filters move from an outside current image to the first match, through the middle, and keep a one-item tail selected"
       ]
     },
     {
@@ -1956,8 +1896,7 @@
       "observation": "完了PJでも絞り込みボタンとチェック項目は使える。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_filters_and_fluid_e2e.cjs::filter popover combines checked states and review-at-tail stays on the filtered image",
-        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
+        "node:tests/test_filters_and_fluid_e2e.cjs::OR filters move from an outside current image to the first match, through the middle, and keep a one-item tail selected"
       ]
     },
     {
@@ -1968,8 +1907,7 @@
       "observation": "処理の開始時は開いていたメニューが閉じ、ボタンと項目が無効になる。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_filters_and_fluid_e2e.cjs::filter popover combines checked states and review-at-tail stays on the filtered image",
-        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
+        "node:tests/test_filters_and_fluid_e2e.cjs::OR filters move from an outside current image to the first match, through the middle, and keep a one-item tail selected"
       ]
     },
     {
@@ -1980,8 +1918,7 @@
       "observation": "処理完了後は再び開いて選択を変えられる",
       "status": "automated",
       "testIds": [
-        "node:tests/test_filters_and_fluid_e2e.cjs::filter popover combines checked states and review-at-tail stays on the filtered image",
-        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
+        "node:tests/test_filters_and_fluid_e2e.cjs::OR filters move from an outside current image to the first match, through the middle, and keep a one-item tail selected"
       ]
     },
     {
@@ -2080,11 +2017,7 @@
         "WS-114"
       ],
       "observation": "実ブラウザーでフォルダー選択時に読込み権限だけが要求されることを確認する。",
-      "status": "manual",
-      "manual": {
-        "environment": "ChromiumのFile System Access許可UI",
-        "reason": "showDirectoryPickerの実許可プロンプトは自動化APIから操作・観測できない。"
-      }
+      "status": "retired"
     },
     {
       "key": "WS-115.1",
@@ -2114,11 +2047,7 @@
         "WS-115"
       ],
       "observation": "実ブラウザーで選択取消と権限拒否を行い、案内と一覧保持を確認する。",
-      "status": "manual",
-      "manual": {
-        "environment": "ChromiumのFile System Access許可UI",
-        "reason": "OS・ブラウザー所有の拒否表示と許可状態はheadless fixtureで再現できない。"
-      }
+      "status": "retired"
     },
     {
       "key": "WS-116.1",
@@ -2410,13 +2339,11 @@
         "WS-129"
       ],
       "observation": "3形式とも一覧へ入り、巨大JPEGの記録寸法・サムネイル・編集座標が回転後の向きで一致する。",
-      "status": "automated",
-      "testIds": [
-        "python:tests.test_image_validation.InputImageValidationTests.test_pillow_pixel_guard_is_disabled_only_while_opening",
-        "python:tests.test_image_validation.InputImageValidationTests.test_pixel_guard_is_restored_after_concurrent_openers_finish",
-        "python:tests.test_server.MozarieTests.test_exif_rotated_jpeg_uses_normalized_mask_coordinates",
-        "python:tests.test_server.MozarieTests.test_thumbnail_generation_serves_five_distinct_images_without_fixed_limit"
-      ]
+      "status": "manual",
+      "manual": {
+        "environment": "十分なRAMを持つWindows実機と巨大PNG/JPEG/WebP・回転JPEG",
+        "reason": "3形式の既定ピクセル数超過画像を同時に一覧・編集表示した座標とサムネイルの一致はCIの小fixtureでは実メモリ・デコード経路を再現できない。"
+      }
     },
     {
       "key": "WS-129.2",
@@ -2424,13 +2351,11 @@
         "WS-129"
       ],
       "observation": "同時表示中もPillowの画素数制限警告を出さず、完了後は別画像を選択・表示できる",
-      "status": "automated",
-      "testIds": [
-        "python:tests.test_image_validation.InputImageValidationTests.test_pillow_pixel_guard_is_disabled_only_while_opening",
-        "python:tests.test_image_validation.InputImageValidationTests.test_pixel_guard_is_restored_after_concurrent_openers_finish",
-        "python:tests.test_server.MozarieTests.test_exif_rotated_jpeg_uses_normalized_mask_coordinates",
-        "python:tests.test_server.MozarieTests.test_thumbnail_generation_serves_five_distinct_images_without_fixed_limit"
-      ]
+      "status": "manual",
+      "manual": {
+        "environment": "十分なRAMを持つWindows実機と巨大PNG/JPEG/WebP",
+        "reason": "Pillow既定上限超過を警告なしで表示し続けながら別画像へ切り替える応答性はCI runnerの実メモリ量に依存する。"
+      }
     },
     {
       "key": "WS-129.3",

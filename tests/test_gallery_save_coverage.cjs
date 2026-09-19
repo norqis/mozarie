@@ -243,6 +243,12 @@ async function galleryInteractions() {
   state.viewMode = "edit"; state.galleryNodes.set("one", galleryItem("gallery")); runtime.setViewMode("overview"); assert.equal(state.viewMode, "overview"); runtime.frames.shift()(); assert.equal(runtime.nodes.get("#overviewPane").focused, true);
   runtime.setViewMode("edit"); assert.equal(state.viewMode, "edit"); runtime.setViewMode("overview"); const stale = runtime.frames.pop(); state.viewMode = "edit"; stale();
   state.currentId = "one"; runtime.context.gesture = true; runtime.moveCurrentBy(1); runtime.context.gesture = false; runtime.moveCurrentBy(1); assert.deepEqual(runtime.selected.at(-1), "image:two");
+  const selectedBeforeStartBoundary = runtime.selected.length;
+  state.currentId = "one"; runtime.moveCurrentBy(-1);
+  assert.equal(runtime.selected.length, selectedBeforeStartBoundary, "previous navigation does not wrap before the first visible image");
+  const selectedBeforeEndBoundary = runtime.selected.length;
+  state.currentId = "three"; runtime.moveCurrentBy(1);
+  assert.equal(runtime.selected.length, selectedBeforeEndBoundary, "next navigation does not wrap after the last visible image");
   runtime.context.gesture = true; assert.equal(await runtime.reviewAndMoveNext(), null); runtime.context.gesture = false; state.currentId = "missing"; assert.equal(await runtime.reviewAndMoveNext(), null); state.currentId = "one"; runtime.context.reviewResult = false; assert.equal(await runtime.reviewAndMoveNext(), null); runtime.context.reviewResult = true; assert.equal((await runtime.reviewAndMoveNext()).id, "two"); state.currentId = "three"; assert.equal(await runtime.reviewAndMoveNext(), null);
   runtime.context.gesture = true; await runtime.hideAndMoveNext(); runtime.context.gesture = false; state.currentId = "missing"; await runtime.hideAndMoveNext(); state.currentId = "one"; runtime.context.hideResult = false; await runtime.hideAndMoveNext(); runtime.context.hideResult = true; await runtime.hideAndMoveNext(); state.currentId = "three"; await runtime.hideAndMoveNext();
   await runtime.runNavigationAction(async () => runtime.calls.push("navigate")); assert.ok(runtime.calls.includes("focus-canvas"));
