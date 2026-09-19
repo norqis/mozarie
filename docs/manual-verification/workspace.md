@@ -13,7 +13,7 @@
 | WS-094.4 | Windows上のアクセス不能な実フォルダー ACL・別プロセスによるアクセス拒否とOSファイルキャッシュの実挙動は一時fixtureだけでは再現できない。 | 不足native sourceを実フォルダーへ再指定し、アクセス拒否後の再試行を確認する。 |
 | WS-101.6 | Chromiumの永続プロファイルとFile System Access許可UI ブラウザー再起動をまたぐhandle許可状態とユーザー許可UIはheadless fixtureで制御できない。 | file sourceとdirectory sourceの許可済み自動復元、拒否、明示復元を実ブラウザーで確認する。 |
 | WS-108.3 | Chromium File System Accessと実フォルダー OSが管理するhandleの削除権限とブラウザー再起動後の許可状態はCIの擬似handleでは再現できない。 | 実フォルダーのbrowser画像を削除・コピー後削除し、再起動後のhandle整理を確認する。 |
-| WS-114.3 | ChromiumのFile System Access許可UI showDirectoryPickerの実許可プロンプトは自動化APIから操作・観測できない。 | 実ブラウザーでフォルダー選択時に読込み権限だけが要求されることを確認する。 |
+| WS-114.3 | ChromiumのFile System Access許可UI showDirectoryPickerの実許可プロンプトは自動化APIから操作・観測できない。 | 実ブラウザーでフォルダー選択時に書き込み権限が要求されることを確認する。 |
 | WS-115.3 | ChromiumのFile System Access許可UI OS・ブラウザー所有の拒否表示と許可状態はheadless fixtureで再現できない。 | 実ブラウザーで選択取消と権限拒否を行い、案内と一覧保持を確認する。 |
 | WS-129.1 | 十分なRAMを持つWindows実機と巨大PNG/JPEG/WebP・回転JPEG 3形式の既定ピクセル数超過画像を同時に一覧・編集表示した座標とサムネイルの一致はCIの小fixtureでは実メモリ・デコード経路を再現できない。 | 3形式とも一覧へ入り、巨大JPEGの記録寸法・サムネイル・編集座標が回転後の向きで一致する。 |
 | WS-129.2 | 十分なRAMを持つWindows実機と巨大PNG/JPEG/WebP Pillow既定上限超過を警告なしで表示し続けながら別画像へ切り替える応答性はCI runnerの実メモリ量に依存する。 | 同時表示中もPillowの画素数制限警告を出さず、完了後は別画像を選択・表示できる |

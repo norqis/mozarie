@@ -315,7 +315,7 @@ test("image switching disables save detection and candidate editing until the ne
     assert.deepEqual(await page.evaluate(() => structuredClone(state.images.find((image) => image.id === "sample"))), old, "the delayed new-image response never mutates the previous image");
     assert.equal(await page.locator("#brushTool").isDisabled(), false, "drawing is restored only for the authoritative image");
     await page.evaluate(() => { state.currentId = null; state.currentImage = null; updateActionButtons(); });
-    assert.equal(await page.locator("#boundaryTool").isDisabled(), false, "an idle empty editor releases the transient image-switch lock from tool-mode controls");
+    assert.equal(await page.locator("#boundaryTool").isDisabled(), true, "an idle empty editor keeps editing tools disabled");
     assert.equal(await page.locator("#boundaryTool").getAttribute("data-disabled-by-lock"), null, "the released transient lock leaves no stale ownership marker");
   } finally { releaseImage?.(); await closeFixture(fixture, opened); }
 });

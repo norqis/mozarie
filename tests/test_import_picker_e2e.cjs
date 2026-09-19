@@ -3654,6 +3654,10 @@ async function main() {
     await page.waitForFunction(() => document.querySelector("#updateStatus").textContent.includes("最新"));
     await page.locator("#settingsDialog").evaluate((dialog) => dialog.close());
     assert.equal(await page.locator("#bucketToleranceControl").isVisible(), false, "bucket tolerance is hidden until the fill tool is selected");
+    assert.equal(await page.locator("#boundaryTool").isDisabled(), true, "an empty editor keeps mutation tools disabled after transient locks settle");
+    assert.equal(await page.locator("#boundaryTool").getAttribute("data-disabled-by-lock"), null, "the empty-editor disabled state is not owned by a stale transient lock");
+    await page.evaluate(() => resyncCatalog()); await page.waitForFunction(() => state.images.length > 0);
+    await page.locator(".gallery-item").first().click(); await page.waitForFunction(() => Boolean(state.currentId && state.currentImage));
     await page.locator("#boundaryTool").click();
     await page.locator("#bucketTool").click();
     assert.equal(await page.locator("#bucketToleranceControl").isVisible(), true, "bucket tolerance appears for the fill tool");
@@ -3677,6 +3681,7 @@ async function main() {
     await page.locator("#brushTool").click();
     assert.equal(await page.locator("#bucketToleranceControl").isVisible(), false, "bucket tolerance hides when switching away from fill");
     assert.deepEqual(await page.evaluate(() => [$("#bucketTool").getAttribute("aria-expanded"), $("#excludeBucketTool").getAttribute("aria-expanded")]), ["false", "false"], "leaving the fill tools collapses both tolerance controls");
+    await page.evaluate(() => { clearCurrentImageSelection(); updateActionButtons(); });
     for (const selector of ["#removeAndNextButton", "#hideAndNextButton"]) assert.equal(await page.locator(selector).isDisabled(), true, `${selector} is disabled without a selected image`);
     assert.equal(await page.locator("[data-candidate-batch]").evaluateAll((buttons) => buttons.every((button) => button.disabled)), true, "candidate batch actions are disabled without a selected image or candidate");
     await selectFixtureImage(page, pageErrors, consoleErrors);

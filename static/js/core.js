@@ -818,6 +818,10 @@ function updateActionButtons() {
       control.disabled = false;
       delete control.dataset.disabledByLock;
     }
+    if (control.dataset.disabledByEmptyEditor === "true") {
+      control.disabled = false;
+      delete control.dataset.disabledByEmptyEditor;
+    }
   }
   $("#pickFolder").disabled = busyLocked || mutationLocked || catalogStaging;
   const detectAllButton = $("#detectAllButton");
@@ -842,6 +846,7 @@ function updateActionButtons() {
   const editorControlsLocked = busyLocked || mutationLocked || switchingImages || (Boolean(state.currentId) && !currentProcessable);
   for (const control of document.querySelectorAll("[data-toolbar-item]:not(#singleViewButton):not(#compareViewButton):not(#fitButton):not(#mosaicPreviewButton), #rectangleTool, #polygonTool, #boundaryBrushTool, #brushSize, #bucketTolerance, #bucketToleranceDecrease, #bucketToleranceIncrease")) {
     if (editorControlsLocked && !control.disabled) { control.dataset.disabledByLock = "true"; control.disabled = true; }
+    else if (!currentProcessable && !control.disabled) { control.dataset.disabledByEmptyEditor = "true"; control.disabled = true; }
   }
   $("#applyStartButton").disabled = busyLocked || mutationLocked || catalogStaging || mutatingCandidates || state.applyTargetIds.length === 0
     || Boolean(applyRestrictionMessage()) || (selectedSaveMode() === "copy" && !state.settings?.saving?.default_output_directory);
