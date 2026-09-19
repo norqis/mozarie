@@ -1352,7 +1352,6 @@
       "status": "automated",
       "testIds": [
         "node:tests/test_editor_masks_behavior.cjs::editor masks, fill, candidates, and history",
-        "node:tests/test_project_history_browser_e2e.cjs::project Ctrl+Z flushes the durable edit and keeps browser history canvases released",
         "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
       ]
     },
@@ -1389,7 +1388,6 @@
       "status": "automated",
       "testIds": [
         "node:tests/test_editor_masks_behavior.cjs::editor masks, fill, candidates, and history",
-        "node:tests/test_project_history_browser_e2e.cjs::project Ctrl+Z flushes the durable edit and keeps browser history canvases released",
         "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
       ]
     },
@@ -1414,7 +1412,6 @@
       "status": "automated",
       "testIds": [
         "node:tests/test_editor_masks_behavior.cjs::editor masks, fill, candidates, and history",
-        "node:tests/test_project_history_browser_e2e.cjs::project Ctrl+Z flushes the durable edit and keeps browser history canvases released",
         "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
       ]
     },
@@ -1439,7 +1436,6 @@
       "status": "automated",
       "testIds": [
         "node:tests/test_editor_masks_behavior.cjs::editor masks, fill, candidates, and history",
-        "node:tests/test_project_history_browser_e2e.cjs::project Ctrl+Z flushes the durable edit and keeps browser history canvases released",
         "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
       ]
     },
@@ -1464,7 +1460,6 @@
       "status": "automated",
       "testIds": [
         "node:tests/test_editor_masks_behavior.cjs::editor masks, fill, candidates, and history",
-        "node:tests/test_project_history_browser_e2e.cjs::project Ctrl+Z flushes the durable edit and keeps browser history canvases released",
         "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
       ]
     },
@@ -1489,7 +1484,6 @@
       "status": "automated",
       "testIds": [
         "node:tests/test_editor_masks_behavior.cjs::editor masks, fill, candidates, and history",
-        "node:tests/test_project_history_browser_e2e.cjs::project Ctrl+Z flushes the durable edit and keeps browser history canvases released",
         "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
       ]
     },
@@ -1592,7 +1586,6 @@
       "status": "automated",
       "testIds": [
         "node:tests/test_editor_masks_behavior.cjs::editor masks, fill, candidates, and history",
-        "node:tests/test_project_history_browser_e2e.cjs::project Ctrl+Z flushes the durable edit and keeps browser history canvases released",
         "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
       ]
     },
@@ -1605,7 +1598,6 @@
       "status": "automated",
       "testIds": [
         "node:tests/test_editor_masks_behavior.cjs::editor masks, fill, candidates, and history",
-        "node:tests/test_project_history_browser_e2e.cjs::project Ctrl+Z flushes the durable edit and keeps browser history canvases released",
         "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
       ]
     },
@@ -1630,7 +1622,6 @@
       "status": "automated",
       "testIds": [
         "node:tests/test_editor_masks_behavior.cjs::editor masks, fill, candidates, and history",
-        "node:tests/test_project_history_browser_e2e.cjs::project Ctrl+Z flushes the durable edit and keeps browser history canvases released",
         "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
       ]
     },
@@ -1791,7 +1782,7 @@
       "status": "automated",
       "testIds": [
         "python:tests.test_workspace.WorkspaceTests.test_named_project_manual_layers_restore_only_the_latest_local_pixels_after_reopen",
-        "node:tests/test_editor_direct_observations_e2e.cjs::direct editor boundary and gesture observations > ED-134.1 and ED-134.2 local layers and overview selection survive exact Undo Redo restoration"
+        "node:tests/test_editor_direct_observations_e2e.cjs::direct editor boundary and gesture observations > ED-134.1 and ED-134.2 named project history preserves overview masks and selection"
       ]
     },
     {
@@ -1804,7 +1795,7 @@
       "testIds": [
         "python:tests.test_workspace.WorkspaceTests.test_named_project_manual_layers_restore_only_the_latest_local_pixels_after_reopen",
         "node:tests/test_project_history_browser_e2e.cjs::project Ctrl+Z flushes the durable edit and keeps browser history canvases released",
-        "node:tests/test_editor_direct_observations_e2e.cjs::direct editor boundary and gesture observations > ED-134.1 and ED-134.2 local layers and overview selection survive exact Undo Redo restoration"
+        "node:tests/test_editor_direct_observations_e2e.cjs::direct editor boundary and gesture observations > ED-134.1 and ED-134.2 named project history preserves overview masks and selection"
       ]
     },
     {

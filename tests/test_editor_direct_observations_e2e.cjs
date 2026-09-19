@@ -137,16 +137,38 @@ test("direct editor boundary and gesture observations", { timeout: 150000 }, asy
     });
 
     await t.test("ED-090.1 detection candidate mosaic addition is removed by one Undo", async () => {
-      await setup(page, fixture.url); await selectBoundaryTool(page, "#rectangleTool"); await drag(page, [{ x: 40, y: 40 }, { x: 100, y: 100 }]);
+      await setup(page, fixture.url);
       await page.evaluate(() => {
-        const detected = { id: "detected-undo", labelToken: "penis", confidence: .9, role: "apply", enabled: true, forced: false, expandPx: 0, color: "#ff3d4d", source: "boundary", origin: "boundary", refinement: null };
-        const nativeApi = api; api = async (path, options) => path === "/api/boundary" ? { candidates: [detected], candidateRevision: 1 } : nativeApi(path, options);
-        reconcileCurrentCandidates = async () => { const mask = document.createElement("canvas"); mask.width = mask.height = 240; mask.getContext("2d").fillRect(40, 40, 60, 60); state.candidates = [detected]; state.candidateImages = new Map([[detected.id, mask]]); state.boundaryDrafts = []; state.boundaryActiveId = null; markMaskDirty(); syncCurrentCandidateRecord(); renderCandidates(); render(); return true; };
+        const nativeApi = api; const nativeFetchBitmap = fetchBitmap;
+        const detected = { id: "auto-undo", labelToken: "penis", confidence: .9, role: "apply", enabled: true, forced: false, expandPx: 0, color: "#ff3d4d", source: "auto", origin: "detect", refinement: null };
+        const run = { applied: false, detectCalls: 0, jobCalls: 0, undoCalls: 0, startedAt: state.pageLoadedAt + 10 };
+        window.__autoUndoRun = run;
+        const nativeShowUserError = showUserError; showUserError = (error, invoker) => { run.error = { code: error?.code, message: error?.message }; return nativeShowUserError(error, invoker); };
+        api = async (path, options = {}) => {
+          if (path === "/api/detect") { run.detectCalls += 1; run.applied = true; return { ok: true }; }
+          if (path === "/api/job") { run.jobCalls += 1; return { kind: "detect", state: "complete", total: 1, completed: 1, processed: 1, imageIds: ["sample"], completedImageIds: ["sample"], startedAt: run.startedAt }; }
+          if (path === "/api/candidates/sample") return { candidates: run.applied ? [{ ...detected }] : [], candidateRevision: run.applied ? 91 : 90 };
+          if (path === "/api/project/history/sample") return { canUndo: run.applied, canRedo: !run.applied };
+          if (path === "/api/project/history/sample/undo") { run.undoCalls += 1; run.applied = false; return { canUndo: false, canRedo: true, changedImageIds: ["sample"], current: { candidateRevision: 90 } }; }
+          if (path === "/api/images") {
+            const snapshot = await nativeApi(path, options); const images = snapshot.images.map((image) => image.id === "sample" ? { ...image, width: 240, height: 240, candidateRevision: run.applied ? 91 : 90 } : image);
+            return { ...snapshot, images, project: { id: "auto-history", status: "working" }, readOnly: false, historyDurable: true };
+          }
+          return nativeApi(path, options);
+        };
+        fetchBitmap = async (url, signal) => {
+          if (String(url).includes("auto-undo")) { const mask = document.createElement("canvas"); mask.width = mask.height = 240; mask.getContext("2d").fillRect(40, 40, 60, 60); return mask; }
+          return nativeFetchBitmap(url, signal);
+        };
+        state.project = { id: "auto-history", status: "working" }; state.projectReadOnly = false; state.historyDurable = true; state.projectHistory = new Map([["sample", { canUndo: false, canRedo: false }]]); updateActionButtons(); updateHistoryButtons();
       });
-      await page.locator("#boundaryDetectButton").click(); await page.waitForFunction(() => !state.boundaryPending && state.history.length === 1 && state.candidates.length === 1);
+      await page.locator("#detectCurrentButton").click(); await page.waitForFunction(() => window.__autoUndoRun.detectCalls === 1 && state.job?.state === "running");
+      await page.evaluate(() => pollJob());
+      const afterDetection = await page.evaluate(() => ({ jobCalls: window.__autoUndoRun.jobCalls, candidates: state.candidates.length, canUndo: state.projectHistory.get("sample")?.canUndo, currentId: state.currentId, projectId: state.project?.id, error: window.__autoUndoRun.error || null }));
+      assert.deepEqual(afterDetection, { jobCalls: 1, candidates: 1, canUndo: true, currentId: "sample", projectId: "auto-history", error: null });
       assert.equal(await page.evaluate(() => { flushMaskComposition(); return combinedCtx.getImageData(60, 60, 1, 1).data[3]; }), 255, "detection adds an enabled mosaic candidate");
-      await page.locator("#undoButton").click(); await page.waitForFunction(() => state.historyIndex === 0 && !state.historyRestoreBusy);
-      assert.deepEqual(await page.evaluate(() => { flushMaskComposition(); return { index: state.historyIndex, busy: state.historyRestoreBusy, removed: state.removedCandidateIds.has("detected-undo"), alpha: combinedCtx.getImageData(60, 60, 1, 1).data[3], error: document.querySelector("#errorDialog")?.open }; }), { index: 0, busy: false, removed: true, alpha: 0, error: false });
+      await page.locator("#undoButton").click(); await page.waitForFunction(() => window.__autoUndoRun.undoCalls === 1 && !state.projectHistoryBusy && state.candidates.length === 0);
+      assert.deepEqual(await page.evaluate(() => { flushMaskComposition(); return { detectCalls: window.__autoUndoRun.detectCalls, jobCalls: window.__autoUndoRun.jobCalls, undoCalls: window.__autoUndoRun.undoCalls, candidates: state.candidates.length, alpha: combinedCtx.getImageData(60, 60, 1, 1).data[3], currentId: state.currentId, error: document.querySelector("#errorDialog")?.open }; }), { detectCalls: 1, jobCalls: 1, undoCalls: 1, candidates: 0, alpha: 0, currentId: "sample", error: false });
     });
 
     await t.test("ED-025.1 outside-image pointer input adds no mask candidate or history", async () => {
@@ -353,19 +375,44 @@ test("direct editor boundary and gesture observations", { timeout: 150000 }, asy
       assert.deepEqual(await page.locator(".gallery-item").evaluateAll((items) => items.map((item) => item.dataset.id)), [], "hidden filter updates after Redo restores the image");
     });
 
-    await t.test("ED-134.1 and ED-134.2 local layers and overview selection survive exact Undo Redo restoration", async () => {
-      await setup(page, fixture.url); await page.evaluate(() => { state.project = { id: "named-ui", status: "working" }; state.historyDurable = false; state.settings.shortcuts.bindings.undo = "Ctrl+Z"; state.settings.shortcuts.bindings.redo = "Ctrl+Shift+Z"; });
-      for (const action of [{ selector: "#brushTool", x: 40 }, { selector: "#eraserTool", x: 100 }, { selector: "#excludeEraserTool", x: 160 }]) { await page.locator(action.selector).click(); await clickImage(page, action.x, 100); }
-      assert.equal(await page.evaluate(() => state.history.length), 3);
-      const edited = await page.evaluate(() => ({ add: [addCtx.getImageData(40, 100, 1, 1).data[3], addCtx.getImageData(200, 200, 1, 1).data[3]], exclusion: [exclusionCtx.getImageData(100, 100, 1, 1).data[3], exclusionCtx.getImageData(200, 200, 1, 1).data[3]], erase: [exclusionEraseCtx.getImageData(160, 100, 1, 1).data[3], exclusionEraseCtx.getImageData(200, 200, 1, 1).data[3]] }));
-      await page.evaluate(() => focusCanvas()); await page.keyboard.press("Control+Z"); await page.waitForFunction(() => state.historyIndex === 2 && !state.historyRestoreBusy);
-      assert.deepEqual(await page.evaluate(() => [addCtx.getImageData(40, 100, 1, 1).data[3], exclusionCtx.getImageData(100, 100, 1, 1).data[3], exclusionEraseCtx.getImageData(160, 100, 1, 1).data[3]]), [255, 255, 0], "Undo changes only the latest local layer pixel");
-      await page.keyboard.press("Control+Shift+Z"); await page.waitForFunction(() => state.historyIndex === 3 && !state.historyRestoreBusy);
-      assert.deepEqual(await page.evaluate(() => ({ add: [addCtx.getImageData(40, 100, 1, 1).data[3], addCtx.getImageData(200, 200, 1, 1).data[3]], exclusion: [exclusionCtx.getImageData(100, 100, 1, 1).data[3], exclusionCtx.getImageData(200, 200, 1, 1).data[3]], erase: [exclusionEraseCtx.getImageData(160, 100, 1, 1).data[3], exclusionEraseCtx.getImageData(200, 200, 1, 1).data[3]] })), edited);
-      await page.locator("#overviewButton").click(); await page.waitForFunction(() => state.viewMode === "overview"); await page.locator("#batchModeButton").click(); await page.locator('.overview-item[data-id="sample-two"]').click();
-      assert.deepEqual(await page.evaluate(() => ({ viewMode: state.viewMode, currentId: state.currentId, selected: [...state.selectedImageIds] })), { viewMode: "overview", currentId: "sample", selected: ["sample-two"] });
-      await page.evaluate(async () => { await restoreSnapshot(2); await restoreSnapshot(3); });
-      assert.deepEqual(await page.evaluate(() => ({ viewMode: state.viewMode, currentId: state.currentId, selected: [...state.selectedImageIds], historyIndex: state.historyIndex, otherDraft: state.drafts.get("sample-two") || null })), { viewMode: "overview", currentId: "sample", selected: ["sample-two"], historyIndex: 3, otherDraft: null }, "restoration preserves overview mode, current image, other-image selection and other-image draft");
+    await t.test("ED-134.1 and ED-134.2 named project history preserves overview masks and selection", async () => {
+      const thumbnailRoute = async (route) => { const url = new URL(route.request().url()); const stage = url.searchParams.get("v")?.endsWith("-2") ? 2 : 3; const color = stage === 2 ? "#20c060" : "#d040d0"; await route.fulfill({ status: 200, contentType: "image/svg+xml", body: `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"><rect width="20" height="20" fill="${color}"/></svg>` }); };
+      await page.route("**/api/thumbnail/sample?*", thumbnailRoute);
+      try {
+        await setup(page, fixture.url); await page.evaluate(() => { state.project = { id: "named-ui", status: "working" }; state.projectReadOnly = false; state.historyDurable = true; state.settings.shortcuts.bindings.undo = "Ctrl+Z"; state.settings.shortcuts.bindings.redo = "Ctrl+Shift+Z"; state.projectHistory = new Map([["sample", { canUndo: false, canRedo: false }]]); });
+        const snapshots = [];
+        for (const action of [{ selector: "#brushTool", x: 40 }, { selector: "#eraserTool", x: 100 }, { selector: "#excludeEraserTool", x: 160 }]) {
+          await page.locator(action.selector).click(); await clickImage(page, action.x, 100);
+          snapshots.push(await page.evaluate(() => ({ add: addCanvas.toDataURL(), exclusion: exclusionCanvas.toDataURL(), exclusionErase: exclusionEraseCanvas.toDataURL(), manualEnabled: true, manualExclusionEnabled: true, manualExclusionEraseEnabled: true, manualMaskPresent: true, manualExclusionForced: false, candidateRevision: Number(currentRecord()?.candidateRevision || 0), removedCandidateIds: [], hasEffectiveMask: true })));
+        }
+        assert.deepEqual(await page.evaluate(() => ({ durable: hasDurableHistory(), localHistory: state.history.length })), { durable: true, localHistory: 0 }, "named projects use server history instead of local snapshots");
+        const edited = await page.evaluate(() => ({ add: [addCtx.getImageData(40, 100, 1, 1).data[3], addCtx.getImageData(200, 200, 1, 1).data[3]], exclusion: [exclusionCtx.getImageData(100, 100, 1, 1).data[3], exclusionCtx.getImageData(200, 200, 1, 1).data[3]], erase: [exclusionEraseCtx.getImageData(160, 100, 1, 1).data[3], exclusionEraseCtx.getImageData(200, 200, 1, 1).data[3]] }));
+        await page.evaluate((drafts) => {
+          const nativeApi = api; const run = { stage: 3, undoCalls: 0, redoCalls: 0, workspaceGets: 0, drafts };
+          window.__durableOverviewRun = run;
+          api = async (path, options = {}) => {
+            if (path === "/api/project/history/sample") return { canUndo: run.stage === 3, canRedo: run.stage === 2 };
+            if (path === "/api/project/history/sample/undo") { run.stage = 2; run.undoCalls += 1; return { canUndo: false, canRedo: true, changedImageIds: ["sample"], current: { candidateRevision: Number(currentRecord()?.candidateRevision || 0) } }; }
+            if (path === "/api/project/history/sample/redo") { run.stage = 3; run.redoCalls += 1; return { canUndo: true, canRedo: false, changedImageIds: ["sample"], current: { candidateRevision: Number(currentRecord()?.candidateRevision || 0) } }; }
+            if (path === "/api/workspace/manual/sample" && (!options.method || options.method === "GET")) { run.workspaceGets += 1; return { draft: structuredClone(run.drafts[run.stage - 1]) }; }
+            if (path === "/api/images") {
+              const snapshot = await nativeApi(path, options); const images = snapshot.images.map((image) => image.id === "sample" ? { ...image, width: 240, height: 240, hasEffectiveMask: true, assetVersion: `durable-mask-${run.stage}` } : image);
+              return { ...snapshot, images, project: { id: "named-ui", status: "working" }, readOnly: false, historyDurable: true };
+            }
+            return nativeApi(path, options);
+          };
+          state.drafts.set("sample-two", { sentinel: "other-image-draft" }); state.projectHistory.set("sample", { canUndo: true, canRedo: false }); updateHistoryButtons();
+        }, snapshots);
+        await page.locator("#overviewButton").click(); await page.waitForFunction(() => state.viewMode === "overview"); await page.locator("#batchModeButton").click(); await page.locator('.overview-item[data-id="sample-two"]').click();
+        const overviewPixel = async () => page.locator('.overview-item[data-id="sample"] img').evaluate(async (image) => { if (!image.complete) await new Promise((resolve) => image.addEventListener("load", resolve, { once: true })); const canvas = document.createElement("canvas"); canvas.width = canvas.height = 1; canvas.getContext("2d").drawImage(image, 0, 0, 1, 1); return [...canvas.getContext("2d").getImageData(0, 0, 1, 1).data]; });
+        assert.deepEqual(await page.evaluate(() => ({ viewMode: state.viewMode, currentId: state.currentId, selected: [...state.selectedImageIds], overviewCurrent: document.querySelector(".overview-item.current")?.dataset.id })), { viewMode: "overview", currentId: "sample", selected: ["sample-two"], overviewCurrent: "sample" });
+        await page.evaluate(() => restoreProjectHistory("undo")); await page.waitForFunction(() => window.__durableOverviewRun.undoCalls === 1 && !state.projectHistoryBusy);
+        assert.deepEqual(await page.evaluate(async () => { const draft = state.drafts.get("sample"); const source = await loadImage(draft.add); const probe = document.createElement("canvas"); probe.width = probe.height = 240; probe.getContext("2d").drawImage(source, 0, 0); return { pixels: [addCtx.getImageData(40, 100, 1, 1).data[3], exclusionCtx.getImageData(100, 100, 1, 1).data[3], exclusionEraseCtx.getImageData(160, 100, 1, 1).data[3]], sourceAlpha: probe.getContext("2d").getImageData(40, 100, 1, 1).data[3], distant: [addCtx.getImageData(200, 200, 1, 1).data[3], exclusionCtx.getImageData(200, 200, 1, 1).data[3], exclusionEraseCtx.getImageData(200, 200, 1, 1).data[3]], viewMode: state.viewMode, currentId: state.currentId, selected: [...state.selectedImageIds], anchor: state.selectionAnchorId, overviewCurrent: document.querySelector(".overview-item.current")?.dataset.id, otherDraft: state.drafts.get("sample-two")?.sentinel, workspaceGets: window.__durableOverviewRun.workspaceGets, restoredAdd: Boolean(draft?.add), maskedLabel: document.querySelector('.overview-item[data-id="sample"]')?.getAttribute("aria-label")?.includes(t("overview.stateMasked")) }; }), { pixels: [255, 255, 0], sourceAlpha: 255, distant: [0, 0, 0], viewMode: "overview", currentId: "sample", selected: ["sample-two"], anchor: "sample-two", overviewCurrent: "sample", otherDraft: "other-image-draft", workspaceGets: 1, restoredAdd: true, maskedLabel: true });
+        assert.deepEqual((await overviewPixel()).slice(0, 3), [32, 192, 96], "overview renders the Undo mask thumbnail");
+        await page.evaluate(() => restoreProjectHistory("redo")); await page.waitForFunction(() => window.__durableOverviewRun.redoCalls === 1 && !state.projectHistoryBusy);
+        assert.deepEqual(await page.evaluate(() => ({ edited: { add: [addCtx.getImageData(40, 100, 1, 1).data[3], addCtx.getImageData(200, 200, 1, 1).data[3]], exclusion: [exclusionCtx.getImageData(100, 100, 1, 1).data[3], exclusionCtx.getImageData(200, 200, 1, 1).data[3]], erase: [exclusionEraseCtx.getImageData(160, 100, 1, 1).data[3], exclusionEraseCtx.getImageData(200, 200, 1, 1).data[3]] }, viewMode: state.viewMode, currentId: state.currentId, selected: [...state.selectedImageIds], overviewCurrent: document.querySelector(".overview-item.current")?.dataset.id, otherDraft: state.drafts.get("sample-two")?.sentinel })), { edited, viewMode: "overview", currentId: "sample", selected: ["sample-two"], overviewCurrent: "sample", otherDraft: "other-image-draft" });
+        assert.deepEqual((await overviewPixel()).slice(0, 3), [208, 64, 208], "overview renders the Redo mask thumbnail");
+      } finally { await page.unroute("**/api/thumbnail/sample?*", thumbnailRoute); }
     });
 
     await t.test("ED-119.1 failed individual and batch candidate controls restore state without history", async () => {
