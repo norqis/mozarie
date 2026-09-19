@@ -281,3 +281,53 @@ test("boundary, fill, transform, undo, and redo recover from pending work withou
     await page.waitForFunction(() => !document.querySelector("#undoButton").disabled);
   });
 });
+
+test("flip availability, toolbar keyboard order, and save metadata format states use the live UI", { timeout: 60000 }, async () => {
+  await withFixture(async ({ fixture, page }) => {
+    await page.goto(fixture.url, { waitUntil: "domcontentloaded" });
+    await page.waitForFunction(() => state.settings && state.images.length === 2);
+    assert.equal(await page.locator("#flipHorizontalButton").isDisabled(), true, "horizontal flip is unavailable before selecting an image");
+    assert.equal(await page.locator("#flipVerticalButton").isDisabled(), true, "vertical flip is unavailable before selecting an image");
+    await page.locator('.gallery-item[data-id="sample"]').click();
+    await page.waitForFunction(() => state.currentId === "sample" && state.currentImage);
+    assert.equal(await page.locator("#flipHorizontalButton").isDisabled(), false);
+    assert.equal(await page.locator("#flipVerticalButton").isDisabled(), false);
+    await page.locator("#flipHorizontalButton").click();
+    await page.waitForFunction(() => currentRecord()?.flipH === true && !state.transformPending);
+    assert.deepEqual(await page.evaluate(() => {
+      const operation = state.history.at(-1);
+      return { transform: operation && { kind: operation.kind, flipH: operation.flipH, flipV: operation.flipV }, binaryValues: Object.values(operation || {}).filter((value) => value instanceof Blob || value instanceof ImageData || value instanceof HTMLCanvasElement).length };
+    }), { transform: { kind: "transform", flipH: true, flipV: false }, binaryValues: 0 }, "flip history stores only the compact transform, never a full pixel copy");
+    await page.locator("#flipHorizontalButton").click();
+    await page.waitForFunction(() => currentRecord()?.flipH === false && !state.transformPending);
+
+    await page.locator("#redoButton").evaluate((button) => { button.disabled = false; });
+    await page.locator("#redoButton").focus();
+    for (const expected of ["flipHorizontalButton", "flipVerticalButton", "mosaicPreviewButton"]) {
+      await page.keyboard.press("ArrowRight");
+      assert.equal(await page.evaluate(() => document.activeElement?.id), expected, `ArrowRight reaches ${expected} in toolbar order`);
+    }
+
+    for (const [open, format, metadata, note] of [
+      ["#saveButton", "#singleSaveOutputFormat", "#singleSaveKeepMetadata", "#singleSaveFormatNote"],
+      ["#saveAllButton", "#applyOutputFormat", "#applyKeepMetadata", "#applyFormatNote"],
+    ]) {
+      await page.locator(open).click();
+      const modeName = open === "#saveButton" ? "singleSaveMode" : "batchSaveMode";
+      const selectedMode = await page.locator(`input[name="${modeName}"]:checked`).getAttribute("value");
+      await page.locator(format).selectOption("png");
+      await page.locator(metadata).check();
+      await page.locator(format).selectOption("jpg");
+      assert.equal(await page.locator(metadata).isDisabled(), true);
+      assert.equal(await page.locator(metadata).isChecked(), false);
+      assert.equal(await page.locator(note).textContent(), "JPG形式ではメタ情報を保持しません。");
+      assert.equal(await page.locator(`input[name="${modeName}"]:checked`).getAttribute("value"), selectedMode, "format changes preserve the selected save mode");
+      await page.locator(format).focus(); await page.keyboard.press("Tab");
+      assert.notEqual(await page.evaluate(() => document.activeElement?.id), metadata.slice(1), "keyboard focus skips the disabled metadata checkbox");
+      await page.locator(format).selectOption("png");
+      assert.equal(await page.locator(metadata).isDisabled(), false);
+      assert.equal(await page.locator(metadata).isChecked(), true);
+      await page.locator(open === "#saveButton" ? "#singleSaveCloseButton" : "#applyCloseButton").click();
+    }
+  });
+});

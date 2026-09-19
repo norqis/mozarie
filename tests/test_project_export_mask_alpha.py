@@ -83,10 +83,11 @@ class ProjectExportMaskAlphaTests(unittest.TestCase):
         })
         self.assertEqual(self.state.restore_project_history(image_id, "undo")["changedImageIds"], [image_id])
         self.assertEqual(self.state.restore_project_history(image_id, "redo")["changedImageIds"], [image_id])
+        self.state.set_image_transform(image_id, {"flipH": True, "flipV": False})
 
         mosaic = list(self.state.iter_project_mask_exports(project["id"], "mosaic"))[0][1]
         excluded = list(self.state.iter_project_mask_exports(project["id"], "exclude"))[0][1]
-        for exported, pixel in ((mosaic, (0, 3)), (excluded, (3, 0))):
+        for exported, pixel in ((mosaic, (3, 3)), (excluded, (0, 0))):
             with Image.open(io.BytesIO(exported)) as image:
                 mask = image.convert("L")
                 self.assertEqual(mask.size, (4, 4))
