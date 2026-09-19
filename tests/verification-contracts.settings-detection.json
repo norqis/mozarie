@@ -758,7 +758,7 @@
       "status": "automated",
       "testIds": [
         "node:tests/test_settings_dialog_e2e.cjs::SD-045 SD-046 GPU provider saves and is restored in the settings UI",
-        "python:tests.test_directml_gpu_identity.DirectMlGpuIdentityTests.test_reverse_enumeration_maps_selected_physical_gpu"
+        "python:tests.test_onnx_adapters.OnnxAdapterTests.test_create_session_prefers_cuda_without_runtime_fallback"
       ]
     },
     {
@@ -793,7 +793,7 @@
       "observation": "環境にDirectMLがなければ未実施と報告する",
       "status": "automated",
       "testIds": [
-        "python:tests.test_directml_gpu_identity.DirectMlGpuIdentityTests.test_reverse_enumeration_maps_selected_physical_gpu"
+        "python:tests.test_onnx_adapters.OnnxAdapterTests.test_available_providers_rejects_missing_selected_gpu_provider"
       ]
     },
     {
