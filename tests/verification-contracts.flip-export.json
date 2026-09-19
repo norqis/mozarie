@@ -1024,7 +1024,7 @@
       "sourceIds": [
         "FE-053"
       ],
-      "observation": "完了後に全出力分のデコード画像・バッファを保持せず",
+      "observation": "完了後に全出力分のデコード画像・バッファを保持しない",
       "status": "manual",
       "manual": {
         "environment": "4K画像を繰り返し変換できる実Windowsプロセスとタスクマネージャー",
@@ -1482,7 +1482,7 @@
       "sourceIds": [
         "FE-077"
       ],
-      "observation": "元座標へ戻して処理し",
+      "observation": "元座標へ戻して処理する",
       "status": "manual",
       "manual": {
         "environment": "配布対象の実検出モデルと利用可能なCPUまたはGPU",
