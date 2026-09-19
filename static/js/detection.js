@@ -276,5 +276,5 @@ async function saveAll() {
   if (state.candidateUpdateChains.size) await waitForCandidateMutations();
   if (isBusy() || state.importing) return;
   saveDraft(); refreshMaskStatus();
-  if (processableImages().length) await openApplyDialog({ initialMode: "all" });
+  if (processableImages().length) await openApplyDialog();
 }

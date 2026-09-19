@@ -188,6 +188,145 @@ test("all-image detection filters images with independent OR checkboxes and pers
   }
 });
 
+test("batch save filters images with independent OR checkboxes and persists the selection", { timeout: 60000 }, async () => {
+  const fixture = await startFixtureServer();
+  fixture.setCatalog([
+    { id: "masked-reviewed", relativePath: "masked-reviewed.png", sourceKind: "filesystem", width: 100, height: 80, candidateCount: 1, enabledCandidateCount: 1, reviewed: true, hidden: false, hasEffectiveMask: true },
+    { id: "unmasked-unreviewed", relativePath: "unmasked-unreviewed.png", sourceKind: "filesystem", width: 100, height: 80, candidateCount: 0, enabledCandidateCount: 0, reviewed: false, hidden: false, hasEffectiveMask: false },
+    { id: "masked-unreviewed", relativePath: "masked-unreviewed.png", sourceKind: "filesystem", width: 100, height: 80, candidateCount: 1, enabledCandidateCount: 1, reviewed: false, hidden: false, hasEffectiveMask: true },
+    { id: "unmasked-reviewed", relativePath: "unmasked-reviewed.png", sourceKind: "filesystem", width: 100, height: 80, candidateCount: 0, enabledCandidateCount: 0, reviewed: true, hidden: false, hasEffectiveMask: false },
+    { id: "hidden", relativePath: "hidden.png", sourceKind: "filesystem", width: 100, height: 80, candidateCount: 1, enabledCandidateCount: 1, reviewed: false, hidden: true, hasEffectiveMask: true },
+  ]);
+  const browser = await chromium.launch({ headless: true });
+  let context; let page;
+  try {
+    ({ context, page } = await freshPage(browser, fixture, null, 5));
+    await page.locator("#saveAllButton").click();
+    await page.waitForFunction(() => document.querySelector("#applyDialog").open);
+    assert.equal(await page.locator("#applyImageFilters legend").textContent(), "保存する画像", "save filters have their own named group");
+    assert.deepEqual(await page.locator("[data-apply-image-filter]").evaluateAll((inputs) => inputs.map((input) => [input.dataset.applyImageFilter, input.checked])), [
+      ["masked", false], ["unmasked", false], ["reviewed", false], ["unreviewed", false],
+    ], "no checked filter defaults to every non-hidden image");
+    const setFilters = async (...filters) => {
+      await page.locator("[data-apply-image-filter]").evaluateAll((inputs, selected) => {
+        for (const input of inputs) {
+          input.checked = selected.includes(input.dataset.applyImageFilter);
+          input.dispatchEvent(new Event("change", { bubbles: true }));
+        }
+      }, filters);
+    };
+    const targetIds = () => page.evaluate(() => [...state.applyTargetIds]);
+    assert.deepEqual(await targetIds(), ["masked-reviewed", "unmasked-unreviewed", "masked-unreviewed", "unmasked-reviewed"], "the hidden image is excluded from the unfiltered save");
+    await setFilters("masked");
+    assert.deepEqual(await targetIds(), ["masked-reviewed", "masked-unreviewed"], "masked ignores review state");
+    await setFilters("unmasked");
+    assert.deepEqual(await targetIds(), ["unmasked-unreviewed", "unmasked-reviewed"], "unmasked ignores review state");
+    await setFilters("reviewed");
+    assert.deepEqual(await targetIds(), ["masked-reviewed", "unmasked-reviewed"], "reviewed ignores mask state");
+    await setFilters("unreviewed");
+    assert.deepEqual(await targetIds(), ["unmasked-unreviewed", "masked-unreviewed"], "unreviewed ignores mask state");
+    await setFilters("masked", "unreviewed");
+    assert.deepEqual(await targetIds(), ["masked-reviewed", "unmasked-unreviewed", "masked-unreviewed"], "multiple save filters use OR semantics");
+
+    await page.evaluate(() => {
+      for (const image of state.images) { image.reviewed = true; state.reviewedImageIds.add(image.id); }
+      refreshApplyTargets();
+    });
+    await setFilters("unreviewed");
+    assert.deepEqual(await targetIds(), [], "a filter can yield zero save targets");
+    assert.equal(await page.locator("#applyStartButton").isDisabled(), true, "saving cannot start with no matching image");
+    await page.evaluate(() => {
+      for (const imageId of ["masked-unreviewed", "unmasked-unreviewed"]) {
+        const image = state.images.find((item) => item.id === imageId);
+        image.reviewed = false; state.reviewedImageIds.delete(image.id);
+      }
+      refreshApplyTargets();
+    });
+    let releaseSettings;
+    let resolveSettingsSeen;
+    const settingsSeen = new Promise((resolve) => { resolveSettingsSeen = resolve; });
+    const settingsGate = new Promise((resolve) => { releaseSettings = resolve; });
+    let resolvePrepareSeen;
+    const prepareSeen = new Promise((resolve) => { resolvePrepareSeen = resolve; });
+    let settingsPayload = null;
+    let preparePayload = null;
+    await page.route("**/api/settings?status=0", async (route) => {
+      settingsPayload = JSON.parse(route.request().postData());
+      resolveSettingsSeen();
+      await settingsGate;
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ settings: { saving: { image_filters: ["unreviewed"] } } }) });
+    });
+    await page.route("**/api/save/prepare", async (route) => {
+      preparePayload = JSON.parse(route.request().postData());
+      resolvePrepareSeen();
+      await route.fulfill({ status: 500, contentType: "application/json", body: JSON.stringify({ error_code: "internal_error" }) });
+    });
+    await page.locator("#applyStartButton").click();
+    await settingsSeen;
+    assert.deepEqual(settingsPayload.saving.image_filters, ["unreviewed"], "starting a batch save persists its filters separately");
+    assert.equal(await page.locator('[data-apply-image-filter="unreviewed"]').isDisabled(), true, "filters lock after the save target snapshot is captured");
+    await page.evaluate(() => {
+      state.images.find((image) => image.id === "masked-unreviewed").hidden = true;
+      state.hiddenImageIds.add("masked-unreviewed");
+      state.images.push({ id: "new-unreviewed", relativePath: "new-unreviewed.png", sourceKind: "filesystem", reviewed: false, hidden: false, hasEffectiveMask: false });
+    });
+    releaseSettings();
+    await prepareSeen;
+    assert.deepEqual(preparePayload.imageIds, ["unmasked-unreviewed"], "an awaited setting update can remove a now-hidden captured target but cannot add a newly matching image");
+    await page.waitForFunction(() => state.saveStarting === false);
+    assert.equal(await page.locator('[data-apply-image-filter="unreviewed"]').isDisabled(), false, "a save-start failure unlocks the saved filters");
+    assert.equal(await page.locator('[data-apply-image-filter="unreviewed"]').isChecked(), true, "a save-start failure retains the selected filter");
+    await page.locator("#errorDialogClose").click();
+    await page.locator("#applyCloseButton").click();
+    await page.locator("#saveAllButton").click();
+    assert.equal(await page.locator('[data-apply-image-filter="unreviewed"]').isChecked(), true, "the same page restores the saved selection");
+  } finally {
+    await context?.close();
+    await browser.close();
+    await closeServer(fixture.server);
+  }
+});
+
+test("batch save keeps confirmation usable after committing a changed output directory", { timeout: 60000 }, async () => {
+  const fixture = await startFixtureServer();
+  fixture.setCatalog([
+    { id: "sample", relativePath: "sample.png", sourceKind: "filesystem", sourcePath: "G:\\fixture\\sample.png", width: 100, height: 80, candidateCount: 1, enabledCandidateCount: 1, reviewed: false, hidden: false, hasEffectiveMask: true },
+  ]);
+  const browser = await chromium.launch({ headless: true });
+  let context; let page;
+  try {
+    ({ context, page } = await freshPage(browser, fixture, null, 1));
+    await page.locator("#saveAllButton").click();
+    await page.waitForFunction(() => document.querySelector("#applyDialog").open);
+    await page.locator("#applyOutputDirectoryStatus").evaluate((input) => { input.value = "G:\\changed-output"; });
+    await page.locator("#applyOverwriteMode").check();
+    await page.evaluate(() => { state.settings.confirmations.overwriteSource = true; });
+    await page.locator("#applyStartButton").click();
+    await page.waitForFunction(() => document.querySelector("#confirmDialog").open);
+    assert.equal(await page.locator("#confirmAccept").isEnabled(), true, "the changed-path commit does not leave confirm disabled");
+    assert.equal(await page.locator("#confirmCancel").isEnabled(), true, "the changed-path commit does not leave cancel disabled");
+    await page.locator("#confirmCancel").click();
+    await page.waitForFunction(() => state.saveStarting === false && !document.querySelector("#confirmDialog").open);
+    assert.equal(await page.locator('[data-apply-image-filter="masked"]').isEnabled(), true, "cancelling after a path commit unlocks the save filters");
+    assert.equal(fixture.saveRequests.some((request) => request.path === "/api/save/prepare"), false, "cancelling confirmation creates no output reservation");
+
+    fixture.holdSaveRender(true);
+    await page.locator("#applyStartButton").click();
+    await page.waitForFunction(() => document.querySelector("#confirmDialog").open);
+    assert.equal(await page.locator("#confirmAccept").isEnabled(), true, "confirmation remains usable on retry");
+    await page.locator("#confirmAccept").click();
+    await page.waitForFunction(() => state.saving && state.applyRunning);
+    fixture.releaseSaveRenders();
+    await page.waitForFunction(() => !state.saving && !state.applyRunning, null, { timeout: 8000 });
+    assert.deepEqual(fixture.saveRequests.map((request) => request.path), ["/api/save/prepare", "/api/save/reserve", "/api/save/render", "/api/save/commit", "/api/save/ack"], "accepting after a path commit completes the overwrite save");
+  } finally {
+    fixture.releaseSaveRenders();
+    await context?.close();
+    await browser.close();
+    await closeServer(fixture.server);
+  }
+});
+
 test("hiding an image removes it from the visible all-image detection and save targets", { timeout: 60000 }, async () => {
   const fixture = await startFixtureServer();
   const browser = await chromium.launch({ headless: true });

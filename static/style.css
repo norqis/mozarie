@@ -155,10 +155,10 @@ h2 { margin: 0 0 2px; font-size: 14px; } .muted { color: #98a2ad; font-size: 12p
 .target-chip:has(input:focus-visible) { outline: 2px solid #87e1c8; outline-offset: 2px; }
 .target-validation { margin: 2px 0 0; color: #ff9d92; font-size: 12px; }
 .target-validation[hidden] { display: none; }
-.detection-image-filters { min-width: 0; margin: 2px 0 4px; padding: 7px 9px 8px; border: 1px solid #414a54; border-radius: 5px; }
-.detection-image-filters legend { padding: 0 4px; color: #c0c8d0; font-size: 12px; }
-.detection-image-filters .target-choices { margin: 0; flex-wrap: wrap; }
-.detection-image-filters[hidden] { display: none; }
+.image-filter-fieldset { min-width: 0; margin: 2px 0 4px; padding: 7px 9px 8px; border: 1px solid #414a54; border-radius: 5px; }
+.image-filter-fieldset legend { padding: 0 4px; color: #c0c8d0; font-size: 12px; }
+.image-filter-fieldset .target-choices { margin: 0; flex-wrap: wrap; }
+.image-filter-fieldset[hidden] { display: none; }
 .gallery-item.hidden, .overview-item.hidden { opacity: .58; }
 .candidate-delete:focus-visible { outline: 2px solid #ff8e98; outline-offset: 2px; }
 .boundary-actions { position: absolute; z-index: 5; display: flex; gap: 6px; padding: 4px; border: 1px solid #48515a; border-radius: 5px; background: #20252aed; box-shadow: 0 8px 20px #0007; backdrop-filter: blur(4px); }

@@ -1200,7 +1200,9 @@ function bindEvents() {
   $("#applyStartButton").addEventListener("click", () => { outputDirectorySaveClickInput = null; });
   document.querySelectorAll('input[name="batchSaveMode"]').forEach((input) => input.addEventListener("change", syncApplyMode));
   $("#applyPreserveDirectoryStructure").addEventListener("change", () => { void saveDirectoryStructurePreference($("#applyPreserveDirectoryStructure")); });
-  $("#applyTargetMode").addEventListener("change", refreshApplyTargets);
+  document.querySelectorAll("[data-apply-image-filter]").forEach((input) => input.addEventListener("change", () => {
+    syncDetectionTargetSwitch(input); refreshApplyTargets();
+  }));
   $("#applyOutputFormat").addEventListener("change", syncApplyMode);
   $("#applyKeepMetadata").addEventListener("change", () => { if (!$("#applyKeepMetadata").disabled) applyKeepMetadataPreference = $("#applyKeepMetadata").checked; });
   $("#mosaicHelpButton").addEventListener("click", () => {

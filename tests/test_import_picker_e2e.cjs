@@ -2781,12 +2781,15 @@ async function runControlLedger(page, fixtureUrl, contracts, finishCancel, holdS
   await page.evaluate(() => { addCtx.fillStyle = "#fff"; addCtx.fillRect(0, 0, 1, 1); markMaskDirty(); refreshMaskStatus(true); });
   await page.waitForFunction(() => !document.querySelector("#saveAllButton").disabled);
   await click("saveAllButton");
-  for (const [id, value] of [["applyTargetMode", "masked"], ["applyCopyMode", true], ["applySuffix", "_ledger"], ["deleteOriginal", true], ["applyDivisor", "102"]]) await input(id, value);
+  await input("applyFilterMasked", true); await input("applyFilterUnmasked", true); await input("applyFilterReviewed", true); await input("applyFilterUnreviewed", true);
+  await page.evaluate(() => { for (const image of state.images) image.sourceKind = "filesystem"; syncApplyMode(); });
+  for (const [id, value] of [["applyCopyMode", true], ["applySuffix", "_ledger"], ["deleteOriginal", true], ["applyDivisor", "102"]]) await input(id, value);
   await input("applyPreserveDirectoryStructure", true);
   await input("applyOutputDirectoryStatus", "G:\\manual-apply-output");
   await click("chooseOutputDirectoryButton");
   await page.waitForFunction(() => !state.outputDirectoryPicking);
   if (await page.locator("#errorDialog").evaluate((dialog) => dialog.open)) await page.locator("#errorDialogClose").click();
+  await input("applyFilterUnmasked", false); await input("applyFilterReviewed", false); await input("applyFilterUnreviewed", false);
   await input("applyOverwriteMode", true); await input("applyCopyMode", true); await click("applyCloseButton");
   await setupFixture(); await click("brushTool");
   const runningSaveCanvas = await page.locator("#editorCanvas").boundingBox();
@@ -3874,7 +3877,7 @@ async function main() {
     await page.locator("#applyDialog").evaluate((dialog) => dialog.showModal());
     assert.equal(await page.locator('#applyDialog [data-i18n="apply.metadata"]').textContent(), "対応するメタデータを引き継ぎます。同名時は自動連番です。", "save dialog describes only supported metadata carryover");
     assert.doesNotMatch(await page.locator('#applyDialog [data-i18n="apply.metadata"]').textContent(), /検証|validated/, "save dialog makes no verification claim");
-    assert.equal(await page.locator("#applyTargetMode").inputValue(), "all", "the normal batch save target is the complete image list");
+    assert.deepEqual(await page.locator("[data-apply-image-filter]").evaluateAll((inputs) => inputs.map((input) => input.checked)), [false, false, false, false], "the normal batch save target is every non-hidden image");
     assert.equal(await page.locator("#applySuffix").isDisabled(), false);
     await page.locator("#applyDialog").evaluate((dialog) => dialog.close());
 
@@ -3885,13 +3888,35 @@ async function main() {
       markMaskDirty(); refreshMaskStatus(true);
     });
     assert.deepEqual(await page.evaluate(() => ({ currentId: state.currentId, targets: saveTargets("masked"), hasMask: hasEffectiveMask() })), { currentId: "sample", targets: ["sample"], hasMask: true }, "the batch test has one real masked filesystem source");
+    await page.evaluate(() => {
+      state.images.find((image) => image.id === "sample-two").hidden = true;
+      state.hiddenImageIds.add("sample-two");
+      renderCatalogViews();
+    });
     await page.locator("#saveAllButton").click();
-    await page.locator("#applyTargetMode").selectOption("masked");
+    await page.locator("[data-apply-image-filter]").evaluateAll((inputs) => {
+      for (const input of inputs) {
+        input.checked = input.dataset.applyImageFilter === "masked";
+        input.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+    });
+    assert.deepEqual(await page.evaluate(() => ({ ids: [...state.applyTargetIds], canOverwrite: applyTargetsSupport("overwrite"), saveStarting: state.saveStarting, applyRunning: state.applyRunning })), { ids: ["sample"], canOverwrite: true, saveStarting: false, applyRunning: false }, "the masked save filter keeps only the overwritable filesystem image");
+    await page.waitForFunction(() => !isBusy());
+    await page.evaluate(() => {
+      state.settings.saving.image_filters = ["masked"];
+      updateActionButtons();
+      syncApplyMode();
+    });
     await page.locator("#applyOverwriteMode").check();
+    const filteredSaveState = await page.evaluate(() => ({ enabled: !$("#applyStartButton").disabled, mode: selectedSaveMode(), restriction: applyRestrictionMessage(), outputPending: state.outputDirectoryPicking || state.outputDirectoryCommitPending, targetIds: [...state.applyTargetIds], defaultOutput: state.settings?.saving?.default_output_directory || "" }));
+    assert.deepEqual(filteredSaveState, { enabled: true, mode: "overwrite", restriction: "", outputPending: false, targetIds: ["sample"], defaultOutput: "G:\\fixture-output" }, `the filtered overwrite can start after pending edits settle: ${JSON.stringify(filteredSaveState)}`);
     const saveRequestStart = saveRequests.length;
+    holdSaveRender(true);
     await page.locator("#applyStartButton").click();
-    await page.locator("#confirmAccept").click();
+    await page.waitForFunction(() => document.querySelector("#confirmDialog").open || state.saving);
+    if (await page.locator("#confirmDialog").evaluate((dialog) => dialog.open)) await page.locator("#confirmAccept").click();
     await page.waitForFunction(() => state.applyRunning && state.saving, null, { timeout: 5000 });
+    releaseSaveRenders();
     await page.waitForFunction(() => !state.applyRunning && !state.saving, null, { timeout: 5000 });
     assert.equal(await page.locator("#errorDialog").evaluate((dialog) => dialog.open), false, `batch overwrite must not fail: ${await page.locator("#applyResult").textContent()}`);
     const batchSaveRequests = saveRequests.slice(saveRequestStart);
@@ -3901,6 +3926,11 @@ async function main() {
     assert.deepEqual([batchSaveRequests[2].payload.clientSaveToken, batchSaveRequests[3].payload.saveToken, batchSaveRequests[4].payload.saveToken], [batchSaveToken, batchSaveToken, batchSaveToken], "batch overwrite keeps one token from reserve through acknowledgement");
     assert.equal(batchSaveRequests[3].payload.sourceAction, "overwrite", "batch overwrite records its source action in the durable receipt");
     assert.deepEqual(await page.evaluate(() => pendingSaveTokens()), {}, "batch overwrite acknowledgement clears the pending browser save record");
+    await page.evaluate(() => {
+      state.images.find((image) => image.id === "sample-two").hidden = false;
+      state.hiddenImageIds.delete("sample-two");
+      renderCatalogViews();
+    });
     assert.match(await page.locator("#applyResult").textContent(), /完了しました。1件を処理しました。/, "batch overwrite reports its completed result");
     assert.equal(await page.locator("#applyCloseButton").isDisabled(), false, "the completed overwrite dialog can be closed");
     await page.locator("#applyCloseButton").click();

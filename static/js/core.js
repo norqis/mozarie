@@ -13,7 +13,7 @@ const state = {
   pointer: null, hover: null, brushCursorGeometry: "", history: [], historyIndex: 0, activeStroke: null, manualStrokePaintFrame: 0, removedCandidateIds: new Set(),
   view: { scale: 1, x: 0, y: 0 }, job: null, saving: false, saveStarting: false, detectionStarting: false, masksClearing: false, transformPending: false,
   catalogMutation: false, imageGeneration: 0, catalogEpoch: 0, serverCatalogGeneration: null, catalogTransition: null, viewGeneration: 0, historyRestoreBusy: false, projectHistoryRefreshTokens: new Map(), workspaceId: null, historyDurable: false, translations: {},
-  applyTargetIds: [], applyTargetMode: "masked", applyCatalogSnapshot: null, applyRunning: false, applyFinishing: false, handledApplyStartedAt: null, importing: false, mosaicPreviewEnabled: true, mosaicPreviewGeneration: 0, mosaicWorker: null, mosaicPreviewRequested: false, mosaicWorkerBusy: false, mosaicPending: null, mosaicPreviewRoi: null, mosaicPreviewFull: false, mosaicSourceImage: null, mosaicSourceId: "", mosaicSourcePromise: null, mosaicPreviewFailureReported: false,
+  applyTargetIds: [], applyCatalogSnapshot: null, applyRunning: false, applyFinishing: false, handledApplyStartedAt: null, importing: false, mosaicPreviewEnabled: true, mosaicPreviewGeneration: 0, mosaicWorker: null, mosaicPreviewRequested: false, mosaicWorkerBusy: false, mosaicPending: null, mosaicPreviewRoi: null, mosaicPreviewFull: false, mosaicSourceImage: null, mosaicSourceId: "", mosaicSourcePromise: null, mosaicPreviewFailureReported: false,
   outputDirectoryPicking: false, outputDirectoryCommitPending: false, singleSave: null, applyDialogInitialized: false, singleSaveDialogInitialized: false,
   detectionTargetIds: [], pendingDetectionTargetIds: [], detectionDialogBaseIds: [], detectionDialogFilterable: false, detectionDialogSubmitting: false, detectCancelRequested: false,
   pageLoadedAt: Date.now() / 1000, handledDetectionStartedAt: null, importSession: null,
@@ -767,7 +767,7 @@ function applyBusyControlLock(controls, busyLocked, confirmDialog) {
     if ((["applyPauseButton", "applyCancelButton"].includes(control.id) && state.applyRunning)
       || (["processingPauseButton", "processingCancelButton"].includes(control.id) && state.processing)
       || control.id === "errorDialogClose" || (state.saveStarting && confirmDialog.open && confirmDialog.contains(control))
-      || (canEditSavePreferences && (control.id === "applyTargetMode" || (control.closest("#applySettings, #singleSaveSettings") && !control.closest(".output-directory-row"))))) continue;
+      || (canEditSavePreferences && (control.matches("[data-apply-image-filter]") || (control.closest("#applySettings, #singleSaveSettings") && !control.closest(".output-directory-row"))))) continue;
     if (!control.disabled) control.dataset.disabledByLock = "true";
     control.disabled = true;
   }
