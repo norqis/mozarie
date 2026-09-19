@@ -2325,6 +2325,7 @@
       "observation": "サーバーを開始せず、ONNX Runtimeの状態が一致しないことと`setup.bat`で修復する案内をCMDへ表示する",
       "status": "automated",
       "testIds": [
+        "python:tests.test_updater.UpdaterTests.test_run_with_missing_or_invalid_marker_requires_setup",
         "python:tests.test_updater.UpdaterTests.test_marker_and_runtime_mismatch_fails_before_pip_or_ready_change"
       ]
     },
@@ -2336,6 +2337,7 @@
       "observation": "実GPU・モデルは読み込まない",
       "status": "automated",
       "testIds": [
+        "python:tests.test_updater.UpdaterTests.test_run_with_missing_or_invalid_marker_requires_setup",
         "python:tests.test_updater.UpdaterTests.test_marker_and_runtime_mismatch_fails_before_pip_or_ready_change"
       ]
     },
