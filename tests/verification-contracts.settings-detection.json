@@ -287,7 +287,6 @@
       "observation": "NTD11の設定がOFFで送られ、そのモデル由来の新規候補・除外を生成しない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
         "python:tests.test_server.MozarieTests.test_model_logic_matrix_uses_only_enabled_models"
       ]
     },
@@ -299,7 +298,6 @@
       "observation": "既存候補の存在を新規検出と混同しない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
         "python:tests.test_server.MozarieTests.test_model_logic_matrix_uses_only_enabled_models"
       ]
     },
@@ -311,7 +309,6 @@
       "observation": "NTD11がONで保存・送信され、利用可能なら準備・実行される",
       "status": "automated",
       "testIds": [
-        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
         "python:tests.test_server.MozarieTests.test_model_logic_matrix_uses_only_enabled_models"
       ]
     },
@@ -323,7 +320,6 @@
       "observation": "検出精度と候補数の最低値は要求しない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
         "python:tests.test_server.MozarieTests.test_model_logic_matrix_uses_only_enabled_models"
       ]
     },
@@ -347,7 +343,6 @@
       "observation": "NTD11のOFFが維持される",
       "status": "automated",
       "testIds": [
-        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
         "python:tests.test_server.MozarieTests.test_model_logic_matrix_uses_only_enabled_models"
       ]
     },
@@ -359,7 +354,6 @@
       "observation": "他モデルのスイッチを変えない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
         "python:tests.test_server.MozarieTests.test_model_logic_matrix_uses_only_enabled_models"
       ]
     },
@@ -371,7 +365,6 @@
       "observation": "Sensitiveの設定がOFFで送られ、そのモデル由来の新規候補・除外を生成しない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
         "python:tests.test_server.MozarieTests.test_model_logic_matrix_uses_only_enabled_models"
       ]
     },
@@ -383,7 +376,6 @@
       "observation": "既存候補の存在を新規検出と混同しない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
         "python:tests.test_server.MozarieTests.test_model_logic_matrix_uses_only_enabled_models"
       ]
     },
@@ -395,7 +387,6 @@
       "observation": "SensitiveがONで保存・送信され、利用可能なら準備・実行される",
       "status": "automated",
       "testIds": [
-        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
         "python:tests.test_server.MozarieTests.test_model_logic_matrix_uses_only_enabled_models"
       ]
     },
@@ -407,7 +398,6 @@
       "observation": "検出精度と候補数の最低値は要求しない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
         "python:tests.test_server.MozarieTests.test_model_logic_matrix_uses_only_enabled_models"
       ]
     },
@@ -431,7 +421,6 @@
       "observation": "SensitiveのOFFが維持される",
       "status": "automated",
       "testIds": [
-        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
         "python:tests.test_server.MozarieTests.test_model_logic_matrix_uses_only_enabled_models"
       ]
     },
@@ -443,7 +432,6 @@
       "observation": "他モデルのスイッチを変えない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
         "python:tests.test_server.MozarieTests.test_model_logic_matrix_uses_only_enabled_models"
       ]
     },
@@ -455,7 +443,6 @@
       "observation": "手検出の設定がOFFで送られ、そのモデル由来の新規候補・除外を生成しない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
         "python:tests.test_server.MozarieTests.test_model_logic_matrix_uses_only_enabled_models"
       ]
     },
@@ -467,7 +454,6 @@
       "observation": "既存候補の存在を新規検出と混同しない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
         "python:tests.test_server.MozarieTests.test_model_logic_matrix_uses_only_enabled_models"
       ]
     },
@@ -479,7 +465,6 @@
       "observation": "手検出がONで保存・送信され、利用可能なら準備・実行される",
       "status": "automated",
       "testIds": [
-        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
         "python:tests.test_server.MozarieTests.test_model_logic_matrix_uses_only_enabled_models"
       ]
     },
@@ -491,7 +476,6 @@
       "observation": "検出精度と候補数の最低値は要求しない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
         "python:tests.test_server.MozarieTests.test_model_logic_matrix_uses_only_enabled_models"
       ]
     },
@@ -515,7 +499,6 @@
       "observation": "手検出と、それに依存する手領域分割がOFFで維持される",
       "status": "automated",
       "testIds": [
-        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
         "python:tests.test_server.MozarieTests.test_model_logic_matrix_uses_only_enabled_models"
       ]
     },
@@ -527,7 +510,6 @@
       "observation": "NTD11・Sensitive・白い液の設定は保持する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
         "python:tests.test_server.MozarieTests.test_model_logic_matrix_uses_only_enabled_models"
       ]
     },
@@ -539,7 +521,6 @@
       "observation": "手領域分割の設定がOFFで送られ、そのモデル由来の新規候補・除外を生成しない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
         "python:tests.test_server.MozarieTests.test_model_logic_matrix_uses_only_enabled_models"
       ]
     },
@@ -551,7 +532,6 @@
       "observation": "既存候補の存在を新規検出と混同しない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
         "python:tests.test_server.MozarieTests.test_model_logic_matrix_uses_only_enabled_models"
       ]
     },
@@ -563,7 +543,6 @@
       "observation": "両方のONが保存される",
       "status": "automated",
       "testIds": [
-        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
         "python:tests.test_server.MozarieTests.test_model_logic_matrix_uses_only_enabled_models"
       ]
     },
@@ -575,7 +554,6 @@
       "observation": "手候補がある場合に手領域分割を実行する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
         "python:tests.test_server.MozarieTests.test_model_logic_matrix_uses_only_enabled_models"
       ]
     },
@@ -587,7 +565,6 @@
       "observation": "手候補0件なら実行確認済みとしない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
         "python:tests.test_server.MozarieTests.test_model_logic_matrix_uses_only_enabled_models"
       ]
     },
@@ -611,7 +588,6 @@
       "observation": "手領域分割のOFFが維持される",
       "status": "automated",
       "testIds": [
-        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
         "python:tests.test_server.MozarieTests.test_model_logic_matrix_uses_only_enabled_models"
       ]
     },
@@ -623,7 +599,6 @@
       "observation": "他モデルのスイッチを変えない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
         "python:tests.test_server.MozarieTests.test_model_logic_matrix_uses_only_enabled_models"
       ]
     },
@@ -635,7 +610,6 @@
       "observation": "白い液の設定がOFFで送られ、そのモデル由来の新規候補・除外を生成しない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
         "python:tests.test_server.MozarieTests.test_model_logic_matrix_uses_only_enabled_models"
       ]
     },
@@ -647,7 +621,6 @@
       "observation": "既存候補の存在を新規検出と混同しない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
         "python:tests.test_server.MozarieTests.test_model_logic_matrix_uses_only_enabled_models"
       ]
     },
@@ -659,7 +632,6 @@
       "observation": "ONが保存・送信される",
       "status": "automated",
       "testIds": [
-        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
         "python:tests.test_server.MozarieTests.test_model_logic_matrix_uses_only_enabled_models"
       ]
     },
@@ -671,7 +643,6 @@
       "observation": "性器候補がある場合に白色領域処理を実行する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
         "python:tests.test_server.MozarieTests.test_model_logic_matrix_uses_only_enabled_models"
       ]
     },
@@ -683,7 +654,6 @@
       "observation": "性器候補0件なら実行確認済みとしない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
         "python:tests.test_server.MozarieTests.test_model_logic_matrix_uses_only_enabled_models"
       ]
     },
@@ -695,7 +665,6 @@
       "observation": "白い液のOFFが維持される",
       "status": "automated",
       "testIds": [
-        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
         "python:tests.test_server.MozarieTests.test_model_logic_matrix_uses_only_enabled_models"
       ]
     },
@@ -707,7 +676,6 @@
       "observation": "他モデルのスイッチを変えない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
         "python:tests.test_server.MozarieTests.test_model_logic_matrix_uses_only_enabled_models"
       ]
     },
@@ -719,7 +687,6 @@
       "observation": "SAMの準備を要求せず、輪郭補正なしで完了する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
         "python:tests.test_server.MozarieTests.test_model_logic_matrix_uses_only_enabled_models"
       ]
     },
@@ -731,7 +698,6 @@
       "observation": "選択したSAMを利用し、未準備ならモデル準備の案内を出す",
       "status": "automated",
       "testIds": [
-        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
         "python:tests.test_server.MozarieTests.test_model_logic_matrix_uses_only_enabled_models"
       ]
     },
@@ -755,7 +721,6 @@
       "observation": "vit_bだけが選択され、再表示後も保持される",
       "status": "automated",
       "testIds": [
-        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
         "python:tests.test_server.MozarieTests.test_model_logic_matrix_uses_only_enabled_models"
       ]
     },
@@ -767,7 +732,6 @@
       "observation": "未準備ファイルを別の種類で代用しない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
         "python:tests.test_server.MozarieTests.test_model_logic_matrix_uses_only_enabled_models"
       ]
     },
@@ -779,7 +743,6 @@
       "observation": "vit_lだけが選択され、再表示後も保持される",
       "status": "automated",
       "testIds": [
-        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
         "python:tests.test_server.MozarieTests.test_model_logic_matrix_uses_only_enabled_models"
       ]
     },
@@ -791,7 +754,6 @@
       "observation": "未準備ファイルを別の種類で代用しない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
         "python:tests.test_server.MozarieTests.test_model_logic_matrix_uses_only_enabled_models"
       ]
     },
@@ -803,7 +765,6 @@
       "observation": "vit_hだけが選択され、再表示後も保持される",
       "status": "automated",
       "testIds": [
-        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
         "python:tests.test_server.MozarieTests.test_model_logic_matrix_uses_only_enabled_models"
       ]
     },
@@ -815,7 +776,6 @@
       "observation": "未準備ファイルを別の種類で代用しない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
         "python:tests.test_server.MozarieTests.test_model_logic_matrix_uses_only_enabled_models"
       ]
     },
@@ -838,7 +798,6 @@
       "observation": "選択した物理GPUで処理する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
         "python:tests.test_directml_gpu_identity.DirectMlGpuIdentityTests.test_reverse_enumeration_maps_selected_physical_gpu"
       ]
     },
@@ -862,7 +821,6 @@
       "observation": "選択した物理GPUで処理する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
         "python:tests.test_directml_gpu_identity.DirectMlGpuIdentityTests.test_reverse_enumeration_maps_selected_physical_gpu"
       ]
     },
@@ -874,7 +832,6 @@
       "observation": "環境にDirectMLがなければ未実施と報告する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
         "python:tests.test_directml_gpu_identity.DirectMlGpuIdentityTests.test_reverse_enumeration_maps_selected_physical_gpu"
       ]
     },
@@ -898,7 +855,6 @@
       "observation": "GPU失敗として案内し、CPU専用セッションへ切り替えない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
         "python:tests.test_server.MozarieTests.test_detection_rejects_an_unsupported_gpu_before_loading_models"
       ]
     },
@@ -910,7 +866,6 @@
       "observation": "選択した実行モードを保存して検出へ渡す",
       "status": "automated",
       "testIds": [
-        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
         "python:tests.test_server.MozarieTests.test_detection_mode_is_read_only_from_saved_settings"
       ]
     },
@@ -922,7 +877,6 @@
       "observation": "精度の比較評価は実施しない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
         "python:tests.test_server.MozarieTests.test_detection_mode_is_read_only_from_saved_settings"
       ]
     },
@@ -1322,7 +1276,6 @@
       "observation": "基本モデルの用途・正式名称・ONNX形式・配布元を表示する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
         "python:tests.test_server.MozarieTests.test_model_download_api_uses_existing_mutation_guards_and_allowlist"
       ]
     },
@@ -1334,7 +1287,6 @@
       "observation": "NTD11の用途・配布元・変換コマンドを表示する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
         "python:tests.test_server.MozarieTests.test_model_download_api_uses_existing_mutation_guards_and_allowlist"
       ]
     },
@@ -1346,7 +1298,6 @@
       "observation": "Sensitiveの用途・配布元・変換コマンドを表示する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
         "python:tests.test_server.MozarieTests.test_model_download_api_uses_existing_mutation_guards_and_allowlist"
       ]
     },
@@ -1358,7 +1309,6 @@
       "observation": "SAMの用途・配布元とvit_b・vit_l・vit_hの比較表を表示する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
         "python:tests.test_server.MozarieTests.test_model_download_api_uses_existing_mutation_guards_and_allowlist"
       ]
     },
@@ -1370,7 +1320,6 @@
       "observation": "画像全体から手を検出する用途・ONNX形式・配布元を表示する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
         "python:tests.test_server.MozarieTests.test_model_download_api_uses_existing_mutation_guards_and_allowlist"
       ]
     },
@@ -1382,7 +1331,6 @@
       "observation": "検出した手の輪郭を補正する用途・safetensors形式・配布元を表示する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
         "python:tests.test_server.MozarieTests.test_model_download_api_uses_existing_mutation_guards_and_allowlist"
       ]
     },
@@ -1394,7 +1342,6 @@
       "observation": "性器候補内の白色領域を対象とし、追加モデルが不要であることを表示する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
         "python:tests.test_server.MozarieTests.test_model_download_api_uses_existing_mutation_guards_and_allowlist"
       ]
     },
@@ -1406,7 +1353,6 @@
       "observation": "設定画面へ戻り、選択モデルの値を保持する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
         "python:tests.test_server.MozarieTests.test_model_download_api_uses_existing_mutation_guards_and_allowlist"
       ]
     },
@@ -1418,7 +1364,6 @@
       "observation": "表示しているコマンドとコピー内容が一致する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
         "python:tests.test_server.MozarieTests.test_model_download_api_uses_existing_mutation_guards_and_allowlist"
       ]
     },
@@ -1430,7 +1375,6 @@
       "observation": "対象モデル名と開始操作を表示する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
         "python:tests.test_server.MozarieTests.test_model_download_api_uses_existing_mutation_guards_and_allowlist"
       ]
     },
@@ -1442,7 +1386,6 @@
       "observation": "進捗を表示し、完了後に利用可能状態になる",
       "status": "automated",
       "testIds": [
-        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
         "python:tests.test_server.MozarieTests.test_model_download_api_uses_existing_mutation_guards_and_allowlist"
       ]
     },
@@ -1454,7 +1397,6 @@
       "observation": "中止を表示し、未完了ファイルを利用可能と表示しない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
         "python:tests.test_server.MozarieTests.test_model_download_api_uses_existing_mutation_guards_and_allowlist"
       ]
     },
@@ -1466,7 +1408,6 @@
       "observation": "サーバーとの通信失敗を表示し、未取得モデルを利用可能と表示しない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
         "python:tests.test_server.MozarieTests.test_model_download_api_uses_existing_mutation_guards_and_allowlist"
       ]
     },
@@ -1566,7 +1507,6 @@
       "observation": "削除ショートカットは Delete・ONである",
       "status": "automated",
       "testIds": [
-        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
         "python:tests.test_config.SettingsTests.test_legacy_shortcuts_gain_per_action_defaults"
       ]
     },
@@ -1578,7 +1518,6 @@
       "observation": "保存値を表示する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
         "python:tests.test_config.SettingsTests.test_legacy_shortcuts_gain_per_action_defaults"
       ]
     },
@@ -1590,7 +1529,6 @@
       "observation": "保存値を復元する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
         "python:tests.test_config.SettingsTests.test_legacy_shortcuts_gain_per_action_defaults"
       ]
     },
@@ -1602,7 +1540,6 @@
       "observation": "削除ショートカットは Delete・ONに戻る",
       "status": "automated",
       "testIds": [
-        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
         "python:tests.test_config.SettingsTests.test_legacy_shortcuts_gain_per_action_defaults"
       ]
     },
@@ -1614,7 +1551,6 @@
       "observation": "削除ショートカットは Delete・ONで補完される",
       "status": "automated",
       "testIds": [
-        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
         "python:tests.test_config.SettingsTests.test_legacy_shortcuts_gain_per_action_defaults"
       ]
     },
@@ -1626,7 +1562,6 @@
       "observation": "正規化後の既存 Delete を保ち、削除ショートカットは未使用の修飾キー付き Delete・OFFで補完され、設定を保存できる",
       "status": "automated",
       "testIds": [
-        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
         "python:tests.test_config.SettingsTests.test_legacy_shortcuts_gain_per_action_defaults"
       ]
     },
@@ -2133,7 +2068,6 @@
       "observation": "現在版と確認結果を表示し、更新がある場合だけ更新操作を案内する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
         "python:tests.test_updater.UpdaterTests.test_fetch_latest_release_validates_payload"
       ]
     },
@@ -2431,7 +2365,6 @@
       "observation": "CIで相対形式の拒否と旧設定移行を確認する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
         "python:tests.test_absolute_path_regression.AbsolutePathRegressionTests.test_relative_model_and_output_paths_are_rejected_for_new_settings"
       ]
     },
@@ -2443,7 +2376,6 @@
       "observation": "相対パスでは該当する設定タブと入力欄を示し「絶対パス」を案内して保存しない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
         "python:tests.test_absolute_path_regression.AbsolutePathRegressionTests.test_relative_model_and_output_paths_are_rejected_for_new_settings"
       ]
     },
@@ -2455,7 +2387,6 @@
       "observation": "成功時は正規化済みの絶対形式を表示し、モデル選択・案内・現在の設定を混ぜない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
         "python:tests.test_absolute_path_regression.AbsolutePathRegressionTests.test_relative_model_and_output_paths_are_rejected_for_new_settings"
       ]
     },
@@ -2467,8 +2398,7 @@
       "observation": "CIで一回限りの絶対化と保存を確認する",
       "status": "automated",
       "testIds": [
-        "python:tests.test_absolute_path_regression.AbsolutePathRegressionTests.test_legacy_relative_paths_are_migrated_to_absolute_paths_once",
-        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state"
+        "python:tests.test_absolute_path_regression.AbsolutePathRegressionTests.test_legacy_relative_paths_are_migrated_to_absolute_paths_once"
       ]
     },
     {
@@ -2479,8 +2409,7 @@
       "observation": "実機では起動後の設定表示、利用者の作業フォルダー、モデル読込案内を確認する",
       "status": "automated",
       "testIds": [
-        "python:tests.test_absolute_path_regression.AbsolutePathRegressionTests.test_legacy_relative_paths_are_migrated_to_absolute_paths_once",
-        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state"
+        "python:tests.test_absolute_path_regression.AbsolutePathRegressionTests.test_legacy_relative_paths_are_migrated_to_absolute_paths_once"
       ]
     },
     {
@@ -2547,7 +2476,6 @@
       "observation": "保存先だけの変更ではGPUの診断やモデル読込を始めず、実在する絶対パスだけを保存する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
         "python:tests.test_server.MozarieTests.test_output_directory_only_update_does_not_probe_an_unchanged_gpu"
       ]
     },
@@ -2559,7 +2487,6 @@
       "observation": "取消・失敗後も選択ボタンを再度使える",
       "status": "automated",
       "testIds": [
-        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
         "python:tests.test_server.MozarieTests.test_output_directory_only_update_does_not_probe_an_unchanged_gpu"
       ]
     },
@@ -2571,7 +2498,6 @@
       "observation": "OSの初期フォルダーは既存の絶対パスだけを使う",
       "status": "automated",
       "testIds": [
-        "node:tests/test_settings_runtime.cjs::settings, model pickers, and download state",
         "python:tests.test_server.MozarieTests.test_output_directory_only_update_does_not_probe_an_unchanged_gpu"
       ]
     }
