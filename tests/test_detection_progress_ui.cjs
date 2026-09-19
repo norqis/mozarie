@@ -55,3 +55,53 @@ test("SD-148 detection progress shows staged work and locks pause only while pub
     await closeServer(fixture.server);
   }
 });
+
+async function withHeldDetection(run) {
+  const fixture = await startFixtureServer();
+  fixture.holdDetection(true);
+  const browser = await chromium.launch({ headless: true });
+  let context;
+  try {
+    context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+    const page = await context.newPage();
+    await page.goto(fixture.url, { waitUntil: "domcontentloaded" });
+    await page.waitForFunction(() => Boolean(state.settings) && state.images.length === 2);
+    await page.locator("#detectAllButton").click();
+    await page.locator("#detectStartButton").click();
+    await page.waitForFunction(() => state.processing?.kind === "detect" && document.querySelector("#processingDialog").open);
+    await run(page, fixture);
+  } finally {
+    await context?.close();
+    await browser.close();
+    await closeServer(fixture.server);
+  }
+}
+
+test("SD-057 SD-058 pause and resume preserve the same detection job and visible progress", { timeout: 60000 }, async () => {
+  await withHeldDetection(async (page) => {
+    const before = await page.evaluate(() => ({ total: state.processing.total, imageIds: [...state.processing.imageIds] }));
+    await page.locator("#processingPauseButton").click();
+    await page.waitForFunction(() => state.processing?.state === "paused");
+    assert.match(await page.locator("#processingPauseButton").textContent(), /再開|Resume/i);
+    assert.deepEqual(await page.evaluate(() => ({ total: state.processing.total, imageIds: [...state.processing.imageIds] })), before);
+    await page.locator("#processingPauseButton").click();
+    await page.waitForFunction(() => state.processing?.state === "running");
+    assert.match(await page.locator("#processingPauseButton").textContent(), /一時停止|Pause/i);
+    assert.deepEqual(await page.evaluate(() => ({ total: state.processing.total, imageIds: [...state.processing.imageIds] })), before);
+  });
+});
+
+test("SD-059 SD-148.2 cancel is sent once and stays visibly pending until terminal acknowledgement", { timeout: 60000 }, async () => {
+  await withHeldDetection(async (page, fixture) => {
+    await page.locator("#processingCancelButton").click();
+    await page.waitForFunction(() => state.job?.cancelRequested === true);
+    assert.equal(fixture.cancelRequests(), 1);
+    assert.equal(await page.locator("#processingCancelButton").isDisabled(), true);
+    assert.equal(await page.locator("#processingDialog").evaluate((dialog) => dialog.open), true);
+    await page.locator("#processingCancelButton").evaluate((button) => button.click());
+    assert.equal(fixture.cancelRequests(), 1);
+    fixture.finishCancel();
+    await page.evaluate(() => pollJob());
+    await page.waitForFunction(() => !document.querySelector("#processingDialog").open && state.processing === null);
+  });
+});

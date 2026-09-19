@@ -240,6 +240,50 @@ test("SD-136 fluid color tolerance accepts inclusive bounds and rejects values o
   }
 });
 
+test("SD-139 disabling fluid color fill visibly disables tolerance without changing its value", { timeout: 60000 }, async () => {
+  const fixture = await startFixtureServer();
+  const browser = await chromium.launch({ headless: true });
+  let context;
+  try {
+    const { context: openedContext, page } = await freshPage(browser, fixture); context = openedContext;
+    await page.locator("#detectAllButton").click();
+    await page.locator("#detectFluidColorFillTolerance").fill("41");
+    await page.locator("#detectFluidColorFillEnabled").uncheck();
+    assert.equal(await page.locator("#detectFluidColorFillTolerance").isDisabled(), true);
+    assert.equal(await page.locator("#detectFluidColorFillTolerance").inputValue(), "41");
+    await page.locator("#detectFluidColorFillEnabled").check();
+    assert.equal(await page.locator("#detectFluidColorFillTolerance").isEnabled(), true);
+    assert.equal(await page.locator("#detectFluidColorFillTolerance").inputValue(), "41");
+  } finally {
+    await context?.close(); await browser.close(); await closeServer(fixture.server);
+  }
+});
+
+test("SD-140 current-image detection uses the saved fluid switch and tolerance without opening the dialog", { timeout: 60000 }, async () => {
+  const fixture = await startFixtureServer();
+  const browser = await chromium.launch({ headless: true });
+  let context;
+  try {
+    const { context: openedContext, page } = await freshPage(browser, fixture); context = openedContext;
+    await page.locator("#detectAllButton").click();
+    await page.locator("#detectFluidColorFillTolerance").fill("37");
+    await page.locator("#detectFluidColorFillEnabled").uncheck();
+    await page.locator("#detectStartButton").click();
+    await page.waitForFunction(() => !state.processing && !isBusy());
+    await page.locator('.gallery-item[data-id="sample"]').click();
+    await page.waitForFunction(() => state.currentId === "sample" && Boolean(state.currentImage));
+    const request = page.waitForRequest((item) => new URL(item.url()).pathname === "/api/detect" && item.method() === "POST");
+    assert.equal(await page.locator("#detectDialog").evaluate((dialog) => dialog.open), false);
+    await page.locator("#detectCurrentButton").click();
+    const payload = JSON.parse((await request).postData());
+    assert.equal(payload.fluidColorFillEnabled, false);
+    assert.equal(payload.fluidColorFillTolerance, 37);
+    assert.deepEqual(payload.imageIds, ["sample"]);
+  } finally {
+    await context?.close(); await browser.close(); await closeServer(fixture.server);
+  }
+});
+
 test("all-image detection filters images with independent OR checkboxes and persists the selection", { timeout: 60000 }, async () => {
   const fixture = await startFixtureServer();
   fixture.setCatalog([

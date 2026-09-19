@@ -193,6 +193,134 @@ test("SD-013 resetting settings replaces edited controls with returned defaults"
   });
 });
 
+async function saveSettingsAndReload(page) {
+  await page.locator("#settingsSaveButton").click();
+  await page.waitForFunction(() => !document.querySelector("#settingsSaveButton").disabled);
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await page.waitForFunction(() => Boolean(state.settings) && state.images.length === 2);
+  await page.locator("#settingsButton").click();
+  await page.locator('[data-settings-tab="models"]').click();
+}
+
+const optionalModelSwitches = [
+  { id: "SD-025 SD-026", label: "NTD11", toggle: "#settingsNtd11Toggle", card: "#settingsNtd11Card", input: "#settingsNtd11Model", path: "G:\\models\\ntd11.onnx", enabled: "ntd11_enabled", value: "ntd11" },
+  { id: "SD-028 SD-029", label: "Sensitive", toggle: "#settingsSensitiveToggle", card: "#settingsSensitiveCard", input: "#settingsSensitiveModel", path: "G:\\models\\sensitive.onnx", enabled: "sensitive_enabled", value: "sensitive" },
+  { id: "SD-031 SD-032", label: "hand detection", toggle: "#settingsHandToggle", card: "#settingsHandCard", input: "#settingsHandModel", path: "G:\\models\\hand.onnx", enabled: "hand_detection_enabled", value: "hand_detection" },
+];
+
+function verifyOptionalModelSwitch(model) {
+  return async () => {
+    await withSettingsPage(async (page, fixture) => {
+      await page.locator('[data-settings-tab="models"]').click();
+      await page.locator(model.input).fill(model.path);
+      await page.locator(`${model.card} label.model-switch`).click();
+      assert.equal(await page.locator(model.toggle).isChecked(), true);
+      await saveSettingsAndReload(page);
+      assert.equal(fixture.settingsPayloads.at(-1).body.models[model.enabled], true);
+      assert.equal(fixture.settingsPayloads.at(-1).body.models[model.value], model.path);
+      assert.equal(await page.locator(model.toggle).isChecked(), true);
+      assert.equal(await page.locator(model.input).inputValue(), model.path);
+      await page.locator(`${model.card} label.model-switch`).click();
+      await saveSettingsAndReload(page);
+      assert.equal(fixture.settingsPayloads.at(-1).body.models[model.enabled], false);
+      assert.equal(await page.locator(model.toggle).isChecked(), false);
+    });
+  };
+}
+test("SD-025 SD-026 NTD11 switch saves its path and survives reload in both states", { timeout: 60000 }, verifyOptionalModelSwitch(optionalModelSwitches[0]));
+test("SD-028 SD-029 Sensitive switch saves its path and survives reload in both states", { timeout: 60000 }, verifyOptionalModelSwitch(optionalModelSwitches[1]));
+test("SD-031 SD-032 hand detection switch saves its path and survives reload in both states", { timeout: 60000 }, verifyOptionalModelSwitch(optionalModelSwitches[2]));
+
+test("SD-034 SD-035 hand segmentation is gated by hand detection and persists independently", { timeout: 60000 }, async () => {
+  await withSettingsPage(async (page, fixture) => {
+    await page.locator('[data-settings-tab="models"]').click();
+    assert.equal(await page.locator("#settingsHandSegmentationToggle").isDisabled(), true);
+    await page.locator("#settingsHandModel").fill("G:\\models\\hand.onnx");
+    await page.locator("#settingsHandCard label.model-switch").click();
+    await page.locator("#settingsHandSegmentationModel").fill("G:\\models\\handseg.safetensors");
+    await page.locator("#settingsHandSegmentationCard label.model-switch").click();
+    await saveSettingsAndReload(page);
+    const posted = fixture.settingsPayloads.at(-1).body.models;
+    assert.equal(posted.hand_detection_enabled, true);
+    assert.equal(posted.hand_segmentation_enabled, true);
+    assert.equal(posted.hand_segmentation, "G:\\models\\handseg.safetensors");
+    assert.equal(await page.locator("#settingsHandSegmentationToggle").isChecked(), true);
+    await page.locator("#settingsHandSegmentationCard label.model-switch").click();
+    await saveSettingsAndReload(page);
+    assert.equal(fixture.settingsPayloads.at(-1).body.models.hand_segmentation_enabled, false);
+    assert.equal(fixture.settingsPayloads.at(-1).body.models.hand_detection_enabled, true);
+  });
+});
+
+test("SD-037 SD-038 fluid exclusion switch persists without changing model switches", { timeout: 60000 }, async () => {
+  await withSettingsPage(async (page, fixture) => {
+    await page.locator('[data-settings-tab="models"]').click();
+    const switchesBefore = await page.evaluate(() => ({
+      ntd11: Boolean(state.settings.models.ntd11_enabled),
+      sensitive: Boolean(state.settings.models.sensitive_enabled),
+      hand: Boolean(state.settings.models.hand_detection_enabled),
+      handSegmentation: Boolean(state.settings.models.hand_segmentation_enabled),
+    }));
+    if (await page.locator("#settingsFluidToggle").isChecked()) await page.locator("#settingsFluidCard label.model-switch").click();
+    await saveSettingsAndReload(page);
+    assert.equal(fixture.settingsPayloads.at(-1).body.detection.fluid_exclusion_enabled, false);
+    assert.deepEqual({
+      ntd11: fixture.settingsPayloads.at(-1).body.models.ntd11_enabled,
+      sensitive: fixture.settingsPayloads.at(-1).body.models.sensitive_enabled,
+      hand: fixture.settingsPayloads.at(-1).body.models.hand_detection_enabled,
+      handSegmentation: fixture.settingsPayloads.at(-1).body.models.hand_segmentation_enabled,
+    }, switchesBefore);
+    assert.equal(await page.locator("#settingsFluidToggle").isChecked(), false);
+    await page.locator("#settingsFluidCard label.model-switch").click();
+    await saveSettingsAndReload(page);
+    assert.equal(fixture.settingsPayloads.at(-1).body.detection.fluid_exclusion_enabled, true);
+    assert.equal(await page.locator("#settingsFluidToggle").isChecked(), true);
+  });
+});
+
+function verifySamVariant(variant) {
+  return async () => {
+    await withSettingsPage(async (page, fixture) => {
+      await page.locator('[data-settings-tab="models"]').click();
+      await page.locator("#settingsPrecisionCard label.model-switch").click();
+      await page.locator(`#settingsSamVariants input[value="${variant}"]`).check({ force: true });
+      const checkpoint = `G:\\models\\sam_${variant}.pth`;
+      await page.locator("#settingsSamModel").fill(checkpoint);
+      await saveSettingsAndReload(page);
+      const posted = fixture.settingsPayloads.at(-1).body;
+      assert.equal(posted.detection.mode, "high_precision");
+      assert.equal(posted.models.sam_model_type, variant);
+      assert.equal(posted.models.sam_checkpoints[variant], checkpoint);
+      assert.equal(await page.locator(`#settingsSamVariants input[value="${variant}"]`).isChecked(), true);
+      assert.equal(await page.locator("#settingsSamModel").inputValue(), checkpoint);
+    });
+  };
+}
+test("SD-041 SAM vit_b selection saves its own checkpoint and survives reload", { timeout: 60000 }, verifySamVariant("vit_b"));
+test("SD-042 SAM vit_l selection saves its own checkpoint and survives reload", { timeout: 60000 }, verifySamVariant("vit_l"));
+test("SD-043 SAM vit_h selection saves its own checkpoint and survives reload", { timeout: 60000 }, verifySamVariant("vit_h"));
+
+function verifyProvider(provider) {
+  return async () => {
+    await withSettingsPage(async (page, fixture) => {
+      await page.locator('[data-settings-tab="models"]').click();
+      await page.locator("#settingsProvider").selectOption(provider);
+      if (provider === "gpu") {
+        await page.waitForFunction(() => document.querySelector("#settingsGpuDevice").options.length > 0);
+        await page.locator("#settingsGpuDevice").selectOption({ index: 0 });
+      }
+      await saveSettingsAndReload(page);
+      assert.equal(fixture.settingsPayloads.at(-1).body.models.provider, provider);
+      assert.equal(await page.locator("#settingsProvider").inputValue(), provider);
+      if (provider === "gpu") await page.waitForFunction(() => !document.querySelector("#settingsGpuDevice").disabled);
+      assert.equal(await page.locator("#settingsGpuDevice").isDisabled(), provider === "cpu");
+      assert.match(await page.locator("#settingsRuntimeBackend").textContent(), /CUDA|CPU|cuda|cpu/);
+    });
+  };
+}
+test("SD-044 CPU provider saves and is restored in the settings UI", { timeout: 60000 }, verifyProvider("cpu"));
+test("SD-045 SD-046 GPU provider saves and is restored in the settings UI", { timeout: 60000 }, verifyProvider("gpu"));
+
 test("SD-014 close returns to the editor image", { timeout: 60000 }, async () => {
   await withSettingsPage(async (page) => {
     const currentId = await page.evaluate(() => state.currentId);

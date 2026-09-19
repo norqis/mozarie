@@ -62,6 +62,12 @@ function setDetectionDialogSubmitting(submitting) {
 }
 
 function persistedDetectionTargets() { return state.settings?.detection?.targets || []; }
+function persistedFluidColorFill() {
+  return {
+    fluidColorFillEnabled: state.settings?.detection?.fluid_color_fill_enabled !== false,
+    fluidColorFillTolerance: state.settings?.detection?.fluid_color_fill_tolerance ?? 26,
+  };
+}
 function detectionCandidatePadding(selector = "#detectCandidatePadding") {
   const text = String($(selector).value).trim();
   const value = Number(text);

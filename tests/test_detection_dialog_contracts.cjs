@@ -123,3 +123,51 @@ test("SD-131 invalid padding blocks detection while zero remains valid", { timeo
     assert.equal(detection.default_exclude_candidate_padding_px, 0);
   });
 });
+
+test("SD-128 current-image run uses the saved apply and exclusion padding for only the current image", { timeout: 60000 }, async () => {
+  await withPage(async (page, fixture) => {
+    await selectFirst(page);
+    assert.deepEqual(await page.evaluate(() => [
+      state.settings.detection.default_candidate_padding_px,
+      state.settings.detection.default_exclude_candidate_padding_px,
+    ]), [3, 11]);
+    const request = page.waitForRequest((item) => new URL(item.url()).pathname === "/api/detect" && item.method() === "POST");
+    await page.locator("#detectCurrentButton").click();
+    assert.deepEqual(JSON.parse((await request).postData()).imageIds, ["sample"]);
+    assert.equal(fixture.detectRequests.length, 1);
+  });
+});
+
+test("SD-129 selected-image run uses the saved apply and exclusion padding for only the selection", { timeout: 60000 }, async () => {
+  await withPage(async (page) => {
+    assert.deepEqual(await page.evaluate(() => [
+      state.settings.detection.default_candidate_padding_px,
+      state.settings.detection.default_exclude_candidate_padding_px,
+    ]), [3, 11]);
+    await page.evaluate(() => setViewMode("overview"));
+    await page.locator("#batchModeButton").click();
+    await page.locator('.overview-item[data-id="sample-two"]').click();
+    await page.locator("#selectionActionsButton").click();
+    await page.locator('[data-selection-action="detect"]').click();
+    assert.deepEqual(await page.locator("#detectForm").evaluate(() => [
+      document.querySelector("#detectCandidatePadding").value,
+      document.querySelector("#detectExcludeCandidatePadding").value,
+    ]), ["3", "11"]);
+    const request = page.waitForRequest((item) => new URL(item.url()).pathname === "/api/detect" && item.method() === "POST");
+    await page.locator("#detectStartButton").click();
+    assert.deepEqual(JSON.parse((await request).postData()).imageIds, ["sample-two"]);
+  });
+});
+
+test("SD-130 all-image run persists and uses the dialog apply and exclusion padding for every visible image", { timeout: 60000 }, async () => {
+  await withPage(async (page, fixture) => {
+    await page.locator("#detectAllButton").click();
+    await page.locator("#detectCandidatePadding").fill("5");
+    await page.locator("#detectExcludeCandidatePadding").fill("13");
+    const request = page.waitForRequest((item) => new URL(item.url()).pathname === "/api/detect" && item.method() === "POST");
+    await page.locator("#detectStartButton").click();
+    assert.deepEqual(JSON.parse((await request).postData()).imageIds, ["sample", "sample-two"]);
+    assert.equal(fixture.settingsPayloads.at(-1).body.detection.default_candidate_padding_px, 5);
+    assert.equal(fixture.settingsPayloads.at(-1).body.detection.default_exclude_candidate_padding_px, 13);
+  });
+});

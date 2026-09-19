@@ -177,7 +177,7 @@ function startFixtureServer() {
     models: { target_segmentation: "", ntd11: "", ntd11_enabled: false, sensitive: "", sensitive_enabled: false, hand_detection: "", hand_detection_enabled: false, sam_checkpoints: { vit_b: "", vit_l: "", vit_h: "" }, sam_model_type: "vit_b", provider: "gpu", gpu_device: 0 },
     display: { apply_color: "#ff3d4d", exclude_color: "#28d3ff", overlay_opacity: 0.78, mosaic_preview: true, tool_position: "left" },
     importing: { parallelism: 3 }, editing: { fill_color_tolerance: 20 }, saving: { parallelism: 2, default_output_directory: "G:\\fixture-output" },
-    detection: { mode: "standard", fluid_exclusion_enabled: true, exclude_forced_default: true, threshold: 0.5, parallelism: 2, default_candidate_padding_px: 3, targets: ["penis", "pussy"] },
+    detection: { mode: "standard", fluid_exclusion_enabled: true, exclude_forced_default: true, threshold: 0.5, parallelism: 2, default_candidate_padding_px: 3, default_exclude_candidate_padding_px: 11, targets: ["penis", "pussy"] },
     shortcuts: {
       enabled: true,
       bindings: { previous: "ArrowLeft", next: "ArrowRight", previousVisible: "ArrowUp", nextVisible: "ArrowDown", first: "Home", last: "End", reviewAndNext: "Enter", removeImage: "Delete", toggleOverview: "G", undo: "Ctrl+Z", redo: "Ctrl+Shift+Z", renameImage: "F2" },

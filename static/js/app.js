@@ -896,7 +896,7 @@ function bindEvents() {
     if (!activeDetection()) openDetectionDialog(allImageDetectionTargets().map((image) => image.id), { filterable: true });
   };
   $("#detectAllButton").addEventListener("click", detectAll);
-  $("#detectCurrentButton").addEventListener("click", () => { const image = currentRecord(); if (!currentImageActionPending() && isProcessableImage(image)) void runDetection([image.id], detectionConfidence(), 1, detectionTargets()); });
+  $("#detectCurrentButton").addEventListener("click", () => { const image = currentRecord(); if (!currentImageActionPending() && isProcessableImage(image)) void runDetection([image.id], detectionConfidence(), 1, detectionTargets(), persistedFluidColorFill()); });
   $("#saveAllButton").addEventListener("click", saveAll); $("#saveButton").addEventListener("click", saveCurrent); $("#singleViewButton").addEventListener("click", () => setDisplayMode("single")); $("#compareViewButton").addEventListener("click", () => setDisplayMode("compare")); $("#fitButton").addEventListener("click", () => { if (!isBusy() && !state.importing) fitImage(); });
   $("#flipHorizontalButton").addEventListener("click", () => { void toggleImageFlip("horizontal"); });
   $("#flipVerticalButton").addEventListener("click", () => { void toggleImageFlip("vertical"); });

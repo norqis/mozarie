@@ -304,6 +304,7 @@
       "observation": "NTD11がONで保存・送信され、利用可能なら準備・実行される",
       "status": "automated",
       "testIds": [
+        "node:tests/test_settings_dialog_e2e.cjs::SD-025 SD-026 NTD11 switch saves its path and survives reload in both states",
         "python:tests.test_server.MozarieTests.test_enabled_auxiliaries_load_in_priority_order"
       ]
     },
@@ -327,6 +328,7 @@
       "observation": "NTD11のOFFが維持される",
       "status": "automated",
       "testIds": [
+        "node:tests/test_settings_dialog_e2e.cjs::SD-025 SD-026 NTD11 switch saves its path and survives reload in both states",
         "python:tests.test_config.SettingsTests.test_valid_settings_are_persisted_only_to_local_file"
       ]
     },
@@ -371,6 +373,7 @@
       "observation": "SensitiveがONで保存・送信され、利用可能なら準備・実行される",
       "status": "automated",
       "testIds": [
+        "node:tests/test_settings_dialog_e2e.cjs::SD-028 SD-029 Sensitive switch saves its path and survives reload in both states",
         "python:tests.test_server.MozarieTests.test_enabled_auxiliaries_load_in_priority_order"
       ]
     },
@@ -394,6 +397,7 @@
       "observation": "SensitiveのOFFが維持される",
       "status": "automated",
       "testIds": [
+        "node:tests/test_settings_dialog_e2e.cjs::SD-028 SD-029 Sensitive switch saves its path and survives reload in both states",
         "python:tests.test_config.SettingsTests.test_valid_settings_are_persisted_only_to_local_file"
       ]
     },
@@ -438,6 +442,7 @@
       "observation": "手検出がONで保存・送信され、利用可能なら準備・実行される",
       "status": "automated",
       "testIds": [
+        "node:tests/test_settings_dialog_e2e.cjs::SD-031 SD-032 hand detection switch saves its path and survives reload in both states",
         "python:tests.test_server.MozarieTests.test_hand_model_verification_occurs_once_after_first_load"
       ]
     },
@@ -461,6 +466,7 @@
       "observation": "手検出と、それに依存する手領域分割がOFFで維持される",
       "status": "automated",
       "testIds": [
+        "node:tests/test_settings_dialog_e2e.cjs::SD-031 SD-032 hand detection switch saves its path and survives reload in both states",
         "python:tests.test_config.SettingsTests.test_hand_segmentation_requires_hand_detection"
       ]
     },
@@ -505,6 +511,7 @@
       "observation": "両方のONが保存される",
       "status": "automated",
       "testIds": [
+        "node:tests/test_settings_dialog_e2e.cjs::SD-034 SD-035 hand segmentation is gated by hand detection and persists independently",
         "python:tests.test_config.SettingsTests.test_hand_segmentation_settings_have_safe_defaults"
       ]
     },
@@ -539,6 +546,7 @@
       "observation": "手領域分割のOFFが維持される",
       "status": "automated",
       "testIds": [
+        "node:tests/test_settings_dialog_e2e.cjs::SD-034 SD-035 hand segmentation is gated by hand detection and persists independently",
         "python:tests.test_config.SettingsTests.test_hand_segmentation_settings_have_safe_defaults"
       ]
     },
@@ -583,6 +591,7 @@
       "observation": "ONが保存・送信される",
       "status": "automated",
       "testIds": [
+        "node:tests/test_settings_dialog_e2e.cjs::SD-037 SD-038 fluid exclusion switch persists without changing model switches",
         "python:tests.test_server.MozarieTests.test_finalization_applies_fluid_to_every_nonempty_target_once"
       ]
     },
@@ -605,6 +614,7 @@
       "observation": "白い液のOFFが維持される",
       "status": "automated",
       "testIds": [
+        "node:tests/test_settings_dialog_e2e.cjs::SD-037 SD-038 fluid exclusion switch persists without changing model switches",
         "python:tests.test_server.MozarieTests.test_finalization_skips_fluid_search_for_empty_apply_masks_and_when_disabled"
       ]
     },
@@ -638,6 +648,7 @@
       "observation": "選択したSAMを利用し、未準備ならモデル準備の案内を出す",
       "status": "automated",
       "testIds": [
+        "node:tests/test_settings_dialog_e2e.cjs::SD-041 SAM vit_b selection saves its own checkpoint and survives reload",
         "python:tests.test_server.MozarieTests.test_high_precision_loads_sam_once_only_when_targets_exist",
         "python:tests.test_server.MozarieTests.test_missing_sam_checkpoint_has_a_specific_error_code"
       ]
@@ -662,6 +673,7 @@
       "observation": "vit_bだけが選択され、再表示後も保持される",
       "status": "automated",
       "testIds": [
+        "node:tests/test_settings_dialog_e2e.cjs::SD-041 SAM vit_b selection saves its own checkpoint and survives reload",
         "python:tests.test_config.SettingsTests.test_sam_checkpoint_variants_are_persisted_as_a_map"
       ]
     },
@@ -684,6 +696,7 @@
       "observation": "vit_lだけが選択され、再表示後も保持される",
       "status": "automated",
       "testIds": [
+        "node:tests/test_settings_dialog_e2e.cjs::SD-042 SAM vit_l selection saves its own checkpoint and survives reload",
         "python:tests.test_config.SettingsTests.test_sam_checkpoint_variants_are_persisted_as_a_map"
       ]
     },
@@ -706,6 +719,7 @@
       "observation": "vit_hだけが選択され、再表示後も保持される",
       "status": "automated",
       "testIds": [
+        "node:tests/test_settings_dialog_e2e.cjs::SD-043 SAM vit_h selection saves its own checkpoint and survives reload",
         "python:tests.test_config.SettingsTests.test_sam_checkpoint_variants_are_persisted_as_a_map"
       ]
     },
@@ -728,6 +742,7 @@
       "observation": "CPUで処理し、GPU必須エラーを表示しない",
       "status": "automated",
       "testIds": [
+        "node:tests/test_settings_dialog_e2e.cjs::SD-044 CPU provider saves and is restored in the settings UI",
         "python:tests.test_onnx_adapters.OnnxAdapterTests.test_cpu_provider_contract_does_not_depend_on_gpu_runtime"
       ]
     },
@@ -739,6 +754,7 @@
       "observation": "選択した物理GPUで処理する",
       "status": "automated",
       "testIds": [
+        "node:tests/test_settings_dialog_e2e.cjs::SD-045 SD-046 GPU provider saves and is restored in the settings UI",
         "python:tests.test_directml_gpu_identity.DirectMlGpuIdentityTests.test_reverse_enumeration_maps_selected_physical_gpu"
       ]
     },
@@ -762,6 +778,7 @@
       "observation": "選択した物理GPUで処理する",
       "status": "automated",
       "testIds": [
+        "node:tests/test_settings_dialog_e2e.cjs::SD-045 SD-046 GPU provider saves and is restored in the settings UI",
         "python:tests.test_directml_gpu_identity.DirectMlGpuIdentityTests.test_reverse_enumeration_maps_selected_physical_gpu"
       ]
     },
@@ -807,6 +824,7 @@
       "observation": "選択した実行モードを保存して検出へ渡す",
       "status": "automated",
       "testIds": [
+        "node:tests/test_settings_dialog_e2e.cjs::SD-041 SAM vit_b selection saves its own checkpoint and survives reload",
         "python:tests.test_server.MozarieTests.test_detection_mode_is_read_only_from_saved_settings"
       ]
     },
@@ -907,6 +925,7 @@
       "observation": "新規画像処理を止め、一時停止状態を表示する",
       "status": "automated",
       "testIds": [
+        "node:tests/test_detection_progress_ui.cjs::SD-057 SD-058 pause and resume preserve the same detection job and visible progress",
         "python:tests.test_server.MozarieTests.test_detection_can_pause_and_resume"
       ]
     },
@@ -918,6 +937,7 @@
       "observation": "未処理対象から再開し、完了済み画像を二重追加しない",
       "status": "automated",
       "testIds": [
+        "node:tests/test_detection_progress_ui.cjs::SD-057 SD-058 pause and resume preserve the same detection job and visible progress",
         "python:tests.test_server.MozarieTests.test_detection_can_pause_and_resume"
       ]
     },
@@ -929,6 +949,7 @@
       "observation": "処理を停止し、完了済みと未処理を混同せず、編集を再有効化する",
       "status": "automated",
       "testIds": [
+        "node:tests/test_detection_progress_ui.cjs::SD-059 SD-148.2 cancel is sent once and stays visibly pending until terminal acknowledgement",
         "python:tests.test_server.MozarieTests.test_detect_cancel_between_inference_and_commit_preserves_existing_candidates"
       ]
     },
@@ -954,6 +975,7 @@
       "observation": "公開までは完了ID・候補一覧を増やさず、全件推論済みの公開待ち状態では一時停止を無効表示にして、取消は公開開始まで使える",
       "status": "automated",
       "testIds": [
+        "node:tests/test_detection_progress_ui.cjs::SD-059 SD-148.2 cancel is sent once and stays visibly pending until terminal acknowledgement",
         "node:tests/test_detection_progress_ui.cjs::SD-148 detection progress shows staged work and locks pause only while publication is pending",
         "python:tests.test_server.MozarieTests.test_detection_staging_reports_every_success_before_atomic_publication",
         "python:tests.test_server.MozarieTests.test_detection_staging_reports_processed_without_publishing_on_failure",
@@ -1990,6 +2012,7 @@
       "observation": "保存済みの2値を使い、新規のモザイク候補だけに3px、新規の除外候補だけに11pxを設定する",
       "status": "automated",
       "testIds": [
+        "node:tests/test_detection_dialog_contracts.cjs::SD-128 current-image run uses the saved apply and exclusion padding for only the current image",
         "node:tests/test_filters_and_fluid_e2e.cjs::all-image detection filters images with independent OR checkboxes and persists the selection",
         "python:tests.test_server.MozarieTests.test_sd_127_detect_and_boundary_candidates_receive_distinct_apply_and_exclude_padding"
       ]
@@ -2002,6 +2025,7 @@
       "observation": "対象外画像、既存の境界候補、手描き範囲は変更しない",
       "status": "automated",
       "testIds": [
+        "node:tests/test_detection_dialog_contracts.cjs::SD-128 current-image run uses the saved apply and exclusion padding for only the current image",
         "node:tests/test_detection_dialog_contracts.cjs::SD-052 current-image detection targets only the selected image and restores editing",
         "python:tests.test_server.MozarieTests.test_sd_060_062_redetection_preserves_review_manual_boundary_and_other_image"
       ]
@@ -2014,6 +2038,7 @@
       "observation": "選択対象だけを処理し、新規候補へ役割別の値を反映する",
       "status": "automated",
       "testIds": [
+        "node:tests/test_detection_dialog_contracts.cjs::SD-129 selected-image run uses the saved apply and exclusion padding for only the selection",
         "node:tests/test_filters_and_fluid_e2e.cjs::all-image detection filters images with independent OR checkboxes and persists the selection",
         "python:tests.test_server.MozarieTests.test_sd_127_detect_and_boundary_candidates_receive_distinct_apply_and_exclude_padding"
       ]
@@ -2026,6 +2051,7 @@
       "observation": "選択外画像と既存の境界候補・手描き範囲は変更しない",
       "status": "automated",
       "testIds": [
+        "node:tests/test_detection_dialog_contracts.cjs::SD-129 selected-image run uses the saved apply and exclusion padding for only the selection",
         "node:tests/test_filters_and_fluid_e2e.cjs::all-image detection filters images with independent OR checkboxes and persists the selection",
         "python:tests.test_server.MozarieTests.test_sd_060_062_redetection_preserves_review_manual_boundary_and_other_image"
       ]
@@ -2038,6 +2064,7 @@
       "observation": "非表示を除く全対象を処理し、各画像の新規候補へ役割別の値を反映する",
       "status": "automated",
       "testIds": [
+        "node:tests/test_detection_dialog_contracts.cjs::SD-130 all-image run persists and uses the dialog apply and exclusion padding for every visible image",
         "node:tests/test_filters_and_fluid_e2e.cjs::hiding an image removes it from the visible all-image detection and save targets",
         "python:tests.test_server.MozarieTests.test_sd_127_detect_and_boundary_candidates_receive_distinct_apply_and_exclude_padding"
       ]
@@ -2050,6 +2077,7 @@
       "observation": "画像ごとに候補の有無が異なっても別の役割の値を流用しない",
       "status": "automated",
       "testIds": [
+        "node:tests/test_detection_dialog_contracts.cjs::SD-130 all-image run persists and uses the dialog apply and exclusion padding for every visible image",
         "python:tests.test_server.MozarieTests.test_sd_127_detect_and_boundary_candidates_receive_distinct_apply_and_exclude_padding"
       ]
     },
@@ -2213,6 +2241,7 @@
       "observation": "精液候補を色で広げるスイッチと許容範囲を操作不可にし、OFF中は許容範囲欄の無効な文字列で開始を妨げない",
       "status": "automated",
       "testIds": [
+        "node:tests/test_filters_and_fluid_e2e.cjs::SD-139 disabling fluid color fill visibly disables tolerance without changing its value",
         "node:tests/test_filters_and_fluid_e2e.cjs::all-image detection submits the fluid color-fill settings with default tolerance 26"
       ]
     },
@@ -2224,6 +2253,7 @@
       "observation": "現在画像は従来どおり直ちに検出を開始し、モーダルを開かない",
       "status": "automated",
       "testIds": [
+        "node:tests/test_filters_and_fluid_e2e.cjs::SD-140 current-image detection uses the saved fluid switch and tolerance without opening the dialog",
         "node:tests/test_filters_and_fluid_e2e.cjs::all-image detection filters images with independent OR checkboxes and persists the selection"
       ]
     },
@@ -2235,6 +2265,7 @@
       "observation": "保存済みの色拡張ON/OFFと許容範囲を開始時に使用する",
       "status": "automated",
       "testIds": [
+        "node:tests/test_filters_and_fluid_e2e.cjs::SD-140 current-image detection uses the saved fluid switch and tolerance without opening the dialog",
         "python:tests.test_server.MozarieTests.test_detect_image_persists_a_real_broad_fluid_exclusion"
       ]
     },
