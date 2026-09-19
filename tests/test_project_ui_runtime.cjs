@@ -59,7 +59,7 @@ let projects = [
   { id: "separate", name: "Gamma", status: "working", imageCount: 1, sourceRoot: "C:/alpha", updatedAt: 500_000 },
 ];
 let openPayload = null;
-const state = { project: null, projectReadOnly: false, projectOperationPending: false, catalogTransition: null, missingNativeSources: [], images: [], selectedImageIds: new Set(), candidateUpdateChains: new Map(), workspaceDraftChains: new Map(), workspaceDraftTimers: new Map(), workspaceMutationErrors: new Map(), candidateBatchPending: new Set(), settings: { general: { language: "ja" } }, importing: false };
+const state = { project: null, projectReadOnly: false, projectOperationPending: false, catalogTransition: null, missingNativeSources: [], images: [], selectedImageIds: new Set(), projectlessDirectorySources: new Map(), candidateUpdateChains: new Map(), workspaceDraftChains: new Map(), workspaceDraftTimers: new Map(), workspaceMutationErrors: new Map(), candidateBatchPending: new Set(), settings: { general: { language: "ja" } }, importing: false };
 const context = {
   console, Promise, Map, Set, WeakMap, Array, Object, Number, String, Boolean, Math, JSON, Error, Intl, AbortController,
   document, state, window: { addEventListener() {}, showDirectoryPicker: async () => ({ kind: "directory" }) }, URL: { createObjectURL: () => "blob:test", revokeObjectURL: () => {} },
@@ -71,6 +71,7 @@ const context = {
   resetCatalog(images) { state.images = images; state.currentId = null; state.selectedImageIds.clear(); calls.push(["reset", images.length]); }, applyProjectSnapshot(snapshot) { state.project = snapshot.project || state.project; state.projectReadOnly = snapshot.readOnly === true || state.project?.status === "completed"; calls.push(["snapshot"]); }, renderCatalogViews() { calls.push(["render"]); },
   updateActionButtons() { calls.push(["actions"]); }, rememberProjectSource: async () => "source", rememberProjectSourceCleanup: async () => "cleanup", forgetProjectSources: async (id) => calls.push(["forget", id]), loadFolder: async () => calls.push(["loadFolder"]),
   rememberedProjectSources: async () => ({ files: [], directories: [] }), matchingProjectDirectorySources: async () => [], ensureProjectSourcePermission: async () => true, requestProjectSourcePermission: async () => true,
+  rememberProjectlessPromotionSources: async () => calls.push(["remember-promotion"]),
   importProjectDirectoryHandle: async (_handle, _project, sourceId) => calls.push(["directory", sourceId]), importProjectFileHandles: async (sources) => { calls.push(["files", sources.length]); return []; },
   confirmAction: async () => true, fetch: async (url) => { calls.push(["fetch", url]); return { ok: true, blob: async () => new Blob(["mask"]) }; }, responseError: () => new Error("download failed"),
   api: async (url, options = {}) => {
@@ -125,7 +126,7 @@ nodeTest("native source relink uses a typed path without an OS folder picker", (
   assert.doesNotMatch(dialog, /showDirectoryPicker|type="file"|pickFolder/, "native relink does not expose an OS folder picker control");
 });
 
-nodeTest("project dialogs, source recovery, and project switching", async (t) => {
+nodeTest("project dialogs, A-B-A switching, failed-open recovery, and duplicate transition guards", async (t) => {
   await new Promise((resolve) => setImmediate(resolve));
   for (const key of ["project.open", "project.new", "project.name", "project.openList", "project.complete", "project.close", "project.resume", "project.sourceChangedClear", "project.downloadMosaic", "project.downloadExclude", "project.downloadMosaicZip", "project.downloadExcludeZip", "project.delete", "project.deleteData", "project.deleteSource", "project.deleteIrreversible"]) {
     assert.equal(typeof japanese[key], "string", `Japanese includes ${key}`); assert.equal(typeof english[key], "string", `English includes ${key}`);
@@ -254,6 +255,7 @@ nodeTest("project dialogs, source recovery, and project switching", async (t) =>
   state.project = projects[0]; state.projectReadOnly = false; await fire("#projectComplete"); assert.equal(state.project, null, "completion closes only the live list after confirmation");
   state.project = projects[0]; state.images = [{ id: "pending" }]; state.workspaceDraftTimers.set("pending", 1); test.openProjectDeleteDialog("working");
   assert.equal(element("#projectDeleteDialog").open, true, "delete asks for explicit confirmation");
+  assert.match(element("#projectDeleteTarget").textContent, /Alpha/, "delete warning names the target project");
   await fire("#projectDeleteCancel"); assert.equal(element("#projectDeleteDialog").open, false, "cancel leaves the project untouched");
   const callsBeforeDelete = calls.length; test.openProjectDeleteDialog("working");
   await fire("#projectDeleteConfirm"); await new Promise((resolve) => setImmediate(resolve)); assert.equal(state.project, null, "deleting the current project closes its live workspace");
@@ -377,4 +379,52 @@ nodeTest("project dialogs, source recovery, and project switching", async (t) =>
     assert.deepEqual(element("#projectListBody").children, priorRows, "a failed delete does not report success by removing the existing rows");
     assert.ok(calls.filter(([kind]) => kind === "error").length >= priorErrors + 4, "each failed project operation reports an error");
   });
+});
+
+nodeTest("project creation, cancellation, duplicate rejection, table columns, and relink payload preserve workspace state", async () => {
+  for (let attempt = 0; attempt < 5; attempt += 1) await new Promise((resolve) => setImmediate(resolve));
+  const fire = async (id, type = "click") => { const listener = element(id).listeners.get(type); assert.ok(listener, `${id} is bound`); await listener({ preventDefault() {}, target: element(id) }); await new Promise((resolve) => setImmediate(resolve)); };
+  const baselineImages = [{ id: "draft", sourceId: "native-a", reviewed: true, hidden: true, candidates: [{ id: "candidate" }] }];
+  state.project = null; state.projectReadOnly = false; state.projectOperationPending = false; state.catalogTransition = null; state.workspaceId = "draft-project"; state.images = baselineImages; state.selectedImageIds = new Set(["draft"]);
+  const submissions = [];
+  context.api = async (url, options = {}) => {
+    calls.push(["api", url, options.method]); submissions.push({ url, body: options.body ? JSON.parse(options.body) : null });
+    if (url === "/api/project/name") return { project: { id: "draft-project", name: "Saved draft", status: "working", imageCount: 1 } };
+    if (url.startsWith("/api/projects?")) return { projects };
+    return {};
+  };
+  test.openProjectNameDialog("name"); element("#projectNameInput").value = "Saved draft"; await fire("#projectNameForm", "submit");
+  for (let attempt = 0; attempt < 5 && !submissions.some((entry) => entry.url === "/api/project/name"); attempt += 1) await new Promise((resolve) => setImmediate(resolve));
+  const promotion = submissions.find((entry) => entry.url === "/api/project/name");
+  assert.ok(promotion, `projectless creation calls the name endpoint; observed=${JSON.stringify(submissions)}`);
+  assert.deepEqual(promotion, { url: "/api/project/name", body: { name: "Saved draft", projectId: "draft-project" } }, "projectless creation promotes the current workspace id");
+  assert.equal(state.images, baselineImages, "project creation retains the current image, review, hidden, candidate, and mask-bearing records");
+
+  const retainedProject = state.project; const retainedImages = state.images;
+  context.api = async (url) => { if (url === "/api/project/name") { const error = new Error("duplicate"); error.code = "project_name_conflict"; error.status = 409; throw error; } return { projects }; };
+  test.openProjectNameDialog("name"); element("#projectNameInput").value = "Duplicate"; await fire("#projectNameForm", "submit");
+  assert.equal(state.project, retainedProject, "duplicate-name rejection retains the active project");
+  assert.equal(state.images, retainedImages, "duplicate-name rejection retains the active workspace data");
+  const requestsBeforeCancel = calls.filter(([kind]) => kind === "api").length; test.openProjectNameDialog("name"); await fire("#projectNameCancel");
+  assert.equal(calls.filter(([kind]) => kind === "api").length, requestsBeforeCancel, "project-name cancellation sends no request");
+
+  context.api = async (url) => url.startsWith("/api/projects?") ? { projects } : {};
+  await test.showProjectList();
+  const rows = element("#projectListBody").children;
+  assert.equal(rows.length, 3, "project management lists every project");
+  assert.equal(rows.every((row) => row.children.length === 7), true, "every row renders name, status, image count, source, created, updated, and actions columns");
+  const opensBeforeBackgroundClick = calls.filter(([kind, url]) => kind === "api" && url === "/api/project/open").length;
+  await element("#projectList").listeners.get("click")({ target: rows[0] });
+  assert.equal(calls.filter(([kind, url]) => kind === "api" && url === "/api/project/open").length, opensBeforeBackgroundClick, "clicking row background does not open a project");
+
+  state.project = projects[0]; state.images = [{ id: "native-image", sourceId: "native-a" }]; state.missingNativeSources = [{ id: "native-a", displayName: "Old", nativePath: "C:/old", kind: "native-folder", exists: false }];
+  let relinkPayload = null; let pickerCalls = 0; context.window.showDirectoryPicker = async () => { pickerCalls += 1; return {}; };
+  context.api = async (url, options = {}) => {
+    if (url === "/api/project/source/relink") { relinkPayload = JSON.parse(options.body); return { project: projects[0], images: state.images, sources: [] }; }
+    if (url === "/api/project/mismatches") return { images: [] };
+    return {};
+  };
+  await fire("#projectSourceRelink"); element("#nativeRelinkPath").value = "D:/replacement"; await fire("#nativeRelinkForm", "submit");
+  assert.equal(pickerCalls, 0, "native relink confirmation never invokes the OS folder picker");
+  assert.deepEqual(relinkPayload, { projectId: "working", sourceId: "native-a", path: "D:/replacement" }, "native relink submits the typed absolute path and selected source");
 });
