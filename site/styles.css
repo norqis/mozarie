@@ -71,6 +71,7 @@ h1 span { display: block; white-space: nowrap; }
 .visual-copy { max-width: 430px; }
 .sequence { margin-bottom: 10px; }
 h2 { margin-bottom: 14px; font-size: clamp(32px, 4vw, 52px); font-weight: 600; line-height: 1.16; }
+.visual-copy h2 span { display: inline-block; white-space: nowrap; }
 .visual-copy p:not(.sequence), .final-cta > p { margin-bottom: 0; color: var(--muted); }
 .crop-preview { position: relative; width: 100%; overflow: hidden; }
 .crop-preview img { position: absolute; display: block; max-width: none; width: calc(100% * 1920 / var(--crop-width)); height: auto; left: calc(-100% * var(--crop-x) / var(--crop-width)); top: calc(-100% * var(--crop-y) / var(--crop-height)); }

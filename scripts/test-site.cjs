@@ -83,6 +83,17 @@ test("the four-pillar page is complete without JavaScript and has no horizontal 
         { sequence: "03", heading: "複数画像をまとめて保存", copy: "プロジェクト内の複数画像をまとめて保存できます。コピー保存または元画像への上書きを選べます。", image: "assets/demo1.png" },
         { sequence: "04", heading: "プロジェクトごとの履歴保持", copy: "候補、手描き範囲、確認状態、非表示状態、Undo／Redo履歴をプロジェクトごとに保持します。プロジェクトを切り替えても、それぞれの編集内容を維持します。", image: null },
       ]);
+      assert.deepEqual(await page.locator("#features h2").evaluateAll((headings) => headings.map((heading) => [...heading.querySelectorAll("span")].map((span) => span.textContent))), [
+        ["モザイク", "自動検出"],
+        ["ブラシ", "ツール"],
+        ["複数画像を", "まとめて保存"],
+        ["プロジェクト", "ごとの", "履歴保持"],
+      ]);
+      assert.equal(await page.locator("#features h2 span").evaluateAll((chunks) => chunks.every((chunk) => {
+        const style = getComputedStyle(chunk);
+        const lineHeight = Number.parseFloat(style.lineHeight);
+        return style.whiteSpace === "nowrap" && chunk.getBoundingClientRect().height <= lineHeight + 1;
+      })), true, `feature headings only wrap at semantic boundaries at ${viewport.width}px`);
       assert.deepEqual(await page.locator(".feature-index a").evaluateAll((links) => links.map((link) => ({ href: link.getAttribute("href"), text: link.innerText.trim() }))), [
         { href: "#detection", text: "01\nモザイク自動検出" },
         { href: "#brush", text: "02\nブラシツール" },
