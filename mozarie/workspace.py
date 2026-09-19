@@ -2001,6 +2001,7 @@ class WorkspaceStore:
                         db, image_id, revision, candidates, effective,
                         replace=True, history_group=history_group,
                         expected_revision=expected_revision,
+                        preserve_reviewed=True,
                         require_candidate_masks=True,
                     )
                 if history_group:

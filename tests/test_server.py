@@ -5426,6 +5426,43 @@ class MozarieTests(unittest.TestCase):
             self.assertFalse(new_auto_path.exists())
             self.assertTrue((cache / "new-auto.png").is_file())
 
+    def test_sd_060_062_redetection_preserves_review_manual_boundary_and_other_image(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            Image.new("RGB", (12, 12), "white").save(root / "first.png")
+            Image.new("RGB", (12, 12), "black").save(root / "second.png")
+            state = self.new_state()
+            first_id, second_id = (item["id"] for item in state.set_root(str(root)))
+            first_cache = state.cache_dir / first_id; first_cache.mkdir(parents=True, exist_ok=True)
+            second_cache = state.cache_dir / second_id; second_cache.mkdir(parents=True, exist_ok=True)
+            boundary_path = first_cache / "boundary.png"; old_path = first_cache / "old.png"
+            other_path = second_cache / "other.png"; pending_path = first_cache / ".mozarie-pending-new.tmp"
+            for path in (boundary_path, old_path, other_path): Image.fromarray(self._mask(12, 12)).save(path)
+            boundary = Candidate("boundary", "boundary", .9, boundary_path, source="boundary", origin="boundary")
+            old_auto = Candidate("old", "penis", .8, old_path, source="target")
+            other = Candidate("other", "pussy", .7, other_path, source="target")
+            state.candidates = {first_id: [boundary, old_auto], second_id: [other]}
+            revision = self.commit_candidates(state, first_id); self.commit_candidates(state, second_id)
+            manual_png = io.BytesIO(); Image.new("L", (12, 12), 255).save(manual_png, format="PNG")
+            manual = "data:image/png;base64," + base64.b64encode(manual_png.getvalue()).decode("ascii")
+            state.save_manual_workspace(first_id, {"add": manual, "exclusion": "", "exclusionErase": "", "removedCandidateIds": [], "candidateRevision": revision, "hasEffectiveMask": True, "manualEnabled": True})
+            state.set_image_flags(first_id, {"reviewed": True}); state.set_image_flags(second_id, {"reviewed": False})
+            before_manual = state.manual_workspace(first_id)["add"]
+            Image.fromarray(self._mask(12, 12)).save(pending_path, format="PNG")
+            fresh = Candidate("fresh", "penis", .95, pending_path, source="target")
+
+            with patch.object(state, "_ensure_models", return_value=[]), patch.object(state, "_detect_image", return_value=[fresh]):
+                state._start_job("detect", [state.image_for_id(first_id)], state._detect_worker, DEFAULT_DETECTION_CONFIDENCE, 1)
+                assert state.worker_thread is not None
+                join_thread(state.worker_thread)
+
+            self.assertEqual([candidate.candidate_id for candidate in state.candidates[first_id]], ["boundary", "fresh"])
+            self.assertEqual([candidate.candidate_id for candidate in state.candidates[second_id]], ["other"])
+            self.assertEqual(state.manual_workspace(first_id)["add"], before_manual)
+            listed = {item["id"]: item for item in state.list_images()}
+            self.assertTrue(listed[first_id]["reviewed"])
+            self.assertFalse(listed[second_id]["reviewed"])
+
     def test_boundary_api_returns_the_created_candidate(self):
         from http.server import ThreadingHTTPServer
 

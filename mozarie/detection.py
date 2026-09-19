@@ -468,7 +468,6 @@ class DetectionMixin:
                         for record in records:
                             self.candidates[record.image_id] = combined[record.image_id]
                             self.candidate_revisions[record.image_id] = expected_revisions[record.image_id] + 1
-                            record.reviewed = False
                             self._record_job_success(staged[record.image_id][0], record.image_id, None, job_generation, catalog_generation)
                 except Exception:
                     for _index, _record, candidates in staged.values():

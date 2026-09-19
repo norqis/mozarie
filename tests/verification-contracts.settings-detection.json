@@ -992,7 +992,7 @@
       "observation": "検出前の各画像の確認状態を保持する",
       "status": "automated",
       "testIds": [
-        "python:tests.test_server.MozarieTests.test_redetection_preserves_boundary_candidates_and_replaces_auto_candidates"
+        "python:tests.test_server.MozarieTests.test_sd_060_062_redetection_preserves_review_manual_boundary_and_other_image"
       ]
     },
     {
@@ -1003,8 +1003,7 @@
       "observation": "通常選択不能時だけ、手との重なりが少ないSAM候補を優先する",
       "status": "automated",
       "testIds": [
-        "python:tests.test_server.MozarieTests.test_detect_image_persists_the_refined_apply_mask",
-        "python:tests.test_detection_regressions.DetectionIntegrityRegressionTests.test_broad_auxiliary_mask_confirms_only_the_best_matching_target"
+        "python:tests.test_server.MozarieTests.test_high_precision_refinement_keeps_detector_mask_when_sam_is_incompatible"
       ]
     },
     {
@@ -1015,8 +1014,7 @@
       "observation": "初回候補と手が重なる場合は、初回のpoint・box・low-res maskを保った再推定で、重なり内へ既存分と合計3点までのnegative点を空間分散して追加する",
       "status": "automated",
       "testIds": [
-        "python:tests.test_server.MozarieTests.test_detect_image_persists_the_refined_apply_mask",
-        "python:tests.test_detection_regressions.DetectionIntegrityRegressionTests.test_broad_auxiliary_mask_confirms_only_the_best_matching_target"
+        "python:tests.test_server.MozarieTests.test_semantic_sam_refinement_uses_safe_points_and_rejects_hand_overlap"
       ]
     },
     {
@@ -1027,8 +1025,7 @@
       "observation": "SAMは輪郭補正だけに使い、通常の検出器thresholdを通過したAPPLY候補はSAMの選択不成立でも保持する",
       "status": "automated",
       "testIds": [
-        "python:tests.test_server.MozarieTests.test_detect_image_persists_the_refined_apply_mask",
-        "python:tests.test_detection_regressions.DetectionIntegrityRegressionTests.test_broad_auxiliary_mask_confirms_only_the_best_matching_target"
+        "python:tests.test_server.MozarieTests.test_high_precision_refinement_keeps_detector_mask_when_sam_is_incompatible"
       ]
     },
     {
@@ -1039,8 +1036,7 @@
       "observation": "手は独立したEXCLUDE候補として操作できる",
       "status": "automated",
       "testIds": [
-        "python:tests.test_server.MozarieTests.test_detect_image_persists_the_refined_apply_mask",
-        "python:tests.test_detection_regressions.DetectionIntegrityRegressionTests.test_broad_auxiliary_mask_confirms_only_the_best_matching_target"
+        "python:tests.test_server.MozarieTests.test_full_hand_exclusion_is_kept_separate_from_the_apply_mask"
       ]
     },
     {
@@ -1062,7 +1058,7 @@
       "observation": "境界候補・手描き範囲・別画像の候補を消さない",
       "status": "automated",
       "testIds": [
-        "python:tests.test_server.MozarieTests.test_redetection_preserves_boundary_candidates_and_replaces_auto_candidates"
+        "python:tests.test_server.MozarieTests.test_sd_060_062_redetection_preserves_review_manual_boundary_and_other_image"
       ]
     },
     {
@@ -1095,7 +1091,7 @@
       "observation": "`sam_high_precision`の補正済み候補を作る",
       "status": "automated",
       "testIds": [
-        "python:tests.test_server.MozarieTests.test_detect_image_persists_the_refined_apply_mask"
+        "python:tests.test_server.MozarieTests.test_high_precision_refinement_keeps_detector_mask_when_sam_is_incompatible"
       ]
     },
     {
@@ -1161,7 +1157,7 @@
       "observation": "多数候補時も手領域の対象範囲を処理し、全マスク配列の積み上げにより処理を停止しない",
       "status": "automated",
       "testIds": [
-        "python:tests.test_detection_regressions.DetectionIntegrityRegressionTests.test_broad_auxiliary_mask_confirms_only_the_best_matching_target"
+        "python:tests.test_detection_regressions.DetectionIntegrityRegressionTests.test_hand_box_envelope_matches_the_previous_union_without_stacking_masks"
       ]
     },
     {
