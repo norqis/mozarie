@@ -444,6 +444,10 @@ nodeTest("SD-066 model download confirmation identifies its target and start act
 });
 
 nodeTest("SD-067 completed model download publishes the acquired path", () => {
+  context.settingsTest.renderModelDownload({ state: "running", expected: 10, received: 4, completed: 0, total: 1, current: "hand_detection", phase: "download", paths: {} });
+  assert.equal(element("#modelDownloadProgress").hidden, false);
+  assert.equal(element("#modelDownloadProgress").value, 4);
+  assert.equal(element("#modelDownloadProgress").max, 10);
   context.settingsTest.renderModelDownload({ state: "complete", expected: 1, received: 1, completed: 1, total: 1, paths: { hand_detection: "G:\\models\\hand.onnx" } });
   assert.equal(element("#settingsHandModel").value, "G:\\models\\hand.onnx");
   assert.equal(element("#modelDownloadCancel").hidden, true);
@@ -454,6 +458,7 @@ nodeTest("SD-068 cancelled model download never publishes an unfinished path", (
   context.settingsTest.renderModelDownload({ state: "cancelled", expected: 10, received: 4, completed: 0, total: 1, paths: {} });
   assert.equal(element("#settingsHandModel").value, "");
   assert.equal(element("#modelDownloadCancel").hidden, true);
+  assert.notEqual(element("#modelDownloadStatus").textContent, "");
 });
 
 nodeTest("SD-069 model download polling failure is visible and leaves no acquired path", async () => {

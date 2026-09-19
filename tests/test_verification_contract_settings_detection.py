@@ -37,6 +37,11 @@ class SettingsDetectionVerificationContractTests(unittest.TestCase):
             source = path.read_text(encoding="utf-8")
             for match in re.finditer(r"(?:nodeTest|test)\(\s*[\"']([^\"']+)[\"']", source):
                 node_ids.add(f"node:tests/{path.name}::{match.group(1)}")
+            if path.name == "test_settings_actions_e2e.cjs":
+                for match in re.finditer(r'\["(SD-(?:07[6-9]|08[0-4]))",', source):
+                    node_ids.add(f"node:tests/{path.name}::{match.group(1)} shortcut performs the visible action only while its action switch is enabled")
+                for match in re.finditer(r'\["(SD-09[0-5]|SD-089)",', source):
+                    node_ids.add(f"node:tests/{path.name}::{match.group(1)} confirmation setting gates the real confirmation dialog without changing its operation target")
 
         manual_keys: set[str] = set()
         for item in observations:

@@ -64,7 +64,7 @@ test("SD-004 detection tab exposes every model switch help and preparation actio
   });
 });
 
-function assertModelHelp(key, { model, file, command = false, samTable = false, source = true }) {
+function assertModelHelp(key, { model, file, purpose, sourceHref = null, command = false, samTable = false }) {
   return async () => {
     await withSettingsPage(async (page) => {
       await page.locator('[data-settings-tab="models"]').click();
@@ -72,21 +72,22 @@ function assertModelHelp(key, { model, file, command = false, samTable = false, 
       await page.waitForFunction(() => document.querySelector("#modelHelpDialog").open);
       assert.match(await page.locator("#modelHelpModel").textContent(), model);
       assert.match(await page.locator("#modelHelpFile").textContent(), file);
-      assert.equal((await page.locator("#modelHelpText").textContent()).trim().length > 0, true);
+      assert.match(await page.locator("#modelHelpText").textContent(), purpose);
       assert.equal(await page.locator("#modelHelpCommandWrap").isHidden(), !command);
       assert.equal(await page.locator("#modelHelpSamTable").isHidden(), !samTable);
       if (samTable) assert.equal(await page.locator("#modelHelpSamTable tbody tr").count(), 3);
-      assert.equal(await page.locator("#modelHelpSource").locator("xpath=..").isHidden(), !source);
+      assert.equal(await page.locator("#modelHelpSource").locator("xpath=..").isHidden(), !sourceHref);
+      if (sourceHref) assert.match(await page.locator("#modelHelpSource").getAttribute("href"), sourceHref);
     });
   };
 }
-test("SD-063 target help shows purpose official model ONNX format and source", { timeout: 60000 }, assertModelHelp("target", { model: /anime-nsfw-segm-yolo26/i, file: /ONNX/i }));
-test("SD-097 NTD11 help shows source and conversion command", { timeout: 60000 }, assertModelHelp("ntd11", { model: /Anime NSFW Detection/i, file: /ONNX/i, command: true }));
-test("SD-098 Sensitive help shows source and conversion command", { timeout: 60000 }, assertModelHelp("sensitive", { model: /sensitive/i, file: /ONNX/i, command: true }));
-test("SD-099 SAM help shows source and all three variant rows", { timeout: 60000 }, assertModelHelp("precision", { model: /Segment Anything/i, file: /\.pth/i, samTable: true }));
-test("SD-100 hand detection help shows whole-image model and ONNX source", { timeout: 60000 }, assertModelHelp("hand", { model: /anime_hand_detection/i, file: /ONNX/i }));
-test("SD-101 hand segmentation help shows HandSegNet safetensors source", { timeout: 60000 }, assertModelHelp("handSegmentation", { model: /HandSegNet/i, file: /safetensors/i }));
-test("SD-102 fluid help shows that no additional model is required", { timeout: 60000 }, assertModelHelp("fluid", { model: /追加モデルなし|No additional model/i, file: /不要|Not required/i, source: false }));
+test("SD-063 target help shows purpose official model ONNX format and source", { timeout: 60000 }, assertModelHelp("target", { model: /anime-nsfw-segm-yolo26/i, file: /ONNX/i, purpose: /性器候補|genital candidates/i, sourceHref: /huggingface\.co\/01miku/ }));
+test("SD-097 NTD11 help shows source and conversion command", { timeout: 60000 }, assertModelHelp("ntd11", { model: /Anime NSFW Detection/i, file: /ONNX/i, purpose: /成人向け|adult model/i, sourceHref: /civitai\.com/, command: true }));
+test("SD-098 Sensitive help shows source and conversion command", { timeout: 60000 }, assertModelHelp("sensitive", { model: /sensitive/i, file: /ONNX/i, purpose: /見落としを補う|supplements the primary/i, sourceHref: /huggingface\.co\/sugarknight/, command: true }));
+test("SD-099 SAM help shows source and all three variant rows", { timeout: 60000 }, assertModelHelp("precision", { model: /Segment Anything/i, file: /\.pth/i, purpose: /輪郭|outline/i, sourceHref: /github\.com\/facebookresearch/, samTable: true }));
+test("SD-100 hand detection help shows whole-image model and ONNX source", { timeout: 60000 }, assertModelHelp("hand", { model: /anime_hand_detection/i, file: /ONNX/i, purpose: /画像全体|whole image/i, sourceHref: /huggingface\.co\/deepghs/ }));
+test("SD-101 hand segmentation help shows HandSegNet safetensors source", { timeout: 60000 }, assertModelHelp("handSegmentation", { model: /HandSegNet/i, file: /safetensors/i, purpose: /手全体の輪郭|full hand-outline/i, sourceHref: /huggingface\.co\/Ov3rLoRd-MLEngineer/ }));
+test("SD-102 fluid help shows that no additional model is required", { timeout: 60000 }, assertModelHelp("fluid", { model: /追加モデルなし|No additional model/i, file: /不要|Not required/i, purpose: /性器候補内の白色領域|white regions inside genital/i }));
 
 test("SD-065 copied conversion command exactly matches the displayed command", { timeout: 60000 }, async () => {
   await withSettingsPage(async (page) => {
@@ -100,6 +101,29 @@ test("SD-065 copied conversion command exactly matches the displayed command", {
     await page.locator("#modelHelpCopy").click();
     await page.waitForFunction(() => Boolean(window.__copiedModelCommand));
     assert.equal(await page.evaluate(() => window.__copiedModelCommand), displayed);
+  });
+});
+
+test("SD-064 closing model preparation returns to settings with its value intact", { timeout: 60000 }, async () => {
+  await withSettingsPage(async (page) => {
+    await page.locator('[data-settings-tab="models"]').click();
+    await page.locator("#settingsNtd11Model").fill("G:\\models\\ntd11.onnx");
+    await page.locator('[data-model-download="ntd11"]').click();
+    await page.waitForFunction(() => document.querySelector("#modelDownloadDialog").open);
+    await page.locator("#modelDownloadClose").click();
+    assert.equal(await page.locator("#settingsDialog").evaluate((dialog) => dialog.open), true);
+    assert.equal(await page.locator("#settingsNtd11Model").inputValue(), "G:\\models\\ntd11.onnx");
+  });
+});
+
+test("SD-066 model download confirmation names the selected model and exposes start", { timeout: 60000 }, async () => {
+  await withSettingsPage(async (page) => {
+    await page.locator('[data-settings-tab="models"]').click();
+    await page.locator("#settingsPrecisionToggle").check();
+    await page.locator('[data-model-download="sam"]').click();
+    await page.waitForFunction(() => document.querySelector("#modelDownloadDialog").open);
+    assert.match(await page.locator("#modelDownloadItems").textContent(), /SAM.*vit_b/i);
+    assert.equal(await page.locator("#modelDownloadStart").isVisible(), true);
   });
 });
 
