@@ -480,10 +480,7 @@
         "SV-096"
       ],
       "observation": "元フォルダー再接続のWindowsダイアログで許可、取消、別フォルダー選択を行ったとき、表示とOS権限UIが正しい。",
-      "status": "retired",
-      "retired": {
-        "reason": "WindowsダイアログとFile System Access権限UIの外観確認は、利用者指定により検証対象外とする。機能上の取消・拒否・不一致はSV-096.1で自動検証する。"
-      }
+      "status": "retired"
     },
     {
       "key": "SV-029.1",
@@ -758,10 +755,7 @@
         "SV-046"
       ],
       "observation": "アクセス許可を求めるOS操作は実施しない。",
-      "status": "retired",
-      "retired": {
-        "reason": "検証対象外: OS permission UI is excluded from verification by the user; functional permission denial and cancellation remain automated in SV-096.1."
-      }
+      "status": "retired"
     },
     {
       "key": "SV-047.1",
@@ -962,10 +956,7 @@
         "SV-062"
       ],
       "observation": "バックエンド・フロントエンドの全テストと静的確認が成功している。",
-      "status": "retired",
-      "retired": {
-        "reason": "検証対象外: A checklist observation that the complete test command passed is release-run evidence, not stable product behavior; CI executes the suites directly."
-      }
+      "status": "retired"
     },
     {
       "key": "SV-062.2",
@@ -973,10 +964,7 @@
         "SV-062"
       ],
       "observation": "失敗・skip・対象外のテストを残していない。",
-      "status": "retired",
-      "retired": {
-        "reason": "検証対象外: A checklist observation about the absence of skips is enforced by the CI test policy and contract validator rather than a product test."
-      }
+      "status": "retired"
     },
     {
       "key": "SV-063.1",
