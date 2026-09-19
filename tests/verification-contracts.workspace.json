@@ -90,8 +90,7 @@
       "observation": "中央モーダルの左下に元名復元、右下にOKとその左に取消を表示する。",
       "status": "automated",
       "testIds": [
-        "python:tests.test_recursive_save_rename.StudioStateNativeRenameTests.test_public_rename_is_metadata_only_and_survives_reopen_with_workspace_state",
-        "node:tests/test_interaction_coverage.cjs::interaction and catalog mutation controls"
+        "node:tests/test_project_ui_runtime.cjs::project dialogs, source recovery, and project switching"
       ]
     },
     {
@@ -102,7 +101,6 @@
       "observation": "復元は入力だけを戻し、OKで保存名を確定する。",
       "status": "automated",
       "testIds": [
-        "python:tests.test_recursive_save_rename.StudioStateNativeRenameTests.test_public_rename_is_metadata_only_and_survives_reopen_with_workspace_state",
         "node:tests/test_interaction_coverage.cjs::interaction and catalog mutation controls"
       ]
     },
@@ -394,8 +392,7 @@
       "observation": "透過部分と画像の形状を保持する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage",
-        "python:tests.test_server.MozarieTests.test_folder_scan_loads_every_normal_file_in_deterministic_order"
+        "python:tests.test_image_validation.InputImageValidationTests.test_transparent_png_preserves_shape_and_alpha_pixels"
       ]
     },
     {
@@ -406,8 +403,7 @@
       "observation": "サムネイルと編集画像の向きが一致する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage",
-        "python:tests.test_server.MozarieTests.test_folder_scan_loads_every_normal_file_in_deterministic_order"
+        "python:tests.test_server.MozarieTests.test_exif_rotated_jpeg_uses_normalized_mask_coordinates"
       ]
     },
     {
@@ -430,8 +426,7 @@
       "observation": "両画像を別の画像として扱い、片方の編集をもう片方へ反映しない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage",
-        "python:tests.test_server.MozarieTests.test_folder_scan_loads_every_normal_file_in_deterministic_order"
+        "python:tests.test_server.MozarieTests.test_import_preserves_safe_nested_relative_paths_and_same_names"
       ]
     },
     {
@@ -1198,8 +1193,7 @@
       "observation": "名前の昇順に行を並べ、その列の昇順三角を表示する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_project_ui_runtime.cjs::project dialogs, source recovery, and project switching",
-        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_project_lifecycle_sources_exports_mismatch_and_read_only"
+        "python:tests.test_project_workspace_coverage.ProjectWorkspaceCoverageTests.test_catalog_source_project_listing_lifecycle_and_sorting"
       ]
     },
     {
@@ -1210,8 +1204,7 @@
       "observation": "名前の降順に行を並べ、その列の降順三角を表示する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_project_ui_runtime.cjs::project dialogs, source recovery, and project switching",
-        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_project_lifecycle_sources_exports_mismatch_and_read_only"
+        "python:tests.test_project_workspace_coverage.ProjectWorkspaceCoverageTests.test_catalog_source_project_listing_lifecycle_and_sorting"
       ]
     },
     {
@@ -1222,8 +1215,7 @@
       "observation": "作成日時の昇順に行を並べ、その列の昇順三角を表示する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_project_ui_runtime.cjs::project dialogs, source recovery, and project switching",
-        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_project_lifecycle_sources_exports_mismatch_and_read_only"
+        "python:tests.test_project_workspace_coverage.ProjectWorkspaceCoverageTests.test_catalog_source_project_listing_lifecycle_and_sorting"
       ]
     },
     {
@@ -1234,8 +1226,7 @@
       "observation": "作成日時の降順に行を並べ、その列の降順三角を表示する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_project_ui_runtime.cjs::project dialogs, source recovery, and project switching",
-        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_project_lifecycle_sources_exports_mismatch_and_read_only"
+        "python:tests.test_project_workspace_coverage.ProjectWorkspaceCoverageTests.test_catalog_source_project_listing_lifecycle_and_sorting"
       ]
     },
     {
@@ -1246,8 +1237,7 @@
       "observation": "更新日時の昇順に行を並べ、その列の昇順三角を表示する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_project_ui_runtime.cjs::project dialogs, source recovery, and project switching",
-        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_project_lifecycle_sources_exports_mismatch_and_read_only"
+        "python:tests.test_project_workspace_coverage.ProjectWorkspaceCoverageTests.test_catalog_source_project_listing_lifecycle_and_sorting"
       ]
     },
     {
@@ -1258,8 +1248,7 @@
       "observation": "更新日時の降順に行を並べ、その列の降順三角を表示する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_project_ui_runtime.cjs::project dialogs, source recovery, and project switching",
-        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_project_lifecycle_sources_exports_mismatch_and_read_only"
+        "python:tests.test_project_workspace_coverage.ProjectWorkspaceCoverageTests.test_catalog_source_project_listing_lifecycle_and_sorting"
       ]
     },
     {
@@ -1462,8 +1451,8 @@
       "observation": "変更したファイルだけを警告一覧へ表示する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_project_ui_runtime.cjs::project dialogs, source recovery, and project switching",
-        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_project_lifecycle_sources_exports_mismatch_and_read_only"
+        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_multi_source_reopen_reconciles_before_one_replace_and_keeps_dimension_lock",
+        "python:tests.test_workspace.WorkspaceTests.test_dimension_acknowledgement_resizes_candidates_without_changing_manual_forced_exclusion"
       ]
     },
     {
@@ -1474,8 +1463,8 @@
       "observation": "対象の編集を保持し、確認済みの更新時刻へ更新する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_project_ui_runtime.cjs::project dialogs, source recovery, and project switching",
-        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_project_lifecycle_sources_exports_mismatch_and_read_only"
+        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_multi_source_reopen_reconciles_before_one_replace_and_keeps_dimension_lock",
+        "python:tests.test_workspace.WorkspaceTests.test_dimension_acknowledgement_resizes_candidates_without_changing_manual_forced_exclusion"
       ]
     },
     {
@@ -1486,8 +1475,8 @@
       "observation": "変更対象のモザイク・除外を削除し、他画像は保持する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_project_ui_runtime.cjs::project dialogs, source recovery, and project switching",
-        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_project_lifecycle_sources_exports_mismatch_and_read_only"
+        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_multi_source_reopen_reconciles_before_one_replace_and_keeps_dimension_lock",
+        "python:tests.test_workspace.WorkspaceTests.test_dimension_acknowledgement_resizes_candidates_without_changing_manual_forced_exclusion"
       ]
     },
     {
@@ -1498,8 +1487,8 @@
       "observation": "新寸法に合わせて編集を保持し、対象画像の古いUndo履歴をリセットする",
       "status": "automated",
       "testIds": [
-        "node:tests/test_project_ui_runtime.cjs::project dialogs, source recovery, and project switching",
-        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_project_lifecycle_sources_exports_mismatch_and_read_only"
+        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_multi_source_reopen_reconciles_before_one_replace_and_keeps_dimension_lock",
+        "python:tests.test_workspace.WorkspaceTests.test_dimension_acknowledgement_resizes_candidates_without_changing_manual_forced_exclusion"
       ]
     },
     {
@@ -1510,8 +1499,8 @@
       "observation": "対象画像の範囲と履歴を削除する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_project_ui_runtime.cjs::project dialogs, source recovery, and project switching",
-        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_project_lifecycle_sources_exports_mismatch_and_read_only"
+        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_multi_source_reopen_reconciles_before_one_replace_and_keeps_dimension_lock",
+        "python:tests.test_workspace.WorkspaceTests.test_dimension_acknowledgement_resizes_candidates_without_changing_manual_forced_exclusion"
       ]
     },
     {
@@ -1546,8 +1535,9 @@
       "observation": "失敗時は関連付け前の元フォルダー・変換状態・画面を保持し、再試行だけ新しいパスへ切り替える。",
       "status": "automated",
       "testIds": [
-        "python:tests.test_project_native_relink_http.ProjectNativeRelinkHttpTests.test_relink_rejections_leave_source_and_live_catalog_unchanged",
-        "python:tests.test_project_native_relink_http.ProjectNativeRelinkHttpTests.test_relink_publish_failure_restores_durable_source_and_retries"
+        "python:tests.test_project_native_relink_http.ProjectNativeRelinkHttpTests.test_source_status_and_native_reload_relink_keep_other_source_state",
+        "python:tests.test_project_native_relink_http.ProjectNativeRelinkHttpTests.test_relink_publish_failure_restores_durable_source_and_retries",
+        "python:tests.test_project_native_relink_http.ProjectNativeRelinkHttpTests.test_relink_rejections_leave_source_and_live_catalog_unchanged"
       ]
     },
     {
@@ -1558,8 +1548,9 @@
       "observation": "成功時は指定した元フォルダーだけ関連付け直し、browser画像の候補・手描き・反転・確認状態と残りの不足を保持する。",
       "status": "automated",
       "testIds": [
-        "python:tests.test_project_native_relink_http.ProjectNativeRelinkHttpTests.test_relink_rejections_leave_source_and_live_catalog_unchanged",
-        "python:tests.test_project_native_relink_http.ProjectNativeRelinkHttpTests.test_relink_publish_failure_restores_durable_source_and_retries"
+        "python:tests.test_project_native_relink_http.ProjectNativeRelinkHttpTests.test_source_status_and_native_reload_relink_keep_other_source_state",
+        "python:tests.test_project_native_relink_http.ProjectNativeRelinkHttpTests.test_relink_publish_failure_restores_durable_source_and_retries",
+        "python:tests.test_project_native_relink_http.ProjectNativeRelinkHttpTests.test_relink_rejections_leave_source_and_live_catalog_unchanged"
       ]
     },
     {
@@ -1570,8 +1561,9 @@
       "observation": "OSのフォルダー選択は使わない",
       "status": "automated",
       "testIds": [
-        "python:tests.test_project_native_relink_http.ProjectNativeRelinkHttpTests.test_relink_rejections_leave_source_and_live_catalog_unchanged",
-        "python:tests.test_project_native_relink_http.ProjectNativeRelinkHttpTests.test_relink_publish_failure_restores_durable_source_and_retries"
+        "python:tests.test_project_native_relink_http.ProjectNativeRelinkHttpTests.test_source_status_and_native_reload_relink_keep_other_source_state",
+        "python:tests.test_project_native_relink_http.ProjectNativeRelinkHttpTests.test_relink_publish_failure_restores_durable_source_and_retries",
+        "python:tests.test_project_native_relink_http.ProjectNativeRelinkHttpTests.test_relink_rejections_leave_source_and_live_catalog_unchanged"
       ]
     },
     {
@@ -1678,8 +1670,8 @@
       "observation": "読込中は確認済み・非表示・反転・手描きだけ保存できる。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_project_ui_runtime.cjs::project dialogs, source recovery, and project switching",
-        "python:tests.test_project_http_coverage.ProjectHttpCoverageTests.test_project_switch_restores_only_its_durable_candidate_manual_history_and_flags"
+        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage",
+        "python:tests.test_server.MozarieTests.test_catalog_reload_is_rejected_while_worker_is_alive_and_stale_worker_cannot_commit"
       ]
     },
     {
@@ -1690,8 +1682,8 @@
       "observation": "構造変更と新しい境界操作は開始できず、作成済みの境界ドラフトは残る。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_project_ui_runtime.cjs::project dialogs, source recovery, and project switching",
-        "python:tests.test_project_http_coverage.ProjectHttpCoverageTests.test_project_switch_restores_only_its_durable_candidate_manual_history_and_flags"
+        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage",
+        "python:tests.test_server.MozarieTests.test_catalog_reload_is_rejected_while_worker_is_alive_and_stale_worker_cannot_commit"
       ]
     },
     {
@@ -1702,8 +1694,8 @@
       "observation": "2件目の遷移も開始しない。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_project_ui_runtime.cjs::project dialogs, source recovery, and project switching",
-        "python:tests.test_project_http_coverage.ProjectHttpCoverageTests.test_project_switch_restores_only_its_durable_candidate_manual_history_and_flags"
+        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage",
+        "python:tests.test_server.MozarieTests.test_catalog_reload_is_rejected_while_worker_is_alive_and_stale_worker_cannot_commit"
       ]
     },
     {
@@ -1714,8 +1706,8 @@
       "observation": "最初の読込だけ完了し、元PJを開き直すと許可した編集を復元する。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_project_ui_runtime.cjs::project dialogs, source recovery, and project switching",
-        "python:tests.test_project_http_coverage.ProjectHttpCoverageTests.test_project_switch_restores_only_its_durable_candidate_manual_history_and_flags"
+        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage",
+        "python:tests.test_server.MozarieTests.test_catalog_reload_is_rejected_while_worker_is_alive_and_stale_worker_cannot_commit"
       ]
     },
     {
@@ -1726,8 +1718,8 @@
       "observation": "`/api/images` の catalogGeneration が変化した復帰時は権威スナップショットへ安全に置換し、PJ・件数・画像がサーバーと一致する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_project_ui_runtime.cjs::project dialogs, source recovery, and project switching",
-        "python:tests.test_project_http_coverage.ProjectHttpCoverageTests.test_project_switch_restores_only_its_durable_candidate_manual_history_and_flags"
+        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage",
+        "python:tests.test_server.MozarieTests.test_catalog_reload_is_rejected_while_worker_is_alive_and_stale_worker_cannot_commit"
       ]
     },
     {
@@ -1739,7 +1731,7 @@
       "status": "automated",
       "testIds": [
         "node:tests/test_project_ui_runtime.cjs::project dialogs, source recovery, and project switching",
-        "python:tests.test_project_http_coverage.ProjectHttpCoverageTests.test_project_switch_restores_only_its_durable_candidate_manual_history_and_flags"
+        "node:tests/test_folder_permissions_e2e.cjs::browser directory restore keeps canonical source paths separate"
       ]
     },
     {
@@ -1751,7 +1743,7 @@
       "status": "automated",
       "testIds": [
         "node:tests/test_project_ui_runtime.cjs::project dialogs, source recovery, and project switching",
-        "python:tests.test_project_http_coverage.ProjectHttpCoverageTests.test_project_switch_restores_only_its_durable_candidate_manual_history_and_flags"
+        "node:tests/test_folder_permissions_e2e.cjs::browser directory restore keeps canonical source paths separate"
       ]
     },
     {
@@ -1763,7 +1755,7 @@
       "status": "automated",
       "testIds": [
         "node:tests/test_project_ui_runtime.cjs::project dialogs, source recovery, and project switching",
-        "python:tests.test_project_http_coverage.ProjectHttpCoverageTests.test_project_switch_restores_only_its_durable_candidate_manual_history_and_flags"
+        "node:tests/test_folder_permissions_e2e.cjs::browser directory restore keeps canonical source paths separate"
       ]
     },
     {
@@ -1775,7 +1767,7 @@
       "status": "automated",
       "testIds": [
         "node:tests/test_project_ui_runtime.cjs::project dialogs, source recovery, and project switching",
-        "python:tests.test_project_http_coverage.ProjectHttpCoverageTests.test_project_switch_restores_only_its_durable_candidate_manual_history_and_flags"
+        "node:tests/test_folder_permissions_e2e.cjs::browser directory restore keeps canonical source paths separate"
       ]
     },
     {
@@ -1787,7 +1779,7 @@
       "status": "automated",
       "testIds": [
         "node:tests/test_project_ui_runtime.cjs::project dialogs, source recovery, and project switching",
-        "python:tests.test_project_http_coverage.ProjectHttpCoverageTests.test_project_switch_restores_only_its_durable_candidate_manual_history_and_flags"
+        "node:tests/test_folder_permissions_e2e.cjs::browser directory restore keeps canonical source paths separate"
       ]
     },
     {
@@ -1810,8 +1802,8 @@
       "observation": "削除を拒否し、PJ・画像・候補・履歴を保持する。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_project_ui_runtime.cjs::project dialogs, source recovery, and project switching",
-        "python:tests.test_project_http_coverage.ProjectHttpCoverageTests.test_project_switch_restores_only_its_durable_candidate_manual_history_and_flags"
+        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_delete_project_handles_current_read_only_noncurrent_and_thumbnail_failure",
+        "node:tests/test_project_ui_runtime.cjs::project dialogs, source recovery, and project switching"
       ]
     },
     {
@@ -1822,8 +1814,8 @@
       "observation": "処理完了後に削除すると対象PJだけを削除できる",
       "status": "automated",
       "testIds": [
-        "node:tests/test_project_ui_runtime.cjs::project dialogs, source recovery, and project switching",
-        "python:tests.test_project_http_coverage.ProjectHttpCoverageTests.test_project_switch_restores_only_its_durable_candidate_manual_history_and_flags"
+        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_delete_project_handles_current_read_only_noncurrent_and_thumbnail_failure",
+        "node:tests/test_project_ui_runtime.cjs::project dialogs, source recovery, and project switching"
       ]
     },
     {
@@ -1847,7 +1839,7 @@
       "status": "automated",
       "testIds": [
         "node:tests/test_project_ui_runtime.cjs::project dialogs, source recovery, and project switching",
-        "python:tests.test_project_http_coverage.ProjectHttpCoverageTests.test_project_switch_restores_only_its_durable_candidate_manual_history_and_flags"
+        "python:tests.test_project_native_relink_http.ProjectNativeRelinkHttpTests.test_relink_rejections_leave_source_and_live_catalog_unchanged"
       ]
     },
     {
@@ -1858,8 +1850,7 @@
       "observation": "元フォルダーを1つとして扱い、同じ画像を重複表示・重複保存しない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_project_ui_runtime.cjs::project dialogs, source recovery, and project switching",
-        "python:tests.test_project_http_coverage.ProjectHttpCoverageTests.test_project_switch_restores_only_its_durable_candidate_manual_history_and_flags"
+        "python:tests.test_project_native_relink_http.ProjectNativeRelinkHttpTests.test_source_status_and_native_reload_relink_keep_other_source_state"
       ]
     },
     {
@@ -1870,8 +1861,8 @@
       "observation": "開く操作は失敗し、直前のPJの一覧・候補・編集状態を保持する。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_project_ui_runtime.cjs::project dialogs, source recovery, and project switching",
-        "python:tests.test_project_http_coverage.ProjectHttpCoverageTests.test_project_switch_restores_only_its_durable_candidate_manual_history_and_flags"
+        "python:tests.test_project_native_relink_http.ProjectNativeRelinkHttpTests.test_relink_rejections_leave_source_and_live_catalog_unchanged",
+        "python:tests.test_server.MozarieTests.test_workspace_restore_rejects_corrupt_candidate_without_partial_display"
       ]
     },
     {
@@ -1882,8 +1873,8 @@
       "observation": "開こうとしたPJの元フォルダー記録、画像の確認済み状態、反転状態、PJ状態は変更しない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_project_ui_runtime.cjs::project dialogs, source recovery, and project switching",
-        "python:tests.test_project_http_coverage.ProjectHttpCoverageTests.test_project_switch_restores_only_its_durable_candidate_manual_history_and_flags"
+        "python:tests.test_project_native_relink_http.ProjectNativeRelinkHttpTests.test_relink_rejections_leave_source_and_live_catalog_unchanged",
+        "python:tests.test_server.MozarieTests.test_workspace_restore_rejects_corrupt_candidate_without_partial_display"
       ]
     },
     {
@@ -1894,8 +1885,8 @@
       "observation": "読込・再指定の失敗でも現在の一覧・候補・catalogGenerationを保持し、途中まで読んだPJや無名一覧を表示せず、再指定先のnative path・変換状態を保存しない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_project_ui_runtime.cjs::project dialogs, source recovery, and project switching",
-        "python:tests.test_project_http_coverage.ProjectHttpCoverageTests.test_project_switch_restores_only_its_durable_candidate_manual_history_and_flags"
+        "python:tests.test_project_native_relink_http.ProjectNativeRelinkHttpTests.test_relink_rejections_leave_source_and_live_catalog_unchanged",
+        "python:tests.test_server.MozarieTests.test_workspace_restore_rejects_corrupt_candidate_without_partial_display"
       ]
     },
     {
@@ -1906,8 +1897,8 @@
       "observation": "再起動時に権威PJ状態で削除済みと分かれば、その画像だけの保存済みハンドルを削除する。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_project_ui_runtime.cjs::project dialogs, source recovery, and project switching",
-        "python:tests.test_project_http_coverage.ProjectHttpCoverageTests.test_project_switch_restores_only_its_durable_candidate_manual_history_and_flags"
+        "node:tests/test_source_delete_e2e.cjs::Delete shortcut keeps a durable source-delete intent through claim and acknowledges the committed receipt",
+        "node:tests/test_source_delete_e2e.cjs::unknown browser-source deletion remains recoverable instead of silently committing or cancelling"
       ]
     },
     {
@@ -1918,8 +1909,8 @@
       "observation": "存在中・削除が拒否・未確定なら記録とハンドルを残し、明確な拒否を受けた削除要求だけ記録を消す",
       "status": "automated",
       "testIds": [
-        "node:tests/test_project_ui_runtime.cjs::project dialogs, source recovery, and project switching",
-        "python:tests.test_project_http_coverage.ProjectHttpCoverageTests.test_project_switch_restores_only_its_durable_candidate_manual_history_and_flags"
+        "node:tests/test_source_delete_e2e.cjs::Delete shortcut keeps a durable source-delete intent through claim and acknowledges the committed receipt",
+        "node:tests/test_source_delete_e2e.cjs::unknown browser-source deletion remains recoverable instead of silently committing or cancelling"
       ]
     },
     {
@@ -1942,8 +1933,8 @@
       "observation": "チェック項目は複数選べ、ボタンに選択数を表示する。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_project_ui_runtime.cjs::project dialogs, source recovery, and project switching",
-        "python:tests.test_project_http_coverage.ProjectHttpCoverageTests.test_project_switch_restores_only_its_durable_candidate_manual_history_and_flags"
+        "node:tests/test_filters_and_fluid_e2e.cjs::filter popover combines checked states and review-at-tail stays on the filtered image",
+        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
       ]
     },
     {
@@ -1954,8 +1945,8 @@
       "observation": "確認済みにして次へは左一覧で選んだ対象順のまま移動する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_project_ui_runtime.cjs::project dialogs, source recovery, and project switching",
-        "python:tests.test_project_http_coverage.ProjectHttpCoverageTests.test_project_switch_restores_only_its_durable_candidate_manual_history_and_flags"
+        "node:tests/test_filters_and_fluid_e2e.cjs::filter popover combines checked states and review-at-tail stays on the filtered image",
+        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
       ]
     },
     {
@@ -1966,8 +1957,8 @@
       "observation": "完了PJでも絞り込みボタンとチェック項目は使える。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_project_ui_runtime.cjs::project dialogs, source recovery, and project switching",
-        "python:tests.test_project_http_coverage.ProjectHttpCoverageTests.test_project_switch_restores_only_its_durable_candidate_manual_history_and_flags"
+        "node:tests/test_filters_and_fluid_e2e.cjs::filter popover combines checked states and review-at-tail stays on the filtered image",
+        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
       ]
     },
     {
@@ -1978,8 +1969,8 @@
       "observation": "処理の開始時は開いていたメニューが閉じ、ボタンと項目が無効になる。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_project_ui_runtime.cjs::project dialogs, source recovery, and project switching",
-        "python:tests.test_project_http_coverage.ProjectHttpCoverageTests.test_project_switch_restores_only_its_durable_candidate_manual_history_and_flags"
+        "node:tests/test_filters_and_fluid_e2e.cjs::filter popover combines checked states and review-at-tail stays on the filtered image",
+        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
       ]
     },
     {
@@ -1990,8 +1981,8 @@
       "observation": "処理完了後は再び開いて選択を変えられる",
       "status": "automated",
       "testIds": [
-        "node:tests/test_project_ui_runtime.cjs::project dialogs, source recovery, and project switching",
-        "python:tests.test_project_http_coverage.ProjectHttpCoverageTests.test_project_switch_restores_only_its_durable_candidate_manual_history_and_flags"
+        "node:tests/test_filters_and_fluid_e2e.cjs::filter popover combines checked states and review-at-tail stays on the filtered image",
+        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
       ]
     },
     {
@@ -2002,8 +1993,7 @@
       "observation": "対応画像がないことを案内し、直前の一覧・選択・PJ画像・カタログ世代を保持する。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage",
-        "python:tests.test_http_import_regression.FolderLoadLoggingContractTests.test_folder_scan_keeps_valid_images_and_enumerates_every_failed_file"
+        "python:tests.test_http_import_regression.FolderLoadLoggingContractTests.test_empty_and_unreadable_folders_keep_the_previous_catalog"
       ]
     },
     {
@@ -2014,8 +2004,7 @@
       "observation": "CMDにはフォルダー走査の開始・完了、候補0件・読込0件・スキップなしを表示する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage",
-        "python:tests.test_http_import_regression.FolderLoadLoggingContractTests.test_folder_scan_keeps_valid_images_and_enumerates_every_failed_file"
+        "python:tests.test_http_import_regression.FolderLoadLoggingContractTests.test_empty_and_unreadable_folders_keep_the_previous_catalog"
       ]
     },
     {
@@ -2026,7 +2015,6 @@
       "observation": "正常画像だけを一覧とサムネイルへ読み込み、壊れた画像だけをスキップする。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage",
         "python:tests.test_http_import_regression.FolderLoadLoggingContractTests.test_folder_scan_keeps_valid_images_and_enumerates_every_failed_file"
       ]
     },
@@ -2038,7 +2026,6 @@
       "observation": "CMDの走査完了は候補数・読込数・理由別スキップ数・代表相対名・所要時間をまとめて表示し、1ファイルごとの大量ログを出さない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage",
         "python:tests.test_http_import_regression.FolderLoadLoggingContractTests.test_folder_scan_keeps_valid_images_and_enumerates_every_failed_file"
       ]
     },
@@ -2050,8 +2037,8 @@
       "observation": "正常PNGは画像本体と一覧へ読み込み、不要な文字列メタデータを展開しない。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage",
-        "python:tests.test_http_import_regression.FolderLoadLoggingContractTests.test_folder_scan_keeps_valid_images_and_enumerates_every_failed_file"
+        "python:tests.test_http_import_regression.FolderLoadLoggingContractTests.test_folder_scan_keeps_large_ztxt_itxt_pngs_when_a_corrupt_png_is_present",
+        "python:tests.test_image_validation.InputImageValidationTests.test_png_with_large_text_metadata_is_inspected_from_pixels"
       ]
     },
     {
@@ -2062,8 +2049,8 @@
       "observation": "CRC不一致と切れたPNGだけを安全にスキップし、他の画像を読み込む",
       "status": "automated",
       "testIds": [
-        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage",
-        "python:tests.test_http_import_regression.FolderLoadLoggingContractTests.test_folder_scan_keeps_valid_images_and_enumerates_every_failed_file"
+        "python:tests.test_http_import_regression.FolderLoadLoggingContractTests.test_folder_scan_keeps_large_ztxt_itxt_pngs_when_a_corrupt_png_is_present",
+        "python:tests.test_image_validation.InputImageValidationTests.test_png_with_large_text_metadata_is_inspected_from_pixels"
       ]
     },
     {
@@ -2074,8 +2061,7 @@
       "observation": "読み込み権限だけを要求し、配下の対応画像を追加する。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage",
-        "python:tests.test_http_import_regression.FolderLoadLoggingContractTests.test_folder_scan_keeps_valid_images_and_enumerates_every_failed_file"
+        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
       ]
     },
     {
@@ -2086,8 +2072,7 @@
       "observation": "完了・失敗・取消のいずれでも読み込み状態が残らず、次のパス入力または画像追加を開始できる",
       "status": "automated",
       "testIds": [
-        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage",
-        "python:tests.test_http_import_regression.FolderLoadLoggingContractTests.test_folder_scan_keeps_valid_images_and_enumerates_every_failed_file"
+        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
       ]
     },
     {
@@ -2110,8 +2095,7 @@
       "observation": "取消または選択失敗の状態を画面に表示し、一覧・選択・読み込み状態を変えない。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage",
-        "python:tests.test_http_import_regression.FolderLoadLoggingContractTests.test_folder_scan_keeps_valid_images_and_enumerates_every_failed_file"
+        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
       ]
     },
     {
@@ -2122,8 +2106,7 @@
       "observation": "例外種別だけで権限拒否を無反応にしない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage",
-        "python:tests.test_http_import_regression.FolderLoadLoggingContractTests.test_folder_scan_keeps_valid_images_and_enumerates_every_failed_file"
+        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
       ]
     },
     {
@@ -2146,8 +2129,8 @@
       "observation": "新しい読込を開始せず、「画像の読み込みまたは処理が完了してから」再実行する状態を表示する。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage",
-        "python:tests.test_http_import_regression.FolderLoadLoggingContractTests.test_folder_scan_keeps_valid_images_and_enumerates_every_failed_file"
+        "python:tests.test_server.MozarieTests.test_same_root_reload_rejects_while_import_is_preparing",
+        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
       ]
     },
     {
@@ -2158,8 +2141,8 @@
       "observation": "先行読込・一覧・PJ状態を保持する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage",
-        "python:tests.test_http_import_regression.FolderLoadLoggingContractTests.test_folder_scan_keeps_valid_images_and_enumerates_every_failed_file"
+        "python:tests.test_server.MozarieTests.test_same_root_reload_rejects_while_import_is_preparing",
+        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
       ]
     },
     {
@@ -2170,8 +2153,7 @@
       "observation": "各高位操作で日本語の操作名・IDを含まないAPIルート・開始/完了または失敗・status・error_code・所要時間を表示する。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage",
-        "python:tests.test_http_import_regression.FolderLoadLoggingContractTests.test_folder_scan_keeps_valid_images_and_enumerates_every_failed_file"
+        "python:tests.test_http_import_regression.FolderLoadLoggingContractTests.test_handler_logs_normalized_routes_without_request_secrets"
       ]
     },
     {
@@ -2182,8 +2164,7 @@
       "observation": "対象数と元フォルダーパスがある操作は表示し、本文・トークン・ヘッダー・画像IDは表示しない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage",
-        "python:tests.test_http_import_regression.FolderLoadLoggingContractTests.test_folder_scan_keeps_valid_images_and_enumerates_every_failed_file"
+        "python:tests.test_http_import_regression.FolderLoadLoggingContractTests.test_handler_logs_normalized_routes_without_request_secrets"
       ]
     },
     {
@@ -2194,8 +2175,8 @@
       "observation": "CMDに処理名・対象数、pause/resume/cancel受付、完了数・所要時間、失敗時のerror_codeを表示する。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage",
-        "python:tests.test_http_import_regression.FolderLoadLoggingContractTests.test_folder_scan_keeps_valid_images_and_enumerates_every_failed_file"
+        "python:tests.test_http_import_regression.FolderLoadLoggingContractTests.test_per_image_success_logs_are_suppressed_but_failures_are_safe_warnings",
+        "python:tests.test_server.MozarieTests.test_apply_pause_resume_and_cancel_state_transitions"
       ]
     },
     {
@@ -2206,8 +2187,8 @@
       "observation": "画像追加はセッション開始・完了、保存は一括操作の開始・完了だけをINFOに集約し、個別の`/api/import/file`、reserve/render/commit/ack成功、ジョブ取得、サムネイル、候補ON/OFF、手描き自動保存はINFOログを大量に出さない。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage",
-        "python:tests.test_http_import_regression.FolderLoadLoggingContractTests.test_folder_scan_keeps_valid_images_and_enumerates_every_failed_file"
+        "python:tests.test_http_import_regression.FolderLoadLoggingContractTests.test_per_image_success_logs_are_suppressed_but_failures_are_safe_warnings",
+        "python:tests.test_server.MozarieTests.test_apply_pause_resume_and_cancel_state_transitions"
       ]
     },
     {
@@ -2218,8 +2199,8 @@
       "observation": "個別失敗はID・本文・token・headerを出さずに警告できる",
       "status": "automated",
       "testIds": [
-        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage",
-        "python:tests.test_http_import_regression.FolderLoadLoggingContractTests.test_folder_scan_keeps_valid_images_and_enumerates_every_failed_file"
+        "python:tests.test_http_import_regression.FolderLoadLoggingContractTests.test_per_image_success_logs_are_suppressed_but_failures_are_safe_warnings",
+        "python:tests.test_server.MozarieTests.test_apply_pause_resume_and_cancel_state_transitions"
       ]
     },
     {
@@ -2230,8 +2211,7 @@
       "observation": "読み込めないことを案内し、直前の一覧・選択・PJ画像・カタログ世代を保持する。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage",
-        "python:tests.test_http_import_regression.FolderLoadLoggingContractTests.test_folder_scan_keeps_valid_images_and_enumerates_every_failed_file"
+        "python:tests.test_http_import_regression.FolderLoadLoggingContractTests.test_dynamic_mutation_routes_log_normalized_success_and_failure_without_ids"
       ]
     },
     {
@@ -2242,8 +2222,7 @@
       "observation": "CMDの走査完了に候補数・読込0件・理由別スキップ数を表示する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage",
-        "python:tests.test_http_import_regression.FolderLoadLoggingContractTests.test_folder_scan_keeps_valid_images_and_enumerates_every_failed_file"
+        "python:tests.test_http_import_regression.FolderLoadLoggingContractTests.test_dynamic_mutation_routes_log_normalized_success_and_failure_without_ids"
       ]
     },
     {
@@ -2254,9 +2233,9 @@
       "observation": "すべてが1操作ずつの永続履歴で戻り、やり直せる。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_workspace_runtime.cjs::workspace runtime contracts",
-        "python:tests.test_unnamed_folder_reload.UnnamedFolderReloadTests.test_same_folder_reload_keeps_history_manual_edits_and_allows_switch",
-        "python:tests.test_server.MozarieTests.test_workspace_restores_flags_masks_and_manual_edits_after_restart"
+        "node:tests/test_project_history_browser_e2e.cjs::project Ctrl+Z flushes the durable edit and keeps browser history canvases released",
+        "python:tests.test_workspace.WorkspaceTests.test_history_restores_one_image_and_discards_its_redo_after_new_edit",
+        "python:tests.test_workspace.WorkspaceTests.test_history_restores_image_flags"
       ]
     },
     {
@@ -2267,9 +2246,9 @@
       "observation": "対象外画像の状態は変わらない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_workspace_runtime.cjs::workspace runtime contracts",
-        "python:tests.test_unnamed_folder_reload.UnnamedFolderReloadTests.test_same_folder_reload_keeps_history_manual_edits_and_allows_switch",
-        "python:tests.test_server.MozarieTests.test_workspace_restores_flags_masks_and_manual_edits_after_restart"
+        "node:tests/test_project_history_browser_e2e.cjs::project Ctrl+Z flushes the durable edit and keeps browser history canvases released",
+        "python:tests.test_workspace.WorkspaceTests.test_history_restores_one_image_and_discards_its_redo_after_new_edit",
+        "python:tests.test_workspace.WorkspaceTests.test_history_restores_image_flags"
       ]
     },
     {
@@ -2280,7 +2259,6 @@
       "observation": "同じ画像ID、候補、手描き、確認済み・非表示、反転、Undo/Redo位置を復元する。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_workspace_runtime.cjs::workspace runtime contracts",
         "python:tests.test_unnamed_folder_reload.UnnamedFolderReloadTests.test_same_folder_reload_keeps_history_manual_edits_and_allows_switch",
         "python:tests.test_server.MozarieTests.test_workspace_restores_flags_masks_and_manual_edits_after_restart"
       ]
@@ -2293,7 +2271,6 @@
       "observation": "PJ一覧には無名作業を表示しない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_workspace_runtime.cjs::workspace runtime contracts",
         "python:tests.test_unnamed_folder_reload.UnnamedFolderReloadTests.test_same_folder_reload_keeps_history_manual_edits_and_allows_switch",
         "python:tests.test_server.MozarieTests.test_workspace_restores_flags_masks_and_manual_edits_after_restart"
       ]
@@ -2306,9 +2283,8 @@
       "observation": "画面を置き換えず、同じ画像IDと履歴のまま名前付きPJになる。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_workspace_runtime.cjs::workspace runtime contracts",
-        "python:tests.test_unnamed_folder_reload.UnnamedFolderReloadTests.test_same_folder_reload_keeps_history_manual_edits_and_allows_switch",
-        "python:tests.test_server.MozarieTests.test_workspace_restores_flags_masks_and_manual_edits_after_restart"
+        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_project_lifecycle_sources_exports_mismatch_and_read_only",
+        "python:tests.test_workspace.WorkspaceTests.test_history_restores_one_image_and_discards_its_redo_after_new_edit"
       ]
     },
     {
@@ -2319,9 +2295,8 @@
       "observation": "名前保存前のUndo/Redoも続けて使える",
       "status": "automated",
       "testIds": [
-        "node:tests/test_workspace_runtime.cjs::workspace runtime contracts",
-        "python:tests.test_unnamed_folder_reload.UnnamedFolderReloadTests.test_same_folder_reload_keeps_history_manual_edits_and_allows_switch",
-        "python:tests.test_server.MozarieTests.test_workspace_restores_flags_masks_and_manual_edits_after_restart"
+        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_project_lifecycle_sources_exports_mismatch_and_read_only",
+        "python:tests.test_workspace.WorkspaceTests.test_history_restores_one_image_and_discards_its_redo_after_new_edit"
       ]
     },
     {
@@ -2332,9 +2307,7 @@
       "observation": "Bが完全に読めた時だけBの無名作業へ切り替え、Aの内部作業を破棄する。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_workspace_runtime.cjs::workspace runtime contracts",
-        "python:tests.test_unnamed_folder_reload.UnnamedFolderReloadTests.test_same_folder_reload_keeps_history_manual_edits_and_allows_switch",
-        "python:tests.test_server.MozarieTests.test_workspace_restores_flags_masks_and_manual_edits_after_restart"
+        "python:tests.test_unnamed_folder_reload.UnnamedFolderReloadTests.test_same_folder_reload_keeps_history_manual_edits_and_allows_switch"
       ]
     },
     {
@@ -2345,9 +2318,7 @@
       "observation": "Bの読込失敗時はAの画像・候補・履歴・選択を保持する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_workspace_runtime.cjs::workspace runtime contracts",
-        "python:tests.test_unnamed_folder_reload.UnnamedFolderReloadTests.test_same_folder_reload_keeps_history_manual_edits_and_allows_switch",
-        "python:tests.test_server.MozarieTests.test_workspace_restores_flags_masks_and_manual_edits_after_restart"
+        "python:tests.test_unnamed_folder_reload.UnnamedFolderReloadTests.test_same_folder_reload_keeps_history_manual_edits_and_allows_switch"
       ]
     },
     {
@@ -2358,9 +2329,8 @@
       "observation": "成功時だけ対象全件の候補と履歴を1回のSQLiteトランザクション・1グループとして公開する。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_workspace_runtime.cjs::workspace runtime contracts",
-        "python:tests.test_unnamed_folder_reload.UnnamedFolderReloadTests.test_same_folder_reload_keeps_history_manual_edits_and_allows_switch",
-        "python:tests.test_server.MozarieTests.test_workspace_restores_flags_masks_and_manual_edits_after_restart"
+        "python:tests.test_server.MozarieTests.test_detector_prepare_rolls_back_when_catalog_reloads_before_publish",
+        "python:tests.test_workspace.WorkspaceTests.test_history_group_restores_every_affected_image"
       ]
     },
     {
@@ -2371,9 +2341,8 @@
       "observation": "取消・失敗・再読込では対象全件の候補、確認済み、画像ID、履歴を開始前のまま保持する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_workspace_runtime.cjs::workspace runtime contracts",
-        "python:tests.test_unnamed_folder_reload.UnnamedFolderReloadTests.test_same_folder_reload_keeps_history_manual_edits_and_allows_switch",
-        "python:tests.test_server.MozarieTests.test_workspace_restores_flags_masks_and_manual_edits_after_restart"
+        "python:tests.test_server.MozarieTests.test_detector_prepare_rolls_back_when_catalog_reloads_before_publish",
+        "python:tests.test_workspace.WorkspaceTests.test_history_group_restores_every_affected_image"
       ]
     },
     {
@@ -2384,9 +2353,8 @@
       "observation": "成功時だけ作業用workspace、source、画像とactive情報を公開する。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_workspace_runtime.cjs::workspace runtime contracts",
-        "python:tests.test_unnamed_folder_reload.UnnamedFolderReloadTests.test_same_folder_reload_keeps_history_manual_edits_and_allows_switch",
-        "python:tests.test_server.MozarieTests.test_workspace_restores_flags_masks_and_manual_edits_after_restart"
+        "python:tests.test_server.MozarieTests.test_projectless_browser_workspace_detaches_without_leaving_an_active_record",
+        "python:tests.test_domain1_extra_coverage.StateCatalogExtraCoverageTests.test_workspace_recreate_replaces_or_preserves_the_recovery_state"
       ]
     },
     {
@@ -2397,9 +2365,8 @@
       "observation": "失敗・取消で内部workspaceを残さず、名前保存では同じworkspace IDへブラウザーhandleを保持する。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_workspace_runtime.cjs::workspace runtime contracts",
-        "python:tests.test_unnamed_folder_reload.UnnamedFolderReloadTests.test_same_folder_reload_keeps_history_manual_edits_and_allows_switch",
-        "python:tests.test_server.MozarieTests.test_workspace_restores_flags_masks_and_manual_edits_after_restart"
+        "python:tests.test_server.MozarieTests.test_projectless_browser_workspace_detaches_without_leaving_an_active_record",
+        "python:tests.test_domain1_extra_coverage.StateCatalogExtraCoverageTests.test_workspace_recreate_replaces_or_preserves_the_recovery_state"
       ]
     },
     {
@@ -2410,9 +2377,8 @@
       "observation": "無名作業を閉じるか別PJへ切り替えた後は再起動しても復活しない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_workspace_runtime.cjs::workspace runtime contracts",
-        "python:tests.test_unnamed_folder_reload.UnnamedFolderReloadTests.test_same_folder_reload_keeps_history_manual_edits_and_allows_switch",
-        "python:tests.test_server.MozarieTests.test_workspace_restores_flags_masks_and_manual_edits_after_restart"
+        "python:tests.test_server.MozarieTests.test_projectless_browser_workspace_detaches_without_leaving_an_active_record",
+        "python:tests.test_domain1_extra_coverage.StateCatalogExtraCoverageTests.test_workspace_recreate_replaces_or_preserves_the_recovery_state"
       ]
     },
     {
@@ -2423,9 +2389,8 @@
       "observation": "Bの作業を公開できた時だけactive情報、一覧、候補、履歴をBへ切り替え、Aの内部workspaceを破棄する。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_workspace_runtime.cjs::workspace runtime contracts",
-        "python:tests.test_unnamed_folder_reload.UnnamedFolderReloadTests.test_same_folder_reload_keeps_history_manual_edits_and_allows_switch",
-        "python:tests.test_server.MozarieTests.test_workspace_restores_flags_masks_and_manual_edits_after_restart"
+        "python:tests.test_server.MozarieTests.test_projectless_browser_workspace_detaches_without_leaving_an_active_record",
+        "python:tests.test_domain1_extra_coverage.StateCatalogExtraCoverageTests.test_workspace_recreate_replaces_or_preserves_the_recovery_state"
       ]
     },
     {
@@ -2436,9 +2401,8 @@
       "observation": "公開に失敗した場合はAの一覧・候補・履歴とactive情報を保持し、Bの内部workspaceを残さない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_workspace_runtime.cjs::workspace runtime contracts",
-        "python:tests.test_unnamed_folder_reload.UnnamedFolderReloadTests.test_same_folder_reload_keeps_history_manual_edits_and_allows_switch",
-        "python:tests.test_server.MozarieTests.test_workspace_restores_flags_masks_and_manual_edits_after_restart"
+        "python:tests.test_server.MozarieTests.test_projectless_browser_workspace_detaches_without_leaving_an_active_record",
+        "python:tests.test_domain1_extra_coverage.StateCatalogExtraCoverageTests.test_workspace_recreate_replaces_or_preserves_the_recovery_state"
       ]
     },
     {
@@ -2449,8 +2413,10 @@
       "observation": "3形式とも一覧へ入り、巨大JPEGの記録寸法・サムネイル・編集座標が回転後の向きで一致する。",
       "status": "automated",
       "testIds": [
-        "python:tests.test_image_validation.InputImageValidationTests.test_open_failures_are_reported_as_image_read_failed",
-        "python:tests.test_http_import_regression.FolderLoadLoggingContractTests.test_folder_scan_keeps_valid_images_and_enumerates_every_failed_file"
+        "python:tests.test_image_validation.InputImageValidationTests.test_pillow_pixel_guard_is_disabled_only_while_opening",
+        "python:tests.test_image_validation.InputImageValidationTests.test_pixel_guard_is_restored_after_concurrent_openers_finish",
+        "python:tests.test_server.MozarieTests.test_exif_rotated_jpeg_uses_normalized_mask_coordinates",
+        "python:tests.test_server.MozarieTests.test_thumbnail_generation_serves_five_distinct_images_without_fixed_limit"
       ]
     },
     {
@@ -2461,8 +2427,10 @@
       "observation": "同時表示中もPillowの画素数制限警告を出さず、完了後は別画像を選択・表示できる",
       "status": "automated",
       "testIds": [
-        "python:tests.test_image_validation.InputImageValidationTests.test_open_failures_are_reported_as_image_read_failed",
-        "python:tests.test_http_import_regression.FolderLoadLoggingContractTests.test_folder_scan_keeps_valid_images_and_enumerates_every_failed_file"
+        "python:tests.test_image_validation.InputImageValidationTests.test_pillow_pixel_guard_is_disabled_only_while_opening",
+        "python:tests.test_image_validation.InputImageValidationTests.test_pixel_guard_is_restored_after_concurrent_openers_finish",
+        "python:tests.test_server.MozarieTests.test_exif_rotated_jpeg_uses_normalized_mask_coordinates",
+        "python:tests.test_server.MozarieTests.test_thumbnail_generation_serves_five_distinct_images_without_fixed_limit"
       ]
     },
     {
@@ -2485,8 +2453,8 @@
       "observation": "読み込み時はその画像だけをCMDの理由別スキップへ記録し、通常画像を一覧へ残す",
       "status": "automated",
       "testIds": [
-        "python:tests.test_image_validation.InputImageValidationTests.test_open_failures_are_reported_as_image_read_failed",
-        "python:tests.test_http_import_regression.FolderLoadLoggingContractTests.test_folder_scan_keeps_valid_images_and_enumerates_every_failed_file"
+        "python:tests.test_http_import_regression.FolderLoadLoggingContractTests.test_folder_scan_keeps_valid_images_and_enumerates_every_failed_file",
+        "python:tests.test_server.MozarieTests.test_explicit_memory_error_has_a_stable_memory_code"
       ]
     },
     {
@@ -2509,8 +2477,8 @@
       "observation": "対象画像の読み込み失敗を画面に示し、サーバーを停止させない。",
       "status": "automated",
       "testIds": [
-        "python:tests.test_image_validation.InputImageValidationTests.test_open_failures_are_reported_as_image_read_failed",
-        "python:tests.test_http_import_regression.FolderLoadLoggingContractTests.test_folder_scan_keeps_valid_images_and_enumerates_every_failed_file"
+        "python:tests.test_http_full_coverage.HttpBoundaryCoverageTests.test_thumbnail_normalizes_pillow_decode_errors",
+        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
       ]
     },
     {
@@ -2521,8 +2489,8 @@
       "observation": "通常画像の表示を続けられる",
       "status": "automated",
       "testIds": [
-        "python:tests.test_image_validation.InputImageValidationTests.test_open_failures_are_reported_as_image_read_failed",
-        "python:tests.test_http_import_regression.FolderLoadLoggingContractTests.test_folder_scan_keeps_valid_images_and_enumerates_every_failed_file"
+        "python:tests.test_http_full_coverage.HttpBoundaryCoverageTests.test_thumbnail_normalizes_pillow_decode_errors",
+        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
       ]
     },
     {
@@ -2545,8 +2513,8 @@
       "observation": "対象画像の読み込み失敗を画面に示し、サーバーを停止させない。",
       "status": "automated",
       "testIds": [
-        "python:tests.test_image_validation.InputImageValidationTests.test_open_failures_are_reported_as_image_read_failed",
-        "python:tests.test_http_import_regression.FolderLoadLoggingContractTests.test_folder_scan_keeps_valid_images_and_enumerates_every_failed_file"
+        "python:tests.test_server.MozarieTests.test_detection_maps_worker_gpu_memory_errors",
+        "python:tests.test_server.MozarieTests.test_thread_start_failure_releases_every_job_gate_and_allows_retry"
       ]
     },
     {
@@ -2557,8 +2525,8 @@
       "observation": "失敗後も新しい検出を開始できる",
       "status": "automated",
       "testIds": [
-        "python:tests.test_image_validation.InputImageValidationTests.test_open_failures_are_reported_as_image_read_failed",
-        "python:tests.test_http_import_regression.FolderLoadLoggingContractTests.test_folder_scan_keeps_valid_images_and_enumerates_every_failed_file"
+        "python:tests.test_server.MozarieTests.test_detection_maps_worker_gpu_memory_errors",
+        "python:tests.test_server.MozarieTests.test_thread_start_failure_releases_every_job_gate_and_allows_retry"
       ]
     },
     {
@@ -2581,8 +2549,8 @@
       "observation": "`internal_error`ではなく画像またはマスクの読み込み失敗を画面に示し、サーバーを停止させない。",
       "status": "automated",
       "testIds": [
-        "python:tests.test_image_validation.InputImageValidationTests.test_open_failures_are_reported_as_image_read_failed",
-        "python:tests.test_http_import_regression.FolderLoadLoggingContractTests.test_folder_scan_keeps_valid_images_and_enumerates_every_failed_file"
+        "python:tests.test_jobs_saving_coverage.JobsSavingCoverageTests.test_saving_input_and_render_boundary_failures",
+        "python:tests.test_server.MozarieTests.test_thread_start_failure_releases_every_job_gate_and_allows_retry"
       ]
     },
     {
@@ -2593,8 +2561,8 @@
       "observation": "失敗後も通常画像を保存できる",
       "status": "automated",
       "testIds": [
-        "python:tests.test_image_validation.InputImageValidationTests.test_open_failures_are_reported_as_image_read_failed",
-        "python:tests.test_http_import_regression.FolderLoadLoggingContractTests.test_folder_scan_keeps_valid_images_and_enumerates_every_failed_file"
+        "python:tests.test_jobs_saving_coverage.JobsSavingCoverageTests.test_saving_input_and_render_boundary_failures",
+        "python:tests.test_server.MozarieTests.test_thread_start_failure_releases_every_job_gate_and_allows_retry"
       ]
     },
     {
@@ -2617,8 +2585,8 @@
       "observation": "対象画像の読み込み失敗を画面に示し、サーバーを停止させない。",
       "status": "automated",
       "testIds": [
-        "python:tests.test_image_validation.InputImageValidationTests.test_open_failures_are_reported_as_image_read_failed",
-        "python:tests.test_http_import_regression.FolderLoadLoggingContractTests.test_folder_scan_keeps_valid_images_and_enumerates_every_failed_file"
+        "python:tests.test_jobs_saving_coverage.JobsSavingCoverageTests.test_saving_input_and_render_boundary_failures",
+        "python:tests.test_server.MozarieTests.test_thread_start_failure_releases_every_job_gate_and_allows_retry"
       ]
     },
     {
@@ -2629,8 +2597,8 @@
       "observation": "失敗後も新しい保存を開始できる",
       "status": "automated",
       "testIds": [
-        "python:tests.test_image_validation.InputImageValidationTests.test_open_failures_are_reported_as_image_read_failed",
-        "python:tests.test_http_import_regression.FolderLoadLoggingContractTests.test_folder_scan_keeps_valid_images_and_enumerates_every_failed_file"
+        "python:tests.test_jobs_saving_coverage.JobsSavingCoverageTests.test_saving_input_and_render_boundary_failures",
+        "python:tests.test_server.MozarieTests.test_thread_start_failure_releases_every_job_gate_and_allows_retry"
       ]
     },
     {
@@ -2653,8 +2621,8 @@
       "observation": "実効並列数は対象数までで、11は10へ丸められず利用者設定より小さい固定上限を追加しない。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage",
-        "python:tests.test_server.MozarieTests.test_import_session_records_requested_and_effective_parallelism_without_a_fixed_cap"
+        "python:tests.test_server.MozarieTests.test_import_session_records_requested_and_effective_parallelism_without_a_fixed_cap",
+        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
       ]
     },
     {
@@ -2665,8 +2633,8 @@
       "observation": "同じsessionの同時転送数は11を超えず、全要求が終了後に転送状態を残さない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage",
-        "python:tests.test_server.MozarieTests.test_import_session_records_requested_and_effective_parallelism_without_a_fixed_cap"
+        "python:tests.test_server.MozarieTests.test_import_session_records_requested_and_effective_parallelism_without_a_fixed_cap",
+        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
       ]
     },
     {
@@ -2677,8 +2645,8 @@
       "observation": "表示範囲の異なる画像は固定の全体worker枠で待たず、同じ画像・版だけは画像I/Oロックで1回だけ生成する。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage",
-        "python:tests.test_server.MozarieTests.test_import_session_records_requested_and_effective_parallelism_without_a_fixed_cap"
+        "python:tests.test_server.MozarieTests.test_thumbnail_requests_singleflight_the_same_image",
+        "python:tests.test_server.MozarieTests.test_thumbnail_generation_serves_five_distinct_images_without_fixed_limit"
       ]
     },
     {
@@ -2689,8 +2657,8 @@
       "observation": "完了後に待機ロックが画像数に比例して残らない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage",
-        "python:tests.test_server.MozarieTests.test_import_session_records_requested_and_effective_parallelism_without_a_fixed_cap"
+        "python:tests.test_server.MozarieTests.test_thumbnail_requests_singleflight_the_same_image",
+        "python:tests.test_server.MozarieTests.test_thumbnail_generation_serves_five_distinct_images_without_fixed_limit"
       ]
     },
     {
@@ -2701,8 +2669,8 @@
       "observation": "通常のブラウザー追加は利用者設定の実効並列数で送信し、サーバーは固定の転送枠を追加しない。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage",
-        "python:tests.test_server.MozarieTests.test_import_session_records_requested_and_effective_parallelism_without_a_fixed_cap"
+        "python:tests.test_server.MozarieTests.test_import_session_records_requested_and_effective_parallelism_without_a_fixed_cap",
+        "python:tests.test_server.MozarieTests.test_rejected_import_transfer_closes_the_unread_request_connection"
       ]
     },
     {
@@ -2713,8 +2681,8 @@
       "observation": "session・origin・認証の検証は維持し、失敗・中断した転送も終了処理で一覧とPJ状態を壊さず転送状態を残さない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage",
-        "python:tests.test_server.MozarieTests.test_import_session_records_requested_and_effective_parallelism_without_a_fixed_cap"
+        "python:tests.test_server.MozarieTests.test_import_session_records_requested_and_effective_parallelism_without_a_fixed_cap",
+        "python:tests.test_server.MozarieTests.test_rejected_import_transfer_closes_the_unread_request_connection"
       ]
     },
     {
@@ -2725,8 +2693,8 @@
       "observation": "CIで設定値の相対形式を拒否する。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage",
-        "python:tests.test_server.MozarieTests.test_import_rejects_unsafe_relative_paths"
+        "python:tests.test_server.MozarieTests.test_import_rejects_unsafe_relative_paths",
+        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
       ]
     },
     {
@@ -2737,8 +2705,8 @@
       "observation": "実機では成功時の正規化済み絶対形式を入力欄へ反映し、directory handleの表示名やImageRecordの相対名を絶対パス扱いしないことを確認する。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage",
-        "python:tests.test_server.MozarieTests.test_import_rejects_unsafe_relative_paths"
+        "python:tests.test_server.MozarieTests.test_import_rejects_unsafe_relative_paths",
+        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
       ]
     },
     {
@@ -2761,9 +2729,14 @@
       "observation": "正常画像は全件を相対名順で一覧へ公開し、壊れた画像だけを理由付きで案内する。",
       "status": "automated",
       "testIds": [
+        "python:tests.test_server.MozarieTests.test_folder_scan_uses_import_parallelism_and_sorts_deterministically",
         "python:tests.test_server.MozarieTests.test_folder_scan_loads_every_normal_file_in_deterministic_order",
+        "python:tests.test_server.MozarieTests.test_folder_scan_starts_inspection_before_tree_enumeration_finishes",
+        "python:tests.test_server.MozarieTests.test_folder_scan_does_not_hold_the_import_lock_during_image_io",
+        "python:tests.test_server.MozarieTests.test_folder_scan_rejects_a_catalogue_change_after_releasing_the_import_lock",
+        "python:tests.test_server.MozarieTests.test_folder_scan_restores_the_callers_import_lock_after_worker_failure",
         "python:tests.test_server.MozarieTests.test_folder_scan_stops_enumerating_when_shutdown_begins",
-        "python:tests.test_http_import_regression.FolderLoadLoggingContractTests.test_folder_scan_keeps_valid_images_and_enumerates_every_failed_file"
+        "python:tests.test_http_import_regression.FolderLoadLoggingContractTests.test_folder_scan_keeps_the_previous_catalog_when_rglob_loses_access"
       ]
     },
     {
@@ -2774,9 +2747,14 @@
       "observation": "走査中の既存PJ操作は待たずに確定する。",
       "status": "automated",
       "testIds": [
+        "python:tests.test_server.MozarieTests.test_folder_scan_uses_import_parallelism_and_sorts_deterministically",
         "python:tests.test_server.MozarieTests.test_folder_scan_loads_every_normal_file_in_deterministic_order",
+        "python:tests.test_server.MozarieTests.test_folder_scan_starts_inspection_before_tree_enumeration_finishes",
+        "python:tests.test_server.MozarieTests.test_folder_scan_does_not_hold_the_import_lock_during_image_io",
+        "python:tests.test_server.MozarieTests.test_folder_scan_rejects_a_catalogue_change_after_releasing_the_import_lock",
+        "python:tests.test_server.MozarieTests.test_folder_scan_restores_the_callers_import_lock_after_worker_failure",
         "python:tests.test_server.MozarieTests.test_folder_scan_stops_enumerating_when_shutdown_begins",
-        "python:tests.test_http_import_regression.FolderLoadLoggingContractTests.test_folder_scan_keeps_valid_images_and_enumerates_every_failed_file"
+        "python:tests.test_http_import_regression.FolderLoadLoggingContractTests.test_folder_scan_keeps_the_previous_catalog_when_rglob_loses_access"
       ]
     },
     {
@@ -2787,9 +2765,14 @@
       "observation": "終了時は途中の新規一覧を公開せず、次回起動後に新しい走査workerを残さない。",
       "status": "automated",
       "testIds": [
+        "python:tests.test_server.MozarieTests.test_folder_scan_uses_import_parallelism_and_sorts_deterministically",
         "python:tests.test_server.MozarieTests.test_folder_scan_loads_every_normal_file_in_deterministic_order",
+        "python:tests.test_server.MozarieTests.test_folder_scan_starts_inspection_before_tree_enumeration_finishes",
+        "python:tests.test_server.MozarieTests.test_folder_scan_does_not_hold_the_import_lock_during_image_io",
+        "python:tests.test_server.MozarieTests.test_folder_scan_rejects_a_catalogue_change_after_releasing_the_import_lock",
+        "python:tests.test_server.MozarieTests.test_folder_scan_restores_the_callers_import_lock_after_worker_failure",
         "python:tests.test_server.MozarieTests.test_folder_scan_stops_enumerating_when_shutdown_begins",
-        "python:tests.test_http_import_regression.FolderLoadLoggingContractTests.test_folder_scan_keeps_valid_images_and_enumerates_every_failed_file"
+        "python:tests.test_http_import_regression.FolderLoadLoggingContractTests.test_folder_scan_keeps_the_previous_catalog_when_rglob_loses_access"
       ]
     },
     {
@@ -2805,4 +2788,4 @@
       }
     }
   ]
-}\n
+}

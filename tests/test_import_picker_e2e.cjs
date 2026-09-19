@@ -4208,7 +4208,7 @@ async function main() {
     assert.ok(keyboardMenu.left >= 0 && keyboardMenu.top >= 0 && keyboardMenu.right <= keyboardMenu.viewportWidth && keyboardMenu.bottom <= keyboardMenu.viewportHeight && keyboardMenu.left >= keyboardMenu.cardLeft && keyboardMenu.top >= keyboardMenu.cardTop, "keyboard menu starts from the card and remains in the viewport");
     await page.keyboard.press("Tab");
     assert.equal(await page.locator("#catalogContextMenu").evaluate((menu) => menu.matches(":popover-open")), false, "Tab closes the catalog context menu without trapping focus");
-    const pointerImages = Array.from({ length: 96 }, (_, index) => ({ id: `pointer-${index}`, relativePath: `pointer/${index}.png`, sourcePath: `G:/pointer/${index}.png`, width: 80, height: 60 }));
+    const pointerImages = Array.from({ length: 96 }, (_, index) => ({ id: `pointer-${index}`, relativePath: index === 0 ? "pointer/非常に長い日本語の画像ファイル名が隣の情報へ重ならないことを確認する.png" : `pointer/${index}.png`, sourcePath: `G:/pointer/${index}.png`, width: 80, height: 60 }));
     setCatalog(pointerImages);
     const pointerContextBefore = await page.evaluate(async (pointerImages) => {
       window.__pointerContextSaved = { images: state.images, currentId: state.currentId, galleryFilter: state.galleryFilter, overviewFilter: state.overviewFilter, viewMode: state.viewMode, batchMode: state.batchMode, selectedImageIds: state.selectedImageIds, selectionAnchorId: state.selectionAnchorId };
@@ -4216,6 +4216,8 @@ async function main() {
       state.currentId = "pointer-0"; state.galleryFilter = new Set(); state.viewMode = "edit"; state.batchMode = false; state.selectedImageIds = new Set(["pointer-0"]); state.selectionAnchorId = "pointer-0";
       renderGallery(true); const gallery = document.querySelector("#gallery"); gallery.scrollTop = 100; resetCatalogWindows(); renderGallery(true);
       const firstCard = document.querySelector('.gallery-item[data-id="pointer-0"]');
+      const nameRect = firstCard.querySelector(".gallery-name").getBoundingClientRect(); const metaRect = firstCard.querySelector(".gallery-meta").getBoundingClientRect();
+      const longJapaneseName = firstCard.querySelector(".gallery-name").textContent;
       const firstInViewport = firstCard.getBoundingClientRect().top >= gallery.getBoundingClientRect().top;
       scrollCatalogImage("gallery", "pointer-0"); const firstSelectionTop = gallery.scrollTop;
       scrollCatalogImage("gallery", "pointer-1"); const visibleSelectionTop = gallery.scrollTop;
@@ -4224,9 +4226,11 @@ async function main() {
       const snapshot = () => ({ scrollTop: gallery.scrollTop, currentId: state.currentId, selected: [...state.selectedImageIds].sort(), focused: document.activeElement?.dataset.id, tabStops: [...document.querySelectorAll('.gallery-item[tabindex="0"]')].map((item) => item.dataset.id) });
       const before = snapshot(); let pointerPrevented = false; target.onpointerdown({ button: 2, preventDefault() { pointerPrevented = true; } });
       target.oncontextmenu({ type: "contextmenu", currentTarget: target, clientX: target.getBoundingClientRect().left + 4, clientY: target.getBoundingClientRect().top + 4, preventDefault() {} });
-      return { before, after: snapshot(), pointerPrevented, target: state.contextMenuImageId, contextScroll: state.contextMenuScroll, firstInViewport, firstSelectionTop, visibleSelectionTop };
+      return { before, after: snapshot(), pointerPrevented, target: state.contextMenuImageId, contextScroll: state.contextMenuScroll, firstInViewport, firstSelectionTop, visibleSelectionTop, longJapaneseName, nameRight: nameRect.right, metaLeft: metaRect.left };
     }, pointerImages);
     assert.deepEqual({ firstInViewport: pointerContextBefore.firstInViewport, firstSelectionTop: pointerContextBefore.firstSelectionTop, visibleSelectionTop: pointerContextBefore.visibleSelectionTop }, { firstInViewport: true, firstSelectionTop: 0, visibleSelectionTop: 0 }, "a replaced catalog starts at its first visible card and selecting another visible card does not move the gallery");
+    assert.match(pointerContextBefore.longJapaneseName, /非常に長い日本語/, "a long Japanese filename is rendered without character loss");
+    assert.ok(pointerContextBefore.nameRight <= pointerContextBefore.metaLeft, "a long Japanese filename does not overlap the adjacent image metadata");
     assert.equal(pointerContextBefore.pointerPrevented, true, "secondary gallery pointerdown prevents focus movement");
     assert.deepEqual(pointerContextBefore.after, pointerContextBefore.before, "right-clicking a visible unselected gallery card leaves logical focus, selection, tab stop, current image, and scroll unchanged");
     assert.equal(pointerContextBefore.target, "pointer-1", "the gallery menu targets the right-clicked card");

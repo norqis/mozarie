@@ -215,7 +215,16 @@ nodeTest("project dialogs, source recovery, and project switching", async (t) =>
 
   test.bindEvents();
   assert.equal(element("#renameImageForm").listeners.get("submit"), submitRenameImage, "project fixture keeps the bound rename submit collaborator intact");
+  const renameActions = indexHtml.match(/<div class="dialog-actions rename-image-actions">([\s\S]*?)<\/div>/)?.[1] || "";
+  const renameControlOrder = ["renameImageRestoreOriginal", "renameImageCancel", "renameImageConfirm"]
+    .map((id) => renameActions.indexOf(`id="${id}"`));
+  assert.equal(renameControlOrder.every((index) => index >= 0), true, "the rename dialog renders restore, cancel, and OK controls");
+  assert.deepEqual([...renameControlOrder].sort((left, right) => left - right), renameControlOrder, "the rename dialog keeps Restore at left and Cancel immediately before OK at right");
   const fire = async (id, type = "click") => { const listener = element(id).listeners.get(type); assert.ok(listener, `${id} is interactive`); await listener({ preventDefault() {} }); await new Promise((resolve) => setImmediate(resolve)); };
+  state.images = [{ id: "rename-target", relativePath: "nested/original.png" }]; state.renameImage = { imageId: "rename-target" };
+  element("#renameImageFilename").value = "edited.png"; await fire("#renameImageRestoreOriginal");
+  assert.equal(element("#renameImageFilename").value, "original.png", "Restore original changes only the rename input to the source basename");
+  assert.equal(element("#renameImageFilename").focused, true, "Restore original returns focus to the rename input");
   await fire("#projectButton"); await fire("#projectClose"); await fire("#projectNew"); await fire("#projectName"); await fire("#projectOpenList"); await fire("#projectListClose");
   state.project = projects[0]; state.projectReadOnly = false; await fire("#projectSourceAdd");
   assert.ok(calls.some(([kind]) => kind === "directory"), "the current project can select a native source folder");

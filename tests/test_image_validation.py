@@ -124,6 +124,21 @@ class InputImageValidationTests(unittest.TestCase):
                     canonical_image(record)
             self.assertEqual(raised.exception.error_code, "image_read_failed")
 
+    def test_transparent_png_preserves_shape_and_alpha_pixels(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "transparent.png"
+            source = Image.new("RGBA", (3, 2), (10, 20, 30, 255))
+            source.putpixel((1, 0), (40, 50, 60, 0))
+            source.save(path)
+            stat = path.stat()
+            record = ImageRecord("transparent", path, path.name, 3, 2, stat.st_mtime_ns, stat.st_size)
+
+            loaded, _raw, _info = canonical_image(record)
+            with loaded:
+                self.assertEqual(loaded.size, (3, 2))
+                self.assertEqual(loaded.mode, "RGBA")
+                self.assertEqual(loaded.getpixel((1, 0)), (40, 50, 60, 0))
+
     def test_png_with_large_text_metadata_is_inspected_from_pixels(self):
         """A valid image must not disappear because optional PNG text is huge."""
         metadata = PngImagePlugin.PngInfo()
