@@ -361,6 +361,27 @@ class ProjectCatalogCoverageTests(unittest.TestCase):
 
         with self.assertRaises(ClientError): state.delete_project(project["id"])
 
+    def test_removed_project_image_does_not_revive_when_source_still_exists(self) -> None:
+        source = self.root / "removed-image-reopen"; original = self.image(source, "original.png")
+        state = self.state(); project = state.create_project("removed image reopen")
+        image_id = state.set_root(str(source))[0]["id"]
+        state.remove_image_from_catalog(image_id)
+        self.assertTrue(original.is_file(), "catalog deletion keeps the original source")
+        state.close_project()
+        reopened = state.open_project(project["id"])
+        self.assertEqual(reopened["images"], [], "reopening the project must not rescan and revive its deleted image")
+        self.assertTrue(original.is_file())
+
+    def test_clear_project_images_closes_live_project_but_keeps_empty_project_and_sources(self) -> None:
+        source = self.root / "clear-project-images"; original = self.image(source, "original.png")
+        state = self.state(); project = state.create_project("clear project images")
+        state.set_root(str(source))
+        state.clear_catalog()
+        self.assertIsNone(state.catalog_id, "clearing project images closes the live project")
+        self.assertEqual(state.list_images(), [])
+        self.assertIsNotNone(state.workspace_store.project(project["id"]), "the empty project remains listed")
+        self.assertTrue(original.is_file(), "clearing project data keeps original source files")
+
     def test_delete_project_handles_current_read_only_noncurrent_and_thumbnail_failure(self) -> None:
         first_root = self.root / "first-project"; second_root = self.root / "second-project"
         first_source = self.image(first_root, "first.png")

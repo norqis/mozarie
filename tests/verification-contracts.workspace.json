@@ -693,8 +693,7 @@
       "observation": "対象の元画像・一覧・PJデータを完全削除し、表示中フィルターの次画像へ移動する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_filters_and_fluid_e2e.cjs::filter popover combines checked states and review-at-tail stays on the filtered image",
-        "node:tests/test_source_delete_e2e.cjs::visible delete control selects next for first and middle, previous for last, and clears every view after an all-image batch"
+        "node:tests/test_filters_and_fluid_e2e.cjs::filtered review and hide keep their tail, while deletion selects the previous filtered image"
       ]
     },
     {
@@ -717,8 +716,7 @@
       "observation": "編集中画像へ戻り、その編集を保持する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_gallery_save_coverage.cjs::gallery and save interactions",
-        "node:tests/test_filters_and_fluid_e2e.cjs::filter popover combines checked states and review-at-tail stays on the filtered image"
+        "node:tests/test_workspace_contract_browser.cjs::returning to an edited image restores its manual pixels and history"
       ]
     },
     {
@@ -785,8 +783,7 @@
       "observation": "非表示ではなく、更新後に有効なモザイク範囲が0の画像だけを表示し、更新前のモザイク状態を残さない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_gallery_save_coverage.cjs::gallery and save interactions",
-        "node:tests/test_filters_and_fluid_e2e.cjs::filter popover combines checked states and review-at-tail stays on the filtered image"
+        "node:tests/test_filters_and_fluid_e2e.cjs::all-image detection filters images with independent OR checkboxes and persists the selection"
       ]
     },
     {
@@ -1214,8 +1211,7 @@
       "observation": "画像一覧を閉じ、PJと画像データを保持する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_workspace_contract_browser.cjs::completed projects keep browsing and exports enabled while every mutation stays disabled",
-        "node:tests/test_project_ui_runtime.cjs::project dialogs, A-B-A switching, failed-open recovery, and duplicate transition guards"
+        "node:tests/test_project_ui_runtime.cjs::project close, complete, resume, and delete produce exact workspace outcomes"
       ]
     },
     {
@@ -1226,7 +1222,6 @@
       "observation": "画像一覧・候補・手描き・確認状態・非表示を復元する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_workspace_contract_browser.cjs::completed projects keep browsing and exports enabled while every mutation stays disabled",
         "node:tests/test_project_ui_runtime.cjs::project dialogs, A-B-A switching, failed-open recovery, and duplicate transition guards"
       ]
     },
@@ -1238,7 +1233,6 @@
       "observation": "保存済み状態を復元し、別PJのデータを混ぜない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_workspace_contract_browser.cjs::completed projects keep browsing and exports enabled while every mutation stays disabled",
         "node:tests/test_project_ui_runtime.cjs::project dialogs, A-B-A switching, failed-open recovery, and duplicate transition guards"
       ]
     },
@@ -1250,8 +1244,7 @@
       "observation": "作業中のまま画像一覧を保持する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_workspace_contract_browser.cjs::completed projects keep browsing and exports enabled while every mutation stays disabled",
-        "node:tests/test_project_ui_runtime.cjs::project dialogs, A-B-A switching, failed-open recovery, and duplicate transition guards"
+        "node:tests/test_project_ui_runtime.cjs::project close, complete, resume, and delete produce exact workspace outcomes"
       ]
     },
     {
@@ -1262,8 +1255,7 @@
       "observation": "一覧を閉じ、PJ管理に完了と表示する。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_project_ui_runtime.cjs::project dialogs, A-B-A switching, failed-open recovery, and duplicate transition guards",
-        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_project_lifecycle_sources_exports_mismatch_and_read_only"
+        "node:tests/test_project_ui_runtime.cjs::project close, complete, resume, and delete produce exact workspace outcomes"
       ]
     },
     {
@@ -1274,8 +1266,7 @@
       "observation": "画像データは保持する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_project_ui_runtime.cjs::project dialogs, A-B-A switching, failed-open recovery, and duplicate transition guards",
-        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_project_lifecycle_sources_exports_mismatch_and_read_only"
+        "node:tests/test_project_ui_runtime.cjs::project close, complete, resume, and delete produce exact workspace outcomes"
       ]
     },
     {
@@ -1298,8 +1289,7 @@
       "observation": "作業中になり、候補と描画の操作を再有効化する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_workspace_contract_browser.cjs::completed projects keep browsing and exports enabled while every mutation stays disabled",
-        "node:tests/test_project_ui_runtime.cjs::project dialogs, A-B-A switching, failed-open recovery, and duplicate transition guards"
+        "node:tests/test_project_ui_runtime.cjs::project close, complete, resume, and delete produce exact workspace outcomes"
       ]
     },
     {
@@ -1310,7 +1300,7 @@
       "observation": "対象名と履歴・モザイク・除外削除、元画像保持、取消不能を明記する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_project_ui_runtime.cjs::project deletion warning names every destructive consequence"
+        "node:tests/test_project_ui_runtime.cjs::project deletion warning names its target and every destructive consequence"
       ]
     },
     {
@@ -1321,8 +1311,7 @@
       "observation": "対象PJを保持する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_workspace_contract_browser.cjs::completed projects keep browsing and exports enabled while every mutation stays disabled",
-        "node:tests/test_project_ui_runtime.cjs::project dialogs, A-B-A switching, failed-open recovery, and duplicate transition guards"
+        "node:tests/test_project_ui_runtime.cjs::project close, complete, resume, and delete produce exact workspace outcomes"
       ]
     },
     {
@@ -1333,8 +1322,7 @@
       "observation": "そのPJだけ消え、現在のPJと編集は保持する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_project_ui_runtime.cjs::project dialogs, A-B-A switching, failed-open recovery, and duplicate transition guards",
-        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_project_lifecycle_sources_exports_mismatch_and_read_only"
+        "node:tests/test_project_ui_runtime.cjs::project close, complete, resume, and delete produce exact workspace outcomes"
       ]
     },
     {
@@ -1345,8 +1333,7 @@
       "observation": "現在PJと関連データが消え、空の作業画面へ戻る",
       "status": "automated",
       "testIds": [
-        "node:tests/test_project_ui_runtime.cjs::project dialogs, A-B-A switching, failed-open recovery, and duplicate transition guards",
-        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_project_lifecycle_sources_exports_mismatch_and_read_only"
+        "node:tests/test_project_ui_runtime.cjs::project close, complete, resume, and delete produce exact workspace outcomes"
       ]
     },
     {
@@ -1369,7 +1356,6 @@
       "observation": "選択PJを開き、新規PJを増やさない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_workspace_contract_browser.cjs::completed projects keep browsing and exports enabled while every mutation stays disabled",
         "node:tests/test_project_ui_runtime.cjs::project dialogs, A-B-A switching, failed-open recovery, and duplicate transition guards"
       ]
     },
@@ -1381,7 +1367,6 @@
       "observation": "既存PJを変更せず、別PJとして作業できる",
       "status": "automated",
       "testIds": [
-        "node:tests/test_workspace_contract_browser.cjs::completed projects keep browsing and exports enabled while every mutation stays disabled",
         "node:tests/test_project_ui_runtime.cjs::project dialogs, A-B-A switching, failed-open recovery, and duplicate transition guards"
       ]
     },
@@ -1393,7 +1378,6 @@
       "observation": "読み込み先PJと画像一覧を変えない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_workspace_contract_browser.cjs::completed projects keep browsing and exports enabled while every mutation stays disabled",
         "node:tests/test_project_ui_runtime.cjs::project dialogs, A-B-A switching, failed-open recovery, and duplicate transition guards"
       ]
     },
@@ -1465,7 +1449,6 @@
       "observation": "利用可能画像は表示し、不足したnative-folderだけの再指定を案内する。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_workspace_contract_browser.cjs::completed projects keep browsing and exports enabled while every mutation stays disabled",
         "node:tests/test_project_ui_runtime.cjs::project dialogs, A-B-A switching, failed-open recovery, and duplicate transition guards"
       ]
     },
@@ -1477,7 +1460,6 @@
       "observation": "再取得後もPJ・画像・source一覧と不足表示が一致する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_workspace_contract_browser.cjs::completed projects keep browsing and exports enabled while every mutation stays disabled",
         "node:tests/test_project_ui_runtime.cjs::project dialogs, A-B-A switching, failed-open recovery, and duplicate transition guards"
       ]
     },
@@ -1538,7 +1520,7 @@
       "observation": "元フォルダーにファイルがあっても削除済みのPJ画像を復活させない",
       "status": "automated",
       "testIds": [
-        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_delete_project_cleans_only_project_state_and_leaves_sources"
+        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_removed_project_image_does_not_revive_when_source_still_exists"
       ]
     },
     {
@@ -1560,7 +1542,7 @@
       "observation": "画像データを消してPJを閉じる。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_workspace_contract_browser.cjs::catalog clear cancel preserves workspace and confirmation removes only image data"
+        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_clear_project_images_closes_live_project_but_keeps_empty_project_and_sources"
       ]
     },
     {
@@ -1571,7 +1553,7 @@
       "observation": "PJ自体は空で残り、元ファイルは残る",
       "status": "automated",
       "testIds": [
-        "node:tests/test_workspace_contract_browser.cjs::catalog clear cancel preserves workspace and confirmation removes only image data"
+        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_clear_project_images_closes_live_project_but_keeps_empty_project_and_sources"
       ]
     },
     {
@@ -1884,7 +1866,7 @@
       "observation": "確認済みにして次へは左一覧で選んだ対象順のまま移動する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_workspace_contract_browser.cjs::batch flag actions change only selected images and report the selection count"
+        "node:tests/test_filters_and_fluid_e2e.cjs::OR filters move from an outside current image to the first match, through the middle, and keep a one-item tail selected"
       ]
     },
     {
@@ -1895,8 +1877,7 @@
       "observation": "完了PJでも絞り込みボタンとチェック項目は使える。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_workspace_contract_browser.cjs::completed projects keep browsing and exports enabled while every mutation stays disabled",
-        "node:tests/test_workspace_contract_browser.cjs::batch detection cancel and processing locks preserve selection, catalog, and project state"
+        "node:tests/test_workspace_contract_browser.cjs::completed projects keep browsing and exports enabled while every mutation stays disabled"
       ]
     },
     {
@@ -1907,7 +1888,6 @@
       "observation": "処理の開始時は開いていたメニューが閉じ、ボタンと項目が無効になる。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_workspace_contract_browser.cjs::completed projects keep browsing and exports enabled while every mutation stays disabled",
         "node:tests/test_workspace_contract_browser.cjs::batch detection cancel and processing locks preserve selection, catalog, and project state"
       ]
     },
@@ -1919,7 +1899,6 @@
       "observation": "処理完了後は再び開いて選択を変えられる",
       "status": "automated",
       "testIds": [
-        "node:tests/test_workspace_contract_browser.cjs::completed projects keep browsing and exports enabled while every mutation stays disabled",
         "node:tests/test_workspace_contract_browser.cjs::batch detection cancel and processing locks preserve selection, catalog, and project state"
       ]
     },
