@@ -18,7 +18,7 @@ html { background: var(--night); scroll-behavior: smooth; }
 body { margin: 0; background: var(--night); color: var(--ink); font-family: "Yu Gothic UI", "Hiragino Kaku Gothic ProN", "Segoe UI", sans-serif; font-size: 17px; line-height: 1.75; }
 a { color: inherit; text-underline-offset: .22em; }
 a:focus-visible, button:focus-visible { outline: 3px solid var(--mint-dark); outline-offset: 4px; }
-.hero-stage a:focus-visible, .hero-stage button:focus-visible, .story-brush button:focus-visible, .final-cta a:focus-visible, .gallery-modal button:focus-visible { outline-color: var(--mint); }
+.hero-stage a:focus-visible, .hero-stage button:focus-visible, .story-brush button:focus-visible, .final-cta a:focus-visible, .gallery-modal button:focus-visible { outline: 3px solid var(--mint); }
 h1, h2, p { margin-top: 0; }
 h1, h2 { font-family: "Segoe UI Variable Display", "Yu Gothic UI", "Segoe UI", sans-serif; font-weight: 650; letter-spacing: -.055em; }
 h1 span { display: inline-block; white-space: nowrap; }
@@ -38,7 +38,7 @@ button { font: inherit; }
 .hero { width: min(calc(100% - clamp(48px, 12vw, 192px)), 1120px); margin-inline: auto; padding: clamp(72px, 9vw, 132px) 0 clamp(64px, 8vw, 112px); text-align: center; }
 .eyebrow, .feature-name { margin-bottom: 22px; color: var(--mint); font-size: .78rem; font-weight: 750; letter-spacing: .14em; }
 .hero h1 { margin-bottom: 30px; font-size: clamp(36px, 11vw, 112px); line-height: .96; }
-.intro { max-width: 760px; margin: 0 auto; color: #b9c1bd; font-size: clamp(17px, 1.5vw, 21px); line-height: 1.8; }
+.intro { max-width: 980px; margin: 0 auto; color: #b9c1bd; font-size: clamp(17px, 1.5vw, 21px); line-height: 1.8; }
 .hero-actions, .final-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; margin-top: 34px; }
 .primary-action { display: inline-flex; min-height: 50px; align-items: center; justify-content: center; padding: 11px 20px; font-size: .92rem; font-weight: 750; text-decoration: none; }
 .primary-action { background: var(--mint); color: var(--night); }

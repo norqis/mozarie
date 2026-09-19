@@ -344,10 +344,11 @@ test("preview buttons and carousel geometry work across supported viewports", { 
       assert.equal(await opener.evaluate((element) => document.activeElement === element), true);
       if (viewport.width === 1440) {
         const previews = page.locator("[data-feature-open]");
+        await page.bringToFront();
         const reachWithTab = async (target) => {
           for (let attempt = 0; attempt < 30; attempt += 1) {
             await page.keyboard.press("Tab");
-            if (await target.evaluate((element) => document.activeElement === element)) return true;
+            if (await target.evaluate((element) => document.activeElement === element && element.matches(":focus-visible"))) return true;
           }
           return false;
         };
@@ -357,6 +358,9 @@ test("preview buttons and carousel geometry work across supported viewports", { 
         assert.equal(await previews.nth(0).evaluate((element) => getComputedStyle(element).outlineColor), "rgb(36, 92, 72)", "first light feature uses the dark focus color");
         assert.equal(await reachWithTab(previews.nth(2)), true, "keyboard reaches the second light feature");
         assert.equal(await previews.nth(2).evaluate((element) => getComputedStyle(element).outlineColor), "rgb(36, 92, 72)", "second light feature uses the dark focus color");
+      }
+      if (viewport.width >= 1440) {
+        assert.equal(await page.locator(".intro").evaluate((element) => element.scrollHeight <= Number.parseFloat(getComputedStyle(element).lineHeight) * 1.2), true, `hero introduction does not leave an orphan line at ${viewport.width}px`);
       }
       assert.equal(await page.locator("html").evaluate((element) => element.scrollWidth <= element.clientWidth), true, `no horizontal overflow at ${viewport.width}px`);
       await context.close();
