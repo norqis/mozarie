@@ -995,6 +995,8 @@ class CatalogMixin:
             return self._open_project(catalog_id, resume=resume)
 
     def _open_project(self, catalog_id: str, *, resume: bool = False) -> dict[str, Any]:
+        with self.lock:
+            discard_workspace_id = self.workspace_id if self.catalog_id is None else None
         project = self.workspace_store.project(catalog_id)
         if not project:
             raise ClientError("プロジェクトが見つかりません。", "project_not_found")
@@ -1038,6 +1040,7 @@ class CatalogMixin:
                     publish_catalog_id=catalog_id, publish_read_only=project["status"] == "completed",
                     publish_source_mismatches=staged_source_mismatches,
                     publish_sources=sources,
+                    discard_workspace_id=discard_workspace_id,
                 )
             except Exception:
                 self.workspace_store.rollback_project_open(catalog_id, rollback)

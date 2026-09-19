@@ -1364,8 +1364,10 @@ async function runDynamicProjectAndShortcutScenario(browser, fixtureUrl, setting
     assert.deepEqual(await page.evaluate(() => state.settings.shortcuts), { enabled: true, bindings: shortcutBindings, actions: shortcutActions }, "saving shortcut settings updates the live twelve-action shortcut state");
     await page.locator("#settingsCloseButton").click();
     const renameCard = page.locator('.gallery-item[data-id="sample"]');
-    await renameCard.press(shortcutBindings.renameImage);
-    await page.waitForFunction(() => document.querySelector("#renameImageDialog").open && state.renameImage?.imageId === "sample");
+    const playwrightShortcut = (shortcut) => shortcut.replace(/^Ctrl\+/, "Control+");
+    await renameCard.scrollIntoViewIfNeeded(); await renameCard.press(playwrightShortcut(shortcutBindings.renameImage));
+    await page.locator("#renameImageDialog").waitFor({ state: "visible" });
+    assert.equal(await page.evaluate(() => state.renameImage?.imageId), "sample", "the enabled rename shortcut opens for the focused image");
     await page.locator("#renameImageCancel").click(); await page.waitForFunction(() => !document.querySelector("#renameImageDialog").open);
     await page.locator("#settingsButton").click(); await page.locator("#settingsTabShortcuts").click();
     await page.locator('[data-shortcut-enabled="renameImage"]').uncheck();
@@ -1373,15 +1375,16 @@ async function runDynamicProjectAndShortcutScenario(browser, fixtureUrl, setting
     await page.locator("#settingsSaveButton").click(); await page.waitForFunction(() => document.querySelector("#settingsResult").textContent === "設定を保存しました。"
       && !document.querySelector("#settingsSaveButton").disabled && state.settings?.shortcuts?.actions?.renameImage === false);
     assert.deepEqual(settingsPayloads.slice(renameDisabledSaveStart).filter((payload) => payload.search === "?status=0").map((payload) => payload.body.shortcuts.actions.renameImage), [false], "saving the disabled rename action posts its exact action state");
-    await page.locator("#settingsCloseButton").click(); await page.locator('.gallery-item[data-id="sample"]').press(shortcutBindings.renameImage);
+    await page.locator("#settingsCloseButton").click(); await renameCard.scrollIntoViewIfNeeded(); await renameCard.press(playwrightShortcut(shortcutBindings.renameImage));
     assert.equal(await page.locator("#renameImageDialog").evaluate((dialog) => dialog.open), false, "a disabled custom rename shortcut does not open the dialog");
     await page.locator("#settingsButton").click(); await page.locator("#settingsTabShortcuts").click(); await page.locator('[data-shortcut-enabled="renameImage"]').check();
     const renameEnabledSaveStart = settingsPayloads.length;
     await page.locator("#settingsSaveButton").click(); await page.waitForFunction(() => document.querySelector("#settingsResult").textContent === "設定を保存しました。"
       && !document.querySelector("#settingsSaveButton").disabled && state.settings?.shortcuts?.actions?.renameImage === true);
     assert.deepEqual(settingsPayloads.slice(renameEnabledSaveStart).filter((payload) => payload.search === "?status=0").map((payload) => payload.body.shortcuts.actions.renameImage), [true], "saving the re-enabled rename action posts its exact action state");
-    await page.locator("#settingsCloseButton").click(); await page.locator('.gallery-item[data-id="sample"]').press(shortcutBindings.renameImage);
-    await page.waitForFunction(() => document.querySelector("#renameImageDialog").open && state.renameImage?.imageId === "sample");
+    await page.locator("#settingsCloseButton").click(); await renameCard.scrollIntoViewIfNeeded(); await renameCard.press(playwrightShortcut(shortcutBindings.renameImage));
+    await page.locator("#renameImageDialog").waitFor({ state: "visible" });
+    assert.equal(await page.evaluate(() => state.renameImage?.imageId), "sample", "the re-enabled rename shortcut opens for the focused image");
     await page.locator("#renameImageCancel").click();
 
     // Restore one browser file source through its visible recovery action.

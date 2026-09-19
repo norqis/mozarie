@@ -96,6 +96,70 @@ class LiveHttpEndpointTests(unittest.TestCase):
         finally:
             connection.close()
 
+    def test_named_project_open_discards_active_projectless_catalog_across_restart(self) -> None:
+        status, _headers, body = self.request("POST", "/api/projects", {"name": "Named target"}, authorized=True)
+        self.assertEqual(status, 200, body.decode("utf-8") if status != 200 else "")
+        named_id = json.loads(body)["project"]["id"]
+        status, _headers, body = self.request("POST", "/api/folder", {"path": str(self.source_dir)}, authorized=True)
+        self.assertEqual(status, 200, body.decode("utf-8") if status != 200 else "")
+        status, _headers, body = self.request("POST", "/api/project/close", {}, authorized=True)
+        self.assertEqual(status, 200, body.decode("utf-8") if status != 200 else "")
+
+        session_id = "cc1cfba8-f5d9-4cd5-a64c-5a3ce14ad125"
+        source_id = "cc1cfba8-f5d9-4cd5-a64c-5a3ce14ad126"
+        expected_generation = self.state.catalog_generation
+        status, _headers, body = self.request("POST", "/api/import/start", {"sessionId": session_id}, authorized=True)
+        self.assertEqual(status, 200, body.decode("utf-8") if status != 200 else "")
+        encoded = io.BytesIO(); Image.new("RGB", (9, 7), "blue").save(encoded, format="PNG")
+        image_bytes = encoded.getvalue()
+        status, _headers, body = self.raw_request("POST", "/api/import/file", image_bytes, {
+            "Origin": self.origin, "X-Mozarie-Token": self.state.session_token,
+            "Content-Type": "application/octet-stream", "X-Mozarie-Name": "browser.png",
+            "X-Mozarie-Relative-Path": "browser.png", "X-Mozarie-Client-Key": "projectless-browser-file",
+            "X-Mozarie-Source-Kind": "browser-files", "X-Mozarie-Source-Id": source_id,
+            "X-Mozarie-Import-Intent": "add", "X-Mozarie-Import-Session": session_id,
+            "X-Mozarie-File-Mtime": "0", "X-Mozarie-File-Size": str(len(image_bytes)),
+        })
+        self.assertEqual(status, 200, body.decode("utf-8") if status != 200 else "")
+        imported = json.loads(body); old_workspace_id = self.state.workspace_id
+        self.assertEqual(len(imported["imported"]), 1)
+        finish_payload = json.dumps({
+            "sessionId": session_id, "expectedProjectId": "", "expectedCatalogGeneration": expected_generation,
+            "completed": 1, "failed": False, "cancelled": False,
+        }).encode("utf-8")
+        status, _headers, body = self.raw_request("POST", "/api/import/finish", finish_payload, {
+            "Origin": self.origin, "X-Mozarie-Token": self.state.session_token, "Content-Type": "application/json",
+            "X-Mozarie-Expected-Project-Id": "", "X-Mozarie-Expected-Catalog-Generation": str(expected_generation),
+        })
+        self.assertEqual(status, 200, body.decode("utf-8") if status != 200 else "")
+        self.assertIsNotNone(old_workspace_id)
+        self.assertEqual(self.state.workspace_store.active_projectless_catalog(), old_workspace_id)
+        self.assertIsNotNone(self.state.workspace_store.project(old_workspace_id or ""))
+        self.assertEqual([image.relative_path for image in self.state.images.values()], ["browser.png"])
+        projectless_sources = self.state.workspace_store.project_sources(old_workspace_id)
+        self.assertEqual(len(projectless_sources), 1)
+        self.assertEqual((projectless_sources[0]["kind"], projectless_sources[0]["identity"]), ("browser-files", source_id))
+
+        status, _headers, body = self.request("POST", "/api/project/open", {"projectId": named_id}, authorized=True)
+        self.assertEqual(status, 200, body.decode("utf-8") if status != 200 else "")
+        self.assertEqual(self.state.catalog_id, named_id)
+        self.assertEqual(self.state.workspace_id, named_id, "named projects use their project ID as the live durable workspace")
+        self.assertIsNone(self.state.workspace_store.active_projectless_catalog())
+        self.assertIsNone(self.state.workspace_store.project(old_workspace_id or ""))
+        self.assertIsNotNone(self.state.workspace_store.project(named_id))
+
+        self.state.shutdown()
+        reopened = StudioState(self.state.cache_dir, self.state.session_base_dir)
+        try:
+            self.assertIsNone(reopened.workspace_id)
+            self.assertIsNone(reopened.workspace_store.active_projectless_catalog())
+            self.assertEqual(reopened.order, [])
+            self.assertIsNone(reopened.workspace_store.project(old_workspace_id or ""))
+            opened = reopened.open_project(named_id)
+            self.assertEqual(opened["project"]["id"], named_id)
+        finally:
+            reopened.shutdown()
+
     def raw_request(self, method: str, path: str, body: bytes, headers: dict[str, str]) -> tuple[int, dict[str, str], bytes]:
         if method != "GET" and "X-Mozarie-Expected-Catalog-Generation" not in headers:
             headers = {

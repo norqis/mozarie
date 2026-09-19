@@ -44,7 +44,11 @@ async function freshPage(browser, fixture) {
       const file = await getFile.call(this);
       return new File([file], file.name, { type: file.type, lastModified: window.__folderFile.lastModified });
     };
-    window.showOpenFilePicker = async () => [];
+    window.__openFilePicker = { calls: [], handles: [] };
+    window.showOpenFilePicker = async (options) => {
+      window.__openFilePicker.calls.push({ ...options, active: navigator.userActivation?.isActive === true });
+      return window.__openFilePicker.handles;
+    };
     window.showDirectoryPicker = async (options) => {
       window.__folderPicker.calls.push({ ...options, active: navigator.userActivation?.isActive === true });
       if (window.__folderPicker.mode === "cancel") throw new DOMException("cancelled", "AbortError");
@@ -56,10 +60,12 @@ async function freshPage(browser, fixture) {
   await context.route("**/api/import/file", async (route) => {
     const headers = route.request().headers();
     sourceId = decodeURIComponent(headers["x-mozarie-source-id"] || "");
-    const index = paths.indexOf(decodeURIComponent(headers["x-mozarie-relative-path"] || ""));
+    const relativePath = decodeURIComponent(headers["x-mozarie-relative-path"] || "");
+    const index = paths.indexOf(relativePath);
+    const imageId = relativePath === "picked-file.png" ? "browser-file" : (index < 0 ? null : `folder-${index}`);
     await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({
       catalogId: "folder-project", catalogGeneration: 7,
-      imported: index < 0 ? [] : [{ imageId: `folder-${index}`, clientKey: decodeURIComponent(headers["x-mozarie-client-key"] || "") }],
+      imported: imageId ? [{ imageId, clientKey: decodeURIComponent(headers["x-mozarie-client-key"] || "") }] : [],
     }) });
   });
   const page = await context.newPage();
@@ -161,25 +167,50 @@ test("project folder restore retains each nested file's direct parent", { timeou
     await page.locator("#pickFolder").click(); await page.locator("#pickFolderFiles").click();
     await page.waitForFunction(() => !state.importing && state.sourceAccess.size === 3);
     assert.deepEqual(await page.evaluate(() => window.__folderPicker.calls.at(-1)), { mode: "readwrite", id: "mozarie-source", active: true }, "the initial folder picker also obtains write access inside the click");
-    assert.deepEqual(await page.evaluate(async () => {
-      const access = state.sourceAccess.get("folder-2");
-      await writeSourceHandle(access, new Response(new Uint8Array([7, 8, 9])));
-      const saved = [...new Uint8Array(await (await access.fileHandle.getFile()).arrayBuffer())];
-      await browserDeleteHandle({ parentHandle: access.parentHandle, fileHandle: access.fileHandle, name: access.fileHandle.name }, {
-        sizeBytes: access.size, mtimeNs: access.lastModified * 1_000_000,
-      });
-      const root = await (await navigator.storage.getDirectory()).getDirectoryHandle("mozarie-folder-permission-e2e");
-      const one = await root.getDirectoryHandle("one"); const deep = await one.getDirectoryHandle("deep");
-      const rootSame = await root.getFileHandle("same.png"); const childSame = await one.getFileHandle("same.png");
-      let grandchildExists = true; try { await deep.getFileHandle("same.png"); } catch (error) { grandchildExists = error.name !== "NotFoundError"; }
-      return { saved, rootSame: rootSame.name, childSame: childSame.name, grandchildExists };
-    }), { saved: [7, 8, 9], rootSame: "same.png", childSame: "same.png", grandchildExists: false }, "the restored grandchild saves and deletes through its direct parent without touching parent or child files with the same name");
   } finally {
     await context?.close(); await browser.close(); await closeServer(fixture.server);
   }
 });
 
-test("unnamed browser workspace promotion keeps its actual directory and file handles under the same workspace id", { timeout: 60000 }, async () => {
+test("reload-restored grandchild handle writes and deletes only its direct same-name entry", { timeout: 60000 }, async () => {
+  const fixture = await startFixtureServer(); const browser = await chromium.launch({ headless: true }); let context; let page;
+  try {
+    ({ context, page } = await freshPage(browser, fixture));
+    await page.locator("#projectButton").click(); await page.locator("#projectSourceAdd").click();
+    await page.waitForFunction(() => !state.importing && state.sourceAccess.size === 3 && !state.projectOperationPending);
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await page.waitForFunction(() => state.project?.id === "folder-project" && state.sourceAccess.size === 3 && !state.importing);
+    assert.deepEqual(await page.evaluate(async () => {
+      const access = state.sourceAccess.get("folder-2");
+      const root = await (await navigator.storage.getDirectory()).getDirectoryHandle("mozarie-folder-permission-e2e");
+      const one = await root.getDirectoryHandle("one"); const deep = await one.getDirectoryHandle("deep");
+      const direct = await deep.getFileHandle("same.png");
+      const restoredIdentity = {
+        file: await access.fileHandle.isSameEntry(direct), parent: await access.parentHandle.isSameEntry(deep),
+        sourceId: access.sourceId, relativePath: access.relativePath,
+      };
+      await writeSourceHandle(access, new Response(new Uint8Array([7, 8, 9])));
+      const saved = [...new Uint8Array(await (await direct.getFile()).arrayBuffer())];
+      await browserDeleteHandle({ parentHandle: access.parentHandle, fileHandle: access.fileHandle, name: access.fileHandle.name }, {
+        sizeBytes: access.size, mtimeNs: access.lastModified * 1_000_000,
+      });
+      const rootFile = await root.getFileHandle("same.png"); const childFile = await one.getFileHandle("same.png");
+      let grandchildMissing = false;
+      try { await deep.getFileHandle("same.png"); }
+      catch (error) { if (error.name !== "NotFoundError") throw error; grandchildMissing = true; }
+      return {
+        restoredIdentity, saved, grandchildMissing,
+        rootBytes: [...new Uint8Array(await (await rootFile.getFile()).arrayBuffer())],
+        childBytes: [...new Uint8Array(await (await childFile.getFile()).arrayBuffer())],
+      };
+    }), {
+      restoredIdentity: { file: true, parent: true, sourceId: canonicalBrowserSourceId, relativePath: "one/deep/same.png" },
+      saved: [7, 8, 9], grandchildMissing: true, rootBytes: [1, 2, 3], childBytes: [1, 2, 3],
+    }, "the handle restored by reload immediately writes and deletes only the grandchild while both same-name ancestors retain their bytes");
+  } finally { await context?.close(); await browser.close(); await closeServer(fixture.server); }
+});
+
+test("unnamed browser workspace promotion keeps its actual directory and browser-file handles under the same workspace id", { timeout: 60000 }, async () => {
   const fixture = await startFixtureServer(); const browser = await chromium.launch({ headless: true }); let context; let page; let setSnapshot;
   try {
     ({ context, page, setSnapshot } = await freshPage(browser, fixture));
@@ -188,50 +219,64 @@ test("unnamed browser workspace promotion keeps its actual directory and file ha
     await page.route("**/api/project/name", async (route) => {
       const body = route.request().postDataJSON();
       assert.equal(body.name, "Promoted"); assert.equal(body.projectId, workspaceId, "the real promotion API keeps the unnamed workspace id");
-      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ project: { id: workspaceId, name: "Promoted", status: "working", imageCount: paths.length } }) });
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ project: { id: workspaceId, name: "Promoted", status: "working", imageCount: paths.length + 1 } }) });
     });
     await page.locator("#projectButton").click(); await page.locator("#projectCloseWorkspace").click();
     await page.waitForFunction(() => state.project === null && state.images.length === 0 && !state.projectOperationPending);
     setSnapshot(() => ({ ...snapshot(), project: null, workspace: true, workspaceId, historyDurable: true, sources: [], needsSource: false }));
     await page.locator("#pickFolder").click(); await page.locator("#pickFolderFiles").click();
     await page.waitForFunction((id) => state.project === null && state.workspaceId === id && state.images.length === 3 && !state.importing, workspaceId);
+    await page.evaluate(async () => {
+      const root = await navigator.storage.getDirectory();
+      const handle = await root.getFileHandle("picked-file.png", { create: true });
+      const writable = await handle.createWritable(); await writable.write(new Uint8Array([9, 8, 7])); await writable.close();
+      window.__promotionFileHandle = handle; window.__openFilePicker.handles = [handle];
+    });
+    setSnapshot(() => ({
+      ...snapshot(), project: null, workspace: true, workspaceId, historyDurable: true, sources: [], needsSource: false,
+      images: [...snapshot().images, {
+        id: "browser-file", relativePath: "picked-file.png", sourceId: null, sourceKind: "session", width: 2, height: 2,
+        sizeBytes: 3, mtimeNs: sourceMtimeNs, candidateCount: 0, enabledCandidateCount: 0, reviewed: false, hidden: false,
+      }],
+    }));
+    await page.locator("#pickFolder").click(); await page.locator("#pickImages").click();
+    await page.waitForFunction(() => !state.importing && state.images.some((image) => image.id === "browser-file") && state.sourceAccess.has("browser-file"));
+    assert.deepEqual(await page.evaluate(() => window.__openFilePicker.calls), [{
+      multiple: true, types: [{ description: "Images", accept: { "image/png": [".png"], "image/jpeg": [".jpg", ".jpeg"], "image/webp": [".webp"] } }], active: true,
+    }], "the visible browser-file picker requests multiple supported image files inside the click");
     const before = await page.evaluate(async (id) => {
       const remembered = await rememberedProjectSources(id);
-      return { same: remembered.directories.length === 0, projectlessSources: state.projectlessDirectorySources.size };
+      const access = state.sourceAccess.get("browser-file");
+      return {
+        rememberedDirectories: remembered.directories.length, rememberedFiles: remembered.files.length,
+        projectlessSources: state.projectlessDirectorySources.size, sourceKind: access.sourceKind,
+        sameFile: await access.fileHandle.isSameEntry(window.__promotionFileHandle), relativePath: access.relativePath,
+      };
     }, workspaceId);
-    assert.equal(before.same, true, "unnamed handles are held in the projectless source map before promotion rather than prematurely persisted as a project");
-    assert.equal(before.projectlessSources, 1);
+    assert.deepEqual(before, {
+      rememberedDirectories: 0, rememberedFiles: 0, projectlessSources: 1,
+      sourceKind: "browser-files", sameFile: true, relativePath: "picked-file.png",
+    }, "directory and browser-file handles remain in the real unnamed workspace until promotion");
     await page.locator("#projectButton").click(); await page.locator("#projectName").click(); await page.locator("#projectNameInput").fill("Promoted"); await page.locator("#projectNameConfirm").click();
     await page.waitForFunction((id) => state.project?.id === id && !state.projectOperationPending, workspaceId);
     assert.deepEqual(await page.evaluate(async ({ id }) => {
       const root = await (await navigator.storage.getDirectory()).getDirectoryHandle("mozarie-folder-permission-e2e");
       const remembered = await rememberedProjectSources(id);
-      return { directoryCount: remembered.directories.length, sameDirectory: await remembered.directories[0].handle.isSameEntry(root), projectId: state.project.id, workspaceId: state.workspaceId };
-    }, { id: workspaceId }), { directoryCount: 1, sameDirectory: true, projectId: workspaceId, workspaceId }, "the promotion UI persists the actual directory handle under the unchanged workspace id");
-  } finally { await context?.close(); await browser.close(); await closeServer(fixture.server); }
-});
-
-test("switching an actual unnamed browser workspace to a named project does not revive it after reload", { timeout: 60000 }, async () => {
-  const fixture = await startFixtureServer(); const browser = await chromium.launch({ headless: true }); let context; let page; let setSnapshot;
-  try {
-    ({ context, page, setSnapshot } = await freshPage(browser, fixture));
-    const workspaceId = "discarded-unnamed-browser-workspace";
-    await page.route("**/api/project/close", (route) => route.fulfill({ status: 200, contentType: "application/json", body: "{}" }));
-    await page.route("**/api/project/open", (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(snapshot()) }));
-    await page.locator("#projectButton").click(); await page.locator("#projectCloseWorkspace").click();
-    await page.waitForFunction(() => state.project === null && state.images.length === 0 && !state.projectOperationPending);
-    setSnapshot(() => ({ ...snapshot(), project: null, workspace: true, workspaceId, historyDurable: true, sources: [], needsSource: false }));
-    await page.locator("#pickFolder").click(); await page.locator("#pickFolderFiles").click();
-    await page.waitForFunction((id) => state.project === null && state.workspaceId === id && state.projectlessDirectorySources.size === 1 && !state.importing, workspaceId);
-    setSnapshot(() => snapshot());
-    await page.evaluate(() => openProject({ id: "folder-project", name: "Folder project", status: "working", imageCount: 3 }));
-    await page.waitForFunction(() => state.project?.id === "folder-project" && state.workspaceId === null && !state.projectOperationPending);
-    await page.reload({ waitUntil: "domcontentloaded" });
-    await page.waitForFunction(() => state.project?.id === "folder-project" && state.images.length === 3 && !state.importing);
-    assert.deepEqual(await page.evaluate(async (discardedId) => ({
-      activeProject: state.project?.id, activeWorkspace: state.workspaceId, projectlessSources: state.projectlessDirectorySources.size,
-      discardedRememberedSources: (await rememberedProjectSources(discardedId)).directories.length + (await rememberedProjectSources(discardedId)).files.length,
-    }), workspaceId), { activeProject: "folder-project", activeWorkspace: null, projectlessSources: 0, discardedRememberedSources: 0 }, "restart keeps only the named project and does not revive the discarded unnamed browser workspace");
+      const file = remembered.files[0];
+      return {
+        directoryCount: remembered.directories.length, fileCount: remembered.files.length,
+        sameDirectory: await remembered.directories[0].handle.isSameEntry(root), sameFile: await file.handle.isSameEntry(window.__promotionFileHandle),
+        fileImageId: file.imageId, fileSourceId: file.sourceId, fileClientKey: file.clientKey, fileRelativePath: file.relativePath,
+        liveSourceId: state.sourceAccess.get("browser-file").sourceId, liveClientKey: state.sourceAccess.get("browser-file").clientKey,
+        projectlessSources: state.projectlessDirectorySources.size, projectId: state.project.id, workspaceId: state.workspaceId,
+      };
+    }, { id: workspaceId }), {
+      directoryCount: 1, fileCount: 1, sameDirectory: true, sameFile: true,
+      fileImageId: "browser-file", fileSourceId: await page.evaluate(() => state.sourceAccess.get("browser-file").sourceId),
+      fileClientKey: await page.evaluate(() => state.sourceAccess.get("browser-file").clientKey), fileRelativePath: "picked-file.png",
+      liveSourceId: await page.evaluate(() => state.sourceAccess.get("browser-file").sourceId), liveClientKey: await page.evaluate(() => state.sourceAccess.get("browser-file").clientKey),
+      projectlessSources: 0, projectId: workspaceId, workspaceId,
+    }, "the promotion UI persists both actual handles and browser-file identity under the unchanged workspace id");
   } finally { await context?.close(); await browser.close(); await closeServer(fixture.server); }
 });
 
