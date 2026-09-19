@@ -205,6 +205,7 @@
       "observation": "色許容値を変更し、再読み込み・サーバー再起動後に開く → 保存値が表示され、次の塗りつぶしに使われる",
       "status": "automated",
       "testIds": [
+        "python:tests.test_config.SettingsTests.test_fill_tolerance_survives_settings_store_reinitialization",
         "node:tests/test_editor_basic_tools_e2e.cjs::basic editor tools keep their pixel-layer contracts > ED-014 fill tolerance survives a page reload and drives the next fill"
       ]
     },
@@ -849,7 +850,7 @@
       "observation": "左一覧を閉じて再表示 → 画像と選択状態を保持する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
+        "node:tests/test_workspace_splitters_e2e.cjs::workspace pane splitters preserve content and use gesture deltas > ED-059 gallery collapse and reopen preserve the current image and selection"
       ]
     },
     {
@@ -871,7 +872,7 @@
       "observation": "右候補を閉じて再表示 → 候補と設定値を保持する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
+        "node:tests/test_workspace_splitters_e2e.cjs::workspace pane splitters preserve content and use gesture deltas > ED-060 inspector collapse and reopen preserve candidates and editor settings"
       ]
     },
     {
@@ -930,8 +931,7 @@
       "observation": "除外候補の強制をOFF→ON → 強制ONでは重なるモザイクから除外され、PJ再開後も設定を保持する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_editor_masks_behavior.cjs::editor masks, fill, candidates, and history",
-        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
+        "python:tests.test_server.MozarieTests.test_forced_exclusion_toggle_survives_project_reopen"
       ]
     },
     {
@@ -1234,9 +1234,7 @@
       "observation": "PJを閉じて再開しUndo → 現在画像の保存済み履歴を戻せる",
       "status": "automated",
       "testIds": [
-        "node:tests/test_editor_masks_behavior.cjs::editor masks, fill, candidates, and history",
-        "node:tests/test_project_history_browser_e2e.cjs::project Ctrl+Z flushes the durable edit and keeps browser history canvases released",
-        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
+        "python:tests.test_server.MozarieTests.test_project_reopen_retains_candidate_history_for_immediate_undo"
       ]
     },
     {
@@ -1297,9 +1295,7 @@
       "observation": "4096×4096画像に離れた境界候補を1件ずつ、計3件追加 → 追加ごとに候補数が1・2・3件となり、前に追加した範囲も表示し続ける",
       "status": "automated",
       "testIds": [
-        "node:tests/test_editor_masks_behavior.cjs::editor masks, fill, candidates, and history",
-        "node:tests/test_project_history_browser_e2e.cjs::project Ctrl+Z flushes the durable edit and keeps browser history canvases released",
-        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
+        "python:tests.test_server.MozarieTests.test_three_4k_candidates_survive_five_reopens_and_one_padding_undo_redo"
       ]
     },
     {
@@ -1310,9 +1306,7 @@
       "observation": "3候補の4K画像から別画像へ移動し、元の画像へ戻る → 3候補とそれぞれの範囲・ON/OFF・枠の値が復元される",
       "status": "automated",
       "testIds": [
-        "node:tests/test_editor_masks_behavior.cjs::editor masks, fill, candidates, and history",
-        "node:tests/test_project_history_browser_e2e.cjs::project Ctrl+Z flushes the durable edit and keeps browser history canvases released",
-        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
+        "python:tests.test_server.MozarieTests.test_three_4k_candidates_survive_five_reopens_and_one_padding_undo_redo"
       ]
     },
     {
@@ -1323,9 +1317,7 @@
       "observation": "3候補の4K画像で枠変更→Undo→Redo → 変更候補だけの枠を戻し、再適用する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_editor_masks_behavior.cjs::editor masks, fill, candidates, and history",
-        "node:tests/test_project_history_browser_e2e.cjs::project Ctrl+Z flushes the durable edit and keeps browser history canvases released",
-        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
+        "python:tests.test_server.MozarieTests.test_three_4k_candidates_survive_five_reopens_and_one_padding_undo_redo"
       ]
     },
     {
@@ -1336,9 +1328,7 @@
       "observation": "3候補の4K画像で枠変更→Undo→Redo → 残る2候補を表示し続ける",
       "status": "automated",
       "testIds": [
-        "node:tests/test_editor_masks_behavior.cjs::editor masks, fill, candidates, and history",
-        "node:tests/test_project_history_browser_e2e.cjs::project Ctrl+Z flushes the durable edit and keeps browser history canvases released",
-        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
+        "python:tests.test_server.MozarieTests.test_three_4k_candidates_survive_five_reopens_and_one_padding_undo_redo"
       ]
     },
     {
@@ -1349,9 +1339,7 @@
       "observation": "3候補の4K画像と小さい画像を5回往復 → 4K画像の全候補を復元でき、往復ごとに以前の範囲画像を保持し続けない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_editor_masks_behavior.cjs::editor masks, fill, candidates, and history",
-        "node:tests/test_project_history_browser_e2e.cjs::project Ctrl+Z flushes the durable edit and keeps browser history canvases released",
-        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
+        "python:tests.test_server.MozarieTests.test_three_4k_candidates_survive_five_reopens_and_one_padding_undo_redo"
       ]
     },
     {
@@ -1362,9 +1350,7 @@
       "observation": "境界検出後に各候補のパーセント表示を見る → 値が0～100%の範囲内に収まる",
       "status": "automated",
       "testIds": [
-        "node:tests/test_editor_masks_behavior.cjs::editor masks, fill, candidates, and history",
-        "node:tests/test_project_history_browser_e2e.cjs::project Ctrl+Z flushes the durable edit and keeps browser history canvases released",
-        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
+        "node:tests/test_workspace_splitters_e2e.cjs::workspace pane splitters preserve content and use gesture deltas > ED-097 candidate confidence display clamps every value to zero through one hundred percent"
       ]
     },
     {
@@ -1557,9 +1543,7 @@
       "observation": "4K画像で各ブラシを高速にドラッグし、多数候補がある状態で描画する → ポインター位置に追従し、候補数に比例して全画面を複製しない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_editor_masks_behavior.cjs::editor masks, fill, candidates, and history",
-        "node:tests/test_project_history_browser_e2e.cjs::project Ctrl+Z flushes the durable edit and keeps browser history canvases released",
-        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
+        "node:tests/test_mosaic_4k_e2e.cjs::4K drag renders a preview before pointerup with one bounded worker"
       ]
     },
     {
@@ -2066,10 +2050,43 @@
       "sourceIds": [
         "ED-120"
       ],
-      "observation": "読込後にメモリ不足になる大きな画像で矩形・4点境界を実行する → `internal_error`ではなく画像またはマスクの読み込み失敗を画面に示し、候補・履歴を追加せず、通常画像で境界検出を続けられる",
+      "observation": "境界処理中に画像またはマスクの読み込みが失敗する → `internal_error`ではなく画像またはマスクの読み込み失敗を画面に示す",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_editor_masks_behavior.cjs::editor masks, fill, candidates, and history > ED-120 boundary read failure preserves state and a later normal image recovers"
+      ]
+    },
+    {
+      "key": "ED-120.2",
+      "sourceIds": [
+        "ED-120"
+      ],
+      "observation": "境界処理中に画像またはマスクの読み込みが失敗する → 候補・履歴を追加せず、境界下書きを再試行用に保持する",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_editor_masks_behavior.cjs::editor masks, fill, candidates, and history > ED-120 boundary read failure preserves state and a later normal image recovers"
+      ]
+    },
+    {
+      "key": "ED-120.3",
+      "sourceIds": [
+        "ED-120"
+      ],
+      "observation": "境界処理中に画像またはマスクの読み込みが失敗した後、通常画像で再実行する → 境界検出を続けられる",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_editor_masks_behavior.cjs::editor masks, fill, candidates, and history > ED-120 boundary read failure preserves state and a later normal image recovers"
+      ]
+    },
+    {
+      "key": "ED-120.4",
+      "sourceIds": [
+        "ED-120"
+      ],
+      "observation": "実OSのメモリ不足で境界処理を実行する → 実際のメモリ割当失敗を画像またはマスクの読み込み失敗として分類する",
       "status": "manual",
       "manual": {
-        "environment": "Windows実機で、通常画像を読み込んだ後に対象画像またはマスクの確保だけが失敗する実メモリ逼迫状態",
+        "environment": "Windows実機で、対象画像またはマスクの確保だけが失敗する実メモリ逼迫状態",
         "reason": "OSと画像ライブラリの実際のメモリ割当失敗を、CIプロセスや同居ジョブを不安定化させず決定的に発生させられないため"
       }
     }

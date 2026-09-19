@@ -428,6 +428,100 @@ class MozarieTests(unittest.TestCase):
             after_delete.open_project(self.persist_project(state))
             self.assertEqual([candidate["id"] for candidate in after_delete.candidate_snapshot(image_id)["candidates"]], ["second"])
 
+    def test_forced_exclusion_toggle_survives_project_reopen(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            Image.new("RGB", (16, 16), "white").save(root / "source.png")
+            state = self.new_state()
+            image_id = state.set_root(str(root))[0]["id"]
+            mask_path = state.cache_dir / image_id / "exclude.png"
+            mask_path.parent.mkdir(parents=True, exist_ok=True)
+            Image.new("L", (16, 16), 255).save(mask_path)
+            state.candidates[image_id] = [Candidate(
+                "exclude", "hand", .9, mask_path, source="hand_exclusion",
+                role=CandidateRole.EXCLUDE, forced=False,
+            )]
+            self.commit_candidates(state, image_id)
+            state.save_manual_workspace(image_id, {
+                "add": "", "exclusion": "", "exclusionErase": "", "removedCandidateIds": [],
+                "candidateRevision": state._candidate_revision(image_id), "hasEffectiveMask": False,
+            })
+            state.set_candidate_state(image_id, "exclude", {"forced": True})
+
+            reopened = self.new_state()
+            reopened.open_project(self.persist_project(state))
+            restored = reopened.candidate_snapshot(image_id)["candidates"]
+            self.assertEqual([(item["id"], item["role"], item["forced"]) for item in restored], [("exclude", "exclude", True)])
+
+    def test_project_reopen_retains_candidate_history_for_immediate_undo(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            Image.new("RGB", (16, 16), "white").save(root / "source.png")
+            state = self.new_state()
+            image_id = state.set_root(str(root))[0]["id"]
+            mask_path = state.cache_dir / image_id / "apply.png"
+            mask_path.parent.mkdir(parents=True, exist_ok=True)
+            Image.new("L", (16, 16), 255).save(mask_path)
+            state.candidates[image_id] = [Candidate("apply", "penis", .9, mask_path)]
+            self.commit_candidates(state, image_id)
+            state.save_manual_workspace(image_id, {
+                "add": "", "exclusion": "", "exclusionErase": "", "removedCandidateIds": [],
+                "candidateRevision": state._candidate_revision(image_id), "hasEffectiveMask": True,
+            })
+            state.set_candidate_state(image_id, "apply", {"enabled": False})
+            project_id = self.persist_project(state)
+
+            reopened = self.new_state()
+            reopened.open_project(project_id)
+            self.assertFalse(reopened.candidate_snapshot(image_id)["candidates"][0]["enabled"])
+            reopened.restore_project_history(image_id, "undo")
+            self.assertTrue(reopened.candidate_snapshot(image_id)["candidates"][0]["enabled"])
+
+    def test_three_4k_candidates_survive_five_reopens_and_one_padding_undo_redo(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            Image.new("RGB", (4096, 4096), "white").save(root / "source.png")
+            Image.new("RGB", (16, 16), "black").save(root / "small.png")
+            state = self.new_state()
+            image_ids = {item["relativePath"]: item["id"] for item in state.set_root(str(root))}
+            image_id = image_ids["source.png"]
+            small_id = image_ids["small.png"]
+            state.candidates[image_id] = []
+            for index in range(3):
+                mask_path = state.cache_dir / image_id / f"candidate-{index}.png"
+                mask_path.parent.mkdir(parents=True, exist_ok=True)
+                mask = Image.new("L", (4096, 4096), 0)
+                mask.paste(255, (index * 16, 0, index * 16 + 8, 8))
+                mask.save(mask_path)
+                state.candidates[image_id].append(Candidate(f"candidate-{index}", "penis", .61 + index / 10, mask_path))
+                self.commit_candidates(state, image_id)
+                snapshot = state.candidate_snapshot(image_id)["candidates"]
+                self.assertEqual([item["id"] for item in snapshot], [f"candidate-{candidate_index}" for candidate_index in range(index + 1)])
+                for candidate_index, item in enumerate(snapshot):
+                    with Image.open(state.candidates[image_id][candidate_index].mask_path) as stored_mask:
+                        self.assertEqual(stored_mask.size, (4096, 4096))
+            state.save_manual_workspace(image_id, {
+                "add": "", "exclusion": "", "exclusionErase": "", "removedCandidateIds": [],
+                "candidateRevision": state._candidate_revision(image_id), "hasEffectiveMask": True,
+            })
+            state.set_candidate_state(image_id, "candidate-1", {"expandPx": 9})
+            self.assertEqual([item.expand_px for item in state.candidates[image_id]], [0, 9, 0])
+            state.restore_project_history(image_id, "undo")
+            self.assertEqual([item.expand_px for item in state.candidates[image_id]], [0, 0, 0])
+            state.restore_project_history(image_id, "redo")
+            self.assertEqual([item.expand_px for item in state.candidates[image_id]], [0, 9, 0])
+            project_id = self.persist_project(state)
+            for _ in range(5):
+                reopened = self.new_state()
+                reopened_records = {item["id"]: item for item in reopened.open_project(project_id)["images"]}
+                self.assertEqual((reopened_records[small_id]["width"], reopened_records[small_id]["height"]), (16, 16))
+                record = reopened_records[image_id]
+                restored = reopened.candidate_snapshot(image_id)["candidates"]
+                self.assertEqual((record["width"], record["height"]), (4096, 4096))
+                self.assertEqual([(item["id"], item["expandPx"]) for item in restored], [
+                    ("candidate-0", 0), ("candidate-1", 9), ("candidate-2", 0),
+                ])
+
     def test_candidate_mutation_does_not_publish_when_workspace_write_fails(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory); Image.new("RGB", (16, 16), "white").save(root / "source.png")

@@ -163,6 +163,16 @@ class SettingsTests(unittest.TestCase):
 
             self.assertEqual(loaded["editing"]["fill_color_tolerance"], 20)
 
+    def test_fill_tolerance_survives_settings_store_reinitialization(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); config = root / "config"; config.mkdir()
+            (config / "defaults.json").write_text(json.dumps(default_settings()), encoding="utf-8")
+
+            SettingsStore(root).save({"editing": {"fill_color_tolerance": 37}})
+
+            restarted_store = SettingsStore(root)
+            self.assertEqual(restarted_store.load()["editing"]["fill_color_tolerance"], 37)
+
     def test_reset_removes_only_machine_override(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory); (root / "config").mkdir()

@@ -14,7 +14,7 @@ async function pointer(page, target, startFraction, deltaX) {
   await page.mouse.up();
 }
 
-nodeTest("workspace pane splitters preserve content and use gesture deltas", { timeout: 45000 }, async () => {
+nodeTest("workspace pane splitters preserve content and use gesture deltas", { timeout: 45000 }, async (t) => {
   const fixture = await startFixtureServer();
   const browser = await chromium.launch({ headless: true });
   const context = await browser.newContext({ viewport: { width: 1920, height: 900 } });
@@ -63,6 +63,38 @@ nodeTest("workspace pane splitters preserve content and use gesture deltas", { t
     }
 
     assert.deepEqual(await contentState(), before, "pane resizing never changes the current image, selection, candidates, or catalog");
+
+    await t.test("ED-059 gallery collapse and reopen preserve the current image and selection", async () => {
+      await page.evaluate(() => { state.selectedImageIds = new Set(["sample", "sample-two"]); });
+      const expected = await page.evaluate(() => ({ currentId: state.currentId, selected: [...state.selectedImageIds].sort(), images: state.images.map((image) => image.id) }));
+      await page.locator("#collapseGalleryButton").click();
+      assert.equal(await page.locator("#collapseGalleryButton").getAttribute("aria-expanded"), "false");
+      await page.locator("#collapseGalleryButton").click();
+      assert.equal(await page.locator("#collapseGalleryButton").getAttribute("aria-expanded"), "true");
+      assert.deepEqual(await page.evaluate(() => ({ currentId: state.currentId, selected: [...state.selectedImageIds].sort(), images: state.images.map((image) => image.id) })), expected);
+    });
+
+    await t.test("ED-060 inspector collapse and reopen preserve candidates and editor settings", async () => {
+      await page.evaluate(() => {
+        state.candidates = [{ id: "retained", role: "exclude", enabled: true, forced: true, expandPx: 7, labelToken: "hand", source: "hand_exclusion", refinement: null, confidence: .73, color: "#28d3ff" }];
+        document.querySelector("#brushSize").value = "37"; updateBrushSize(37); renderCandidates();
+      });
+      const expected = await page.evaluate(() => ({ candidates: state.candidates.map(({ id, enabled, forced, expandPx }) => ({ id, enabled, forced, expandPx })), brush: document.querySelector("#brushSize").value }));
+      await page.locator("#collapseInspectorButton").click();
+      assert.equal(await page.locator("#collapseInspectorButton").getAttribute("aria-expanded"), "false");
+      await page.locator("#collapseInspectorButton").click();
+      assert.equal(await page.locator("#collapseInspectorButton").getAttribute("aria-expanded"), "true");
+      assert.deepEqual(await page.evaluate(() => ({ candidates: state.candidates.map(({ id, enabled, forced, expandPx }) => ({ id, enabled, forced, expandPx })), brush: document.querySelector("#brushSize").value })), expected);
+      assert.match(await page.locator('[data-candidate-blink-id="retained"] .candidate-padding-button').textContent(), /7/);
+    });
+
+    await t.test("ED-097 candidate confidence display clamps every value to zero through one hundred percent", async () => {
+      await page.evaluate(() => {
+        state.candidates = [-.1, .615, 1.5].map((confidence, index) => ({ id: `confidence-${index}`, role: "apply", enabled: true, forced: false, expandPx: 0, labelToken: "boundary", source: "boundary", refinement: null, confidence, color: "#ff3d4d" }));
+        renderCandidates();
+      });
+      assert.deepEqual(await page.locator("#candidateList .candidate-conf").allTextContents(), ["0%", "62%", "100%"]);
+    });
   } finally {
     await context.close();
     await browser.close();

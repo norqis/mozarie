@@ -45,7 +45,7 @@ nodeTest("basic editor tools keep their pixel-layer contracts", { timeout: 45000
   const fixture = await startFixtureServer();
   const browser = await chromium.launch({ headless: true });
   const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
-  const page = await context.newPage();
+  let page = await context.newPage();
   try {
     await page.goto(fixture.url, { waitUntil: "domcontentloaded" });
     await page.waitForFunction(() => state.settings && state.images.length === 2 && document.querySelectorAll(".gallery-item").length === 2);
@@ -61,7 +61,11 @@ nodeTest("basic editor tools keep their pixel-layer contracts", { timeout: 45000
     await page.locator("#brushSize").dispatchEvent("input");
 
     await t.test("ED-001 drag adds mosaic only along the circular brush sweep", async () => {
-      await resetLayers(page); await page.locator("#brushTool").click(); await dragImage(page, { x: 20, y: 20 }, { x: 40, y: 20 });
+      await resetLayers(page); await page.locator("#brushTool").click();
+      const start = await imagePoint(page, 20, 20); const end = await imagePoint(page, 40, 20);
+      await page.mouse.move(start.x, start.y); await page.mouse.down(); await page.mouse.move(end.x, end.y, { steps: 4 });
+      assert.equal((await alphas(page, { duringDrag: { layer: "add", x: 30, y: 20 } })).duringDrag, 255, "the editable layer changes before pointerup");
+      await page.mouse.up();
       assert.deepEqual(await alphas(page, { start: { layer: "add", x: 20, y: 20 }, end: { layer: "add", x: 40, y: 20 }, exclude: { layer: "exclusion", x: 30, y: 20 } }), { start: 255, end: 255, exclude: 0 });
     });
 
@@ -96,6 +100,7 @@ nodeTest("basic editor tools keep their pixel-layer contracts", { timeout: 45000
       await resetLayers(page); await page.evaluate(() => { addCtx.fillStyle = "#fff"; addCtx.fillRect(0, 0, addCanvas.width, addCanvas.height); markMaskDirty(); flushMaskComposition(); });
       await page.locator("#eraserTool").click(); await dragImage(page, { x: 20, y: 20 }, { x: 40, y: 20 });
       assert.deepEqual(await alphas(page, { add: { layer: "add", x: 30, y: 20 }, exclusion: { layer: "exclusion", x: 30, y: 20 }, effective: { layer: "combined", x: 30, y: 20 } }), { add: 255, exclusion: 255, effective: 0 });
+      assert.deepEqual(await page.evaluate(() => ({ automatic: state.candidates.length, manualApply: Boolean(document.querySelector('[data-candidate-blink-id="manual:apply"]')), manualExclude: Boolean(document.querySelector('[data-candidate-blink-id="manual:exclude"]')) })), { automatic: 0, manualApply: false, manualExclude: true }, "exclusion drawing creates only its exclusion row and never a mosaic candidate row");
     });
 
     await t.test("ED-006 exclusion click adds one circular exclusion stamp", async () => {
@@ -118,7 +123,7 @@ nodeTest("basic editor tools keep their pixel-layer contracts", { timeout: 45000
 
     async function assertTolerance(toolSelector, layer, sourceId) {
       await resetLayers(page);
-      await page.evaluate(() => { originalCtx.fillStyle = "rgb(10, 10, 10)"; originalCtx.fillRect(0, 0, 20, 80); originalCtx.fillStyle = "rgb(35, 35, 35)"; originalCtx.fillRect(20, 0, 20, 80); });
+      await page.evaluate(() => { originalCtx.fillStyle = "rgb(10, 10, 10)"; originalCtx.fillRect(0, 0, 20, 80); originalCtx.fillStyle = "rgb(35, 35, 35)"; originalCtx.fillRect(20, 0, 20, 80); originalCtx.fillStyle = "rgb(120, 120, 120)"; originalCtx.fillRect(40, 0, 20, 80); originalCtx.fillStyle = "rgb(10, 10, 10)"; originalCtx.fillRect(60, 0, 20, 80); });
       await page.locator(toolSelector).click();
       await page.locator("#bucketTolerance").fill("5"); await page.locator("#bucketTolerance").dispatchEvent("input"); await clickImage(page, 10, 10);
       await page.waitForFunction(() => !state.fillPending && state.history.length === 1);
@@ -128,6 +133,7 @@ nodeTest("basic editor tools keep their pixel-layer contracts", { timeout: 45000
       await page.locator("#bucketTolerance").fill("50"); await page.locator("#bucketTolerance").dispatchEvent("input"); await clickImage(page, 10, 10);
       await page.waitForFunction(() => !state.fillPending && state.historyIndex === 1);
       assert.ok((await alphas(page, { adjacent: { layer, x: 25, y: 10 } })).adjacent > 0, `${sourceId} larger tolerance includes the adjacent color`);
+      assert.equal((await alphas(page, { disconnectedSame: { layer, x: 70, y: 10 } })).disconnectedSame, 0, `${sourceId} never crosses the disconnected barrier to an identical color`);
     }
 
     await t.test("ED-009 mosaic fill tolerance changes the connected result across undo", async () => assertTolerance("#bucketTool", "add", "ED-009"));
@@ -153,14 +159,26 @@ nodeTest("basic editor tools keep their pixel-layer contracts", { timeout: 45000
     await t.test("ED-014 fill tolerance survives a page reload and drives the next fill", async () => {
       await page.locator("#bucketTool").click(); await page.locator("#bucketTolerance").fill("37"); await page.locator("#bucketTolerance").dispatchEvent("input"); await page.locator("#bucketTolerance").dispatchEvent("change");
       await page.waitForFunction(() => state.settings.editing.fill_color_tolerance === 37);
-      await page.reload({ waitUntil: "domcontentloaded" }); await page.waitForFunction(() => state.settings && state.images.length === 2);
+      const restartedPage = await context.newPage(); await page.close(); page = restartedPage;
+      await page.goto(fixture.url, { waitUntil: "domcontentloaded" }); await page.waitForFunction(() => state.settings && state.images.length === 2);
       await page.locator('.gallery-item[data-id="sample"]').click(); await page.waitForFunction(() => state.currentId === "sample" && state.currentImage);
       assert.equal(await page.locator("#bucketTolerance").inputValue(), "37");
+      await page.evaluate(() => {
+        const image = document.createElement("canvas"); image.width = 100; image.height = 80; const source = image.getContext("2d");
+        source.fillStyle = "rgb(10, 10, 10)"; source.fillRect(0, 0, 20, 80); source.fillStyle = "rgb(35, 35, 35)"; source.fillRect(20, 0, 20, 80);
+        state.currentImage = image; Object.assign(currentRecord(), { width: 100, height: 80 }); canvasSizeForImage(image); prepareOriginalImage(); fitImage(); render();
+      });
+      await page.locator("#bucketTool").click(); await clickImage(page, 10, 10); await page.waitForFunction(() => !state.fillPending && state.history.length === 1);
+      assert.ok((await alphas(page, { adjacent: { layer: "add", x: 25, y: 10 } })).adjacent > 0, "the reinitialized editor uses the persisted tolerance for its next fill");
     });
 
     await t.test("ED-015 brush size display and cursor diameter follow every requested value without drawing", async () => {
       const history = await page.evaluate(() => state.history.length);
-      for (const value of [1, 48, 100]) { await page.locator("#brushSize").fill(String(value)); await page.locator("#brushSize").dispatchEvent("input"); assert.match(await page.locator("#brushSizeValue").textContent(), new RegExp(String(value))); }
+      await page.locator("#brushTool").click(); const hover = await imagePoint(page, 10, 10); await page.mouse.move(hover.x, hover.y);
+      for (const value of [1, 48, 100]) {
+        await page.locator("#brushSize").fill(String(value)); await page.locator("#brushSize").dispatchEvent("input"); assert.match(await page.locator("#brushSizeValue").textContent(), new RegExp(String(value)));
+        const cursor = await page.locator("#brushCursor").boundingBox(); const scale = await page.evaluate(() => state.view.scale); assert.ok(Math.abs(cursor.width - value * scale) <= 2, `cursor diameter follows ${value}px at the active image scale`);
+      }
       assert.equal(await page.evaluate(() => state.history.length), history);
     });
 
@@ -171,13 +189,33 @@ nodeTest("basic editor tools keep their pixel-layer contracts", { timeout: 45000
     });
 
     await t.test("ED-017 mosaic divisor updates calculated pixels without changing masks", async () => {
+      await page.evaluate(() => { addCtx.fillStyle = "#fff"; addCtx.fillRect(0, 0, addCanvas.width, addCanvas.height); state.manualEnabled = true; markMaskDirty(); flushMaskComposition(); });
       const before = await page.evaluate(() => [addCanvas.toDataURL(), exclusionCanvas.toDataURL(), exclusionEraseCanvas.toDataURL()]);
-      await page.locator("#divisor").fill("25"); await page.locator("#divisor").dispatchEvent("input"); assert.match(await page.locator("#blockSizeValue").textContent(), /4/);
-      assert.deepEqual(await page.evaluate(() => [addCanvas.toDataURL(), exclusionCanvas.toDataURL(), exclusionEraseCanvas.toDataURL()]), before);
+      const granularity = async (divisor) => {
+        await page.locator("#divisor").fill(String(divisor)); await page.locator("#divisor").dispatchEvent("input");
+        await page.evaluate(async () => { state.mosaicPreviewEnabled = true; await rebuildMosaicPreview(); });
+        await page.waitForFunction(() => !state.mosaicWorkerBusy && !state.mosaicPending);
+        return page.evaluate(() => {
+          const data = mosaicCtx.getImageData(0, 0, mosaicCanvas.width, 1).data; let changes = 0;
+          for (let x = 1; x < mosaicCanvas.width; x += 1) if (data[x * 4] !== data[(x - 1) * 4]) changes += 1;
+          return { changes, label: document.querySelector("#blockSizeValue").textContent };
+        });
+      };
+      await page.evaluate(() => { for (let x = 0; x < originalCanvas.width; x += 1) { originalCtx.fillStyle = `rgb(${x % 256},${(x * 3) % 256},${(x * 7) % 256})`; originalCtx.fillRect(x, 0, 1, originalCanvas.height); } releaseMosaicPreview(); state.mosaicPreviewEnabled = true; });
+      const coarse = await granularity(10); const fine = await granularity(100);
+      assert.notEqual(coarse.label, fine.label, "calculated pixel display changes with the divisor"); assert.ok(fine.changes > coarse.changes, "a finer divisor produces visibly finer mosaic blocks");
+      assert.deepEqual(await page.evaluate(() => [addCanvas.toDataURL(), exclusionCanvas.toDataURL(), exclusionEraseCanvas.toDataURL()]), before, "divisor changes preserve every mask layer");
     });
 
     await t.test("ED-018 mosaic help shows guideline links and returns to the editor", async () => {
-      await page.locator("#mosaicHelpButton").click(); assert.equal(await page.locator("#mosaicHelpDialog").evaluate((node) => node.open), true); assert.equal(await page.locator("#mosaicHelpDialog a").count(), 4);
+      await page.locator("#mosaicHelpButton").click(); assert.equal(await page.locator("#mosaicHelpDialog").evaluate((node) => node.open), true);
+      assert.match(await page.locator("#mosaicHelpDialog p").first().textContent(), /長辺の1\/100.*最低4 px/);
+      assert.deepEqual(await page.locator("#mosaicHelpDialog a").evaluateAll((links) => links.map((link) => ({ text: link.textContent, href: link.href, target: link.target, rel: link.rel }))), [
+        { text: "BOOTH", href: "https://booth.pm/guidelines", target: "_blank", rel: "noreferrer" },
+        { text: "pixiv", href: "https://www.pixiv.net/terms/?page=guideline", target: "_blank", rel: "noreferrer" },
+        { text: "FANZA", href: "https://terms.dmm.co.jp/doujin_regulation", target: "_blank", rel: "noreferrer" },
+        { text: "DLsite", href: "https://www.dlsite.com/home/mosaic", target: "_blank", rel: "noreferrer" },
+      ]);
       await page.locator("#mosaicHelpCloseButton").click(); assert.equal(await page.locator("#mosaicHelpDialog").evaluate((node) => node.open), false); assert.equal(await page.locator("#editorCanvas").isVisible(), true);
     });
   } finally {

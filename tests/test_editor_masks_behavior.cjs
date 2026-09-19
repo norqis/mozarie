@@ -322,7 +322,7 @@ assert.equal(test.buildCombinedMask(), "data:image/png;base64,mask");
 test.enableManualLayerForTool("exclude_eraser");
 assert.equal(state.manualExclusionEraseEnabled, true);
 
-nodeTest("editor masks, fill, candidates, and history", async () => {
+nodeTest("editor masks, fill, candidates, and history", async (t) => {
   await test.addBoundaryCandidate();
   assert.equal(state.boundaryDrafts.length, 0, "successful boundary detection consumes the submitted draft");
   assert.equal(state.images[0].candidateRevision, 8);
@@ -1241,6 +1241,48 @@ nodeTest("editor masks, fill, candidates, and history", async () => {
   deferredHistory[1]({ canUndo: false, canRedo: true }); await newerHistory;
   deferredHistory[0]({ canUndo: true, canRedo: false }); await olderHistory;
   assert.deepEqual({ ...state.projectHistory.get("image") }, { canUndo: false, canRedo: true }, "a late history response cannot overwrite the newer undo and redo state");
+
+  await t.test("ED-120 boundary read failure preserves state and a later normal image recovers", async () => {
+    const originalHooks = {
+      api: context.api,
+      boundaryRequests: context.boundaryRequests,
+      reconcileCurrentCandidates: context.reconcileCurrentCandidates,
+      showUserError: context.showUserError,
+      hasDurableHistory: context.hasDurableHistory,
+    };
+    state.currentId = "image"; state.currentImage = { width: 100, height: 80 }; state.imageGeneration = 2;
+    state.images = [{ id: "image", candidateRevision: 4, candidateCount: 0, enabledCandidateCount: 0 }];
+    state.project = null; state.projectReadOnly = false; state.importing = false; state.boundaryPending = false;
+    state.candidates = []; state.history = []; state.historyIndex = 0;
+    const draft = { id: "oom", type: "rectangle", roi: { left: 1, top: 1, right: 10, bottom: 10 } };
+    state.boundaryDrafts = [draft]; state.boundaryActiveId = draft.id;
+    context.boundaryRequests = () => [{ draft: state.boundaryDrafts[0], draftIds: ["oom"] }];
+    context.reconcileCurrentCandidates = async () => true;
+    context.hasDurableHistory = () => false;
+    const shownErrors = [];
+    context.showUserError = (error) => shownErrors.push(error?.code || error);
+    context.api = async () => {
+      const error = new Error("mask decode failed");
+      error.code = "image_read_failed";
+      throw error;
+    };
+
+    await test.addBoundaryCandidate();
+    assert.deepEqual(shownErrors, ["image_read_failed"], "a boundary input read failure keeps its specific user-facing error code");
+    assert.equal(state.boundaryDrafts.length, 1, "a failed boundary read keeps the draft available for retry");
+    assert.deepEqual(state.candidates, [], "a failed boundary read adds no candidate state");
+    assert.deepEqual(state.history, [], "a failed boundary read adds no history entry");
+    assert.equal(state.images[0].candidateRevision, 4, "a failed boundary read does not advance the candidate revision");
+    assert.equal(state.boundaryPending, false, "a failed boundary read releases the pending state");
+
+    context.api = async () => ({ candidates: [{ id: "recovered", role: "apply", enabled: true }], candidateRevision: 5 });
+    await test.addBoundaryCandidate();
+    assert.equal(state.boundaryDrafts.length, 0, "a later normal image request consumes the retained draft");
+    assert.equal(state.images[0].candidateRevision, 5, "a later normal image request advances candidate state");
+    assert.ok(state.history.some((entry) => entry.kind === "addCandidates" && entry.ids.includes("recovered")), "a later normal image request resumes ordinary boundary history");
+    assert.equal(state.boundaryPending, false, "the successful retry also releases the pending state");
+    Object.assign(context, originalHooks);
+  });
 
   state.project = null; state.projectHistory = new Map();
 });
