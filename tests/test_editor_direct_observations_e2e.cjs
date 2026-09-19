@@ -265,6 +265,34 @@ test("direct editor boundary and gesture observations", { timeout: 150000 }, asy
       }
     });
 
+    await t.test("ED-114.1 candidate toggle force padding and role batch are one button and shortcut history step", async () => {
+      for (const [index, scenario] of ["toggle", "forced", "padding", "batch"].entries()) {
+        await setup(page, fixture.url);
+        await page.evaluate(() => {
+          const mask = document.createElement("canvas"); mask.width = mask.height = 240; mask.getContext("2d").fillRect(20, 20, 20, 20);
+          state.candidates = [
+            { id: "apply", role: "apply", enabled: true, forced: false, expandPx: 0, color: "#fff", labelToken: "penis", confidence: .8 },
+            { id: "exclude", role: "exclude", enabled: true, forced: true, expandPx: 0, color: "#000", labelToken: "hand", confidence: .8 },
+          ];
+          state.candidateImages = new Map([["apply", mask], ["exclude", mask]]); state.removedCandidateIds = new Set(); resetHistoryToCurrentManualMask();
+          state.settings.shortcuts.bindings.undo = "Ctrl+Z"; state.settings.shortcuts.bindings.redo = "Ctrl+Shift+Z";
+          api = async () => ({ candidateRevision: Number(currentRecord().candidateRevision || 0) + 1 }); refreshCandidateBitmap = async () => true;
+          saveDraft = async () => {}; flushWorkspaceDraft = async () => {}; renderCandidates(); render();
+        });
+        if (scenario === "toggle") await page.locator('[data-candidate-blink-id="apply"] .candidate-toggle').click();
+        if (scenario === "forced") await page.locator('[data-candidate-blink-id="exclude"] .candidate-forced').click();
+        if (scenario === "padding") { await page.locator('[data-candidate-blink-id="apply"] .candidate-padding-button').click(); await page.locator("#candidatePaddingInput").fill("8"); await page.locator("#candidatePaddingConfirm").click(); }
+        if (scenario === "batch") await page.locator('[data-candidate-batch="apply:toggle"]').click();
+        await page.waitForFunction(() => state.history.length === 1 && state.historyIndex === 1 && state.candidateUpdateChains.size === 0 && state.candidateBatchPending.size === 0);
+        const edited = await page.evaluate(() => state.candidates.map(({ id, enabled, forced, expandPx }) => ({ id, enabled, forced, expandPx })));
+        if (index % 2) await page.keyboard.press("Control+Z"); else await page.locator("#undoButton").click();
+        await page.waitForFunction(() => state.historyIndex === 0 && !state.historyRestoreBusy);
+        if (index % 2) await page.locator("#redoButton").click(); else { await page.evaluate(() => focusCanvas()); await page.keyboard.press("Control+Shift+Z"); }
+        await page.waitForFunction(() => state.historyIndex === 1 && !state.historyRestoreBusy);
+        assert.deepEqual(await page.evaluate(() => state.candidates.map(({ id, enabled, forced, expandPx }) => ({ id, enabled, forced, expandPx }))), edited, `${scenario} candidate state round-trips exactly`);
+      }
+    });
+
     await t.test("ED-116.1 and ED-116.2 anonymous reviewed and hidden toggles round-trip through history and catalog state", async () => {
       await setup(page, fixture.url);
       await page.evaluate(() => {

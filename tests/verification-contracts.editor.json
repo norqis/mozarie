@@ -1678,7 +1678,8 @@
       "observation": "無名作業で手描き、塗りつぶし、候補ON/OFF・強制・枠・削除、役割別一括操作、境界候補、反転を各1回実行し、ボタンとCtrl+Z/Ctrl+Shift+Zで戻す → 各操作が1履歴で、ボタンとショートカットの双方で戻し直せる",
       "status": "automated",
       "testIds": [
-        "node:tests/test_editor_direct_observations_e2e.cjs::direct editor boundary and gesture observations > ED-114.1 anonymous drawing fill deletion boundary and flip are one history step with buttons and shortcuts"
+        "node:tests/test_editor_direct_observations_e2e.cjs::direct editor boundary and gesture observations > ED-114.1 anonymous drawing fill deletion boundary and flip are one history step with buttons and shortcuts",
+        "node:tests/test_editor_direct_observations_e2e.cjs::direct editor boundary and gesture observations > ED-114.1 candidate toggle force padding and role batch are one button and shortcut history step"
       ]
     },
     {
