@@ -471,9 +471,7 @@
       "observation": "保存画像と同じ向きで除外範囲を出力する",
       "status": "automated",
       "testIds": [
-        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_all_flip_combinations_preserve_dimensions_and_exact_pixel_coordinates",
-        "python:tests.test_project_export_mask_alpha.ProjectExportMaskAlphaTests.test_project_zip_export_uses_rgba_alpha_for_manual_mosaic_and_exclude_masks",
-        "python:tests.test_http_live_endpoints.LiveHttpEndpointTests.test_live_detect_edit_and_copy_save_preserves_png_metadata"
+        "python:tests.test_project_export_mask_alpha.ProjectExportMaskAlphaTests.test_project_zip_export_uses_rgba_alpha_for_manual_mosaic_and_exclude_masks"
       ]
     },
     {
@@ -969,8 +967,7 @@
       "observation": "未処理分を成功件数に含めず",
       "status": "automated",
       "testIds": [
-        "python:tests.test_server.MozarieTests.test_cancelled_or_failed_apply_reports_only_successfully_completed_images",
-        "node:tests/test_ui_operation_lifecycle_e2e.cjs::single and batch saves hold native controls, then complete or cancel through their real HTTP lifecycle"
+        "python:tests.test_server.MozarieTests.test_cancelled_or_failed_apply_reports_only_successfully_completed_images"
       ]
     },
     {
@@ -1137,7 +1134,6 @@
       "observation": "画素へ適用済みのOrientationは1にする",
       "status": "automated",
       "testIds": [
-        "python:tests.test_server.MozarieTests.test_jpeg_metadata_is_preserved_after_save",
         "python:tests.test_flip_export_contracts.FlipExportContractTests.test_original_jpeg_preserves_exif_and_icc_but_normalizes_orientation"
       ]
     },
@@ -1666,9 +1662,8 @@
       "observation": "出力寸法は回転後の向き",
       "status": "automated",
       "testIds": [
-        "python:tests.test_image_validation.InputImageValidationTests.test_pillow_pixel_guard_is_disabled_only_while_opening",
         "python:tests.test_server.MozarieTests.test_exif_rotated_jpeg_uses_normalized_mask_coordinates",
-        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_mosaic_pixels_and_image_are_flipped_together"
+        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_over_limit_oriented_jpeg_flip_keeps_mask_in_normalized_visible_coordinates"
       ]
     },
     {
@@ -1679,9 +1674,8 @@
       "observation": "EXIF Orientationは1になる",
       "status": "automated",
       "testIds": [
-        "python:tests.test_image_validation.InputImageValidationTests.test_pillow_pixel_guard_is_disabled_only_while_opening",
         "python:tests.test_server.MozarieTests.test_exif_rotated_jpeg_uses_normalized_mask_coordinates",
-        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_mosaic_pixels_and_image_are_flipped_together"
+        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_over_limit_oriented_jpeg_flip_keeps_mask_in_normalized_visible_coordinates"
       ]
     },
     {
