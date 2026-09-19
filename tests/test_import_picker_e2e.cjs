@@ -1013,14 +1013,18 @@ async function runCandidateBlinkScenario(browser, expanded = false) {
     assert.deepEqual(await page.evaluate(() => ({ list: document.querySelector("#candidateList").scrollTop, page: scrollY })), scrollBeforeArrows, "padding arrow keys do not scroll the candidate list or page");
     assert.equal(scenario.candidateUpdates.length, beforeInvalid, "repeated arrow keys never commit the draft");
     await paddingInput.fill(""); await page.keyboard.press("ArrowUp"); assert.equal(await paddingInput.inputValue(), "1", "ArrowUp recovers an invalid empty value from the persisted value");
+    await page.waitForFunction((id) => state.candidatePaddingPreviewImages?.has(id), scenario.candidateId);
+    assert.equal(scenario.candidateUpdates.length, beforeInvalid, "live padding preview does not persist before confirmation");
     await page.locator("#candidatePaddingReset").click();
     for (const invalid of ["0.1", "-1"]) {
       await paddingInput.fill(invalid); await page.locator("#candidatePaddingConfirm").click();
       assert.equal(await paddingInput.getAttribute("aria-invalid"), "true", `padding ${invalid} is exposed as invalid`);
       assert.equal(await paddingPopover.evaluate((node) => node.matches(":popover-open")), true, "invalid padding keeps the editor open");
       assert.equal(scenario.candidateUpdates.length, beforeInvalid, "invalid padding never reaches the candidate API");
+      assert.equal(await page.evaluate(() => state.candidatePaddingPreviewImages?.size || 0), 0, "invalid padding restores the persisted candidate display");
     }
     await page.keyboard.press("Escape");
+    assert.equal(await page.evaluate(() => state.candidatePaddingPreviewImages?.size || 0), 0, "Escape discards the live padding preview");
     assert.equal(await page.evaluate((id) => document.activeElement?.dataset.candidatePaddingId === id, scenario.candidateId), true, "Escape cancels and restores focus to the invoking row");
     await page.keyboard.press("Space"); assert.equal(await paddingPopover.evaluate((node) => node.matches(":popover-open")), true, "Space opens padding from the focused row button");
     await page.keyboard.press("Escape"); await page.keyboard.press("Enter"); assert.equal(await paddingPopover.evaluate((node) => node.matches(":popover-open")), true, "Enter opens padding from the focused row button");
@@ -1029,18 +1033,24 @@ async function runCandidateBlinkScenario(browser, expanded = false) {
     assert.equal(scenario.candidateUpdates.length, beforeInvalid + 1, "Enter commits padding exactly once");
     assert.equal(scenario.candidateUpdates.at(-1).update.expandPx, 1, "one-pixel padding is persisted in source-image pixels");
     await row.locator(".candidate-padding-button").click(); await paddingInput.fill(String(maximumPadding));
+    await page.waitForFunction((id) => state.candidatePaddingPreviewImages?.has(id), scenario.candidateId);
     await page.locator("#candidatePane .inspector-heading").click();
-    await page.waitForFunction((maximum) => state.candidates.find((item) => item.id === "candidate-blink-apply")?.expandPx === maximum, maximumPadding);
-    assert.equal(scenario.candidateUpdates.length, beforeInvalid + 2, "valid outside-click commits the maximum exactly once");
+    await page.waitForFunction(() => (state.candidatePaddingPreviewImages?.size || 0) === 0);
+    assert.equal(await page.evaluate(() => state.candidates.find((item) => item.id === "candidate-blink-apply")?.expandPx), 1, "outside-click restores the persisted padding instead of committing the preview");
+    assert.equal(scenario.candidateUpdates.length, beforeInvalid + 1, "outside-click never persists the padding preview");
     await row.locator(".candidate-padding-button").click(); await page.locator("#candidatePaddingReset").click(); await page.locator("#candidatePaddingConfirm").click();
     await page.waitForFunction(() => state.candidates.find((item) => item.id === "candidate-blink-apply")?.expandPx === 0);
-    assert.equal(scenario.candidateUpdates.length, beforeInvalid + 3, "reset and confirm commit zero exactly once");
+    assert.equal(scenario.candidateUpdates.length, beforeInvalid + 2, "reset and confirm commit zero exactly once");
     const batchPaddingUpdates = scenario.candidateUpdates.length;
     await page.locator('[data-candidate-padding-batch="apply"]').click();
     assert.equal(await paddingPopover.evaluate((node) => node.matches(":popover-open")), true, "the apply batch padding control opens the shared editor");
-    await paddingInput.fill("2"); await page.locator("#candidatePaddingConfirm").click();
+    await paddingInput.fill("2");
+    await page.waitForFunction(() => state.candidatePaddingPreviewImages?.size === 1);
+    assert.deepEqual(await page.evaluate(() => [...state.candidatePaddingPreviewImages.keys()]), ["candidate-blink-apply"], "batch live preview changes only candidates in the selected role");
+    await page.locator("#candidatePaddingConfirm").click();
     await page.waitForFunction(() => state.candidates.find((item) => item.id === "candidate-blink-apply")?.expandPx === 2);
     assert.equal(scenario.candidateUpdates.length, batchPaddingUpdates + 1, "batch padding makes one API request");
+    assert.equal(await page.evaluate(() => state.candidatePaddingPreviewImages?.size || 0), 0, "confirmed batch padding releases its temporary previews");
     assert.deepEqual(await page.evaluate(() => state.candidates.map((candidate) => [candidate.id, candidate.expandPx || 0])), [["candidate-blink-apply", 2], ["candidate-blink-exclude", 0]], "batch padding changes only candidates in its selected role");
     recordAnonymousControl('[data-candidate-padding-batch="apply"]');
     await page.locator('[data-candidate-padding-batch="exclude"]').click();
@@ -1308,12 +1318,12 @@ async function runDynamicProjectAndShortcutScenario(browser, fixtureUrl, setting
     await page.locator("#settingsButton").click();
     await page.locator("#settingsTabShortcuts").click();
     const shortcutKeys = ["previous", "next", "previousVisible", "nextVisible", "first", "last", "reviewAndNext", "removeImage", "renameImage", "toggleOverview", "undo", "redo"];
-    const shortcutBindings = Object.fromEntries(shortcutKeys.map((action, index) => [action, `Ctrl+Shift+Alt+${String.fromCharCode(65 + index)}`]));
+    const shortcutBindings = Object.fromEntries(shortcutKeys.map((action, index) => [action, `Ctrl+Shift+Alt+F${index + 1}`]));
     assert.equal(await page.locator("[data-shortcut-action]").count(), shortcutKeys.length, "shortcut settings renders the fixed twelve-action inventory");
     assert.deepEqual(await page.locator("[data-shortcut-action]").evaluateAll((inputs) => inputs.map((input) => input.dataset.shortcutAction)), shortcutKeys, "shortcut settings exposes every action in its documented order");
     for (const [index, action] of shortcutKeys.entries()) {
       const shortcut = page.locator(`[data-shortcut-action="${action}"]`);
-      await shortcut.focus(); await page.keyboard.press(`Control+Shift+Alt+${String.fromCharCode(65 + index)}`);
+      await shortcut.focus(); await page.keyboard.press(`Control+Shift+Alt+F${index + 1}`);
       assert.equal(await shortcut.inputValue(), shortcutBindings[action], `${action} records its exact keyboard binding through the public handler`);
     }
     recordDynamicControl("[data-shortcut-action]");

@@ -2919,7 +2919,8 @@ class CatalogMixin:
         mtime_ns, size_bytes = record.asset_fingerprint()
         return f"{mtime_ns}-{size_bytes}-{record.asset_revision}"
 
-    def read_candidate_mask_png(self, image_id: str, candidate_id: str, *, expected_revision: int | None = None) -> bytes:
+    def read_candidate_mask_png(self, image_id: str, candidate_id: str, *, expected_revision: int | None = None,
+                                expand_px_override: int | None = None) -> bytes:
         """Read one stable mask, then encode outside its per-image lock."""
         with self.image_io_lock(image_id):
             with self.lock:
@@ -2951,7 +2952,11 @@ class CatalogMixin:
         with open_image(io.BytesIO(raw_mask)) as mask_image:
             alpha_source = mask_image.getchannel("A") if mask_image.mode in {"RGBA", "LA"} else mask_image.convert("L")
             alpha = alpha_source.point(lambda value: 255 if value else 0)
-            alpha = Image.fromarray(expand_mask(np.asarray(alpha, dtype=np.uint8), candidate.expand_px))
+            expand_px = candidate.expand_px if expand_px_override is None else expand_px_override
+            max_expand_px = int(np.ceil(np.hypot(alpha.height - 1, alpha.width - 1)))
+            if isinstance(expand_px, bool) or not isinstance(expand_px, int) or expand_px < 0:
+                raise ClientError("候補の枠pxは0以上の整数で指定してください。", "input_invalid")
+            alpha = Image.fromarray(expand_mask(np.asarray(alpha, dtype=np.uint8), min(expand_px, max_expand_px)))
             rgba = Image.new("RGBA", alpha.size, (255, 255, 255, 0))
             rgba.putalpha(alpha)
             output = io.BytesIO()

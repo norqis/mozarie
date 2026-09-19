@@ -50,7 +50,7 @@ function syncDetectionFluidColorFill() {
 function syncDetectionActions() {
   const enabled = persistedDetectionTargets().length > 0 && !isBusy() && !state.importing && !catalogStagingEditsActive()
     && !state.projectReadOnly && !currentRecord()?.sourceDimensionsChanged && !currentImageActionPending();
-  $("#detectAllButton").disabled = !enabled || !processableImages().length;
+  $("#detectAllButton").disabled = !enabled || !allImageDetectionTargets().length;
   $("#detectCurrentButton").disabled = !enabled || !isProcessableImage(currentRecord());
 }
 
