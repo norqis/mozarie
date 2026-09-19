@@ -5114,7 +5114,7 @@ class MozarieTests(unittest.TestCase):
             self.assertEqual(list((state.cache_dir / image_id).glob("*.png")), [])
             self.assertEqual(list((state.cache_dir / image_id).glob("*.tmp")), [])
 
-    def test_boundary_candidate_keeps_hand_fluid_as_an_independent_exclusion(self):
+    def test_sd_143_boundary_exclusions_toggle_without_mutating_apply_or_manual_masks(self):
         class FakePredictor:
             def predict(self, **_kwargs):
                 masks = np.zeros((1, 12, 12), dtype=bool)
@@ -5142,6 +5142,20 @@ class MozarieTests(unittest.TestCase):
             self.assertEqual([candidate["source"] for candidate in candidates[1:]], ["hand_exclusion", "fluid_exclusion"])
             self.assertEqual([candidate["enabled"] for candidate in candidates], [True, True, True])
             self.assertTrue(all(candidate["origin"] == "boundary" for candidate in candidates))
+            apply = state.candidates[record.image_id][0]
+            exclusion = state.candidates[record.image_id][1]
+            apply_png = apply.mask_path.read_bytes()
+            manual_before = state.manual_workspace(record.image_id)
+            with_exclusions = state.combined_candidate_mask(record.image_id)
+            state.set_candidate_state(record.image_id, exclusion.candidate_id, {"enabled": False})
+            without_one_exclusion = state.combined_candidate_mask(record.image_id)
+            self.assertGreater(np.count_nonzero(without_one_exclusion), np.count_nonzero(with_exclusions))
+            self.assertTrue(state.candidates[record.image_id][0].enabled)
+            self.assertEqual(state.candidates[record.image_id][0].mask_path.read_bytes(), apply_png)
+            self.assertEqual(state.manual_workspace(record.image_id), manual_before)
+            state.set_candidate_state(record.image_id, exclusion.candidate_id, {"enabled": True})
+            self.assertTrue(np.array_equal(state.combined_candidate_mask(record.image_id), with_exclusions))
+            self.assertEqual(state.manual_workspace(record.image_id), manual_before)
 
     def test_sd_074_exclusion_default_applies_only_to_new_candidates(self):
         class FakePredictor:

@@ -1115,7 +1115,7 @@
       "observation": "APPLYと手のEXCLUDEを別々の候補として表示する",
       "status": "automated",
       "testIds": [
-        "python:tests.test_server.MozarieTests.test_boundary_candidate_keeps_hand_fluid_as_an_independent_exclusion"
+        "python:tests.test_server.MozarieTests.test_sd_143_boundary_exclusions_toggle_without_mutating_apply_or_manual_masks"
       ]
     },
     {
@@ -1126,7 +1126,7 @@
       "observation": "手だけをON/OFFしてもAPPLY候補の候補行・ON/OFF・手描き範囲を変えず、保存後のモザイク範囲だけを更新する",
       "status": "automated",
       "testIds": [
-        "python:tests.test_server.MozarieTests.test_boundary_candidate_keeps_hand_fluid_as_an_independent_exclusion"
+        "python:tests.test_server.MozarieTests.test_sd_143_boundary_exclusions_toggle_without_mutating_apply_or_manual_masks"
       ]
     },
     {
