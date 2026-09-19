@@ -2312,33 +2312,38 @@ class WorkspaceStore:
                 candidate_rows = iter(db.execute("""SELECT * FROM candidates
                     ORDER BY image_id,candidate_id"""))
                 manual_rows = iter(db.execute("SELECT * FROM manual_edits ORDER BY image_id"))
-                candidate = next(candidate_rows, None)
-                manual = next(manual_rows, None)
-                for image in images:
-                    image_id = str(image["image_id"])
-                    candidates: list[dict[str, Any]] = []
-                    while candidate is not None and str(candidate["image_id"]) == image_id:
-                        candidates.append({
-                            "id": str(candidate["candidate_id"]), "mask": candidate["mask_png"], "enabled": bool(candidate["enabled"]),
-                            "role": str(candidate["role"]), "forced": bool(candidate["forced"]), "expandPx": int(candidate["expand_px"] or 0),
-                        })
-                        candidate = next(candidate_rows, None)
-                    current_manual = manual if manual is not None and str(manual["image_id"]) == image_id else None
-                    if current_manual is not None:
-                        manual = next(manual_rows, None)
-                    yield {
-                        "image": {"id": image_id, "relativePath": str(image["relative_path"]),
-                                  "width": int(image["width"]), "height": int(image["height"]),
-                                  "sourceId": str(image["source_id"]), "sourceDisplay": str(image["display_name"]),
-                                  "flipH": bool(image["flip_horizontal"]), "flipV": bool(image["flip_vertical"])},
-                        "candidates": candidates,
-                        "manual": None if current_manual is None else {
-                            "add": current_manual["add_png"], "exclusion": current_manual["exclusion_png"], "erase": current_manual["exclusion_erase_png"],
-                            "manualEnabled": bool(current_manual["manual_enabled"]), "exclusionEnabled": bool(current_manual["exclusion_enabled"]),
-                            "eraseEnabled": bool(current_manual["exclusion_erase_enabled"]), "exclusionForced": bool(current_manual["exclusion_forced"]),
-                            "removed": str(current_manual["removed_candidate_ids"]),
-                        },
-                    }
+                try:
+                    candidate = next(candidate_rows, None)
+                    manual = next(manual_rows, None)
+                    for image in images:
+                        image_id = str(image["image_id"])
+                        candidates: list[dict[str, Any]] = []
+                        while candidate is not None and str(candidate["image_id"]) == image_id:
+                            candidates.append({
+                                "id": str(candidate["candidate_id"]), "mask": candidate["mask_png"], "enabled": bool(candidate["enabled"]),
+                                "role": str(candidate["role"]), "forced": bool(candidate["forced"]), "expandPx": int(candidate["expand_px"] or 0),
+                            })
+                            candidate = next(candidate_rows, None)
+                        current_manual = manual if manual is not None and str(manual["image_id"]) == image_id else None
+                        if current_manual is not None:
+                            manual = next(manual_rows, None)
+                        yield {
+                            "image": {"id": image_id, "relativePath": str(image["relative_path"]),
+                                      "width": int(image["width"]), "height": int(image["height"]),
+                                      "sourceId": str(image["source_id"]), "sourceDisplay": str(image["display_name"]),
+                                      "flipH": bool(image["flip_horizontal"]), "flipV": bool(image["flip_vertical"])},
+                            "candidates": candidates,
+                            "manual": None if current_manual is None else {
+                                "add": current_manual["add_png"], "exclusion": current_manual["exclusion_png"], "erase": current_manual["exclusion_erase_png"],
+                                "manualEnabled": bool(current_manual["manual_enabled"]), "exclusionEnabled": bool(current_manual["exclusion_enabled"]),
+                                "eraseEnabled": bool(current_manual["exclusion_erase_enabled"]), "exclusionForced": bool(current_manual["exclusion_forced"]),
+                                "removed": str(current_manual["removed_candidate_ids"]),
+                            },
+                        }
+                finally:
+                    images.close()
+                    candidate_rows.close()
+                    manual_rows.close()
 
     @staticmethod
     def _history_public_state(state: dict[str, Any]) -> dict[str, Any]:

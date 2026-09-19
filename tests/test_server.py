@@ -7097,6 +7097,14 @@ class MozarieTests(unittest.TestCase):
             Image.new("RGB", (10, 8), "white").save(replacement_raw, format="PNG")
             replacement_stage = root / "replacement.upload"
             replacement_stage.write_bytes(replacement_raw.getvalue())
+            complete_before = {
+                "catalog": state.catalog_snapshot(include_sources=True),
+                "transform": state.workspace_store.image_transform(image_id),
+                "candidateRevision": state._candidate_revision(image_id),
+                "workspace": state.workspace_store.export_state(image_id),
+            }
+            with state.workspace_store._connect() as db:
+                sources_before = db.execute("SELECT source_id,kind,source_identity FROM project_sources ORDER BY source_id").fetchall()
             with patch.object(state.workspace_store, "hydrate_candidates", side_effect=ValueError("injected hydrate failure")):
                 with self.assertRaisesRegex(ValueError, "injected hydrate failure"):
                     state.import_image_file_for_api(
@@ -7111,6 +7119,15 @@ class MozarieTests(unittest.TestCase):
                 "transformRevision": 37,
             })
             self.assertEqual(state.image_for_id(image_id).width, 8)
+            self.assertEqual({
+                "catalog": state.catalog_snapshot(include_sources=True),
+                "transform": state.workspace_store.image_transform(image_id),
+                "candidateRevision": state._candidate_revision(image_id),
+                "workspace": state.workspace_store.export_state(image_id),
+            }, complete_before)
+            with state.workspace_store._connect() as db:
+                self.assertEqual(db.execute("SELECT source_id,kind,source_identity FROM project_sources ORDER BY source_id").fetchall(), sources_before)
+            self.assertFalse(replacement_stage.exists())
 
     def test_browser_reimport_commits_an_external_source_transform_reset(self):
         with tempfile.TemporaryDirectory() as directory:

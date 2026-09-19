@@ -435,13 +435,26 @@ function catalogResponse(snapshot) {
   if (isCompleteCatalogSnapshot(snapshot) && typeof applyProjectSnapshot === "function") applyProjectSnapshot(snapshot);
   return snapshot;
 }
+function replaceCatalogSnapshot(snapshot, expectedProjectId) {
+  const images = snapshot.images || [];
+  const preservesEditor = (snapshot?.project?.id || null) === (expectedProjectId || null)
+    && Boolean(state.currentId && state.currentImage && images.some((image) => image.id === state.currentId));
+  if (!preservesEditor) { resetCatalog(images, snapshot.root || ""); return; }
+  const availableIds = new Set(images.map((image) => image.id));
+  for (const image of state.images.filter((image) => !availableIds.has(image.id))) {
+    releaseImageCaches(image.id); state.sourceAccess.delete(image.id); state.drafts.delete(image.id); state.maskStatus.delete(image.id);
+    clearReviewForRemovedImage(image); state.selectedImageIds.delete(image.id);
+  }
+  state.images = images;
+  loadReviewedPaths(); pruneSourceAccess(); renderCatalogViews(); updateSelectionActionBar(); updateNavigationControls(); updateActionButtons();
+}
 function reconcileCatalogSnapshot(snapshot, expectedProjectId, expectedCatalogGeneration) {
   const projectId = snapshot?.project?.id || null;
   const replaced = isCompleteCatalogSnapshot(snapshot)
     && (projectId !== (expectedProjectId || null) || snapshot.catalogGeneration !== expectedCatalogGeneration);
   catalogResponse(snapshot);
   if (replaced) {
-    resetCatalog(snapshot.images || [], snapshot.root || "");
+    replaceCatalogSnapshot(snapshot, expectedProjectId);
     applyProjectSnapshot(snapshot);
     state.missingNativeSources = typeof missingNativeSources === "function" ? missingNativeSources(snapshot.sources) : [];
     if (typeof restoreBrowserProjectSourcesForCurrentCatalog === "function") void restoreBrowserProjectSourcesForCurrentCatalog(snapshot.sources).catch(() => {});
@@ -479,11 +492,12 @@ async function catalogApi(path, payload = {}, options = {}) {
   }
 }
 async function resyncCatalog(epoch = state.catalogEpoch, signal = undefined) {
+  const currentProjectId = state.project?.id || null;
   const snapshot = await api("/api/images", { signal, resyncOnStale: false });
   if (!isCurrentCatalogEpoch(epoch)) return null;
   catalogResponse(snapshot);
   if (typeof flushPendingBrowserSaveAcks === "function") void flushPendingBrowserSaveAcks();
-  resetCatalog(snapshot.images || [], snapshot.root || "");
+  replaceCatalogSnapshot(snapshot, currentProjectId);
   applyProjectSnapshot(snapshot);
   state.missingNativeSources = typeof missingNativeSources === "function" ? missingNativeSources(snapshot.sources) : [];
   if (typeof restoreBrowserProjectSourcesForCurrentCatalog === "function") void restoreBrowserProjectSourcesForCurrentCatalog(snapshot.sources).catch(() => {});
@@ -505,7 +519,7 @@ async function syncCatalogOnReturn() {
     catalogResponse(snapshot);
     if (typeof flushPendingBrowserSaveAcks === "function") void flushPendingBrowserSaveAcks();
     if (changed) {
-      resetCatalog(snapshot.images || [], snapshot.root || "");
+      replaceCatalogSnapshot(snapshot, knownProjectId);
       state.missingNativeSources = typeof missingNativeSources === "function" ? missingNativeSources(snapshot.sources) : [];
       if (typeof restoreBrowserProjectSourcesForCurrentCatalog === "function") void restoreBrowserProjectSourcesForCurrentCatalog(snapshot.sources).catch(() => {});
     }

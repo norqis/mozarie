@@ -1143,8 +1143,12 @@ class CatalogMixin:
         """Compose a project ZIP one image at a time from raw workspace BLOBs."""
         if kind not in {"mosaic", "exclude"}:
             raise ClientError("マスク種別が正しくありません。", "input_invalid")
-        for state in self.workspace_store.iter_project_export_states(project_id):
-            yield state["image"], self._export_workspace_mask_raw(state, kind)
+        states = self.workspace_store.iter_project_export_states(project_id)
+        try:
+            for state in states:
+                yield state["image"], self._export_workspace_mask_raw(state, kind)
+        finally:
+            states.close()
 
     @staticmethod
     def _raw_workspace_mask(raw: bytes | None, width: int, height: int) -> np.ndarray | None:
@@ -2996,7 +3000,7 @@ class CatalogMixin:
                 candidates = [replace(item) for item in self.candidates.get(image_id, [])]
                 candidate = next((item for item in candidates if item.candidate_id == candidate_id), None)
                 if candidate is None:
-                    raise ClientError("検出候補が見つかりません。", "catalog_changed")
+                    raise ClientError("検出候補が見つかりません。", "candidate_not_found")
                 replace_snapshot = False
                 if "role" in payload:
                     if payload["role"] not in {"apply", "exclude"}:

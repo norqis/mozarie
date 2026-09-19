@@ -162,7 +162,10 @@ async function runDetection(imageIds, confidence = detectionConfidence(), parall
   }
   if (!imageIds.length || catalogStagingEditsActive() || (!state.detectionStarting && (isBusy() || state.importing))) return;
   if (!validateDetectionTargets(targetClasses, $("#detectionTargetValidation"))) return;
-  if (!state.detectionStarting) beginDetectionStart(imageIds);
+  const previousJob = state.job;
+  const previousDetectionTargetIds = [...(state.detectionTargetIds || [])];
+  const previousDetectCancelRequested = state.detectCancelRequested;
+  state.detectionStarting = true;
   updateActionButtons();
   try {
     if (!prepared) {
@@ -173,10 +176,15 @@ async function runDetection(imageIds, confidence = detectionConfidence(), parall
     const payload = { imageIds, confidence, parallelism: Math.max(1, Math.round(parallelism)), targetClasses };
     if (fluidColorFill) Object.assign(payload, fluidColorFill);
     await api("/api/detect", { method: "POST", body: JSON.stringify(payload) });
-    state.detectionTargetIds = [...imageIds];
-    state.detectCancelRequested = false;
+    beginDetectionStart(imageIds);
     updateProgress(state.job); setStatusKey("status.detectStarted", {}, "running");
-  } catch (error) { failDetectionStart(error); }
+  } catch (error) {
+    state.job = previousJob;
+    state.detectionTargetIds = previousDetectionTargetIds;
+    state.detectCancelRequested = previousDetectCancelRequested;
+    if (state.job) updateProgress(state.job);
+    showUserError(error);
+  }
   finally { state.detectionStarting = false; updateActionButtons(); }
 }
 
@@ -187,15 +195,6 @@ function beginDetectionStart(imageIds) {
   state.job = { kind: "detect", state: "running", total: imageIds.length, completed: 0, processed: 0, current: "", imageIds: [...imageIds], completedImageIds: [] };
   showProcessing(state.job);
   updateProgress(state.job);
-}
-
-function failDetectionStart(error) {
-  state.job = { kind: "detect", state: "idle", total: 0, completed: 0, current: "" };
-  state.detectionTargetIds = [];
-  state.detectCancelRequested = false;
-  closeProcessing();
-  updateProgress(state.job);
-  showUserError(error);
 }
 
 async function startDetectionFromDialog(event) {
@@ -241,7 +240,8 @@ async function startDetectionFromDialog(event) {
     setDetectionDialogSubmitting(false);
     $("#detectDialog").close();
     resetDetectionDialogState();
-    beginDetectionStart(imageIds);
+    state.detectionStarting = true;
+    updateActionButtons();
     await runDetection(imageIds, confidence, parallelism, targetClasses, {
       fluidColorFillEnabled,
       fluidColorFillTolerance,

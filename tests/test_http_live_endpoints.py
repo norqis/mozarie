@@ -187,6 +187,22 @@ class LiveHttpEndpointTests(unittest.TestCase):
         self.assertEqual(status, 404)
         self.assertEqual(json.loads(body)["error_code"], "api_not_found")
 
+    def test_public_api_has_no_relative_path_partial_delete_route(self) -> None:
+        """DI-243.1: deletion accepts opaque image IDs, never path fragments."""
+        status, _headers, body = self.request("POST", "/api/folder", {"path": str(self.source_dir)}, authorized=True)
+        self.assertEqual(status, 200, body.decode("utf-8"))
+        image_id = json.loads(body)["images"][0]["id"]
+        for method, route in (
+            ("DELETE", "/api/catalog/path/source.png"),
+            ("POST", "/api/catalog/delete-relative-path"),
+            ("POST", "/api/project/image/source.png/delete"),
+        ):
+            status, _headers, response = self.request(method, route, {"relativePath": "source.png"}, authorized=True)
+            self.assertEqual(status, 404, (method, route, response.decode("utf-8")))
+            self.assertEqual(json.loads(response)["error_code"], "api_not_found")
+        self.assertEqual([item["id"] for item in self.state.list_images()], [image_id])
+        self.assertTrue((self.source_dir / "source.png").is_file())
+
     def test_delete_json_body_is_fully_consumed_before_the_next_request(self) -> None:
         _status, _headers, body = self.request("POST", "/api/folder", {"path": str(self.source_dir)}, authorized=True)
         image_id = json.loads(body)["images"][0]["id"]
@@ -391,7 +407,8 @@ class LiveHttpEndpointTests(unittest.TestCase):
 
         failed = "00000000-0000-4000-8000-000000000104"
         begin(failed, ["add"]); layer(failed, "add", layers["add"])
-        with patch.object(self.state, "save_manual_workspace", side_effect=ClientError("保存に失敗しました。", "workspace_write_failed")):
+        with patch.object(self.state, "save_manual_workspace", side_effect=ClientError("保存に失敗しました。", "workspace_write_failed")), \
+             self.assertLogs("mozarie", level="WARNING") as failure_log:
             status, _headers, response = self.request(
                 "POST", f"/api/workspace/manual/{image_id}/commit", {**base_payload, "sessionId": failed}, authorized=True,
             )
@@ -399,6 +416,7 @@ class LiveHttpEndpointTests(unittest.TestCase):
         self.assertEqual(json.loads(response)["error_code"], "workspace_write_failed")
         self.assertNotIn(failed, self.state._manual_uploads)
         self.assertEqual(self.state.manual_workspace(image_id)["add"], persisted["add"])
+        self.assertTrue(any("error_code=workspace_write_failed" in line and "所要=" in line for line in failure_log.output))
 
         retry = "00000000-0000-4000-8000-000000000105"
         begin(retry, ["add"]); layer(retry, "add", layers["add"])
@@ -414,6 +432,11 @@ class LiveHttpEndpointTests(unittest.TestCase):
         status, _headers, body = self.request("POST", "/api/folder", {"path": str(self.source_dir)}, authorized=True)
         self.assertEqual(status, 200, body.decode("utf-8"))
         image_id = json.loads(body)["images"][0]["id"]
+        before = {
+            "catalog": self.state.catalog_snapshot(include_sources=True),
+            "workspace": self.state.workspace_store.export_state(image_id),
+            "projects": self.state.projects(),
+        }
         with warnings.catch_warnings():
             warnings.simplefilter("error", DeprecationWarning)
             status, headers, body = self.request("GET", f"/api/project/mask/{image_id}/mosaic")
@@ -421,6 +444,11 @@ class LiveHttpEndpointTests(unittest.TestCase):
         self.assertEqual(headers["Content-Type"], "image/png")
         with Image.open(io.BytesIO(body)) as mask:
             self.assertEqual((mask.mode, mask.size), ("L", (12, 8)))
+        self.assertEqual({
+            "catalog": self.state.catalog_snapshot(include_sources=True),
+            "workspace": self.state.workspace_store.export_state(image_id),
+            "projects": self.state.projects(),
+        }, before, "warnings-as-errors export preserves the complete project state")
 
     def test_source_delete_rejects_a_same_fingerprint_foreign_replacement(self) -> None:
         status, _headers, body = self.request("POST", "/api/folder", {"path": str(self.source_dir)}, authorized=True)
@@ -452,6 +480,27 @@ class LiveHttpEndpointTests(unittest.TestCase):
         self.assertEqual(source.read_bytes(), bytes(foreign_bytes))
         self.assertFalse(any(self.source_dir.glob(".source.png.mozarie-delete-*")))
 
+    def test_source_delete_commit_failure_is_written_to_cmd_log(self) -> None:
+        """DI-230.2: a server-reached commit exception is logged with its safe code."""
+        status, _headers, body = self.request("POST", "/api/folder", {"path": str(self.source_dir)}, authorized=True)
+        self.assertEqual(status, 200, body.decode("utf-8"))
+        image_id = json.loads(body)["images"][0]["id"]
+        token = "00000000-0000-4000-8000-000000230201"
+        for route, payload in (
+            ("/api/catalog/delete-source/prepare", {"imageIds": [image_id], "deleteToken": token}),
+            ("/api/catalog/delete-source/claim", {"deleteToken": token}),
+        ):
+            status, _headers, body = self.request("POST", route, payload, authorized=True)
+            self.assertEqual(status, 200, body.decode("utf-8"))
+        with patch.object(self.state, "delete_images_with_sources", side_effect=ClientError("commit failed", "workspace_write_failed")), \
+             self.assertLogs("mozarie", level="WARNING") as captured:
+            status, _headers, body = self.request("POST", "/api/catalog/delete-source", {
+                "imageIds": [image_id], "deleteToken": token, "browserDeletedImageIds": [],
+            }, authorized=True)
+        self.assertEqual(status, 400)
+        self.assertEqual(json.loads(body)["error_code"], "workspace_write_failed")
+        self.assertTrue(any("操作失敗: 元画像を完全削除" in line and "error_code=workspace_write_failed" in line and "所要=" in line for line in captured.output))
+
     def test_save_reserve_requires_a_canonical_uuid_token(self) -> None:
         status, _headers, body = self.request("POST", "/api/folder", {"path": str(self.source_dir)}, authorized=True)
         self.assertEqual(status, 200, body.decode("utf-8") if status != 200 else "")
@@ -471,6 +520,22 @@ class LiveHttpEndpointTests(unittest.TestCase):
         status, _headers, body = self.request("POST", "/api/folder", {"path": str(self.source_dir)}, authorized=True)
         self.assertEqual(status, 200, body.decode("utf-8") if status != 200 else "")
         image_id = json.loads(body)["images"][0]["id"]
+        mask_path = self.state.cache_dir / image_id / "stable-render.png"
+        mask_path.parent.mkdir(parents=True, exist_ok=True)
+        Image.new("L", (12, 8), 255).save(mask_path)
+        with self.state.image_io_lock(image_id), self.state.lock:
+            self.state._commit_candidate_snapshot(
+                image_id,
+                [Candidate("stable-render", "penis", .9, mask_path)],
+                replace=True,
+            )
+        self.state.set_candidate_state(image_id, "stable-render", {"enabled": False})
+        self.state.set_image_flags(image_id, {"reviewed": True})
+        state_before_render = {
+            "catalog": self.state.catalog_snapshot(include_sources=True),
+            "candidate": self.state.candidate_snapshot(image_id),
+            "reviewed": self.state.images[image_id].reviewed,
+        }
         client_save_token = "00000000-0000-4000-8000-000000000001"
         status, _headers, body = self.request("POST", "/api/save/reserve", {
             "imageId": image_id,
@@ -481,21 +546,52 @@ class LiveHttpEndpointTests(unittest.TestCase):
             "keepMetadata": True,
         }, authorized=True)
         self.assertEqual(status, 200, body.decode("utf-8") if status != 200 else "")
-        status, headers, body = self.request("POST", "/api/save/render", {
-            "imageId": image_id,
-            "candidateRevision": self.state._candidate_revision(image_id),
-            "clientSaveToken": client_save_token,
-            "divisor": 100,
-            "draft": None,
-            "copyToDefault": False,
-            "format": "original",
-            "keepMetadata": True,
-        }, authorized=True)
+        response_paths: list[Path] = []
+        original_render = self.state.render_browser_save
+
+        def capture_render(*args, **kwargs):
+            rendered = original_render(*args, **kwargs)
+            if rendered.response_path is not None:
+                response_paths.append(rendered.response_path)
+            return rendered
+
+        with patch.object(self.state, "render_browser_save", side_effect=capture_render):
+            status, headers, body = self.request("POST", "/api/save/render", {
+                "imageId": image_id,
+                "candidateRevision": self.state._candidate_revision(image_id),
+                "clientSaveToken": client_save_token,
+                "divisor": 100,
+                "draft": None,
+                "copyToDefault": False,
+                "format": "original",
+                "keepMetadata": True,
+            }, authorized=True)
         self.assertEqual(status, 200, body.decode("utf-8") if status != 200 else "")
         self.assertEqual(headers["Content-Type"], "image/png")
         self.assertTrue(headers.get("X-Mozarie-Save-Token"))
+        with self.assertLogs("mozarie", level="INFO") as status_log:
+            status_code, _status_headers, status_body = self.request("POST", "/api/save/status", {
+                "imageId": image_id,
+                "candidateRevision": self.state._candidate_revision(image_id),
+                "saveToken": headers["X-Mozarie-Save-Token"],
+                "sourceAction": "overwrite",
+            }, authorized=True)
+        self.assertEqual(status_code, 200, status_body.decode("utf-8"))
+        self.assertTrue(any("操作開始: ブラウザー保存状態確認" in line for line in status_log.output))
+        self.assertTrue(any("操作完了: ブラウザー保存状態確認" in line and "所要=" in line for line in status_log.output))
         with Image.open(io.BytesIO(body)) as rendered:
             self.assertEqual((rendered.mode, rendered.size), ("RGB", (12, 8)))
+        self.assertTrue(response_paths)
+        for _ in range(50):
+            if all(not path.exists() for path in response_paths):
+                break
+            time.sleep(.01)
+        self.assertTrue(all(not path.exists() for path in response_paths), "response completion removes every temporary render")
+        self.assertEqual({
+            "catalog": self.state.catalog_snapshot(include_sources=True),
+            "candidate": self.state.candidate_snapshot(image_id),
+            "reviewed": self.state.images[image_id].reviewed,
+        }, state_before_render, "streaming the response does not mutate image, candidate, or review state")
 
     def test_live_edited_name_moves_native_source_only_after_overwrite_and_reopens_canonically(self) -> None:
         status, _headers, body = self.request("POST", "/api/projects", {"name": "Edited HTTP save"}, authorized=True)
@@ -722,6 +818,9 @@ class LiveHttpEndpointTests(unittest.TestCase):
         }, authorized=True)
         self.assertEqual(status, 200, body.decode("utf-8") if status != 200 else "")
         self.assertTrue(self.state.manual_workspace(image_id)["add"].startswith("data:image/png;base64,"))
+        self.state.set_image_flags(image_id, {"reviewed": True})
+        history_before_save = self.state.workspace_store.history_status(image_id)
+        self.assertTrue(history_before_save["canUndo"])
 
         client_token = "00000000-0000-4000-8000-000000000021"
         save_options = {
@@ -763,6 +862,8 @@ class LiveHttpEndpointTests(unittest.TestCase):
             reopened_manual = reopened.manual_workspace(image_id)
             self.assertIsNotNone(reopened_manual)
             self.assertTrue(reopened_manual["add"].startswith("data:image/png;base64,"))
+            self.assertTrue(reopened.images[image_id].reviewed)
+            self.assertEqual(reopened.workspace_store.history_status(image_id), history_before_save)
         finally:
             reopened.shutdown()
 

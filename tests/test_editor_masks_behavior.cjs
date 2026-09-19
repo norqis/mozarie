@@ -137,8 +137,8 @@ const state = {
 let latestFillWorker = null;
 class FillWorker {
   constructor(url) { this.url = url; latestFillWorker = this; }
-  postMessage(payload, transfers) { this.payload = payload; this.transfers = transfers; }
-  terminate() { this.terminated = true; }
+  postMessage(payload, transfers) { this.payload = payload; this.transfers = transfers; this.ownedBuffers = transfers.length; }
+  terminate() { this.terminated = true; this.ownedBuffers = 0; }
 }
 
 const context = {
@@ -832,6 +832,8 @@ nodeTest("editor masks, fill, candidates, and history", async (t) => {
   assert.deepEqual(context.fillUiRefreshes, ["candidates", "actions"], "starting a fill immediately locks every candidate and action control");
   latestFillWorker.onmessage({ data: { spans: [2, 3, 7] } });
   assert.equal(state.fillPending, false, "worker completion clears the pending fill flag");
+  assert.equal(latestFillWorker.terminated, true, "completed fill terminates its worker");
+  assert.equal(latestFillWorker.ownedBuffers, 0, "completed fill retains no transferred pixel buffer");
   assert.equal(state.history.at(-1).tool, "bucket", "worker completion adds an undoable bucket operation");
   assert.deepEqual(context.fillUiRefreshes.slice(-2), ["candidates", "actions"], "fill completion immediately unlocks every candidate and action control");
   state.manualEnabled = false; state.manualExclusionEnabled = false; state.manualExclusionEraseEnabled = false;
@@ -1020,10 +1022,15 @@ nodeTest("editor masks, fill, candidates, and history", async (t) => {
   state.images = [{ id: "image", assetVersion: "a" }];
   state.manualEnabled = false; state.manualExclusionEnabled = false; state.manualExclusionEraseEnabled = false;
   const staleFillHistoryLength = state.history.length; context.fillUiRefreshes.length = 0;
+  const staleLayerPixels = [addCtx.pixels, exclusionCtx.pixels, exclusionEraseCtx.pixels];
   test.fillAt({ x: 4, y: 4 }, "exclude_bucket");
   const staleWorker = latestFillWorker; state.currentId = "other";
   staleWorker.onmessage({ data: { spans: [1, 1, 3] } });
   assert.equal(state.fillPending, false, "a fill result from another image is discarded");
+  assert.equal(staleWorker.terminated, true, "discarding an old-image fill terminates its worker");
+  assert.equal(staleWorker.ownedBuffers, 0, "discarding an old-image fill retains no transferred source pixel buffer");
+  assert.equal(state.fillWorker, null, "stale fill completion leaves no worker owner");
+  assert.deepEqual([addCtx.pixels, exclusionCtx.pixels, exclusionEraseCtx.pixels], staleLayerPixels, "stale fill completion leaves every pixel layer unchanged");
   assert.deepEqual([state.manualEnabled, state.manualExclusionEnabled, state.manualExclusionEraseEnabled], [false, false, false], "a stale fill result leaves every manual layer flag unchanged");
   assert.equal(state.history.length, staleFillHistoryLength, "a stale fill result does not create a history operation");
   assert.deepEqual(context.fillUiRefreshes, ["candidates", "actions", "candidates", "actions"], "a stale fill result only refreshes controls when its pending state clears");

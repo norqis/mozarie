@@ -448,6 +448,8 @@ async function recoverPendingBrowserDeletes(pending) {
 async function resumePendingSourceDeletes(requestPermission = false) {
   const pendingDeletes = await pendingSourceDeletes();
   if (!pendingDeletes.length) return;
+  const pendingImageIds = new Set(pendingDeletes.flatMap((pending) => pending.imageIds || []));
+  const recoverySelection = deletionSelectionSnapshot(pendingImageIds, galleryFilteredImages());
   for (const pending of pendingDeletes) {
     try {
       let status;
@@ -515,7 +517,11 @@ async function resumePendingSourceDeletes(requestPermission = false) {
       // Keep prepared and cleanup-pending operations until a terminal receipt is acknowledged.
     }
   }
-  await resyncCatalog().catch(() => null);
+  const snapshot = await resyncCatalog().catch(() => null);
+  if (snapshot) {
+    await restoreDeletionSelection(recoverySelection, pendingImageIds);
+    if (!state.currentImage && state.images[0]) await selectImage(state.images[0].id, true, { saveCurrentDraft: false });
+  }
 }
 
 async function resumePendingSourceDeletesFromUser() {
@@ -607,7 +613,7 @@ async function permanentlyDeleteImages(images, visibleImages) {
   } catch (error) {
     await restoreDeletionSelection(selection, imageIds);
     showUserError(error);
-  } finally { state.catalogMutation = false; updateActionButtons(); }
+  } finally { state.catalogMutation = false; updateActionButtons(); updateSelectionActionBar(); }
 }
 
 async function removeImageFromCatalog(imageId = state.contextMenuImageId) {

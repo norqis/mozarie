@@ -230,6 +230,50 @@ class ProjectHttpCoverageTests(unittest.TestCase):
         expected = apply.copy(); expected[exclude > 0] = 0
         self.assertTrue(np.array_equal(actual, expected), "single mosaic export subtracts the exclusion mask pixel-for-pixel")
 
+    def test_project_mask_zip_keeps_same_named_images_from_distinct_sources_identifiable(self) -> None:
+        first = self.root / "first-source"
+        second = self.root / "second-source"
+        first.mkdir(); second.mkdir()
+        Image.new("RGB", (12, 8), "red").save(first / "same.png")
+        Image.new("RGB", (12, 8), "blue").save(second / "same.png")
+        project = self.state.create_project("same-name masks")
+        first_id = self.state.set_root(str(first))[0]["id"]
+        second_path = second / "same.png"
+        second_stat = second_path.stat()
+        second_source = self.state.workspace_store.ensure_project_source(
+            project["id"], kind="native-folder", display_name=second.name, identity=str(second.resolve()),
+        )
+        self.state.workspace_store.reconcile_images(project["id"], [SimpleNamespace(
+            relative_path="same.png", size_bytes=second_stat.st_size, mtime_ns=second_stat.st_mtime_ns,
+            width=12, height=8,
+        )], second_source)
+        self.state.open_project(project["id"])
+        ids = {self.state.image_for_id(item["id"]).path.parent.name: item["id"] for item in self.state.list_images()}
+        self.assertEqual(set(ids), {"first-source", "second-source"})
+        for source_name, pixel in (("first-source", (1, 1)), ("second-source", (9, 5))):
+            image_id = ids[source_name]
+            mask_path = self.state.cache_dir / image_id / "same-mask.png"
+            mask_path.parent.mkdir(parents=True, exist_ok=True)
+            mask = Image.new("L", (12, 8), 0); mask.putpixel(pixel, 255); mask.save(mask_path)
+            with self.state.image_io_lock(image_id):
+                with self.state.lock:
+                    self.state._commit_candidate_snapshot(image_id, [Candidate("same-mask", "penis", .9, mask_path)], replace=True)
+
+        status, _headers, body = self.request("GET", f"/api/project/masks/{project['id']}/mosaic")
+        self.assertEqual(status, 200)
+        with zipfile.ZipFile(io.BytesIO(body)) as archive:
+            names = archive.namelist()
+            self.assertEqual(len(names), 2)
+            self.assertEqual(len(set(names)), 2)
+            self.assertTrue(all(name.endswith("/same.png.mosaic.png") for name in names))
+            self.assertTrue(any(name.startswith("first-source-") for name in names))
+            self.assertTrue(any(name.startswith("second-source-") for name in names))
+            boxes = {}
+            for name in names:
+                with Image.open(io.BytesIO(archive.read(name))) as mask:
+                    boxes[name.split("-", 1)[0]] = mask.convert("L").getbbox()
+            self.assertEqual(boxes, {"first": (1, 1, 2, 2), "second": (9, 5, 10, 6)})
+
     def test_project_switch_restores_only_its_durable_candidate_manual_history_and_flags(self) -> None:
         project_a, image_a = self.create_and_load("A")
         mask_path = self.state.cache_dir / image_a / "candidate.png"
