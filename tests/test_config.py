@@ -256,7 +256,25 @@ class SettingsTests(unittest.TestCase):
         settings = validate_settings(legacy)
         self.assertTrue(settings["shortcuts"]["actions"]["previousVisible"])
         self.assertEqual(settings["shortcuts"]["bindings"]["nextVisible"], "ArrowDown")
+        self.assertEqual(settings["shortcuts"]["bindings"]["removeImage"], "Delete")
+        self.assertTrue(settings["shortcuts"]["actions"]["removeImage"])
         self.assertTrue(settings["confirmations"]["candidateDelete"])
+
+    def test_legacy_delete_binding_migration_avoids_an_existing_delete_key(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); config = root / "config"; config.mkdir()
+            defaults = default_settings(); (config / "defaults.json").write_text(json.dumps(defaults), encoding="utf-8")
+            legacy = {"shortcuts": {"bindings": {
+                key: value for key, value in defaults["shortcuts"]["bindings"].items() if key != "removeImage"
+            }, "actions": {
+                key: value for key, value in defaults["shortcuts"]["actions"].items() if key != "removeImage"
+            }}}
+            legacy["shortcuts"]["bindings"]["previous"] = "Delete"
+            (config / "local.json").write_text(json.dumps(legacy), encoding="utf-8")
+            settings = SettingsStore(root).load()
+            self.assertEqual(settings["shortcuts"]["bindings"]["previous"], "Delete")
+            self.assertEqual(settings["shortcuts"]["bindings"]["removeImage"], "Ctrl+Delete")
+            self.assertFalse(settings["shortcuts"]["actions"]["removeImage"])
 
     def test_failed_atomic_replace_keeps_the_previous_local_json(self):
         with tempfile.TemporaryDirectory() as directory:

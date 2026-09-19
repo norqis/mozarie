@@ -429,3 +429,38 @@ nodeTest("settings, model pickers, and download state", async () => {
   await context.settingsTest.startUpdate();
   assert.equal(updateStarted, true, "confirmed updates start the update request");
 });
+
+nodeTest("SD-064 model preparation dialog preserves the selected model value", () => {
+  element("#settingsNtd11Model").value = "G:\\models\\ntd11.onnx";
+  context.settingsTest.showUnsupportedModelDownload("ntd11");
+  assert.equal(element("#settingsNtd11Model").value, "G:\\models\\ntd11.onnx");
+});
+
+nodeTest("SD-066 model download confirmation identifies its target and start action", () => {
+  element("#settingsSamType").value = "vit_b";
+  context.settingsTest.modelDownloadConfirmation("sam");
+  assert.equal(element("#modelDownloadStart").hidden, false);
+  assert.equal(element("#modelDownloadActions").hidden, false);
+});
+
+nodeTest("SD-067 completed model download publishes the acquired path", () => {
+  context.settingsTest.renderModelDownload({ state: "complete", expected: 1, received: 1, completed: 1, total: 1, paths: { hand_detection: "G:\\models\\hand.onnx" } });
+  assert.equal(element("#settingsHandModel").value, "G:\\models\\hand.onnx");
+  assert.equal(element("#modelDownloadCancel").hidden, true);
+});
+
+nodeTest("SD-068 cancelled model download never publishes an unfinished path", () => {
+  element("#settingsHandModel").value = "";
+  context.settingsTest.renderModelDownload({ state: "cancelled", expected: 10, received: 4, completed: 0, total: 1, paths: {} });
+  assert.equal(element("#settingsHandModel").value, "");
+  assert.equal(element("#modelDownloadCancel").hidden, true);
+});
+
+nodeTest("SD-069 model download polling failure is visible and leaves no acquired path", async () => {
+  element("#settingsHandModel").value = "";
+  const before = errors.length;
+  context.api = async () => { throw new Error("download status failed"); };
+  await context.settingsTest.refreshModelDownload();
+  assert.equal(errors.length, before + 1);
+  assert.equal(element("#settingsHandModel").value, "");
+});

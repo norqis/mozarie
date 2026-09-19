@@ -86,3 +86,40 @@ test("SD-054 cancelling the all-image dialog starts no detection", { timeout: 60
     assert.equal(await page.evaluate(() => state.processing), null);
   });
 });
+
+test("SD-127 detection dialog persists distinct apply and exclusion padding", { timeout: 60000 }, async () => {
+  await withPage(async (page, fixture) => {
+    await page.locator("#detectAllButton").click();
+    await page.locator("#detectCandidatePadding").fill("3");
+    await page.locator("#detectExcludeCandidatePadding").fill("11");
+    assert.deepEqual(await page.locator("#detectForm").evaluate(() => [
+      document.querySelector("#detectCandidatePadding").value,
+      document.querySelector("#detectExcludeCandidatePadding").value,
+    ]), ["3", "11"]);
+    await page.locator("#detectStartButton").click();
+    await page.waitForFunction(() => state.processing?.kind === "detect" || state.job?.kind === "detect");
+    const detection = fixture.settingsPayloads.at(-1).body.detection;
+    assert.equal(detection.default_candidate_padding_px, 3);
+    assert.equal(detection.default_exclude_candidate_padding_px, 11);
+  });
+});
+
+test("SD-131 invalid padding blocks detection while zero remains valid", { timeout: 60000 }, async () => {
+  await withPage(async (page, fixture) => {
+    await page.locator("#detectAllButton").click();
+    const before = fixture.detectRequests.length;
+    for (const invalid of ["-1", "1.5", ""]) {
+      await page.locator("#detectCandidatePadding").fill(invalid);
+      await page.evaluate(() => startDetectionFromDialog({ preventDefault() {} }));
+      assert.equal(fixture.detectRequests.length, before);
+      assert.equal(await page.locator("#detectCandidatePadding").getAttribute("aria-invalid"), "true");
+    }
+    await page.locator("#detectCandidatePadding").fill("0");
+    await page.locator("#detectExcludeCandidatePadding").fill("0");
+    await page.locator("#detectStartButton").click();
+    await page.waitForFunction(() => state.processing?.kind === "detect" || state.job?.kind === "detect");
+    const detection = fixture.settingsPayloads.at(-1).body.detection;
+    assert.equal(detection.default_candidate_padding_px, 0);
+    assert.equal(detection.default_exclude_candidate_padding_px, 0);
+  });
+});

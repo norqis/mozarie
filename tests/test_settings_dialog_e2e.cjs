@@ -64,6 +64,45 @@ test("SD-004 detection tab exposes every model switch help and preparation actio
   });
 });
 
+function assertModelHelp(key, { model, file, command = false, samTable = false, source = true }) {
+  return async () => {
+    await withSettingsPage(async (page) => {
+      await page.locator('[data-settings-tab="models"]').click();
+      await page.locator(`[data-model-help="${key}"]`).click();
+      await page.waitForFunction(() => document.querySelector("#modelHelpDialog").open);
+      assert.match(await page.locator("#modelHelpModel").textContent(), model);
+      assert.match(await page.locator("#modelHelpFile").textContent(), file);
+      assert.equal((await page.locator("#modelHelpText").textContent()).trim().length > 0, true);
+      assert.equal(await page.locator("#modelHelpCommandWrap").isHidden(), !command);
+      assert.equal(await page.locator("#modelHelpSamTable").isHidden(), !samTable);
+      if (samTable) assert.equal(await page.locator("#modelHelpSamTable tbody tr").count(), 3);
+      assert.equal(await page.locator("#modelHelpSource").locator("xpath=..").isHidden(), !source);
+    });
+  };
+}
+test("SD-063 target help shows purpose official model ONNX format and source", { timeout: 60000 }, assertModelHelp("target", { model: /anime-nsfw-segm-yolo26/i, file: /ONNX/i }));
+test("SD-097 NTD11 help shows source and conversion command", { timeout: 60000 }, assertModelHelp("ntd11", { model: /Anime NSFW Detection/i, file: /ONNX/i, command: true }));
+test("SD-098 Sensitive help shows source and conversion command", { timeout: 60000 }, assertModelHelp("sensitive", { model: /sensitive/i, file: /ONNX/i, command: true }));
+test("SD-099 SAM help shows source and all three variant rows", { timeout: 60000 }, assertModelHelp("precision", { model: /Segment Anything/i, file: /\.pth/i, samTable: true }));
+test("SD-100 hand detection help shows whole-image model and ONNX source", { timeout: 60000 }, assertModelHelp("hand", { model: /anime_hand_detection/i, file: /ONNX/i }));
+test("SD-101 hand segmentation help shows HandSegNet safetensors source", { timeout: 60000 }, assertModelHelp("handSegmentation", { model: /HandSegNet/i, file: /safetensors/i }));
+test("SD-102 fluid help shows that no additional model is required", { timeout: 60000 }, assertModelHelp("fluid", { model: /追加モデルなし|No additional model/i, file: /不要|Not required/i, source: false }));
+
+test("SD-065 copied conversion command exactly matches the displayed command", { timeout: 60000 }, async () => {
+  await withSettingsPage(async (page) => {
+    await page.evaluate(() => Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText: async (value) => { window.__copiedModelCommand = value; } },
+    }));
+    await page.locator('[data-settings-tab="models"]').click();
+    await page.locator('[data-model-help="ntd11"]').click();
+    const displayed = await page.locator("#modelHelpCommand").textContent();
+    await page.locator("#modelHelpCopy").click();
+    await page.waitForFunction(() => Boolean(window.__copiedModelCommand));
+    assert.equal(await page.evaluate(() => window.__copiedModelCommand), displayed);
+  });
+});
+
 test("SD-009 changing Japanese to English retranslates the open interface", { timeout: 60000 }, async () => {
   await withSettingsPage(async (page) => {
     await page.locator("#settingsLanguage").selectOption("en");
@@ -190,6 +229,36 @@ test("SD-118 shortcut assignment records Delete without deleting an image", { ti
     await page.keyboard.press("Delete");
     assert.equal(await input.inputValue(), "Delete");
     assert.deepEqual(await page.evaluate(() => state.images.map((image) => image.id)), before);
+  });
+});
+
+test("SD-105 through SD-110 remove-image shortcut defaults save restore and reset", { timeout: 60000 }, async () => {
+  await withSettingsPage(async (page) => {
+    await page.locator('[data-settings-tab="shortcuts"]').click();
+    const binding = page.locator('[data-shortcut-action="removeImage"]');
+    const enabled = page.locator('[data-shortcut-enabled="removeImage"]');
+    assert.equal(await binding.inputValue(), "Delete");
+    assert.equal(await enabled.isChecked(), true);
+    await binding.fill("Ctrl+D");
+    await enabled.uncheck();
+    await page.locator("#settingsSaveButton").click();
+    await page.waitForFunction(() => state.settings.shortcuts.bindings.removeImage === "Ctrl+D" && state.settings.shortcuts.actions.removeImage === false);
+    await page.locator('[data-settings-tab="shortcuts"]').click();
+    assert.equal(await binding.inputValue(), "Ctrl+D");
+    assert.equal(await enabled.isChecked(), false);
+    const defaults = await page.evaluate(() => {
+      const value = structuredClone(state.settings);
+      value.shortcuts.bindings.removeImage = "Delete";
+      value.shortcuts.actions.removeImage = true;
+      return value;
+    });
+    await page.route("**/api/settings/reset?status=0", async (route) => route.fulfill({
+      status: 200, contentType: "application/json", body: JSON.stringify({ settings: defaults, version: "v1.0.0" }),
+    }));
+    await page.locator("#settingsResetButton").click();
+    await page.waitForFunction(() => document.querySelector('[data-shortcut-action="removeImage"]').value === "Delete");
+    assert.equal(await binding.inputValue(), "Delete");
+    assert.equal(await enabled.isChecked(), true);
   });
 });
 

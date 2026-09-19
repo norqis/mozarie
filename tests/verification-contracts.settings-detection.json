@@ -7,7 +7,7 @@
   },
   "baseline": {
     "rows": 149,
-    "observations": 221
+    "observations": 212
   },
   "observations": [
     {
@@ -308,17 +308,6 @@
       ]
     },
     {
-      "key": "SD-025.2",
-      "sourceIds": [
-        "SD-025"
-      ],
-      "observation": "検出精度と候補数の最低値は要求しない",
-      "status": "automated",
-      "testIds": [
-        "python:tests.test_server.MozarieTests.test_model_logic_matrix_uses_only_enabled_models"
-      ]
-    },
-    {
       "key": "SD-025.3",
       "sourceIds": [
         "SD-025"
@@ -386,17 +375,6 @@
       ]
     },
     {
-      "key": "SD-028.2",
-      "sourceIds": [
-        "SD-028"
-      ],
-      "observation": "検出精度と候補数の最低値は要求しない",
-      "status": "automated",
-      "testIds": [
-        "python:tests.test_server.MozarieTests.test_model_logic_matrix_uses_only_enabled_models"
-      ]
-    },
-    {
       "key": "SD-028.3",
       "sourceIds": [
         "SD-028"
@@ -461,17 +439,6 @@
       "status": "automated",
       "testIds": [
         "python:tests.test_server.MozarieTests.test_hand_model_verification_occurs_once_after_first_load"
-      ]
-    },
-    {
-      "key": "SD-031.2",
-      "sourceIds": [
-        "SD-031"
-      ],
-      "observation": "検出精度と候補数の最低値は要求しない",
-      "status": "automated",
-      "testIds": [
-        "python:tests.test_server.MozarieTests.test_model_logic_matrix_uses_only_enabled_models"
       ]
     },
     {
@@ -553,17 +520,6 @@
       ]
     },
     {
-      "key": "SD-034.3",
-      "sourceIds": [
-        "SD-034"
-      ],
-      "observation": "手候補0件なら実行確認済みとしない",
-      "status": "automated",
-      "testIds": [
-        "python:tests.test_server.MozarieTests.test_model_logic_matrix_uses_only_enabled_models"
-      ]
-    },
-    {
       "key": "SD-034.4",
       "sourceIds": [
         "SD-034"
@@ -639,17 +595,6 @@
       "status": "automated",
       "testIds": [
         "python:tests.test_server.MozarieTests.test_finalization_applies_fluid_to_every_nonempty_target_once"
-      ]
-    },
-    {
-      "key": "SD-037.3",
-      "sourceIds": [
-        "SD-037"
-      ],
-      "observation": "性器候補0件なら実行確認済みとしない",
-      "status": "automated",
-      "testIds": [
-        "python:tests.test_server.MozarieTests.test_finalization_skips_fluid_search_for_empty_apply_masks_and_when_disabled"
       ]
     },
     {
@@ -866,17 +811,6 @@
       ]
     },
     {
-      "key": "SD-048.2",
-      "sourceIds": [
-        "SD-048"
-      ],
-      "observation": "精度の比較評価は実施しない",
-      "status": "automated",
-      "testIds": [
-        "python:tests.test_server.MozarieTests.test_detection_mode_is_read_only_from_saved_settings"
-      ]
-    },
-    {
       "key": "SD-049.1",
       "sourceIds": [
         "SD-049"
@@ -960,17 +894,6 @@
         "SD-056"
       ],
       "observation": "開始時から60件の対象・進捗を表示し、処理終了後に画面操作を再有効化する",
-      "status": "automated",
-      "testIds": [
-        "python:tests.test_server.MozarieTests.test_detection_staging_reports_every_success_before_atomic_publication"
-      ]
-    },
-    {
-      "key": "SD-056.2",
-      "sourceIds": [
-        "SD-056"
-      ],
-      "observation": "検出精度は評価しない",
       "status": "automated",
       "testIds": [
         "python:tests.test_server.MozarieTests.test_detection_staging_reports_every_success_before_atomic_publication"
@@ -1220,17 +1143,6 @@
       ]
     },
     {
-      "key": "SD-146.2",
-      "sourceIds": [
-        "SD-146"
-      ],
-      "observation": "候補数や検出精度は評価しない",
-      "status": "automated",
-      "testIds": [
-        "python:tests.test_detection_regressions.DetectionIntegrityRegressionTests.test_transparent_pixels_use_black_inference_background_and_clip_every_candidate"
-      ]
-    },
-    {
       "key": "SD-147.1",
       "sourceIds": [
         "SD-147"
@@ -1260,7 +1172,7 @@
       "observation": "基本モデルの用途・正式名称・ONNX形式・配布元を表示する",
       "status": "automated",
       "testIds": [
-        "python:tests.test_server.MozarieTests.test_model_download_api_uses_existing_mutation_guards_and_allowlist"
+        "node:tests/test_settings_dialog_e2e.cjs::SD-063 target help shows purpose official model ONNX format and source"
       ]
     },
     {
@@ -1271,7 +1183,7 @@
       "observation": "NTD11の用途・配布元・変換コマンドを表示する",
       "status": "automated",
       "testIds": [
-        "python:tests.test_server.MozarieTests.test_model_download_api_uses_existing_mutation_guards_and_allowlist"
+        "node:tests/test_settings_dialog_e2e.cjs::SD-097 NTD11 help shows source and conversion command"
       ]
     },
     {
@@ -1282,7 +1194,7 @@
       "observation": "Sensitiveの用途・配布元・変換コマンドを表示する",
       "status": "automated",
       "testIds": [
-        "python:tests.test_server.MozarieTests.test_model_download_api_uses_existing_mutation_guards_and_allowlist"
+        "node:tests/test_settings_dialog_e2e.cjs::SD-098 Sensitive help shows source and conversion command"
       ]
     },
     {
@@ -1293,7 +1205,7 @@
       "observation": "SAMの用途・配布元とvit_b・vit_l・vit_hの比較表を表示する",
       "status": "automated",
       "testIds": [
-        "python:tests.test_server.MozarieTests.test_model_download_api_uses_existing_mutation_guards_and_allowlist"
+        "node:tests/test_settings_dialog_e2e.cjs::SD-099 SAM help shows source and all three variant rows"
       ]
     },
     {
@@ -1304,7 +1216,7 @@
       "observation": "画像全体から手を検出する用途・ONNX形式・配布元を表示する",
       "status": "automated",
       "testIds": [
-        "python:tests.test_server.MozarieTests.test_model_download_api_uses_existing_mutation_guards_and_allowlist"
+        "node:tests/test_settings_dialog_e2e.cjs::SD-100 hand detection help shows whole-image model and ONNX source"
       ]
     },
     {
@@ -1315,7 +1227,7 @@
       "observation": "検出した手の輪郭を補正する用途・safetensors形式・配布元を表示する",
       "status": "automated",
       "testIds": [
-        "python:tests.test_server.MozarieTests.test_model_download_api_uses_existing_mutation_guards_and_allowlist"
+        "node:tests/test_settings_dialog_e2e.cjs::SD-101 hand segmentation help shows HandSegNet safetensors source"
       ]
     },
     {
@@ -1326,7 +1238,7 @@
       "observation": "性器候補内の白色領域を対象とし、追加モデルが不要であることを表示する",
       "status": "automated",
       "testIds": [
-        "python:tests.test_server.MozarieTests.test_model_download_api_uses_existing_mutation_guards_and_allowlist"
+        "node:tests/test_settings_dialog_e2e.cjs::SD-102 fluid help shows that no additional model is required"
       ]
     },
     {
@@ -1337,7 +1249,7 @@
       "observation": "設定画面へ戻り、選択モデルの値を保持する",
       "status": "automated",
       "testIds": [
-        "python:tests.test_server.MozarieTests.test_model_download_api_uses_existing_mutation_guards_and_allowlist"
+        "node:tests/test_settings_runtime.cjs::SD-064 model preparation dialog preserves the selected model value"
       ]
     },
     {
@@ -1348,7 +1260,7 @@
       "observation": "表示しているコマンドとコピー内容が一致する",
       "status": "automated",
       "testIds": [
-        "python:tests.test_server.MozarieTests.test_model_download_api_uses_existing_mutation_guards_and_allowlist"
+        "node:tests/test_settings_dialog_e2e.cjs::SD-065 copied conversion command exactly matches the displayed command"
       ]
     },
     {
@@ -1359,7 +1271,7 @@
       "observation": "対象モデル名と開始操作を表示する",
       "status": "automated",
       "testIds": [
-        "python:tests.test_server.MozarieTests.test_model_download_api_uses_existing_mutation_guards_and_allowlist"
+        "node:tests/test_settings_runtime.cjs::SD-066 model download confirmation identifies its target and start action"
       ]
     },
     {
@@ -1370,7 +1282,7 @@
       "observation": "進捗を表示し、完了後に利用可能状態になる",
       "status": "automated",
       "testIds": [
-        "python:tests.test_server.MozarieTests.test_model_download_api_uses_existing_mutation_guards_and_allowlist"
+        "node:tests/test_settings_runtime.cjs::SD-067 completed model download publishes the acquired path"
       ]
     },
     {
@@ -1381,7 +1293,7 @@
       "observation": "中止を表示し、未完了ファイルを利用可能と表示しない",
       "status": "automated",
       "testIds": [
-        "python:tests.test_server.MozarieTests.test_model_download_api_uses_existing_mutation_guards_and_allowlist"
+        "node:tests/test_settings_runtime.cjs::SD-068 cancelled model download never publishes an unfinished path"
       ]
     },
     {
@@ -1392,7 +1304,7 @@
       "observation": "サーバーとの通信失敗を表示し、未取得モデルを利用可能と表示しない",
       "status": "automated",
       "testIds": [
-        "python:tests.test_server.MozarieTests.test_model_download_api_uses_existing_mutation_guards_and_allowlist"
+        "node:tests/test_settings_runtime.cjs::SD-069 model download polling failure is visible and leaves no acquired path"
       ]
     },
     {
@@ -1491,7 +1403,7 @@
       "observation": "削除ショートカットは Delete・ONである",
       "status": "automated",
       "testIds": [
-        "python:tests.test_config.SettingsTests.test_legacy_shortcuts_gain_per_action_defaults"
+        "node:tests/test_settings_dialog_e2e.cjs::SD-105 through SD-110 remove-image shortcut defaults save restore and reset"
       ]
     },
     {
@@ -1502,7 +1414,7 @@
       "observation": "保存値を表示する",
       "status": "automated",
       "testIds": [
-        "python:tests.test_config.SettingsTests.test_legacy_shortcuts_gain_per_action_defaults"
+        "node:tests/test_settings_dialog_e2e.cjs::SD-105 through SD-110 remove-image shortcut defaults save restore and reset"
       ]
     },
     {
@@ -1513,7 +1425,7 @@
       "observation": "保存値を復元する",
       "status": "automated",
       "testIds": [
-        "python:tests.test_config.SettingsTests.test_legacy_shortcuts_gain_per_action_defaults"
+        "node:tests/test_settings_dialog_e2e.cjs::SD-105 through SD-110 remove-image shortcut defaults save restore and reset"
       ]
     },
     {
@@ -1524,7 +1436,7 @@
       "observation": "削除ショートカットは Delete・ONに戻る",
       "status": "automated",
       "testIds": [
-        "python:tests.test_config.SettingsTests.test_legacy_shortcuts_gain_per_action_defaults"
+        "node:tests/test_settings_dialog_e2e.cjs::SD-105 through SD-110 remove-image shortcut defaults save restore and reset"
       ]
     },
     {
@@ -1546,7 +1458,7 @@
       "observation": "正規化後の既存 Delete を保ち、削除ショートカットは未使用の修飾キー付き Delete・OFFで補完され、設定を保存できる",
       "status": "automated",
       "testIds": [
-        "python:tests.test_config.SettingsTests.test_legacy_shortcuts_gain_per_action_defaults"
+        "python:tests.test_config.SettingsTests.test_legacy_delete_binding_migration_avoids_an_existing_delete_key"
       ]
     },
     {
@@ -2063,19 +1975,7 @@
       "observation": "2つの入力を区別して表示し、新規のモザイク候補だけに3px、新規の手・白い液などの除外候補だけに11pxを設定する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_filters_and_fluid_e2e.cjs::all-image detection filters images with independent OR checkboxes and persists the selection",
-        "python:tests.test_server.MozarieTests.test_detect_and_boundary_candidates_receive_the_current_padding_default"
-      ]
-    },
-    {
-      "key": "SD-127.2",
-      "sourceIds": [
-        "SD-127"
-      ],
-      "observation": "候補がない種類は精度確認済みと扱わない",
-      "status": "automated",
-      "testIds": [
-        "node:tests/test_filters_and_fluid_e2e.cjs::all-image detection filters images with independent OR checkboxes and persists the selection",
+        "node:tests/test_detection_dialog_contracts.cjs::SD-127 detection dialog persists distinct apply and exclusion padding",
         "python:tests.test_server.MozarieTests.test_detect_and_boundary_candidates_receive_the_current_padding_default"
       ]
     },
@@ -2087,7 +1987,6 @@
       "observation": "保存済みの2値を使い、新規のモザイク候補だけに3px、新規の除外候補だけに11pxを設定する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_filters_and_fluid_e2e.cjs::all-image detection filters images with independent OR checkboxes and persists the selection",
         "python:tests.test_server.MozarieTests.test_detect_and_boundary_candidates_receive_the_current_padding_default"
       ]
     },
@@ -2099,7 +1998,6 @@
       "observation": "対象外画像、既存の境界候補、手描き範囲は変更しない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_filters_and_fluid_e2e.cjs::all-image detection filters images with independent OR checkboxes and persists the selection",
         "python:tests.test_server.MozarieTests.test_detect_and_boundary_candidates_receive_the_current_padding_default"
       ]
     },
@@ -2111,7 +2009,6 @@
       "observation": "選択対象だけを処理し、新規候補へ役割別の値を反映する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_filters_and_fluid_e2e.cjs::all-image detection filters images with independent OR checkboxes and persists the selection",
         "python:tests.test_server.MozarieTests.test_detect_and_boundary_candidates_receive_the_current_padding_default"
       ]
     },
@@ -2123,7 +2020,6 @@
       "observation": "選択外画像と既存の境界候補・手描き範囲は変更しない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_filters_and_fluid_e2e.cjs::all-image detection filters images with independent OR checkboxes and persists the selection",
         "python:tests.test_server.MozarieTests.test_detect_and_boundary_candidates_receive_the_current_padding_default"
       ]
     },
@@ -2135,7 +2031,6 @@
       "observation": "非表示を除く全対象を処理し、各画像の新規候補へ役割別の値を反映する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_filters_and_fluid_e2e.cjs::all-image detection filters images with independent OR checkboxes and persists the selection",
         "python:tests.test_server.MozarieTests.test_detect_and_boundary_candidates_receive_the_current_padding_default"
       ]
     },
@@ -2147,7 +2042,6 @@
       "observation": "画像ごとに候補の有無が異なっても別の役割の値を流用しない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_filters_and_fluid_e2e.cjs::all-image detection filters images with independent OR checkboxes and persists the selection",
         "python:tests.test_server.MozarieTests.test_detect_and_boundary_candidates_receive_the_current_padding_default"
       ]
     },
@@ -2159,7 +2053,7 @@
       "observation": "各経路の新規候補を0pxで作成し、元の候補マスクを広げない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_filters_and_fluid_e2e.cjs::all-image detection filters images with independent OR checkboxes and persists the selection",
+        "node:tests/test_detection_dialog_contracts.cjs::SD-131 invalid padding blocks detection while zero remains valid",
         "python:tests.test_server.MozarieTests.test_detect_and_boundary_candidates_receive_the_current_padding_default"
       ]
     },
@@ -2171,8 +2065,7 @@
       "observation": "負数・小数・空欄では開始せず、0以上の整数を求める",
       "status": "automated",
       "testIds": [
-        "node:tests/test_filters_and_fluid_e2e.cjs::all-image detection filters images with independent OR checkboxes and persists the selection",
-        "python:tests.test_server.MozarieTests.test_detect_and_boundary_candidates_receive_the_current_padding_default"
+        "node:tests/test_detection_dialog_contracts.cjs::SD-131 invalid padding blocks detection while zero remains valid"
       ]
     },
     {
@@ -2229,8 +2122,7 @@
       "observation": "同じ設定モーダルに「精液候補を色で広げる」と0〜255の許容範囲を表示する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_filters_and_fluid_e2e.cjs::all-image detection submits the fluid color-fill settings with default tolerance 26",
-        "python:tests.test_fluid.FluidTests.test_expand_white_fluid_mask_respects_alpha_and_tolerance_boundaries"
+        "node:tests/test_filters_and_fluid_e2e.cjs::all-image detection submits the fluid color-fill settings with default tolerance 26"
       ]
     },
     {
@@ -2241,8 +2133,7 @@
       "observation": "初期値はON・26で、手動塗りつぶしの許容範囲を変更しない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_filters_and_fluid_e2e.cjs::all-image detection submits the fluid color-fill settings with default tolerance 26",
-        "python:tests.test_fluid.FluidTests.test_expand_white_fluid_mask_respects_alpha_and_tolerance_boundaries"
+        "node:tests/test_filters_and_fluid_e2e.cjs::all-image detection submits the fluid color-fill settings with default tolerance 26"
       ]
     },
     {
@@ -2253,8 +2144,7 @@
       "observation": "0〜255の整数だけを受け付け、設定値を保存・再表示する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_filters_and_fluid_e2e.cjs::all-image detection submits the fluid color-fill settings with default tolerance 26",
-        "python:tests.test_fluid.FluidTests.test_expand_white_fluid_mask_respects_alpha_and_tolerance_boundaries"
+        "node:tests/test_filters_and_fluid_e2e.cjs::all-image detection submits the fluid color-fill settings with default tolerance 26"
       ]
     },
     {
@@ -2265,7 +2155,6 @@
       "observation": "0では既存の精液候補だけを保持し、各検出で対象候補またはメタデータ検索範囲の外へ広がらない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_filters_and_fluid_e2e.cjs::all-image detection submits the fluid color-fill settings with default tolerance 26",
         "python:tests.test_fluid.FluidTests.test_expand_white_fluid_mask_respects_alpha_and_tolerance_boundaries"
       ]
     },
@@ -2277,8 +2166,8 @@
       "observation": "OFFでは既存の白い液候補検出だけを使い、ONでは開始時の設定値だけを全対象へ一貫して使う",
       "status": "automated",
       "testIds": [
-        "node:tests/test_filters_and_fluid_e2e.cjs::all-image detection submits the fluid color-fill settings with default tolerance 26",
-        "python:tests.test_fluid.FluidTests.test_expand_white_fluid_mask_respects_alpha_and_tolerance_boundaries"
+        "python:tests.test_server.MozarieTests.test_finalization_skips_fluid_search_for_empty_apply_masks_and_when_disabled",
+        "python:tests.test_server.MozarieTests.test_finalization_applies_fluid_to_every_nonempty_target_once"
       ]
     },
     {
@@ -2289,8 +2178,7 @@
       "observation": "検出中の設定変更で途中画像だけの値を変えない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_filters_and_fluid_e2e.cjs::all-image detection submits the fluid color-fill settings with default tolerance 26",
-        "python:tests.test_fluid.FluidTests.test_expand_white_fluid_mask_respects_alpha_and_tolerance_boundaries"
+        "python:tests.test_server.MozarieTests.test_detect_image_persists_a_real_broad_fluid_exclusion"
       ]
     },
     {
@@ -2301,7 +2189,6 @@
       "observation": "完全透明画素へ候補が広がらず、RGB画像および既存の白い液候補検出の条件は変わらない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_filters_and_fluid_e2e.cjs::all-image detection submits the fluid color-fill settings with default tolerance 26",
         "python:tests.test_fluid.FluidTests.test_expand_white_fluid_mask_respects_alpha_and_tolerance_boundaries"
       ]
     },
@@ -2313,8 +2200,7 @@
       "observation": "精液候補を色で広げるスイッチと許容範囲を操作不可にし、OFF中は許容範囲欄の無効な文字列で開始を妨げない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_filters_and_fluid_e2e.cjs::all-image detection submits the fluid color-fill settings with default tolerance 26",
-        "python:tests.test_fluid.FluidTests.test_expand_white_fluid_mask_respects_alpha_and_tolerance_boundaries"
+        "node:tests/test_filters_and_fluid_e2e.cjs::all-image detection submits the fluid color-fill settings with default tolerance 26"
       ]
     },
     {
@@ -2325,8 +2211,7 @@
       "observation": "現在画像は従来どおり直ちに検出を開始し、モーダルを開かない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_filters_and_fluid_e2e.cjs::all-image detection submits the fluid color-fill settings with default tolerance 26",
-        "python:tests.test_fluid.FluidTests.test_expand_white_fluid_mask_respects_alpha_and_tolerance_boundaries"
+        "node:tests/test_filters_and_fluid_e2e.cjs::all-image detection filters images with independent OR checkboxes and persists the selection"
       ]
     },
     {
@@ -2337,8 +2222,7 @@
       "observation": "保存済みの色拡張ON/OFFと許容範囲を開始時に使用する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_filters_and_fluid_e2e.cjs::all-image detection submits the fluid color-fill settings with default tolerance 26",
-        "python:tests.test_fluid.FluidTests.test_expand_white_fluid_mask_respects_alpha_and_tolerance_boundaries"
+        "python:tests.test_server.MozarieTests.test_detect_image_persists_a_real_broad_fluid_exclusion"
       ]
     },
     {
