@@ -7,7 +7,7 @@
   },
   "baseline": {
     "rows": 149,
-    "observations": 212
+    "observations": 221
   },
   "observations": [
     {
@@ -2379,6 +2379,78 @@
       "testIds": [
         "node:tests/test_settings_dialog_e2e.cjs::SD-149 output picker sends the absolute current path and remains reusable after cancel and failure"
       ]
+    },
+    {
+      "key": "SD-025.2",
+      "sourceIds": [
+        "SD-025"
+      ],
+      "observation": "検出精度と候補数の最低値は要求しない",
+      "status": "retired"
+    },
+    {
+      "key": "SD-028.2",
+      "sourceIds": [
+        "SD-028"
+      ],
+      "observation": "検出精度と候補数の最低値は要求しない",
+      "status": "retired"
+    },
+    {
+      "key": "SD-031.2",
+      "sourceIds": [
+        "SD-031"
+      ],
+      "observation": "検出精度と候補数の最低値は要求しない",
+      "status": "retired"
+    },
+    {
+      "key": "SD-034.3",
+      "sourceIds": [
+        "SD-034"
+      ],
+      "observation": "手候補0件なら実行確認済みとしない",
+      "status": "retired"
+    },
+    {
+      "key": "SD-037.3",
+      "sourceIds": [
+        "SD-037"
+      ],
+      "observation": "性器候補0件なら実行確認済みとしない",
+      "status": "retired"
+    },
+    {
+      "key": "SD-048.2",
+      "sourceIds": [
+        "SD-048"
+      ],
+      "observation": "精度の比較評価は実施しない",
+      "status": "retired"
+    },
+    {
+      "key": "SD-056.2",
+      "sourceIds": [
+        "SD-056"
+      ],
+      "observation": "検出精度は評価しない",
+      "status": "retired"
+    },
+    {
+      "key": "SD-146.2",
+      "sourceIds": [
+        "SD-146"
+      ],
+      "observation": "候補数や検出精度は評価しない",
+      "status": "retired"
+    },
+    {
+      "key": "SD-127.2",
+      "sourceIds": [
+        "SD-127"
+      ],
+      "observation": "候補がない種類は精度確認済みと扱わない",
+      "status": "retired"
     }
   ]
 }

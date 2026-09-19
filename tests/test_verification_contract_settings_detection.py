@@ -51,12 +51,16 @@ class SettingsDetectionVerificationContractTests(unittest.TestCase):
                 for test_id in item["testIds"]:
                     self.assertIn(test_id, python_ids | node_ids)
                 self.assertNotIn("manual", item)
-            else:
+            elif item["status"] == "manual":
                 self.assertEqual(item["status"], "manual")
                 self.assertNotIn("testIds", item)
                 self.assertTrue(item["manual"]["environment"].strip())
                 self.assertIn("CI", item["manual"]["reason"])
                 manual_keys.add(item["key"])
+            else:
+                self.assertEqual(item["status"], "retired")
+                self.assertNotIn("testIds", item)
+                self.assertNotIn("manual", item)
 
         documented_manual: dict[str, str] = {}
         for line in MANUAL.read_text(encoding="utf-8").splitlines():
