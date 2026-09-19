@@ -18,69 +18,93 @@
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <header class="site-header">
-    <a class="brand" href="https://norqis.github.io/mozarie/" aria-label="Mozarie ホーム"><span class="brand-mark" aria-hidden="true"><img src="assets/mozarie-logo.png" alt=""></span><span>Mozarie</span></a>
-    <nav aria-label="主要リンク"><a href="#features">機能</a><a href="https://github.com/norqis/mozarie">GitHub</a></nav>
-  </header>
   <main>
-    <section class="hero" aria-labelledby="page-title">
-      <div class="hero-copy">
+    <div class="hero-stage">
+    <header class="site-header">
+      <a class="brand" href="https://norqis.github.io/mozarie/" aria-label="Mozarie ホーム"><span class="brand-mark" aria-hidden="true"><img src="assets/mozarie-logo.png" alt=""></span><span>Mozarie</span></a>
+      <nav aria-label="主要リンク"><a href="https://github.com/norqis/mozarie">GitHub</a><a class="header-download" href="https://github.com/norqis/mozarie/releases/latest">ダウンロード</a></nav>
+    </header>
+
+      <section class="hero" aria-labelledby="page-title">
         <p class="eyebrow">Windows用モザイク加工ソフト</p>
-        <h1 id="page-title"><span>複数画像のモザイク処理を、</span><span>検出・編集・保存まで。</span></h1>
-        <p class="intro">Mozarieは、モザイク自動検出、ブラシツール、複数画像の一括保存、プロジェクトごとの履歴保持に対応したWindowsアプリです。</p>
-      </div>
-      <div class="hero-action"><a class="download" href="https://github.com/norqis/mozarie/releases/latest">最新版をダウンロード</a><a class="readme" href="https://github.com/norqis/mozarie">GitHubで詳しく見る</a><p class="platform">Windows / PNG・JPEG・WebP / MIT License</p></div>
-    </section>
-
-    <nav class="feature-index" aria-label="機能一覧">
-      <a href="#detection"><span>01</span>モザイク自動検出</a>
-      <a href="#brush"><span>02</span>ブラシツール</a>
-      <a href="#bulk-save"><span>03</span>複数画像をまとめて保存</a>
-      <a href="#project-history"><span>04</span>プロジェクトごとの履歴保持</a>
-    </nav>
-
-    <section class="gallery" aria-label="Mozarie の画面" aria-roledescription="carousel">
-      <div class="gallery-frame" data-gallery>
-        <div class="gallery-row">
-          <button class="gallery-arrow gallery-arrow-previous" type="button" data-gallery-controls data-gallery-prev aria-label="前の画面" hidden><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m10 2-6 6 6 6"></path></svg></button>
-          <div class="gallery-viewport" data-gallery-viewport>
-            <img class="gallery-peek gallery-peek-previous" data-gallery-peek-previous src="assets/demo1.png" width="1920" height="959" alt="" aria-hidden="true">
-            <figure class="gallery-slide" data-gallery-slide data-gallery-position="active"><button class="gallery-image" type="button" data-gallery-open aria-label="自動検出結果の画面を拡大表示" disabled><img src="assets/demo3.png" width="1920" height="959" alt="Mozarieで自動検出した範囲をモザイク結果と適用範囲で確認している画面"></button></figure>
-            <figure class="gallery-slide" data-gallery-slide hidden><button class="gallery-image" type="button" data-gallery-open aria-label="Mozarieの作業画面を拡大表示" disabled><img src="assets/demo1.png" width="1920" height="959" alt="Mozarieで画像一覧、ブラシ、候補、保存操作を扱っている画面"></button></figure>
-            <img class="gallery-peek gallery-peek-next" data-gallery-peek-next src="assets/demo1.png" width="1920" height="959" alt="" aria-hidden="true">
-          </div>
-          <button class="gallery-arrow gallery-arrow-next" type="button" data-gallery-controls data-gallery-next aria-label="次の画面" hidden><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m6 2 6 6-6 6"></path></svg></button>
+        <h1 id="page-title"><span>検出から保存まで、</span><span>ひとつの画面で。</span></h1>
+        <p class="intro">モザイク自動検出、ブラシ編集、複数画像の一括保存。作業内容はプロジェクトごとに残ります。</p>
+        <div class="hero-actions">
+          <a class="primary-action" href="https://github.com/norqis/mozarie/releases/latest">最新版をダウンロード</a>
+          <a class="secondary-action" href="https://github.com/norqis/mozarie">GitHubを見る</a>
         </div>
-        <div class="gallery-status"><p class="gallery-caption" data-gallery-caption>自動検出した候補を、処理結果と適用範囲で確認できます。</p><div class="gallery-dots" data-gallery-controls aria-label="画面表示の操作" hidden><button type="button" data-gallery-dot="0" aria-label="画面 1を表示" aria-current="true"></button><button type="button" data-gallery-dot="1" aria-label="画面 2を表示"></button></div></div>
+        <p class="platform">Windows / PNG・JPEG・WebP / MIT License</p>
+      </section>
+
+      <section class="gallery" aria-label="Mozarie の画面" aria-roledescription="carousel">
+        <div class="gallery-frame" data-gallery>
+          <div class="gallery-row">
+            <button class="gallery-arrow gallery-arrow-previous" type="button" data-gallery-controls data-gallery-prev aria-label="前の画面" hidden><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m10 2-6 6 6 6"></path></svg></button>
+            <div class="gallery-viewport" data-gallery-viewport>
+              <img class="gallery-peek gallery-peek-previous" data-gallery-peek-previous src="assets/demo1.png" width="1920" height="959" alt="" aria-hidden="true">
+              <figure class="gallery-slide" data-gallery-slide data-gallery-position="active"><button class="gallery-image" type="button" data-gallery-open aria-label="自動検出結果の画面を拡大表示" disabled><img src="assets/demo3.png" width="1920" height="959" alt="Mozarieで自動検出した範囲をモザイク結果と適用範囲で確認している画面"></button></figure>
+              <figure class="gallery-slide" data-gallery-slide hidden><button class="gallery-image" type="button" data-gallery-open aria-label="Mozarieの作業画面を拡大表示" disabled><img src="assets/demo1.png" width="1920" height="959" alt="Mozarieで画像一覧、ブラシ、候補、保存操作を扱っている画面"></button></figure>
+              <img class="gallery-peek gallery-peek-next" data-gallery-peek-next src="assets/demo1.png" width="1920" height="959" alt="" aria-hidden="true">
+            </div>
+            <button class="gallery-arrow gallery-arrow-next" type="button" data-gallery-controls data-gallery-next aria-label="次の画面" hidden><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m6 2 6 6-6 6"></path></svg></button>
+          </div>
+          <div class="gallery-status"><p class="gallery-caption" data-gallery-caption>自動検出した候補を、処理結果と適用範囲で確認できます。</p><div class="gallery-dots" data-gallery-controls aria-label="画面表示の操作" hidden><button type="button" data-gallery-dot="0" aria-label="画面 1を表示" aria-current="true"></button><button type="button" data-gallery-dot="1" aria-label="画面 2を表示"></button></div></div>
+        </div>
+      </section>
+    </div>
+
+    <section class="story story-detection" id="features" aria-labelledby="detection-title">
+      <div class="story-inner">
+        <div class="story-copy">
+          <p class="feature-name">モザイク自動検出</p>
+          <h2 id="detection-title"><span>モザイク候補を、</span><span>自動検出。</span></h2>
+          <p>現在の画像またはプロジェクト内の全画像から、モザイク候補を自動検出。候補ごとに適用範囲を確認できます。</p>
+        </div>
+        <button class="feature-preview crop-preview crop-detection" type="button" data-feature-open aria-label="自動検出結果の画面を拡大表示" disabled><img src="assets/demo3.png" width="1920" height="959" alt="Mozarieで自動検出した候補と適用範囲を確認している画面"></button>
       </div>
     </section>
 
-    <section class="visual-moments" id="features" aria-label="機能紹介">
-      <article class="visual-moment detection" id="detection">
-        <div class="visual-copy"><p class="sequence">01</p><h2><span>モザイク</span><wbr><span>自動検出</span></h2><p>現在の画像またはプロジェクト内の全画像を対象に、モザイク候補を自動検出できます。候補は画像ごとに確認し、適用する範囲を選べます。</p></div>
-        <button class="feature-preview crop-preview crop-detection" type="button" data-feature-open aria-label="自動検出結果の画面を拡大表示" disabled><img src="assets/demo3.png" width="1920" height="959" alt="Mozarieで自動検出した範囲をモザイク結果と適用範囲で確認している画面"></button>
-      </article>
-      <article class="visual-moment brush" id="brush">
-        <div class="visual-copy"><p class="sequence">02</p><h2><span>ブラシ</span><wbr><span>ツール</span></h2><p>ブラシと消しゴムを使い、モザイクをかける範囲や除外する範囲を画像上で直接編集できます。</p></div>
-        <button class="feature-preview crop-preview crop-brush" type="button" data-feature-open aria-label="ブラシツールの画面を拡大表示" disabled><img src="assets/demo1.png" width="1920" height="959" alt="Mozarieでブラシと消しゴムを使い範囲を画像上で編集している画面"></button>
-      </article>
-      <article class="visual-moment bulk" id="bulk-save">
-        <div class="visual-copy"><p class="sequence">03</p><h2><span>複数画像を</span><wbr><span>まとめて保存</span></h2><p>プロジェクト内の複数画像をまとめて保存できます。コピー保存または元画像への上書きを選べます。</p></div>
-        <button class="feature-preview crop-preview crop-bulk" type="button" data-feature-open aria-label="複数画像をまとめて保存する画面を拡大表示" disabled><img src="assets/demo1.png" width="1920" height="959" alt="Mozarieで画像一覧と一括保存操作を扱っている画面"></button>
-      </article>
-      <article class="visual-moment history" id="project-history">
-        <div class="visual-copy"><p class="sequence">04</p><h2><span>プロジェクト</span><wbr><span>ごとの</span><wbr><span>履歴保持</span></h2><p>候補、手描き範囲、確認状態、非表示状態、Undo／Redo履歴をプロジェクトごとに保持します。プロジェクトを切り替えても、それぞれの編集内容を維持します。</p></div>
-        <ul class="retained-items" aria-label="プロジェクトごとに保持する編集内容"><li>候補</li><li>手描き範囲</li><li>確認状態</li><li>非表示状態</li><li>Undo・Redo履歴</li></ul>
-      </article>
+    <section class="story story-brush" aria-labelledby="brush-title">
+      <div class="story-inner story-split">
+        <div class="story-copy">
+          <p class="feature-name">ブラシツール</p>
+          <h2 id="brush-title"><span>ブラシで、</span><span>直接描く。</span></h2>
+          <p>モザイクをかける範囲も、除外する範囲も、画像の上でそのまま編集できます。</p>
+        </div>
+        <button class="feature-preview crop-preview crop-brush" type="button" data-feature-open aria-label="ブラシツールの画面を拡大表示" disabled><img src="assets/demo1.png" width="1920" height="959" alt="Mozarieでブラシを使い画像上の範囲を直接編集している画面"></button>
+      </div>
     </section>
 
-    <section class="final-cta content-section" aria-labelledby="final-cta-title">
-      <h2 id="final-cta-title">Mozarieをダウンロード</h2>
-      <p>Windowsで利用できます。</p>
-      <div class="final-cta-actions"><a class="download" href="https://github.com/norqis/mozarie/releases/latest">最新版をダウンロード</a><a class="readme" href="https://github.com/norqis/mozarie">GitHubを見る</a></div>
+    <section class="story story-bulk" aria-labelledby="bulk-title">
+      <div class="story-inner">
+        <div class="story-copy story-copy-wide">
+          <p class="feature-name">複数画像をまとめて保存</p>
+          <h2 id="bulk-title"><span>複数画像を、</span><span>まとめて保存。</span></h2>
+          <p>プロジェクト内の画像をまとめて保存。コピー保存と元画像への上書きを選べます。</p>
+        </div>
+        <button class="feature-preview crop-preview crop-bulk" type="button" data-feature-open aria-label="複数画像をまとめて保存する画面を拡大表示" disabled><img src="assets/demo1.png" width="1920" height="959" alt="Mozarieの画像一覧と一括保存操作が見える画面"></button>
+      </div>
+    </section>
+
+    <section class="story story-history" aria-labelledby="history-title">
+      <div class="story-inner">
+        <p class="feature-name">プロジェクトごとの履歴保持</p>
+        <h2 id="history-title"><span>作業は、</span><span>プロジェクト</span><span>ごとに残る。</span></h2>
+        <p>候補、手描き範囲、確認状態、非表示状態、元に戻す・やり直すの履歴をプロジェクトごとに保持します。</p>
+      </div>
+    </section>
+
+    <section class="final-cta" aria-labelledby="final-cta-title">
+      <div class="final-cta-inner">
+        <h2 id="final-cta-title"><span>Mozarieで、</span><span>画像をまとめて</span><span>仕上げる。</span></h2>
+        <p>Windowsで利用できます。</p>
+        <div class="final-actions"><a class="primary-action" href="https://github.com/norqis/mozarie/releases/latest">最新版をダウンロード</a><a class="secondary-action" href="https://github.com/norqis/mozarie">GitHubを見る</a></div>
+      </div>
     </section>
   </main>
+
   <dialog class="gallery-modal" data-gallery-modal aria-labelledby="gallery-modal-title"><div class="gallery-modal-content"><button class="gallery-modal-close" type="button" data-gallery-modal-close aria-label="拡大表示を閉じる" autofocus><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m3 3 10 10M13 3 3 13"></path></svg></button><img data-gallery-modal-image alt=""><p id="gallery-modal-title" class="visually-hidden">Mozarieの作業画面を拡大表示</p></div></dialog>
+
   <footer><p>Mozarie</p><div><a href="https://github.com/norqis/mozarie#readme">README</a><a href="https://github.com/norqis/mozarie/issues">Issues</a><a lang="en" href="https://github.com/norqis/mozarie/blob/main/README.en.md">English README</a><a href="https://github.com/norqis/mozarie/releases">Releases</a><a href="https://github.com/norqis/mozarie/blob/main/LICENSE">License</a></div></footer>
   <script src="gallery.js"></script>
 </body>
