@@ -2098,6 +2098,7 @@
       "observation": "固定16384pxでは拒否しない",
       "status": "automated",
       "testIds": [
+        "python:tests.test_server.MozarieTests.test_sd_134_candidate_padding_accepts_over_16384_and_clamps_to_image_diagonal",
         "python:tests.test_candidate_expand.CandidateExpandTests.test_large_padding_uses_image_space_and_saturates_without_a_large_kernel"
       ]
     },
@@ -2109,6 +2110,7 @@
       "observation": "画像内で効果がある値はそのまま候補へ設定し、対角線を超える値は画像寸法から求めた最大有効値として扱い、巨大な処理用配列を確保しない",
       "status": "automated",
       "testIds": [
+        "python:tests.test_server.MozarieTests.test_sd_134_candidate_padding_accepts_over_16384_and_clamps_to_image_diagonal",
         "python:tests.test_candidate_expand.CandidateExpandTests.test_large_padding_uses_image_space_and_saturates_without_a_large_kernel"
       ]
     },

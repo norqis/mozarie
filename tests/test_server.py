@@ -546,7 +546,7 @@ class MozarieTests(unittest.TestCase):
                 after = tuple(db.execute("SELECT removed_candidate_ids,candidate_revision,has_effective_mask FROM manual_edits WHERE image_id=?", (image_id,)).fetchone())
             self.assertEqual(after, before)
 
-    def test_candidate_padding_rejects_more_than_the_image_long_edge(self):
+    def test_sd_134_candidate_padding_accepts_over_16384_and_clamps_to_image_diagonal(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             Image.new("RGB", (16, 10), "white").save(root / "source.png")
@@ -557,8 +557,16 @@ class MozarieTests(unittest.TestCase):
             Image.new("L", (16, 10), 255).save(mask_path)
             state.candidates[image_id] = [Candidate("candidate", "penis", 0.9, mask_path)]
             self.commit_candidates(state, image_id)
-            self.assertGreater(state.set_candidate_state(image_id, "candidate", {"expandPx": 19}), 0)
-            self.assertEqual(state.candidates[image_id][0].expand_px, 18)
+            self.assertGreater(state.set_candidate_state(image_id, "candidate", {"expandPx": 20_000}), 0)
+            diagonal = int(np.ceil(np.hypot(16 - 1, 10 - 1)))
+            self.assertEqual(diagonal, 18)
+            self.assertEqual(state.candidates[image_id][0].expand_px, diagonal)
+            with state.workspace_store._connect() as db:
+                persisted = db.execute(
+                    "SELECT expand_px FROM candidate_metadata WHERE image_id=? AND candidate_id=?",
+                    (image_id, "candidate"),
+                ).fetchone()["expand_px"]
+            self.assertEqual(persisted, diagonal)
 
     def test_candidate_padding_updates_metadata_without_rewriting_the_durable_png(self):
         with tempfile.TemporaryDirectory() as directory:
