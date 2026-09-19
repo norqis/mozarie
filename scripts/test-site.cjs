@@ -70,6 +70,8 @@ test("the four-pillar page is complete without JavaScript and has no horizontal 
       assert.equal(await page.locator('meta[name="description"]').getAttribute("content"), "Mozarieは、自動検出から手描き修正、複数画像の一括保存までを1つの画面で進められるWindowsアプリです。編集内容とUndo／Redo履歴はプロジェクトごとに残ります。");
       assert.equal(await page.locator('link[rel="canonical"]').getAttribute("href"), canonicalUrl);
       assert.equal(await page.locator('meta[name="google-site-verification"]').getAttribute("content"), "UrWwBw6iDkiGPFlWk3S4jrSsP7YfkvctuNVveYOJd_o");
+      assert.equal(await page.getByRole("link", { name: "できること", exact: true }).getAttribute("href"), "#features");
+      assert.equal(await page.getByRole("link", { name: "GitHub", exact: true }).getAttribute("href"), "https://github.com/norqis/mozarie");
       assert.equal(await page.getByRole("heading", { name: "検出から保存までを、1つの画面で進めます。", exact: true }).count(), 1);
       assert.deepEqual(await page.locator("#features .visual-moment").evaluateAll((moments) => moments.map((moment) => ({
         sequence: moment.querySelector(".sequence")?.textContent.trim(),
@@ -95,7 +97,12 @@ test("the four-pillar page is complete without JavaScript and has no horizontal 
       assert.equal(await page.getByRole("heading", { name: "検出から一括保存まで、Mozarieで進められます。", exact: true }).count(), 1);
       assert.equal(await page.getByRole("link", { name: "最新版をダウンロード", exact: true }).count(), 2);
       assert.equal(await page.getByRole("link", { name: "動作環境と使い方", exact: true }).count(), 2);
+      assert.equal(await page.getByRole("link", { name: "最新版をダウンロード", exact: true }).first().getAttribute("href"), "https://github.com/norqis/mozarie/releases/latest");
+      assert.equal(await page.getByRole("link", { name: "動作環境と使い方", exact: true }).first().getAttribute("href"), "https://github.com/norqis/mozarie#readme");
+      assert.equal(await page.getByRole("link", { name: "English README", exact: true }).getAttribute("href"), "https://github.com/norqis/mozarie/blob/main/README.en.md");
       const heroDownload = page.getByRole("link", { name: "最新版をダウンロード", exact: true }).first();
+      await heroDownload.focus();
+      assert.equal(await heroDownload.evaluate((element) => getComputedStyle(element).outlineStyle), "solid");
       const heroDownloadBounds = await heroDownload.boundingBox();
       assert.ok(heroDownloadBounds && heroDownloadBounds.height >= 44 && heroDownloadBounds.y + heroDownloadBounds.height <= viewport.height, `initial download CTA is usable at ${viewport.width}px`);
       const image = await page.locator("[data-gallery-slide]:not([hidden]) img").boundingBox();
@@ -275,6 +282,9 @@ test("preview buttons and carousel geometry work across supported viewports", { 
       if (viewport.width <= 900) {
         assert.ok(previous.width >= 44 && previous.height >= 44 && previous.y >= image.y + image.height, `previous arrow is below the image at ${viewport.width}px`);
         assert.ok(next.width >= 44 && next.height >= 44 && next.y >= image.y + image.height, `next arrow is below the image at ${viewport.width}px`);
+        const caption = await page.locator("[data-gallery-caption]").boundingBox();
+        assert.ok(caption, `caption is visible at ${viewport.width}px`);
+        for (const arrow of [previous, next]) assert.equal(arrow.x < caption.x + caption.width && arrow.x + arrow.width > caption.x && arrow.y < caption.y + caption.height && arrow.y + arrow.height > caption.y, false, `arrows do not overlap the caption at ${viewport.width}px`);
       } else {
         assert.ok(previous.width >= 44 && previous.height >= 44 && previous.x + previous.width <= image.x, `previous arrow is outside the image at ${viewport.width}px`);
         assert.ok(next.width >= 44 && next.height >= 44 && next.x >= image.x + image.width, `next arrow is outside the image at ${viewport.width}px`);
