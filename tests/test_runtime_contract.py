@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import unittest
+import io
+import subprocess
+import zipfile
 from pathlib import Path
 import sys
 from unittest.mock import patch
@@ -17,6 +20,19 @@ class RuntimeContractTests(unittest.TestCase):
         for path in ("/.github export-ignore", "/.coveragerc export-ignore", "/tests export-ignore", "/scripts export-ignore", "/site export-ignore", "/package.json export-ignore", "/package-lock.json export-ignore", "/requirements-test.txt export-ignore"):
             self.assertIn(path, attributes)
         self.assertIn("output/", (root / ".gitignore").read_text(encoding="utf-8"))
+
+        archive = subprocess.run(
+            ["git", "archive", "--format=zip", "HEAD"], cwd=root, check=True, capture_output=True,
+        ).stdout
+        with zipfile.ZipFile(io.BytesIO(archive)) as package:
+            names = set(package.namelist())
+        required = {
+            "server.py", "mozarie/__init__.py", "static/index.html", "config/defaults.json",
+            "run.bat", "setup.bat", "update.bat", "VERSION", "README.md", "LICENSE",
+            ".gitignore", ".gitattributes",
+        }
+        self.assertLessEqual(required, names)
+        self.assertFalse(any(name == "AGENTS.md" or name.startswith(("docs/", "tests/", ".github/", "scripts/", "site/")) for name in names))
 
     def test_health_cpu_does_not_expose_or_need_a_gpu(self):
         self.assertEqual(health_device("cpu", 7, []), {"provider": "cpu", "runtimeBackend": "cpu", "gpuDevice": None, "device": "CPU"})

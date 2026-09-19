@@ -1492,6 +1492,41 @@ class MozarieTests(unittest.TestCase):
     def _jpeg_segment(marker: int, payload: bytes) -> bytes:
         return b"\xff" + bytes([marker]) + (len(payload) + 2).to_bytes(2, "big") + payload
 
+    def test_windows_locked_source_rejects_overwrite_and_preserves_original(self):
+        if os.name != "nt":
+            return
+        import ctypes
+        from ctypes import wintypes
+
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "source.png"
+            rendered = Path(directory) / "rendered.png"
+            Image.new("RGB", (16, 16), "red").save(source)
+            Image.new("RGB", (16, 16), "blue").save(rendered)
+            original = source.read_bytes()
+            record = self._record(source, 16, 16)
+            fingerprint = (record.mtime_ns, record.size_bytes)
+
+            kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+            create_file = kernel32.CreateFileW
+            create_file.argtypes = (
+                wintypes.LPCWSTR, wintypes.DWORD, wintypes.DWORD, wintypes.LPVOID,
+                wintypes.DWORD, wintypes.DWORD, wintypes.HANDLE,
+            )
+            create_file.restype = wintypes.HANDLE
+            handle = create_file(str(source), 0x80000000, 0, None, 3, 0x80, None)
+            self.assertNotEqual(handle, wintypes.HANDLE(-1).value)
+            try:
+                with self.assertRaises(PermissionError):
+                    image_io_module._stage_record_replacement(record, rendered, fingerprint)
+            finally:
+                kernel32.CloseHandle(handle)
+
+            self.assertEqual(source.read_bytes(), original)
+            self.assertEqual(record.path, source)
+            self.assertFalse(list(source.parent.glob(".source.png.mozarie-backup-*")))
+            self.assertFalse(list(source.parent.glob("*.mozarie.tmp")))
+
     def test_block_size_uses_image_specific_divisor_and_minimum(self):
         self.assertEqual(calculate_block_size(300, 200, 100), 4)
         self.assertEqual(calculate_block_size(400, 220, 100), 4)

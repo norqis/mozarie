@@ -312,6 +312,30 @@ async function saveInteractions() {
   assert.equal(runtime.nodes.get("#singleSaveKeepMetadata").checked, false, "single-save metadata preference is retained while this page stays open");
   assert.equal(runtime.nodes.get("#singleSaveRemoveSaved").checked, true, "single-save list removal preference is retained while this page stays open");
   runtime.nodes.get("#singleSaveRemoveSaved").checked = false;
+
+  state.images = Array.from({ length: 400 }, (_, index) => ({
+    id: `reviewed-${index}`, relativePath: `${index}.png`, reviewed: true, hidden: false,
+    width: 32, height: 32, candidateCount: index % 2, enabledCandidateCount: index % 2, masked: Boolean(index % 2),
+  }));
+  state.images.push({ id: "hidden", relativePath: "hidden.png", reviewed: true, hidden: true, width: 32, height: 32, candidateCount: 1, enabledCandidateCount: 1 });
+  runtime.nodes.get("#applyFilterReviewed").checked = true;
+  runtime.nodes.get("#applyFilterUnreviewed").checked = false;
+  runtime.nodes.get("#applyFilterMasked").checked = false;
+  runtime.nodes.get("#applyFilterUnmasked").checked = false;
+  runtime.refreshApplyTargets();
+  assert.equal(state.applyTargetIds.length, 400, "reviewed batch targeting includes all 400 visible reviewed images");
+  assert.equal(runtime.nodes.get("#applyTargetCount").textContent, "apply.target:400", "the batch count matches the exact reviewed target set");
+  runtime.nodes.get("#applyFilterReviewed").checked = false;
+  runtime.nodes.get("#applyFilterMasked").checked = true;
+  runtime.refreshApplyTargets();
+  assert.equal(state.applyTargetIds.length, 200, "masked batch targeting uses the same visible set shown in its count");
+  runtime.nodes.get("#applyFilterMasked").checked = false;
+  runtime.refreshApplyTargets();
+  assert.equal(state.applyTargetIds.length, 400, "all batch targeting excludes hidden images without excluding previously saved visible images");
+  state.images = [
+    { id: "file", sourceKind: "filesystem", relativePath: "file.png", reviewed: true, hidden: false, width: 32, height: 32, candidateCount: 1, enabledCandidateCount: 1 },
+    { id: "session", relativePath: "session.png", reviewed: false, hidden: false, width: 32, height: 32, candidateCount: 0, enabledCandidateCount: 0, sourceKind: "session" },
+  ];
   await runtime.openApplyDialog();
   runtime.nodes.get("#applyDivisor").value = "23"; runtime.nodes.get("#applyOutputFormat").value = "png"; runtime.nodes.get("#applyKeepMetadata").checked = false; runtime.nodes.get("#applyRemoveSaved").checked = true; runtime.nodes.get("#applyFilterReviewed").checked = true;
   runtime.refreshApplyTargets();
@@ -453,8 +477,8 @@ async function saveCoverageMatrix() {
   // They execute against the current HTTP lifecycle above; no File System Access output-directory path remains here.
 }
 
-nodeTest("gallery and save interactions", async () => {
-  await galleryInteractions();
-  await saveInteractions();
-  await saveCoverageMatrix();
+nodeTest("gallery and save interactions", async (t) => {
+  await t.test("gallery selection filters and navigation", galleryInteractions);
+  await t.test("single and batch save modal preferences and controls", saveInteractions);
+  await t.test("save lifecycle orders prepare reserve render commit and ack", saveCoverageMatrix);
 });
