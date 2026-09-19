@@ -207,8 +207,25 @@ test("SD-116 duplicate remove shortcut does not dispatch two visible actions", {
 
 test("SD-117 editable controls and a noncurrent gallery card cannot start source deletion", { timeout: 60000 }, async () => {
   await select("sample");
-  await page.locator("#settingsButton").click(); await page.locator("#settingsPort").focus(); await page.keyboard.press("Delete");
-  await page.locator("#settingsCloseButton").click(); await page.locator('.gallery-item[data-id="sample-two"]').focus(); await page.keyboard.press("Delete");
+  await page.locator("#settingsButton").click();
+  const settingsControls = page.locator("#settingsDialog input, #settingsDialog textarea, #settingsDialog select, #settingsDialog button");
+  let exercisedSettings = 0;
+  for (let index = 0; index < await settingsControls.count(); index += 1) {
+    const control = settingsControls.nth(index);
+    if (!await control.isVisible() || !await control.isEnabled()) continue;
+    await control.focus(); await page.keyboard.press("Delete"); exercisedSettings += 1;
+  }
+  assert.ok(exercisedSettings >= 10, "every visible settings control category is exercised");
+  await page.locator("#settingsCloseButton").click();
+  const editorControls = page.locator('input:visible, textarea:visible, select:visible, button:visible:not(.gallery-item.current)');
+  let exercisedEditor = 0;
+  for (let index = 0; index < await editorControls.count(); index += 1) {
+    const control = editorControls.nth(index);
+    if (!await control.isEnabled()) continue;
+    await control.focus(); await page.keyboard.press("Delete"); exercisedEditor += 1;
+  }
+  assert.ok(exercisedEditor >= 10, "visible editor inputs selects and buttons are exercised");
+  await page.locator('.gallery-item[data-id="sample-two"]').focus(); await page.keyboard.press("Delete");
   await page.waitForTimeout(80); assert.equal(fixture.sourceDeleteRequests.length, 0); assert.equal(await page.evaluate(() => state.currentId), "sample");
 });
 
@@ -241,12 +258,12 @@ test("SD-121 busy and importing states each prevent Delete from starting source 
 test("SD-122 read-only pending and changed-source states each prevent source deletion", { timeout: 60000 }, async () => {
   await select("sample"); await page.locator('.gallery-item[data-id="sample"]').focus();
   const scenarios = [
-    ["projectReadOnly", true], ["projectOperationPending", true], ["sourceDimensionsChanged", true],
+    ["projectReadOnly", true], ["projectOperationPending", true], ["pendingImageId", "sample-two"], ["sourceDimensionsChanged", true],
   ];
   for (const [kind, value] of scenarios) {
     await page.evaluate(({ kind, value }) => { if (kind === "sourceDimensionsChanged") state.images.find((image) => image.id === state.currentId).sourceDimensionsChanged = value; else state[kind] = value; }, { kind, value });
     await page.keyboard.press("Delete"); await page.waitForTimeout(40);
-    await page.evaluate((kind) => { if (kind === "sourceDimensionsChanged") state.images.find((image) => image.id === state.currentId).sourceDimensionsChanged = false; else state[kind] = false; }, kind);
+    await page.evaluate((kind) => { if (kind === "sourceDimensionsChanged") state.images.find((image) => image.id === state.currentId).sourceDimensionsChanged = false; else state[kind] = kind === "pendingImageId" ? null : false; }, kind);
   }
   assert.equal(fixture.sourceDeleteRequests.length, 0); assert.equal(await page.evaluate(() => state.images.length), 2);
 });
@@ -284,6 +301,21 @@ test("SD-125 an unknown browser deletion remains pending and does not commit the
   }, token);
   assert.deepEqual(await page.evaluate(async () => (await pendingSourceDeletes()).map((entry) => entry.browserEntries[0]?.state)), ["unknown"]);
   assert.equal(fixture.sourceDeleteRequests.length, 0); assert.equal(await page.evaluate(() => state.images.length), 2);
+});
+
+test("SD-125 a network disconnect during source deletion keeps the image and selection recoverable", { timeout: 60000 }, async () => {
+  await select("sample");
+  await page.route("**/api/catalog/delete-source", async (route) => route.abort("connectionfailed"));
+  await page.locator('.gallery-item[data-id="sample"]').focus();
+  await page.keyboard.press("Delete");
+  await page.waitForFunction(() => document.querySelector("#confirmDialog").open);
+  const disconnected = page.waitForRequest((request) => new URL(request.url()).pathname === "/api/catalog/delete-source");
+  await page.locator("#confirmAccept").click();
+  await disconnected;
+  await page.waitForTimeout(250);
+  assert.deepEqual(await page.evaluate(() => state.images.map((image) => image.id)), ["sample", "sample-two"]);
+  assert.equal(await page.evaluate(() => state.currentId), "sample");
+  assert.equal(await page.locator('.gallery-item[data-id="sample"]').getAttribute("aria-current"), "true");
 });
 
 test("SD-126 only the current gallery card can open confirmation and commit its source deletion", { timeout: 60000 }, async () => {

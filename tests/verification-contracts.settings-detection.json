@@ -1494,6 +1494,7 @@
       "observation": "対象と元画像ファイルを保持する",
       "status": "automated",
       "testIds": [
+        "node:tests/test_source_delete_e2e.cjs::Delete shortcut keeps a durable source-delete intent through claim and acknowledges the committed receipt",
         "node:tests/test_source_delete_e2e.cjs::source-delete confirmation can be skipped, restored in settings, and cancelled without changing the preference"
       ]
     },
@@ -1505,6 +1506,7 @@
       "observation": "元画像ファイルと一覧・DB上の対象を完全削除し、次の表示対象へ移る",
       "status": "automated",
       "testIds": [
+        "python:tests.test_workspace.WorkspaceTests.test_commit_source_delete_removes_claimed_images",
         "node:tests/test_source_delete_e2e.cjs::visible delete control selects next for first and middle, previous for last, and clears every view after an all-image batch"
       ]
     },
@@ -1648,6 +1650,7 @@
       "observation": "画面と選択状態を整合させる",
       "status": "automated",
       "testIds": [
+        "node:tests/test_settings_actions_e2e.cjs::SD-125 a network disconnect during source deletion keeps the image and selection recoverable",
         "node:tests/test_settings_actions_e2e.cjs::SD-125 an unknown browser deletion remains pending and does not commit the catalog"
       ]
     },
@@ -1681,6 +1684,9 @@
       "observation": "他のbutton、現在画像以外のカード、一覧表示、ダイアログ中では削除を開始しない",
       "status": "automated",
       "testIds": [
+        "node:tests/test_settings_actions_e2e.cjs::SD-117 editable controls and a noncurrent gallery card cannot start source deletion",
+        "node:tests/test_settings_actions_e2e.cjs::SD-119 an open dialog prevents the remove shortcut from starting its operation",
+        "node:tests/test_settings_actions_e2e.cjs::SD-120 overview mode prevents Delete from removing the selected image",
         "node:tests/test_settings_actions_e2e.cjs::SD-126 only the current gallery card can open confirmation and commit its source deletion"
       ]
     },
@@ -1989,7 +1995,7 @@
       "observation": "現在版と確認結果を表示し、更新がある場合だけ更新操作を案内する",
       "status": "automated",
       "testIds": [
-        "python:tests.test_updater.UpdaterTests.test_fetch_latest_release_validates_payload"
+        "node:tests/test_settings_dialog_e2e.cjs::SD-096 update check shows current and latest versions then starts the confirmed update"
       ]
     },
     {
@@ -2323,6 +2329,7 @@
       "observation": "実機では起動後の設定表示、利用者の作業フォルダー、モデル読込案内を確認する",
       "status": "automated",
       "testIds": [
+        "node:tests/test_settings_dialog_e2e.cjs::SD-142 startup UI displays migrated absolute model and output paths",
         "python:tests.test_absolute_path_regression.AbsolutePathRegressionTests.test_legacy_relative_paths_are_migrated_to_absolute_paths_once"
       ]
     },

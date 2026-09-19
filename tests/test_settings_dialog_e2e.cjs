@@ -193,6 +193,27 @@ test("SD-013 resetting settings replaces edited controls with returned defaults"
   });
 });
 
+test("SD-096 update check shows current and latest versions then starts the confirmed update", { timeout: 60000 }, async () => {
+  await withSettingsPage(async (page, fixture) => {
+    fixture.setUpdateAvailable(true);
+    await page.locator('[data-settings-tab="info"]').click();
+    const checksBefore = fixture.updateRequests.length;
+    await page.locator("#checkUpdateButton").click();
+    await page.waitForFunction(() => document.querySelector("#checkUpdateButton").dataset.available === "true");
+    assert.equal(fixture.updateRequests.length, checksBefore + 1);
+    assert.equal(await page.locator("#settingsVersion").textContent(), "v1.0.0");
+    assert.match(await page.locator("#updateStatus").textContent(), /新しいバージョン|available/i);
+    assert.equal(await page.locator("#updateToast").isHidden(), false);
+    await page.locator("#checkUpdateButton").click();
+    await page.waitForFunction(() => document.querySelector("#confirmDialog").open);
+    assert.match(await page.locator("#confirmMessage").textContent(), /更新|update/i);
+    const updateStarted = page.waitForResponse((response) => new URL(response.url()).pathname === "/api/update/start" && response.request().method() === "POST");
+    await page.locator("#confirmAccept").click();
+    await updateStarted;
+    assert.equal(fixture.updateStarts.length, 1);
+  });
+});
+
 async function saveSettingsAndReload(page) {
   await page.locator("#settingsSaveButton").click();
   await page.waitForFunction(() => !document.querySelector("#settingsSaveButton").disabled);
@@ -559,6 +580,22 @@ test("SD-141 relative paths select the owning tab while absolute paths preserve 
     assert.equal(payload.general.port, 9123);
     assert.equal(payload.saving.default_output_directory, "G:\\absolute-output");
     assert.equal(payload.models.target_segmentation, "G:\\models\\target.onnx");
+  });
+});
+
+test("SD-142 startup UI displays migrated absolute model and output paths", { timeout: 60000 }, async () => {
+  await withSettingsPage(async (page, fixture) => {
+    const migrated = await page.evaluate(() => structuredClone(state.settings));
+    migrated.models.target_segmentation = "G:\\Mozarie\\models\\target.onnx";
+    migrated.saving.default_output_directory = "G:\\Mozarie\\output";
+    fixture.setSettings(migrated);
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await page.waitForFunction(() => state.settings?.models?.target_segmentation === "G:\\Mozarie\\models\\target.onnx");
+    await page.locator("#settingsButton").click();
+    assert.equal(await page.locator("#settingsDefaultOutputDirectory").inputValue(), "G:\\Mozarie\\output");
+    await page.locator('[data-settings-tab="models"]').click();
+    assert.equal(await page.locator("#settingsTargetModel").inputValue(), "G:\\Mozarie\\models\\target.onnx");
+    assert.notEqual(await page.locator("#settingsTargetModel").getAttribute("aria-invalid"), "true");
   });
 });
 
