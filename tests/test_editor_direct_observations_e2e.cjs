@@ -62,6 +62,14 @@ async function layerAlpha(page, layer, x, y) {
   return page.evaluate(({ layer, x, y }) => ({ add: addCtx, exclusion: exclusionCtx, exclusionErase: exclusionEraseCtx })[layer].getImageData(x, y, 1, 1).data[3], { layer, x, y });
 }
 
+async function renderedPixel(page, x, y) {
+  return page.evaluate(({ x, y }) => {
+    state.blinkPhase = true; renderNow();
+    const point = transformImagePoint({ x, y }); const px = Math.round(state.view.x + point.x * state.view.scale); const py = Math.round(state.view.y + point.y * state.view.scale);
+    return [...ctx.getImageData(px, py, 1, 1).data];
+  }, { x, y });
+}
+
 test("direct editor boundary and gesture observations", { timeout: 150000 }, async (t) => {
   const fixture = await startFixtureServer(); const browser = await chromium.launch({ headless: true });
   const context = await browser.newContext({ viewport: { width: 1280, height: 900 } }); const page = await context.newPage();
@@ -128,6 +136,19 @@ test("direct editor boundary and gesture observations", { timeout: 150000 }, asy
       assert.equal(await page.evaluate(() => addCtx.getImageData(201, 201, 1, 1).data[3]), outsideBefore); assert.equal(await page.evaluate(() => state.candidates.length), 1);
     });
 
+    await t.test("ED-090.1 detection candidate mosaic addition is removed by one Undo", async () => {
+      await setup(page, fixture.url); await selectBoundaryTool(page, "#rectangleTool"); await drag(page, [{ x: 40, y: 40 }, { x: 100, y: 100 }]);
+      await page.evaluate(() => {
+        const detected = { id: "detected-undo", labelToken: "penis", confidence: .9, role: "apply", enabled: true, forced: false, expandPx: 0, color: "#ff3d4d", source: "boundary", origin: "boundary", refinement: null };
+        const nativeApi = api; api = async (path, options) => path === "/api/boundary" ? { candidates: [detected], candidateRevision: 1 } : nativeApi(path, options);
+        reconcileCurrentCandidates = async () => { const mask = document.createElement("canvas"); mask.width = mask.height = 240; mask.getContext("2d").fillRect(40, 40, 60, 60); state.candidates = [detected]; state.candidateImages = new Map([[detected.id, mask]]); state.boundaryDrafts = []; state.boundaryActiveId = null; markMaskDirty(); syncCurrentCandidateRecord(); renderCandidates(); render(); return true; };
+      });
+      await page.locator("#boundaryDetectButton").click(); await page.waitForFunction(() => !state.boundaryPending && state.history.length === 1 && state.candidates.length === 1);
+      assert.equal(await page.evaluate(() => { flushMaskComposition(); return combinedCtx.getImageData(60, 60, 1, 1).data[3]; }), 255, "detection adds an enabled mosaic candidate");
+      await page.locator("#undoButton").click(); await page.waitForFunction(() => state.historyIndex === 0 && !state.historyRestoreBusy);
+      assert.deepEqual(await page.evaluate(() => { flushMaskComposition(); return { index: state.historyIndex, busy: state.historyRestoreBusy, removed: state.removedCandidateIds.has("detected-undo"), alpha: combinedCtx.getImageData(60, 60, 1, 1).data[3], error: document.querySelector("#errorDialog")?.open }; }), { index: 0, busy: false, removed: true, alpha: 0, error: false });
+    });
+
     await t.test("ED-025.1 outside-image pointer input adds no mask candidate or history", async () => {
       await setup(page, fixture.url); const before = await layerSnapshot(page); await page.locator("#brushTool").click();
       await page.evaluate(() => { const rect = canvas.getBoundingClientRect(); canvas.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, pointerId: 71, button: 0, buttons: 1, clientX: rect.left - 20, clientY: rect.top - 20 })); canvas.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, pointerId: 71, button: 0, buttons: 0, clientX: rect.left - 20, clientY: rect.top - 20 })); });
@@ -177,10 +198,19 @@ test("direct editor boundary and gesture observations", { timeout: 150000 }, asy
         await setup(page, fixture.url);
         if (scenario.seed) await page.evaluate((seed) => { const target = seed === "add" ? addCtx : exclusionCtx; target.fillStyle = "#fff"; target.fillRect(0, 0, 240, 240); if (seed === "add") state.manualEnabled = true; else state.manualExclusionEnabled = true; resetHistoryToCurrentManualMask(); markMaskDirty(); flushMaskComposition(); }, scenario.seed);
         await page.locator(scenario.selector).click(); await clickImage(page, 100, 100); assert.equal(await layerAlpha(page, scenario.layer, 100, 100), scenario.after); assert.equal(await page.evaluate(() => state.history.length), 1);
+        const circle = await page.evaluate(({ layer, seeded }) => {
+          const context = ({ add: addCtx, exclusion: exclusionCtx, exclusionErase: exclusionEraseCtx })[layer]; const radius = Number($("#brushSize").value) / 2;
+          const alpha = (x, y) => context.getImageData(x, y, 1, 1).data[3];
+          return { radius, inside: [[100 + radius - 2, 100], [100 - radius + 2, 100], [100, 100 + radius - 2], [100, 100 - radius + 2]].map(([x, y]) => alpha(Math.round(x), Math.round(y))), outside: [[100 + radius + 2, 100], [100 - radius - 2, 100], [100, 100 + radius + 2], [100, 100 - radius - 2]].map(([x, y]) => alpha(Math.round(x), Math.round(y))), seeded };
+        }, { layer: scenario.layer, seeded: Boolean(scenario.seed) });
+        assert.ok(circle.inside.every((alpha) => alpha === scenario.after), `${scenario.selector} changes every cardinal pixel inside the cursor radius`);
+        assert.ok(circle.outside.every((alpha) => alpha === (scenario.seed === "add" ? 255 : 0)), `${scenario.selector} changes no pixel outside the cursor radius`);
         await page.locator("#undoButton").click(); await page.waitForFunction(() => state.historyIndex === 0);
         assert.equal(await layerAlpha(page, scenario.layer, 100, 100), scenario.seed === "add" ? 255 : 0);
       }
       await setup(page, fixture.url); await selectBoundaryTool(page, "#boundaryBrushTool"); await clickImage(page, 100, 100); assert.equal(await page.evaluate(() => state.boundaryDrafts.length), 1);
+      const boundaryCircle = await page.evaluate(() => { const draft = state.boundaryDrafts[0]; const radius = Number($("#brushSize").value) / 2; const center = transformImagePoint({ x: 100, y: 100 }); const pixel = (x, y) => [...boundaryOverlayCtx.getImageData(Math.round(state.view.x + x * state.view.scale), Math.round(state.view.y + y * state.view.scale), 1, 1).data]; return { radius, draftDiameter: draft.radius, width: draft.roi.right - draft.roi.left, height: draft.roi.bottom - draft.roi.top, center: pixel(center.x, center.y), outside: pixel(center.x + radius + 5, center.y) }; });
+      assert.ok(Math.abs(boundaryCircle.draftDiameter - boundaryCircle.radius * 2) <= 1 && Math.abs(boundaryCircle.width - boundaryCircle.radius * 2) <= 2 && Math.abs(boundaryCircle.height - boundaryCircle.radius * 2) <= 2); assert.notDeepEqual(boundaryCircle.center, boundaryCircle.outside);
       await page.keyboard.press("Control+Z"); assert.equal(await page.evaluate(() => state.boundaryDrafts.length), 0, "boundary brush point is reversed by one Undo shortcut");
     });
 
@@ -304,47 +334,72 @@ test("direct editor boundary and gesture observations", { timeout: 150000 }, asy
       });
       assert.deepEqual(await page.evaluate(() => [state.history.length, currentRecord().reviewed, state.reviewedImageIds.has(state.currentId)]), [2, false, false]);
       await page.locator("#undoButton").click(); await page.waitForFunction(() => state.historyIndex === 1); assert.deepEqual(await page.evaluate(() => [currentRecord().reviewed, state.reviewedImageIds.has(state.currentId)]), [true, true]);
+      await page.evaluate(() => { document.querySelectorAll("[data-gallery-filter]").forEach((input) => { input.checked = input.dataset.galleryFilter === "reviewed"; }); document.querySelector('[data-gallery-filter="reviewed"]').dispatchEvent(new Event("change", { bubbles: true })); });
+      assert.deepEqual(await page.locator(".gallery-item").evaluateAll((items) => items.map((item) => item.dataset.id)), ["sample"], "reviewed filter shows only the reviewed image after Undo");
       await page.evaluate(() => focusCanvas()); await page.keyboard.press("Control+Shift+Z"); await page.waitForFunction(() => state.historyIndex === 2); assert.equal(await page.evaluate(() => currentRecord().reviewed), false);
+      assert.deepEqual(await page.locator(".gallery-item").evaluateAll((items) => items.map((item) => item.dataset.id)), [], "reviewed filter updates after Redo returns the image to unreviewed");
+      await page.evaluate(() => { document.querySelectorAll("[data-gallery-filter]").forEach((input) => { input.checked = input.dataset.galleryFilter === "unreviewed"; }); document.querySelector('[data-gallery-filter="unreviewed"]').dispatchEvent(new Event("change", { bubbles: true })); });
+      assert.deepEqual(new Set(await page.locator(".gallery-item").evaluateAll((items) => items.map((item) => item.dataset.id))), new Set(["sample", "sample-two"]));
       await page.evaluate(() => {
         resetHistoryToCurrentManualMask(); publishWorkspaceFlags(state.currentId, { hidden: true }); recordHistoryOperation({ kind: "workspaceFlag" });
         publishWorkspaceFlags(state.currentId, { hidden: false }); recordHistoryOperation({ kind: "workspaceFlag" }); renderCatalogViews();
       });
       await page.evaluate(() => focusCanvas()); await page.keyboard.press("Control+Z"); await page.waitForFunction(() => state.historyIndex === 1);
       assert.deepEqual(await page.evaluate(() => [currentRecord().hidden, state.hiddenImageIds.has(state.currentId)]), [true, true]);
+      await page.evaluate(() => { document.querySelectorAll("[data-gallery-filter]").forEach((input) => { input.checked = input.dataset.galleryFilter === "hidden"; }); document.querySelector('[data-gallery-filter="hidden"]').dispatchEvent(new Event("change", { bubbles: true })); });
+      assert.deepEqual(await page.locator(".gallery-item").evaluateAll((items) => items.map((item) => item.dataset.id)), ["sample"], "hidden filter shows the hidden image after Undo");
       await page.locator("#redoButton").click(); await page.waitForFunction(() => state.historyIndex === 2);
-      assert.deepEqual(await page.evaluate(() => [currentRecord().hidden, state.hiddenImageIds.has(state.currentId), document.querySelector(`.gallery-item[data-id="${state.currentId}"]`) !== null]), [false, false, true]);
+      assert.deepEqual(await page.evaluate(() => [currentRecord().hidden, state.hiddenImageIds.has(state.currentId)]), [false, false]);
+      assert.deepEqual(await page.locator(".gallery-item").evaluateAll((items) => items.map((item) => item.dataset.id)), [], "hidden filter updates after Redo restores the image");
+    });
+
+    await t.test("ED-134.1 and ED-134.2 local layers and overview selection survive exact Undo Redo restoration", async () => {
+      await setup(page, fixture.url); await page.evaluate(() => { state.project = { id: "named-ui", status: "working" }; state.historyDurable = false; state.settings.shortcuts.bindings.undo = "Ctrl+Z"; state.settings.shortcuts.bindings.redo = "Ctrl+Shift+Z"; });
+      for (const action of [{ selector: "#brushTool", x: 40 }, { selector: "#eraserTool", x: 100 }, { selector: "#excludeEraserTool", x: 160 }]) { await page.locator(action.selector).click(); await clickImage(page, action.x, 100); }
+      assert.equal(await page.evaluate(() => state.history.length), 3);
+      const edited = await page.evaluate(() => ({ add: [addCtx.getImageData(40, 100, 1, 1).data[3], addCtx.getImageData(200, 200, 1, 1).data[3]], exclusion: [exclusionCtx.getImageData(100, 100, 1, 1).data[3], exclusionCtx.getImageData(200, 200, 1, 1).data[3]], erase: [exclusionEraseCtx.getImageData(160, 100, 1, 1).data[3], exclusionEraseCtx.getImageData(200, 200, 1, 1).data[3]] }));
+      await page.evaluate(() => focusCanvas()); await page.keyboard.press("Control+Z"); await page.waitForFunction(() => state.historyIndex === 2 && !state.historyRestoreBusy);
+      assert.deepEqual(await page.evaluate(() => [addCtx.getImageData(40, 100, 1, 1).data[3], exclusionCtx.getImageData(100, 100, 1, 1).data[3], exclusionEraseCtx.getImageData(160, 100, 1, 1).data[3]]), [255, 255, 0], "Undo changes only the latest local layer pixel");
+      await page.keyboard.press("Control+Shift+Z"); await page.waitForFunction(() => state.historyIndex === 3 && !state.historyRestoreBusy);
+      assert.deepEqual(await page.evaluate(() => ({ add: [addCtx.getImageData(40, 100, 1, 1).data[3], addCtx.getImageData(200, 200, 1, 1).data[3]], exclusion: [exclusionCtx.getImageData(100, 100, 1, 1).data[3], exclusionCtx.getImageData(200, 200, 1, 1).data[3]], erase: [exclusionEraseCtx.getImageData(160, 100, 1, 1).data[3], exclusionEraseCtx.getImageData(200, 200, 1, 1).data[3]] })), edited);
+      await page.locator("#overviewButton").click(); await page.waitForFunction(() => state.viewMode === "overview"); await page.locator("#batchModeButton").click(); await page.locator('.overview-item[data-id="sample-two"]').click();
+      assert.deepEqual(await page.evaluate(() => ({ viewMode: state.viewMode, currentId: state.currentId, selected: [...state.selectedImageIds] })), { viewMode: "overview", currentId: "sample", selected: ["sample-two"] });
+      await page.evaluate(async () => { await restoreSnapshot(2); await restoreSnapshot(3); });
+      assert.deepEqual(await page.evaluate(() => ({ viewMode: state.viewMode, currentId: state.currentId, selected: [...state.selectedImageIds], historyIndex: state.historyIndex, otherDraft: state.drafts.get("sample-two") || null })), { viewMode: "overview", currentId: "sample", selected: ["sample-two"], historyIndex: 3, otherDraft: null }, "restoration preserves overview mode, current image, other-image selection and other-image draft");
     });
 
     await t.test("ED-119.1 failed individual and batch candidate controls restore state without history", async () => {
-      for (const scenario of ["toggle", "forced", "padding", "batch"]) {
+      for (const scenario of ["toggle", "forced", "padding", "batch"]) for (const failure of ["disconnect", "stale_catalog"]) {
         await setup(page, fixture.url);
-        await page.evaluate(() => {
+        await page.evaluate((failure) => {
           const mask = document.createElement("canvas"); mask.width = mask.height = 240; mask.getContext("2d").fillRect(20, 20, 20, 20);
           state.candidates = [
             { id: "apply", role: "apply", enabled: true, forced: false, expandPx: 0, color: "#fff", labelToken: "penis", confidence: .8 },
             { id: "exclude", role: "exclude", enabled: true, forced: true, expandPx: 0, color: "#000", labelToken: "hand", confidence: .8 },
           ];
           state.candidateImages = new Map([["apply", mask], ["exclude", mask]]); state.removedCandidateIds = new Set(); resetHistoryToCurrentManualMask();
+          setCandidateDisplayMode(["apply"], "normal"); state.blinkPhase = true; state.mosaicPreviewEnabled = false; mosaicCtx.fillStyle = "#345"; mosaicCtx.fillRect(0, 0, 8, 8);
           const baseline = state.candidates.map((candidate) => ({ ...candidate }));
-          api = async () => { const error = new Error("stale"); error.code = "stale_catalog"; throw error; };
+          api = async () => { const error = new TypeError(failure === "disconnect" ? "Failed to fetch" : "stale"); if (failure !== "disconnect") error.code = failure; throw error; };
           reconcileCurrentCandidates = async () => { state.candidates = baseline.map((candidate) => ({ ...candidate })); renderCandidates(); render(); return true; };
-          renderCandidates(); render();
-        });
-        const before = await page.evaluate(() => ({ candidates: state.candidates.map(({ id, enabled, forced, expandPx }) => ({ id, enabled, forced, expandPx })), history: state.history.length, mask: combinedCanvas.toDataURL(), reviewed: currentRecord().reviewed === true }));
+          flushMaskComposition(); renderCandidates(); render();
+        }, failure);
+        const snapshot = () => page.evaluate(() => ({ candidates: state.candidates.map(({ id, enabled, forced, expandPx }) => ({ id, enabled, forced, expandPx })), history: [state.history.length, state.historyIndex], mask: combinedCanvas.toDataURL(), reviewed: currentRecord().reviewed === true, range: { ids: [...state.blinkCandidateIds], modes: [...state.blinkModes.entries()] }, preview: { enabled: state.mosaicPreviewEnabled, pixels: mosaicCanvas.toDataURL() }, list: [...document.querySelectorAll("#candidatePane .candidate-row")].map((row) => ({ id: row.dataset.candidateBlinkId, className: row.className, controls: [...row.querySelectorAll("button")].map((button) => [button.className, button.getAttribute("aria-pressed"), button.disabled]) })) }));
+        const before = await snapshot();
         if (scenario === "toggle") await page.locator('[data-candidate-blink-id="apply"] .candidate-toggle').click();
         if (scenario === "forced") await page.locator('[data-candidate-blink-id="exclude"] .candidate-forced').click();
         if (scenario === "padding") { await page.locator('[data-candidate-blink-id="apply"] .candidate-padding-button').click(); await page.locator("#candidatePaddingInput").fill("8"); await page.locator("#candidatePaddingConfirm").click(); }
         if (scenario === "batch") await page.locator('[data-candidate-batch="apply:toggle"]').click();
         await page.waitForFunction(() => state.candidateUpdateChains.size === 0 && state.candidateBatchPending.size === 0 && !candidateControlLocked(state.currentId));
-        const after = await page.evaluate(() => ({ candidates: state.candidates.map(({ id, enabled, forced, expandPx }) => ({ id, enabled, forced, expandPx })), history: state.history.length, mask: combinedCanvas.toDataURL(), reviewed: currentRecord().reviewed === true }));
-        assert.deepEqual(after, before, `${scenario} failure restores every observable state and records no history`);
+        const after = await snapshot();
+        assert.deepEqual(after, before, `${scenario} ${failure} restores range, preview, list, candidate, review and history state`);
       }
     });
 
     await t.test("ED-093.1 through ED-096.1 three 4K ranges survive Undo Redo and five UI image round-trips", async () => {
       await setup(page, fixture.url, 4096);
       await page.evaluate(() => {
-        window.__directRangeCounter = 0; window.__directLatestCandidate = null; window.__releasedRangePreviews = 0;
+        window.__directRangeCounter = 0; window.__directLatestCandidate = null; window.__releasedCandidateRanges = 0;
         const nativeApi = api;
         api = async (path, options = {}) => {
           if (path === "/api/boundary") {
@@ -352,7 +407,8 @@ test("direct editor boundary and gesture observations", { timeout: 150000 }, asy
             const candidate = { id: `range-${index}`, labelToken: "boundary", confidence: .8, role: "apply", enabled: true, forced: false, expandPx: 0, color: "#ff3d4d", source: "boundary", origin: "boundary", refinement: null };
             window.__directLatestCandidate = candidate; return { candidates: [candidate], candidateRevision: 10 + index };
           }
-          if (path.startsWith("/api/candidates/") && window.__directRangeCandidates) return { candidates: window.__directRangeCandidates.map((candidate) => ({ ...candidate })), candidateRevision: 20 };
+          if (path === "/api/candidates/sample" && window.__directRangeCandidates) return { candidates: window.__directRangeCandidates.map((candidate) => ({ ...candidate })), candidateRevision: 20 };
+          if (path === "/api/candidates/sample-two") return { candidates: [], candidateRevision: 0 };
           if (path.startsWith("/api/candidate/")) return { candidateRevision: (currentRecord().candidateRevision || 12) + 1 };
           return nativeApi(path, options);
         };
@@ -362,7 +418,7 @@ test("direct editor boundary and gesture observations", { timeout: 150000 }, asy
             state.candidates.push(candidate);
             const mask = document.createElement("canvas"); mask.width = mask.height = 4096;
             const index = Number(candidate.id.split("-").at(-1)); mask.getContext("2d").fillRect(100 + index * 600, 100 + index * 600, 32, 32);
-            mask.close = () => { window.__releasedRangePreviews += 1; };
+            mask.close = () => { window.__releasedCandidateRanges += 1; };
             state.candidateImages.set(candidate.id, mask);
           }
           renderCandidates(); render(); return true;
@@ -377,6 +433,8 @@ test("direct editor boundary and gesture observations", { timeout: 150000 }, asy
         await page.waitForFunction((count) => !state.boundaryPending && state.candidates.length === count, index + 1);
         assert.equal(await page.locator("#candidateList .candidate-row").count(), index + 1);
         assert.deepEqual(await page.evaluate(() => [...state.candidateImages.values()].map((mask) => [mask.width, mask.height])), Array.from({ length: index + 1 }, () => [4096, 4096]));
+        await page.evaluate(() => { if (state.blinkTimer) clearInterval(state.blinkTimer); setCandidateDisplayMode(state.candidates.map((candidate) => candidate.id), "normal"); state.blinkPhase = true; renderNow(); });
+        for (let visibleIndex = 0; visibleIndex <= index; visibleIndex += 1) assert.notDeepEqual(await renderedPixel(page, 110 + visibleIndex * 600, 110 + visibleIndex * 600), [119, 136, 153, 255], `range ${visibleIndex} remains rendered after adding range ${index}`);
       }
       await page.evaluate(() => { state.candidates[1].enabled = false; resetHistoryToCurrentManualMask(); renderCandidates(); });
       await page.evaluate(async () => { const candidate = state.candidates[2]; candidate.expandPx = 9; if (await updateCandidate(candidate, candidate.enabled, state.maskStatus.get(state.currentId), candidate.forced, 0)) recordHistoryOperation({ kind: "candidateState" }); });
@@ -386,8 +444,11 @@ test("direct editor boundary and gesture observations", { timeout: 150000 }, asy
       ]);
       await page.locator("#undoButton").click(); await page.waitForFunction(() => state.historyIndex === 0 && !state.historyRestoreBusy); const undoState = await page.evaluate(() => ({ index: state.historyIndex, length: state.history.length, drafts: state.boundaryDrafts.length, pending: state.historyRestoreBusy, expand: state.candidates[2].expandPx, error: document.querySelector("#errorDialog")?.open })); assert.equal(undoState.index, 0, JSON.stringify(undoState)); assert.equal(undoState.expand, 0);
       assert.equal(await page.evaluate(() => state.candidates.slice(0, 2).every((candidate) => state.candidateImages.has(candidate.id))), true);
+      await page.evaluate(() => { setCandidateDisplayMode(state.candidates.slice(0, 2).map((candidate) => candidate.id), "normal"); state.blinkPhase = true; renderNow(); });
+      for (const point of [110, 710]) assert.notDeepEqual(await renderedPixel(page, point, point), [119, 136, 153, 255], "an unchanged candidate range remains visible during Undo");
       await page.locator("#redoButton").click(); await page.waitForFunction(() => state.historyIndex === 1 && !state.historyRestoreBusy);
       assert.equal(await page.evaluate(() => state.candidates[2].expandPx), 9);
+      for (const point of [110, 710]) assert.notDeepEqual(await renderedPixel(page, point, point), [119, 136, 153, 255], "an unchanged candidate range remains visible during Redo");
 
       await page.evaluate(() => {
         const record = currentRecord(); record.candidateRevision = 20; record.candidateCount = 3; record.enabledCandidateCount = 2;
@@ -395,18 +456,16 @@ test("direct editor boundary and gesture observations", { timeout: 150000 }, asy
         fetchBitmap = async (url) => window.__directRangeMasks.get([...window.__directRangeMasks.keys()].find((id) => String(url).includes(encodeURIComponent(id)))) || document.createElement("canvas");
         state.imageCache.set(imageCacheKey(record), state.currentImage, 4096 * 4096 * 4);
         state.candidateBundleCache.set(candidateCacheKey(record.id, record.candidateRevision), { candidates: state.candidates, candidateImages: state.candidateImages, candidateRevision: record.candidateRevision }, 4096 * 4096 * 3);
-        const preview = document.createElement("canvas"); preview.width = preview.height = 4096; preview.close = () => { window.__releasedRangePreviews += 1; };
-        state.candidatePaddingPreviewImages.set("range-2", preview);
         state.mosaicPreviewEnabled = false; releaseMosaicPreview();
         state.imageMutationChains.clear(); state.candidateUpdateChains.clear(); state.candidateControlLocks.clear();
         updateActionButtons(); renderCandidates();
       });
       for (let cycle = 0; cycle < 5; cycle += 1) {
-        await page.locator('.gallery-item[data-id="sample-two"]').dispatchEvent("click"); await page.waitForTimeout(100);
+        await page.locator('.gallery-item[data-id="sample-two"]').dispatchEvent("click"); await page.waitForFunction(() => state.currentId === "sample-two" && state.pendingImageId === null);
         const switched = await page.evaluate(() => ({ currentId: state.currentId, pendingId: state.pendingImageId, busy: isBusy(), actionPending: currentImageActionPending(), gesture: isGestureActive(), locks: [...state.candidateControlLocks.entries()], chains: state.imageMutationChains.size }));
         assert.equal(switched.currentId, "sample-two", `cycle ${cycle}: ${JSON.stringify(switched)}`);
-        await page.waitForFunction(() => state.currentId === "sample-two" && state.pendingImageId === null);
-        await page.locator('.gallery-item[data-id="sample"]').dispatchEvent("click"); await page.waitForTimeout(100);
+        assert.deepEqual(await page.evaluate(() => ({ released: window.__releasedCandidateRanges, retainedCurrent: state.candidateImages.size, retainedBundles: [...state.candidateBundleCache.items.keys()].filter((key) => key.startsWith("sample:")).length })), { released: (cycle + 1) * 3, retainedCurrent: 0, retainedBundles: 0 }, `cycle ${cycle} releases all prior candidate range images without retaining an old bundle`);
+        await page.locator('.gallery-item[data-id="sample"]').dispatchEvent("click"); await page.waitForFunction(() => state.currentId === "sample" && state.pendingImageId === null && state.candidates.length === 3);
         const switchedBack = await page.evaluate(() => ({ currentId: state.currentId, pendingId: state.pendingImageId, candidates: state.candidates.length, busy: isBusy(), actionPending: currentImageActionPending(), gesture: isGestureActive() }));
         assert.deepEqual(switchedBack, { currentId: "sample", pendingId: null, candidates: 3, busy: false, actionPending: false, gesture: false }, `cycle ${cycle}: ${JSON.stringify(switchedBack)}`);
         assert.deepEqual(await page.evaluate(() => state.candidates.map(({ id, enabled, expandPx }) => ({ id, enabled, expandPx }))), [
@@ -414,7 +473,7 @@ test("direct editor boundary and gesture observations", { timeout: 150000 }, asy
         ]);
         assert.equal(await page.evaluate(() => state.candidateImages.size), 3);
       }
-      assert.ok(await page.evaluate(() => window.__releasedRangePreviews >= 1), "switching releases the obsolete full-size padding preview bitmap");
+      assert.equal(await page.evaluate(() => window.__releasedCandidateRanges), 15, "every round-trip releases all three obsolete full-size candidate range images");
     });
 
     await t.test("ED-106.1 every 4K brush keeps preview copies bounded with many candidates", async () => {
@@ -436,6 +495,8 @@ test("direct editor boundary and gesture observations", { timeout: 150000 }, asy
         await page.evaluate((seed) => { for (const context of [addCtx, exclusionCtx, exclusionEraseCtx]) context.clearRect(0, 0, 4096, 4096); if (seed) { const target = seed === "add" ? addCtx : exclusionCtx; target.fillStyle = "#fff"; target.fillRect(0, 0, 4096, 4096); } state.history = []; state.historyIndex = 0; clearBoundaryInteraction(); window.__directBrushCopies.fullCompose = window.__directBrushCopies.fullBitmap = window.__directBrushCopies.blobs = window.__directBrushCopies.patchBitmap = 0; markMaskDirty(); flushMaskComposition(); }, scenario.seed || "");
         if (scenario.boundary) await selectBoundaryTool(page, scenario.selector); else await page.locator(scenario.selector).click();
         await drag(page, [{ x: 1800, y: 1000 }, { x: 2100, y: 1000 }]); await page.waitForFunction(() => !state.activeStroke && !state.mosaicWorkerBusy && !state.mosaicPending);
+        const endpoint = await imagePoint(page, 2100, 1000); const cursorBox = await page.locator("#brushCursor").boundingBox();
+        assert.ok(cursorBox, `${scenario.selector} keeps the full-screen brush overlay visible`); assert.ok(Math.abs(cursorBox.x + cursorBox.width / 2 - endpoint.x) <= 1 && Math.abs(cursorBox.y + cursorBox.height / 2 - endpoint.y) <= 1, `${scenario.selector} overlay follows the final pointer position`);
         const copies = await page.evaluate(() => ({ ...window.__directBrushCopies, candidates: state.candidates.length }));
         assert.equal(copies.candidates, 24); assert.equal(copies.fullCompose, 0, `${scenario.selector} does not compose the full mask while dragging`); assert.equal(copies.fullBitmap, 0); assert.equal(copies.blobs, 0);
         if (!scenario.boundary) assert.ok(copies.patchBitmap > 0, `${scenario.selector} updates one or more cropped preview patches`);

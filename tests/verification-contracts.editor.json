@@ -1226,7 +1226,7 @@
       "observation": "自動検出後にUndo → 検出で加わった候補とモザイクを検出前へ戻す",
       "status": "automated",
       "testIds": [
-        "python:tests.test_workspace.WorkspaceTests.test_history_group_restores_every_affected_image"
+        "node:tests/test_editor_direct_observations_e2e.cjs::direct editor boundary and gesture observations > ED-090.1 detection candidate mosaic addition is removed by one Undo"
       ]
     },
     {
@@ -1238,7 +1238,6 @@
       "status": "automated",
       "testIds": [
         "node:tests/test_editor_masks_behavior.cjs::editor masks, fill, candidates, and history",
-        "node:tests/test_project_history_browser_e2e.cjs::project Ctrl+Z flushes the durable edit and keeps browser history canvases released",
         "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
       ]
     },
@@ -1341,7 +1340,6 @@
       "status": "automated",
       "testIds": [
         "node:tests/test_editor_masks_behavior.cjs::editor masks, fill, candidates, and history",
-        "node:tests/test_project_history_browser_e2e.cjs::project Ctrl+Z flushes the durable edit and keeps browser history canvases released",
         "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
       ]
     },
@@ -1367,7 +1365,6 @@
       "status": "automated",
       "testIds": [
         "node:tests/test_editor_masks_behavior.cjs::editor masks, fill, candidates, and history",
-        "node:tests/test_project_history_browser_e2e.cjs::project Ctrl+Z flushes the durable edit and keeps browser history canvases released",
         "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
       ]
     },
@@ -1380,7 +1377,6 @@
       "status": "automated",
       "testIds": [
         "node:tests/test_editor_masks_behavior.cjs::editor masks, fill, candidates, and history",
-        "node:tests/test_project_history_browser_e2e.cjs::project Ctrl+Z flushes the durable edit and keeps browser history canvases released",
         "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
       ]
     },
@@ -1406,7 +1402,6 @@
       "status": "automated",
       "testIds": [
         "node:tests/test_editor_masks_behavior.cjs::editor masks, fill, candidates, and history",
-        "node:tests/test_project_history_browser_e2e.cjs::project Ctrl+Z flushes the durable edit and keeps browser history canvases released",
         "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
       ]
     },
@@ -1432,7 +1427,6 @@
       "status": "automated",
       "testIds": [
         "node:tests/test_editor_masks_behavior.cjs::editor masks, fill, candidates, and history",
-        "node:tests/test_project_history_browser_e2e.cjs::project Ctrl+Z flushes the durable edit and keeps browser history canvases released",
         "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
       ]
     },
@@ -1458,7 +1452,6 @@
       "status": "automated",
       "testIds": [
         "node:tests/test_editor_masks_behavior.cjs::editor masks, fill, candidates, and history",
-        "node:tests/test_project_history_browser_e2e.cjs::project Ctrl+Z flushes the durable edit and keeps browser history canvases released",
         "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
       ]
     },
@@ -1484,7 +1477,6 @@
       "status": "automated",
       "testIds": [
         "node:tests/test_editor_masks_behavior.cjs::editor masks, fill, candidates, and history",
-        "node:tests/test_project_history_browser_e2e.cjs::project Ctrl+Z flushes the durable edit and keeps browser history canvases released",
         "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
       ]
     },
@@ -1588,7 +1580,6 @@
       "status": "automated",
       "testIds": [
         "node:tests/test_editor_masks_behavior.cjs::editor masks, fill, candidates, and history",
-        "node:tests/test_project_history_browser_e2e.cjs::project Ctrl+Z flushes the durable edit and keeps browser history canvases released",
         "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
       ]
     },
@@ -1627,7 +1618,6 @@
       "status": "automated",
       "testIds": [
         "node:tests/test_editor_masks_behavior.cjs::editor masks, fill, candidates, and history",
-        "node:tests/test_project_history_browser_e2e.cjs::project Ctrl+Z flushes the durable edit and keeps browser history canvases released",
         "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
       ]
     },
@@ -1653,7 +1643,6 @@
       "status": "automated",
       "testIds": [
         "node:tests/test_editor_masks_behavior.cjs::editor masks, fill, candidates, and history",
-        "node:tests/test_project_history_browser_e2e.cjs::project Ctrl+Z flushes the durable edit and keeps browser history canvases released",
         "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
       ]
     },
@@ -1666,7 +1655,6 @@
       "status": "automated",
       "testIds": [
         "node:tests/test_editor_masks_behavior.cjs::editor masks, fill, candidates, and history",
-        "node:tests/test_project_history_browser_e2e.cjs::project Ctrl+Z flushes the durable edit and keeps browser history canvases released",
         "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
       ]
     },
@@ -1802,7 +1790,8 @@
       "observation": "名前付きPJの1画像で離れた位置にモザイク、除外、除外消しゴムを描き、Ctrl+Z→Redoを各1回行う。編集表示と一覧表示の両方で、別画像も選択してから確認する → 対象の局所画素だけを戻し直し、他の手描き層・離れた画素・別画像を変えない",
       "status": "automated",
       "testIds": [
-        "python:tests.test_workspace.WorkspaceTests.test_named_project_manual_layers_restore_only_the_latest_local_pixels_after_reopen"
+        "python:tests.test_workspace.WorkspaceTests.test_named_project_manual_layers_restore_only_the_latest_local_pixels_after_reopen",
+        "node:tests/test_editor_direct_observations_e2e.cjs::direct editor boundary and gesture observations > ED-134.1 and ED-134.2 local layers and overview selection survive exact Undo Redo restoration"
       ]
     },
     {
@@ -1814,7 +1803,8 @@
       "status": "automated",
       "testIds": [
         "python:tests.test_workspace.WorkspaceTests.test_named_project_manual_layers_restore_only_the_latest_local_pixels_after_reopen",
-        "node:tests/test_project_history_browser_e2e.cjs::project Ctrl+Z flushes the durable edit and keeps browser history canvases released"
+        "node:tests/test_project_history_browser_e2e.cjs::project Ctrl+Z flushes the durable edit and keeps browser history canvases released",
+        "node:tests/test_editor_direct_observations_e2e.cjs::direct editor boundary and gesture observations > ED-134.1 and ED-134.2 local layers and overview selection survive exact Undo Redo restoration"
       ]
     },
     {
@@ -2036,9 +2026,10 @@
         "ED-120"
       ],
       "observation": "実OSのメモリ不足で境界処理を実行する → 実際のメモリ割当失敗を画像またはマスクの読み込み失敗として分類する",
-      "status": "retired",
-      "retired": {
-        "reason": "実OSのメモリ割当失敗は決定的に再現できず、今回の確認対象から除外するため"
+      "status": "manual",
+      "manual": {
+        "environment": "Windows実機で、対象画像またはマスクの確保だけが失敗する実メモリ逼迫状態",
+        "reason": "OSと画像ライブラリの実際のメモリ割当失敗を、CIプロセスや同居ジョブを不安定化させず決定的に発生させられないため"
       }
     }
   ]
