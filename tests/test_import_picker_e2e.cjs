@@ -1318,12 +1318,15 @@ async function runDynamicProjectAndShortcutScenario(browser, fixtureUrl, setting
     await page.locator("#settingsButton").click();
     await page.locator("#settingsTabShortcuts").click();
     const shortcutKeys = ["previous", "next", "previousVisible", "nextVisible", "first", "last", "reviewAndNext", "removeImage", "renameImage", "toggleOverview", "undo", "redo"];
-    const shortcutBindings = Object.fromEntries(shortcutKeys.map((action, index) => [action, `Ctrl+Shift+Alt+${String.fromCharCode(65 + index)}`]));
+    // Keep these page-level shortcuts clear of Chromium's own Ctrl/Alt
+    // shortcuts so replay remains focused on the gallery card.
+    const shortcutLetters = shortcutKeys.map((_, index) => String.fromCharCode(65 + index));
+    const shortcutBindings = Object.fromEntries(shortcutKeys.map((action, index) => [action, `Shift+${shortcutLetters[index]}`]));
     assert.equal(await page.locator("[data-shortcut-action]").count(), shortcutKeys.length, "shortcut settings renders the fixed twelve-action inventory");
     assert.deepEqual(await page.locator("[data-shortcut-action]").evaluateAll((inputs) => inputs.map((input) => input.dataset.shortcutAction)), shortcutKeys, "shortcut settings exposes every action in its documented order");
     for (const [index, action] of shortcutKeys.entries()) {
       const shortcut = page.locator(`[data-shortcut-action="${action}"]`);
-      await shortcut.focus(); await page.keyboard.press(`Control+Shift+Alt+${String.fromCharCode(65 + index)}`);
+      await shortcut.press(`Shift+${shortcutLetters[index]}`);
       assert.equal(await shortcut.inputValue(), shortcutBindings[action], `${action} records its exact keyboard binding through the public handler`);
     }
     recordDynamicControl("[data-shortcut-action]");
@@ -1338,27 +1341,31 @@ async function runDynamicProjectAndShortcutScenario(browser, fixtureUrl, setting
     recordDynamicControl("[data-shortcut-enabled]");
     const shortcutSaveStart = settingsPayloads.length;
     await page.locator("#settingsSaveButton").click();
-    await page.waitForFunction(() => document.querySelector("#settingsResult").textContent === "設定を保存しました。");
+    await page.waitForFunction(([bindings, actions]) => document.querySelector("#settingsResult").textContent === "設定を保存しました。"
+      && !document.querySelector("#settingsSaveButton").disabled
+      && JSON.stringify(state.settings?.shortcuts?.bindings) === JSON.stringify(bindings)
+      && JSON.stringify(state.settings?.shortcuts?.actions) === JSON.stringify(actions), [shortcutBindings, shortcutActions]);
     assert.deepEqual(settingsPayloads.slice(shortcutSaveStart).filter((payload) => payload.search === "?status=0").map((payload) => payload.body.shortcuts), [{ enabled: true, bindings: shortcutBindings, actions: shortcutActions }], "saving shortcut settings posts all twelve exact bindings and enabled actions");
     assert.deepEqual(await page.evaluate(() => state.settings.shortcuts), { enabled: true, bindings: shortcutBindings, actions: shortcutActions }, "saving shortcut settings updates the live twelve-action shortcut state");
     await page.locator("#settingsCloseButton").click();
     const renameCard = page.locator('.gallery-item[data-id="sample"]');
-    const playwrightShortcut = (shortcut) => shortcut.replace(/^Ctrl\+/, "Control+");
-    await renameCard.focus(); await page.keyboard.press(playwrightShortcut(shortcutBindings.renameImage));
+    await renameCard.press(shortcutBindings.renameImage);
     await page.waitForFunction(() => document.querySelector("#renameImageDialog").open && state.renameImage?.imageId === "sample");
     await page.locator("#renameImageCancel").click(); await page.waitForFunction(() => !document.querySelector("#renameImageDialog").open);
     await page.locator("#settingsButton").click(); await page.locator("#settingsTabShortcuts").click();
     await page.locator('[data-shortcut-enabled="renameImage"]').uncheck();
     const renameDisabledSaveStart = settingsPayloads.length;
-    await page.locator("#settingsSaveButton").click(); await page.waitForFunction(() => document.querySelector("#settingsResult").textContent === "設定を保存しました。");
+    await page.locator("#settingsSaveButton").click(); await page.waitForFunction(() => document.querySelector("#settingsResult").textContent === "設定を保存しました。"
+      && !document.querySelector("#settingsSaveButton").disabled && state.settings?.shortcuts?.actions?.renameImage === false);
     assert.deepEqual(settingsPayloads.slice(renameDisabledSaveStart).filter((payload) => payload.search === "?status=0").map((payload) => payload.body.shortcuts.actions.renameImage), [false], "saving the disabled rename action posts its exact action state");
-    await page.locator("#settingsCloseButton").click(); await renameCard.focus(); await page.keyboard.press(playwrightShortcut(shortcutBindings.renameImage));
+    await page.locator("#settingsCloseButton").click(); await renameCard.press(shortcutBindings.renameImage);
     assert.equal(await page.locator("#renameImageDialog").evaluate((dialog) => dialog.open), false, "a disabled custom rename shortcut does not open the dialog");
     await page.locator("#settingsButton").click(); await page.locator("#settingsTabShortcuts").click(); await page.locator('[data-shortcut-enabled="renameImage"]').check();
     const renameEnabledSaveStart = settingsPayloads.length;
-    await page.locator("#settingsSaveButton").click(); await page.waitForFunction(() => document.querySelector("#settingsResult").textContent === "設定を保存しました。");
+    await page.locator("#settingsSaveButton").click(); await page.waitForFunction(() => document.querySelector("#settingsResult").textContent === "設定を保存しました。"
+      && !document.querySelector("#settingsSaveButton").disabled && state.settings?.shortcuts?.actions?.renameImage === true);
     assert.deepEqual(settingsPayloads.slice(renameEnabledSaveStart).filter((payload) => payload.search === "?status=0").map((payload) => payload.body.shortcuts.actions.renameImage), [true], "saving the re-enabled rename action posts its exact action state");
-    await page.locator("#settingsCloseButton").click(); await renameCard.focus(); await page.keyboard.press(playwrightShortcut(shortcutBindings.renameImage));
+    await page.locator("#settingsCloseButton").click(); await renameCard.press(shortcutBindings.renameImage);
     await page.waitForFunction(() => document.querySelector("#renameImageDialog").open && state.renameImage?.imageId === "sample");
     await page.locator("#renameImageCancel").click();
 
