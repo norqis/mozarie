@@ -17,6 +17,20 @@ def default_settings() -> dict:
 
 
 class SettingsTests(unittest.TestCase):
+    def test_detection_image_filters_default_round_trip_and_validate_tokens(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); config = root / "config"; config.mkdir()
+            (config / "defaults.json").write_text(json.dumps(default_settings()), encoding="utf-8")
+            store = SettingsStore(root)
+            self.assertEqual(store.load()["detection"]["image_filters"], ["unreviewed"])
+            saved = store.save({"detection": {"image_filters": ["reviewed", "masked", "reviewed"]}})
+            self.assertEqual(saved["detection"]["image_filters"], ["masked", "reviewed"])
+            self.assertEqual(SettingsStore(root).load()["detection"]["image_filters"], ["masked", "reviewed"])
+            self.assertEqual(store.validate_update({"detection": {"image_filters": []}})["detection"]["image_filters"], [])
+            for value in ("unreviewed", ["hidden"], [1]):
+                with self.subTest(value=value), self.assertRaises(SettingsError):
+                    store.validate_update({"detection": {"image_filters": value}})
+
     def test_default_candidate_padding_round_trips_and_rejects_non_integer_values(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory); config = root / "config"; config.mkdir()

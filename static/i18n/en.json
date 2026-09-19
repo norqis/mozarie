@@ -115,6 +115,7 @@
   "detectDialog.rerunNote": "Re-detection replaces automatic ranges only. Boundary and manual ranges remain.",
   "detectDialog.start": "Start detection",
   "detectDialog.target": "Detecting {count} image(s).",
+  "detectDialog.imageFilters": "Images to detect",
   "detection.targets": "Targets",
   "error.detectionTargetsRequired": "Select penis or pussy.",
   "detectDialog.title": "Automatic detection settings",

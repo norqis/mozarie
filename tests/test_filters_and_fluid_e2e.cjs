@@ -87,35 +87,81 @@ test("all-image detection submits the fluid color-fill settings with default tol
   }
 });
 
-test("all-image detection skips reviewed images and disables only the all-image action when none remain", { timeout: 60000 }, async () => {
+test("all-image detection filters images with independent OR checkboxes and persists the selection", { timeout: 60000 }, async () => {
   const fixture = await startFixtureServer();
   fixture.setCatalog([
     { id: "sample", relativePath: "sample.png", sourceKind: "filesystem", width: 100, height: 80, candidateCount: 1, enabledCandidateCount: 1, reviewed: true, hidden: false, hasEffectiveMask: true },
     { id: "sample-two", relativePath: "sample-two.png", sourceKind: "session", width: 100, height: 80, candidateCount: 0, enabledCandidateCount: 0, reviewed: false, hidden: false, hasEffectiveMask: false },
+    { id: "masked-unreviewed", relativePath: "masked-unreviewed.png", sourceKind: "session", width: 100, height: 80, candidateCount: 1, enabledCandidateCount: 1, reviewed: false, hidden: false, hasEffectiveMask: true },
+    { id: "unmasked-reviewed", relativePath: "unmasked-reviewed.png", sourceKind: "session", width: 100, height: 80, candidateCount: 0, enabledCandidateCount: 0, reviewed: true, hidden: false, hasEffectiveMask: false },
+    { id: "hidden-unreviewed", relativePath: "hidden-unreviewed.png", sourceKind: "session", width: 100, height: 80, candidateCount: 1, enabledCandidateCount: 1, reviewed: false, hidden: true, hasEffectiveMask: true },
   ]);
   const browser = await chromium.launch({ headless: true });
   let context; let page;
   try {
-    ({ context, page } = await freshPage(browser, fixture));
+    ({ context, page } = await freshPage(browser, fixture, null, 5));
     await page.locator("#detectAllButton").click();
     await page.waitForFunction(() => document.querySelector("#detectDialog").open);
-    assert.match(await page.locator("#detectTargetCount").textContent(), /1件$/, "the dialog counts only unreviewed images");
+    assert.equal(await page.locator("#detectImageFilters legend").textContent(), "検出する画像", "image filters have their own named group");
+    assert.equal(await page.locator("#detectImageFilters").evaluate((field) => field.contains(document.querySelector("#dialogTargetPenis"))), false, "image filters are separate from detection classes");
+    assert.deepEqual(await page.locator("[data-detection-image-filter]").evaluateAll((inputs) => inputs.map((input) => [input.dataset.detectionImageFilter, input.checked])), [
+      ["masked", false], ["unmasked", false], ["reviewed", false], ["unreviewed", true],
+    ], "the default filter selects only unreviewed images");
+    assert.match(await page.locator("#detectTargetCount").textContent(), /2件$/, "the default excludes reviewed and hidden images");
+
+    const setFilters = async (...filters) => {
+      await page.locator("[data-detection-image-filter]").evaluateAll((inputs, selected) => {
+        for (const input of inputs) {
+          input.checked = selected.includes(input.dataset.detectionImageFilter);
+          input.dispatchEvent(new Event("change", { bubbles: true }));
+        }
+      }, filters);
+    };
+    const targetIds = () => page.evaluate(() => [...state.pendingDetectionTargetIds]);
+    await setFilters();
+    assert.deepEqual(await targetIds(), ["sample", "sample-two", "masked-unreviewed", "unmasked-reviewed"], "no checked filter means every non-hidden image");
+    await setFilters("masked");
+    assert.deepEqual(await targetIds(), ["sample", "masked-unreviewed"], "masked ignores review state");
+    await setFilters("unmasked");
+    assert.deepEqual(await targetIds(), ["sample-two", "unmasked-reviewed"], "unmasked ignores review state");
+    await setFilters("reviewed");
+    assert.deepEqual(await targetIds(), ["sample", "unmasked-reviewed"], "reviewed ignores mask state");
+    await setFilters("unreviewed");
+    assert.deepEqual(await targetIds(), ["sample-two", "masked-unreviewed"], "unreviewed excludes reviewed images");
+    await setFilters("masked", "unreviewed");
+    assert.deepEqual(await targetIds(), ["sample", "sample-two", "masked-unreviewed"], "multiple checked filters use OR semantics");
+
+    await page.evaluate(() => {
+      for (const image of state.images) { image.reviewed = true; state.reviewedImageIds.add(image.id); }
+      renderCatalogViews(); syncDetectionDialog();
+    });
+    await setFilters("unreviewed");
+    assert.match(await page.locator("#detectTargetCount").textContent(), /0件$/, "filter changes update the target count immediately");
+    assert.equal(await page.locator("#detectStartButton").isDisabled(), true, "detection cannot start with no matching image");
+    await page.evaluate(() => {
+      const image = state.images.find((item) => item.id === "sample-two");
+      image.reviewed = false; state.reviewedImageIds.delete(image.id); renderCatalogViews(); syncDetectionDialog();
+    });
     const detectRequest = page.waitForRequest((request) => new URL(request.url()).pathname === "/api/detect");
     await page.locator("#detectStartButton").click();
     assert.deepEqual(JSON.parse((await detectRequest).postData()).imageIds, ["sample-two"], "the all-image request excludes the reviewed image");
-    await context.close();
-    fixture.resetJob();
-
-    fixture.setCatalog([
-      { id: "sample", relativePath: "sample.png", sourceKind: "filesystem", width: 100, height: 80, candidateCount: 1, enabledCandidateCount: 1, reviewed: true, hidden: false, hasEffectiveMask: true },
-      { id: "sample-two", relativePath: "sample-two.png", sourceKind: "session", width: 100, height: 80, candidateCount: 0, enabledCandidateCount: 0, reviewed: true, hidden: false, hasEffectiveMask: false },
-    ]);
-    ({ context, page } = await freshPage(browser, fixture));
+    assert.deepEqual(fixture.settingsPayloads.at(-1).body.detection.image_filters, ["unreviewed"], "starting detection persists the selected image filters");
+    await page.waitForFunction(() => state.detectionStarting === false);
+    fixture.finishCancel();
     await page.evaluate(() => pollJob());
-    await page.waitForFunction(() => state.job?.state === "idle");
+    await page.waitForFunction(() => state.job?.state === "cancelled" && state.processing === null);
+    await page.locator("#detectAllButton").click();
+    await page.waitForFunction(() => document.querySelector("#detectDialog").open);
+    assert.equal(await page.locator('[data-detection-image-filter="unreviewed"]').isChecked(), true, "the saved filter is restored when the modal reopens");
+    assert.deepEqual(await page.locator("#detectForm").evaluate((form) => [
+      "dialogTargetPenis", "dialogTargetPussy", "detectFilterMasked", "detectFilterUnmasked",
+      "detectFilterReviewed", "detectFilterUnreviewed", "detectParallelism", "detectConfidenceRange",
+      "detectConfidenceNumber", "detectCandidatePadding", "detectExcludeCandidatePadding", "detectCancelButton",
+    ].filter((id) => form.querySelector(`#${id}`).disabled)), [], "a successful run restores every reusable modal control before the same page reopens it");
+    await page.locator("#detectCancelButton").click();
+
     await page.locator('.gallery-item[data-id="sample"]').click();
     await page.waitForFunction(() => state.currentId === "sample" && state.currentImage);
-    assert.equal(await page.locator("#detectAllButton").isDisabled(), true, "all-image detection is disabled when every processable image is reviewed");
     assert.equal(await page.locator("#detectCurrentButton").isEnabled(), true, "the explicit current-image action still permits detection of a reviewed image");
     let explicitRequest = page.waitForRequest((request) => new URL(request.url()).pathname === "/api/detect");
     await page.locator("#detectCurrentButton").click();
@@ -123,17 +169,18 @@ test("all-image detection skips reviewed images and disables only the all-image 
     await context.close();
     fixture.resetJob();
 
-    ({ context, page } = await freshPage(browser, fixture));
+    ({ context, page } = await freshPage(browser, fixture, null, 5));
     await page.evaluate(() => pollJob());
     await page.waitForFunction(() => state.job?.state === "idle");
     await page.evaluate(() => setViewMode("overview"));
     await page.locator("#batchModeButton").click();
-    await page.locator('.overview-item[data-id="sample-two"]').click();
+    await page.locator('.overview-item[data-id="sample"]').click();
     await page.locator("#selectionActionsButton").click();
     explicitRequest = page.waitForRequest((request) => new URL(request.url()).pathname === "/api/detect");
     await page.locator('[data-selection-action="detect"]').click();
+    assert.equal(await page.locator("#detectImageFilters").isHidden(), true, "selected-image detection does not expose all-image filters");
     await page.locator("#detectStartButton").click();
-    assert.deepEqual(JSON.parse((await explicitRequest).postData()).imageIds, ["sample-two"], "selected-image detection submits the reviewed image explicitly");
+    assert.deepEqual(JSON.parse((await explicitRequest).postData()).imageIds, ["sample"], "selected-image detection submits the reviewed image explicitly");
   } finally {
     await context?.close();
     await browser.close();

@@ -97,8 +97,8 @@ async function testBoundApplicationEvents() {
   group("[data-model-help]", ["help-target", "help-fluid"]); element("help-target").dataset.modelHelp = "target"; element("help-fluid").dataset.modelHelp = "fluid";
   group(".settings-tab", ["settings-tab"]); element("settings-tab").dataset.settingsTab = "models";
   group("[data-model-toggle]", ["toggle-hand"]); element("toggle-hand").dataset.modelToggle = "hand_detection"; element("toggle-hand").checked = true;
-  group("#dialogTargetPenis, #dialogTargetPussy", ["dialogTargetPenis"]); element("dialogTargetPenis").checked = true;
-  group(".target-chip input", ["dialogTargetPussy", "targetPenis"]); element("dialogTargetPussy").checked = true; element("targetPenis").checked = true;
+  group("#detectTargetPenis, #detectTargetPussy, #dialogTargetPenis, #dialogTargetPussy", ["dialogTargetPussy", "targetPenis"]); element("dialogTargetPussy").checked = true; element("targetPenis").checked = true;
+  group("[data-detection-image-filter]", ["detectionFilter"]); element("detectionFilter").dataset.detectionImageFilter = "unreviewed"; element("detectionFilter").checked = true;
   group('input[name="batchSaveMode"]', ["batchMode"]); group('input[name="singleSaveMode"]', ["singleMode"]);
   group("[data-selection-action]", ["selectionAction"]); element("selectionAction").dataset.selectionAction = "review";
   group("[data-candidate-batch]", ["candidateBatch"]); element("candidateBatch").dataset.candidateBatch = "apply:toggle";
@@ -132,7 +132,7 @@ async function testBoundApplicationEvents() {
   const submitRenameImage = note("submitRenameImage");
   context.submitRenameImage = submitRenameImage;
   for (const name of [
-    "openSettings", "selectSettingsTab", "moveSettingsTab", "saveSettings", "resetSettings", "chooseSettingsOutputDirectory", "chooseSettingsModelFile", "startModelDownload", "cancelModelDownload", "beginModelDownload", "syncProviderSelection", "markModelStatusDirty", "selectSamVariant", "startUpdate", "handleToolRailKeydown", "setToolRailTabStop", "setModelCardEnabled", "setHandSegmentationAvailable", "setPrecisionDetectionEnabled", "refreshSettingsStatus", "setFluidExclusionEnabled", "pickImageFiles", "pickImageDirectory", "importDroppedFiles", "loadFolder", "openDetectionDialog", "validateDetectionTargets", "runDetection", "saveAll", "saveCurrent", "setDisplayMode", "fitImage", "updateCompareSplitter", "render", "updateBrushCursor", "updateBrushSize", "setHidden", "clearMasks", "closeBatchMoreMenus", "closeFilterPopovers", "syncResourceOwnership", "clearCatalog", "renderGallery", "setViewMode", "runNavigationAction", "moveCurrentBy", "reviewAndMoveNext", "removeImageFromCatalog", "hideAndMoveNext", "runSelectionAction", "clearBatchSelection", "renderOverview", "updateSelectionActionBar", "batchCandidateOperation", "toggleCandidateDisplay", "toggleCandidateEffective", "renderShortcutBindings", "setTool", "setBoundaryModeMenuOpen", "addBoundaryCandidate", "cancelBoundary", "setMosaicPreviewEnabled", "requestMosaicPreview", "updateBlockSizeDisplay", "setDetectionConfidence", "syncDetectionTargetSwitch", "syncDetectionFluidColorFill", "validateDetectionFluidColorFill", "startDetectionFromDialog", "restoreSnapshot", "resizeRenderCanvas", "refreshApplyTargets", "chooseOutputDirectory", "syncApplyMode", "controlApply", "startApplyFromDialog", "chooseSingleOutputDirectory", "syncSingleSaveMode", "startSingleSave", "showProcessing", "updateProgress", "scheduleJobPoll", "showUserError", "cancelDetection", "setReviewed", "closeCatalogContextMenu", "copyContextMenuImagePath", "setGalleryDropOverlay", "beginBoundaryBrushStroke", "appendBoundaryBrushPoint", "beginManualStroke", "appendManualStrokePoint", "fillAt", "completeManualStroke", "cancelManualStroke", "completeBoundaryBrushStroke", "flushRender", "focusElement", "closeBoundaryModeMenu", "cancelFillWork", "handleWindowKeydown", "addBoundaryDraft", "loadTranslations", "updateBoundaryActions", "setSettingsForm", "initCandidatePaddingPopover"
+    "openSettings", "selectSettingsTab", "moveSettingsTab", "saveSettings", "resetSettings", "chooseSettingsOutputDirectory", "chooseSettingsModelFile", "startModelDownload", "cancelModelDownload", "beginModelDownload", "syncProviderSelection", "markModelStatusDirty", "selectSamVariant", "startUpdate", "handleToolRailKeydown", "setToolRailTabStop", "setModelCardEnabled", "setHandSegmentationAvailable", "setPrecisionDetectionEnabled", "refreshSettingsStatus", "setFluidExclusionEnabled", "pickImageFiles", "pickImageDirectory", "importDroppedFiles", "loadFolder", "openDetectionDialog", "validateDetectionTargets", "syncDetectionDialog", "resetDetectionDialogState", "runDetection", "saveAll", "saveCurrent", "setDisplayMode", "fitImage", "updateCompareSplitter", "render", "updateBrushCursor", "updateBrushSize", "setHidden", "clearMasks", "closeBatchMoreMenus", "closeFilterPopovers", "syncResourceOwnership", "clearCatalog", "renderGallery", "setViewMode", "runNavigationAction", "moveCurrentBy", "reviewAndMoveNext", "removeImageFromCatalog", "hideAndMoveNext", "runSelectionAction", "clearBatchSelection", "renderOverview", "updateSelectionActionBar", "batchCandidateOperation", "toggleCandidateDisplay", "toggleCandidateEffective", "renderShortcutBindings", "setTool", "setBoundaryModeMenuOpen", "addBoundaryCandidate", "cancelBoundary", "setMosaicPreviewEnabled", "requestMosaicPreview", "updateBlockSizeDisplay", "setDetectionConfidence", "syncDetectionTargetSwitch", "syncDetectionFluidColorFill", "validateDetectionFluidColorFill", "startDetectionFromDialog", "restoreSnapshot", "resizeRenderCanvas", "refreshApplyTargets", "chooseOutputDirectory", "syncApplyMode", "controlApply", "startApplyFromDialog", "chooseSingleOutputDirectory", "syncSingleSaveMode", "startSingleSave", "showProcessing", "updateProgress", "scheduleJobPoll", "showUserError", "cancelDetection", "setReviewed", "closeCatalogContextMenu", "copyContextMenuImagePath", "setGalleryDropOverlay", "beginBoundaryBrushStroke", "appendBoundaryBrushPoint", "beginManualStroke", "appendManualStrokePoint", "fillAt", "completeManualStroke", "cancelManualStroke", "completeBoundaryBrushStroke", "flushRender", "focusElement", "closeBoundaryModeMenu", "cancelFillWork", "handleWindowKeydown", "addBoundaryDraft", "loadTranslations", "updateBoundaryActions", "setSettingsForm", "initCandidatePaddingPopover"
   ]) context[name] = note(name);
   context.openSettings = async () => { calls.push(["openSettings"]); };
   context.reconcileOverviewSelection = note("reconcileOverviewSelection");
@@ -154,7 +154,7 @@ async function testBoundApplicationEvents() {
   context.canBoundary = false; await fire("#boundaryDetectButton", "click"); context.canBoundary = true; await fire("#boundaryDetectButton", "click");
   await fire("#settingsProvider", "change"); await fire("modelControl", "input"); await fire("modelControl", "change"); await fire("samVariant", "change"); await fire("toggle-hand", "change"); await fire("#settingsPrecisionToggle", "change"); await fire("#settingsFluidToggle", "change");
   await fire("#folderPath", "keydown", { key: "Enter" }); await fire("galleryFilter", "change"); await fire("overviewFilter", "change"); await fire("#overviewQuery", "input", { target: { value: "cowgirl" } }); await fire("#overviewFolder", "change", { target: { value: "folder" } });
-  await fire("#brushSize", "input"); await fire("#divisor", "input"); await fire("#applyDivisor", "input"); await fire("#confidence", "input"); await fire("#detectConfidenceRange", "input"); await fire("#detectConfidenceNumber", "input"); await fire("dialogTargetPussy", "change"); await fire("targetPenis", "change");
+  await fire("#brushSize", "input"); await fire("#divisor", "input"); await fire("#applyDivisor", "input"); await fire("#confidence", "input"); await fire("#detectConfidenceRange", "input"); await fire("#detectConfidenceNumber", "input"); await fire("dialogTargetPussy", "change"); await fire("targetPenis", "change"); await fire("detectionFilter", "change");
   await fire("#detectForm", "submit"); await fire("#detectCancelButton", "click"); await fire("#applyForm", "submit"); await fire("batchMode", "change"); await fire("#applyTargetMode", "change"); await fire("#singleSaveForm", "submit"); await fire("singleMode", "change"); await fire("#settingsLanguage", "change", { target: { value: "en" } });
   state.processing = { kind: "import", state: "running" }; state.importSession = {}; await fire("#processingPauseButton", "click"); await fire("#processingCancelButton", "click"); state.processing = { kind: "detect", state: "paused" }; element("#processingCancelButton").disabled = false; await fire("#processingPauseButton", "click"); await fire("#processingCancelButton", "click");
   await fire("#gallery", "dragenter", { dataTransfer: { types: ["Files"] } }); await fire("#gallery", "dragover", { dataTransfer: { types: ["Files"] } }); await fire("#gallery", "dragleave", { relatedTarget: null }); await fire("#gallery", "drop", { dataTransfer: { files: [{}] } });
@@ -605,12 +605,12 @@ async function testCoreBoundaryAndWorkspaceBehaviour() {
 
 async function testDetectionImportAndSaveBehaviour() {
   const { element } = browserFixture();
-  const state = { settings: { importing: { parallelism: "" } }, importing: false, candidateUpdateChains: new Map(), images: [], currentId: null };
+  const state = { settings: { importing: { parallelism: "" } }, importing: false, candidateUpdateChains: new Map(), images: [], currentId: null, detectionDialogBaseIds: [], detectionDialogFilterable: false, detectionDialogSubmitting: false, pendingDetectionTargetIds: [] };
   const calls = [];
   const context = {
     Promise, Map, Set, Array, Object, Number, String, Boolean, Math, JSON, structuredClone,
     state, $: (selector) => element(selector),
-    isBusy: () => false, activeDetection: () => false, currentImageActionPending: () => false, catalogStagingEditsActive: () => false, isProcessableImage: (image) => Boolean(image && !image.hidden), flushAllImageMutations: async () => {}, flushAllWorkspaceMutations: async () => {}, processableImages: (images = state.images) => images.filter((image) => !image.hidden), updateActionButtons() {}, updateProgress() {}, showUserError() {}, setStatusKey() {}, closeProcessing() {},
+    isBusy: () => false, activeDetection: () => false, currentImageActionPending: () => false, catalogStagingEditsActive: () => false, isProcessableImage: (image) => Boolean(image && !image.hidden), flushAllImageMutations: async () => {}, flushAllWorkspaceMutations: async () => {}, processableImages: (images = state.images) => images.filter((image) => !image.hidden), imageMatchesStateFilter: () => true, updateActionButtons() {}, updateProgress() {}, showUserError() {}, setStatusKey() {}, closeProcessing() {},
     saveDraft: () => calls.push("draft"), refreshMaskStatus: () => calls.push("refresh"), saveTargets: () => ["one"],
     openApplyDialog: async (options) => calls.push(options.initialMode), openSingleSaveDialog: async (id) => calls.push(`single:${id}`), waitForCandidateMutations: async () => { calls.push("wait"); }, imageHasMask: () => true,
     detectionConfidence: () => 0.5, normaliseDetectionConfidence: Number, setDetectionConfidence() {}, showModalFromInvoker() {},
@@ -619,7 +619,7 @@ async function testDetectionImportAndSaveBehaviour() {
   const source = fs.readFileSync(path.join(jsRoot, "detection.js"), "utf8");
   vm.runInNewContext(source, context, { filename: path.join(jsRoot, "detection.js") });
   context.validateDetectionTargets = () => true;
-  vm.runInNewContext("globalThis.detectionCoverage={ detectionParallelism, detectionTargets, setDetectionTargets, normaliseImportParallelism, importParallelism, openDetectionDialog, runDetection, startDetectionFromDialog, cancelDetection, saveCurrent, saveAll };", context, { filename: "test-detection-exports.js" });
+  vm.runInNewContext("globalThis.detectionCoverage={ detectionParallelism, detectionTargets, setDetectionTargets, detectionImageFilters, setDetectionImageFilters, syncDetectionDialog, resetDetectionDialogState, normaliseImportParallelism, importParallelism, openDetectionDialog, runDetection, startDetectionFromDialog, cancelDetection, saveCurrent, saveAll };", context, { filename: "test-detection-exports.js" });
   assert.equal(context.detectionCoverage.importParallelism(), 3);
   state.settings.importing.parallelism = "12";
   assert.equal(context.detectionCoverage.importParallelism(), 12, "import parallelism preserves values above the former artificial maximum");
@@ -643,6 +643,10 @@ async function testDetectionImportAndSaveBehaviour() {
   context.detectionCoverage.openDetectionDialog([]);
   context.detectionCoverage.openDetectionDialog(["one"]);
   assert.deepEqual(JSON.parse(JSON.stringify(state.pendingDetectionTargetIds)), ["one"], "opening detection preserves target ids");
+  assert.equal(element("#detectImageFilters").hidden, true, "selected-image detection hides the all-image filters");
+  context.detectionCoverage.resetDetectionDialogState();
+  context.detectionCoverage.openDetectionDialog(["one"], { filterable: true });
+  assert.equal(element("#detectImageFilters").hidden, false, "all-image detection exposes its image filters");
   await context.detectionCoverage.runDetection([], .5, 1, ["penis"]);
   await context.detectionCoverage.runDetection(["one"], .5, 99, []);
   await context.detectionCoverage.runDetection(["one"], .5, 99, ["penis"]);
@@ -681,9 +685,9 @@ async function testDetectionImportAndSaveBehaviour() {
   context.validateDetectionTargets = () => false;
   await context.detectionCoverage.runDetection(["one"], .5, 1, ["penis"]);
   context.validateDetectionTargets = () => true;
-  state.pendingDetectionTargetIds = [];
+  state.detectionDialogBaseIds = [];
   await context.detectionCoverage.startDetectionFromDialog({ preventDefault() {} });
-  state.pendingDetectionTargetIds = ["one"];
+  state.detectionDialogBaseIds = ["one"];
   context.validateDetectionTargets = () => false;
   await context.detectionCoverage.startDetectionFromDialog({ preventDefault() {} });
   context.validateDetectionTargets = () => true;

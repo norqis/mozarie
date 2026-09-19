@@ -47,7 +47,8 @@
     "default_exclude_candidate_padding_px": 0,
     "threshold": 0.5,
     "parallelism": 2,
-    "targets": ["penis", "pussy"]
+    "targets": ["penis", "pussy"],
+    "image_filters": ["unreviewed"]
   },
   "saving": {
     "parallelism": 2,

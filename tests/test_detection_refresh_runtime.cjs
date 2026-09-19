@@ -25,18 +25,18 @@ async function testDetectionWaitsForDraft() {
   assert.deepEqual(events, ["draft", "detect"], "manual layers are captured before detection starts");
 }
 
-async function testDetectionShowsProcessingBeforeDelayedRequests() {
+async function testDetectionFinalizesPendingStateBeforeShowingProcessing() {
   const deferred = () => { let resolve; const promise = new Promise((done) => { resolve = done; }); return { promise, resolve }; };
   const settings = deferred(); const draft = deferred(); const detect = deferred();
   const controls = new Map();
   const control = (id) => {
-    if (!controls.has(id)) controls.set(id, { id, value: id === "#detectConfidenceNumber" ? "0.5" : id === "#detectCandidatePadding" ? "0" : "1", checked: id === "#dialogTargetPenis", textContent: "", hidden: false, disabled: false, attributes: new Map(), setAttribute(name, value) { this.attributes.set(name, value); }, close() { this.closed = true; } });
+    if (!controls.has(id)) controls.set(id, { id, value: id === "#detectConfidenceNumber" ? "0.5" : id === "#detectCandidatePadding" ? "0" : "1", checked: id === "#dialogTargetPenis" || id.includes('="unreviewed"'), textContent: "", hidden: false, disabled: false, attributes: new Map(), setAttribute(name, value) { this.attributes.set(name, value); }, close() { this.closed = true; }, querySelectorAll() { return []; } });
     return controls.get(id);
   };
   const events = [];
-  const state = { detectionStarting: false, importing: false, detectionTargetIds: [], detectCancelRequested: false, job: null, images: [{ id: "one" }, { id: "two" }], pendingDetectionTargetIds: ["one", "two"], settings: { detection: { targets: ["penis"] } }, settingsStatus: null };
+  const state = { detectionStarting: false, importing: false, detectionTargetIds: [], detectCancelRequested: false, job: null, images: [{ id: "one", reviewed: false }, { id: "two", reviewed: false }], pendingDetectionTargetIds: ["one", "two"], detectionDialogBaseIds: ["one", "two"], detectionDialogFilterable: true, detectionDialogSubmitting: false, settings: { detection: { targets: ["penis"], image_filters: ["unreviewed"] } }, settingsStatus: null };
   const context = {
-    state, Math, Promise, structuredClone, normaliseDetectionConfidence: (value) => Number(value), normaliseCandidatePadding: Number, normaliseFluidColorFillTolerance: Number, catalogStagingEditsActive: () => false, flushAllImageMutations: async () => {}, flushAllWorkspaceMutations: async () => {}, processableImages: (images = state.images) => images, $: control, isBusy: () => state.job?.state === "running",
+    state, Math, Promise, Set, structuredClone, normaliseDetectionConfidence: (value) => Number(value), normaliseCandidatePadding: Number, normaliseFluidColorFillTolerance: Number, catalogStagingEditsActive: () => false, flushAllImageMutations: async () => {}, flushAllWorkspaceMutations: async () => {}, processableImages: (images = state.images) => images, imageMatchesStateFilter: (image, filters) => !filters.size || (filters.has("reviewed") && image.reviewed) || (filters.has("unreviewed") && !image.reviewed), $: control, isBusy: () => state.job?.state === "running",
     saveDraft: () => { events.push("draft"); return draft.promise; },
     api: (path) => { events.push(path); return path.startsWith("/api/settings") ? settings.promise : detect.promise; },
     setSettingsForm() {}, updateActionButtons() {}, showProcessing: (job) => events.push(`modal:${job.completed}/${job.total}:${job.current}`), closeProcessing: () => events.push("close"), updateProgress() {}, setStatusKey() {}, setStatus() {}, showUserError() {}, t: (key) => key,
@@ -44,14 +44,17 @@ async function testDetectionShowsProcessingBeforeDelayedRequests() {
   vm.runInNewContext(fs.readFileSync(path.join(root, "detection.js"), "utf8"), context, { filename: path.join(root, "detection.js") });
   vm.runInNewContext("globalThis.startDetectionForTest=startDetectionFromDialog;", context, { filename: "test-detection-dialog-exports.js" });
   const pending = context.startDetectionForTest({ preventDefault() {} });
-  assert.equal(events[0], "modal:0/2:", "the modal opens synchronously before settings, draft, and detect requests");
-  assert.deepEqual({ imageIds: [...state.job.imageIds], completedImageIds: [...state.job.completedImageIds], completed: state.job.completed, total: state.job.total }, { imageIds: ["one", "two"], completedImageIds: [], completed: 0, total: 2 });
-  settings.resolve({ settings: state.settings });
   for (let index = 0; index < 12 && !events.includes("draft"); index += 1) await new Promise((resolve) => setImmediate(resolve));
-  assert.equal(events.join("|"), "modal:0/2:|/api/settings?status=0|draft", "a delayed draft keeps the same optimistic processing state");
+  assert.equal(events.join("|"), "draft", "pending edits are finalized before settings or processing starts");
+  assert.equal(state.job, null, "the processing state is not published for a stale target list");
+  state.images[1].reviewed = true;
   draft.resolve();
+  for (let index = 0; index < 12 && !events.includes("/api/settings?status=0"); index += 1) await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(events.join("|"), "draft|/api/settings?status=0", "settings are saved only after pending edits settle");
+  settings.resolve({ settings: state.settings });
   for (let index = 0; index < 12 && !events.includes("/api/detect"); index += 1) await new Promise((resolve) => setImmediate(resolve));
-  assert.equal(events.join("|"), "modal:0/2:|/api/settings?status=0|draft|/api/detect", "a delayed detect request does not recreate the modal");
+  assert.equal(events.join("|"), "draft|/api/settings?status=0|modal:0/1:|/api/detect", "processing starts only with images matching the finalized state");
+  assert.deepEqual({ imageIds: [...state.job.imageIds], completedImageIds: [...state.job.completedImageIds], completed: state.job.completed, total: state.job.total }, { imageIds: ["one"], completedImageIds: [], completed: 0, total: 1 });
   detect.resolve({ ok: true }); await pending;
   assert.equal(events.filter((event) => event.startsWith("modal:")).length, 1, "the modal is shown once while the start request is pending");
 }
@@ -75,19 +78,21 @@ async function testDetectionStartFailureClosesProcessing() {
 async function testDetectionSettingsFailureDoesNotStartDetect() {
   const controls = new Map(); const events = [];
   const control = (id) => {
-    if (!controls.has(id)) controls.set(id, { value: id === "#detectConfidenceNumber" ? "0.5" : id === "#detectCandidatePadding" ? "9" : "1", checked: id === "#dialogTargetPenis", textContent: "", hidden: false, disabled: false, setAttribute() {}, close() {} });
+    if (!controls.has(id)) controls.set(id, { value: id === "#detectConfidenceNumber" ? "0.5" : id === "#detectCandidatePadding" ? "9" : "1", checked: id === "#dialogTargetPenis", textContent: "", hidden: false, disabled: false, setAttribute() {}, close() { this.closed = true; }, querySelectorAll() { return []; } });
     return controls.get(id);
   };
-  const state = { detectionStarting: false, importing: false, detectionTargetIds: [], detectCancelRequested: false, job: null, images: [{ id: "one" }], pendingDetectionTargetIds: ["one"], settings: { detection: { targets: ["penis"], default_candidate_padding_px: 0 } }, settingsStatus: null };
+  const state = { detectionStarting: false, importing: false, detectionTargetIds: [], detectCancelRequested: false, job: null, images: [{ id: "one" }], pendingDetectionTargetIds: ["one"], detectionDialogBaseIds: ["one"], detectionDialogFilterable: false, detectionDialogSubmitting: false, settings: { detection: { targets: ["penis"], default_candidate_padding_px: 0 } }, settingsStatus: null };
   const context = {
-    state, Math, Promise, structuredClone, normaliseDetectionConfidence: Number, normaliseCandidatePadding: Number, normaliseFluidColorFillTolerance: Number, catalogStagingEditsActive: () => false, flushAllImageMutations: async () => {}, flushAllWorkspaceMutations: async () => {}, processableImages: (images = state.images) => images, $: control, isBusy: () => false,
+    state, Math, Promise, Set, structuredClone, normaliseDetectionConfidence: Number, normaliseCandidatePadding: Number, normaliseFluidColorFillTolerance: Number, catalogStagingEditsActive: () => false, flushAllImageMutations: async () => {}, flushAllWorkspaceMutations: async () => {}, processableImages: (images = state.images) => images, imageMatchesStateFilter: () => true, $: control, isBusy: () => false,
     saveDraft: async () => { events.push("draft"); }, api: async (path) => { events.push(path); throw new Error("settings failed"); },
     setSettingsForm() {}, updateActionButtons() {}, showProcessing() { events.push("modal"); }, closeProcessing() { events.push("close"); }, updateProgress() {}, setStatusKey() {}, setStatus() {}, showUserError() { events.push("error"); }, t: (key) => key,
   };
   vm.runInNewContext(fs.readFileSync(path.join(root, "detection.js"), "utf8"), context, { filename: path.join(root, "detection.js") });
   vm.runInNewContext("globalThis.startDetectionForTest=startDetectionFromDialog;", context);
   await context.startDetectionForTest({ preventDefault() {} });
-  assert.deepEqual(events, ["modal", "/api/settings?status=0", "close", "error"], "a settings-save failure never sends a detection request");
+  assert.equal(events.join("|"), "draft|/api/settings?status=0|error", "a settings-save failure keeps the detection modal open and never starts processing");
+  assert.equal(control("#detectDialog").closed, undefined, "the failed settings save keeps the dialog available for retry");
+  assert.equal(state.detectionDialogSubmitting, false, "the failed settings save restores dialog controls");
 }
 
 async function testCompletionInvalidatesAndReloadsCandidates() {
@@ -128,7 +133,7 @@ async function testCompletionInvalidatesAndReloadsCandidates() {
 
 nodeTest("detection refresh runtime contracts", async () => {
   await testDetectionWaitsForDraft();
-  await testDetectionShowsProcessingBeforeDelayedRequests();
+  await testDetectionFinalizesPendingStateBeforeShowingProcessing();
   await testDetectionStartFailureClosesProcessing();
   await testDetectionSettingsFailureDoesNotStartDetect();
   await testCompletionInvalidatesAndReloadsCandidates();

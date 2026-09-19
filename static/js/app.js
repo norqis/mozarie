@@ -893,10 +893,9 @@ function bindEvents() {
   $("#folderPath").addEventListener("keydown", (event) => { if (event.key === "Enter") loadFolder(); });
   $("#loadFolderButton").addEventListener("click", loadFolder);
   const detectAll = () => {
-    if (!activeDetection()) openDetectionDialog(allImageDetectionTargets().map((image) => image.id));
+    if (!activeDetection()) openDetectionDialog(allImageDetectionTargets().map((image) => image.id), { filterable: true });
   };
   $("#detectAllButton").addEventListener("click", detectAll);
-  document.querySelectorAll("#dialogTargetPenis, #dialogTargetPussy").forEach((input) => input.addEventListener("change", () => validateDetectionTargets(detectionTargets("dialogTarget"), $("#detectTargetValidation"))));
   $("#detectCurrentButton").addEventListener("click", () => { const image = currentRecord(); if (!currentImageActionPending() && isProcessableImage(image)) void runDetection([image.id], detectionConfidence(), 1, detectionTargets()); });
   $("#saveAllButton").addEventListener("click", saveAll); $("#saveButton").addEventListener("click", saveCurrent); $("#singleViewButton").addEventListener("click", () => setDisplayMode("single")); $("#compareViewButton").addEventListener("click", () => setDisplayMode("compare")); $("#fitButton").addEventListener("click", () => { if (!isBusy() && !state.importing) fitImage(); });
   $("#flipHorizontalButton").addEventListener("click", () => { void toggleImageFlip("horizontal"); });
@@ -1072,15 +1071,18 @@ function bindEvents() {
   $("#detectConfidenceNumber").addEventListener("input", () => setDetectionConfidence($("#detectConfidenceNumber").value));
   $("#detectFluidColorFillEnabled").addEventListener("change", syncDetectionFluidColorFill);
   $("#detectFluidColorFillTolerance").addEventListener("input", validateDetectionFluidColorFill);
-  document.querySelectorAll(".target-chip input").forEach((input) => input.addEventListener("change", () => {
+  document.querySelectorAll("#detectTargetPenis, #detectTargetPussy, #dialogTargetPenis, #dialogTargetPussy").forEach((input) => input.addEventListener("change", () => {
     syncDetectionTargetSwitch(input);
-    if (input.id.startsWith("dialog")) validateDetectionTargets(detectionTargets("dialogTarget"), $("#detectTargetValidation"));
+    if (input.id.startsWith("dialog")) syncDetectionDialog();
     else validateDetectionTargets(detectionTargets(), $("#detectionTargetValidation"));
   }));
+  document.querySelectorAll("[data-detection-image-filter]").forEach((input) => input.addEventListener("change", () => {
+    syncDetectionTargetSwitch(input); syncDetectionDialog();
+  }));
   $("#detectForm").addEventListener("submit", startDetectionFromDialog);
-  $("#detectCancelButton").addEventListener("click", () => { $("#detectDialog").close(); state.pendingDetectionTargetIds = []; $("#detectTargetValidation").hidden = true; });
-  $("#detectDialog").addEventListener("cancel", (event) => { event.preventDefault(); $("#detectDialog").close(); state.pendingDetectionTargetIds = []; $("#detectTargetValidation").hidden = true; });
-  lightDismiss($("#detectDialog"), () => { $("#detectDialog").close(); state.pendingDetectionTargetIds = []; });
+  $("#detectCancelButton").addEventListener("click", () => { if (!state.detectionDialogSubmitting) { $("#detectDialog").close(); resetDetectionDialogState(); } });
+  $("#detectDialog").addEventListener("cancel", (event) => { event.preventDefault(); if (!state.detectionDialogSubmitting) { $("#detectDialog").close(); resetDetectionDialogState(); } });
+  lightDismiss($("#detectDialog"), () => { if (!state.detectionDialogSubmitting) { $("#detectDialog").close(); resetDetectionDialogState(); } });
   $("#undoButton").addEventListener("click", () => { if (hasDurableHistory()) void restoreProjectHistory("undo"); else restoreSnapshot(state.historyIndex - 1); }); $("#redoButton").addEventListener("click", () => { if (hasDurableHistory()) void restoreProjectHistory("redo"); else restoreSnapshot(state.historyIndex + 1); });
   const grid = $(".studio-grid");
   const paneStorage = { gallery: "mozarie.galleryWidth", inspector: "mozarie.inspectorWidth" };
