@@ -408,9 +408,12 @@ test("DI-103 DI-104 and DI-125 source cleanup removes only authoritatively absen
     await page.reload({ waitUntil: "domcontentloaded" });
     await page.waitForFunction(() => state.settings && state.images.length === 2);
     await page.waitForFunction(async () => {
-      const db = await directoryCatalogStore();
-      if (!db) return false;
+      let db;
       try {
+        const remembered = await rememberedProjectSources("boot-gone");
+        if (remembered.files.length || remembered.directories.length) return false;
+        db = await directoryCatalogStore();
+        if (!db) return false;
         return await new Promise((resolve, reject) => {
           const transaction = db.transaction(["projectSources", "directories"]);
           const sourceRequest = transaction.objectStore("projectSources").index("projectId").getAll(IDBKeyRange.only("boot-gone"));
@@ -426,7 +429,7 @@ test("DI-103 DI-104 and DI-125 source cleanup removes only authoritatively absen
           };
         });
       } catch { return false; }
-      finally { db.close(); }
+      finally { db?.close(); }
     });
     assert.deepEqual(await page.evaluate(async () => rememberedProjectSources("boot-gone")), { files: [], directories: [] },
       "the next application startup removes handles for a project absent from the authoritative project list");
