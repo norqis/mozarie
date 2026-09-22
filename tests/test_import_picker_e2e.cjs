@@ -1285,6 +1285,7 @@ async function runDynamicProjectAndShortcutScenario(browser, fixtureUrl, setting
   const page = await newCoveredPage(browser, { viewport: { width: 1280, height: 900 } });
   const restoredFileRequests = [];
   const sameSourceOpenRequests = [];
+  let ledgerImages = [];
   let restoringProjectSource = false;
   let restoreCatalogGeneration = null;
   try {
@@ -1315,11 +1316,13 @@ async function runDynamicProjectAndShortcutScenario(browser, fixtureUrl, setting
         project: ledgerProject
           ? { id: "ledger-project", name: "Ledger project", status: "working", imageCount: 1, sourceRoot: "G:\\ledger-source" }
           : { id: "same-source-second", name: "Second source", status: "working", imageCount: 0, sourceRoot: "G:\\same-source" },
-        images: [], root: ledgerProject ? "G:\\ledger-source" : "G:\\same-source", sources: [], needsSource: false, readOnly: false,
+        images: ledgerProject ? ledgerImages : [], root: ledgerProject ? "G:\\ledger-source" : "G:\\same-source", sources: [], needsSource: false, readOnly: false,
       }) });
     });
     await page.goto(fixtureUrl, { waitUntil: "domcontentloaded" });
     await waitForFixtureReady(page);
+    ledgerImages = await page.evaluate(() => state.images.filter((image) => image.id === "sample"));
+    assert.deepEqual(ledgerImages.map((image) => image.id), ["sample"], "the project fixture owns the image used by the later rename shortcut checks");
 
     await page.locator("#projectButton").click();
     await page.locator("#projectOpenList").click();
@@ -1335,6 +1338,8 @@ async function runDynamicProjectAndShortcutScenario(browser, fixtureUrl, setting
 
     await page.locator('[data-project-action="open"]').click();
     await page.waitForFunction(() => document.querySelector("#projectListDialog")?.open === false && state.project?.id === "ledger-project");
+    await page.locator('.gallery-item[data-id="sample"]').waitFor({ state: "visible" });
+    assert.equal(sameSourceOpenRequests.length, 1, "opening the listed project sends one project-open request");
     assert.equal(sameSourceOpenRequests.at(-1).projectId, "ledger-project", "Open submits the exact selected row project");
     assert.equal(sameSourceOpenRequests.at(-1).resume, false, "Open does not silently resume the working project");
     assert.equal(Number.isInteger(sameSourceOpenRequests.at(-1).expectedCatalogGeneration), true, "Open carries the visible catalog generation");
@@ -1472,6 +1477,7 @@ async function runDynamicProjectAndShortcutScenario(browser, fixtureUrl, setting
 
     // A matching-source list uses its selected row when its public Open
     // action posts the target project id.
+    const sameSourceOpenStart = sameSourceOpenRequests.length;
     await page.evaluate(() => showSameSourceDialog([
       { id: "same-source-first", name: "First source", status: "working", imageCount: 1 },
       { id: "same-source-second", name: "Second source", status: "working", imageCount: 2 },
@@ -1479,8 +1485,8 @@ async function runDynamicProjectAndShortcutScenario(browser, fixtureUrl, setting
     await page.locator("#sameSourceList button").nth(1).click();
     await page.locator("#sameSourceOpen").click();
     await page.waitForFunction(() => state.project?.id === "same-source-second");
-    assert.equal(sameSourceOpenRequests.length, 1, "opening a matching source sends one project-open request");
-    assert.equal(sameSourceOpenRequests[0].projectId, "same-source-second", "opening a matching source posts the project selected from the generated list");
+    assert.equal(sameSourceOpenRequests.length - sameSourceOpenStart, 1, "opening a matching source sends one project-open request");
+    assert.equal(sameSourceOpenRequests.at(-1).projectId, "same-source-second", "opening a matching source posts the project selected from the generated list");
     recordDynamicControl("#sameSourceList button");
   } finally {
     await stopCoveredPage(page, true);
