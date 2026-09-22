@@ -299,6 +299,7 @@ function progressText(job) {
 
 function processingCurrentPath(job) {
   if (job?.kind !== "detect") return job?.current || "";
+  if (job.phase === "preparing_models" && ["running", "pausing", "paused"].includes(job.state)) return t("processing.preparingModels");
   const imageIds = job.imageIds || [];
   const completedIds = new Set(job.completedImageIds || []);
   const targetIds = new Set(imageIds);
@@ -388,11 +389,9 @@ function updateFilterMenuButtons() {
 function currentRecord() { return state.images.find((image) => image.id === state.currentId) || null; }
 function isCurrentGeneration(generation) { return state.imageGeneration === generation; }
 function normaliseDetectionConfidence(value) { return Math.max(0.10, Math.min(1.00, Number(value) || 0.50)); }
-function detectionConfidence() { return normaliseDetectionConfidence($("#confidence").value); }
+function detectionConfidence() { return normaliseDetectionConfidence(state.settings?.detection?.threshold); }
 function setDetectionConfidence(value) {
   const confidence = normaliseDetectionConfidence(value);
-  $("#confidence").value = confidence.toFixed(2);
-  $("#confidenceValue").textContent = confidence.toFixed(2);
   $("#detectConfidenceRange").value = confidence.toFixed(2);
   $("#detectConfidenceNumber").value = confidence.toFixed(2);
 }
@@ -828,6 +827,7 @@ function updateActionButtons() {
   detectAllButton.textContent = t("gallery.detectAll");
   detectAllButton.disabled = busyLocked || mutationLocked || catalogStaging || allImageDetectionTargets().length === 0;
   $("#detectCurrentButton").disabled = busyLocked || mutationLocked || catalogStaging || switchingImages || !currentProcessable;
+  $("#detectionSettingsButton").disabled = busyLocked || mutationLocked || catalogStaging;
   $("#clearCurrentMasksButton").disabled = busyLocked || mutationLocked || catalogStaging || switchingImages || candidateLocked || !currentProcessable
     || !(current.candidateCount || state.manualMaskPresent || presence?.hasManualExclude || presence?.hasManualExclusionErase || imageHasMask(current));
   const visibilityButton = $("#removeCurrentImageButton");

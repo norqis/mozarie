@@ -835,10 +835,11 @@
       "sourceIds": [
         "SD-049"
       ],
-      "observation": "数値表示と送信値が一致する",
+      "observation": "検出設定で保存したしきい値・対象・色拡張・適用枠と除外枠を個別検出に使い、一括の並列数・画像絞り込みは保持する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_detection_dialog_contracts.cjs::SD-049 editor confidence slider keeps display and request value identical"
+        "node:tests/test_detection_dialog_contracts.cjs::SD-049 editor confidence slider keeps display and request value identical",
+        "node:tests/test_detection_dialog_contracts.cjs::individual detection settings save all shared options without changing batch filters or parallelism"
       ]
     },
     {
@@ -891,10 +892,11 @@
       "sourceIds": [
         "SD-054"
       ],
-      "observation": "設定画面が閉じ、検出を実行しない",
+      "observation": "個別・一括の設定取消しは保存値を変更せず検出を実行しない。設定保存失敗ではダイアログを開いたまま保存値を保持する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_detection_dialog_contracts.cjs::SD-054 cancelling the all-image dialog starts no detection"
+        "node:tests/test_detection_dialog_contracts.cjs::SD-054 cancelling the all-image dialog starts no detection",
+        "node:tests/test_detection_dialog_contracts.cjs::cancelled detection drafts never change current-image or general settings and failed saves stay open"
       ]
     },
     {
@@ -960,13 +962,14 @@
       "sourceIds": [
         "SD-148"
       ],
-      "observation": "候補公開前でも進捗は1/NからN/Nへ進み、処理中の画像名と残り時間を表示する",
+      "observation": "実際のモデル準備中は画像名を隠してモデル準備中と表示し、推論開始後も進捗画面を維持する。候補公開前でも進捗は1/NからN/Nへ進み、処理中の画像名と残り時間を表示する",
       "status": "automated",
       "testIds": [
         "node:tests/test_detection_progress_ui.cjs::SD-148 detection progress shows staged work and locks pause only while publication is pending",
         "python:tests.test_server.MozarieTests.test_detection_staging_reports_every_success_before_atomic_publication",
         "python:tests.test_server.MozarieTests.test_detection_staging_reports_processed_without_publishing_on_failure",
-        "python:tests.test_server.MozarieTests.test_detection_rejects_cancel_after_publication_starts_and_completes"
+        "python:tests.test_server.MozarieTests.test_detection_rejects_cancel_after_publication_starts_and_completes",
+        "python:tests.test_detection_progress_live_browser.LiveDetectionProgressBrowserTests.test_real_model_loading_pause_inference_completion_error_and_cancel_are_visible"
       ]
     },
     {

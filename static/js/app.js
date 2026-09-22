@@ -901,7 +901,8 @@ function bindEvents() {
     if (!activeDetection()) openDetectionDialog(allImageDetectionTargets().map((image) => image.id), { filterable: true });
   };
   $("#detectAllButton").addEventListener("click", detectAll);
-  $("#detectCurrentButton").addEventListener("click", () => { const image = currentRecord(); if (!currentImageActionPending() && isProcessableImage(image)) void runDetection([image.id], detectionConfidence(), 1, detectionTargets(), persistedFluidColorFill()); });
+  $("#detectCurrentButton").addEventListener("click", () => { const image = currentRecord(); if (!currentImageActionPending() && isProcessableImage(image)) void runDetection([image.id], detectionConfidence(), 1, persistedDetectionTargets(), persistedFluidColorFill()); });
+  $("#detectionSettingsButton").addEventListener("click", () => openDetectionDialog([], { settingsOnly: true }));
   $("#saveAllButton").addEventListener("click", saveAll); $("#saveButton").addEventListener("click", saveCurrent); $("#singleViewButton").addEventListener("click", () => setDisplayMode("single")); $("#compareViewButton").addEventListener("click", () => setDisplayMode("compare")); $("#fitButton").addEventListener("click", () => { if (!isBusy() && !state.importing) fitImage(); });
   $("#flipHorizontalButton").addEventListener("click", () => { void toggleImageFlip("horizontal"); });
   $("#flipVerticalButton").addEventListener("click", () => { void toggleImageFlip("vertical"); });
@@ -1071,15 +1072,13 @@ function bindEvents() {
     requestMosaicPreview(); updateBlockSizeDisplay(); render();
   });
   $("#applyDivisor").addEventListener("input", () => { if (!isBusy() && !state.importing) updateBlockSizeDisplay(); });
-  $("#confidence").addEventListener("input", () => { if (!isBusy() && !state.importing) setDetectionConfidence($("#confidence").value); });
   $("#detectConfidenceRange").addEventListener("input", () => setDetectionConfidence($("#detectConfidenceRange").value));
   $("#detectConfidenceNumber").addEventListener("input", () => setDetectionConfidence($("#detectConfidenceNumber").value));
   $("#detectFluidColorFillEnabled").addEventListener("change", syncDetectionFluidColorFill);
   $("#detectFluidColorFillTolerance").addEventListener("input", validateDetectionFluidColorFill);
-  document.querySelectorAll("#detectTargetPenis, #detectTargetPussy, #dialogTargetPenis, #dialogTargetPussy").forEach((input) => input.addEventListener("change", () => {
+  document.querySelectorAll("#dialogTargetPenis, #dialogTargetPussy").forEach((input) => input.addEventListener("change", () => {
     syncDetectionTargetSwitch(input);
-    if (input.id.startsWith("dialog")) syncDetectionDialog();
-    else validateDetectionTargets(detectionTargets(), $("#detectionTargetValidation"));
+    syncDetectionDialog();
   }));
   document.querySelectorAll("[data-detection-image-filter]").forEach((input) => input.addEventListener("change", () => {
     syncDetectionTargetSwitch(input); syncDetectionDialog();

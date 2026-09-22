@@ -467,6 +467,7 @@
   "modelHelp.samTable.vitH.vram": "High",
   "modelHelp.samTable.vitH.use": "More detail, high VRAM",
   "processing.detect": "Automatic detection",
+  "processing.preparingModels": "Preparing models",
   "processing.import": "Loading images",
   "gallery.tabUnmasked": "No mosaic",
   "gallery.tabHidden": "Hidden",

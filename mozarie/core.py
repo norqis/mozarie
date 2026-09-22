@@ -301,6 +301,7 @@ class Job:
 
     def as_dict(self) -> dict[str, Any]:
         active_elapsed = 0.0
+        preparing_models = self.preparing_models > 0 and self.state in {"running", "pausing", "paused"}
         if self.started_at is not None:
             active_elapsed = max(0.0, (self.paused_at or self.ended_at or time.time()) - self.started_at - self.paused_seconds)
         return {
@@ -309,7 +310,7 @@ class Job:
             "total": self.total,
             "completed": self.completed,
             "processed": self.processed,
-            "current": self.current,
+            "current": "" if preparing_models else self.current,
             "errorCode": self.error_code,
             "params": public_error_params(self.error_code, self.params),
             "startedAt": self.started_at,
@@ -319,7 +320,7 @@ class Job:
             "completedImageIds": list(self.completed_image_ids),
             "activeCount": self.active_count,
             "parallelism": self.parallelism,
-            "phase": "preparing_models" if self.preparing_models else "",
+            "phase": "preparing_models" if preparing_models else "",
             "cancelRequested": self.cancel_requested,
         }
 

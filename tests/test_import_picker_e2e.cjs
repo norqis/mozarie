@@ -2389,6 +2389,7 @@ async function runControlLedger(page, fixtureUrl, contracts, finishCancel, holdS
       const result = await page.evaluate(() => window.__sourceDeleteResumeLedger);
       assert.deepEqual(result, { permissionCalls: 1, resumeCalls: 1, resumeWithPermission: true }, "sourceDeleteResume requests the cached parent-handle permission once and hides after the public click");
     },
+    detectionSettingsButton: dialog("detectDialog", true, "detectionSettingsButton"),
     detectAllButton: dialog("detectDialog", true, "detectAllButton"), detectCancelButton: dialog("detectDialog", false, "detectCancelButton"),
     detectStartButton: dialog("processingDialog", true, "detectStartButton"),
     settingsCloseButton: dialog("settingsDialog", false, "settingsCloseButton"),
@@ -2669,7 +2670,7 @@ async function runControlLedger(page, fixtureUrl, contracts, finishCancel, holdS
   await assertHistoryControlReady("undoButton");
   assert.deepEqual(pageErrors.slice(errorsBeforeHistoryPointer), [], "the isolated public brush gesture does not raise a page error");
   await click("undoButton"); await assertHistoryControlReady("redoButton"); await click("redoButton");
-  for (const id of ["detectTargetPenis", "detectTargetPussy", "confidence"]) await input(id, id === "confidence" ? "0.51" : true);
+  await click("detectionSettingsButton"); await page.locator("#detectCancelButton").click();
 
   // Detection includes the disabled boundary action before a boundary is
   // created by the main pixel scenario.  The disabled state is asserted here;
@@ -3971,10 +3972,13 @@ async function main() {
     await selectFixtureImage(page, pageErrors, consoleErrors);
     assert.equal(await page.locator("#removeAndNextButton").isDisabled(), false, "remove and next enables after selecting an image");
     assert.equal(await page.locator("#hideAndNextButton").isDisabled(), false, "hide and next enables after selecting an image");
-    await page.locator("#confidence").evaluate((input) => {
+    await page.locator("#detectionSettingsButton").click();
+    await page.locator("#detectConfidenceRange").evaluate((input) => {
       input.value = "1.00";
       input.dispatchEvent(new Event("input", { bubbles: true }));
     });
+    await page.locator("#detectStartButton").click();
+    await page.waitForFunction(() => !document.querySelector("#detectDialog").open);
     const detectionControls = await page.evaluate(() => {
       const saved = [...state.settings.detection.targets];
       state.settings.detection.targets = [];
@@ -3999,21 +4003,24 @@ async function main() {
     assert.equal(Object.hasOwn(detectRequests[0], "mode"), false, "current-image detection must not submit a mode override");
     resetJob();
     await page.evaluate(async () => { await pollJob(); closeProcessing(); });
-    await page.locator("label.target-chip:has(#detectTargetPussy)").click();
-    await page.waitForFunction(() => document.querySelector("#detectTargetPussy").checked === false);
+    await page.locator("#detectionSettingsButton").click();
+    await page.locator("label.target-chip:has(#dialogTargetPussy)").click();
+    await page.locator("#detectStartButton").click();
+    await page.waitForFunction(() => !document.querySelector("#detectDialog").open);
     detectionRequest = page.waitForResponse((response) => new URL(response.url()).pathname === "/api/detect" && response.request().method() === "POST");
     await page.locator("#detectCurrentButton").click();
     await detectionRequest;
     assert.deepEqual(detectRequests[1].targetClasses, ["penis"], "current-image detection uses the visible penis-only choice");
     resetJob();
     await page.evaluate(async () => { await pollJob(); closeProcessing(); });
-    await page.locator("label.target-chip:has(#detectTargetPenis)").click();
-    await page.waitForFunction(() => document.querySelector("#detectTargetPenis").checked === false);
-    await page.locator("#detectCurrentButton").click();
-    assert.equal(detectRequests.length, 2, "current-image detection must not start without a selected target");
-    assert.match(await page.locator("#detectionTargetValidation").textContent(), /penis|pussy/, "current-image detection explains which target to select");
-    await page.locator("label.target-chip:has(#detectTargetPussy)").click();
-    await page.waitForFunction(() => document.querySelector("#detectTargetPussy").checked === true);
+    await page.locator("#detectionSettingsButton").click();
+    await page.locator("label.target-chip:has(#dialogTargetPenis)").click();
+    assert.equal(await page.locator("#detectStartButton").isDisabled(), true, "settings cannot save an empty target selection");
+    assert.equal(detectRequests.length, 2, "settings never starts detection");
+    assert.match(await page.locator("#detectTargetValidation").textContent(), /penis|pussy/);
+    await page.locator("label.target-chip:has(#dialogTargetPussy)").click();
+    await page.locator("#detectStartButton").click();
+    await page.waitForFunction(() => !document.querySelector("#detectDialog").open);
     detectionRequest = page.waitForResponse((response) => new URL(response.url()).pathname === "/api/detect" && response.request().method() === "POST");
     await page.locator("#detectCurrentButton").click();
     await detectionRequest;
@@ -4025,7 +4032,8 @@ async function main() {
     const persistedDetection = await page.evaluate(() => structuredClone(state.settings.detection));
     failNextSettingsSave();
     await page.locator("#detectAllButton").click();
-    await page.locator("#dialogTargetPussy").evaluate((input) => { input.checked = false; input.dispatchEvent(new Event("change", { bubbles: true })); });
+    await page.locator("label.target-chip:has(#dialogTargetPenis)").click();
+    await page.locator("label.target-chip:has(#dialogTargetPussy)").click();
     await page.locator("#detectConfidenceNumber").fill("0.67");
     await page.locator("#detectParallelism").fill("4");
     await page.locator("#detectStartButton").click();
@@ -4044,7 +4052,7 @@ async function main() {
     assert.equal(detectRequests.length, currentDetectionRequests, "opening settings must not start another detection");
     await page.locator("#detectConfidenceNumber").fill("0.67");
     assert.equal(await page.locator("#detectParallelism").isDisabled(), false, "GPU keeps the same editable worker control");
-    assert.equal(await page.locator("#detectParallelism").inputValue(), "2", "the saved worker count is shown without rewriting it");
+    assert.equal(await page.locator("#detectParallelism").inputValue(), "4", "a failed save keeps the draft worker count for retry");
     await page.locator("#settingsProvider").evaluate((select) => { select.value = "cpu"; select.dispatchEvent(new Event("change", { bubbles: true })); });
     await page.locator("#detectParallelism").fill("4");
     await page.locator("#settingsProvider").evaluate((select) => { select.value = "gpu"; select.dispatchEvent(new Event("change", { bubbles: true })); });
@@ -4543,9 +4551,9 @@ async function main() {
         const toolbar = box("#canvasToolRail"); const stage = box("#canvasStage"); const controls = [...document.querySelectorAll(".candidate-section-actions > button")].map((node) => { const rect = node.getBoundingClientRect(); return { left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom, width: rect.width, height: rect.height, text: node.textContent }; });
         const candidateOverflow = [...document.querySelectorAll(".candidate-section-actions, .candidate-row")].some((node) => node.scrollWidth > node.clientWidth || node.scrollHeight > node.clientHeight);
         const candidateHit = [...document.querySelectorAll(".candidate-section-actions > button")].every((button) => { const rect = button.getBoundingClientRect(); const target = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2); return button === target || button.contains(target); });
-        const targetChoices = document.querySelector(".candidate-pane .target-choices"); const targetPane = document.querySelector(".candidate-pane"); const targetBounds = targetChoices.getBoundingClientRect(); const paneBounds = targetPane.getBoundingClientRect(); const targetInputs = [...targetChoices.querySelectorAll('input[type="checkbox"]')]; const targetChips = [...targetChoices.querySelectorAll(".target-chip")]; const targetLabel = targetChoices.querySelector(".target-choices-label").getBoundingClientRect();
+        const targetButton = document.querySelector("#detectionSettingsButton"); const targetBounds = targetButton.getBoundingClientRect(); const paneBounds = document.querySelector(".candidate-pane").getBoundingClientRect();
         const blockHeading = document.querySelector(".block-control-heading"); const blockLabel = blockHeading.querySelector('label[for="divisor"]'); const blockHelp = document.querySelector("#mosaicHelpButton"); const headingBox = blockHeading.getBoundingClientRect(); const labelBox = blockLabel.getBoundingClientRect(); const helpBox = blockHelp.getBoundingClientRect();
-        return { toolbar, stage, controls, candidateOverflow, candidateHit, targets: { count: targetInputs.length, native: targetInputs.every((input) => input.type === "checkbox"), oneLine: new Set([targetLabel.top, ...targetChips.map((item) => item.getBoundingClientRect().top)].map(Math.round)).size === 1, centered: targetChips.every((chip) => Math.abs((chip.getBoundingClientRect().top + chip.getBoundingClientRect().bottom) / 2 - (targetLabel.top + targetLabel.bottom) / 2) <= 1), withinPane: targetBounds.left >= paneBounds.left && targetBounds.right <= paneBounds.right, compact: targetChips.every((chip) => { const rect = chip.getBoundingClientRect(); return rect.height >= 26 && rect.height <= 28; }), selected: targetChips.every((chip) => chip.classList.contains("is-selected")), tracksAbsent: !targetChoices.querySelector(".target-switch-track") }, overviewFilterButton: document.querySelector("#overviewFilterButton").textContent, orientation: document.querySelector("#canvasToolRail").getAttribute("aria-orientation"), help: { label: blockHelp.getAttribute("aria-label"), title: blockHelp.title, parent: blockHelp.parentElement.className, nestedInLabel: Boolean(blockHelp.closest("label")), followsLabel: helpBox.left >= labelBox.right, fitsHeading: headingBox.left <= labelBox.left && headingBox.right >= helpBox.right && headingBox.width >= labelBox.width + helpBox.width }, toolPosition: document.querySelector("#settingsToolPosition") };
+        return { toolbar, stage, controls, candidateOverflow, candidateHit, targets: { visible: targetBounds.width > 0 && targetBounds.height > 0, withinPane: targetBounds.left >= paneBounds.left && targetBounds.right <= paneBounds.right }, overviewFilterButton: document.querySelector("#overviewFilterButton").textContent, orientation: document.querySelector("#canvasToolRail").getAttribute("aria-orientation"), help: { label: blockHelp.getAttribute("aria-label"), title: blockHelp.title, parent: blockHelp.parentElement.className, nestedInLabel: Boolean(blockHelp.closest("label")), followsLabel: helpBox.left >= labelBox.right, fitsHeading: headingBox.left <= labelBox.left && headingBox.right >= helpBox.right && headingBox.width >= labelBox.width + helpBox.width }, toolPosition: document.querySelector("#settingsToolPosition") };
       });
       assert.ok(editor.toolbar.left === editor.stage.left && editor.toolbar.right === editor.stage.right && editor.toolbar.top === editor.stage.top && editor.toolbar.height > 30, `toolbar fills the editor top at ${width}/${language}`);
       assert.equal(editor.toolPosition, null, "legacy tool position control is absent");
@@ -4559,17 +4567,19 @@ async function main() {
       assert.equal(editor.controls.filter((control) => control.text === (language === "ja" ? "検出範囲" : "Detection range")).length, 2, `both candidate sections expose a detection-range button at ${width}/${language}`);
       assert.equal(editor.candidateOverflow, false, `candidate controls do not overflow at ${width}/${language}`);
       assert.equal(editor.candidateHit, true, `candidate display segments own their hit targets at ${width}/${language}`);
-      assert.equal(editor.targets.count === 2 && editor.targets.native && editor.targets.oneLine && editor.targets.centered && editor.targets.withinPane && editor.targets.compact && editor.targets.selected && editor.targets.tracksAbsent, true, `target label and chips stay compact and aligned at ${width}/${language}: ${JSON.stringify(editor.targets)}`);
+      assert.equal(editor.targets.visible && editor.targets.withinPane, true, `detection settings button fits the sidebar at ${width}/${language}`);
       if (width === 1024 && language === "ja") {
-        const penis = page.locator("#detectTargetPenis"); const pussy = page.locator("#detectTargetPussy");
+        await page.locator("#detectionSettingsButton").click();
+        const penis = page.locator("#dialogTargetPenis"); const pussy = page.locator("#dialogTargetPussy");
         await penis.focus(); await penis.press("Space");
         assert.equal(await penis.isChecked(), false, "keyboard toggles the penis target off");
-        assert.equal(await page.locator("#detectTargetPenis").evaluate((input) => input.closest(".target-chip").classList.contains("is-selected")), false, "an unselected target uses the neutral chip");
+        assert.equal(await page.locator("#dialogTargetPenis").evaluate((input) => input.closest(".target-chip").classList.contains("is-selected")), false, "an unselected target uses the neutral chip");
         await pussy.focus(); await pussy.press("Space");
-        const zeroTargets = await page.evaluate(() => ({ targets: settingsPayload().detection.targets, visible: !document.querySelector("#detectionTargetValidation").hidden, text: document.querySelector("#detectionTargetValidation").textContent }));
+        const zeroTargets = await page.evaluate(() => ({ targets: detectionTargets(), visible: !document.querySelector("#detectTargetValidation").hidden, text: document.querySelector("#detectTargetValidation").textContent }));
         assert.deepEqual(zeroTargets.targets, [], "settings payload preserves an explicit empty target selection");
         assert.equal(zeroTargets.visible && zeroTargets.text === "penis または pussy を選択してください。", true, "empty target selection shows localized inline validation");
         await penis.focus(); await penis.press("Space"); await pussy.focus(); await pussy.press("Space");
+        await page.locator("#detectCancelButton").click();
       }
       await page.locator("#mosaicHelpButton").click();
       const mosaicHelp = await page.locator("#mosaicHelpDialog").evaluate((dialog) => {

@@ -2,10 +2,10 @@ function detectionParallelism() {
   const value = Number($("#detectParallelism").value);
   return Number.isFinite(value) ? Math.max(1, Math.round(value)) : 2;
 }
-function detectionTargets(prefix = "detectTarget") {
+function detectionTargets(prefix = "dialogTarget") {
   return ["penis", "pussy"].filter((name) => $(`#${prefix}${name[0].toUpperCase()}${name.slice(1)}`).checked === true);
 }
-function setDetectionTargets(targets, prefix = "detectTarget") {
+function setDetectionTargets(targets, prefix = "dialogTarget") {
   const selected = new Set(targets || ["penis", "pussy"]);
   for (const name of ["penis", "pussy"]) {
     const input = $(`#${prefix}${name[0].toUpperCase()}${name.slice(1)}`); input.checked = selected.has(name); syncDetectionTargetSwitch(input);
@@ -40,7 +40,7 @@ function syncDetectionDialog() {
   state.pendingDetectionTargetIds = imageIds;
   $("#detectTargetCount").textContent = t("detectDialog.target", { count: imageIds.length });
   const targetsValid = validateDetectionTargets(detectionTargets("dialogTarget"), $("#detectTargetValidation"));
-  $("#detectStartButton").disabled = state.detectionDialogSubmitting || !targetsValid || imageIds.length === 0;
+  $("#detectStartButton").disabled = state.detectionDialogSubmitting || !targetsValid || (!state.detectionSettingsOnly && imageIds.length === 0);
   return imageIds;
 }
 
@@ -49,6 +49,7 @@ function resetDetectionDialogState() {
   state.detectionDialogBaseIds = [];
   state.detectionDialogFilterable = false;
   state.detectionDialogSubmitting = false;
+  state.detectionSettingsOnly = false;
   $("#detectTargetValidation").hidden = true;
 }
 
@@ -130,17 +131,24 @@ function importParallelism() {
   return normaliseImportParallelism(state.settings?.importing?.parallelism);
 }
 
-function openDetectionDialog(imageIds, { filterable = false } = {}) {
+function openDetectionDialog(imageIds, { filterable = false, settingsOnly = false } = {}) {
   const ids = new Set(processableImages().map((image) => image.id));
   imageIds = [...new Set(imageIds)].filter((imageId) => ids.has(imageId));
-  if (!imageIds.length || isBusy() || state.importing || catalogStagingEditsActive()) return;
+  if ((!settingsOnly && !imageIds.length) || isBusy() || state.importing || catalogStagingEditsActive()) return;
+  state.detectionSettingsOnly = settingsOnly;
   state.detectionDialogBaseIds = [...imageIds];
   state.detectionDialogFilterable = filterable;
   state.detectionDialogSubmitting = false;
+  $("#detectDialogTitle").dataset.i18n = settingsOnly ? "detection.title" : "detectDialog.title";
+  $("#detectDialogTitle").textContent = t($("#detectDialogTitle").dataset.i18n);
+  $("#detectStartButton").dataset.i18n = settingsOnly ? "dialog.save" : "detectDialog.start";
+  $("#detectStartButton").textContent = t($("#detectStartButton").dataset.i18n);
+  $("#detectTargetCount").hidden = settingsOnly;
+  $("#detectParallelismRow").hidden = settingsOnly;
   $("#detectImageFilters").hidden = !filterable;
   setDetectionImageFilters(state.settings?.detection?.image_filters || ["unreviewed"]);
   setDetectionConfidence(detectionConfidence());
-  $("#detectParallelism").value = String(detectionParallelism());
+  $("#detectParallelism").value = String(state.settings?.detection?.parallelism || 2);
   $("#detectCandidatePadding").value = String(state.settings?.detection?.default_candidate_padding_px || 0);
   $("#detectExcludeCandidatePadding").value = String(state.settings?.detection?.default_exclude_candidate_padding_px || 0);
   $("#detectFluidColorFillEnabled").checked = state.settings?.detection?.fluid_color_fill_enabled !== false;
@@ -161,7 +169,7 @@ async function runDetection(imageIds, confidence = detectionConfidence(), parall
     imageIds = [...imageIds];
   }
   if (!imageIds.length || catalogStagingEditsActive() || (!state.detectionStarting && (isBusy() || state.importing))) return;
-  if (!validateDetectionTargets(targetClasses, $("#detectionTargetValidation"))) return;
+  if (!validateDetectionTargets(targetClasses)) return;
   const previousJob = state.job;
   const previousDetectionTargetIds = [...(state.detectionTargetIds || [])];
   const previousDetectCancelRequested = state.detectCancelRequested;
@@ -192,7 +200,7 @@ function beginDetectionStart(imageIds) {
   state.detectionStarting = true;
   state.detectionTargetIds = [...imageIds];
   state.detectCancelRequested = false;
-  state.job = { kind: "detect", state: "running", total: imageIds.length, completed: 0, processed: 0, current: "", imageIds: [...imageIds], completedImageIds: [] };
+  state.job = { kind: "detect", state: "running", phase: "preparing_models", total: imageIds.length, completed: 0, processed: 0, current: "", imageIds: [...imageIds], completedImageIds: [] };
   showProcessing(state.job);
   updateProgress(state.job);
 }
@@ -200,6 +208,7 @@ function beginDetectionStart(imageIds) {
 async function startDetectionFromDialog(event) {
   event.preventDefault();
   if (catalogStagingEditsActive() || state.detectionDialogSubmitting) return;
+  const settingsOnly = state.detectionSettingsOnly;
   const confidence = normaliseDetectionConfidence($("#detectConfidenceNumber").value);
   const parallelism = detectionParallelism();
   const targetClasses = detectionTargets("dialogTarget");
@@ -215,17 +224,19 @@ async function startDetectionFromDialog(event) {
     ?? 26;
   setDetectionDialogSubmitting(true);
   try {
-    await flushAllImageMutations();
-    await saveDraft();
-    await flushAllWorkspaceMutations();
+    if (!settingsOnly) {
+      await flushAllImageMutations();
+      await saveDraft();
+      await flushAllWorkspaceMutations();
+    }
     const imageIds = syncDetectionDialog();
-    if (!imageIds.length) { setDetectionDialogSubmitting(false); return; }
+    if (!settingsOnly && !imageIds.length) { setDetectionDialogSubmitting(false); return; }
     if (state.settings) {
       const settings = structuredClone(state.settings);
       settings.detection = {
         ...settings.detection,
         threshold: confidence,
-        parallelism,
+        ...(!settingsOnly ? { parallelism } : {}),
         targets: targetClasses,
         default_candidate_padding_px: defaultCandidatePadding,
         default_exclude_candidate_padding_px: defaultExcludeCandidatePadding,
@@ -240,6 +251,7 @@ async function startDetectionFromDialog(event) {
     setDetectionDialogSubmitting(false);
     $("#detectDialog").close();
     resetDetectionDialogState();
+    if (settingsOnly) { updateActionButtons(); return; }
     state.detectionStarting = true;
     updateActionButtons();
     await runDetection(imageIds, confidence, parallelism, targetClasses, {
@@ -247,7 +259,6 @@ async function startDetectionFromDialog(event) {
       fluidColorFillTolerance,
     }, true);
   } catch (error) {
-    setSettingsForm(state.settings, state.settingsStatus);
     setDetectionDialogSubmitting(false);
     showUserError(error);
   }

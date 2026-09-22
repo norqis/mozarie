@@ -133,19 +133,7 @@
         <button id="removeCurrentImageButton" type="button" data-i18n="editor.hide">非表示</button>
       </div>
       <section class="detection-settings">
-        <h2 data-i18n="detection.title">検出設定</h2>
-        <div class="target-choices" role="group" data-i18n-aria-label="detection.targets" aria-label="対象">
-          <span class="target-choices-label" data-i18n="detection.targets">対象</span>
-          <label class="target-chip"><input id="detectTargetPenis" type="checkbox" checked><span>penis</span></label>
-          <label class="target-chip"><input id="detectTargetPussy" type="checkbox" checked><span>pussy</span></label>
-        </div>
-        <p id="detectionTargetValidation" class="target-validation" role="alert" hidden></p>
-        <label class="threshold-control" for="confidence">
-          <span data-i18n="detection.confidence">判定しきい値</span>
-          <output id="confidenceValue">0.50</output>
-        </label>
-        <input id="confidence" type="range" min="0.10" max="1.00" step="0.01" value="0.50">
-        <p class="muted" data-i18n="detection.help">高いほど誤検出は減りますが、見逃しは増えます。</p>
+        <button id="detectionSettingsButton" type="button" data-i18n="detection.title">検出設定</button>
       </section>
       <output id="candidateStatus" class="muted" hidden data-i18n-dynamic>画像を選択してください</output>
       <section class="candidate-section">
@@ -276,7 +264,7 @@
     <form id="detectForm" class="dialog-body">
       <h2 id="detectDialogTitle" data-i18n="detectDialog.title">自動検出の設定</h2>
       <p id="detectTargetCount" class="muted"></p>
-       <label class="form-row">
+       <label id="detectParallelismRow" class="form-row">
          <span data-i18n="detectDialog.parallelism">同時処理数</span>
          <input id="detectParallelism" type="number" min="1" step="1" value="2" data-i18n-aria-label="detectDialog.parallelism" aria-label="同時処理数">
        </label>

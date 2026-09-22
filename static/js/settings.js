@@ -337,11 +337,11 @@ function settingsPayload() {
     },
     importing: { parallelism: normaliseImportParallelism($("#settingsImportParallelism").value) },
     detection: {
-      threshold: normaliseDetectionConfidence($("#detectConfidenceNumber").value),
-      parallelism: detectionParallelism(),
+      threshold: detectionConfidence(),
+      parallelism: state.settings.detection.parallelism,
       mode: $("#settingsPrecisionToggle").checked ? "high_precision" : "standard",
       fluid_exclusion_enabled: $("#settingsFluidToggle").checked,
-      exclude_forced_default: $("#settingsExcludeForcedDefault").checked, targets: detectionTargets(),
+      exclude_forced_default: $("#settingsExcludeForcedDefault").checked, targets: persistedDetectionTargets(),
     },
     saving: {
       parallelism: Math.max(1, Math.round(Number($("#settingsSaveParallelism").value) || 2)),

@@ -304,6 +304,9 @@ class DetectionMixin:
         models: DetectionModels | None = None
         staged: dict[str, tuple[int, ImageRecord, list[Candidate]]] = {}
         durable_published = False
+        # Job creation reserves one preparation count before runtime imports.
+        # Nested model loaders own their own counts and may run again per image.
+        initial_preparation_pending = True
         try:
             # Direct workers without a launch epoch snapshot it once before
             # any work; publication must
@@ -339,6 +342,8 @@ class DetectionMixin:
                 if history_group: self.workspace_store.finish_history_group(history_group, failed=True)
                 return
             models = self._ensure_models()
+            self._set_detection_model_preparation(False, job_generation, catalog_generation)
+            initial_preparation_pending = False
             stage_lock = threading.Lock()
 
             def claim_and_run(index: int, record: ImageRecord) -> None:
@@ -492,6 +497,8 @@ class DetectionMixin:
                     self._discard_candidates(candidates)
             self._fail_job(exc, job_generation, catalog_generation)
         finally:
+            if initial_preparation_pending:
+                self._set_detection_model_preparation(False, job_generation, catalog_generation)
             # ``claim_and_run`` closes over this value. Drop it before the
             # background runner clears state-owned models and the GPU cache.
             models = None

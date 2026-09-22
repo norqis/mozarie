@@ -31,11 +31,93 @@ async function selectFirst(page) {
   await page.waitForFunction(() => state.currentId === "sample" && Boolean(state.currentImage));
 }
 
+test("individual detection settings save all shared options without changing batch filters or parallelism", { timeout: 60000 }, async () => {
+  await withPage(async (page, fixture) => {
+    await selectFirst(page);
+    const before = await page.evaluate(() => structuredClone(state.settings.detection));
+    await page.locator("#detectionSettingsButton").click();
+    assert.equal(await page.locator("#detectDialogTitle").textContent(), "検出設定");
+    assert.equal(await page.locator("#detectStartButton").textContent(), "保存");
+    for (const selector of ["#detectTargetCount", "#detectParallelismRow", "#detectImageFilters"]) assert.equal(await page.locator(selector).isVisible(), false);
+    await page.locator("#detectConfidenceNumber").fill("0.64");
+    await page.locator("label.target-chip:has(#dialogTargetPussy)").click();
+    await page.locator("#detectCandidatePadding").fill("7");
+    await page.locator("#detectExcludeCandidatePadding").fill("15");
+    await page.locator("#detectFluidColorFillTolerance").fill("41");
+    await page.locator("#detectFluidColorFillEnabled").uncheck();
+    assert.equal(await page.locator("#detectFluidColorFillTolerance").isDisabled(), true);
+    await page.locator("#detectStartButton").click();
+    await page.waitForFunction(() => !document.querySelector("#detectDialog").open);
+    assert.equal(fixture.detectRequests.length, 0);
+    const saved = fixture.settingsPayloads.at(-1).body.detection;
+    assert.equal(saved.threshold, 0.64);
+    assert.deepEqual(saved.targets, ["penis"]);
+    assert.equal(saved.default_candidate_padding_px, 7);
+    assert.equal(saved.default_exclude_candidate_padding_px, 15);
+    assert.equal(saved.fluid_color_fill_enabled, false);
+    assert.equal(saved.fluid_color_fill_tolerance, 41);
+    assert.equal(saved.parallelism, before.parallelism);
+    assert.deepEqual(saved.image_filters, before.image_filters);
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await page.waitForFunction(() => Boolean(state.settings) && state.images.length === 2);
+    await selectFirst(page);
+    await page.locator("#detectCurrentButton").click();
+    await page.waitForFunction(() => state.job?.kind === "detect");
+    assert.deepEqual(fixture.detectRequests.at(-1), { imageIds: ["sample"], confidence: 0.64, parallelism: 1, targetClasses: ["penis"], fluidColorFillEnabled: false, fluidColorFillTolerance: 41 });
+    await page.waitForFunction(() => !state.processing && !isBusy());
+    await page.locator("#detectAllButton").click();
+    assert.equal(await page.locator("#detectParallelismRow").isVisible(), true);
+    assert.equal(await page.locator("#detectImageFilters").isVisible(), true);
+    assert.equal(await page.locator("#detectConfidenceNumber").inputValue(), "0.64");
+    assert.equal(await page.locator("#detectCandidatePadding").inputValue(), "7");
+    assert.equal(await page.locator("#detectExcludeCandidatePadding").inputValue(), "15");
+    await page.locator("#detectCancelButton").click();
+  });
+});
+
+test("cancelled detection drafts never change current-image or general settings and failed saves stay open", { timeout: 60000 }, async () => {
+  await withPage(async (page, fixture) => {
+    await selectFirst(page);
+    const before = await page.evaluate(() => structuredClone(state.settings.detection));
+    for (const opener of ["#detectionSettingsButton", "#detectAllButton"]) {
+      await page.locator(opener).click();
+      await page.locator("#detectConfidenceNumber").fill("0.92");
+      await page.locator("label.target-chip:has(#dialogTargetPussy)").click();
+      await page.locator("#detectCandidatePadding").fill("22");
+      await page.locator("#detectFluidColorFillTolerance").fill("82");
+      await page.locator("#detectCancelButton").click();
+      assert.deepEqual(await page.evaluate(() => state.settings.detection), before);
+      assert.equal(await page.evaluate(() => settingsPayload().detection.threshold), before.threshold);
+      assert.deepEqual(await page.evaluate(() => settingsPayload().detection.targets), before.targets);
+    }
+    await page.locator("#detectionSettingsButton").click();
+    assert.equal(await page.locator("#detectConfidenceNumber").inputValue(), before.threshold.toFixed(2));
+    assert.equal(await page.locator("#detectCandidatePadding").inputValue(), String(before.default_candidate_padding_px));
+    await page.locator("#detectConfidenceNumber").fill("0.66");
+    fixture.failNextSettingsSave();
+    await page.locator("#detectStartButton").click();
+    await page.waitForFunction(() => document.querySelector("#errorDialog").open);
+    assert.equal(await page.locator("#detectDialog").evaluate((dialog) => dialog.open), true);
+    assert.equal(await page.locator("#detectConfidenceNumber").inputValue(), "0.66");
+    assert.deepEqual(await page.evaluate(() => state.settings.detection), before);
+    assert.equal(fixture.detectRequests.length, 0);
+    await page.locator("#errorDialogClose").click();
+    await page.locator("#detectCancelButton").click();
+    await page.locator("#detectCurrentButton").click();
+    await page.waitForFunction(() => state.job?.kind === "detect");
+    assert.equal(fixture.detectRequests.at(-1).confidence, before.threshold);
+    assert.deepEqual(fixture.detectRequests.at(-1).targetClasses, before.targets);
+  });
+});
+
 test("SD-049 editor confidence slider keeps display and request value identical", { timeout: 60000 }, async () => {
   await withPage(async (page, fixture) => {
     await selectFirst(page);
-    await page.locator("#confidence").evaluate((input) => { input.value = "0.61"; input.dispatchEvent(new Event("input", { bubbles: true })); });
-    assert.equal(await page.locator("#confidenceValue").textContent(), "0.61");
+    await page.locator("#detectionSettingsButton").click();
+    await page.locator("#detectConfidenceRange").evaluate((input) => { input.value = "0.61"; input.dispatchEvent(new Event("input", { bubbles: true })); });
+    assert.equal(await page.locator("#detectConfidenceNumber").inputValue(), "0.61");
+    await page.locator("#detectStartButton").click();
+    await page.waitForFunction(() => !document.querySelector("#detectDialog").open);
     await page.locator("#detectCurrentButton").click();
     await page.waitForFunction(() => state.processing?.kind === "detect" || state.job?.kind === "detect");
     assert.equal(fixture.detectRequests.at(-1).confidence, 0.61);

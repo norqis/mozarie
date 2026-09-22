@@ -5892,6 +5892,8 @@ class MozarieTests(unittest.TestCase):
 
                 self.assertEqual(state.job.state, "error")
                 self.assertEqual(state.job.error_code, "internal_error")
+                self.assertEqual(state.job.preparing_models, 0)
+                self.assertEqual(state.job.as_dict()["phase"], "")
                 self.assertIsNone(state.worker_thread)
                 self.assertIsNone(state.job_control)
                 self.assertFalse(state._has_active_worker())
