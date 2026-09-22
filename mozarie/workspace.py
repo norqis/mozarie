@@ -1715,7 +1715,7 @@ class WorkspaceStore:
             # still cascades all of it.
             db.execute("UPDATE candidates SET deleted=1 WHERE image_id=?", (image_id,))
             db.execute("DELETE FROM manual_edits WHERE image_id=?", (image_id,))
-            db.execute("UPDATE images SET candidate_revision=?,reviewed=0,updated_at=? WHERE image_id=?", (revision, time.time_ns(), image_id))
+            db.execute("UPDATE images SET candidate_revision=?,updated_at=? WHERE image_id=?", (revision, time.time_ns(), image_id))
             self._record_history_db(db, image_id, before, self._history_state_db(db, image_id), group_id=group_id)
 
     def delete_catalog_images(self, catalog_id: str) -> None:
@@ -1828,7 +1828,7 @@ class WorkspaceStore:
                 elif clear_edited_filename:
                     db.execute("UPDATE images SET edited_filename=NULL,updated_at=? WHERE image_id=?", (time.time_ns(), image_id))
                 if candidate_revision is not None and not delete_image:
-                    db.execute("UPDATE images SET candidate_revision=?,reviewed=0,updated_at=? WHERE image_id=?", (candidate_revision, time.time_ns(), image_id))
+                    db.execute("UPDATE images SET candidate_revision=?,updated_at=? WHERE image_id=?", (candidate_revision, time.time_ns(), image_id))
                 if source_flip_horizontal is not None and source_flip_vertical is not None and not delete_image:
                     db.execute("""INSERT INTO image_transforms(image_id,flip_horizontal,flip_vertical,source_flip_horizontal,source_flip_vertical,revision)
                         SELECT image_id,0,0,?,?,1 FROM images WHERE image_id=? ON CONFLICT(image_id) DO UPDATE SET
@@ -1937,16 +1937,13 @@ class WorkspaceStore:
 
     def _write_candidate_state_db(self, db: sqlite3.Connection, image_id: str, revision: int, candidates: list[Any], effective: bool,
                                   *, replace: bool, history_group: str | None = None, expected_revision: int | None = None,
-                                  preserve_reviewed: bool = False, require_candidate_masks: bool = False) -> None:
+                                  require_candidate_masks: bool = False) -> None:
         if expected_revision is not None:
             current = db.execute("SELECT candidate_revision FROM images WHERE image_id=?", (image_id,)).fetchone()
             if current is None or int(current["candidate_revision"]) != expected_revision:
                 raise ValueError("workspace candidate revision changed")
         before = self._history_state_db(db, image_id)
-        if preserve_reviewed:
-            db.execute("UPDATE images SET candidate_revision=?, updated_at=? WHERE image_id=?", (revision, time.time_ns(), image_id))
-        else:
-            db.execute("UPDATE images SET candidate_revision=?, reviewed=0, updated_at=? WHERE image_id=?", (revision, time.time_ns(), image_id))
+        db.execute("UPDATE images SET candidate_revision=?, updated_at=? WHERE image_id=?", (revision, time.time_ns(), image_id))
         if replace:
             db.execute("UPDATE candidates SET deleted=1 WHERE image_id=?", (image_id,))
             for candidate in candidates:
@@ -2001,7 +1998,6 @@ class WorkspaceStore:
                         db, image_id, revision, candidates, effective,
                         replace=True, history_group=history_group,
                         expected_revision=expected_revision,
-                        preserve_reviewed=True,
                         require_candidate_masks=True,
                     )
                 if history_group:
@@ -2013,16 +2009,14 @@ class WorkspaceStore:
                 raise
 
     def prepare_candidate_state(self, image_id: str, revision: int, candidates: list[Any], effective: bool, *, replace: bool,
-                                history_group: str | None = None, expected_revision: int | None = None,
-                                preserve_reviewed: bool = False) -> _PendingWorkspaceCommit:
+                                history_group: str | None = None, expected_revision: int | None = None) -> _PendingWorkspaceCommit:
         """Write a candidate revision but leave COMMIT to the state publisher."""
         with self._lock:
             db = self._connect()
             db.execute("BEGIN IMMEDIATE")
             try:
                 self._write_candidate_state_db(db, image_id, revision, candidates, effective, replace=replace,
-                                               history_group=history_group, expected_revision=expected_revision,
-                                               preserve_reviewed=preserve_reviewed)
+                                               history_group=history_group, expected_revision=expected_revision)
                 return _PendingWorkspaceCommit(db)
             except Exception:
                 db.execute("ROLLBACK")
@@ -2160,7 +2154,7 @@ class WorkspaceStore:
                 manual_enabled=excluded.manual_enabled,exclusion_enabled=excluded.exclusion_enabled,exclusion_erase_enabled=excluded.exclusion_erase_enabled,
                 exclusion_forced=excluded.exclusion_forced,removed_candidate_ids=excluded.removed_candidate_ids,candidate_revision=excluded.candidate_revision,has_effective_mask=excluded.has_effective_mask,history_json=excluded.history_json,updated_at=excluded.updated_at""",
             (image_id,layers["add"],layers["exclusion"],layers["erase"],int(payload.get("manualEnabled", True)),int(payload.get("manualExclusionEnabled", True)),int(payload.get("manualExclusionEraseEnabled", True)),int(payload.get("manualExclusionForced", True)),json.dumps(removed),revision,int(has_effective_mask),history_json,time.time_ns()))
-        db.execute("UPDATE images SET reviewed=0,updated_at=? WHERE image_id=?", (time.time_ns(), image_id))
+        db.execute("UPDATE images SET updated_at=? WHERE image_id=?", (time.time_ns(), image_id))
         self._record_history_db(db, image_id, before, self._history_state_db(db, image_id), manual_rois={
             "add": rois.get("add"), "exclusion": rois.get("exclusion"), "erase": rois.get("exclusionErase"),
         })
@@ -2514,7 +2508,7 @@ class WorkspaceStore:
                 raise
 
     @staticmethod
-    def _restore_history_state(db: sqlite3.Connection, image_id: str, state: dict[str, Any], manual_delta: dict[str, Any], *, forward: bool) -> None:
+    def _restore_history_state(db: sqlite3.Connection, image_id: str, state: dict[str, Any], manual_delta: dict[str, Any], *, forward: bool, restore_reviewed: bool = True) -> None:
         if not isinstance(state, dict) or not isinstance(state.get("candidates"), list):
             raise ValueError("workspace history is invalid")
         revision = state.get("revision")
@@ -2564,7 +2558,8 @@ class WorkspaceStore:
         flags = state.get("flags", {})
         if not isinstance(flags, dict) or not isinstance(flags.get("hidden", False), bool) or not isinstance(flags.get("reviewed", False), bool):
             raise ValueError("workspace history is invalid")
-        db.execute("UPDATE images SET candidate_revision=?,hidden=?,reviewed=?,updated_at=? WHERE image_id=?", (revision, int(flags.get("hidden", False)), int(flags.get("reviewed", False)), time.time_ns(), image_id))
+        db.execute("UPDATE images SET candidate_revision=?,hidden=?,reviewed=CASE WHEN ? THEN ? ELSE reviewed END,updated_at=? WHERE image_id=?",
+                   (revision, int(flags.get("hidden", False)), int(restore_reviewed), int(flags.get("reviewed", False)), time.time_ns(), image_id))
         transform = state.get("transform", {"flipHorizontal": False, "flipVertical": False})
         if not isinstance(transform, dict) or not isinstance(transform.get("flipHorizontal", False), bool) or not isinstance(transform.get("flipVertical", False), bool):
             raise ValueError("workspace history is invalid")
@@ -2660,14 +2655,27 @@ class WorkspaceStore:
                     member_guard(record_ids)
                 changed: list[str] = []
                 for member in entries:
-                    state = json.loads(str(member["before_json"] if direction == "undo" else member["after_json"]))
+                    before = json.loads(str(member["before_json"]))
+                    after = json.loads(str(member["after_json"]))
+                    if not isinstance(before, dict) or not isinstance(after, dict):
+                        raise ValueError("workspace history is invalid")
+                    state = before if direction == "undo" else after
+                    # Only an explicit flag operation restores its review bit.
+                    # Editing history (including old snapshots) must keep the
+                    # user's current review choice.
+                    flag_only = {key: value for key, value in before.items() if key != "flags"} == {key: value for key, value in after.items() if key != "flags"}
+                    before_flags, after_flags = before.get("flags", {}), after.get("flags", {})
+                    if not isinstance(before_flags, dict) or not isinstance(after_flags, dict):
+                        raise ValueError("workspace history is invalid")
+                    review_changed = before_flags.get("reviewed") != after_flags.get("reviewed")
                     try:
                         delta = json.loads(str(member["delta_json"]))
                     except (TypeError, ValueError, json.JSONDecodeError) as exc:
                         raise ValueError("workspace history is invalid") from exc
                     if not isinstance(delta, dict) or not isinstance(delta.get("manual", {}), dict):
                         raise ValueError("workspace history is invalid")
-                    self._restore_history_state(db, str(member["image_id"]), state, delta.get("manual", {}), forward=direction == "redo")
+                    self._restore_history_state(db, str(member["image_id"]), state, delta.get("manual", {}),
+                                                forward=direction == "redo", restore_reviewed=flag_only and review_changed)
                     if direction == "undo":
                         previous = db.execute("SELECT entry_id FROM history_entries WHERE image_id=? AND entry_id<? ORDER BY entry_id DESC LIMIT 1", (member["image_id"], member["entry_id"])).fetchone()
                         db.execute("""INSERT INTO history_cursors(image_id,entry_id) VALUES(?,?)

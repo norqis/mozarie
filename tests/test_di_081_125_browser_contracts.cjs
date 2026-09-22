@@ -229,7 +229,7 @@ test("DI-085 through DI-098 clear confirmations preserve the exact visible targe
       clearRequests.push(payload.imageIds);
       const ids = new Set(payload.imageIds);
       catalogue = catalogue.map((image) => ids.has(image.id) ? {
-        ...image, candidateCount: 0, enabledCandidateCount: 0, hasEffectiveMask: false, reviewed: false,
+        ...image, candidateCount: 0, enabledCandidateCount: 0, hasEffectiveMask: false,
       } : image);
       fixture.setCatalog(catalogue);
       await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ok: true }) });
@@ -263,7 +263,7 @@ test("DI-085 through DI-098 clear confirmations preserve the exact visible targe
     await page.waitForFunction(() => !state.masksClearing);
     assert.deepEqual(clearRequests, [["A"]]);
     assert.deepEqual(await page.evaluate(() => state.images.filter((image) => ["A", "B"].includes(image.id)).map((image) => [image.id, image.hasEffectiveMask, image.reviewed])),
-      [["A", false, false], ["B", true, false]], "single clear changes only A in the refreshed browser catalogue");
+      [["A", false, true], ["B", true, false]], "single clear changes only A in the refreshed browser catalogue");
     catalogue = structuredClone(initial); fixture.setCatalog(catalogue);
     await page.evaluate(() => resyncCatalog());
     await page.evaluate(() => { state.selectedImageIds = new Set(["A", "B"]); updateSelectionActionBar(); });
@@ -275,15 +275,15 @@ test("DI-085 through DI-098 clear confirmations preserve the exact visible targe
     await page.waitForFunction(() => !state.masksClearing && !document.querySelector("#confirmDialog").open);
     assert.deepEqual(clearRequests, [["A"], ["A", "B"]], "single and selected clear submit their exact target sets");
     assert.deepEqual(await page.evaluate(() => state.images.map((image) => [image.id, image.hasEffectiveMask, image.reviewed, image.hidden])), [
-      ["A", false, false, false], ["B", false, false, false], ["C", false, true, false], ["D", false, false, false],
+      ["A", false, true, false], ["B", false, false, false], ["C", false, true, false], ["D", false, false, false],
       ["E", true, true, true], ["F", true, false, true], ["G", false, true, true], ["H", false, false, true],
     ], "the refreshed visible catalogue resets A and B while retaining every unrelated and hidden flag");
 
     await page.locator("#saveAllButton").click();
     await page.waitForFunction(() => document.querySelector("#applyDialog").open);
     await page.locator('[data-apply-image-filter="reviewed"]').check({ force: true });
-    assert.deepEqual(await page.evaluate(() => [...state.applyTargetIds]), ["C"], "reviewed save contains only C after A and B are cleared");
-    assert.match(await page.locator("#applyTargetCount").textContent(), /1件/, "reviewed save reports one target");
+    assert.deepEqual(await page.evaluate(() => [...state.applyTargetIds]), ["A", "C"], "reviewed save retains A and C after A and B are cleared");
+    assert.match(await page.locator("#applyTargetCount").textContent(), /2件/, "reviewed save reports two targets");
     await page.locator("#applyCloseButton").click();
 
     await page.locator("#batchMoreButton").click();
@@ -300,13 +300,17 @@ test("DI-085 through DI-098 clear confirmations preserve the exact visible targe
     const assertEmptyFilter = async (filter) => {
       await page.locator("#saveAllButton").click();
       await page.waitForFunction(() => document.querySelector("#applyDialog").open);
+      await page.locator('[data-apply-image-filter="reviewed"]').uncheck({ force: true });
       await page.locator(`[data-apply-image-filter="${filter}"]`).check({ force: true });
-      assert.deepEqual(await page.evaluate(() => [...state.applyTargetIds]), [], `${filter} has no target after visible masks and review flags are cleared`);
+      assert.deepEqual(await page.evaluate(() => [...state.applyTargetIds]), [], `${filter} has no target after visible masks are cleared`);
       assert.equal(await page.locator("#applyStartButton").isDisabled(), true, `${filter} cannot start an empty save`);
       await page.locator("#applyCloseButton").click();
     };
     await assertEmptyFilter("masked");
-    await assertEmptyFilter("reviewed");
+    await page.locator("#saveAllButton").click();
+    await page.locator('[data-apply-image-filter="reviewed"]').check({ force: true });
+    assert.deepEqual(await page.evaluate(() => [...state.applyTargetIds]), ["A", "C"], "all clear preserves reviewed membership");
+    await page.locator("#applyCloseButton").click();
     await page.locator("#saveAllButton").click();
     await page.waitForFunction(() => document.querySelector("#applyDialog").open);
     await page.locator("[data-apply-image-filter]").evaluateAll((inputs) => {
@@ -450,7 +454,7 @@ test("DI-103 DI-104 and DI-125 source cleanup removes only authoritatively absen
 test("DI-092 and DI-093 durable undo redo reconcile the visible range and review state", { timeout: 60000 }, async () => {
   const fixture = await startFixtureServer();
   let catalogue = [{ id: "A", relativePath: "A.png", sourceKind: "filesystem", width: 100, height: 80,
-    candidateCount: 0, enabledCandidateCount: 0, hasEffectiveMask: false, reviewed: false, hidden: false }];
+    candidateCount: 0, enabledCandidateCount: 0, hasEffectiveMask: false, reviewed: true, hidden: false }];
   fixture.setCatalog(catalogue);
   let phase = "cleared";
   const browser = await chromium.launch({ headless: true });
@@ -465,12 +469,12 @@ test("DI-092 and DI-093 durable undo redo reconcile the visible range and review
       }
       if (path.endsWith("/undo")) {
         phase = "restored";
-        catalogue = catalogue.map((image) => ({ ...image, candidateCount: 1, enabledCandidateCount: 1, hasEffectiveMask: true, reviewed: true }));
+        catalogue = catalogue.map((image) => ({ ...image, candidateCount: 1, enabledCandidateCount: 1, hasEffectiveMask: true }));
         fixture.setCatalog(catalogue);
         await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ changedImageIds: ["A"], canUndo: false, canRedo: true, current: { candidateRevision: 1 } }) });
       } else {
         phase = "cleared";
-        catalogue = catalogue.map((image) => ({ ...image, candidateCount: 0, enabledCandidateCount: 0, hasEffectiveMask: false, reviewed: false }));
+        catalogue = catalogue.map((image) => ({ ...image, candidateCount: 0, enabledCandidateCount: 0, hasEffectiveMask: false }));
         fixture.setCatalog(catalogue);
         await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ changedImageIds: ["A"], canUndo: true, canRedo: false, current: { candidateRevision: 2 } }) });
       }
@@ -493,7 +497,7 @@ test("DI-092 and DI-093 durable undo redo reconcile the visible range and review
     await page.evaluate(() => restoreProjectHistory("redo"));
     assert.deepEqual(await page.evaluate(() => ({ range: currentRecord()?.hasEffectiveMask, reviewed: currentRecord()?.reviewed,
       cardReviewed: document.querySelector('.gallery-item[data-id="A"]')?.classList.contains("reviewed") })),
-    { range: false, reviewed: false, cardReviewed: false }, "redo removes the range and marks the same visible image unreviewed");
+    { range: false, reviewed: true, cardReviewed: true }, "redo removes the range and retains the same visible image review choice");
   } finally {
     await context?.close();
     await browser.close();

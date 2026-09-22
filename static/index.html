@@ -103,7 +103,7 @@
         <div class="canvas-navigation-bar" data-i18n-aria-label="navigation.aria" aria-label="画像移動">
           <output id="currentFileName" class="current-file-name" data-i18n-dynamic>画像未選択</output><output id="reviewStatus" class="review-status" data-i18n-dynamic>未確認</output>
           <button id="previousImageButton" class="icon-button" type="button" aria-label="前へ" title="前へ" data-i18n-aria-label="navigation.previous" data-i18n-title="navigation.previous">‹</button><output id="imagePosition" class="image-position">- / -</output><button id="nextImageButton" class="icon-button" type="button" aria-label="次へ" title="次へ" data-i18n-aria-label="navigation.next" data-i18n-title="navigation.next">›</button>
-          <button id="removeAndNextButton" class="danger" type="button" data-i18n="navigation.removeAndNext">削除</button><button id="hideAndNextButton" type="button" data-i18n="navigation.hideAndNext">非表示にして次へ</button><button id="reviewAndNextButton" class="primary" type="button" data-i18n="navigation.reviewAndNext">確認済にして次へ</button>
+          <button id="removeAndNextButton" class="danger" type="button" data-i18n="navigation.removeAndNext">削除</button><button id="removeFromListButton" class="warning" type="button" data-i18n="catalog.removeFromList">一覧から削除</button><button id="hideAndNextButton" type="button" data-i18n="navigation.hideAndNext">非表示にして次へ</button><button id="reviewAndNextButton" class="primary" type="button" data-i18n="navigation.reviewAndNext">確認済にして次へ</button>
         </div>
         <canvas id="editorCanvas" tabindex="0" data-i18n-aria-label="editor.canvas" aria-label="画像編集キャンバス"></canvas>
         <div id="compareSplitter" role="separator" tabindex="0" aria-controls="editorCanvas" aria-orientation="vertical" aria-valuemin="20" aria-valuemax="80" aria-valuenow="50" aria-label="比較表示の分割位置" data-i18n-aria-label="editor.compareSplitter"></div>
@@ -173,7 +173,7 @@
         <output id="selectionCount" aria-live="polite">0件を選択中</output>
         <button id="selectionActionsButton" type="button" popovertarget="selectionActionsMenu" aria-expanded="false" data-i18n="selection.actions">一括操作</button>
         <div id="selectionActionsMenu" class="batch-more-menu" popover>
-          <button data-selection-action="remove" class="danger" type="button" data-i18n="selection.remove">元画像を削除</button><button data-selection-action="hide" type="button" data-i18n="selection.hide">非表示</button><button data-selection-action="show" type="button" data-i18n="selection.show">再表示</button><button data-selection-action="clear" type="button" data-i18n="selection.clear">モザイククリア</button><button data-selection-action="detect" type="button" data-i18n="selection.detect">自動検出</button><button data-selection-action="reviewed" type="button" data-i18n="selection.reviewed">確認済</button><button data-selection-action="unreviewed" type="button" data-i18n="selection.unreviewed">未確認</button>
+          <button data-selection-action="remove" class="danger" type="button" data-i18n="selection.remove">元画像を削除</button><button data-selection-action="removeFromList" class="warning" type="button" data-i18n="catalog.removeFromList">一覧から削除</button><button data-selection-action="hide" type="button" data-i18n="selection.hide">非表示</button><button data-selection-action="show" type="button" data-i18n="selection.show">再表示</button><button data-selection-action="clear" type="button" data-i18n="selection.clear">モザイククリア</button><button data-selection-action="detect" type="button" data-i18n="selection.detect">自動検出</button><button data-selection-action="reviewed" type="button" data-i18n="selection.reviewed">確認済</button><button data-selection-action="unreviewed" type="button" data-i18n="selection.unreviewed">未確認</button>
         </div>
         <button id="selectionClearButton" type="button" data-i18n="selection.end">終了</button>
       </div>
@@ -211,6 +211,7 @@
     <button id="toggleReviewMenuItem" type="button" role="menuitem"></button>
     <button id="renameImageMenuItem" type="button" role="menuitem" data-i18n="context.rename">名前を変更</button>
     <button id="copyImagePathMenuItem" type="button" role="menuitem" hidden data-i18n="context.copyPath">パスをコピー</button>
+    <button id="removeFromListMenuItem" class="warning" type="button" role="menuitem" data-i18n="catalog.removeFromList">一覧から削除</button>
     <button id="removeImageMenuItem" type="button" role="menuitem" data-i18n="editor.hide">非表示</button>
   </div>
 

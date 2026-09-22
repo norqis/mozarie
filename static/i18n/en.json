@@ -1,4 +1,7 @@
 {
+  "review.hidden": "Hidden",
+  "catalog.removeFromList": "Remove from list",
+  "status.removedFromList": "Removed {count} images from the list. Source images were kept.",
   "app.title": "Mozarie",
   "apply.cancelled": "Save cancelled after {completed} image(s).",
   "apply.changeOutputDirectory": "Change save location",

@@ -172,6 +172,22 @@ class WorkspaceTests(unittest.TestCase):
             self.assertEqual(store.image_state(image_a), (False, False))
             self.assertEqual(store.image_state(image_b), (False, True))
 
+    def test_edit_history_ignores_legacy_review_values(self):
+        for old_reviewed in (False, True):
+            with self.subTest(old_reviewed=old_reviewed), tempfile.TemporaryDirectory() as directory:
+                store = WorkspaceStore(Path(directory)); catalog = self._new_catalog(store)
+                image_id = str(store.reconcile_images(catalog, [self._image(Path(directory))])["001.png"]["image_id"])
+                store.set_image_flags(image_id, reviewed=True)
+                before = store.history_state(image_id)
+                store.save_manual(image_id, {"add": "", "exclusion": "", "exclusionErase": "", "hasEffectiveMask": False}, lambda _value: None)
+                after = store.history_state(image_id)
+                before["flags"]["reviewed"] = old_reviewed
+                after["flags"]["reviewed"] = False
+                store.record_history(image_id, before, after)
+                for direction in ("undo", "redo"):
+                    store.restore_history(image_id, direction)
+                    self.assertTrue(store.image_state(image_id)[1], direction)
+
     def test_history_group_restores_every_affected_image(self):
         with tempfile.TemporaryDirectory() as directory:
             store = WorkspaceStore(Path(directory)); catalog = self._new_catalog(store)

@@ -2761,6 +2761,7 @@ class MozarieTests(unittest.TestCase):
             state = self.new_state()
             image_id = state.set_root(str(root))[0]["id"]
             record = state.image_for_id(image_id)
+            state.set_image_flags(image_id, {"reviewed": True})
             state.job = core_module.Job(started_at=time.time(), kind="detect", state="running", total=1, image_ids=(image_id,))
             old_path = state.cache_dir / image_id / "old-hand.png"
             old_path.parent.mkdir(parents=True, exist_ok=True)
@@ -2781,6 +2782,8 @@ class MozarieTests(unittest.TestCase):
             self.assertEqual(state.job.state, "complete")
             self.assertEqual([(candidate.label_token, candidate.source) for candidate in state.candidates[image_id]], [("penis", "target")])
             self.assertFalse(old_path.exists())
+            self.assertTrue(state.images[image_id].reviewed)
+            self.assertTrue(state.workspace_store.image_state(image_id)[1])
 
     def test_detection_resynchronizes_a_durable_candidate_revision_before_start(self):
         with tempfile.TemporaryDirectory() as directory:

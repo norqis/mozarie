@@ -731,22 +731,8 @@ function setReviewed(image, reviewed) {
     return saved;
   });
 }
-function markImagesUnreviewed(imageIds, renderAfter = true) {
-  let changed = false;
-  for (const imageId of imageIds) {
-    const image = state.images.find((item) => item.id === imageId);
-    if (!image || !isReviewed(image)) continue;
-    changed = true;
-    void setReviewed(image, false).then((saved) => { if (saved && renderAfter) refreshReviewViews(); });
-  }
-  return changed;
-}
-function markCurrentUnreviewed(renderAfter = true) { return markImagesUnreviewed([state.currentId], renderAfter); }
 function refreshCurrentReviewAndMask() {
-  const reviewChanged = markCurrentUnreviewed(false);
-  const maskChanged = refreshMaskStatus(true);
-  if (reviewChanged && !maskChanged) refreshReviewViews();
-  return reviewChanged || maskChanged;
+  return refreshMaskStatus(true);
 }
 function imageIndex(imageId = state.currentId) { return state.images.findIndex((image) => image.id === imageId); }
 function hasOpenDialog() { return [...document.querySelectorAll("dialog")].some((dialog) => dialog.open); }
@@ -773,6 +759,11 @@ function canRemoveCurrentImage() {
   const current = currentRecord();
   return Boolean(state.currentId && state.currentImage && current)
     && !isBusy() && !state.importing && !state.projectReadOnly && !current.sourceDimensionsChanged
+    && !state.projectOperationPending && !catalogStagingEditsActive() && !currentImageActionPending();
+}
+
+function canRemoveImagesFromList(images) {
+  return images.length > 0 && !isBusy() && !state.importing && !state.projectReadOnly
     && !state.projectOperationPending && !catalogStagingEditsActive() && !currentImageActionPending();
 }
 
@@ -857,6 +848,7 @@ function updateActionButtons() {
   $("#nextImageButton").disabled = busyLocked || switchingImages || visibleImages.length === 0 || visibleIndex === visibleImages.length - 1;
   $("#reviewAndNextButton").disabled = busyLocked || mutationLocked || switchingImages || !hasImage;
   $("#removeAndNextButton").disabled = !canRemoveCurrentImage();
+  $("#removeFromListButton").disabled = !canRemoveImagesFromList(current ? [current] : []);
   $("#hideAndNextButton").disabled = busyLocked || mutationLocked || switchingImages || !hasImage;
   $("#downloadCurrentMosaicMask").disabled = switchingImages || !currentProcessable || !state.project;
   $("#downloadCurrentExcludeMask").disabled = switchingImages || !currentProcessable || !state.project;
@@ -891,6 +883,10 @@ function updateActionButtons() {
     const availableInReadOnlyControls = new Set([
       ...document.querySelectorAll(".gallery-item, .overview-item, [data-gallery-filter], [data-overview-filter], .project-table [data-project-action], .project-sort-button, [data-candidate-display-toggle], [data-candidate-effective-toggle], [data-candidate-display-id], [data-candidate-effective-id]"),
     ]);
+    if (sourceIncompatible && !state.projectReadOnly && !state.projectOperationPending) {
+      availableInReadOnly.add("removeFromListButton"); availableInReadOnly.add("removeFromListMenuItem");
+      for (const control of document.querySelectorAll('[data-selection-action="removeFromList"]')) availableInReadOnlyControls.add(control);
+    }
     const availableInReadOnlyDialogs = ["#settingsDialog", "#modelHelpDialog", "#modelDownloadDialog", ...(projectNameMode === "new" ? ["#projectNameDialog"] : []), ...(sourceIncompatible ? ["#sourceMismatchDialog"] : [])].map($);
     for (const control of controls) {
       if (availableInReadOnly.has(control.id) || availableInReadOnlyControls.has(control)

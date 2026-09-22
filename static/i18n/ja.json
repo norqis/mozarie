@@ -1,4 +1,7 @@
 {
+  "review.hidden": "非表示",
+  "catalog.removeFromList": "一覧から削除",
+  "status.removedFromList": "一覧から{count}件削除しました。元画像は保持されています。",
   "app.title": "Mozarie",
   "folder.label": "画像フォルダ",
   "folder.load": "読み込む",

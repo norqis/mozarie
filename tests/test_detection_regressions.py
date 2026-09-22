@@ -107,6 +107,7 @@ class DetectionIntegrityRegressionTests(unittest.TestCase):
                     self.assertTrue(np.all(candidate_mask[:, :4] == 255))
                     self.assertTrue(np.all(candidate_mask[:, 4:] == 0))
 
+                state.set_image_flags(record.image_id, {"reviewed": True})
                 boundary_seen: list[np.ndarray] = []
                 boundary_predictor = Mock()
                 boundary_predictor.predict.return_value = (np.asarray([full > 0]), np.asarray([0.9]), None)
@@ -118,6 +119,8 @@ class DetectionIntegrityRegressionTests(unittest.TestCase):
                         "roi": {"left": 0, "top": 0, "right": 8, "bottom": 8},
                         "point": {"x": 2, "y": 2},
                     })
+                self.assertTrue(state.images[record.image_id].reviewed)
+                self.assertTrue(state.workspace_store.image_state(record.image_id)[1])
                 self.assertEqual(len(boundary_seen), 1)
                 self.assertTrue(np.all(boundary_seen[0][:, 4:] == 0))
                 boundary = state.candidates[record.image_id][-1]

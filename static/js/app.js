@@ -1019,6 +1019,7 @@ function bindEvents() {
   $("#nextImageButton").addEventListener("click", () => runNavigationAction(() => moveCurrentBy(1)));
   $("#reviewAndNextButton").addEventListener("click", () => { void runNavigationAction(reviewAndMoveNext); });
   $("#removeAndNextButton").addEventListener("click", () => { void removeImageFromCatalog(state.currentId); });
+  $("#removeFromListButton").addEventListener("click", () => { const image = currentRecord(); if (image) void removeImagesFromList([image]); });
   $("#hideAndNextButton").addEventListener("click", () => { void hideAndMoveNext(); });
   document.querySelectorAll("[data-selection-action]").forEach((button) => button.addEventListener("click", () => { void runSelectionAction(button.dataset.selectionAction); }));
   $("#selectionClearButton").addEventListener("click", () => { closeBatchMoreMenus(); state.batchMode = false; clearBatchSelection(); renderOverview(); updateSelectionActionBar(); });
@@ -1267,10 +1268,11 @@ function bindEvents() {
     const image = state.images.find((item) => item.id === state.contextMenuImageId);
     if (image) {
       const scroll = state.contextMenuScroll;
+      const reviewedBefore = isReviewed(image);
       const changed = await queueImageMutation(image.id, () => saveWorkspaceFlagNow(image, "reviewed", !isReviewed(image), () => {
         if (state.images.some((item) => item.id === image.id)) refreshReviewViews(scroll);
       }), { lockCandidateControls: true });
-      if (changed && !state.project?.id && image.id === state.currentId) recordHistoryOperation({ kind: "workspaceFlag" });
+      if (changed && !hasDurableHistory() && image.id === state.currentId) recordHistoryOperation({ kind: "workspaceFlag", reviewedBefore, reviewedAfter: isReviewed(image) });
     }
   })();
     closeCatalogContextMenu();
@@ -1278,6 +1280,7 @@ function bindEvents() {
   $("#copyImagePathMenuItem").addEventListener("click", () => { void copyContextMenuImagePath(); });
   $("#renameImageMenuItem").addEventListener("click", () => { openRenameImageDialog(); });
   $("#removeImageMenuItem").addEventListener("click", () => { const image = state.images.find((item) => item.id === state.contextMenuImageId); if (image) void setHidden(image, !isHidden(image)); closeCatalogContextMenu(); });
+  $("#removeFromListMenuItem").addEventListener("click", () => { void removeContextImagesFromList(); });
   $("#renameImageForm").addEventListener("submit", submitRenameImage);
   $("#renameImageRestoreOriginal").addEventListener("click", () => {
     const image = state.images.find((entry) => entry.id === state.renameImage?.imageId);

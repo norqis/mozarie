@@ -2026,7 +2026,7 @@ async function runExhaustiveAddedScenarios(page, fixtureUrl, resetScenario) {
     await page.waitForFunction(() => state.overviewFilter.size === 0);
   }
   await page.locator("#overviewFilterButton").click();
-  for (const action of ["remove", "hide", "show", "clear", "detect", "reviewed", "unreviewed"]) {
+  for (const action of ["remove", "removeFromList", "hide", "show", "clear", "detect", "reviewed", "unreviewed"]) {
     resetScenario(); await setupFixture();
     if (action === "show") await page.evaluate(() => { const image = state.images.find((item) => item.id === "sample"); state.hiddenImageIds.add(image.id); image.hidden = true; renderCatalogViews(); });
     if (action === "clear") await page.evaluate(() => { state.maskStatus.set("sample", true); currentRecord().candidateCount = 1; renderCatalogViews(); });
@@ -2038,7 +2038,7 @@ async function runExhaustiveAddedScenarios(page, fixtureUrl, resetScenario) {
     if (action === "detect") {
       await page.waitForFunction(() => document.querySelector("#detectDialog").open);
       await page.locator("#detectCancelButton").click(); await page.waitForFunction(() => !document.querySelector("#detectDialog").open);
-    } else if (action === "remove") await page.waitForFunction(() => !state.images.some((image) => image.id === "sample"));
+    } else if (["remove", "removeFromList"].includes(action)) await page.waitForFunction(() => !state.images.some((image) => image.id === "sample"));
     else if (action === "hide") await page.waitForFunction(() => isHidden(state.images.find((image) => image.id === "sample")));
     else if (action === "show") await page.waitForFunction(() => !isHidden(state.images.find((image) => image.id === "sample")));
     else if (action === "clear") await page.waitForFunction(() => state.maskStatus.get("sample") !== true && state.images.find((image) => image.id === "sample")?.candidateCount === 0);
@@ -2329,6 +2329,8 @@ async function runControlLedger(page, fixtureUrl, contracts, finishCancel, holdS
     nextImageButton: async (before, after) => { await page.waitForFunction((current) => state.currentId !== current, before.state.current); assert.notEqual((await snapshot()).state.current, before.state.current, "nextImageButton must navigate"); },
     reviewAndNextButton: async (before, after) => { await page.waitForFunction((id) => currentRecord()?.id === id && currentRecord()?.reviewed === true, before.state.current); assert.notDeepEqual((await snapshot()).state.images, before.state.images, "reviewAndNextButton must mark the image reviewed"); },
     hideAndNextButton: async (before, after) => { await page.waitForFunction((id) => currentRecord()?.id !== id || Boolean(currentRecord()?.hidden), before.state.current); assert.notDeepEqual((await snapshot()).state.images, before.state.images, "hideAndNextButton must hide the image"); },
+    removeFromListButton: async (before) => { await page.waitForFunction((id) => !state.images.some((image) => image.id === id), before.state.current); assert.ok(!(await snapshot()).state.imageIds.includes(before.state.current)); },
+    removeFromListMenuItem: async (before) => { await page.waitForFunction((count) => state.images.length < count, before.state.imageIds.length); assert.equal(await page.locator("#catalogContextMenu").evaluate((menu) => menu.matches(":popover-open")), false); },
     removeAndNextButton: dialog("confirmDialog", true, "removeAndNextButton"), removeCurrentImageButton: async (before) => { await page.waitForFunction((count) => state.hiddenImageIds.size !== count, before.state.hiddenCount); assert.notEqual((await snapshot()).state.hiddenCount, before.state.hiddenCount, "removeCurrentImageButton must toggle hidden state"); },
     boundaryDetectButton: (before, after) => apiChanged(before, after, "boundaryDetectButton", "/api/boundary"),
     boundaryCancelButton: (before, after) => assert.equal(after.flags.boundaryActionsHidden, true, "boundaryCancelButton must hide boundary actions"),
@@ -2748,7 +2750,10 @@ async function runControlLedger(page, fixtureUrl, contracts, finishCancel, holdS
   await input("renameImageFilename", "sample-ledger.png"); await click("renameImageConfirm");
   await page.locator('.gallery-item[data-id="sample"]').click({ button: "right" }); await click("removeImageMenuItem");
   await closeDialogs();
-  await setupFixture(); await click("removeAndNextButton");
+  await setupFixture(); await click("removeFromListButton");
+  resetScenario(); await setupFixture();
+  await page.locator('.gallery-item[data-id="sample"]').click({ button: "right" }); await click("removeFromListMenuItem");
+  resetScenario(); await setupFixture(); await click("removeAndNextButton");
   if (await page.locator("#confirmDialog").evaluate((dialog) => dialog.open)) await click("confirmAccept");
   resetScenario();
   await setupFixture();
@@ -3872,9 +3877,9 @@ async function main() {
     }
     await assertToolRailLayout(page, "top");
     await page.locator("#canvasStage").evaluate((stage) => { stage.dataset.toolPosition = "left"; });
-    for (const [language, labels] of [["ja", ["削除", "非表示にして次へ", "確認済にして次へ"]], ["en", ["Delete", "Hide and next", "Mark reviewed and next"]]]) {
+    for (const [language, labels] of [["ja", ["削除", "一覧から削除", "非表示にして次へ", "確認済にして次へ"]], ["en", ["Delete", "Remove from list", "Hide and next", "Mark reviewed and next"]]]) {
       await page.evaluate((locale) => loadTranslations(locale), language);
-      assert.deepEqual(await page.locator(".canvas-navigation-bar > button").evaluateAll((buttons) => buttons.slice(-3).map((button) => button.textContent.trim())), labels, `${language} navigation actions follow the requested order`);
+      assert.deepEqual(await page.locator(".canvas-navigation-bar > button").evaluateAll((buttons) => buttons.slice(-4).map((button) => button.textContent.trim())), labels, `${language} navigation actions follow the requested order`);
       await assertCompactNavigationLayout(page, language);
     }
     await page.evaluate(() => loadTranslations("ja"));
@@ -4465,7 +4470,7 @@ async function main() {
     await page.locator("#batchModeButton").click();
     assert.equal(await page.locator("#batchModeButton").getAttribute("aria-pressed"), "true", "batch edit is an explicit overview mode");
     assert.equal(await page.locator("#overviewSelectionBar").isVisible(), true, "batch controls appear immediately below the overview toolbar");
-    assert.equal(await page.locator('[data-selection-action]').count(), 7, "overview batch edit retains all seven actions");
+    assert.equal(await page.locator('[data-selection-action]').count(), 8, "overview batch edit retains all eight actions");
     await page.locator('.overview-item[data-id="sample"]').focus();
     await page.keyboard.press("Space");
     await page.locator('.overview-item[data-id="sample-two"]').click();

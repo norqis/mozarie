@@ -224,6 +224,7 @@ function openCatalogContextMenu(event, imageId) {
   rename.title = renameAvailable ? "" : t("context.renameUnavailableHelp");
   $("#copyImagePathMenuItem").hidden = !image.sourcePath;
   $("#removeImageMenuItem").textContent = t(isHidden(image) ? "editor.show" : "editor.hide");
+  $("#removeFromListMenuItem").disabled = !canRemoveImagesFromList([image]);
   const menu = $("#catalogContextMenu");
   const cardRect = state.contextMenuOrigin?.getBoundingClientRect?.();
   const clientX = !keyboardEvent && Number.isFinite(event.clientX) ? event.clientX : (cardRect ? cardRect.left + Math.min(24, cardRect.width / 2) : 8);
@@ -624,6 +625,32 @@ async function removeImageFromCatalog(imageId = state.contextMenuImageId) {
   if (image) await permanentlyDeleteImages([image], galleryFilteredImages());
 }
 
+async function removeImagesFromList(images, visibleImages = galleryFilteredImages()) {
+  if (!canRemoveImagesFromList(images)) return;
+  const ids = new Set(images.map((image) => image.id));
+  const selection = deletionSelectionSnapshot(ids, visibleImages);
+  const epoch = state.catalogEpoch;
+  state.catalogMutation = true; updateActionButtons();
+  try {
+    await flushAllImageMutations();
+    await flushAllWorkspaceMutations();
+    if (!await removeSavedCatalogEntries([...ids], epoch, selection)) return;
+    if (!state.images.length) { state.batchMode = false; clearBatchSelection(); }
+    updateSelectionActionBar();
+    setStatusKey("status.removedFromList", { count: ids.size }, "success");
+  } catch (error) {
+    if (isCurrentCatalogEpoch(epoch)) showUserError(error);
+  } finally { state.catalogMutation = false; updateActionButtons(); updateSelectionActionBar(); }
+}
+
+function removeContextImagesFromList() {
+  const image = state.images.find((item) => item.id === state.contextMenuImageId);
+  const fromOverview = Boolean(state.contextMenuOrigin?.closest("#overviewGrid"));
+  const images = fromOverview && state.batchMode && state.selectedImageIds.has(image?.id) ? selectedImages() : image ? [image] : [];
+  closeCatalogContextMenu();
+  return removeImagesFromList(images, fromOverview ? overviewImages() : galleryFilteredImages());
+}
+
 async function runSelectionAction(action) {
   const images = selectedImages(); if (!images.length || isBusy() || state.importing) return;
   if (catalogStagingEditsActive() && !["hide", "show", "reviewed", "unreviewed"].includes(action)) return;
@@ -649,6 +676,7 @@ async function runSelectionAction(action) {
   if (action === "remove") {
     await permanentlyDeleteImages(images, overviewImages());
   }
+  if (action === "removeFromList") await removeImagesFromList(images, overviewImages());
 }
 
 function droppedFile(file, relativePath = file.name, fileHandle = null, parentHandle = null) {

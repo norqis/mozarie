@@ -202,7 +202,6 @@ class CatalogMixin:
                 draft["hasEffectiveMask"] = self._effective_mask_for_draft(image_id, candidates, draft)
         self.candidates[image_id] = candidates
         self.candidate_revisions[image_id] = revision
-        self.images[image_id].reviewed = False
         return revision
 
     def _commit_candidate_snapshot_outside_state_lock(
@@ -222,7 +221,7 @@ class CatalogMixin:
             effective = self._effective_mask_for_draft(image_id, candidates, draft)
             pending = self.workspace_store.prepare_candidate_state(
                 image_id, revision, candidates, effective, replace=replace, history_group=history_group,
-                expected_revision=expected_revision, preserve_reviewed=True,
+                expected_revision=expected_revision,
             )
         else:
             projectless_draft = self.projectless_manual_drafts.get(image_id)
@@ -2062,7 +2061,6 @@ class CatalogMixin:
                 for record in records:
                     self.candidates[record.image_id] = []
                     self.candidate_revisions[record.image_id] = revisions[record.image_id]
-                    record.reviewed = False
             self._delete_mask_files(mask_paths, [self.cache_dir / record.image_id for record in records])
         return len(records)
 
@@ -2663,7 +2661,6 @@ class CatalogMixin:
                     # The manual row, its normalized removal IDs, exact candidate
                     # revision, and gallery scalar are one SQLite transaction.
                     self.workspace_store.save_manual(image_id, committed, self._decode_workspace_mask)
-                    self.images[image_id].reviewed = False
                 except ValueError as exc:
                     raise ClientError("手描き状態を保存できません。", "workspace_write_failed") from exc
 
@@ -3167,7 +3164,6 @@ class CatalogMixin:
                             draft["hasEffectiveMask"] = projectless_effective[image_id]
                         self.candidates[image_id] = updates[image_id]
                         self.candidate_revisions[image_id] = revisions[image_id]
-                        self.images[image_id].reviewed = False
                     result = revisions
                 self._delete_mask_files(delete_paths, [])
                 return result

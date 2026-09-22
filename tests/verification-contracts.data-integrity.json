@@ -800,7 +800,7 @@
       "sourceIds": [
         "DI-051"
       ],
-      "observation": "A・Bの候補・手描きモザイク・除外・除外消しゴムを消し、両画像を未確認にする",
+      "observation": "A・Bの候補・手描きモザイク・除外・除外消しゴムを消し、両画像の確認状態を保持する",
       "status": "automated",
       "testIds": [
         "python:tests.test_data_integrity_051_070.DataIntegrity051070Tests.test_batch_clear_undo_redo_restores_only_the_selected_images"
@@ -822,7 +822,7 @@
       "sourceIds": [
         "DI-052"
       ],
-      "observation": "A・Bの範囲を復元し、Aは確認済み・Bは未確認に戻る",
+      "observation": "A・Bの範囲を復元し、Aの確認済み・Bの未確認を保持する",
       "status": "automated",
       "testIds": [
         "python:tests.test_data_integrity_051_070.DataIntegrity051070Tests.test_batch_clear_undo_redo_restores_only_the_selected_images"
@@ -844,7 +844,7 @@
       "sourceIds": [
         "DI-053"
       ],
-      "observation": "A・Bだけを再びクリアして未確認にする",
+      "observation": "A・Bだけを再びクリアし、確認状態を保持する",
       "status": "automated",
       "testIds": [
         "python:tests.test_data_integrity_051_070.DataIntegrity051070Tests.test_batch_clear_undo_redo_restores_only_the_selected_images"
@@ -1334,7 +1334,7 @@
       "sourceIds": [
         "DI-088"
       ],
-      "observation": "直後の画面・画像一覧API・DBがすべてAを未確認とし、対象外の確認状態を保持する",
+      "observation": "直後の画面・画像一覧API・DBがすべてAの確認済みと対象外の確認状態を保持する",
       "status": "automated",
       "testIds": [
         "node:tests/test_di_081_125_browser_contracts.cjs::DI-085 through DI-098 clear confirmations preserve the exact visible target set",
@@ -1346,7 +1346,7 @@
       "sourceIds": [
         "DI-089"
       ],
-      "observation": "直後の画面・画像一覧API・DBがすべてA・Bを未確認とし、E・Fの状態を保持する",
+      "observation": "直後の画面・画像一覧API・DBがすべてA・Bの確認状態とE・Fの状態を保持する",
       "status": "automated",
       "testIds": [
         "node:tests/test_di_081_125_browser_contracts.cjs::DI-085 through DI-098 clear confirmations preserve the exact visible target set",
@@ -1358,7 +1358,7 @@
       "sourceIds": [
         "DI-090"
       ],
-      "observation": "対象はCの1件",
+      "observation": "対象は確認済みのA・Cの2件",
       "status": "automated",
       "testIds": [
         "node:tests/test_di_081_125_browser_contracts.cjs::DI-085 through DI-098 clear confirmations preserve the exact visible target set"
@@ -1369,7 +1369,7 @@
       "sourceIds": [
         "DI-090"
       ],
-      "observation": "A・Bと非表示E・Gを含めず、画面・画像一覧API・DBで対象集合が一致する",
+      "observation": "未確認のBと非表示E・Gを含めず、画面・画像一覧API・DBで対象集合が一致する",
       "status": "automated",
       "testIds": [
         "node:tests/test_di_081_125_browser_contracts.cjs::DI-085 through DI-098 clear confirmations preserve the exact visible target set",
@@ -1392,7 +1392,7 @@
       "sourceIds": [
         "DI-092"
       ],
-      "observation": "範囲と確認状態が履歴位置へ戻り、画面・画像一覧API・DBで一致する",
+      "observation": "範囲が履歴位置へ戻り、現在の確認状態を画面・画像一覧API・DBで保持する",
       "status": "automated",
       "testIds": [
         "node:tests/test_di_081_125_browser_contracts.cjs::DI-092 and DI-093 durable undo redo reconcile the visible range and review state",
@@ -1404,7 +1404,7 @@
       "sourceIds": [
         "DI-093"
       ],
-      "observation": "対象範囲が消え、画面・画像一覧API・DBで対象が未確認となる",
+      "observation": "対象範囲が消え、画面・画像一覧API・DBで現在の確認状態を保持する",
       "status": "automated",
       "testIds": [
         "node:tests/test_di_081_125_browser_contracts.cjs::DI-092 and DI-093 durable undo redo reconcile the visible range and review state",
@@ -1416,7 +1416,7 @@
       "sourceIds": [
         "DI-094"
       ],
-      "observation": "Aだけが範囲なし・未確認となる",
+      "observation": "Aだけが範囲なしとなり、確認済みを保持する",
       "status": "automated",
       "testIds": [
         "python:tests.test_di_081_125_http_contracts.DataIntegrityHttpContracts.test_clear_mask_http_catalogue_and_sqlite_share_the_exact_A_to_H_state"
@@ -1438,7 +1438,7 @@
       "sourceIds": [
         "DI-095"
       ],
-      "observation": "表示中A～Dだけが範囲なし・未確認となる",
+      "observation": "表示中A～Dだけが範囲なしとなり、各画像の確認状態を保持する",
       "status": "automated",
       "testIds": [
         "node:tests/test_di_081_125_browser_contracts.cjs::DI-085 through DI-098 clear confirmations preserve the exact visible target set",
@@ -1472,7 +1472,7 @@
       "sourceIds": [
         "DI-097"
       ],
-      "observation": "対象0件を表示し、保存開始を無効にする",
+      "observation": "確認済みの対象A・Cの2件を表示し、保存開始できる",
       "status": "automated",
       "testIds": [
         "node:tests/test_di_081_125_browser_contracts.cjs::DI-085 through DI-098 clear confirmations preserve the exact visible target set"
@@ -4946,7 +4946,7 @@
       "observation": "active projectless catalogは作業1件だけを指し、追加画像・一覧・候補を保持する",
       "status": "automated",
       "testIds": [
-        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_projectless_candidate_change_publishes_unreviewed_only_after_persistence",
+        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_projectless_candidate_change_keeps_reviewed_after_success_and_failure",
         "python:tests.test_server.MozarieTests.test_explicit_browser_catalog_never_reassigns_and_restores_state"
       ]
     },
@@ -5161,10 +5161,10 @@
       "sourceIds": [
         "DI-255"
       ],
-      "observation": "成功時は候補と確認済み状態を同時に公開し、対象は未確認となる",
+      "observation": "成功時に候補を公開し、利用者が明示した確認状態を保持する",
       "status": "automated",
       "testIds": [
-        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_projectless_candidate_change_publishes_unreviewed_only_after_persistence",
+        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_projectless_candidate_change_keeps_reviewed_after_success_and_failure",
         "python:tests.test_server.MozarieTests.test_successful_detection_replaces_a_seeded_hand_candidate"
       ]
     },

@@ -9,6 +9,8 @@ button.primary { border-color: #299778; background: #176953; color: #f4fffb; }
 button.primary:hover { background: #207c63; }
 button.danger, .danger { border-color: #a65d57; background: #4b2e2c; color: #ffddd9; }
 button.danger:hover, .danger:hover { background: #633936; }
+button.warning { border-color: #b57532; background: #583b20; color: #ffdaa4; }
+button.warning:hover { background: #714d29; }
 button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid #72cdb3; outline-offset: 2px; }
 input[type="text"], input[type="number"], select { min-width: 0; height: 32px; border: 1px solid #4e5660; border-radius: 4px; background: #121518; color: #e7eaed; padding: 4px 8px; }
 input[type="range"] { accent-color: #4bb99d; }

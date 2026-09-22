@@ -81,7 +81,7 @@ class DataIntegrityStateContracts(unittest.TestCase):
         self.assertEqual(state.clear_masks([ids["A"]]), 1)
         listed = {Path(item["relativePath"]).stem: item for item in state.list_images()}
         self.assertIsNone(state.manual_workspace(ids["A"]))
-        self.assertFalse(listed["A"]["reviewed"])
+        self.assertTrue(listed["A"]["reviewed"])
         self.assertIsNotNone(state.manual_workspace(ids["B"]))
         self.assertTrue(listed["C"]["reviewed"])
         self.assertTrue(listed["E"]["hidden"])
@@ -91,7 +91,7 @@ class DataIntegrityStateContracts(unittest.TestCase):
         self.assertTrue(next(item for item in state.list_images() if item["id"] == ids["A"])["reviewed"])
         self.assertEqual(state.restore_project_history(ids["A"], "redo")["changedImageIds"], [ids["A"]])
         self.assertIsNone(state.manual_workspace(ids["A"]))
-        self.assertFalse(next(item for item in state.list_images() if item["id"] == ids["A"])["reviewed"])
+        self.assertTrue(next(item for item in state.list_images() if item["id"] == ids["A"])["reviewed"])
 
         state.clear_masks([ids[name] for name in ("A", "B", "C", "D")])
         reopened = self.state()
@@ -99,7 +99,7 @@ class DataIntegrityStateContracts(unittest.TestCase):
         reopened_list = {Path(item["relativePath"]).stem: item for item in reopened.list_images()}
         for name in ("A", "B", "C", "D"):
             self.assertIsNone(reopened.manual_workspace(ids[name]))
-            self.assertFalse(reopened_list[name]["reviewed"])
+            self.assertEqual(reopened_list[name]["reviewed"], name in ("A", "C"))
         for name in ("E", "F"):
             self.assertIsNotNone(reopened.manual_workspace(ids[name]))
         self.assertTrue(reopened_list["E"]["reviewed"])

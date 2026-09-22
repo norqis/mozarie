@@ -138,7 +138,7 @@ class DataIntegrityHttpContracts(unittest.TestCase):
         api = self.snapshot()
         db = self.db_state(image_ids)
         self.assertEqual((api["A"]["hasEffectiveMask"], api["A"]["reviewed"], db["A"]),
-                         (False, False, {"reviewed": False, "hidden": False, "candidates": 0, "manual": 0}))
+                         (False, True, {"reviewed": True, "hidden": False, "candidates": 0, "manual": 0}))
         self.assertEqual((api["B"]["hasEffectiveMask"], db["B"]["candidates"], db["B"]["manual"]), (True, 1, 1))
         self.assertTrue(api["C"]["reviewed"])
         self.assertEqual({name: (api[name]["reviewed"], api[name]["hidden"]) for name in "EFGH"},
@@ -154,14 +154,14 @@ class DataIntegrityHttpContracts(unittest.TestCase):
         self.assertEqual((status, redo["changedImageIds"]), (200, [image_ids["A"]]))
         api = self.snapshot(); db = self.db_state(image_ids)
         self.assertEqual((api["A"]["hasEffectiveMask"], api["A"]["reviewed"], db["A"]["candidates"], db["A"]["manual"]),
-                         (False, False, 0, 0))
+                         (False, True, 0, 0))
 
         status, payload = self.request("POST", "/api/masks/clear", {"imageIds": [image_ids[name] for name in "AB"]})
         self.assertEqual((status, payload["cleared"]), (200, 2))
         api = self.snapshot(); db = self.db_state(image_ids)
         for name in "AB":
             self.assertEqual((api[name]["hasEffectiveMask"], api[name]["reviewed"], db[name]["candidates"], db[name]["manual"]),
-                             (False, False, 0, 0), name)
+                             (False, name in "AC", 0, 0), name)
         self.assertEqual((db["E"]["candidates"], db["E"]["manual"], db["F"]["candidates"], db["F"]["manual"]), (1, 1, 1, 1))
 
         status, payload = self.request("POST", "/api/masks/clear", {"imageIds": [image_ids[name] for name in "ABCD"]})
@@ -169,7 +169,7 @@ class DataIntegrityHttpContracts(unittest.TestCase):
         api = self.snapshot(); db = self.db_state(image_ids)
         for name in "ABCD":
             self.assertEqual((api[name]["hasEffectiveMask"], api[name]["reviewed"], db[name]["candidates"], db[name]["manual"]),
-                             (False, False, 0, 0), name)
+                             (False, name in "AC", 0, 0), name)
         self.assertEqual({name: db[name] for name in "EFGH"}, {
             "E": {"reviewed": True, "hidden": True, "candidates": 1, "manual": 1},
             "F": {"reviewed": False, "hidden": True, "candidates": 1, "manual": 1},

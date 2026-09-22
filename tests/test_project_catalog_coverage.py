@@ -210,9 +210,9 @@ class ProjectCatalogCoverageTests(unittest.TestCase):
 
         state.set_image_flags(image_ids[0], {"reviewed": True})
         self.assertEqual(state.set_candidate_state(image_ids[0], "apply-0", {"expandPx": 3, "color": "#112233", "enabled": False}), 2)
-        self.assertFalse(state.images[image_ids[0]].reviewed)
-        self.assertFalse(next(image for image in state.list_images() if image["id"] == image_ids[0])["reviewed"])
-        self.assertEqual(state.workspace_store.image_state(image_ids[0])[1], False)
+        self.assertTrue(state.images[image_ids[0]].reviewed)
+        self.assertTrue(next(image for image in state.list_images() if image["id"] == image_ids[0])["reviewed"])
+        self.assertEqual(state.workspace_store.image_state(image_ids[0])[1], True)
         self.assertTrue(state.project_history_status(image_ids[0])["canUndo"])
         undone = state.restore_project_history(image_ids[0], "undo")
         self.assertTrue(undone["current"]["candidates"][0]["enabled"])
@@ -231,7 +231,7 @@ class ProjectCatalogCoverageTests(unittest.TestCase):
         state.set_image_flags_bulk({"imageIds": image_ids, "reviewed": True})
         revisions = state.batch_update_candidates_many(image_ids + [image_ids[0]], {"role": "apply", "operation": "enable"})
         self.assertEqual(set(revisions), set(image_ids))
-        self.assertTrue(all(not image["reviewed"] for image in state.list_images() if image["id"] in image_ids))
+        self.assertTrue(all(image["reviewed"] for image in state.list_images() if image["id"] in image_ids))
         self.assertEqual(set(state.restore_project_history(image_ids[1], "undo")["changedImageIds"]), set(image_ids))
         self.assertGreater(state.batch_update_candidates(image_ids[0], {"role": "apply", "operation": "delete"}), 0)
         self.assertFalse((state.cache_dir / image_ids[0] / "apply-0.png").exists())
@@ -269,7 +269,7 @@ class ProjectCatalogCoverageTests(unittest.TestCase):
         self.commit_candidates(state, image_ids[1], state.candidates[image_ids[1]])
         state.set_candidate_state(image_ids[0], "role", {"role": "exclude", "forced": True})
 
-    def test_projectless_candidate_change_publishes_unreviewed_only_after_persistence(self) -> None:
+    def test_projectless_candidate_change_keeps_reviewed_after_success_and_failure(self) -> None:
         root = self.root / "images"; self.image(root, "one.png")
         state = self.state(); image_id = state.set_root(str(root))[0]["id"]
         self.commit_candidates(state, image_id, [self.candidate(state, image_id, "apply")])
@@ -280,8 +280,55 @@ class ProjectCatalogCoverageTests(unittest.TestCase):
         self.assertTrue(state.images[image_id].reviewed)
         self.assertTrue(next(image for image in state.list_images() if image["id"] == image_id)["reviewed"])
         state.set_candidate_state(image_id, "apply", {"enabled": False})
-        self.assertFalse(state.images[image_id].reviewed)
-        self.assertFalse(next(image for image in state.list_images() if image["id"] == image_id)["reviewed"])
+        self.assertTrue(state.images[image_id].reviewed)
+        self.assertTrue(next(image for image in state.list_images() if image["id"] == image_id)["reviewed"])
+
+    def test_review_choice_survives_edits_history_restart_and_list_removal(self) -> None:
+        source = self.root / "review-choice"
+        paths = [self.image(source, name) for name in ("target.png", "other.png")]
+        originals = {path: path.read_bytes() for path in paths}
+        state = self.state(); project = state.create_project("review choice")
+        ids = {item["relativePath"]: item["id"] for item in state.set_root(str(source))}
+        target, other = ids["target.png"], ids["other.png"]
+        self.commit_candidates(state, target, [self.candidate(state, target, "apply"), self.candidate(state, target, "exclude", role=CandidateRole.EXCLUDE)])
+        self.commit_candidates(state, other, [self.candidate(state, other, "other-apply")])
+        state.set_image_flags(target, {"reviewed": True})
+        manual = "data:image/png;base64," + base64.b64encode(self.png(pixel=(3, 3))).decode("ascii")
+        operations = [
+            lambda: state.set_candidate_state(target, "apply", {"enabled": False, "expandPx": 3, "color": "#123456"}),
+            lambda: state.set_candidate_state(target, "exclude", {"forced": True, "expandPx": 2}),
+            lambda: state.batch_update_candidates_many([target, other], {"role": "apply", "operation": "enable"}),
+            lambda: state.save_manual_workspace(target, {"add": manual, "exclusion": "", "exclusionErase": "", "removedCandidateIds": [], "hasEffectiveMask": True}),
+            lambda: state.set_image_transform(target, {"flipH": True, "flipV": True}),
+            lambda: state.delete_candidate(target, "exclude"),
+            lambda: state.clear_masks([target]),
+        ]
+        for operation in operations:
+            operation()
+            self.assertTrue(state.images[target].reviewed)
+            self.assertTrue(state.workspace_store.image_state(target)[1])
+            for direction in ("undo", "redo"):
+                state.restore_project_history(target, direction)
+                self.assertTrue(state.images[target].reviewed, direction)
+                self.assertTrue(state.workspace_store.image_state(target)[1], direction)
+            self.assertFalse(state.images[other].reviewed)
+        state.rename_catalog_image(target, "renamed.png")
+        restarted = self.state(); restarted.open_project(project["id"])
+        self.assertTrue(restarted.images[target].reviewed)
+        self.assertFalse(restarted.images[other].reviewed)
+        restarted.set_image_flags(target, {"reviewed": False})
+        self.assertFalse(restarted.images[target].reviewed)
+        restarted.restore_project_history(target, "undo")
+        self.assertTrue(restarted.images[target].reviewed, "explicit unreview remains undoable")
+        restarted.restore_project_history(target, "redo")
+        self.assertFalse(restarted.images[target].reviewed)
+        result = restarted.remove_images_from_catalog([target, other])
+        self.assertEqual(set(result["removedImageIds"]), {target, other})
+        self.assertEqual({path: path.read_bytes() for path in paths}, originals)
+        reopened = self.state(); reopened.open_project(project["id"])
+        self.assertEqual(reopened.list_images(), [])
+        self.assertFalse(reopened.workspace_store.has_image(target))
+        self.assertFalse(reopened.workspace_store.history_status(other)["canUndo"])
 
     def test_catalog_input_validation_provisional_and_removed_sources(self) -> None:
         state = self.state()

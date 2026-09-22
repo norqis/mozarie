@@ -417,8 +417,10 @@ nodeTest("editor masks, fill, candidates, and history", async (t) => {
   };
   let restoreResult = await runProjectlessRestore(null, true);
   assert.equal(state.historyIndex, 0, "history position commits only after all persistence has completed");
-  assert.deepEqual(restoreResult.order, ["queued", "flag:reviewed", "flag:hidden", "/api/images/image/transform", "/api/candidate/image/apply", "draft:0", "flush"], "projectless restore persists flags, transform, padding, draft, and flush in order");
-  for (const failedStep of ["reviewed", "hidden", "transform", "candidate", "draft"]) {
+  assert.deepEqual(restoreResult.order, ["queued", "flag:hidden", "/api/images/image/transform", "/api/candidate/image/apply", "draft:0", "flush"], "projectless restore persists flags, transform, padding, draft, and flush in order");
+  assert.equal(state.images[0].reviewed, false, "editing undo ignores stale reviewed snapshots");
+  assert.equal(restoreResult.serverRecord.reviewed, false, "editing undo never writes a review flag");
+  for (const failedStep of ["hidden", "transform", "candidate", "draft"]) {
     restoreResult = await runProjectlessRestore(failedStep);
     assert.equal(state.historyIndex, 1, `${failedStep} failure leaves the previous history position selected`);
     assert.ok(restoreResult.order.includes("/api/images"), `${failedStep} failure reloads the server snapshot`);

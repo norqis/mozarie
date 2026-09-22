@@ -89,6 +89,7 @@ const context = {
   ensureHandlePermission: async () => {}, flushWorkspaceDraft: async () => {},
   catalogApi: async () => ({}),
   isBusy: () => busy, catalogStagingEditsActive: () => false, currentImageActionPending: () => Boolean(state.pendingImageId),
+  canRemoveImagesFromList: (images) => images.length > 0 && !busy && !state.importing && !state.projectReadOnly && !state.projectOperationPending && !state.pendingImageId,
   canRemoveCurrentImage: () => Boolean(state.currentId && state.currentImage && images[0])
     && !busy && !state.importing && !state.projectReadOnly && !images[0].sourceDimensionsChanged
     && !state.projectOperationPending && !state.pendingImageId,

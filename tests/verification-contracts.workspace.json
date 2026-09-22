@@ -7,7 +7,7 @@
   },
   "baseline": {
     "rows": 138,
-    "observations": 232
+    "observations": 234
   },
   "observations": [
     {
@@ -493,11 +493,14 @@
       "sourceIds": [
         "WS-027"
       ],
-      "observation": "その画像だけ確認済みになり、表示は緑になる",
+      "observation": "その画像だけ確認済みになり、編集・編集の取り消し・再起動後も明示的な確認操作まで保持する",
       "status": "automated",
       "testIds": [
         "node:tests/test_gallery_save_coverage.cjs::gallery and save interactions",
-        "node:tests/test_workspace_flags_runtime.cjs::workspace flag runtime contracts"
+        "node:tests/test_workspace_flags_runtime.cjs::workspace flag runtime contracts",
+        "node:tests/test_review_list_removal_e2e.cjs::review choices survive editing and list-only removal preserves source access boundaries > brush undo redo and hidden labels retain the explicit reviewed flag",
+        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_review_choice_survives_edits_history_restart_and_list_removal",
+        "python:tests.test_workspace.WorkspaceTests.test_edit_history_ignores_legacy_review_values"
       ]
     },
     {
@@ -517,11 +520,12 @@
       "sourceIds": [
         "WS-029"
       ],
-      "observation": "対象だけ通常一覧から隠れ、元ファイルと編集データは残る",
+      "observation": "対象だけ通常一覧から隠れ、状態は非表示と表示し、元ファイル・編集データ・確認フラグは残る",
       "status": "automated",
       "testIds": [
         "node:tests/test_gallery_save_coverage.cjs::gallery and save interactions",
-        "node:tests/test_workspace_flags_runtime.cjs::workspace flag runtime contracts"
+        "node:tests/test_workspace_flags_runtime.cjs::workspace flag runtime contracts",
+        "node:tests/test_review_list_removal_e2e.cjs::review choices survive editing and list-only removal preserves source access boundaries > brush undo redo and hidden labels retain the explicit reviewed flag"
       ]
     },
     {
@@ -2662,6 +2666,31 @@
         "environment": "Windowsで5,000件以上の実画像とファイル共有",
         "reason": "大規模実ディスクI/O、別プロセスの共有ロック、アプリ終了の組合せは隔離CIの小fixtureで実負荷を再現できない。"
       }
+    },
+    {
+      "key": "WS-036.2",
+      "sourceIds": [
+        "WS-036"
+      ],
+      "observation": "一覧から削除は元画像を保持し、絞り込みの次・末尾では前へ移動する。別画像の削除では現在の画像を保持し、PJ再開でも一覧に戻さない。",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_review_list_removal_e2e.cjs::review choices survive editing and list-only removal preserves source access boundaries > orange footer removes from the filtered list and navigates next then previous",
+        "node:tests/test_review_list_removal_e2e.cjs::review choices survive editing and list-only removal preserves source access boundaries > gallery context and overview multiselection remove only their targets",
+        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_review_choice_survives_edits_history_restart_and_list_removal"
+      ]
+    },
+    {
+      "key": "WS-036.3",
+      "sourceIds": [
+        "WS-036"
+      ],
+      "observation": "一覧から削除は右クリックと複数選択に対応し、失敗・読み取り専用・処理中では一覧と編集画面を保持する。",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_review_list_removal_e2e.cjs::review choices survive editing and list-only removal preserves source access boundaries > failed read-only and busy list removal leave the catalogue and editor intact",
+        "node:tests/test_review_list_removal_e2e.cjs::review choices survive editing and list-only removal preserves source access boundaries > footer and context list removal accept unavailable and dimension-changed sources"
+      ]
     }
   ]
 }

@@ -160,8 +160,8 @@ class DataIntegrity051070Tests(unittest.TestCase):
         for name in ("A.png", "B.png"):
             self.assertEqual(cleared[name]["candidates"], (), f"{name} candidates are cleared")
             self.assertIsNone(cleared[name]["manual"], f"{name} all three manual layers are cleared")
-            self.assertFalse(cleared[name]["flags"][1], f"{name} is unreviewed")
-            self.assertFalse(state.images[images[name]].reviewed, f"{name} is immediately unreviewed in the published catalogue")
+            self.assertEqual(cleared[name]["flags"][1], before[name]["flags"][1], f"{name} keeps its review choice")
+            self.assertEqual(state.images[images[name]].reviewed, before[name]["flags"][1], f"{name} keeps its review choice in the published catalogue")
             self.assertEqual(cleared[name]["flags"][0], before[name]["flags"][0])
         self.assertEqual(cleared["E.png"], before["E.png"], "hidden E is byte-for-byte outside the batch")
         self.assertEqual(cleared["F.png"], before["F.png"], "hidden F is byte-for-byte outside the batch")
