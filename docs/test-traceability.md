@@ -24,6 +24,8 @@
 
 ブラシの円外保持と候補枠プレビューの取消は `test_editor_brush_padding_e2e.cjs` で、合成画像・実ポインタードラッグ・実Worker出力・保存用PNG・Undoを画素単位で照合する。候補枠の長押しは押下中の複数回の輪郭更新、最新値の確定、失敗時の復元、操作中断時の停止を自動確認する。ブラシ径1〜300pxとShiftホイールの上下限は `test_editor_basic_tools_e2e.cjs` で表示・カーソル・値を確認する。
 
+`test_editor_gesture_live_browser.py` は実ブラウザーのクリック・ドラッグを実HTTP、SQLite履歴、PNG保存まで通し、候補枠取消、4種の手描き、Undo・Redo、PJ再開直後の再編集とUndo、元画像不変を画素単位で照合する。
+
 ## 実機確認として残す範囲
 
 残る項目は次の外部環境に限ります。具体的な観測内容は [実機確認の索引](manual-verification.md) から各分野の文書を参照してください。

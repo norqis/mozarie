@@ -1691,7 +1691,8 @@
       "status": "automated",
       "testIds": [
         "python:tests.test_workspace.WorkspaceTests.test_candidate_history_references_existing_png_and_restores_metadata",
-        "python:tests.test_workspace.WorkspaceTests.test_named_project_manual_layers_restore_only_the_latest_local_pixels_after_reopen"
+        "python:tests.test_workspace.WorkspaceTests.test_named_project_manual_layers_restore_only_the_latest_local_pixels_after_reopen",
+        "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_real_gestures_persist_history_reopen_and_render_only_the_effective_mask"
       ]
     },
     {

@@ -905,7 +905,7 @@ class MosaicHandler(BaseHTTPRequestHandler):
                                               expected_catalog_generation=expected_catalog_generation,
                                               resume=bool(payload.get("resume")))
                 )
-                self._json({**data, "catalogGeneration": snapshot["catalogGeneration"]})
+                self._json({**snapshot, **data})
             elif path == "/api/project/resume":
                 project, snapshot = self._catalog_transition_snapshot(
                     lambda: STATE.resume_project(str(payload.get("projectId", "")), expected_project_id=expected_project_id,
