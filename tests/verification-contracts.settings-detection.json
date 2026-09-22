@@ -128,7 +128,10 @@
       "observation": "保存完了後に設定を開き直すと保存値が表示される",
       "status": "automated",
       "testIds": [
-        "node:tests/test_settings_dialog_e2e.cjs::SD-011 saved settings are shown after closing and reopening"
+        "node:tests/test_settings_dialog_e2e.cjs::SD-011 saved settings are shown after closing and reopening",
+        "python:tests.test_settings_import_regressions.SettingsImportRegressionTests.test_http_complete_settings_persists_with_missing_unchanged_output",
+        "python:tests.test_settings_import_regressions.SettingsImportRegressionTests.test_stale_output_allows_focused_and_complete_settings_with_equivalent_path",
+        "python:tests.test_settings_import_regressions.SettingsImportRegressionTests.test_live_browser_settings_detection_and_file_entry_points"
       ]
     },
     {
@@ -150,7 +153,8 @@
       "observation": "初期値が表示され、保存後の再表示にも反映される",
       "status": "automated",
       "testIds": [
-        "node:tests/test_settings_dialog_e2e.cjs::SD-013 resetting settings replaces edited controls with returned defaults"
+        "node:tests/test_settings_dialog_e2e.cjs::SD-013 resetting settings replaces edited controls with returned defaults",
+        "python:tests.test_settings_import_regressions.SettingsImportRegressionTests.test_reset_restores_builtin_output_after_previous_output_disappears"
       ]
     },
     {
@@ -217,7 +221,8 @@
       "observation": "設定値を保持し、全画像の読み込み完了後に操作を再有効化する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_settings_detection_completion_e2e.cjs::SD-018 a complete parallel import restores every primary control"
+        "node:tests/test_settings_detection_completion_e2e.cjs::SD-018 a complete parallel import restores every primary control",
+        "python:tests.test_settings_import_regressions.SettingsImportRegressionTests.test_live_browser_settings_detection_and_file_entry_points"
       ]
     },
     {
@@ -2400,7 +2405,9 @@
       "observation": "保存先だけの変更ではGPUの診断やモデル読込を始めず、実在する絶対パスだけを保存する",
       "status": "automated",
       "testIds": [
-        "python:tests.test_server.MozarieTests.test_output_directory_only_update_does_not_probe_an_unchanged_gpu"
+        "python:tests.test_server.MozarieTests.test_output_directory_only_update_does_not_probe_an_unchanged_gpu",
+        "python:tests.test_settings_import_regressions.SettingsImportRegressionTests.test_new_unavailable_or_invalid_output_is_rejected_without_mutating_settings",
+        "python:tests.test_settings_import_regressions.SettingsImportRegressionTests.test_copy_save_still_rejects_the_missing_output_and_preserves_the_source"
       ]
     },
     {

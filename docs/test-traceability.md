@@ -61,3 +61,9 @@ node --test tests/test_verification_contracts.cjs
 | 操作別と全体のOFF、入力中・ダイアログ・処理中・閲覧専用・無効ボタン・画像切替・描画中の抑止 | 同ファイルの `toolbar shortcuts obey per-action global focus modal busy and disabled controls` |
 | キー欄の右側のON/OFFスイッチ、右端揃え・下線・交互背景、Tab移動、変更と再読み込み | 同ファイルの `shortcut switches align after key inputs and preserve remapped disabled bindings after reload` |
 | 旧設定の独自キーと有効状態を保持し、新キーの衝突時は未使用キーをOFFで追加、重複保存拒否 | `tests.test_config.SettingsTests.test_toolbar_shortcuts_defaults_are_complete_unique_and_round_trip`、`test_toolbar_shortcuts_migrate_without_claiming_custom_keys` |
+
+## 設定・ブラウザー取り込みの回帰境界
+
+`tests/test_settings_import_regressions.py` と `tests/test_import_drop_contract.cjs` は、SD-011・013・018・149、WS-012・013・137へ対応する。消えた既定保存先を保った設定保存、変更先の検証、初期化、実保存時の拒否、File/handle両経路、端数ミリ秒、失敗後の再取り込みを検証する。実HTTP・SQLiteとChromiumを接続した試験で、設定保存・色許容範囲・全画像検出の要求・ファイル選択・ドロップ・パス入力を操作する。推論要求だけはGPU境界で応答を代替し、設定と取り込みのHTTPは代替しない。
+
+画像ごとの取り込み応答は一覧世代だけを読み、一覧全体は最後の要求で一度取得する。32枚のHTTP試験で全画像の識別情報・mtimeと世代を確認し、画像ごとに一覧全体を作成しないことを固定する。256枚の小PNG・逐次HTTP・通常のSQLite同期によるローカル計測では、旧処理を再現した比較が8.481秒・一覧作成257回、新処理が7.022秒・1回だった。これは当該fixtureの測定値であり、大画像や実ドライブ全般の所要を保証しない。

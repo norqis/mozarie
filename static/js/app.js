@@ -890,7 +890,10 @@ function bindEvents() {
     if (event.dataTransfer?.types?.includes("Files")) event.preventDefault();
   });
   document.addEventListener("drop", (event) => {
-    if (event.dataTransfer?.files?.length) void importDroppedFiles(event);
+    if (event.dataTransfer?.types?.includes("Files") || event.dataTransfer?.files?.length) {
+      event.preventDefault();
+      void importDroppedFiles(event);
+    }
   });
   $("#folderPath").addEventListener("keydown", (event) => { if (event.key === "Enter") loadFolder(); });
   $("#loadFolderButton").addEventListener("click", loadFolder);

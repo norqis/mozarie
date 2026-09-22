@@ -198,7 +198,7 @@ async function interactionUserEventWorkflowTest() {
   let dropPrevented = false;
   let dropStopped = false;
   await test.importDroppedFiles({
-    dataTransfer: { items: [] },
+    dataTransfer: { types: ["Files"], items: [] },
     preventDefault() { dropPrevented = true; },
     stopPropagation() { dropStopped = true; },
   });

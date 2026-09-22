@@ -281,9 +281,9 @@ nodeTest("interaction and catalog mutation controls", async () => {
   context.window.showOpenFilePicker = async () => handles; await test.pickImageFiles();
   context.window.showOpenFilePicker = async () => { const error = new Error(); error.name = "AbortError"; throw error; }; await test.pickImageFiles();
   context.window.showDirectoryPicker = async () => directory; await test.pickImageDirectory();
-  await test.importDroppedFiles({ ...event(""), dataTransfer: { items: [] } });
+  await test.importDroppedFiles({ ...event(""), dataTransfer: { types: ["Files"], items: [] } });
   vm.runInNewContext("directFilesFromDrop = async () => [];", context);
-  await test.importDroppedFiles({ ...event(""), dataTransfer: { items: [] } }); test.setGalleryDropOverlay(true);
+  await test.importDroppedFiles({ ...event(""), dataTransfer: { types: ["Files"], items: [] } }); test.setGalleryDropOverlay(true);
 
   state.viewMode = "edit"; state.settings.shortcuts.bindings = { undo: "U", redo: "R", previous: "P", next: "N", previousVisible: "PV", nextVisible: "NV", first: "F", last: "L", reviewAndNext: "RN", toggleOverview: "G" };
   state.settings.shortcuts.actions = {};
@@ -296,7 +296,7 @@ nodeTest("interaction and catalog mutation controls", async () => {
   test.setTool("brush"); test.updateBrushSize(3); await test.clearMasks(["one"], "a", "b"); await test.clearCatalog();
   test.openCatalogContextMenu(event("", "contextmenu"), "one"); await test.removeImageFromCatalog("one"); await test.runSelectionAction("hide");
   assert.equal(test.beginImportSession(), null); await test.importFileHandles([], null); await test.importDirectoryHandle(directory, null);
-  await test.pickImageFiles(); await test.pickImageDirectory(); await test.importDroppedFiles({ ...event(""), dataTransfer: { items: [] } });
+  await test.pickImageFiles(); await test.pickImageDirectory(); await test.importDroppedFiles({ ...event(""), dataTransfer: { types: ["Files"], items: [] } });
   assert.equal(test.handleEditorKeydown(event("U")), false); assert.equal(test.navigationShortcutAction(event("P")), null);
   busy = false;
   state.currentImage = null; test.resetCurrentDraft();
@@ -336,7 +336,7 @@ nodeTest("interaction and catalog mutation controls", async () => {
   context.window.showOpenFilePicker = async () => { throw new Error("picker failed"); }; await test.pickImageFiles();
   context.window.showDirectoryPicker = async () => { throw new Error("directory failed"); }; await test.pickImageDirectory();
   vm.runInNewContext("directFilesFromDrop = async () => { throw new Error('drop failed'); };", context);
-  await test.importDroppedFiles({ ...event(""), dataTransfer: { items: [] } });
+  await test.importDroppedFiles({ ...event(""), dataTransfer: { types: ["Files"], items: [] } });
   editable = true; assert.equal(test.handleEditorKeydown(event("U")), false); editable = false; dialogOpen = true; assert.equal(test.navigationShortcutAction(event("P")), null); dialogOpen = false;
   gesture = true; assert.equal(test.navigationShortcutAction(event("P")), null); gesture = false;
   state.viewMode = "overview"; assert.equal(test.handleEditorKeydown(event("U")), false); assert.equal(test.navigationShortcutAction(event("P")), null); state.viewMode = "edit";

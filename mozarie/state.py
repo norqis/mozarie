@@ -280,10 +280,14 @@ class StudioState(CatalogMixin, SavingMixin, DetectionMixin, JobsMixin):
                 settings = self.settings_store.validate_update(update)
             except SettingsError as exc:
                 raise ClientError("設定の内容が正しくありません。", "invalid_settings") from exc
-            try:
-                validate_output_directory_ready(settings["saving"]["default_output_directory"])
-            except (SettingsError, OSError) as exc:
-                raise ClientError("保存先フォルダを使用できません。", "output_folder_unavailable") from exc
+            # An unavailable previously chosen folder must not block unrelated
+            # settings, including a full form posting that same folder again.
+            # Paths have already passed syntax/absolute-path validation above.
+            if Path(settings["saving"]["default_output_directory"]) != Path(self.settings["saving"]["default_output_directory"]):
+                try:
+                    validate_output_directory_ready(settings["saving"]["default_output_directory"])
+                except (SettingsError, OSError) as exc:
+                    raise ClientError("保存先フォルダを使用できません。", "output_folder_unavailable") from exc
             # Selecting an output folder must remain available when a previously
             # configured GPU is temporarily unavailable. Model changes still
             # receive the same validation before they are persisted.

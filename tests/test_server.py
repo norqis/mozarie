@@ -4178,7 +4178,7 @@ class MozarieTests(unittest.TestCase):
         with patch.object(state, "_require_supported_gpu"), patch.object(state_module, "validate_output_directory_ready") as ready, \
              patch.object(state.settings_store, "save", return_value=unchanged) as save:
             state.update_settings(unchanged)
-        ready.assert_called_once_with(unchanged["saving"]["default_output_directory"])
+        ready.assert_not_called()
         save.assert_called_once_with(unchanged)
 
         changed = copy.deepcopy(state.settings)
@@ -4186,7 +4186,7 @@ class MozarieTests(unittest.TestCase):
         with patch.object(state, "_require_supported_gpu"), patch.object(state_module, "validate_output_directory_ready") as ready, \
              patch.object(state.settings_store, "save", return_value=changed) as save:
             state.update_settings(changed)
-        ready.assert_called_once_with(changed["saving"]["default_output_directory"])
+        ready.assert_not_called()
         save.assert_called_once_with(changed)
 
         with tempfile.TemporaryDirectory() as directory:

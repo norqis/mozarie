@@ -366,7 +366,7 @@ async function browserDeleteHandle(entry, image, requestPermission = false) {
   const resolved = await entry.parentHandle.getFileHandle(entry.name);
   if (resolved.isSameEntry && !await resolved.isSameEntry(entry.fileHandle)) throw codedError("stale_asset");
   const file = await resolved.getFile();
-  if (file.size !== image.sizeBytes || file.lastModified * 1_000_000 !== image.mtimeNs) throw codedError("stale_asset");
+  if (file.size !== image.sizeBytes || Math.round(file.lastModified) * 1_000_000 !== image.mtimeNs) throw codedError("stale_asset");
   await entry.parentHandle.removeEntry(entry.name);
 }
 async function preflightBrowserSourceDelete(images, permissionFailures = []) {
@@ -383,7 +383,7 @@ async function preflightBrowserSourceDelete(images, permissionFailures = []) {
       const resolved = await entry.parentHandle.getFileHandle(entry.name);
       if (resolved.isSameEntry && !await resolved.isSameEntry(entry.fileHandle)) throw codedError("stale_asset");
       const file = await resolved.getFile();
-      if (file.size !== image.sizeBytes || file.lastModified * 1_000_000 !== image.mtimeNs) throw codedError("stale_asset");
+      if (file.size !== image.sizeBytes || Math.round(file.lastModified) * 1_000_000 !== image.mtimeNs) throw codedError("stale_asset");
       ready.push(image);
     } catch (error) { failed.push({ imageId: image.id, reason: error?.code || "source_delete_failed" }); }
   }
@@ -656,16 +656,28 @@ function droppedFile(file, relativePath = file.name, fileHandle = null, parentHa
 }
 
 async function directFilesFromDrop(dataTransfer) {
-  const handles = await Promise.all([...dataTransfer.items]
-    .filter((item) => item.kind === "file")
-    .map((item) => item.getAsFileSystemHandle()));
+  // Both APIs must be called during the drop event, before its data store is
+  // protected again. Keep File snapshots when handle access is unsupported,
+  // rejected, or returns null (for example a drag from another application).
+  const files = [...(dataTransfer.files || [])];
+  const items = [...(dataTransfer.items || [])].filter((item) => item.kind === "file");
+  const pending = items.map((item, index) => {
+    const file = item.getAsFile?.() || files[index] || null;
+    let handle;
+    try { handle = item.getAsFileSystemHandle?.(); } catch { handle = null; }
+    return Promise.resolve(handle).catch(() => null).then((handle) => ({ handle, file }));
+  });
+  const snapshots = pending.length ? await Promise.all(pending) : files.map((file) => ({ handle: null, file }));
   const entries = [];
-  async function collectHandle(handle, parent = "", parentHandle = null) {
+  async function collectHandle(handle, parent = "", parentHandle = null, file = null) {
     const relativePath = parent ? `${parent}/${handle.name}` : handle.name;
-    if (handle.kind === "file") entries.push({ handle, relativePath, parentHandle });
+    if (handle.kind === "file") entries.push({ handle, relativePath, parentHandle, ...(file ? { file } : {}) });
     else for await (const entry of handle.values()) await collectHandle(entry, relativePath, handle);
   }
-  for (const handle of handles) if (handle) await collectHandle(handle);
+  for (const { handle, file } of snapshots) {
+    if (handle) await collectHandle(handle, "", null, file);
+    else if (file) entries.push(droppedFile(file, file.webkitRelativePath || file.name));
+  }
   return { handleEntries: entries };
 }
 
@@ -855,7 +867,7 @@ async function importSingleFile(entry, clientKey, catalogId = null, sourceId = n
       "X-Mozarie-Name": encodeURIComponent(entry.file.name),
       "X-Mozarie-Relative-Path": encodeURIComponent(entry.relativePath),
       "X-Mozarie-Client-Key": encodeURIComponent(clientKey),
-      "X-Mozarie-File-Mtime": String(Math.max(0, Number(entry.file.lastModified || 0))),
+      "X-Mozarie-File-Mtime": String(Math.max(0, Math.round(Number(entry.file.lastModified || 0)))),
       "X-Mozarie-File-Size": String(Math.max(0, Number(entry.file.size || 0))),
       ...(sourceId ? { "X-Mozarie-Source-Id": encodeURIComponent(sourceId) } : {}),
       ...(sourceKind ? { "X-Mozarie-Source-Kind": sourceKind } : {}),
@@ -941,9 +953,9 @@ async function waitForImportSession(session) {
 }
 
 async function importHandleEntries(entries, session) {
-  return importFiles(entries.map((entry) => ({
+  return importFiles(entries.map((entry) => entry.handle ? ({
     ...entry, name: entry.handle.name, getFile: () => entry.handle.getFile(), fileHandle: entry.handle,
-  })), session);
+  }) : entry), session);
 }
 
 async function importFileHandles(handles, session = beginImportSession()) {
@@ -1053,6 +1065,8 @@ async function pickImageDirectory() {
 }
 
 async function importDroppedFiles(event) {
+  if (!event.dataTransfer?.types?.includes("Files") && !event.dataTransfer?.files?.length
+      && ![...(event.dataTransfer?.items || [])].some((item) => item.kind === "file")) return;
   event.preventDefault();
   event.stopPropagation();
   setGalleryDropOverlay(false);

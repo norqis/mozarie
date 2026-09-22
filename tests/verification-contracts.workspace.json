@@ -315,7 +315,10 @@
       "observation": "ドロップ画像を追加し、ブラウザーを画像URLへ遷移させない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
+        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage",
+        "python:tests.test_settings_import_regressions.SettingsImportRegressionTests.test_live_browser_settings_detection_and_file_entry_points",
+        "node:tests/test_import_drop_contract.cjs::drop snapshots every File and handle request before the transfer becomes protected",
+        "node:tests/test_import_drop_contract.cjs::drop accepts unsupported handle APIs and FileList-only transfers"
       ]
     },
     {
@@ -326,7 +329,8 @@
       "observation": "配下の対応画像を追加し、処理後にドロップ案内が消える",
       "status": "automated",
       "testIds": [
-        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
+        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage",
+        "node:tests/test_import_drop_contract.cjs::drop keeps native handles, nested relative paths, and each immediate parent"
       ]
     },
     {
@@ -2575,7 +2579,8 @@
       "status": "automated",
       "testIds": [
         "python:tests.test_server.MozarieTests.test_import_session_records_requested_and_effective_parallelism_without_a_fixed_cap",
-        "python:tests.test_server.MozarieTests.test_rejected_import_transfer_closes_the_unread_request_connection"
+        "python:tests.test_server.MozarieTests.test_rejected_import_transfer_closes_the_unread_request_connection",
+        "python:tests.test_settings_import_regressions.SettingsImportRegressionTests.test_binary_batch_builds_catalog_summary_once_and_retains_every_image"
       ]
     },
     {

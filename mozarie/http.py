@@ -813,8 +813,12 @@ class MosaicHandler(BaseHTTPRequestHandler):
                     finally:
                         if staged_path is not None:
                             staged_path.unlink(missing_ok=True)
-                    response = {"imported": imported, "catalogId": STATE.catalog_id,
-                                "catalogGeneration": STATE.catalog_snapshot()["catalogGeneration"]}
+                    # The final /api/images request publishes the full list.
+                    # Building that list for each individual upload makes a
+                    # batch do quadratic work just to return its generation.
+                    with STATE.lock:
+                        response = {"imported": imported, "catalogId": STATE.catalog_id,
+                                    "catalogGeneration": STATE.catalog_generation}
                     succeeded = True
                 finally:
                     STATE.end_import_transfer(import_session_id, succeeded=succeeded)
