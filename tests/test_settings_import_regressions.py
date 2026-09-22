@@ -28,7 +28,7 @@ from mozarie.state import StudioState
 class SettingsImportRegressionTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temporary = tempfile.TemporaryDirectory()
-        self.root = Path(self.temporary.name)
+        self.root = Path(self.temporary.name).resolve()
         self.app_dir = self.root / "app"
         (self.app_dir / "config").mkdir(parents=True)
         shutil.copy2(Path(__file__).resolve().parents[1] / "config" / "defaults.json", self.app_dir / "config" / "defaults.json")

@@ -164,9 +164,9 @@ def import_image_list_for_test(state, files):
 class MozarieTests(unittest.TestCase):
     def setUp(self) -> None:
         self._cache_directory = tempfile.TemporaryDirectory()
-        self.cache_dir = Path(self._cache_directory.name) / "cache"
+        self.cache_dir = Path(self._cache_directory.name).resolve() / "cache"
         self._app_directory = tempfile.TemporaryDirectory()
-        self.app_dir = Path(self._app_directory.name) / "app"
+        self.app_dir = Path(self._app_directory.name).resolve() / "app"
         config_dir = self.app_dir / "config"
         config_dir.mkdir(parents=True)
         shutil.copyfile(Path(__file__).resolve().parents[1] / "config" / "defaults.json", config_dir / "defaults.json")
@@ -8806,7 +8806,7 @@ class MozarieTests(unittest.TestCase):
 
     def test_folder_scan_publishes_five_thousand_valid_images_sorted_and_reports_the_broken_file(self):
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
+            root = Path(directory).resolve()
             expected = []
             for index in range(5001):
                 relative = Path(f"part-{index % 5}") / f"image-{5000 - index:04}.png"
