@@ -92,14 +92,24 @@ test("repeated settings, project rows, and candidate padding lifecycles retain o
     });
     const page = await context.newPage();
     let batchRequests = 0; let singleRequests = 0;
+    let paddingRevision = 1;
+    const paddingCandidates = [
+      { id: "padding-one", role: "apply", enabled: true, forced: false, labelToken: "penis", source: "target", refinement: null, confidence: .9, color: "#fff", expandPx: 2 },
+      { id: "padding-two", role: "apply", enabled: true, forced: false, labelToken: "pussy", source: "target", refinement: null, confidence: .8, color: "#fff", expandPx: 7 },
+    ];
     await page.route("**/api/candidates/batch", async (route) => {
       batchRequests += 1;
-      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ candidateRevision: 2 }) });
+      paddingRevision += 1;
+      for (const candidate of paddingCandidates) candidate.expandPx = route.request().postDataJSON().expandPx;
+      await route.fulfill({ json: { candidateRevision: paddingRevision } });
     });
     await page.route("**/api/candidate/**", async (route) => {
       singleRequests += 1;
-      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ candidateRevision: 2 }) });
+      paddingRevision += 1;
+      paddingCandidates[0].expandPx = route.request().postDataJSON().expandPx;
+      await route.fulfill({ json: { candidateRevision: paddingRevision } });
     });
+    await page.route("**/api/candidates/lifecycle-0", (route) => route.fulfill({ json: { candidates: batchRequests ? paddingCandidates : paddingCandidates.slice(0, 1), candidateRevision: paddingRevision } }));
     await page.goto(fixture.url, { waitUntil: "domcontentloaded" });
     await page.waitForFunction(() => state.settings && state.images.length === 400);
     let galleryPlateau = null;
@@ -149,11 +159,26 @@ test("repeated settings, project rows, and candidate padding lifecycles retain o
     assert.equal(await page.evaluate(() => window.__activeListenerTotal()), projectListenerTotal, "delegated project-row handling retains no listener on replaced rows");
     assert.equal(await page.evaluate(() => window.__connectedListenerTotal()), baselineListeners, "project manager refreshes do not accumulate listeners on live rows");
 
-    await page.evaluate(() => {
-      const record = state.images[0]; state.currentId = record.id; state.currentImage = { width: record.width, height: record.height };
+    const maskPng = await page.evaluate(async (candidates) => {
+      const record = state.images[0]; state.currentId = record.id;
+      const image = document.createElement("canvas"); image.width = record.width; image.height = record.height;
+      const imageContext = image.getContext("2d"); imageContext.fillStyle = "#789"; imageContext.fillRect(0, 0, image.width, image.height);
+      state.currentImage = await createImageBitmap(image); canvasSizeForImage(record); prepareOriginalImage();
+      const mask = document.createElement("canvas"); mask.width = record.width; mask.height = record.height;
+      const maskContext = mask.getContext("2d"); maskContext.fillStyle = "#fff"; maskContext.fillRect(30, 20, 20, 20);
+      window.__lifecycleMask = mask;
       record.candidateRevision = 1;
-      state.candidates = [{ id: "padding-one", role: "apply", enabled: true, forced: false, labelToken: "penis", source: "target", confidence: .9, color: "#fff", expandPx: 2 }];
-      state.candidateImages = new Map([["padding-one", originalCanvas]]); state.removedCandidateIds = new Set(); renderCandidates();
+      state.candidates = candidates;
+      state.candidateImages = new Map([["padding-one", mask]]); state.removedCandidateIds = new Set(); renderCandidates();
+      return mask.toDataURL().split(",")[1];
+    }, paddingCandidates.slice(0, 1));
+    await page.route("**/api/mask/lifecycle-0/*", (route) => route.fulfill({ contentType: "image/png", body: Buffer.from(maskPng, "base64") }));
+    const errorDialogs = [];
+    await page.exposeFunction("recordLifecycleError", (text) => errorDialogs.push(text));
+    await page.evaluate(() => {
+      const dialog = document.querySelector("#errorDialog");
+      window.__lifecycleErrorObserver = new MutationObserver(() => { if (dialog.open) void window.recordLifecycleError(dialog.textContent); });
+      window.__lifecycleErrorObserver.observe(dialog, { attributes: true, attributeFilter: ["open"] });
     });
     const paddingTrigger = page.locator('[data-candidate-padding-id="padding-one"]');
     await paddingTrigger.waitFor();
@@ -171,21 +196,21 @@ test("repeated settings, project rows, and candidate padding lifecycles retain o
     assert.equal(await page.evaluate(() => window.__paddingStaticControls.every((node) => node?.isConnected && document.getElementById(node.id) === node)), true, "padding always reuses the same popover and controls");
     await paddingTrigger.click();
     await page.locator("#candidatePaddingInput").fill("7");
+    await page.waitForFunction(() => state.candidatePaddingPreviewImages.size === 1 || document.querySelector("#errorDialog").open);
+    assert.equal(await page.locator("#errorDialog").evaluate((dialog) => dialog.open), false, "single padding preview decodes its valid fixture mask without an error dialog");
     await page.locator("#candidatePaddingConfirm").click();
     await page.waitForFunction(() => !document.querySelector("#candidatePaddingPopover").matches(":popover-open"));
     await page.waitForFunction(() => !state.candidateControlLocks.size);
     assert.equal(singleRequests, 1, "one single-row padding confirmation sends exactly one update");
-    if (await page.locator("#errorDialog").evaluate((dialog) => dialog.open)) await page.locator("#errorDialogClose").click();
+    assert.equal(await page.locator("#errorDialog").evaluate((dialog) => dialog.open), false, "single padding confirmation succeeds without dismissing an error");
+    assert.equal(await page.evaluate(() => state.candidates[0].expandPx), 7);
 
-    await page.evaluate(() => {
+    await page.evaluate((candidates) => {
       const record = state.images[0]; record.candidateRevision = 2;
       state.projectReadOnly = false; state.candidateControlLocks.clear(); state.candidateBatchPending.clear();
-      state.candidates = [
-        { id: "padding-one", role: "apply", enabled: true, forced: false, labelToken: "penis", source: "target", confidence: .9, color: "#fff", expandPx: 7 },
-        { id: "padding-two", role: "apply", enabled: true, forced: false, labelToken: "pussy", source: "target", confidence: .8, color: "#fff", expandPx: 7 },
-      ];
-      state.candidateImages = new Map([["padding-one", originalCanvas], ["padding-two", originalCanvas]]); renderCandidates(); updateActionButtons();
-    });
+      state.candidates = candidates;
+      state.candidateImages = new Map([["padding-one", window.__lifecycleMask], ["padding-two", window.__lifecycleMask]]); renderCandidates(); updateActionButtons();
+    }, paddingCandidates);
     const batchTrigger = page.locator('[data-candidate-padding-batch="apply"]');
     for (let index = 0; index < 10; index += 1) {
       await batchTrigger.click(); await page.keyboard.press("Escape");
@@ -193,6 +218,10 @@ test("repeated settings, project rows, and candidate padding lifecycles retain o
     await batchTrigger.click(); await page.locator("#candidatePaddingInput").fill("9"); await page.locator("#candidatePaddingConfirm").click();
     await page.waitForFunction(() => !state.candidateBatchPending.size);
     assert.equal(batchRequests, 1, "one batch padding confirmation sends exactly one update after repeated cancels");
+    assert.deepEqual(await page.evaluate(() => state.candidates.map((candidate) => candidate.expandPx)), [9, 9], "the committed batch retains both candidates with their new padding");
+    assert.equal(await page.locator("#errorDialog").evaluate((dialog) => dialog.open), false, "batch padding confirmation succeeds without an error dialog");
+    assert.deepEqual(errorDialogs, [], "no padding lifecycle opens an error dialog, including transient failures");
+    await page.evaluate(() => { window.__lifecycleErrorObserver.disconnect(); delete window.__lifecycleErrorObserver; delete window.__lifecycleMask; });
     assert.equal(await page.evaluate(() => state.candidatePaddingPreviewImages.size), 0, "padding confirmation leaves no preview bitmap owned");
 
     const projectRelease = await page.evaluate(() => {
