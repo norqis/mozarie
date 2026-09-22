@@ -977,9 +977,9 @@ class WorkspaceStore:
                     source_id = self._ensure_project_source_db(db, catalog_id, kind, display_name, identity)
                     for record in members:
                         db.execute(
-                            "INSERT INTO images(catalog_id,source_id,relative_path,image_id,size_bytes,mtime_ns,width,height,updated_at) VALUES(?,?,?,?,?,?,?,?,?)",
+                            "INSERT INTO images(catalog_id,source_id,relative_path,image_id,size_bytes,mtime_ns,width,height,hidden,reviewed,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
                             (catalog_id, source_id, record.relative_path, record.image_id, record.size_bytes,
-                             record.mtime_ns, record.width, record.height, now),
+                             record.mtime_ns, record.width, record.height, int(record.hidden), int(record.reviewed), now),
                         )
                         if record.flip_horizontal or record.flip_vertical or record.source_flip_horizontal or record.source_flip_vertical or record.transform_revision:
                             db.execute("""INSERT INTO image_transforms(image_id,flip_horizontal,flip_vertical,source_flip_horizontal,source_flip_vertical,revision)
@@ -993,7 +993,7 @@ class WorkspaceStore:
                     revision = revisions.get(image_id, 0)
                     if snapshot or revision:
                         before = self._history_state_db(db, image_id)
-                        db.execute("UPDATE images SET candidate_revision=?,reviewed=0,updated_at=? WHERE image_id=?", (revision, time.time_ns(), image_id))
+                        db.execute("UPDATE images SET candidate_revision=?,updated_at=? WHERE image_id=?", (revision, time.time_ns(), image_id))
                         for candidate in snapshot:
                             with candidate.mask_path.open("rb") as handle:
                                 mask = handle.read()
@@ -1013,13 +1013,6 @@ class WorkspaceStore:
                             db, image_id, revision,
                             {candidate.candidate_id for candidate in snapshot},
                             bool(effective_masks.get(image_id, False)),
-                        )
-                        self._record_history_db(db, image_id, before, self._history_state_db(db, image_id))
-                    if record.hidden or record.reviewed:
-                        before = self._history_state_db(db, image_id)
-                        db.execute(
-                            "UPDATE images SET hidden=?,reviewed=?,updated_at=? WHERE image_id=?",
-                            (int(record.hidden), int(record.reviewed), time.time_ns(), image_id),
                         )
                         self._record_history_db(db, image_id, before, self._history_state_db(db, image_id))
                     draft = manual_drafts.get(image_id)
@@ -1191,7 +1184,7 @@ class WorkspaceStore:
                         db.execute("UPDATE image_transforms SET source_flip_horizontal=0,source_flip_vertical=0,revision=revision+1 WHERE image_id=?", (row["image_id"],))
                     result[record.relative_path] = {
                         "image_id": row["image_id"], "hidden": bool(row["hidden"]),
-                        "reviewed": False if changed else bool(row["reviewed"]),
+                        "reviewed": bool(row["reviewed"]),
                         "edited_filename": row["edited_filename"],
                         "revision": int(row["candidate_revision"]),
                         "changed": changed or bool(row["source_blocked"]),
@@ -1216,7 +1209,7 @@ class WorkspaceStore:
                    or int(row["width"]) != width or int(row["height"]) != height)
         return {
             "image_id": row["image_id"], "hidden": bool(row["hidden"]),
-            "reviewed": False if changed else bool(row["reviewed"]),
+            "reviewed": bool(row["reviewed"]),
             "edited_filename": row["edited_filename"],
             "revision": int(row["candidate_revision"]),
             "changed": changed or bool(row["source_blocked"]),
@@ -1450,13 +1443,13 @@ class WorkspaceStore:
                         self._preserve_resized_workspace_db(db, image_id, old_size, new_size, resized_revision)
                         resized.add(image_id)
                     if image_id in clear_revisions:
-                        db.execute("""UPDATE images SET size_bytes=?,mtime_ns=?,width=?,height=?,source_blocked=0,reviewed=0,
+                        db.execute("""UPDATE images SET size_bytes=?,mtime_ns=?,width=?,height=?,source_blocked=0,
                             candidate_revision=?,updated_at=? WHERE image_id=?""", (record.size_bytes, record.mtime_ns, record.width, record.height, clear_revisions[image_id], now, image_id))
                     elif old_size != new_size:
-                        db.execute("""UPDATE images SET size_bytes=?,mtime_ns=?,width=?,height=?,source_blocked=0,reviewed=0,
+                        db.execute("""UPDATE images SET size_bytes=?,mtime_ns=?,width=?,height=?,source_blocked=0,
                             candidate_revision=?,updated_at=? WHERE image_id=?""", (record.size_bytes, record.mtime_ns, record.width, record.height, resized_revision, now, image_id))
                     else:
-                        db.execute("""UPDATE images SET size_bytes=?,mtime_ns=?,width=?,height=?,source_blocked=0,reviewed=0,updated_at=?
+                        db.execute("""UPDATE images SET size_bytes=?,mtime_ns=?,width=?,height=?,source_blocked=0,updated_at=?
                             WHERE image_id=?""", (record.size_bytes, record.mtime_ns, record.width, record.height, now, image_id))
                 db.execute("COMMIT")
                 return resized

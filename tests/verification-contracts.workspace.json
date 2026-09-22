@@ -482,14 +482,16 @@
       "sourceIds": [
         "WS-027"
       ],
-      "observation": "その画像だけ確認済みになり、編集・編集の取り消し・再起動後も明示的な確認操作まで保持する",
+      "observation": "その画像だけ確認済みになり、編集・元画像変更の受け入れ・PJへの移行・編集の取り消し・再起動後も明示的な確認操作まで保持する",
       "status": "automated",
       "testIds": [
         "node:tests/test_gallery_save_coverage.cjs::gallery and save interactions",
         "node:tests/test_workspace_flags_runtime.cjs::workspace flag runtime contracts",
         "node:tests/test_review_list_removal_e2e.cjs::review choices survive editing and list-only removal preserves source access boundaries > brush undo redo and hidden labels retain the explicit reviewed flag",
         "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_review_choice_survives_edits_history_restart_and_list_removal",
-        "python:tests.test_workspace.WorkspaceTests.test_edit_history_ignores_legacy_review_values"
+        "python:tests.test_workspace.WorkspaceTests.test_edit_history_ignores_legacy_review_values",
+        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_source_mismatch_acceptance_preserves_both_review_choices_across_restart",
+        "python:tests.test_workspace.WorkspaceTests.test_projectless_promotion_preserves_review_choices_through_every_history_step"
       ]
     },
     {

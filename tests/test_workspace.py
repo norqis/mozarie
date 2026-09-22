@@ -642,6 +642,31 @@ class WorkspaceTests(unittest.TestCase):
             accepted = store.reconcile_images(catalog, [changed])["001.png"]
             self.assertFalse(accepted["changed"]); self.assertFalse(accepted["dimensions_changed"])
 
+    def test_projectless_promotion_preserves_review_choices_through_every_history_step(self):
+        for reviewed in (False, True):
+            with self.subTest(reviewed=reviewed), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory); store = WorkspaceStore(root)
+                record = SimpleNamespace(image_id="image", relative_path="image.png", size_bytes=10, mtime_ns=20,
+                                         width=4, height=4, hidden=True, reviewed=reviewed, flip_horizontal=False,
+                                         flip_vertical=False, source_flip_horizontal=False, source_flip_vertical=False, transform_revision=0)
+                mask_path = root / "candidate.png"; mask_path.write_bytes(self._png())
+                candidate = SimpleNamespace(candidate_id="candidate", label_token="penis", confidence=.9, mask_path=mask_path,
+                                            enabled=True, color="#ff0000", source="auto", origin="auto", refinement=None,
+                                            role=SimpleNamespace(value="apply"), forced=False, expand_px=0)
+                draft = {"add": "ink", "exclusion": "", "exclusionErase": "", "removedCandidateIds": [], "hasEffectiveMask": True}
+                project, _sources = store.promote_projectless("Imported", [("browser-files", "source", "Source", [record])],
+                    {"image": [candidate]}, {"image": 1}, {"image": True}, {"image": draft}, lambda value: self._png() if value else None, "a" * 32)
+                reopened = WorkspaceStore(root)
+                self.assertEqual(reopened.image_state("image")[1], reviewed)
+                for direction, available in (("undo", "canUndo"), ("redo", "canRedo")):
+                    count = 0
+                    while reopened.history_status("image")[available] and count < 10:
+                        reopened.restore_history("image", direction); count += 1
+                        self.assertEqual(reopened.image_state("image"), (True, reviewed), direction)
+                    self.assertEqual(count, 2, "promotion records candidate and manual edits, never an invented flag change")
+                    self.assertFalse(reopened.history_status("image")[available])
+                self.assertEqual(WorkspaceStore(root).image_state("image"), (True, reviewed))
+
     def test_dimension_acknowledgement_resizes_candidates_without_changing_manual_forced_exclusion(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory); store = WorkspaceStore(root); catalog = self._new_catalog(store)

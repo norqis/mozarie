@@ -543,6 +543,31 @@ class ProjectCatalogCoverageTests(unittest.TestCase):
         assert_round_trip(lambda: state.delete_candidate(target, "target-candidate"))
         assert_round_trip(lambda: state.clear_masks([target]))
 
+    def test_source_mismatch_acceptance_preserves_both_review_choices_across_restart(self) -> None:
+        for reviewed in (False, True):
+            for mode, size, clear in (("keep", (8, 8), False), ("resize", (12, 6), False), ("clear", (10, 7), True)):
+                with self.subTest(reviewed=reviewed, mode=mode):
+                    source = self.root / f"review-{reviewed}-{mode}"
+                    path = self.image(source, "source.png")
+                    state = self.state(); project = state.create_project(f"review {reviewed} {mode}")
+                    image_id = state.set_root(str(source))[0]["id"]
+                    self.commit_candidates(state, image_id, [self.candidate(state, image_id, "apply")])
+                    state.set_image_flags(image_id, {"reviewed": reviewed})
+                    Image.new("RGB", size, "black").save(path)
+                    state.set_root(str(source))
+                    self.assertEqual(state.images[image_id].reviewed, reviewed, "live source reconciliation")
+                    self.assertEqual(state.workspace_store.image_state(image_id)[1], reviewed)
+                    reopened = self.state(); reopened.open_project(project["id"])
+                    self.assertTrue(reopened.source_mismatch_snapshot())
+                    self.assertEqual(reopened.images[image_id].reviewed, reviewed, "changed source after restart")
+                    reopened.resolve_source_mismatches([image_id], clear)
+                    self.assertEqual(reopened.images[image_id].reviewed, reviewed, "accepted live record")
+                    self.assertEqual(reopened.workspace_store.image_state(image_id)[1], reviewed, "accepted durable record")
+                    accepted = self.state(); accepted.open_project(project["id"])
+                    self.assertEqual(accepted.source_mismatch_snapshot(), [])
+                    self.assertEqual(accepted.images[image_id].reviewed, reviewed, "accepted source after restart")
+                    self.assertEqual(bool(accepted.candidates[image_id]), not clear)
+
     def test_source_mismatch_keep_resize_and_clear_have_exact_scoped_results(self) -> None:
         source = self.root / "mismatch-exact"; first_path = self.image(source, "first.png"); second_path = self.image(source, "second.png")
         state = self.state(); project = state.create_project("mismatch exact")
