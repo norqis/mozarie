@@ -636,7 +636,7 @@
       "observation": "表示画像に対応するPNGだけが揃い、非表示画像のPNGを含めない",
       "status": "automated",
       "testIds": [
-        "python:tests.test_project_http_coverage.ProjectHttpCoverageTests.test_project_mask_png_zip_and_cleanup"
+        "python:tests.http.test_project_http_endpoints.ProjectHttpCoverageTests.test_project_mask_png_zip_and_cleanup"
       ]
     },
     {
@@ -648,7 +648,7 @@
       "status": "automated",
       "testIds": [
         "python:tests.workspace.test_project_and_output_integrity.DataIntegrityStateContracts.test_mask_exports_preserve_dimensions_roles_erase_padding_and_disabled_candidates",
-        "python:tests.test_project_http_coverage.ProjectHttpCoverageTests.test_project_mask_png_zip_and_cleanup"
+        "python:tests.http.test_project_http_endpoints.ProjectHttpCoverageTests.test_project_mask_png_zip_and_cleanup"
       ]
     },
     {
@@ -659,7 +659,7 @@
       "observation": "表示画像に対応するPNGだけが揃い、非表示画像のPNGを含めない",
       "status": "automated",
       "testIds": [
-        "python:tests.test_project_http_coverage.ProjectHttpCoverageTests.test_project_mask_png_zip_and_cleanup"
+        "python:tests.http.test_project_http_endpoints.ProjectHttpCoverageTests.test_project_mask_png_zip_and_cleanup"
       ]
     },
     {
@@ -671,7 +671,7 @@
       "status": "automated",
       "testIds": [
         "python:tests.workspace.test_project_and_output_integrity.DataIntegrityStateContracts.test_mask_exports_preserve_dimensions_roles_erase_padding_and_disabled_candidates",
-        "python:tests.test_project_http_coverage.ProjectHttpCoverageTests.test_project_mask_png_zip_and_cleanup"
+        "python:tests.http.test_project_http_endpoints.ProjectHttpCoverageTests.test_project_mask_png_zip_and_cleanup"
       ]
     },
     {
@@ -682,7 +682,7 @@
       "observation": "両画像のマスクが衝突せずZIPに残り、各元画像との対応を識別できる",
       "status": "automated",
       "testIds": [
-        "python:tests.test_project_http_coverage.ProjectHttpCoverageTests.test_project_mask_zip_keeps_same_named_images_from_distinct_sources_identifiable"
+        "python:tests.http.test_project_http_endpoints.ProjectHttpCoverageTests.test_project_mask_zip_keeps_same_named_images_from_distinct_sources_identifiable"
       ]
     },
     {
@@ -1672,7 +1672,7 @@
       "status": "automated",
       "testIds": [
         "python:tests.workspace.test_workspace_mutation_integrity.DataIntegrityStateContracts.test_project_export_uses_one_temp_sqlite_snapshot_streams_rows_and_always_cleans_it",
-        "python:tests.test_project_workspace_coverage.ProjectWorkspaceCoverageTests.test_project_export_streams_three_ordered_queries_and_one_image_payload"
+        "python:tests.workspace.test_project_workspace_persistence.ProjectWorkspaceCoverageTests.test_project_export_streams_three_ordered_queries_and_one_image_payload"
       ]
     },
     {
@@ -2035,7 +2035,7 @@
       "status": "automated",
       "testIds": [
         "python:tests.workspace.test_workspace_mutation_integrity.DataIntegrityStateContracts.test_project_switch_serializes_flag_and_two_image_candidate_batches_without_cross_project_leaks",
-        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_candidate_history_batch_and_failure_guards",
+        "python:tests.workspace.test_project_catalog_lifecycle.ProjectCatalogCoverageTests.test_candidate_history_batch_and_failure_guards",
         "python:tests.test_server.MozarieTests.test_batch_candidate_padding_hundred_candidates_writes_one_history_and_no_png"
       ]
     },
@@ -3693,7 +3693,7 @@
       "status": "automated",
       "testIds": [
         "python:tests.test_server.MozarieTests.test_remove_image_from_catalog_rejects_active_work",
-        "python:tests.test_project_http_coverage.ProjectHttpCoverageTests.test_hidden_history_undo_redo_restores_processing_eligibility"
+        "python:tests.http.test_project_http_endpoints.ProjectHttpCoverageTests.test_hidden_history_undo_redo_restores_processing_eligibility"
       ]
     },
     {
@@ -3715,8 +3715,8 @@
       "observation": "ZIPは開始時点で可視のA～Dだけを含み、Eの候補・手描きBLOBを読まない",
       "status": "automated",
       "testIds": [
-        "python:tests.test_project_http_coverage.ProjectHttpCoverageTests.test_project_mask_png_zip_and_cleanup",
-        "python:tests.test_project_workspace_coverage.ProjectWorkspaceCoverageTests.test_project_export_streams_three_ordered_queries_and_one_image_payload"
+        "python:tests.http.test_project_http_endpoints.ProjectHttpCoverageTests.test_project_mask_png_zip_and_cleanup",
+        "python:tests.workspace.test_project_workspace_persistence.ProjectWorkspaceCoverageTests.test_project_export_streams_three_ordered_queries_and_one_image_payload"
       ]
     },
     {
@@ -3819,7 +3819,7 @@
       "observation": "EのUndo/Redoは履歴に従って使え、非表示・確認済みを含む状態を復元する",
       "status": "automated",
       "testIds": [
-        "python:tests.test_project_http_coverage.ProjectHttpCoverageTests.test_hidden_history_undo_redo_restores_processing_eligibility",
+        "python:tests.http.test_project_http_endpoints.ProjectHttpCoverageTests.test_hidden_history_undo_redo_restores_processing_eligibility",
         "node:tests/test_project_history_browser_e2e.cjs::history completion recreates every candidate control after success, no-op, and failure"
       ]
     },
@@ -3983,8 +3983,8 @@
       "observation": "開く前のPJ表示とDBの完了/作業中状態、元画像照合により変化した反転版を一致させて復元する",
       "status": "automated",
       "testIds": [
-        "python:tests.test_project_http_coverage.ProjectHttpCoverageTests.test_project_switch_restores_only_its_durable_candidate_manual_history_and_flags",
-        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_multi_source_reopen_reconciles_before_one_replace_and_keeps_dimension_lock"
+        "python:tests.http.test_project_http_endpoints.ProjectHttpCoverageTests.test_project_switch_restores_only_its_durable_candidate_manual_history_and_flags",
+        "python:tests.workspace.test_project_catalog_lifecycle.ProjectCatalogCoverageTests.test_multi_source_reopen_reconciles_before_one_replace_and_keeps_dimension_lock"
       ]
     },
     {
@@ -3996,7 +3996,7 @@
       "status": "automated",
       "testIds": [
         "python:tests.test_server.MozarieTests.test_workspace_restore_rejects_corrupt_candidate_without_partial_display",
-        "python:tests.test_project_workspace_coverage.ProjectWorkspaceCoverageTests.test_all_public_empty_and_failure_boundaries_roll_back"
+        "python:tests.workspace.test_project_workspace_persistence.ProjectWorkspaceCoverageTests.test_all_public_empty_and_failure_boundaries_roll_back"
       ]
     },
     {
@@ -4089,7 +4089,7 @@
       "status": "automated",
       "testIds": [
         "python:tests.test_server.MozarieTests.test_clear_catalog_only_removes_images_from_the_screen_catalog",
-        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_delete_project_cleans_only_project_state_and_leaves_sources",
+        "python:tests.workspace.test_project_catalog_lifecycle.ProjectCatalogCoverageTests.test_delete_project_cleans_only_project_state_and_leaves_sources",
         "python:tests.test_server.MozarieTests.test_delete_candidate_is_idempotent_and_removes_its_mask"
       ]
     },
@@ -4631,7 +4631,7 @@
       "status": "automated",
       "testIds": [
         "python:tests.test_http_live_endpoints.LiveHttpEndpointTests.test_live_manual_layer_transfer_persists_and_recovers_after_cancel_or_commit_failure",
-        "python:tests.test_project_http_coverage.ProjectHttpCoverageTests.test_project_switch_restores_only_its_durable_candidate_manual_history_and_flags"
+        "python:tests.http.test_project_http_endpoints.ProjectHttpCoverageTests.test_project_switch_restores_only_its_durable_candidate_manual_history_and_flags"
       ]
     },
     {
@@ -4700,7 +4700,7 @@
       "status": "automated",
       "testIds": [
         "python:tests.test_http_live_endpoints.LiveHttpEndpointTests.test_live_manual_layer_transfer_persists_and_recovers_after_cancel_or_commit_failure",
-        "python:tests.test_project_workspace_coverage.ProjectWorkspaceCoverageTests.test_manual_dirty_input_and_stale_candidate_revision_leave_workspace_unchanged"
+        "python:tests.workspace.test_project_workspace_persistence.ProjectWorkspaceCoverageTests.test_manual_dirty_input_and_stale_candidate_revision_leave_workspace_unchanged"
       ]
     },
     {
@@ -4839,7 +4839,7 @@
       "status": "automated",
       "testIds": [
         "python:tests.test_workspace.WorkspaceTests.test_reconcile_images_loads_transforms_without_per_image_queries",
-        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_multi_source_reopen_reconciles_before_one_replace_and_keeps_dimension_lock"
+        "python:tests.workspace.test_project_catalog_lifecycle.ProjectCatalogCoverageTests.test_multi_source_reopen_reconciles_before_one_replace_and_keeps_dimension_lock"
       ]
     },
     {
@@ -4863,7 +4863,7 @@
       "testIds": [
         "python:tests.test_workspace.WorkspaceTests.test_future_database_is_not_touched",
         "python:tests.test_workspace.WorkspaceTests.test_invalid_schema_version_is_rejected_without_mutation",
-        "python:tests.test_project_workspace_coverage.ProjectWorkspaceCoverageTests.test_reopen_schema_corruption_is_rejected_without_write"
+        "python:tests.workspace.test_project_workspace_persistence.ProjectWorkspaceCoverageTests.test_reopen_schema_corruption_is_rejected_without_write"
       ]
     },
     {
@@ -4874,8 +4874,8 @@
       "observation": "既存DBを更新せず、通常の作業画面を開かない",
       "status": "automated",
       "testIds": [
-        "python:tests.test_project_http_coverage.ProjectHttpCoverageTests.test_workspace_recovery_page_api_and_recreate_route",
-        "python:tests.test_project_http_coverage.ProjectHttpCoverageTests.test_live_unavailable_workspace_routes_are_strict_and_recover_once"
+        "python:tests.http.test_project_http_endpoints.ProjectHttpCoverageTests.test_workspace_recovery_page_api_and_recreate_route",
+        "python:tests.http.test_project_http_endpoints.ProjectHttpCoverageTests.test_live_unavailable_workspace_routes_are_strict_and_recover_once"
       ]
     },
     {
@@ -4934,7 +4934,7 @@
       "observation": "active projectless catalogは作業1件だけを指し、追加画像・一覧・候補を保持する",
       "status": "automated",
       "testIds": [
-        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_projectless_candidate_change_keeps_reviewed_after_success_and_failure",
+        "python:tests.workspace.test_project_catalog_lifecycle.ProjectCatalogCoverageTests.test_projectless_candidate_change_keeps_reviewed_after_success_and_failure",
         "python:tests.test_server.MozarieTests.test_explicit_browser_catalog_never_reassigns_and_restores_state"
       ]
     },
@@ -5129,8 +5129,8 @@
       "observation": "一時ZIPは実行用cache配下にだけ作成され、再起動時のcache整理で残留分を回収する",
       "status": "automated",
       "testIds": [
-        "python:tests.test_project_http_coverage.ProjectHttpCoverageTests.test_startup_removes_a_stale_mask_zip_from_a_process_cache",
-        "python:tests.test_project_http_coverage.ProjectHttpCoverageTests.test_project_mask_png_zip_and_cleanup"
+        "python:tests.http.test_project_http_endpoints.ProjectHttpCoverageTests.test_startup_removes_a_stale_mask_zip_from_a_process_cache",
+        "python:tests.http.test_project_http_endpoints.ProjectHttpCoverageTests.test_project_mask_png_zip_and_cleanup"
       ]
     },
     {
@@ -5141,7 +5141,7 @@
       "observation": "通常の応答は完了後にZIPを削除し、ダウンロード内容とPJ状態を保持する",
       "status": "automated",
       "testIds": [
-        "python:tests.test_project_http_coverage.ProjectHttpCoverageTests.test_project_mask_png_zip_and_cleanup"
+        "python:tests.http.test_project_http_endpoints.ProjectHttpCoverageTests.test_project_mask_png_zip_and_cleanup"
       ]
     },
     {
@@ -5152,7 +5152,7 @@
       "observation": "成功時に候補を公開し、利用者が明示した確認状態を保持する",
       "status": "automated",
       "testIds": [
-        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_projectless_candidate_change_keeps_reviewed_after_success_and_failure",
+        "python:tests.workspace.test_project_catalog_lifecycle.ProjectCatalogCoverageTests.test_projectless_candidate_change_keeps_reviewed_after_success_and_failure",
         "python:tests.test_server.MozarieTests.test_successful_detection_replaces_a_seeded_hand_candidate"
       ]
     },
@@ -5290,7 +5290,7 @@
       "observation": "Aだけの候補・手描き・履歴・非表示/確認済みを復元し、Bの選択・検索・フィルターを持ち込まない",
       "status": "automated",
       "testIds": [
-        "python:tests.test_project_http_coverage.ProjectHttpCoverageTests.test_project_switch_restores_only_its_durable_candidate_manual_history_and_flags",
+        "python:tests.http.test_project_http_endpoints.ProjectHttpCoverageTests.test_project_switch_restores_only_its_durable_candidate_manual_history_and_flags",
         "node:tests/test_project_ui_runtime.cjs::project dialogs, A-B-A switching, failed-open recovery, and duplicate transition guards"
       ]
     },
@@ -5302,7 +5302,7 @@
       "observation": "Undoは画像を再表示して編集・保存を再有効化し、Redoは再び無効化する",
       "status": "automated",
       "testIds": [
-        "python:tests.test_project_http_coverage.ProjectHttpCoverageTests.test_hidden_history_undo_redo_restores_processing_eligibility"
+        "python:tests.http.test_project_http_endpoints.ProjectHttpCoverageTests.test_hidden_history_undo_redo_restores_processing_eligibility"
       ]
     },
     {
@@ -5313,7 +5313,7 @@
       "observation": "ZIPは非表示画像を含めない",
       "status": "automated",
       "testIds": [
-        "python:tests.test_project_http_coverage.ProjectHttpCoverageTests.test_project_mask_png_zip_and_cleanup"
+        "python:tests.http.test_project_http_endpoints.ProjectHttpCoverageTests.test_project_mask_png_zip_and_cleanup"
       ]
     },
     {

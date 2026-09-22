@@ -126,7 +126,7 @@ const context = {
   isGestureActive: () => gesture, moveCurrentBy: () => {}, setViewMode: (mode) => { state.viewMode = mode; }, reviewAndMoveNext: () => {}, hasDurableHistory: () => false, restoreProjectHistory: () => {}, restoreSnapshot: () => {},
 };
 
-const interactionPath = path.join(__dirname, "..", "static", "js", "interaction.js");
+const interactionPath = path.join(__dirname, "..", "..", "static", "js", "interaction.js");
 const source = fs.readFileSync(interactionPath, "utf8");
 vm.runInNewContext(source, context, { filename: interactionPath });
 vm.runInNewContext("globalThis.interactionTest={setTool,setBoundaryModeMenuOpen,closeBoundaryModeMenu,updateBrushSize,updateBlockSizeDisplay,rememberFillToleranceTrigger,confirmAction,confirmationRequired,beginBrowserDeletePermissionRequests,preflightBrowserSourceDelete,resetCurrentDraft,clearMasks,clearCatalog,closeCatalogContextMenu,positionCatalogContextMenu,openCatalogContextMenu,submitRenameImage,copyContextMenuImagePath,clearReviewForRemovedImage,removeImageFromCatalog,runSelectionAction,droppedFile,directFilesFromDrop,isSupportedImageFile,newClientKey,pruneSourceAccess,rememberImportedSource,importFiles,importSingleFile,beginImportSession,remapImportedImageIds,finishImportSession,waitForImportSession,importHandleEntries,importFileHandles,importDirectoryHandle,importProjectDirectoryHandle,importProjectFileHandles,pickImageFiles,pickImageDirectory,importDroppedFiles,setGalleryDropOverlay,handleEditorKeydown,navigationShortcutAction,handleNavigationKeydown,handleWindowKeydown};", context, { filename: "test-interaction-exports.js" });
@@ -134,8 +134,8 @@ vm.runInNewContext("globalThis.interactionTest={setTool,setBoundaryModeMenuOpen,
 const test = context.interactionTest;
 const event = (binding, type = "keydown") => ({ binding, type, currentTarget: element("#origin"), clientX: 30, clientY: 40, preventDefault() { this.prevented = true; }, stopPropagation() { this.stopped = true; } });
 const file = (name) => ({ name, size: 1, lastModified: 1 });
-const indexSource = fs.readFileSync(path.join(__dirname, "..", "static", "index.html"), "utf8");
-const styleSource = fs.readFileSync(path.join(__dirname, "..", "static", "style.css"), "utf8");
+const indexSource = fs.readFileSync(path.join(__dirname, "..", "..", "static", "index.html"), "utf8");
+const styleSource = fs.readFileSync(path.join(__dirname, "..", "..", "static", "style.css"), "utf8");
 const tolerancePanelCss = styleSource.match(/\.bucket-tolerance-panel\s*\{([^}]*)\}/)?.[1] || "";
 
 nodeTest("interaction and catalog mutation controls", async () => {

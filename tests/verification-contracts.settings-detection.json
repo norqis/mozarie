@@ -1508,7 +1508,7 @@
       "observation": "Delete で削除・確認を開始しない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_interaction_coverage.cjs::SD-113 disabled remove-image action ignores Delete"
+        "node:tests/editor/test_browser_interaction_runtime.cjs::SD-113 disabled remove-image action ignores Delete"
       ]
     },
     {
@@ -1519,7 +1519,7 @@
       "observation": "Delete で削除・確認を開始しない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_interaction_coverage.cjs::SD-114 global shortcut disable ignores Delete"
+        "node:tests/editor/test_browser_interaction_runtime.cjs::SD-114 global shortcut disable ignores Delete"
       ]
     },
     {

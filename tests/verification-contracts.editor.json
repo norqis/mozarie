@@ -782,7 +782,7 @@
       "status": "automated",
       "testIds": [
         "node:tests/test_import_picker_e2e.cjs::import picker browser coverage",
-        "node:tests/test_app_core_detection_coverage.cjs::application startup, catalog state, and detection controls"
+        "node:tests/app/test_startup_catalog_and_detection_controls.cjs::application startup, catalog state, and detection controls"
       ]
     },
     {
@@ -794,7 +794,7 @@
       "status": "automated",
       "testIds": [
         "node:tests/test_import_picker_e2e.cjs::import picker browser coverage",
-        "node:tests/test_app_core_detection_coverage.cjs::application startup, catalog state, and detection controls"
+        "node:tests/app/test_startup_catalog_and_detection_controls.cjs::application startup, catalog state, and detection controls"
       ]
     },
     {
@@ -806,7 +806,7 @@
       "status": "automated",
       "testIds": [
         "node:tests/test_import_picker_e2e.cjs::import picker browser coverage",
-        "node:tests/test_app_core_detection_coverage.cjs::application startup, catalog state, and detection controls"
+        "node:tests/app/test_startup_catalog_and_detection_controls.cjs::application startup, catalog state, and detection controls"
       ]
     },
     {
@@ -818,7 +818,7 @@
       "status": "automated",
       "testIds": [
         "node:tests/test_import_picker_e2e.cjs::import picker browser coverage",
-        "node:tests/test_app_core_detection_coverage.cjs::application startup, catalog state, and detection controls"
+        "node:tests/app/test_startup_catalog_and_detection_controls.cjs::application startup, catalog state, and detection controls"
       ]
     },
     {
@@ -830,7 +830,7 @@
       "status": "automated",
       "testIds": [
         "node:tests/test_import_picker_e2e.cjs::import picker browser coverage",
-        "node:tests/test_app_core_detection_coverage.cjs::application startup, catalog state, and detection controls"
+        "node:tests/app/test_startup_catalog_and_detection_controls.cjs::application startup, catalog state, and detection controls"
       ]
     },
     {
