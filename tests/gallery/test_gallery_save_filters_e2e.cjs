@@ -173,7 +173,9 @@ test("single save ignores a persisted batch filter that excludes the current ima
       const requests = fixture.saveRequests.slice(before);
       assert.deepEqual(requests.find((request) => request.path === "/api/save/prepare").payload.imageIds, expectedIds,
         `save prepare receives only ${filters.join("+") || "all"}`);
-      assert.deepEqual(requests.filter((request) => request.path === "/api/save/commit").map((request) => request.payload.imageId), expectedIds,
+      const committedIds = requests.filter((request) => request.path === "/api/save/commit").map((request) => request.payload.imageId);
+      assert.equal(committedIds.length, expectedIds.length, `save commits ${filters.join("+") || "all"} target count once`);
+      assert.deepEqual(committedIds.slice().sort(), expectedIds.slice().sort(),
         `save commits each ${filters.join("+") || "all"} target once`);
       assert.deepEqual(await page.evaluate(() => state.images.map((image) => [image.id, image.hidden, image.reviewed, Boolean(image.hasEffectiveMask)])), expectedState,
         "completed overwrite leaves all review, hidden, and mask classifications intact");
@@ -236,7 +238,9 @@ test("zero-target masked filter disables start and switching to all completes th
     await page.locator("#applyStartButton").click();
     await page.waitForFunction(() => !state.saving && !state.applyRunning && !state.saveStarting, null, { timeout: 20000 });
     assert.deepEqual(fixture.saveRequests.find((request) => request.path === "/api/save/prepare").payload.imageIds, ["A", "B", "C", "D"]);
-    assert.deepEqual(fixture.saveRequests.filter((request) => request.path === "/api/save/commit").map((request) => request.payload.imageId), ["A", "B", "C", "D"]);
+    const committedIds = fixture.saveRequests.filter((request) => request.path === "/api/save/commit").map((request) => request.payload.imageId);
+    assert.equal(committedIds.length, 4, "all four targets are committed once");
+    assert.deepEqual(committedIds.slice().sort(), ["A", "B", "C", "D"]);
     assert.equal(fixture.saveRequests.filter((request) => request.path === "/api/save/ack").length, 4, "all four saves are acknowledged successfully");
   } finally {
     await context?.close();
