@@ -156,6 +156,7 @@ function startFixtureServer(options = {}) {
   const catalogRemoveRequests = [];
   const folderRequests = [];
   let folderImportFailures = [];
+  const boundaryCandidates = new Map();
   const initialCatalog = [
     { id: "sample", relativePath: "sample.png", sourceKind: "filesystem", sourcePath: "G:\\画像 フォルダー\\sample image.png", width: 100, height: 80, candidateCount: 0, enabledCandidateCount: 0, reviewed: false, hidden: false },
     { id: "sample-two", relativePath: "sample-two.png", sourceKind: "session", width: 100, height: 80, candidateCount: 0, enabledCandidateCount: 0, reviewed: false, hidden: false },
@@ -290,6 +291,19 @@ function startFixtureServer(options = {}) {
       for await (const _chunk of request) { /* consume the selected absolute path */ }
       response.writeHead(200, { "Content-Type": "application/json" });
       response.end(JSON.stringify({ projects: [] }));
+      return;
+    }
+    if (requestPath === "/api/project/source/relink" && request.method === "POST") {
+      let body = ""; for await (const chunk of request) body += chunk;
+      const { projectId, sourceId, path: sourcePath } = JSON.parse(body);
+      if (projectId !== "fixture-project" || sourceId !== "fixture-source" || sourcePath !== "G:\\fixture-new") {
+        response.writeHead(400, { "Content-Type": "application/json" });
+        response.end(JSON.stringify({ error_code: "input_invalid" }));
+        return;
+      }
+      response.writeHead(200, { "Content-Type": "application/json" });
+      response.end(JSON.stringify({ ...catalogSnapshot(), project: { id: projectId, status: "working" },
+        sources: [{ id: sourceId, kind: "native-folder", exists: true, nativePath: sourcePath }] }));
       return;
     }
     if (/^\/api\/project\/masks\/[^/]+\/(mosaic|exclude)$/.test(requestPath) && request.method === "GET") {
@@ -639,8 +653,12 @@ function startFixtureServer(options = {}) {
     if (requestPath === "/api/boundary" && request.method === "POST") {
       let body = ""; for await (const chunk of request) body += chunk;
       const boundary = JSON.parse(body);
+      const previous = boundaryCandidates.get(boundary.imageId) || { candidates: [], candidateRevision: 0 };
+      const candidate = { id: `boundary-${boundary.imageId}-${previous.candidateRevision + 1}`, role: "apply", enabled: true, forced: false,
+        labelToken: "boundary", source: "boundary", refinement: null, confidence: 1, color: "#ff3d4d" };
+      boundaryCandidates.set(boundary.imageId, { candidates: [...previous.candidates, candidate], candidateRevision: previous.candidateRevision + 1 });
       response.writeHead(200, { "Content-Type": "application/json" });
-      response.end(JSON.stringify({ candidates: [{ id: `boundary-${Date.now()}`, role: "apply", enabled: true, forced: false, labelToken: "boundary", source: "boundary", refinement: null, confidence: 1, color: "#ff3d4d" }], candidateRevision: 1, boundary }));
+      response.end(JSON.stringify({ candidates: [candidate], candidateRevision: previous.candidateRevision + 1, boundary }));
       return;
     }
     if (requestPath.startsWith("/api/workspace/manual/")) {
@@ -652,8 +670,14 @@ function startFixtureServer(options = {}) {
       return;
     }
     if (requestPath.startsWith("/api/candidates/")) {
+      const imageId = decodeURIComponent(requestPath.slice("/api/candidates/".length));
       response.writeHead(200, { "Content-Type": "application/json" });
-      response.end(JSON.stringify({ candidates: [], candidateRevision: 0 }));
+      response.end(JSON.stringify(boundaryCandidates.get(imageId) || { candidates: [], candidateRevision: 0 }));
+      return;
+    }
+    if (requestPath.startsWith("/api/mask/")) {
+      response.writeHead(200, { "Content-Type": "image/png", "Content-Length": onePixelPng.length });
+      response.end(onePixelPng);
       return;
     }
     if (requestPath.startsWith("/api/image/")) {
@@ -687,7 +711,7 @@ function startFixtureServer(options = {}) {
     server.listen(0, "127.0.0.1", () => {
       server.off("error", reject);
       const { port } = server.address();
-      resolve({ server, url: `http://127.0.0.1:${port}`, detectRequests, applyRequests, saveRequests, renameRequests, catalogRemoveRequests, folderRequests, setFolderImportFailures: (failures) => { folderImportFailures = structuredClone(failures); }, catalogImageIds: () => catalog.map((image) => image.id), sourceDeleteRequests, sourceDeleteOperations: () => structuredClone([...sourceDeletes.entries()]), setSourceDeleteOperation: (token, operation) => sourceDeletes.set(token, structuredClone(operation)), setSourceDeleteCommitFailureIds: (imageIds) => { sourceDeleteCommitFailureIds = new Set(imageIds); }, setSourceDeleteCleanupPendingCount: (count) => { sourceDeleteCleanupPendingCount = count; }, setSourceDeletePrepareEmpty: (value) => { forceSourceDeletePrepareEmpty = value; }, holdSourceDeletePrepare: (value) => { holdSourceDeletePrepare = value; }, releaseSourceDeletePrepares: () => { holdSourceDeletePrepare = false; pendingSourceDeletePrepares.splice(0).forEach((resume) => resume()); }, holdSourceDeleteClaim: (value) => { holdSourceDeleteClaim = value; }, releaseSourceDeleteClaims: () => { holdSourceDeleteClaim = false; pendingSourceDeleteClaims.splice(0).forEach((resume) => resume()); }, settingsRequests, settingsPayloads, settingsActions, settingsStatusRequests, waitForSettingsStatusRequests: (count) => settingsStatusRequests.length >= count ? Promise.resolve() : new Promise((resolve) => settingsStatusWaiters.push({ count, resolve })), updateRequests, updateStarts, modelPickerRequests, modelDownloadRequests, modelDownloadJobs: () => modelDownloadJobs, modelDownloadPolls: () => modelDownloadPolls, cancelRequests: () => cancelRequests, holdDetection: (value) => { holdDetection = value; }, finishDetection: () => { currentJob = { ...currentJob, state: "complete", completed: currentJob.total, processed: currentJob.total, current: "", completedImageIds: currentJob.imageIds }; }, holdSaveRender: (value) => { holdSaveRender = value; }, releaseSaveRenders: () => { holdSaveRender = false; pendingSaveRenders.splice(0).forEach((resume) => resume()); }, failCancel: (value) => { cancelShouldFail = value; }, failNextSettingsSave: () => { failNextSettingsSave = true; }, failModelDownloadStatus: (value) => { failModelDownloadStatus = value; }, resetModelDownload: () => { modelDownloadJob = { state: "idle", paths: {} }; }, resetScenario: () => { catalog = structuredClone(initialCatalog); catalogGeneration += 1; saveTokens.clear(); sourceDeletes.clear(); sourceDeleteRequests.length = 0; pendingSourceDeletePrepares.splice(0).forEach((resume) => resume()); pendingSourceDeleteClaims.splice(0).forEach((resume) => resume()); holdSourceDeletePrepare = false; holdSourceDeleteClaim = false; sourceDeleteCommitFailureIds = new Set(); sourceDeleteCleanupPendingCount = 0; forceSourceDeletePrepareEmpty = false; saveRequests.length = 0; renameRequests.length = 0; catalogRemoveRequests.length = 0; folderRequests.length = 0; folderImportFailures = []; currentJob = { kind: "idle", state: "idle" }; }, setCatalog: (images) => { catalog = structuredClone(images); }, setDefaultOutputDirectory: (value) => { settings.saving.default_output_directory = value; }, resetJob: () => { currentJob = { kind: "idle", state: "idle" }; }, finishCancel: () => { currentJob = { ...currentJob, state: "cancelled", current: "" }; }, finishApply: () => { currentJob = { ...currentJob, state: "complete", completed: currentJob.total, current: "", completedImageIds: currentJob.imageIds }; }, setUpdateAvailable: (value) => { updateAvailable = value; }, setSettings: (value) => { settings = structuredClone(value); }, deferFullSettings: () => { deferFullSettings = true; }, releaseNextFullSettings: () => { pendingFullSettings.shift()?.(); }, releaseFullSettings: () => { deferFullSettings = false; pendingFullSettings.splice(0).forEach((reply) => reply()); }, deferUpdateStatus: () => { deferUpdateStatus = true; }, releaseUpdateStatus: () => { deferUpdateStatus = false; pendingUpdateStatus.splice(0).forEach((reply) => reply()); } });
+      resolve({ server, url: `http://127.0.0.1:${port}`, detectRequests, applyRequests, saveRequests, renameRequests, catalogRemoveRequests, folderRequests, setFolderImportFailures: (failures) => { folderImportFailures = structuredClone(failures); }, catalogImageIds: () => catalog.map((image) => image.id), sourceDeleteRequests, sourceDeleteOperations: () => structuredClone([...sourceDeletes.entries()]), setSourceDeleteOperation: (token, operation) => sourceDeletes.set(token, structuredClone(operation)), setSourceDeleteCommitFailureIds: (imageIds) => { sourceDeleteCommitFailureIds = new Set(imageIds); }, setSourceDeleteCleanupPendingCount: (count) => { sourceDeleteCleanupPendingCount = count; }, setSourceDeletePrepareEmpty: (value) => { forceSourceDeletePrepareEmpty = value; }, holdSourceDeletePrepare: (value) => { holdSourceDeletePrepare = value; }, releaseSourceDeletePrepares: () => { holdSourceDeletePrepare = false; pendingSourceDeletePrepares.splice(0).forEach((resume) => resume()); }, holdSourceDeleteClaim: (value) => { holdSourceDeleteClaim = value; }, releaseSourceDeleteClaims: () => { holdSourceDeleteClaim = false; pendingSourceDeleteClaims.splice(0).forEach((resume) => resume()); }, settingsRequests, settingsPayloads, settingsActions, settingsStatusRequests, waitForSettingsStatusRequests: (count) => settingsStatusRequests.length >= count ? Promise.resolve() : new Promise((resolve) => settingsStatusWaiters.push({ count, resolve })), updateRequests, updateStarts, modelPickerRequests, modelDownloadRequests, modelDownloadJobs: () => modelDownloadJobs, modelDownloadPolls: () => modelDownloadPolls, cancelRequests: () => cancelRequests, holdDetection: (value) => { holdDetection = value; }, finishDetection: () => { currentJob = { ...currentJob, state: "complete", completed: currentJob.total, processed: currentJob.total, current: "", completedImageIds: currentJob.imageIds }; }, holdSaveRender: (value) => { holdSaveRender = value; }, releaseSaveRenders: () => { holdSaveRender = false; pendingSaveRenders.splice(0).forEach((resume) => resume()); }, failCancel: (value) => { cancelShouldFail = value; }, failNextSettingsSave: () => { failNextSettingsSave = true; }, failModelDownloadStatus: (value) => { failModelDownloadStatus = value; }, resetModelDownload: () => { modelDownloadJob = { state: "idle", paths: {} }; }, resetScenario: () => { boundaryCandidates.clear(); catalog = structuredClone(initialCatalog); catalogGeneration += 1; saveTokens.clear(); sourceDeletes.clear(); sourceDeleteRequests.length = 0; pendingSourceDeletePrepares.splice(0).forEach((resume) => resume()); pendingSourceDeleteClaims.splice(0).forEach((resume) => resume()); holdSourceDeletePrepare = false; holdSourceDeleteClaim = false; sourceDeleteCommitFailureIds = new Set(); sourceDeleteCleanupPendingCount = 0; forceSourceDeletePrepareEmpty = false; saveRequests.length = 0; renameRequests.length = 0; catalogRemoveRequests.length = 0; folderRequests.length = 0; folderImportFailures = []; currentJob = { kind: "idle", state: "idle" }; }, setCatalog: (images) => { catalog = structuredClone(images); }, setDefaultOutputDirectory: (value) => { settings.saving.default_output_directory = value; }, resetJob: () => { currentJob = { kind: "idle", state: "idle" }; }, finishCancel: () => { currentJob = { ...currentJob, state: "cancelled", current: "" }; }, finishApply: () => { currentJob = { ...currentJob, state: "complete", completed: currentJob.total, current: "", completedImageIds: currentJob.imageIds }; }, setUpdateAvailable: (value) => { updateAvailable = value; }, setSettings: (value) => { settings = structuredClone(value); }, deferFullSettings: () => { deferFullSettings = true; }, releaseNextFullSettings: () => { pendingFullSettings.shift()?.(); }, releaseFullSettings: () => { deferFullSettings = false; pendingFullSettings.splice(0).forEach((reply) => reply()); }, deferUpdateStatus: () => { deferUpdateStatus = true; }, releaseUpdateStatus: () => { deferUpdateStatus = false; pendingUpdateStatus.splice(0).forEach((reply) => reply()); } });
     });
   });
 }
@@ -2198,10 +2222,11 @@ async function runControlLedger(page, fixtureUrl, contracts, finishCancel, holdS
       state: {
         tool: state.tool, view: state.viewMode, displayMode: state.displayMode, scale: state.view?.scale, history: state.history?.length, historyIndex: state.historyIndex,
         galleryCollapsed: state.galleryCollapsed, inspectorCollapsed: state.inspectorCollapsed, mosaicPreview: state.mosaicPreviewEnabled,
-        current: state.currentId, imageIds: state.images.map((image) => image.id), images: state.images.map((image) => ({ id: image.id, relativePath: image.relativePath, editedFilename: image.editedFilename, reviewed: image.reviewed, hidden: image.hidden })), selectedImageIds: [...state.selectedImageIds].sort(), batchMode: state.batchMode,
+        current: state.currentId, imageIds: state.images.map((image) => image.id), images: state.images.map((image) => ({ id: image.id, relativePath: image.relativePath, editedFilename: image.editedFilename, reviewed: image.reviewed, hidden: image.hidden, flipH: image.flipH, flipV: image.flipV, candidateCount: image.candidateCount })), selectedImageIds: [...state.selectedImageIds].sort(), batchMode: state.batchMode,
         galleryFilter: state.galleryFilter, overviewFilter: state.overviewFilter, overviewQuery: state.overviewQuery, overviewFolder: state.overviewFolder, hiddenCount: state.hiddenImageIds.size,
         candidateDisplay: [...state.blinkCandidateIds || []].sort(), candidateDisplayModes: [...state.blinkModes || []].sort(),
         catalogGeneration: state.serverCatalogGeneration, projectId: state.project?.id || null, contextMenuImageId: state.contextMenuImageId, renameImageId: state.renameImage?.imageId || null,
+        processing: state.processing ? { kind: state.processing.kind, state: state.processing.state } : null,
       },
       canvasHash,
       candidateControls: [...document.querySelectorAll("[data-candidate-batch], [data-candidate-display-toggle], [data-candidate-effective-toggle]")]
@@ -2216,6 +2241,8 @@ async function runControlLedger(page, fixtureUrl, contracts, finishCancel, holdS
     assert.ok(requests.length > 0, `${control} must issue a product API request`);
     if (endpoint) assert.ok(requests.some((request) => request.url.includes(endpoint)), `${control} must request ${endpoint}; got ${requests.map((request) => request.url).join(", ")}`);
   };
+  const exactRequests = (before, after, method, pathname) => after.api.slice(before.api.length).filter((request) =>
+    request.method === method && new URL(request.url, fixtureUrl).pathname === pathname);
   const assertOutputDirectoryPick = async (before, control, statusSelector, startSelector = null) => {
     await page.waitForFunction((count) => window.__ledgerApi.slice(count).some((request) => request.method === "POST" && request.url.includes("/api/output-directory/pick")), before.api.length);
     await page.waitForFunction(([statusId, startId]) => {
@@ -2300,14 +2327,37 @@ async function runControlLedger(page, fixtureUrl, contracts, finishCancel, holdS
     projectSourceAdd: (before, after) => assert.ok(after.pickers.directory > before.pickers.directory, "projectSourceAdd must invoke the directory picker"),
     projectSourceRelink: dialog("nativeRelinkDialog", true, "projectSourceRelink"),
     nativeRelinkCancel: dialog("nativeRelinkDialog", false, "nativeRelinkCancel"),
-    nativeRelinkConfirm: (before, after) => apiChanged(before, after, "nativeRelinkConfirm", "/api/project"),
+    nativeRelinkConfirm: async (before) => {
+      await page.waitForFunction(() => !document.querySelector("#nativeRelinkDialog").open && !nativeRelinkBusy && state.missingNativeSources.length === 0);
+      const after = await snapshot();
+      const requests = exactRequests(before, after, "POST", "/api/project/source/relink");
+      assert.equal(requests.length, 1, "nativeRelinkConfirm sends one source relink request");
+      const payload = JSON.parse(requests[0].body);
+      assert.deepEqual({ projectId: payload.projectId, sourceId: payload.sourceId, path: payload.path },
+        { projectId: "fixture-project", sourceId: "fixture-source", path: "G:\\fixture-new" }, "nativeRelinkConfirm relinks the selected source to the entered absolute path");
+      assert.equal(after.state.projectId, "fixture-project", "nativeRelinkConfirm retains the active project after relinking");
+      assert.equal(after.dialogs.nativeRelinkDialog, false, "nativeRelinkConfirm closes after the source is reconnected");
+      assert.equal(after.dialogs.errorDialog, false, "nativeRelinkConfirm completes without a user error");
+    },
     pickImages: (before, after) => assert.ok(after.pickers.files > before.pickers.files, "pickImages must invoke the file picker"),
     pickFolderFiles: (before, after) => assert.ok(after.pickers.directory > before.pickers.directory, "pickFolderFiles must invoke the directory picker"),
     // Project-aware folder imports first ask whether the source belongs to an
     // existing project.  The decisive import is still the folder request;
     // wait for it rather than mistaking that harmless preflight for the
     // control's result.
-    loadFolderButton: (before, after) => assert.equal(after.controls.folderPath.value, "G:\\fixture", "loadFolderButton keeps the entered absolute folder path"),
+    loadFolderButton: async (before) => {
+      await page.waitForFunction((count) => window.__ledgerApi.slice(count).some((request) =>
+        request.method === "POST" && new URL(request.url, location.href).pathname === "/api/folder")
+        && !state.catalogTransition && state.images.length === 2, before.api.length);
+      const after = await snapshot();
+      const requests = exactRequests(before, after, "POST", "/api/folder");
+      assert.equal(requests.length, 1, "loadFolderButton sends one folder import request");
+      assert.equal(JSON.parse(requests[0].body).path, "G:\\fixture", "loadFolderButton submits the entered absolute path");
+      assert.deepEqual(after.state.imageIds, ["sample", "sample-two"], "loadFolderButton settles with both imported images");
+      assert.deepEqual(await page.locator(".gallery-item").evaluateAll((items) => items.map((item) => item.dataset.id)),
+        ["sample", "sample-two"], "loadFolderButton renders the imported catalog in the gallery");
+      assert.equal(after.dialogs.errorDialog, false, "loadFolderButton completes without a user error");
+    },
     settingsButton: dialog("settingsDialog", true, "settingsButton"), updateToast: dialog("settingsDialog", true, "updateToast"),
     batchMoreButton: (before, after) => assert.equal(after.popovers.batchMoreMenu, true, "batchMoreButton must open the batch menu"),
     galleryFilterButton: (before, after) => assert.equal(after.popovers.galleryFilterMenu, true, "galleryFilterButton must open its filter menu"),
@@ -2321,8 +2371,28 @@ async function runControlLedger(page, fixtureUrl, contracts, finishCancel, holdS
     singleViewButton: (before, after) => assert.equal(after.state.displayMode, "single", "singleViewButton must select the single editor view"),
     compareViewButton: (before, after) => assert.equal(after.state.displayMode, "compare", "compareViewButton must select the compare editor view"),
     fitButton: () => assertFitPostcondition(),
-    flipHorizontalButton: (before, after) => apiChanged(before, after, "flipHorizontalButton", "/transform"),
-    flipVerticalButton: (before, after) => apiChanged(before, after, "flipVerticalButton", "/transform"),
+    flipHorizontalButton: async (before) => {
+      const target = before.state.images.find((image) => image.id === before.state.current);
+      const expected = target.flipH !== true;
+      await page.waitForFunction((value) => !state.transformPending && currentRecord()?.flipH === value, expected);
+      const after = await snapshot();
+      const requests = exactRequests(before, after, "POST", `/api/images/${encodeURIComponent(before.state.current)}/transform`);
+      assert.equal(requests.length, 1, "flipHorizontalButton saves one transform for the selected image");
+      assert.equal(JSON.parse(requests[0].body).flipH, expected, "flipHorizontalButton submits the changed horizontal orientation");
+      assert.equal(after.controls.flipHorizontalButton.pressed, String(expected), "flipHorizontalButton displays the saved orientation");
+      assert.equal(after.dialogs.errorDialog, false, "flipHorizontalButton completes without an error");
+    },
+    flipVerticalButton: async (before) => {
+      const target = before.state.images.find((image) => image.id === before.state.current);
+      const expected = target.flipV !== true;
+      await page.waitForFunction((value) => !state.transformPending && currentRecord()?.flipV === value, expected);
+      const after = await snapshot();
+      const requests = exactRequests(before, after, "POST", `/api/images/${encodeURIComponent(before.state.current)}/transform`);
+      assert.equal(requests.length, 1, "flipVerticalButton saves one transform for the selected image");
+      assert.equal(JSON.parse(requests[0].body).flipV, expected, "flipVerticalButton submits the changed vertical orientation");
+      assert.equal(after.controls.flipVerticalButton.pressed, String(expected), "flipVerticalButton displays the saved orientation");
+      assert.equal(after.dialogs.errorDialog, false, "flipVerticalButton completes without an error");
+    },
     undoButton: async (before) => {
       const target = before.state.historyIndex - 1;
       assert.ok(before.state.historyIndex > 0, "undoButton has an undoable history position");
@@ -2366,14 +2436,39 @@ async function runControlLedger(page, fixtureUrl, contracts, finishCancel, holdS
     removeFromListButton: async (before) => { await page.waitForFunction((id) => !state.images.some((image) => image.id === id), before.state.current); assert.ok(!(await snapshot()).state.imageIds.includes(before.state.current)); },
     removeFromListMenuItem: async (before) => { await page.waitForFunction((count) => state.images.length < count, before.state.imageIds.length); assert.equal(await page.locator("#catalogContextMenu").evaluate((menu) => menu.matches(":popover-open")), false); },
     removeAndNextButton: dialog("confirmDialog", true, "removeAndNextButton"), removeCurrentImageButton: async (before) => { await page.waitForFunction((count) => state.hiddenImageIds.size !== count, before.state.hiddenCount); assert.notEqual((await snapshot()).state.hiddenCount, before.state.hiddenCount, "removeCurrentImageButton must toggle hidden state"); },
-    boundaryDetectButton: (before, after) => apiChanged(before, after, "boundaryDetectButton", "/api/boundary"),
+    boundaryDetectButton: async (before) => {
+      const count = before.state.images.find((image) => image.id === before.state.current)?.candidateCount || 0;
+      await page.waitForFunction((previous) => !state.boundaryPending && (currentRecord()?.candidateCount || 0) > previous, count);
+      const after = await snapshot();
+      const requests = exactRequests(before, after, "POST", "/api/boundary");
+      assert.equal(requests.length, 1, "boundaryDetectButton submits one boundary request");
+      assert.equal(JSON.parse(requests[0].body).imageId, before.state.current, "boundaryDetectButton targets the selected image");
+      assert.ok((after.state.images.find((image) => image.id === before.state.current)?.candidateCount || 0) > count,
+        "boundaryDetectButton adds the detected candidate to the gallery image");
+      assert.equal(after.dialogs.errorDialog, false, "boundaryDetectButton finishes without an error");
+    },
     boundaryCancelButton: (before, after) => assert.equal(after.flags.boundaryActionsHidden, true, "boundaryCancelButton must hide boundary actions"),
     detectCurrentButton: dialog("processingDialog", true, "detectCurrentButton"), saveButton: dialog("singleSaveDialog", true, "saveButton"), saveAllButton: dialog("applyDialog", true, "saveAllButton"),
     clearCurrentMasksButton: dialog("confirmDialog", true, "clearCurrentMasksButton"),
     batchModeButton: (before, after) => assert.equal(after.state.batchMode, true, "batchModeButton must enable batch mode"),
     selectionActionsButton: (before, after) => assert.equal(after.popovers.selectionActionsMenu, true, "selectionActionsButton must open selection actions"),
     selectionClearButton: (before, after) => assert.equal(after.state.batchMode, false, "selectionClearButton must clear batch mode"),
-    toggleReviewMenuItem: (before, after) => assert.equal(after.popovers.catalogContextMenu, false, "toggleReviewMenuItem must complete and close the catalog context menu"),
+    toggleReviewMenuItem: async (before) => {
+      const target = before.state.contextMenuImageId;
+      assert.ok(target, "toggleReviewMenuItem targets the right-clicked image");
+      const reviewedBefore = before.state.images.find((image) => image.id === target)?.reviewed === true;
+      await page.waitForFunction(([imageId, expected]) => {
+        const image = state.images.find((entry) => entry.id === imageId);
+        return image && isReviewed(image) === expected && !state.workspaceFlagPending.has(`${imageId}:reviewed`);
+      }, [target, !reviewedBefore]);
+      const after = await snapshot();
+      const requests = exactRequests(before, after, "POST", `/api/workspace/image/${encodeURIComponent(target)}`);
+      assert.equal(requests.length, 1, "toggleReviewMenuItem persists exactly one review change");
+      assert.equal(JSON.parse(requests[0].body).reviewed, !reviewedBefore, "toggleReviewMenuItem sends the new review flag");
+      assert.equal(after.state.images.find((image) => image.id === target)?.reviewed, !reviewedBefore, "toggleReviewMenuItem settles the selected image flag");
+      assert.equal(after.popovers.catalogContextMenu, false, "toggleReviewMenuItem closes the catalog context menu");
+      assert.equal(after.dialogs.errorDialog, false, "toggleReviewMenuItem does not report a failed save");
+    },
     copyImagePathMenuItem: (before, after) => assert.ok(after.clipboardWrites > before.clipboardWrites, "copyImagePathMenuItem must write the clipboard"),
     renameImageMenuItem: async (before) => {
       await page.waitForFunction((imageId) => document.querySelector("#renameImageDialog").open && state.renameImage?.imageId === imageId, before.state.contextMenuImageId);
@@ -2432,7 +2527,15 @@ async function runControlLedger(page, fixtureUrl, contracts, finishCancel, holdS
     settingsChooseOutputDirectory: (before) => assertOutputDirectoryPick(before, "settingsChooseOutputDirectory", "#settingsDefaultOutputDirectory"),
     checkUpdateButton: dialog("confirmDialog", true, "checkUpdateButton"),
     settingsResetButton: async (before, after) => { await page.waitForFunction((count) => window.__ledgerApi.slice(count).some((request) => request.url.includes("/api/settings/reset")), before.api.length); apiChanged(before, await snapshot(), "settingsResetButton", "/api/settings/reset"); },
-    settingsSaveButton: (before, after) => apiChanged(before, after, "settingsSaveButton", "/api/settings"),
+    settingsSaveButton: async (before) => {
+      await page.waitForFunction(() => document.querySelector("#settingsResult").textContent === "設定を保存しました。" && !document.querySelector("#settingsSaveButton").disabled);
+      const after = await snapshot();
+      const requests = exactRequests(before, after, "POST", "/api/settings").filter((request) => new URL(request.url, fixtureUrl).search === "?status=0");
+      assert.equal(requests.length, 1, "settingsSaveButton submits one complete settings save");
+      assert.equal(JSON.parse(requests[0].body).general.port, 8788, "settingsSaveButton submits the changed port setting");
+      assert.equal(await page.locator("#settingsPort").inputValue(), "8788", "settingsSaveButton displays the saved value");
+      assert.equal(after.dialogs.errorDialog, false, "settingsSaveButton finishes without an error dialog");
+    },
     modelDownloadClose: dialog("modelDownloadDialog", false, "modelDownloadClose"),
     modelDownloadCopy: (before, after) => assert.ok(after.clipboardWrites > before.clipboardWrites, "modelDownloadCopy must write the clipboard"),
     modelDownloadStart: (before, after) => apiChanged(before, after, "modelDownloadStart", "/api/model-download/start"),
@@ -2445,8 +2548,23 @@ async function runControlLedger(page, fixtureUrl, contracts, finishCancel, holdS
     applyPauseButton: async () => { await page.waitForFunction(() => state.browserSave?.paused === true); },
     applyCancelButton: async () => { await page.waitForFunction(() => state.browserSave?.cancelled === true); },
     applyStartButton: async () => { await page.waitForFunction(() => state.applyRunning && state.saving); },
-    processingPauseButton: (before, after) => apiChanged(before, after, "processingPauseButton", "/api/job/"),
-    processingCancelButton: (before, after) => apiChanged(before, after, "processingCancelButton", "/api/job/cancel"),
+    processingPauseButton: async (before) => {
+      const target = before.state.processing?.state === "paused" ? "running" : "paused";
+      const endpoint = target === "paused" ? "/api/job/pause" : "/api/job/resume";
+      await page.waitForFunction((expected) => state.processing?.state === expected, target);
+      const after = await snapshot();
+      assert.equal(exactRequests(before, after, "POST", endpoint).length, 1, `processingPauseButton sends one ${target} request`);
+      assert.equal(after.state.processing?.state, target, `processingPauseButton visibly enters ${target}`);
+      assert.equal(after.dialogs.errorDialog, false, "processingPauseButton does not report a failed job action");
+    },
+    processingCancelButton: async (before) => {
+      await page.waitForFunction(() => state.job?.kind === "detect" && state.job?.cancelRequested === true && document.querySelector("#processingCancelButton").disabled);
+      const after = await snapshot();
+      assert.equal(exactRequests(before, after, "POST", "/api/job/cancel").length, 1, "processingCancelButton sends one cancellation request");
+      assert.equal(after.controls.processingCancelButton.disabled, true, "processingCancelButton remains disabled during in-flight cancellation");
+      assert.equal(after.dialogs.processingDialog, true, "processingCancelButton keeps progress visible until the worker stops");
+      assert.equal(after.dialogs.errorDialog, false, "processingCancelButton does not report a failed cancellation");
+    },
     importFailuresClose: dialog("importFailuresDialog", false, "importFailuresClose"),
     modelHelpCloseButton: dialog("modelHelpDialog", false, "modelHelpCloseButton"),
     modelHelpCopy: (before, after) => assert.ok(after.clipboardWrites > before.clipboardWrites, "modelHelpCopy must write the clipboard"),
@@ -2956,20 +3074,23 @@ async function runControlLedger(page, fixtureUrl, contracts, finishCancel, holdS
   await click("settingsTabConfirm"); for (const id of ["confirmClearMasks", "confirmClearCatalog", "confirmRemoveImage", "confirmCandidateDelete", "confirmCandidateRoleDelete", "confirmOverwriteSource", "confirmDeleteSourceAfterCopy"]) await input(id, true);
   await click("settingsTabInfo"); await click("checkUpdateButton");
   if (await page.locator("#confirmDialog").evaluate((dialog) => dialog.open)) await page.locator("#confirmDialog").press("Escape");
-  await click("settingsResetButton"); await click("settingsSaveButton"); await click("settingsCloseButton");
+  await click("settingsResetButton"); await page.locator("#settingsTabGeneral").click();
+  await input("settingsPort", "8788"); await click("settingsSaveButton"); await click("settingsCloseButton");
+  await setupFixture();
+  assert.equal(await page.locator("#settingsPort").inputValue(), "8788", "saved settings survive a fresh page load");
 
   // Source actions require an active project and a relinkable source.  This
   // setup mirrors the public project snapshot before exercising the controls.
   await page.evaluate(() => {
     state.project = { id: "fixture-project", status: "working" };
     state.projectReadOnly = false;
-    state.missingNativeSources = [{ id: "fixture-source", nativePath: "G:\\fixture-old", relativePath: "sample.png" }];
+    state.missingNativeSources = [{ id: "fixture-source", kind: "native-folder", exists: false, nativePath: "G:\\fixture-old", relativePath: "sample.png" }];
     renderProjectCurrent();
   });
   await page.locator("#projectButton").click();
   await click("projectSourceAdd");
   await click("projectSourceRelink"); await input("nativeRelinkPath", "G:\\fixture-new"); await click("nativeRelinkCancel");
-  await click("projectSourceRelink"); await click("nativeRelinkConfirm");
+  await click("projectSourceRelink"); await input("nativeRelinkPath", "G:\\fixture-new"); await click("nativeRelinkConfirm");
   if (await page.locator("#errorDialog").evaluate((dialog) => dialog.open)) await click("errorDialogClose");
   if (await page.locator("#nativeRelinkDialog").evaluate((dialog) => dialog.open)) await page.locator("#nativeRelinkCancel").click();
   await page.locator("#projectClose").click();
