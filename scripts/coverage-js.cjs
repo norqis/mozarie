@@ -1,3 +1,5 @@
+"use strict";
+
 const assert = require("node:assert/strict");
 const childProcess = require("node:child_process");
 const fs = require("node:fs");
@@ -8,7 +10,7 @@ const v8ToIstanbul = require("v8-to-istanbul");
 const { createCoverageMap } = require("istanbul-lib-coverage");
 const libReport = require("istanbul-lib-report");
 const reports = require("istanbul-reports");
-const { frontendTestArguments, frontendTestFiles } = require("./test-discovery.cjs");
+const { frontendTestArguments, frontendTestFiles, selectedFrontendTestFiles } = require("./test-discovery.cjs");
 
 const root = path.resolve(__dirname, "..");
 const staticRoot = path.join(root, "static", "js");
@@ -19,6 +21,25 @@ const nodeCoverageTemp = path.join(coverageRoot, "v8");
 const browserCoverageFile = path.join(coverageRoot, "browser-v8.json");
 const testFiles = frontendTestFiles();
 
+function parseArguments(argv) {
+  if (!argv.length) return { shardIndex: null, shardTotal: null, manifest: null };
+  let shardIndex = null;
+  let shardTotal = null;
+  let manifest = null;
+  for (let index = 0; index < argv.length; index += 2) {
+    const option = argv[index];
+    const value = argv[index + 1];
+    if (!value || !["--shard-index", "--shard-total", "--manifest"].includes(option)) throw new Error("usage: node scripts/coverage-js.cjs [--shard-index INDEX --shard-total TOTAL --manifest FILE]");
+    if (option === "--shard-index") shardIndex = Number(value);
+    if (option === "--shard-total") shardTotal = Number(value);
+    if (option === "--manifest") manifest = path.resolve(value);
+  }
+  if (!Number.isInteger(shardIndex) || !Number.isInteger(shardTotal) || shardTotal < 1 || shardIndex < 0 || shardIndex >= shardTotal || !manifest) {
+    throw new Error("usage: node scripts/coverage-js.cjs [--shard-index INDEX --shard-total TOTAL --manifest FILE]");
+  }
+  return { shardIndex, shardTotal, manifest };
+}
+
 function staticFiles(directory = staticRoot) {
   return fs.readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
     const file = path.join(directory, entry.name);
@@ -27,7 +48,7 @@ function staticFiles(directory = staticRoot) {
   });
 }
 
-function runNodeCoverage() {
+function runNodeCoverage(files = testFiles) {
   const c8 = require.resolve("c8/bin/c8.js");
   const result = childProcess.spawnSync(process.execPath, [
     c8,
@@ -38,7 +59,7 @@ function runNodeCoverage() {
     "--temp-directory", nodeCoverageTemp,
     "--clean",
     process.execPath,
-    ...frontendTestArguments(testFiles),
+    ...frontendTestArguments(files),
   ], {
     cwd: root,
     env: {
@@ -49,7 +70,7 @@ function runNodeCoverage() {
     stdio: "inherit",
   });
   if (result.error) throw result.error;
-  assert.equal(result.status, 0, "the existing frontend and browser tests must pass before coverage is evaluated");
+  assert.equal(result.status, 0, "the selected frontend and browser tests must pass before coverage is accepted");
 }
 
 function sourceFileForCoverageEntry(entry) {
@@ -60,9 +81,9 @@ function sourceFileForCoverageEntry(entry) {
   return path.resolve(root, "static", url.pathname.slice(1).split("/").join(path.sep));
 }
 
-function nodeCoverageMap() {
-  const nodeCoverageFile = path.join(nodeCoverageRoot, "coverage-final.json");
-  assert.ok(fs.existsSync(nodeCoverageFile), "c8 did not create a Node/VM coverage report");
+function nodeCoverageMap(directory = nodeCoverageRoot) {
+  const nodeCoverageFile = path.join(directory, "coverage-final.json");
+  assert.ok(fs.existsSync(nodeCoverageFile), `Node coverage JSON was not created: ${nodeCoverageFile}`);
   return createCoverageMap(JSON.parse(fs.readFileSync(nodeCoverageFile, "utf8")));
 }
 
@@ -90,31 +111,85 @@ async function browserCoverageMap(entries) {
 async function combinedCoverageMap() {
   const nodeMap = nodeCoverageMap();
   assert.ok(fs.existsSync(browserCoverageFile), "browser coverage output was not written");
-  const browserEntries = JSON.parse(fs.readFileSync(browserCoverageFile, "utf8"));
-  nodeMap.merge(await browserCoverageMap(browserEntries));
+  nodeMap.merge(await browserCoverageMap(JSON.parse(fs.readFileSync(browserCoverageFile, "utf8"))));
   return nodeMap;
 }
 
 function verifyCoverage(map) {
   const missing = [];
   for (const file of staticFiles()) {
-    if (!map.data[file]) {
-      missing.push(path.relative(root, file).replaceAll("\\", "/"));
-    }
+    if (!map.data[file]) missing.push(path.relative(root, file).replaceAll("\\", "/"));
   }
   assert.deepEqual(missing, [], `unmeasured static JavaScript files:\n${missing.join("\n")}`);
 }
 
-async function main() {
+function writeCoverageReports(map, reportDirectory) {
+  const context = libReport.createContext({ dir: reportDirectory, coverageMap: map });
+  reports.create("json").execute(context);
+  reports.create("text", { maxCols: Infinity }).execute(context);
+}
+
+function readJson(file, label) {
+  try { return JSON.parse(fs.readFileSync(file, "utf8")); }
+  catch (error) { throw new Error(`${label} is missing or corrupt (${file}): ${error.message}`); }
+}
+
+async function mergeFrontendShardCoverage(shardDirectories, reportDirectory, dependencies = {}) {
+  if (!shardDirectories.length) throw new Error("frontend shard coverage has no inputs");
+  const convertBrowser = dependencies.browserCoverageMap || browserCoverageMap;
+  const verify = dependencies.verifyCoverage || verifyCoverage;
+  const write = dependencies.writeCoverageReports || writeCoverageReports;
+  const combined = createCoverageMap({});
+  let browserInputs = 0;
+  for (const directory of shardDirectories) {
+    combined.merge(createCoverageMap(readJson(path.join(directory, "node", "coverage-final.json"), "frontend shard Node coverage")));
+    const browserFile = path.join(directory, "browser-v8.json");
+    if (fs.existsSync(browserFile)) {
+      combined.merge(await convertBrowser(readJson(browserFile, "frontend shard browser coverage")));
+      browserInputs += 1;
+    }
+  }
+  if (!browserInputs) throw new Error("frontend shard coverage has no browser V8 input");
+  verify(combined);
+  write(combined, reportDirectory);
+  return combined;
+}
+
+function writeShardManifest(file, manifest) {
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+}
+
+async function runSerial() {
   fs.rmSync(coverageRoot, { recursive: true, force: true });
   fs.mkdirSync(coverageRoot, { recursive: true });
   runNodeCoverage();
   const combined = await combinedCoverageMap();
-  const reportDirectory = path.join(coverageRoot, "report");
-  const context = libReport.createContext({ dir: reportDirectory, coverageMap: combined });
-  reports.create("json").execute(context);
-  reports.create("text", { maxCols: Infinity }).execute(context);
+  writeCoverageReports(combined, path.join(coverageRoot, "report"));
   verifyCoverage(combined);
+}
+
+async function runShard({ shardIndex, shardTotal, manifest: manifestPath }) {
+  const selected = selectedFrontendTestFiles(testFiles, shardIndex, shardTotal);
+  const manifest = { schema: 1, shard: { index: shardIndex, total: shardTotal }, discovered: testFiles, selected, status: "error" };
+  fs.rmSync(coverageRoot, { recursive: true, force: true });
+  fs.mkdirSync(coverageRoot, { recursive: true });
+  writeShardManifest(manifestPath, manifest);
+  try {
+    runNodeCoverage(selected);
+    manifest.status = "passed";
+  } catch (error) {
+    manifest.status = "failed";
+    throw error;
+  } finally {
+    writeShardManifest(manifestPath, manifest);
+  }
+}
+
+async function main() {
+  const options = parseArguments(process.argv.slice(2));
+  if (options.shardIndex === null) await runSerial();
+  else await runShard(options);
 }
 
 if (require.main === module) {
@@ -126,4 +201,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { browserCoverageMap, testFiles };
+module.exports = { browserCoverageMap, mergeFrontendShardCoverage, nodeCoverageMap, parseArguments, testFiles, verifyCoverage, writeCoverageReports };

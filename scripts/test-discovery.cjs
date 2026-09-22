@@ -30,4 +30,11 @@ function frontendTestArguments(files = frontendTestFiles()) {
   return ["--test", "--test-reporter=./scripts/strict-tap-reporter.cjs", "--test-concurrency=1", ...files];
 }
 
-module.exports = { frontendPerformanceTestFiles, frontendTestArguments, frontendTestFiles };
+function selectedFrontendTestFiles(files, shardIndex, shardTotal) {
+  if (!Array.isArray(files) || !Number.isInteger(shardIndex) || !Number.isInteger(shardTotal) || shardTotal < 1 || shardIndex < 0 || shardIndex >= shardTotal) {
+    throw new Error("frontend shard index must be within shard total");
+  }
+  return files.filter((_, position) => position % shardTotal === shardIndex);
+}
+
+module.exports = { frontendPerformanceTestFiles, frontendTestArguments, frontendTestFiles, selectedFrontendTestFiles };

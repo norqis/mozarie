@@ -56,6 +56,10 @@ Pythonの自動テストは製品の`.venv`を参照・変更しない。リポ�
 
 CIは隔離fixtureで実行できるテストを常に実行する。frontend jobはcoverageを完了してから、非instrumentedの20,000件カタログ性能試験を1回実行する。Playwrightは利用者に見える画面と隔離した`BrowserContext`を使い、固定待機ではなくlocatorや応答などのweb-first条件で待つ。coverageは全対象のレポートを毎回生成し、未検証の境界を見つける補助にする。100%などの数値を合否条件にせず、損失・破損・権限・復旧の重要経路を人が確認する。数値達成のためのテスト、内部実装を固定するテスト、skipによる見かけの成功を作らない。実行時間やメモリが増える回帰は、小さいfixtureで件数に比例しないことを確認する。
 
+CIのfrontend通常テストは、再帰探索したファイル一覧を辞書順に並べ、位置を二つのshardへ交互に割り当てる。各shard内はブラウザーfixtureのCPU競合を避けるため一並列のまま実行し、完全な探索一覧・選択一覧・実行結果・Node coverage・browser V8 coverageを別々のartifactへ保存する。集約jobは両shardのindex、探索一覧、期待partition、和集合、重複、pass、skip、todoを検査してからcoverageを結合し、確認項目の契約台帳を一度だけ照合する。新しいテストファイルは手動一覧を更新せず、どちらか一方へ必ず割り当てられる。
+
+20,000件カタログ性能試験は通常shardへ混ぜず、専用jobで一度だけ実行する。集約jobはそのmanifestと成功結果も必須にする。公開される必須checkは集約jobの `frontend` とし、shardまたは性能jobの失敗を明示して失敗する。ローカルの `npm test` は従来どおり全frontendテストを直列実行する。`test-quiet frontend` の12分上限は、その全件直列実行が停止したことを検出する監視時間であり、製品データや処理件数の上限ではない。
+
 各suiteの子プロセスには用途別の上限時間を置き、失敗または時間切れでは経過時間と完全な標準出力・標準エラーをsuite artifactへ残す。CIはcoverageの有無にかかわらずsuite artifact全体をuploadする。ローカルでbackendの実行環境を明示する必要がある場合だけ、`MOZARIE_TEST_PYTHON`にPython実行ファイルを指定する。製品用`.venv`やGPU設定はテスト実行環境の選択に使わない。
 
 高回数のbrowser File System Access保存量試験は、操作回数と実ファイル・実SQLの境界を保つ。OS同期だけは、その試験の専用SaveJournal接続で省略できる。SaveJournalの障害、再起動回復、耐久性の契約は通常の同期設定で別に実行する。

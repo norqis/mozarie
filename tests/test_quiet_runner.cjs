@@ -197,6 +197,11 @@ async function runFrontendCases() {
 }
 
 assert.deepEqual(runner.parseArguments(["frontend", "--artifacts", "coverage-artifacts"]).suite, "frontend", "the requested suite is parsed");
+assert.deepEqual(runner.parseArguments(["frontend-shard", "--shard-index", "1", "--shard-total", "2"]).shardIndex, 1, "a frontend shard has a stable zero-based index");
+assert.equal(runner.parseArguments(["frontend-performance"]).suite, "frontend-performance", "the performance suite is independently runnable");
+assert.equal(runner.parseArguments(["frontend-aggregate", "--shard-artifacts", "coverage-artifacts", "--performance-artifacts", "performance-artifacts"]).suite, "frontend-aggregate", "frontend aggregate requires shard and performance artifacts");
+assert.throws(() => runner.parseArguments(["frontend-shard"]), /usage/, "frontend shard requires an explicit partition");
+assert.throws(() => runner.parseArguments(["frontend-aggregate", "--shard-artifacts", "coverage-artifacts"]), /usage/, "frontend aggregate cannot omit the performance artifact");
 assert.deepEqual(runner.parseArguments(["backend", "--shard-index", "1", "--shard-total", "2"]).shardIndex, 1, "a backend shard has a stable zero-based index");
 assert.throws(() => runner.parseArguments(["backend", "--shard-index", "2", "--shard-total", "2"]), /usage/, "an out-of-range backend shard is rejected before execution");
 assert.equal(runner.parseArguments(["backend-aggregate", "--shard-artifacts", "coverage-artifacts"]).suite, "backend-aggregate", "the aggregate runner requires downloaded shard artifacts");
