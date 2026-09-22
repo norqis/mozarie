@@ -5,7 +5,6 @@ import contextlib
 import http.client
 import importlib
 import json
-import shutil
 import tempfile
 import threading
 import uuid
@@ -15,6 +14,7 @@ from unittest.mock import Mock, patch
 from http import HTTPStatus
 
 from PIL import Image, PngImagePlugin
+from tests import prepare_test_app_config
 
 from mozarie import catalog as catalog_module
 from mozarie import http as http_module
@@ -37,7 +37,7 @@ class FolderLoadLoggingContractTests(unittest.TestCase):
         self._temporary_directory = tempfile.TemporaryDirectory()
         self.root = Path(self._temporary_directory.name).resolve()
         self.app_dir = self.root / "app"
-        shutil.copytree(Path(__file__).parents[1] / "config", self.app_dir / "config")
+        prepare_test_app_config(self.app_dir)
         self.states: list[StudioState] = []
 
     def tearDown(self) -> None:

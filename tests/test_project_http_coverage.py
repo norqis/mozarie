@@ -14,7 +14,6 @@ import io
 import json
 import base64
 import contextlib
-import shutil
 import tempfile
 import threading
 import time
@@ -26,6 +25,7 @@ from unittest.mock import Mock, patch
 
 import numpy as np
 from PIL import Image
+from tests import prepare_test_app_config
 
 import mozarie.http as http_module
 import mozarie.state as state_module
@@ -40,7 +40,7 @@ class ProjectHttpCoverageTests(unittest.TestCase):
         self._temporary_directory = tempfile.TemporaryDirectory()
         self.root = Path(self._temporary_directory.name)
         self.app_dir = self.root / "app"
-        shutil.copytree(Path(__file__).resolve().parents[1] / "config", self.app_dir / "config")
+        prepare_test_app_config(self.app_dir)
         self.source_dir = self.root / "images"
         self.source_dir.mkdir()
         Image.new("RGB", (12, 8), "white").save(self.source_dir / "source.png")

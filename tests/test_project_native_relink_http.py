@@ -6,7 +6,6 @@ import base64
 import http.client
 import io
 import json
-import shutil
 import tempfile
 import threading
 import unittest
@@ -15,6 +14,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from PIL import Image
+from tests import prepare_test_app_config
 
 import mozarie.http as http_module
 import mozarie.state as state_module
@@ -28,7 +28,7 @@ class ProjectNativeRelinkHttpTests(unittest.TestCase):
         self._temporary = tempfile.TemporaryDirectory()
         self.root = Path(self._temporary.name)
         self.app_dir = self.root / "app"
-        shutil.copytree(Path(__file__).resolve().parents[1] / "config", self.app_dir / "config")
+        prepare_test_app_config(self.app_dir)
         self.native = self.root / "native"; self.native.mkdir()
         self.relinked = self.root / "relinked"; self.relinked.mkdir()
         self.other_native = self.root / "other-native"; self.other_native.mkdir()

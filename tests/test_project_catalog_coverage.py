@@ -15,6 +15,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from PIL import Image
+from tests import prepare_test_app_config
 
 import mozarie.state as state_module
 from mozarie.core import ClientError
@@ -27,7 +28,7 @@ class ProjectCatalogCoverageTests(unittest.TestCase):
         self._temporary = tempfile.TemporaryDirectory()
         self.root = Path(self._temporary.name)
         self.app_dir = self.root / "app"
-        shutil.copytree(Path(__file__).resolve().parents[1] / "config", self.app_dir / "config")
+        prepare_test_app_config(self.app_dir)
         self.cache_dir = self.root / "cache"
         self.states: list[StudioState] = []
 

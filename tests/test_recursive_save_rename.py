@@ -3,12 +3,12 @@ import threading
 import unittest
 import base64
 import io
-import shutil
 import sqlite3
 from pathlib import Path
 from unittest.mock import Mock, patch
 
 from PIL import Image
+from tests import prepare_test_app_config
 
 import mozarie.state as state_module
 from mozarie.core import BrowserSaveToken, ClientError, ImageRecord
@@ -89,7 +89,7 @@ class RecursiveSaveTests(unittest.TestCase):
     def test_flatten_publish_race_never_reassigns_the_final_name(self):
         with tempfile.TemporaryDirectory() as raw:
             root = Path(raw); source = root / "source.png"; Image.new("RGB", (8, 8), "white").save(source)
-            app_dir = root / "app"; shutil.copytree(Path(__file__).resolve().parents[1] / "config", app_dir / "config")
+            app_dir = root / "app"; prepare_test_app_config(app_dir)
             with patch.object(state_module, "APP_DIR", app_dir):
                 state = StudioState(root / "cache", root / "sessions")
             try:
@@ -195,7 +195,7 @@ class RenameJournalTests(unittest.TestCase):
 class StudioStateNativeRenameTests(unittest.TestCase):
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory(); self.root = Path(self.temporary.name)
-        self.app_dir = self.root / "app"; shutil.copytree(Path(__file__).resolve().parents[1] / "config", self.app_dir / "config")
+        self.app_dir = self.root / "app"; prepare_test_app_config(self.app_dir)
         self.source_root = self.root / "sources"; self.source_root.mkdir()
         self.source = self.source_root / "nested" / "source.png"; self.source.parent.mkdir(); Image.new("RGB", (8, 8), "white").save(self.source)
         self.states: list[StudioState] = []

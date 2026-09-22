@@ -10,13 +10,13 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-import shutil
 import subprocess
 import tempfile
 import threading
 import unittest
 
 from PIL import Image
+from tests import prepare_test_app_config
 
 import mozarie.http as http_module
 import mozarie.state as state_module
@@ -29,7 +29,7 @@ class LiveProjectHistoryBrowserTests(unittest.TestCase):
         self._temporary_directory = tempfile.TemporaryDirectory()
         root = Path(self._temporary_directory.name)
         self.app_dir = root / "app"
-        shutil.copytree(Path(__file__).resolve().parents[1] / "config", self.app_dir / "config")
+        prepare_test_app_config(self.app_dir)
         self.source_dir = root / "source"
         self.source_dir.mkdir()
         Image.new("RGB", (64, 48), "white").save(self.source_dir / "history.png")

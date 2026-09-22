@@ -4,13 +4,13 @@ from __future__ import annotations
 
 import base64
 import io
-import shutil
 import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
 
 from PIL import Image
+from tests import prepare_test_app_config
 
 import mozarie.saving as saving_module
 import mozarie.state as state_module
@@ -23,7 +23,7 @@ class ProjectExportMaskAlphaTests(unittest.TestCase):
         self._temporary = tempfile.TemporaryDirectory()
         self.root = Path(self._temporary.name)
         self.app_dir = self.root / "app"
-        shutil.copytree(Path(__file__).resolve().parents[1] / "config", self.app_dir / "config")
+        prepare_test_app_config(self.app_dir)
         self.state: StudioState | None = None
 
     def tearDown(self) -> None:

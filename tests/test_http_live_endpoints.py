@@ -10,7 +10,6 @@ import http.client
 import io
 import json
 import sqlite3
-import shutil
 import tempfile
 import threading
 import time
@@ -20,6 +19,7 @@ from unittest.mock import patch
 from pathlib import Path
 
 from PIL import Image, ImageOps, PngImagePlugin
+from tests import prepare_test_app_config
 
 import mozarie.http as http_module
 import mozarie.state as state_module
@@ -45,7 +45,7 @@ class LiveHttpEndpointTests(unittest.TestCase):
         self._temporary_directory = tempfile.TemporaryDirectory()
         root = Path(self._temporary_directory.name).resolve()
         self.app_dir = root / "app"
-        shutil.copytree(Path(__file__).resolve().parents[1] / "config", self.app_dir / "config")
+        prepare_test_app_config(self.app_dir)
         self.source_dir = root / "images"
         self.source_dir.mkdir()
         Image.new("RGB", (12, 8), "white").save(self.source_dir / "source.png")

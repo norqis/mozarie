@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import base64
 import io
-import shutil
 import sqlite3
 import tempfile
 import threading
@@ -13,6 +12,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from PIL import Image
+from tests import prepare_test_app_config
 
 import mozarie.state as state_module
 from mozarie.state import StudioState
@@ -24,7 +24,7 @@ class DataIntegrityStateContracts(unittest.TestCase):
         self.temporary = tempfile.TemporaryDirectory()
         self.root = Path(self.temporary.name)
         self.app_dir = self.root / "app"
-        shutil.copytree(Path(__file__).resolve().parents[1] / "config", self.app_dir / "config")
+        prepare_test_app_config(self.app_dir)
         self.states: list[StudioState] = []
 
     def tearDown(self) -> None:

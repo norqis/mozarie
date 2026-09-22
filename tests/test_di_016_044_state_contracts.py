@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import base64
 import io
-import shutil
 import sqlite3
 import tempfile
 import unittest
@@ -13,6 +12,7 @@ from unittest.mock import patch
 
 import numpy as np
 from PIL import Image
+from tests import prepare_test_app_config
 
 import mozarie.state as state_module
 from mozarie.core import ClientError
@@ -27,7 +27,7 @@ class DataIntegrityStateContracts(unittest.TestCase):
         self._temporary = tempfile.TemporaryDirectory()
         self.root = Path(self._temporary.name)
         self.app_dir = self.root / "app"
-        shutil.copytree(Path(__file__).resolve().parents[1] / "config", self.app_dir / "config")
+        prepare_test_app_config(self.app_dir)
         self.cache = self.root / "cache"
         self.sessions = self.root / "sessions"
         self.states: list[StudioState] = []

@@ -6,7 +6,6 @@ import base64
 import http.client
 import io
 import json
-import shutil
 import sqlite3
 import socket
 import tempfile
@@ -16,6 +15,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from PIL import Image
+from tests import prepare_test_app_config
 
 import mozarie.http as http_module
 import mozarie.state as state_module
@@ -29,7 +29,7 @@ class DataIntegrityHttpContracts(unittest.TestCase):
         self.temporary = tempfile.TemporaryDirectory()
         self.root = Path(self.temporary.name).resolve()
         self.app_dir = self.root / "app"
-        shutil.copytree(Path(__file__).resolve().parents[1] / "config", self.app_dir / "config")
+        prepare_test_app_config(self.app_dir)
         self.sources = self.root / "images"
         self.sources.mkdir()
         Image.new("RGB", (12, 8), "white").save(self.sources / "A.png")

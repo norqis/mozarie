@@ -7,7 +7,6 @@ import io
 import json
 import os
 from pathlib import Path
-import shutil
 import sqlite3
 import subprocess
 import tempfile
@@ -18,6 +17,7 @@ import unittest
 from unittest.mock import patch
 
 from PIL import Image
+from tests import prepare_test_app_config
 
 import mozarie.http as http_module
 import mozarie.state as state_module
@@ -32,7 +32,7 @@ class DataIntegrity051070Tests(unittest.TestCase):
         self._temporary = tempfile.TemporaryDirectory()
         self.root = Path(self._temporary.name)
         self.app_dir = self.root / "app"
-        shutil.copytree(Path(__file__).resolve().parents[1] / "config", self.app_dir / "config")
+        prepare_test_app_config(self.app_dir)
         self._states: list[StudioState] = []
 
     def tearDown(self) -> None:
