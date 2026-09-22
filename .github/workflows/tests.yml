@@ -156,6 +156,11 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run check
+      - name: Require successful frontend shards and performance
+        if: needs.frontend-shards.result != 'success' || needs.frontend-performance.result != 'success'
+        run: |
+          echo "frontend shards: ${{ needs.frontend-shards.result }}, performance: ${{ needs.frontend-performance.result }}" >&2
+          exit 1
       - if: always()
         uses: actions/download-artifact@v7
         with:
@@ -167,11 +172,6 @@ jobs:
         with:
           name: frontend-performance
           path: ${{ runner.temp }}/frontend-performance
-      - name: Require successful frontend shards and performance
-        if: needs.frontend-shards.result != 'success' || needs.frontend-performance.result != 'success'
-        run: |
-          echo "frontend shards: ${{ needs.frontend-shards.result }}, performance: ${{ needs.frontend-performance.result }}" >&2
-          exit 1
       - run: node scripts/test-quiet.cjs frontend-aggregate --shard-artifacts "${{ runner.temp }}/frontend-shards" --performance-artifacts "${{ runner.temp }}/frontend-performance" --artifacts "${{ runner.temp }}/mozarie-coverage"
       - if: always()
         uses: actions/upload-artifact@v6
