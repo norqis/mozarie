@@ -5195,8 +5195,10 @@ async function main() {
       assert.deepEqual(duringExclusion, { active: true, exclusion: true, removedFromEffectiveMask: true }, `${width}x${height} exclusion immediately removes the effective mosaic area`);
       await page.mouse.up();
     }
-    await page.evaluate(() => releaseMosaicPreview());
-    await page.waitForFunction(() => !state.mosaicWorker && !state.mosaicSourceImage);
+    await page.waitForFunction(() => state.mosaicPreviewEnabled && document.querySelector("#mosaicPreviewButton").getAttribute("aria-pressed") === "true");
+    await page.locator("#mosaicPreviewButton").click();
+    await page.waitForFunction(() => document.querySelector("#mosaicPreviewButton").getAttribute("aria-pressed") === "false"
+      && !state.mosaicPreviewEnabled && !state.mosaicWorker && !state.mosaicSourceImage && !state.mosaicSourceId);
 
     const ledgerPage = await newCoveredPage(browser, { viewport: { width: 1280, height: 900 } });
     setUpdateAvailable(true);
