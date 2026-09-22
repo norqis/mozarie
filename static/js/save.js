@@ -787,7 +787,7 @@ async function ensureHandlePermission(access, requireWrite = true, requestedPerm
   const permission = requestedPermission ? await preparedRequest(requestedPermission) : await querySavePermission(handle, options, requestPermission);
   if (permission && permission !== "granted") throw codedError("source_permission_denied");
   const file = await handle.getFile();
-  if (access.size != null && (file.size !== access.size || file.lastModified !== access.lastModified)) {
+  if (access.size != null && (file.size !== access.size || Math.round(file.lastModified) !== Math.round(access.lastModified))) {
     throw codedError("stale_asset");
   }
 }
@@ -879,7 +879,7 @@ async function reconnectSaveSourceParent(image, access, pickedParent) {
   }
   if (!matched) throw codedError("source_action_unavailable");
   const file = await matched.fileHandle.getFile();
-  if (access.size != null && (file.size !== access.size || file.lastModified !== access.lastModified)) throw codedError("stale_asset");
+  if (access.size != null && (file.size !== access.size || Math.round(file.lastModified) !== Math.round(access.lastModified))) throw codedError("stale_asset");
   access.parentHandle = matched.parentHandle;
   access.rootHandle = pickedParent;
   access.fileHandle = matched.fileHandle;
@@ -969,15 +969,17 @@ async function discardFormattedSourceRename(access, rename) {
 }
 
 function sourceCommitMetadata(access) {
-  return { sourceMtimeMs: Math.max(0, Number(access.lastModified || 0)), sourceSizeBytes: Math.max(0, Number(access.size || 0)) };
+  return { sourceMtimeMs: Math.max(0, Math.round(Number(access.lastModified || 0))), sourceSizeBytes: Math.max(0, Number(access.size || 0)) };
 }
 
 async function snapshotSourceHandle(access) {
-  const file = await access.fileHandle.getFile();
-  if (!(file instanceof Blob) || typeof file.arrayBuffer !== "function") return null;
-  // File.slice() may retain a lazy link to the source. Read the bytes before
-  // any overwrite or deletion; access retains the exact source name.
-  return new Blob([await file.arrayBuffer()], { type: file.type });
+  try {
+    const file = await access.fileHandle.getFile();
+    if (!(file instanceof Blob) || typeof file.arrayBuffer !== "function") return null;
+    // File.slice() may retain a lazy link to the source. Read the bytes before
+    // any overwrite or deletion; access retains the exact source name.
+    return new Blob([await file.arrayBuffer()], { type: file.type });
+  } catch { throw codedError("source_restore_failed"); }
 }
 
 async function restoreSourceHandle(access, snapshot, deleted) {

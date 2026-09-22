@@ -770,6 +770,7 @@
       "status": "automated",
       "testIds": [
         "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > source change during render rejects overwrite",
+        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > fractional source timestamps remain saveable after catalog restore",
         "python:tests.test_server.MozarieTests.test_filesystem_save_rejects_change_during_source_read"
       ]
     },

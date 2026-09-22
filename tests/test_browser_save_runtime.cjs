@@ -878,6 +878,7 @@ async function runSourceRestoreFailurePresentationAndStateCase() {
   unreadable.arrayBuffer = async () => { throw new Error("source read failed"); };
   const handle = { name: "source.png", async getFile() { return unreadable; }, async queryPermission() { return "granted"; }, async createWritable() { writableOpens += 1; throw new Error("must not write"); } };
   const runtime = createRuntime({ initialImages: [image], commit: () => jsonResponse({ cleared: true, stale: false }) });
+  runtime.state.translations["errorDialog.project_source_unavailable.title"] = "Source image unavailable";
   runtime.state.currentId = image.id; runtime.state.currentImage = { sentinel: "image" };
   runtime.state.singleSave = { imageId: image.id, generation: runtime.state.imageGeneration, divisor: 100, draft: { add: "manual" } };
   runtime.state.candidates = [{ id: "candidate" }]; runtime.state.drafts.set(image.id, { add: "manual" });
@@ -887,10 +888,39 @@ async function runSourceRestoreFailurePresentationAndStateCase() {
   const before = { images: runtime.state.images, currentImage: runtime.state.currentImage, candidates: runtime.state.candidates, drafts: runtime.state.drafts, sourceAccess: runtime.state.sourceAccess };
   await runtime.startSingleSave({ preventDefault() {} });
   assert.equal(runtime.element("#errorDialog").open, true, "source_restore_failed is presented in the real error dialog");
+  assert.equal(runtime.element("#errorDialogTitle").textContent, "Source image unavailable", "source read failures identify the recoverable source error");
   assert.equal(writableOpens, 0, "an unreadable source is never opened for destructive writing");
   assert.equal(runtime.requests.some((request) => request.path === "/api/save/commit"), false, "source_restore_failed never reports a committed overwrite");
   for (const [key, value] of Object.entries(before)) assert.equal(runtime.state[key], value, `source_restore_failed preserves ${key}`);
   assert.equal(runtime.state.drafts.get(image.id).add, "manual", "source_restore_failed preserves the hand-drawn draft");
+}
+
+async function runFractionalSourceTimestampCase(t) {
+  const image = { id: "image-1", sourceKind: "session", relativePath: "source.png", width: 32, height: 32, candidateCount: 1, enabledCandidateCount: 1 };
+  const fileAt = (mtime) => {
+    const file = sourceBlob("source.png", 3, mtime);
+    Object.defineProperty(file, "lastModified", { value: mtime });
+    return file;
+  };
+  let sourceFile = fileAt(34.75);
+  let committedMtime;
+  const handle = {
+    name: "source.png", getFile: t.mock.fn(async () => sourceFile), queryPermission: t.mock.fn(async () => "granted"),
+    createWritable: t.mock.fn(async () => ({ async write() {}, async close() { sourceFile = fileAt(35.75); }, async abort() {} })),
+  };
+  const runtime = createRuntime({ initialImages: [image], commit: ({ options }) => {
+    committedMtime = JSON.parse(options.body).sourceMtimeMs;
+    return jsonResponse({ cleared: false, stale: false, images: [image] });
+  } });
+  const access = { fileHandle: handle, name: "source.png", size: 3, lastModified: 35 };
+  runtime.state.sourceAccess.set(image.id, access);
+  await runtime.ensureSaveSources([image.id], "overwrite", false);
+  await runtime.runBrowserSave([image.id], "_censored", false, "overwrite");
+  assert.equal(committedMtime, 36, "fractional browser timestamps cross the save commit API as integer milliseconds");
+  access.lastModified = committedMtime;
+  await runtime.ensureSaveSources([image.id], "overwrite", false);
+  sourceFile = fileAt(37.75);
+  await assert.rejects(runtime.ensureSaveSources([image.id], "overwrite", false), { code: "stale_asset" });
 }
 
 function runOutputDirectoryDisplayCase() {
@@ -1840,6 +1870,7 @@ nodeTest("browser save runtime contracts", async (t) => {
   await t.test("single copy preserves editor state", runSingleCopyKeepsEditorStateCase);
   await t.test("single save preserves review and draft state", runSingleSaveKeepsReviewAndDraftCase);
   await t.test("source_restore_failed is shown and preserves source editor and catalog state", runSourceRestoreFailurePresentationAndStateCase);
+  await t.test("fractional source timestamps remain saveable after catalog restore", runFractionalSourceTimestampCase);
   await t.test("pause and terminal completion reset controls", runPauseResetAfterTerminalBrowserSaveCase);
   await t.test("in-flight pause settles current output and resume saves only unprocessed images", runInFlightPauseAndResumeCase);
   await t.test("output permission submission locks settle", runOutputPermissionSubmissionLockCases);
