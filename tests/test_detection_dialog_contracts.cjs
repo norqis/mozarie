@@ -83,6 +83,7 @@ test("cancelled detection drafts never change current-image or general settings 
       await page.locator(opener).click();
       await page.locator("#detectConfidenceNumber").fill("0.92");
       await page.locator("label.target-chip:has(#dialogTargetPussy)").click();
+      await page.locator("label.target-chip:has(#dialogTargetPenis)").click();
       await page.locator("#detectCandidatePadding").fill("22");
       await page.locator("#detectFluidColorFillTolerance").fill("82");
       await page.locator("#detectCancelButton").click();
@@ -90,6 +91,12 @@ test("cancelled detection drafts never change current-image or general settings 
       assert.equal(await page.evaluate(() => settingsPayload().detection.threshold), before.threshold);
       assert.deepEqual(await page.evaluate(() => settingsPayload().detection.targets), before.targets);
     }
+    await page.locator("#settingsButton").click();
+    await page.locator("#settingsImportParallelism").fill("6");
+    await page.locator("#settingsSaveButton").click();
+    await page.waitForFunction(() => state.settings.importing.parallelism === 6);
+    assert.deepEqual(fixture.settingsPayloads.at(-1).body.detection.targets, before.targets, "cancelled empty detection targets never block a general settings save");
+    await page.locator("#settingsCloseButton").click();
     await page.locator("#detectionSettingsButton").click();
     assert.equal(await page.locator("#detectConfidenceNumber").inputValue(), before.threshold.toFixed(2));
     assert.equal(await page.locator("#detectCandidatePadding").inputValue(), String(before.default_candidate_padding_px));

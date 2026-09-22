@@ -70,3 +70,5 @@ node --test tests/test_verification_contracts.cjs
 確認フラグの編集後保持と一覧専用削除は `test_review_list_removal_e2e.cjs` のブラウザー操作、`test_project_catalog_coverage.py` の元画像保持・再起動、`test_workspace.py` の旧履歴復元で確認する。WS-027・WS-029・WS-036 と DI-051〜053・DI-088〜097・DI-255 の契約を対応させ、実機確認項目は追加しない。
 
 元画像の変更検知・同寸法の受け入れ・範囲の拡縮・クリア・PJへの移行でも、確認済み／未確認の両方を維持する。WS-027 のPython契約で再起動と全履歴のUndo/Redoまで確認する。
+
+一般設定の検証・保存は、検出ダイアログの取消し後も保存済みの対象を使うことを確認します。

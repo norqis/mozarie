@@ -443,7 +443,7 @@ async function saveSettings(event) {
   event.preventDefault();
   if (settingsMutationPending) return;
   const result = $("#settingsResult"); result.textContent = ""; result.classList.remove("error");
-  if (!validateDetectionTargets(detectionTargets())) {
+  if (!validateDetectionTargets(persistedDetectionTargets())) {
     result.textContent = t("error.detectionTargetsRequired"); result.classList.add("error"); return;
   }
   if (!validateAbsoluteSettingsPaths()) return;

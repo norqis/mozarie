@@ -74,7 +74,7 @@ const context = {
   focusElement(item) { context.focused = item; },
   renderSamVariantStatuses() {}, renderSettingsStatus() {}, syncProviderSelection() {},
   setNavigationShortcutsEnabled() {}, setMosaicPreviewEnabled() {}, renderOutputDirectory() {}, applyToolPosition() {}, setDetectionConfidence() {}, setDetectionTargets() {}, syncDetectionActions() {}, loadTranslations: async () => {},
-  validateDetectionTargets: () => true, detectionTargets: () => ["penis"], detectionParallelism: () => 2, normaliseDetectionConfidence: Number, normaliseImportParallelism: Number, settingsPayload: () => ({ ok: true }),
+  validateDetectionTargets: () => true, detectionTargets: () => [], detectionConfidence: () => state.settings.detection.threshold, persistedDetectionTargets: () => state.settings?.detection?.targets || [], normaliseImportParallelism: Number, settingsPayload: () => ({ ok: true }),
   pickOutputDirectory: async () => "", api: async () => ({ settings: { general: { language: "ja", shortcuts_enabled: true }, display: { mosaic_preview: true } }, version: "v1" }), clearInterval() {}, setInterval() { return 1; },
   confirmAction: async () => true,
 };
@@ -139,18 +139,32 @@ nodeTest("settings, model pickers, and download state", async () => {
   await context.settingsTest.saveSettings({ preventDefault() {} });
   assert.equal(element("#settingsResult").classList.contains("error"), true, "saving with no detection target leaves a visible inline validation error");
 
-  state.settings = { general: {}, models: { gpu_device: 0 }, display: {} };
-  context.validateDetectionTargets = () => true;
+  state.settings = { general: {}, models: { gpu_device: 0 }, display: {}, detection: { threshold: 0.63, parallelism: 4, targets: ["penis"] }, editing: { fill_color_tolerance: 20 } };
+  context.validateDetectionTargets = (targets) => {
+    assert.deepEqual(targets, ["penis"], "general settings validate persisted targets even when the detection dialog draft is empty");
+    return true;
+  };
   element("#settingsDefaultOutputDirectory").value = "G:\\output";
   element("#settingsSamModel").value = "";
   shortcutBindings.push(
     { dataset: { shortcutAction: "previous" }, value: "Ctrl+P" },
     { dataset: { shortcutAction: "next" }, value: "Ctrl+P" },
   );
+  const errorsBeforeDuplicate = errors.length;
+  let duplicateSettingsPosts = 0;
+  context.api = async () => { duplicateSettingsPosts += 1; throw new Error("duplicate shortcuts must not reach the API"); };
   await context.settingsTest.saveSettings({ preventDefault() {} });
+  assert.equal(errors.length, errorsBeforeDuplicate + 1, "duplicate shortcuts produce a new validation error");
   assert.equal(errors.at(-1)[0].code, "input_invalid", "saving rejects duplicate shortcut bindings before sending settings");
+  assert.equal(duplicateSettingsPosts, 0, "duplicate shortcut validation sends no settings request");
 
   shortcutBindings.length = 0;
+  element("#detectConfidenceNumber").value = "0.99";
+  element("#detectParallelism").value = "9";
+  const savedDetectionPayload = context.settingsTest.settingsPayload().detection;
+  assert.equal(savedDetectionPayload.threshold, 0.63, "general settings use the persisted detection threshold instead of a dialog draft");
+  assert.equal(savedDetectionPayload.parallelism, 4, "general settings use persisted detection parallelism");
+  assert.deepEqual(savedDetectionPayload.targets, ["penis"], "general settings preserve the persisted detection target selection");
   element("#settingsDefaultOutputDirectory").value = "G:\\output";
   for (const id of ["#settingsNtd11Model", "#settingsSensitiveModel", "#settingsSamModel", "#settingsHandModel", "#settingsHandSegmentationModel"]) element(id).value = "";
   element("#settingsTargetModel").value = "models\\target.onnx";
@@ -280,14 +294,14 @@ nodeTest("settings, model pickers, and download state", async () => {
   context.settingsTest.renderSettingsStatus(null, 5);
   state.settingsStatus = null;
   context.settingsTest.renderSettingsStatus(null);
-  const defaultSettings = { general: { language: "ja", open_browser: false, port: 8766, shortcuts_enabled: true }, models: { provider: "gpu", gpu_device: 0, target_segmentation: "", ntd11: "", ntd11_enabled: false, sensitive: "", sensitive_enabled: false, hand_detection: "", hand_detection_enabled: false, hand_segmentation_enabled: false, sam_checkpoints: {}, sam_model_type: "vit_b" }, display: { apply_color: "", exclude_color: "", overlay_opacity: 0, mosaic_preview: false }, importing: {}, editing: { fill_color_tolerance: 20 }, saving: {}, detection: { mode: "standard", fluid_exclusion_enabled: false, exclude_forced_default: true, threshold: .5, targets: [] }, shortcuts: {}, confirmations: {} };
+  const defaultSettings = { general: { language: "ja", open_browser: false, port: 8766, shortcuts_enabled: true }, models: { provider: "gpu", gpu_device: 0, target_segmentation: "", ntd11: "", ntd11_enabled: false, sensitive: "", sensitive_enabled: false, hand_detection: "", hand_detection_enabled: false, hand_segmentation_enabled: false, sam_checkpoints: {}, sam_model_type: "vit_b" }, display: { apply_color: "", exclude_color: "", overlay_opacity: 0, mosaic_preview: false }, importing: {}, editing: { fill_color_tolerance: 20 }, saving: {}, detection: { mode: "standard", fluid_exclusion_enabled: false, exclude_forced_default: true, threshold: .5, parallelism: 2, targets: [] }, shortcuts: {}, confirmations: {} };
   context.settingsTest.setSettingsForm(defaultSettings, { models: {}, gpus: [] });
   assert.equal(element("#confirmRemoveImage").checked, true, "the source-delete confirmation defaults to enabled");
   defaultSettings.confirmations.removeImage = false; context.settingsTest.setSettingsForm(defaultSettings, { models: {}, gpus: [] });
   assert.equal(element("#confirmRemoveImage").checked, false, "a saved source-delete preference restores as disabled");
   assert.equal(context.settingsTest.settingsPayload().confirmations.removeImage, false, "saving settings preserves the explicit source-delete confirmation preference");
   assert.equal(element("#settingsImportParallelism").value, "3", "empty import settings use their public default");
-  assert.equal(element("#detectParallelism").value, "2", "empty detection settings use their public default");
+  assert.equal(element("#detectParallelism").value, "2", "saved detection parallelism is shown in its control");
   assert.equal(element("#bucketTolerance").value, "20", "the fill tolerance reflects the persisted editing setting");
   let tolerancePayload = null;
   context.api = async (_path, options) => { tolerancePayload = JSON.parse(options.body); return { settings: { ...state.settings, editing: { fill_color_tolerance: 37 } } }; };
@@ -360,7 +374,7 @@ nodeTest("settings, model pickers, and download state", async () => {
 
   let translations = 0;
   context.loadTranslations = async () => { translations += 1; };
-  state.settings = { general: { language: "ja" }, models: { gpu_device: 0 }, display: {} };
+  state.settings = { general: { language: "ja" }, models: { gpu_device: 0 }, display: {}, detection: { threshold: 0.5, parallelism: 2, targets: ["penis"] }, editing: { fill_color_tolerance: 20 } };
   context.validateDetectionTargets = () => true;
   element("#settingsDefaultOutputDirectory").value = "G:\\output";
   context.api = async (url) => {
