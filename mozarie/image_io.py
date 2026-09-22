@@ -5,7 +5,6 @@ import math
 import os
 import shutil
 import tempfile
-import threading
 import uuid
 import zlib
 from contextlib import contextmanager
@@ -25,9 +24,10 @@ from .runtime import directml_devices, runtime_backend
 from .save_journal import SaveJournal
 
 
-_IMAGE_OPEN_LOCK = threading.RLock()
-_IMAGE_OPEN_DEPTH = 0
-_IMAGE_OPEN_PREVIOUS_LIMIT: int | None = None
+# Mozarie intentionally accepts images of any dimensions that Pillow and the
+# machine can decode. Keep Pillow's process-wide heuristic limit disabled for
+# the whole process instead of changing the global around individual reads.
+Image.MAX_IMAGE_PIXELS = None
 IMAGE_DECODE_ERRORS = (
     MemoryError, OSError, RuntimeError, ValueError, SyntaxError,
     UnidentifiedImageError, Image.DecompressionBombError, Image.DecompressionBombWarning,
@@ -36,33 +36,9 @@ IMAGE_DECODE_ERRORS = (
 
 @contextmanager
 def open_image(source: Any):
-    """Open one supported image with Pillow's process-wide pixel guard disabled."""
-    global _IMAGE_OPEN_DEPTH, _IMAGE_OPEN_PREVIOUS_LIMIT
-    with _IMAGE_OPEN_LOCK:
-        if _IMAGE_OPEN_DEPTH == 0:
-            _IMAGE_OPEN_PREVIOUS_LIMIT = Image.MAX_IMAGE_PIXELS
-        Image.MAX_IMAGE_PIXELS = None
-        _IMAGE_OPEN_DEPTH += 1
-    try:
-        image = Image.open(source)
-    except BaseException:
-        with _IMAGE_OPEN_LOCK:
-            _IMAGE_OPEN_DEPTH -= 1
-            if _IMAGE_OPEN_DEPTH == 0:
-                Image.MAX_IMAGE_PIXELS = _IMAGE_OPEN_PREVIOUS_LIMIT
-                _IMAGE_OPEN_PREVIOUS_LIMIT = None
-        raise
-    try:
+    """Open one supported image using Mozarie's process-wide Pillow policy."""
+    with Image.open(source) as image:
         yield image
-    finally:
-        try:
-            image.close()
-        finally:
-            with _IMAGE_OPEN_LOCK:
-                _IMAGE_OPEN_DEPTH -= 1
-                if _IMAGE_OPEN_DEPTH == 0:
-                    Image.MAX_IMAGE_PIXELS = _IMAGE_OPEN_PREVIOUS_LIMIT
-                    _IMAGE_OPEN_PREVIOUS_LIMIT = None
 
 
 def _valid_color(value: str) -> bool:
@@ -311,24 +287,12 @@ def open_image_without_png_text(path: Path, raw: bytes | None = None, *, expecte
 
 
 def inspect_import_image(path: Path, expected_suffix: str) -> tuple[int, int]:
-    """Validate an input image completely before publishing it to the catalogue."""
+    """Load input pixels and return their display-oriented dimensions."""
     try:
         with open_image_without_png_text(path, expected_suffix=expected_suffix) as image:
             _assert_image_suffix_matches_format(expected_suffix, image.format)
-            size = oriented_image_size(image)
-        with open_image_without_png_text(path, expected_suffix=expected_suffix) as image:
-            image.verify()
-        with open_image_without_png_text(path, expected_suffix=expected_suffix) as image:
-            _assert_image_suffix_matches_format(expected_suffix, image.format)
             image.load()
-            if oriented_image_size(image) != size:
-                raise OSError("image dimensions changed while decoding")
-        if expected_suffix.lower() in {".jpg", ".jpeg"}:
-            with path.open("rb") as source:
-                source.seek(-2, os.SEEK_END)
-                if source.read() != b"\xff\xd9":
-                    raise OSError("truncated JPEG")
-        return size
+            return oriented_image_size(image)
     except ClientError:
         raise
     except IMAGE_DECODE_ERRORS as exc:

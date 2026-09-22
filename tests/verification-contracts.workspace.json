@@ -2646,7 +2646,7 @@
       "observation": "Pillowの画素数上限を超えるPNG・JPEG・WebPを警告なしで一覧と画像APIへ公開し、回転JPEGの記録寸法・サムネイル・編集画像を同じ向きにする。",
       "status": "automated",
       "testIds": [
-        "python:tests.test_http_live_endpoints.LiveHttpEndpointTests.test_over_limit_png_jpeg_webp_catalog_and_assets_preserve_dimensions_without_warnings",
+        "python:tests.test_http_live_endpoints.LiveHttpEndpointTests.test_unlimited_png_jpeg_webp_catalog_and_assets_preserve_dimensions",
         "python:tests.test_http_live_endpoints.LiveHttpEndpointTests.test_exif_rotated_thumbnail_and_editor_asset_have_identical_visual_orientation"
       ]
     }

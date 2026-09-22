@@ -483,7 +483,7 @@ class FlipExportContractTests(unittest.TestCase):
         finally:
             state.shutdown()
 
-    def test_over_limit_oriented_jpeg_flip_keeps_mask_in_normalized_visible_coordinates(self) -> None:
+    def test_unlimited_oriented_jpeg_flip_keeps_mask_in_normalized_visible_coordinates(self) -> None:
         source_root = self.root / "large-oriented"; source_root.mkdir()
         source = source_root / "oriented.jpg"
         pixels = np.zeros((4, 6, 3), dtype=np.uint8)
@@ -493,14 +493,14 @@ class FlipExportContractTests(unittest.TestCase):
         Image.fromarray(pixels).save(source, quality=100, subsampling=0, exif=exif)
         state = StudioState(self.root / "large-cache", self.root / "large-sessions")
         try:
-            with patch.object(Image, "MAX_IMAGE_PIXELS", 1):
-                image_id = state.set_root(str(source_root))[0]["id"]
-                record = state.image_for_id(image_id)
-                self.assertEqual((record.width, record.height), (4, 6), "catalog dimensions use the EXIF-normalized direction despite the pixel guard")
-                state.set_image_transform(image_id, {"flipH": True, "flipV": False})
-                mask = np.zeros((6, 4), dtype=np.uint8); mask[1:3, 0:2] = 255
-                payload, _suffix, _mime = render_output(record, mask, 2, "original", True)
-                baseline_payload, _suffix, _mime = render_output(record, None, 2, "original", True)
+            self.assertIsNone(Image.MAX_IMAGE_PIXELS)
+            image_id = state.set_root(str(source_root))[0]["id"]
+            record = state.image_for_id(image_id)
+            self.assertEqual((record.width, record.height), (4, 6), "catalog dimensions use the EXIF-normalized direction without an arbitrary pixel limit")
+            state.set_image_transform(image_id, {"flipH": True, "flipV": False})
+            mask = np.zeros((6, 4), dtype=np.uint8); mask[1:3, 0:2] = 255
+            payload, _suffix, _mime = render_output(record, mask, 2, "original", True)
+            baseline_payload, _suffix, _mime = render_output(record, None, 2, "original", True)
             with Image.open(io.BytesIO(payload)) as saved:
                 self.assertEqual(saved.size, (4, 6))
                 self.assertEqual(saved.getexif().get(274), 1)

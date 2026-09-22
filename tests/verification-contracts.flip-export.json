@@ -1646,7 +1646,7 @@
       "observation": "一覧・編集画面の回転後座標と同じ位置にモザイクを出力し",
       "status": "automated",
       "testIds": [
-        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_over_limit_oriented_jpeg_flip_keeps_mask_in_normalized_visible_coordinates"
+        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_unlimited_oriented_jpeg_flip_keeps_mask_in_normalized_visible_coordinates"
       ]
     },
     {
@@ -1658,7 +1658,7 @@
       "status": "automated",
       "testIds": [
         "python:tests.test_server.MozarieTests.test_exif_rotated_jpeg_uses_normalized_mask_coordinates",
-        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_over_limit_oriented_jpeg_flip_keeps_mask_in_normalized_visible_coordinates"
+        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_unlimited_oriented_jpeg_flip_keeps_mask_in_normalized_visible_coordinates"
       ]
     },
     {
@@ -1670,7 +1670,7 @@
       "status": "automated",
       "testIds": [
         "python:tests.test_server.MozarieTests.test_exif_rotated_jpeg_uses_normalized_mask_coordinates",
-        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_over_limit_oriented_jpeg_flip_keeps_mask_in_normalized_visible_coordinates"
+        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_unlimited_oriented_jpeg_flip_keeps_mask_in_normalized_visible_coordinates"
       ]
     },
     {

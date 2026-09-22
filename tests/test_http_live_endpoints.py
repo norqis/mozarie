@@ -389,7 +389,7 @@ class LiveHttpEndpointTests(unittest.TestCase):
         with Image.open(io.BytesIO(body)) as image:
             self.assertEqual(image.size, (13, 9))
 
-    def test_over_limit_png_jpeg_webp_catalog_and_assets_preserve_dimensions_without_warnings(self) -> None:
+    def test_unlimited_png_jpeg_webp_catalog_and_assets_preserve_dimensions(self) -> None:
         for extension, image_format in [("png", "PNG"), ("jpg", "JPEG"), ("webp", "WEBP")]:
             with Image.new("RGB", (40, 20), "#d04020") as source:
                 options = {}
@@ -399,22 +399,20 @@ class LiveHttpEndpointTests(unittest.TestCase):
                     options["exif"] = exif
                 source.save(self.source_dir / f"over-limit.{extension}", format=image_format, **options)
 
-        with patch.object(Image, "MAX_IMAGE_PIXELS", 1), warnings.catch_warnings(record=True) as caught:
-            warnings.simplefilter("always", Image.DecompressionBombWarning)
-            status, _headers, body = self.request("POST", "/api/folder", {"path": str(self.source_dir)}, authorized=True)
-            self.assertEqual(status, 200, body.decode("utf-8"))
-            records = {item["relativePath"]: item for item in json.loads(body)["images"]}
-            self.assertEqual(set(records), {"source.png", "over-limit.png", "over-limit.jpg", "over-limit.webp"})
-            assets = []
-            for name, record in records.items():
-                expected = (20, 40) if name.endswith(".jpg") else ((12, 8) if name == "source.png" else (40, 20))
-                self.assertEqual((record["width"], record["height"]), expected)
-                for route in ("image", "thumbnail"):
-                    status, _headers, asset = self.request("GET", f"/api/{route}/{record['id']}")
-                    self.assertEqual(status, 200, name)
-                    assets.append((asset, expected))
-            self.assertEqual(Image.MAX_IMAGE_PIXELS, 1, "requests restore the caller's Pillow guard")
-            self.assertFalse([warning for warning in caught if issubclass(warning.category, Image.DecompressionBombWarning)])
+        self.assertIsNone(Image.MAX_IMAGE_PIXELS)
+        status, _headers, body = self.request("POST", "/api/folder", {"path": str(self.source_dir)}, authorized=True)
+        self.assertEqual(status, 200, body.decode("utf-8"))
+        records = {item["relativePath"]: item for item in json.loads(body)["images"]}
+        self.assertEqual(set(records), {"source.png", "over-limit.png", "over-limit.jpg", "over-limit.webp"})
+        assets = []
+        for name, record in records.items():
+            expected = (20, 40) if name.endswith(".jpg") else ((12, 8) if name == "source.png" else (40, 20))
+            self.assertEqual((record["width"], record["height"]), expected)
+            for route in ("image", "thumbnail"):
+                status, _headers, asset = self.request("GET", f"/api/{route}/{record['id']}")
+                self.assertEqual(status, 200, name)
+                assets.append((asset, expected))
+        self.assertIsNone(Image.MAX_IMAGE_PIXELS)
 
         for asset, expected in assets:
             with Image.open(io.BytesIO(asset)) as source, ImageOps.exif_transpose(source) as visible:
