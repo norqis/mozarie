@@ -3,6 +3,7 @@
 const assert = require("node:assert/strict");
 const test = require("node:test");
 const { chromium } = require("playwright");
+const { expect } = require("playwright/test");
 const { closeServer, startFixtureServer } = require("./test_import_picker_e2e.cjs");
 
 async function freshPage(browser, fixture) {
@@ -47,11 +48,13 @@ test("Delete shortcut keeps a durable source-delete intent through claim and ack
     const singleDeleteColor = await page.locator("#removeAndNextButton").evaluate((button) => getComputedStyle(button).backgroundColor.match(/\d+/g).map(Number));
     assert.equal(singleDeleteColor[0] > singleDeleteColor[1] * 1.5 && singleDeleteColor[0] > singleDeleteColor[2] * 1.5, true, "the rendered single source-delete control is visibly red");
     await page.locator("#confirmAccept").click();
-    await page.waitForFunction(async () => (await pendingSourceDeletes()).some((entry) => entry.imageIds?.includes("sample") && entry.state === "preparing"));
+    await expect.poll(async () => page.evaluate(async () =>
+      (await pendingSourceDeletes()).some((entry) => entry.imageIds?.includes("sample") && entry.state === "preparing")), { timeout: 30000 }).toBe(true);
     for (let attempt = 0; attempt < 100 && !fixture.sourceDeleteRequests.length; attempt += 1) await new Promise((resolve) => setTimeout(resolve, 10));
     assert.equal(fixture.sourceDeleteRequests[0]?.path, "/api/catalog/delete-source/prepare", "the preparing token is already durable while the prepare response is still pending");
     fixture.releaseSourceDeletePrepares();
-    await page.waitForFunction(async () => (await pendingSourceDeletes()).some((entry) => entry.imageIds?.includes("sample")));
+    await expect.poll(async () => page.evaluate(async () =>
+      (await pendingSourceDeletes()).some((entry) => entry.imageIds?.includes("sample"))), { timeout: 30000 }).toBe(true);
     const pending = await page.evaluate(async () => (await pendingSourceDeletes()).find((entry) => entry.imageIds?.includes("sample")));
     assert.deepEqual(pending.browserEntries, [], "a filesystem source persists its delete intent before the server claim without a browser-handle entry");
     fixture.releaseSourceDeleteClaims();
@@ -71,7 +74,7 @@ test("Delete shortcut keeps a durable source-delete intent through claim and ack
       { expectedProjectId: "delete-project", expectedCatalogGeneration: 1, headerProjectId: "delete-project", headerCatalogGeneration: "1" },
       { expectedProjectId: "delete-project", expectedCatalogGeneration: 1, headerProjectId: "delete-project", headerCatalogGeneration: "1" },
     ], "every source-delete mutation uses the same captured catalog epoch in its body and headers");
-    await page.waitForFunction(async () => (await pendingSourceDeletes()).length === 0);
+    await expect.poll(async () => page.evaluate(async () => (await pendingSourceDeletes()).length === 0), { timeout: 30000 }).toBe(true);
     assert.deepEqual(fixture.sourceDeleteOperations(), [], "acknowledgement removes the server receipt only after commit is visible to the browser");
     await page.reload({ waitUntil: "domcontentloaded" });
     assert.deepEqual(await page.evaluate(async () => rememberedProjectSources("delete-project")), { files: [], directories: [] }, "after browser restart the authoritative deletion has removed only the deleted image's persisted handle");

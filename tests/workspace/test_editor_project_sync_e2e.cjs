@@ -3,6 +3,7 @@
 const assert = require("node:assert/strict");
 const test = require("node:test");
 const { chromium } = require("playwright");
+const { expect } = require("playwright/test");
 const { closeServer, startFixtureServer } = require("../test_import_picker_e2e.cjs");
 
 async function openCatalogue(browser, fixture, count) {
@@ -407,7 +408,7 @@ test("DI-103 DI-104 and DI-125 source cleanup removes only authoritatively absen
     });
     await page.reload({ waitUntil: "domcontentloaded" });
     await page.waitForFunction(() => state.settings && state.images.length === 2);
-    await page.waitForFunction(async () => {
+    await expect.poll(async () => page.evaluate(async () => {
       let db;
       try {
         const remembered = await rememberedProjectSources("boot-gone");
@@ -430,7 +431,7 @@ test("DI-103 DI-104 and DI-125 source cleanup removes only authoritatively absen
         });
       } catch { return false; }
       finally { db?.close(); }
-    });
+    }), { timeout: 30000 }).toBe(true);
     assert.deepEqual(await page.evaluate(async () => rememberedProjectSources("boot-gone")), { files: [], directories: [] },
       "the next application startup removes handles for a project absent from the authoritative project list");
     const imageRestart = await page.evaluate(async () => {
@@ -443,7 +444,7 @@ test("DI-103 DI-104 and DI-125 source cleanup removes only authoritatively absen
     await page.reload({ waitUntil: "domcontentloaded" });
     await page.waitForFunction(() => state.settings && state.images.length === 2);
     await page.evaluate(async () => retryProjectSourceCleanup(new Set(["kept", "images", "restart-images"])));
-    await page.waitForFunction(async (absentIntent) => {
+    await expect.poll(async () => page.evaluate(async (absentIntent) => {
       const sources = await rememberedProjectSources("restart-images");
       const db = await directoryCatalogStore();
       try {
@@ -454,7 +455,7 @@ test("DI-103 DI-104 and DI-125 source cleanup removes only authoritatively absen
         return sources.files.length === 1 && sources.files[0].imageId === "present"
           && !(cleanup.imageIntents || []).some((intent) => intent.intentId === absentIntent);
       } finally { db.close(); }
-    }, imageRestart.absentIntent);
+    }, imageRestart.absentIntent), { timeout: 30000 }).toBe(true);
     assert.deepEqual(await page.evaluate(async () => (await rememberedProjectSources("restart-images")).files.map((source) => source.imageId)), ["present"],
       "restart removes only the committed-deleted image handle and keeps the authoritative existing image handle");
     const rejectedOnly = await page.evaluate(async ({ absentIntent, presentIntent }) => {

@@ -3,6 +3,7 @@
 const assert = require("node:assert/strict");
 const test = require("node:test");
 const { chromium } = require("playwright");
+const { expect } = require("playwright/test");
 const { closeServer, startFixtureServer } = require("../test_import_picker_e2e.cjs");
 
 const catalogue = [
@@ -1139,7 +1140,8 @@ test("DI-168 and DI-183 disconnected pending deletion resumes from the committed
     }, token);
     await page.route("**/api/catalog/delete-source/status", (route) => route.abort("connectionfailed"));
     await page.evaluate(async () => { await resumePendingSourceDeletes(); });
-    await page.waitForFunction(async () => (await pendingSourceDeletes()).some((entry) => entry.deleteToken.endsWith("168183")));
+    await expect.poll(async () => page.evaluate(async () =>
+      (await pendingSourceDeletes()).some((entry) => entry.deleteToken.endsWith("168183"))), { timeout: 30000 }).toBe(true);
     assert.deepEqual(await page.evaluate(() => ({ ids: state.images.map((image) => image.id), currentId: state.currentId,
       hasCanvas: Boolean(state.currentImage), candidates: state.candidates.length })),
     { ids: ["A", "B", "C", "D"], currentId: "C", hasCanvas: true, candidates: 0 },
@@ -1152,9 +1154,9 @@ test("DI-168 and DI-183 disconnected pending deletion resumes from the committed
       images: survivors, removedImageIds: ["C"], failed: [] });
     await page.reload({ waitUntil: "domcontentloaded" });
     await page.waitForLoadState("networkidle");
-    await page.waitForFunction(async () => state.images.map((image) => image.id).join(",") === "A,B,D"
+    await expect.poll(async () => page.evaluate(async () => state.images.map((image) => image.id).join(",") === "A,B,D"
       && !(await pendingSourceDeletes()).some((entry) => entry.deleteToken.endsWith("168183"))
-      && Boolean(state.currentId) && Boolean(state.currentImage) && !state.catalogTransition && !state.projectOperationPending);
+      && Boolean(state.currentId) && Boolean(state.currentImage) && !state.catalogTransition && !state.projectOperationPending), { timeout: 30000 }).toBe(true);
     assert.deepEqual(await page.evaluate(() => ({ ids: state.images.map((image) => image.id), currentId: state.currentId,
       currentExists: state.images.some((image) => image.id === state.currentId), candidates: state.candidates.length,
       canvasReady: originalCanvas.width > 1 && originalCanvas.height > 1 })),
