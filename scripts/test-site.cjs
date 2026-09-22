@@ -66,9 +66,18 @@ test("the rebuilt product page is complete without JavaScript and has no horizon
       await context.route("**/*", localOnly(site));
       const page = await context.newPage();
       assert.equal((await page.goto(`${site.url}/`, { waitUntil: "load" })).status(), 200);
-      assert.equal(await page.title(), "Mozarie | 自動検出・ブラシ編集・一括保存に対応したモザイク加工ソフト");
-      assert.equal(await page.locator("h1").textContent(), "検出から保存まで、ひとつの画面で。");
-      assert.equal(await page.locator('meta[name="description"]').getAttribute("content"), "Mozarieは、モザイク自動検出、ブラシツール、複数画像の一括保存、プロジェクトごとの履歴保持に対応したWindowsアプリです。");
+      assert.equal(await page.title(), "Mozarie | 同人誌・画像向けモザイクツール");
+      assert.equal(await page.locator("h1").textContent(), "同人誌の画像に、モザイクを。");
+      assert.equal(await page.locator(".intro").innerText(), "NSFW画像の性器を自動検出。ブラシ編集と一括保存で、同人誌のモザイク加工をスムーズに。");
+      assert.equal(await page.locator('meta[name="description"]').getAttribute("content"), "Mozarieは、同人誌やNSFW画像向けのWindows用モザイクツールです。ペニス・女性器（penis / pussy）の自動検出、ブラシ編集、複数画像の一括保存に対応しています。");
+      assert.equal(await page.locator('meta[property="og:title"]').getAttribute("content"), await page.title());
+      assert.equal(await page.locator('meta[property="og:description"]').getAttribute("content"), "性器の自動検出からブラシ編集、一括保存まで。同人誌やNSFW画像のモザイク加工をひとつの画面で。");
+      assert.equal(await page.locator('meta[property="og:type"]').getAttribute("content"), "website");
+      assert.equal(await page.locator('meta[property="og:url"]').getAttribute("content"), canonicalUrl);
+      const socialImage = new URL(await page.locator('meta[property="og:image"]').getAttribute("content"));
+      assert.equal(socialImage.href, new URL(await activeImage(page).getAttribute("src"), canonicalUrl).href);
+      assert.equal((await get(`${site.url}/${socialImage.pathname.split("/").slice(2).join("/")}`)).status, 200, "the share image is an existing product screenshot");
+      assert.equal(await page.locator('meta[name="twitter:card"]').getAttribute("content"), "summary_large_image");
       assert.equal(await page.locator('link[rel="canonical"]').getAttribute("href"), canonicalUrl);
       assert.equal(await page.locator('meta[name="google-site-verification"]').getAttribute("content"), "UrWwBw6iDkiGPFlWk3S4jrSsP7YfkvctuNVveYOJd_o");
       assert.equal(await page.locator('.site-header a[href="https://github.com/norqis/mozarie"]').getAttribute("href"), "https://github.com/norqis/mozarie");
@@ -78,13 +87,13 @@ test("the rebuilt product page is complete without JavaScript and has no horizon
         copy: story.querySelector("p:last-of-type")?.textContent.trim(),
         image: story.querySelector("img")?.getAttribute("src") || null,
       }))), [
-        { name: "モザイク自動検出", heading: "モザイク候補を、自動検出。", copy: "現在の画像またはプロジェクト内の全画像から、モザイク候補を自動検出。候補ごとに適用範囲を確認できます。", image: "assets/demo3.png" },
+        { name: "モザイク自動検出", heading: "性器の候補を、自動検出。", copy: "ペニス（penis）・女性器（pussy）を検出対象に、現在の画像やプロジェクト内の画像からモザイク候補を見つけます。候補ごとに適用範囲を確認できます。", image: "assets/demo3.png" },
         { name: "ブラシツール", heading: "ブラシで、直接描く。", copy: "モザイクをかける範囲も、除外する範囲も、画像の上でそのまま編集できます。", image: "assets/demo1.png" },
-        { name: "複数画像をまとめて保存", heading: "複数画像を、まとめて保存。", copy: "プロジェクト内の画像をまとめて保存。コピー保存と元画像への上書きを選べます。", image: "assets/demo1.png" },
+        { name: "複数画像をまとめて保存", heading: "複数画像を、まとめて保存。", copy: "同人誌の複数ページや画像をまとめて保存。コピー保存と元画像への上書きを選べます。", image: "assets/demo1.png" },
         { name: "プロジェクトごとの履歴保持", heading: "作業は、プロジェクトごとに残る。", copy: "候補、手描き範囲、確認状態、非表示状態、元に戻す・やり直すの履歴をプロジェクトごとに保持します。", image: null },
       ]);
       assert.deepEqual(await page.locator(".story h2").evaluateAll((headings) => headings.map((heading) => [...heading.querySelectorAll("span")].map((span) => span.textContent))), [
-        ["モザイク候補を、", "自動検出。"],
+        ["性器の候補を、", "自動検出。"],
         ["ブラシで、", "直接描く。"],
         ["複数画像を、", "まとめて保存。"],
         ["作業は、", "プロジェクト", "ごとに残る。"],
