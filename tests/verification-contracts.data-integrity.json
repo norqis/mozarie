@@ -1243,11 +1243,8 @@
         "DI-080"
       ],
       "observation": "保存終了後に出力全件分の画像バッファを保持せず、完了回数に応じて待機時RAMが増え続けない",
-      "status": "manual",
-      "manual": {
-        "environment": "実ブラウザー、4K画像一式、OSのプロセスメモリ計測",
-        "reason": "保存完了後の待機時RAMはランタイムとOSの回収時期に依存し、CIで安定した合否にできないため"
-      }
+      "status": "retired",
+      "retirementReason": "実ブラウザー、4K画像一式、OSのプロセスメモリ計測での観測は対象外とする。保存完了後の待機時RAMはランタイムとOSの回収時期に依存し、CIで安定した合否にできないため"
     },
     {
       "key": "DI-081.1",
@@ -1267,11 +1264,8 @@
         "DI-082"
       ],
       "observation": "マウスを離す前からモザイクが追従し、操作時間に応じて追従遅延が増えない",
-      "status": "manual",
-      "manual": {
-        "environment": "実ブラウザー、実ポインティングデバイス、4K表示",
-        "reason": "連続ドラッグの知覚遅延は入力機器、表示更新頻度、GPU構成に依存するため"
-      }
+      "status": "retired",
+      "retirementReason": "実ブラウザー、実ポインティングデバイス、4K表示での観測は対象外とする。連続ドラッグの知覚遅延は入力機器、表示更新頻度、GPU構成に依存するため"
     },
     {
       "key": "DI-083.1",
@@ -1542,11 +1536,8 @@
         "DI-101"
       ],
       "observation": "候補数に比例して処理中のRAMが増え続けない",
-      "status": "manual",
-      "manual": {
-        "environment": "実ブラウザー、4K候補多数、OSのプロセスメモリ計測",
-        "reason": "候補数増加時の実RAM推移はブラウザーとOSの回収時期に依存するため"
-      }
+      "status": "retired",
+      "retirementReason": "実ブラウザー、4K候補多数、OSのプロセスメモリ計測での観測は対象外とする。候補数増加時の実RAM推移はブラウザーとOSの回収時期に依存するため"
     },
     {
       "key": "DI-102.1",
@@ -1701,11 +1692,8 @@
         "DI-107"
       ],
       "observation": "処理中のRAMが画像数や出力時間に比例して増え続けない",
-      "status": "manual",
-      "manual": {
-        "environment": "実データ、大規模PJ、OSのプロセスメモリ計測",
-        "reason": "実RAMの推移はOSとPythonのメモリ回収時期に依存するため"
-      }
+      "status": "retired",
+      "retirementReason": "実データ、大規模PJ、OSのプロセスメモリ計測での観測は対象外とする。実RAMの推移はOSとPythonのメモリ回収時期に依存するため"
     },
     {
       "key": "DI-108.1",
@@ -4354,8 +4342,7 @@
       "observation": "cancelは未確定操作だけを取り消し、ackはcommitted/cancelledだけを削除する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_source_delete_post_contract.cjs::source delete POST contracts",
-        "node:tests/test_source_delete_e2e.cjs::source-delete confirmation can be skipped, restored in settings, and cancelled without changing the preference"
+        "python:tests.test_protocol_retry_contracts.SourceDeleteProtocolContracts.test_source_delete_cancel_and_ack_obey_durable_protocol_states"
       ]
     },
     {
@@ -4529,7 +4516,8 @@
         "DI-231"
       ],
       "observation": "実ChromiumとOSが表示する書き込み権限ダイアログそのものを目視する",
-      "status": "retired"
+      "status": "retired",
+      "retirementReason": "OS所有の許可ダイアログ自体の目視は自動検証できないため対象外とする。許可結果によるアプリの分岐は自動テストで検証する。"
     },
     {
       "key": "DI-232.1",
@@ -4778,7 +4766,7 @@
       "sourceIds": [
         "DI-237"
       ],
-      "observation": "実機では未確定tokenと一時出力の置換・回収、応答喪失後の再送、時刻だけで失効しないこと、CMDの開始・完了または失敗理由・所要を確認する",
+      "observation": "隔離した保存状態とループバックHTTPで、未確定tokenが時刻だけでは失効せず、完了応答の一時出力を回収し、保存状態確認の開始・完了・所要をログに記録する。",
       "status": "automated",
       "testIds": [
         "python:tests.test_di_203_265_gap_contracts.RemainingDataIntegrityContracts.test_browser_save_tokens_survive_time_and_status_ack_cleans_only_the_terminal_token",
@@ -4824,7 +4812,7 @@
       "sourceIds": [
         "DI-239"
       ],
-      "observation": "実機ではcommit応答喪失をstatusで確定してackし、pendingとunknownを区別し、別タブのtokenや削除済み画像のreceiptを誤って残さないことを確認する",
+      "observation": "隔離した保存状態でcommit後のstatusを再取得でき、pending・unknown・committedを区別し、ackは対象の確定tokenだけを清掃する。",
       "status": "automated",
       "testIds": [
         "python:tests.test_di_203_265_gap_contracts.RemainingDataIntegrityContracts.test_browser_save_tokens_survive_time_and_status_ack_cleans_only_the_terminal_token"
@@ -5303,7 +5291,7 @@
       "status": "automated",
       "testIds": [
         "python:tests.test_project_http_coverage.ProjectHttpCoverageTests.test_project_switch_restores_only_its_durable_candidate_manual_history_and_flags",
-        "node:tests/test_project_ui_runtime.cjs::project dialogs, source recovery, and project switching"
+        "node:tests/test_project_ui_runtime.cjs::project dialogs, A-B-A switching, failed-open recovery, and duplicate transition guards"
       ]
     },
     {

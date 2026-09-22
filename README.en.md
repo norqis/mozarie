@@ -123,10 +123,6 @@ Use **Check for updates** in Settings or run `update.bat`. Close Mozarie before 
 - **GPU, CUDA, or DirectML error:** Close other GPU apps, select another GPU, or switch to CPU.
 - **Still stuck:** Include the error text in a [GitHub issue](https://github.com/norqis/mozarie/issues).
 
-## Manual verification
-
-Follow the [manual verification guide](https://github.com/norqis/mozarie/blob/main/docs/manual-verification.md).
-
 ## Tests
 
 Install the test dependencies, then run the backend and frontend suites.
@@ -137,7 +133,7 @@ npm ci
 node scripts/test-quiet.cjs all
 ```
 
-The automated suites verify HTTP, SQLite, real-file, and browser UI contracts. `frontend` and `all` run the uninstrumented 20,000-item catalogue performance scenario once after coverage completes. Run the [manual verification guide](https://github.com/norqis/mozarie/blob/main/docs/manual-verification.md) before a release as well.
+The automated suites verify HTTP, SQLite, real-file, and browser UI contracts. `frontend` and `all` run the uninstrumented 20,000-item catalogue performance scenario once after coverage completes. The [test traceability document](https://github.com/norqis/mozarie/blob/main/docs/test-traceability.md) records verified contracts and observations excluded from automated verification.
 
 ## License
 

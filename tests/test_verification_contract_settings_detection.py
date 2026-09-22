@@ -43,35 +43,27 @@ class SettingsDetectionVerificationContractTests(unittest.TestCase):
                 for match in re.finditer(r'\["(SD-09[0-5]|SD-089)",', source):
                     node_ids.add(f"node:tests/{path.name}::{match.group(1)} confirmation setting gates the real confirmation dialog without changing its operation target")
 
-        manual_keys: set[str] = set()
         for item in observations:
             self.assertTrue(item["observation"].strip())
             if item["status"] == "automated":
                 self.assertTrue(item["testIds"])
                 for test_id in item["testIds"]:
-                    self.assertIn(test_id, python_ids | node_ids)
+                    if test_id.startswith("node:") and " > " in test_id:
+                        relative_path, qualified_name = test_id.removeprefix("node:").split("::", 1)
+                        source = (ROOT / relative_path).read_text(encoding="utf-8")
+                        for title in qualified_name.split(" > "):
+                            self.assertRegex(source, rf"(?:nodeTest|test)\(\s*(['\"]){re.escape(title)}\1", test_id)
+                    else:
+                        self.assertTrue(test_id in python_ids | node_ids, test_id)
                 self.assertNotIn("manual", item)
-            elif item["status"] == "manual":
-                self.assertEqual(item["status"], "manual")
-                self.assertNotIn("testIds", item)
-                self.assertTrue(item["manual"]["environment"].strip())
-                self.assertIn("CI", item["manual"]["reason"])
-                manual_keys.add(item["key"])
             else:
                 self.assertEqual(item["status"], "retired")
                 self.assertNotIn("testIds", item)
                 self.assertNotIn("manual", item)
 
-        documented_manual: dict[str, str] = {}
-        for line in MANUAL.read_text(encoding="utf-8").splitlines():
-            columns = [column.strip() for column in line.split("|")]
-            if len(columns) >= 6 and re.fullmatch(r"SD-\d+\.\d+", columns[1]):
-                documented_manual[columns[1]] = columns[4]
-        self.assertEqual(set(documented_manual), manual_keys)
-        self.assertEqual(
-            documented_manual,
-            {item["key"]: item["observation"] for item in observations if item["status"] == "manual"},
-        )
+        self.assertFalse(MANUAL.exists(), "the completed checklist is deleted")
+        self.assertNotIn("manual", {item["status"] for item in observations})
+
 
 
 if __name__ == "__main__":

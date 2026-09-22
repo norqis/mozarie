@@ -7,7 +7,7 @@
   },
   "baseline": {
     "rows": 138,
-    "observations": 234
+    "observations": 235
   },
   "observations": [
     {
@@ -51,11 +51,8 @@
         "WS-143"
       ],
       "observation": "親・子・孫の実フォルダーで初回許可、拒否、復元、取消、孫だけの削除・保存を確認する。",
-      "status": "manual",
-      "manual": {
-        "environment": "Chromium File System Access許可UIと実階層フォルダー",
-        "reason": "書込み許可プロンプトとOS所有の親子directory handle削除先はheadless擬似handleで完全には観測できない。"
-      }
+      "status": "retired",
+      "retirementReason": "Chromium File System Access許可UIと実階層フォルダーでの観測は対象外とする。書込み許可プロンプトとOS所有の親子directory handle削除先はheadless擬似handleで完全には観測できない。"
     },
     {
       "key": "WS-142.1",
@@ -132,11 +129,8 @@
         "WS-001"
       ],
       "observation": "新規展開先でsetup.batを実行し、外部依存の導入と完了案内を確認する。",
-      "status": "manual",
-      "manual": {
-        "environment": "新規Windows環境と実ネットワーク",
-        "reason": "未導入のPython・pip・GPU依存を実際に取得する初回setupの所要と外部インストーラー結果は隔離CIで固定できない。"
-      }
+      "status": "retired",
+      "retirementReason": "新規Windows環境と実ネットワークでの観測は対象外とする。未導入のPython・pip・GPU依存を実際に取得する初回setupの所要と外部インストーラー結果は隔離CIで固定できない。"
     },
     {
       "key": "WS-002.1",
@@ -155,11 +149,8 @@
         "WS-002"
       ],
       "observation": "同じ展開先でsetup.batを再実行し、既存環境を壊さず完了することを確認する。",
-      "status": "manual",
-      "manual": {
-        "environment": "依存導入済みWindows環境",
-        "reason": "既存仮想環境・pipキャッシュ・実プロセスとの組合せは隔離fixtureで忠実に再現できない。"
-      }
+      "status": "retired",
+      "retirementReason": "依存導入済みWindows環境での観測は対象外とする。既存仮想環境・pipキャッシュ・実プロセスとの組合せは隔離fixtureで忠実に再現できない。"
     },
     {
       "key": "WS-003.1",
@@ -170,7 +161,8 @@
       "status": "automated",
       "testIds": [
         "python:tests.test_updater.UpdaterTests.test_run_honors_explicit_mozarie_python_without_creating_a_venv",
-        "node:tests/test_app_core_detection_coverage.cjs::application startup, catalog state, and detection controls"
+        "node:tests/test_app_core_detection_coverage.cjs::application startup, catalog state, and detection controls",
+        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
       ]
     },
     {
@@ -179,11 +171,8 @@
         "WS-003"
       ],
       "observation": "run.batから実ブラウザーが開き、ページへ接続できることを確認する。",
-      "status": "manual",
-      "manual": {
-        "environment": "Windowsデスクトップと既定ブラウザー",
-        "reason": "既定ブラウザーの起動と実ウィンドウ表示はheadless CIから観測できない。"
-      }
+      "status": "retired",
+      "retirementReason": "Windowsデスクトップと既定ブラウザーでの観測は対象外とする。既定ブラウザーの起動と実ウィンドウ表示はheadless CIから観測できない。"
     },
     {
       "key": "WS-004.1",
@@ -1503,11 +1492,8 @@
         "WS-094"
       ],
       "observation": "不足native sourceを実フォルダーへ再指定し、アクセス拒否後の再試行を確認する。",
-      "status": "manual",
-      "manual": {
-        "environment": "Windows上のアクセス不能な実フォルダー",
-        "reason": "ACL・別プロセスによるアクセス拒否とOSファイルキャッシュの実挙動は一時fixtureだけでは再現できない。"
-      }
+      "status": "retired",
+      "retirementReason": "Windows上のアクセス不能な実フォルダーでの観測は対象外とする。ACL・別プロセスによるアクセス拒否とOSファイルキャッシュの実挙動は一時fixtureだけでは再現できない。"
     },
     {
       "key": "WS-096.1",
@@ -1711,11 +1697,8 @@
         "WS-101"
       ],
       "observation": "file sourceとdirectory sourceの許可済み自動復元、拒否、明示復元を実ブラウザーで確認する。",
-      "status": "manual",
-      "manual": {
-        "environment": "Chromiumの永続プロファイルとFile System Access許可UI",
-        "reason": "ブラウザー再起動をまたぐhandle許可状態とユーザー許可UIはheadless fixtureで制御できない。"
-      }
+      "status": "retired",
+      "retirementReason": "Chromiumの永続プロファイルとFile System Access許可UIでの観測は対象外とする。ブラウザー再起動をまたぐhandle許可状態とユーザー許可UIはheadless fixtureで制御できない。"
     },
     {
       "key": "WS-102.1",
@@ -1839,11 +1822,8 @@
         "WS-108"
       ],
       "observation": "実フォルダーのbrowser画像を削除・コピー後削除し、再起動後のhandle整理を確認する。",
-      "status": "manual",
-      "manual": {
-        "environment": "Chromium File System Accessと実フォルダー",
-        "reason": "OSが管理するhandleの削除権限とブラウザー再起動後の許可状態はCIの擬似handleでは再現できない。"
-      }
+      "status": "retired",
+      "retirementReason": "Chromium File System Accessと実フォルダーでの観測は対象外とする。OSが管理するhandleの削除権限とブラウザー再起動後の許可状態はCIの擬似handleでは再現できない。"
     },
     {
       "key": "WS-109.1",
@@ -1997,11 +1977,8 @@
         "WS-114"
       ],
       "observation": "実ブラウザーでフォルダー選択時に書き込み権限が要求されることを確認する。",
-      "status": "manual",
-      "manual": {
-        "environment": "ChromiumのFile System Access許可UI",
-        "reason": "showDirectoryPickerの実許可プロンプトは自動化APIから操作・観測できない。"
-      }
+      "status": "retired",
+      "retirementReason": "ChromiumのFile System Access許可UIでの観測は対象外とする。showDirectoryPickerの実許可プロンプトは自動化APIから操作・観測できない。"
     },
     {
       "key": "WS-115.1",
@@ -2031,11 +2008,8 @@
         "WS-115"
       ],
       "observation": "実ブラウザーで選択取消と権限拒否を行い、案内と一覧保持を確認する。",
-      "status": "manual",
-      "manual": {
-        "environment": "ChromiumのFile System Access許可UI",
-        "reason": "OS・ブラウザー所有の拒否表示と許可状態はheadless fixtureで再現できない。"
-      }
+      "status": "retired",
+      "retirementReason": "ChromiumのFile System Access許可UIでの観測は対象外とする。OS・ブラウザー所有の拒否表示と許可状態はheadless fixtureで再現できない。"
     },
     {
       "key": "WS-116.1",
@@ -2316,11 +2290,8 @@
         "WS-129"
       ],
       "observation": "3形式とも一覧へ入り、巨大JPEGの記録寸法・サムネイル・編集座標が回転後の向きで一致する。",
-      "status": "manual",
-      "manual": {
-        "environment": "十分なRAMを持つWindows実機と巨大PNG/JPEG/WebP・回転JPEG",
-        "reason": "3形式の既定ピクセル数超過画像を同時に一覧・編集表示した座標とサムネイルの一致はCIの小fixtureでは実メモリ・デコード経路を再現できない。"
-      }
+      "status": "retired",
+      "retirementReason": "十分なRAMを持つWindows実機と巨大PNG/JPEG/WebP・回転JPEGでの観測は対象外とする。3形式の既定ピクセル数超過画像を同時に一覧・編集表示した座標とサムネイルの一致はCIの小fixtureでは実メモリ・デコード経路を再現できない。"
     },
     {
       "key": "WS-129.2",
@@ -2328,11 +2299,8 @@
         "WS-129"
       ],
       "observation": "同時表示中もPillowの画素数制限警告を出さず、完了後は別画像を選択・表示できる",
-      "status": "manual",
-      "manual": {
-        "environment": "十分なRAMを持つWindows実機と巨大PNG/JPEG/WebP",
-        "reason": "Pillow既定上限超過を警告なしで表示し続けながら別画像へ切り替える応答性はCI runnerの実メモリ量に依存する。"
-      }
+      "status": "retired",
+      "retirementReason": "十分なRAMを持つWindows実機と巨大PNG/JPEG/WebPでの観測は対象外とする。Pillow既定上限超過を警告なしで表示し続けながら別画像へ切り替える応答性はCI runnerの実メモリ量に依存する。"
     },
     {
       "key": "WS-129.3",
@@ -2340,11 +2308,8 @@
         "WS-129"
       ],
       "observation": "既定ピクセル数超過の3形式と回転JPEGを同時表示し、応答性を確認する。",
-      "status": "manual",
-      "manual": {
-        "environment": "十分なRAMを持つWindows実機と巨大PNG/JPEG/WebP",
-        "reason": "Pillow既定上限超過画像を複数同時表示した実メモリ圧と描画応答はCI資源量に依存する。"
-      }
+      "status": "retired",
+      "retirementReason": "十分なRAMを持つWindows実機と巨大PNG/JPEG/WebPでの観測は対象外とする。Pillow既定上限超過画像を複数同時表示した実メモリ圧と描画応答はCI資源量に依存する。"
     },
     {
       "key": "WS-130.1",
@@ -2364,11 +2329,8 @@
         "WS-130"
       ],
       "observation": "読込走査中の実メモリ不足で対象だけがスキップされることを確認する。",
-      "status": "manual",
-      "manual": {
-        "environment": "Windows 11実機。利用可能RAMを意図的に圧迫し、数千画像を含む実フォルダーを読み込む。",
-        "reason": "OS全体の実メモリ枯渇とプロセス強制回収はCIで安全かつ決定的に再現できないため。"
-      }
+      "status": "retired",
+      "retirementReason": "Windows 11実機。利用可能RAMを意図的に圧迫し、数千画像を含む実フォルダーを読み込む この実環境での観測は対象外とする。OS全体の実メモリ枯渇とプロセス強制回収はCIで安全かつ決定的に再現できないため。"
     },
     {
       "key": "WS-131.1",
@@ -2400,11 +2362,8 @@
         "WS-131"
       ],
       "observation": "表示時の実メモリ不足後も通常画像を操作できることを確認する。",
-      "status": "manual",
-      "manual": {
-        "environment": "Windows 11実機。画像表示中に実メモリ不足を発生させ、解放後に別の通常画像を開く。",
-        "reason": "画像デコーダーとOSの実メモリ割当失敗はCIで安全かつ決定的に再現できないため。"
-      }
+      "status": "retired",
+      "retirementReason": "Windows 11実機。画像表示中に実メモリ不足を発生させ、解放後に別の通常画像を開く この実環境での観測は対象外とする。画像デコーダーとOSの実メモリ割当失敗はCIで安全かつ決定的に再現できないため。"
     },
     {
       "key": "WS-132.1",
@@ -2415,7 +2374,7 @@
       "status": "automated",
       "testIds": [
         "python:tests.test_server.MozarieTests.test_detection_maps_worker_gpu_memory_errors",
-        "python:tests.test_server.MozarieTests.test_thread_start_failure_releases_every_job_gate_and_allows_retry"
+        "python:tests.test_protocol_retry_contracts.StatefulRetryContracts.test_detection_gpu_memory_failure_releases_job_and_same_state_retry_publishes_mask"
       ]
     },
     {
@@ -2427,7 +2386,7 @@
       "status": "automated",
       "testIds": [
         "python:tests.test_server.MozarieTests.test_detection_maps_worker_gpu_memory_errors",
-        "python:tests.test_server.MozarieTests.test_thread_start_failure_releases_every_job_gate_and_allows_retry"
+        "python:tests.test_protocol_retry_contracts.StatefulRetryContracts.test_detection_gpu_memory_failure_releases_job_and_same_state_retry_publishes_mask"
       ]
     },
     {
@@ -2436,11 +2395,8 @@
         "WS-132"
       ],
       "observation": "自動検出中の実メモリ不足後も次の検出を開始できることを確認する。",
-      "status": "manual",
-      "manual": {
-        "environment": "Windows 11実機。GPUまたはCPU検出中に実メモリ不足を発生させ、解放後に次の検出を開始する。",
-        "reason": "推論ランタイムを含む実メモリ枯渇はCIで安全かつ決定的に再現できないため。"
-      }
+      "status": "retired",
+      "retirementReason": "Windows 11実機。GPUまたはCPU検出中に実メモリ不足を発生させ、解放後に次の検出を開始する この実環境での観測は対象外とする。推論ランタイムを含む実メモリ枯渇はCIで安全かつ決定的に再現できないため。"
     },
     {
       "key": "WS-133.1",
@@ -2451,7 +2407,7 @@
       "status": "automated",
       "testIds": [
         "python:tests.test_jobs_saving_coverage.JobsSavingCoverageTests.test_saving_input_and_render_boundary_failures",
-        "python:tests.test_server.MozarieTests.test_thread_start_failure_releases_every_job_gate_and_allows_retry"
+        "python:tests.test_protocol_retry_contracts.StatefulRetryContracts.test_browser_mask_read_failure_keeps_token_retryable_and_same_state_retry_overwrites_source"
       ]
     },
     {
@@ -2463,7 +2419,7 @@
       "status": "automated",
       "testIds": [
         "python:tests.test_jobs_saving_coverage.JobsSavingCoverageTests.test_saving_input_and_render_boundary_failures",
-        "python:tests.test_server.MozarieTests.test_thread_start_failure_releases_every_job_gate_and_allows_retry"
+        "python:tests.test_protocol_retry_contracts.StatefulRetryContracts.test_browser_mask_read_failure_keeps_token_retryable_and_same_state_retry_overwrites_source"
       ]
     },
     {
@@ -2472,11 +2428,8 @@
         "WS-133"
       ],
       "observation": "手描きまたは候補マスク付きブラウザー保存の実メモリ不足後に再保存できることを確認する。",
-      "status": "manual",
-      "manual": {
-        "environment": "Windows 11実機。手描きまたは候補マスク付き画像をブラウザー保存中に実メモリ不足にし、解放後に再保存する。",
-        "reason": "ブラウザーとOSを跨ぐ実メモリ枯渇はCIで安全かつ決定的に再現できないため。"
-      }
+      "status": "retired",
+      "retirementReason": "Windows 11実機。手描きまたは候補マスク付き画像をブラウザー保存中に実メモリ不足にし、解放後に再保存する この実環境での観測は対象外とする。ブラウザーとOSを跨ぐ実メモリ枯渇はCIで安全かつ決定的に再現できないため。"
     },
     {
       "key": "WS-134.1",
@@ -2487,7 +2440,7 @@
       "status": "automated",
       "testIds": [
         "python:tests.test_jobs_saving_coverage.JobsSavingCoverageTests.test_saving_input_and_render_boundary_failures",
-        "python:tests.test_server.MozarieTests.test_thread_start_failure_releases_every_job_gate_and_allows_retry"
+        "python:tests.test_protocol_retry_contracts.StatefulRetryContracts.test_apply_render_read_failure_releases_job_and_same_state_retry_writes_output"
       ]
     },
     {
@@ -2499,7 +2452,7 @@
       "status": "automated",
       "testIds": [
         "python:tests.test_jobs_saving_coverage.JobsSavingCoverageTests.test_saving_input_and_render_boundary_failures",
-        "python:tests.test_server.MozarieTests.test_thread_start_failure_releases_every_job_gate_and_allows_retry"
+        "python:tests.test_protocol_retry_contracts.StatefulRetryContracts.test_apply_render_read_failure_releases_job_and_same_state_retry_writes_output"
       ]
     },
     {
@@ -2508,11 +2461,8 @@
         "WS-134"
       ],
       "observation": "コピーまたはバックグラウンド保存の実メモリ不足後に再保存できることを確認する。",
-      "status": "manual",
-      "manual": {
-        "environment": "Windows 11実機。コピー保存またはバックグラウンド保存中に実メモリ不足にし、解放後に再保存する。",
-        "reason": "ファイルI/OとOS実メモリ枯渇の組合せはCIで安全かつ決定的に再現できないため。"
-      }
+      "status": "retired",
+      "retirementReason": "Windows 11実機。コピー保存またはバックグラウンド保存中に実メモリ不足にし、解放後に再保存する この実環境での観測は対象外とする。ファイルI/OとOS実メモリ枯渇の組合せはCIで安全かつ決定的に再現できないため。"
     },
     {
       "key": "WS-135.1",
@@ -2604,7 +2554,7 @@
       "sourceIds": [
         "WS-138"
       ],
-      "observation": "実機では成功時の正規化済み絶対形式を入力欄へ反映し、directory handleの表示名やImageRecordの相対名を絶対パス扱いしないことを確認する。",
+      "observation": "サーバーが返した正規化済み絶対形式を入力欄へ反映し、directory handleの表示名やImageRecordの相対名を絶対パス扱いしない。",
       "status": "automated",
       "testIds": [
         "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
@@ -2616,11 +2566,8 @@
         "WS-138"
       ],
       "observation": "実在絶対パスとbrowser directory sourceを併用し、入力欄と表示名を確認する。",
-      "status": "manual",
-      "manual": {
-        "environment": "Windowsの実在絶対パスとChromium directory handle",
-        "reason": "OSが返す正規化済みドライブパス表示とdirectory handle表示名の区別は非Windows/headless CIでは同じ形で観測できない。"
-      }
+      "status": "retired",
+      "retirementReason": "Windowsの実在絶対パスとChromium directory handleでの観測は対象外とする。OSが返す正規化済みドライブパス表示とdirectory handle表示名の区別は非Windows/headless CIでは同じ形で観測できない。"
     },
     {
       "key": "WS-139.1",
@@ -2661,11 +2608,8 @@
         "WS-139"
       ],
       "observation": "5,000件以上の実フォルダー走査中に編集と終了を行い、応答と再起動後を確認する。",
-      "status": "manual",
-      "manual": {
-        "environment": "Windowsで5,000件以上の実画像とファイル共有",
-        "reason": "大規模実ディスクI/O、別プロセスの共有ロック、アプリ終了の組合せは隔離CIの小fixtureで実負荷を再現できない。"
-      }
+      "status": "retired",
+      "retirementReason": "Windowsで5,000件以上の実画像とファイル共有での観測は対象外とする。大規模実ディスクI/O、別プロセスの共有ロック、アプリ終了の組合せは隔離CIの小fixtureで実負荷を再現できない。"
     },
     {
       "key": "WS-036.2",
@@ -2690,6 +2634,18 @@
       "testIds": [
         "node:tests/test_review_list_removal_e2e.cjs::review choices survive editing and list-only removal preserves source access boundaries > failed read-only and busy list removal leave the catalogue and editor intact",
         "node:tests/test_review_list_removal_e2e.cjs::review choices survive editing and list-only removal preserves source access boundaries > footer and context list removal accept unavailable and dimension-changed sources"
+      ]
+    },
+    {
+      "key": "WS-129.4",
+      "sourceIds": [
+        "WS-129"
+      ],
+      "observation": "Pillowの画素数上限を超えるPNG・JPEG・WebPを警告なしで一覧と画像APIへ公開し、回転JPEGの記録寸法・サムネイル・編集画像を同じ向きにする。",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_http_live_endpoints.LiveHttpEndpointTests.test_over_limit_png_jpeg_webp_catalog_and_assets_preserve_dimensions_without_warnings",
+        "python:tests.test_http_live_endpoints.LiveHttpEndpointTests.test_exif_rotated_thumbnail_and_editor_asset_have_identical_visual_orientation"
       ]
     }
   ]

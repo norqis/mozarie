@@ -41,19 +41,13 @@ class DataIntegrityVerificationContractTests(unittest.TestCase):
                 self.assertTrue(item["testIds"])
                 self.assertNotIn("manual", item)
                 self.assertEqual(set(item), {"key", "sourceIds", "observation", "status", "testIds"})
-            elif item["status"] == "manual":
-                self.assertEqual(item["status"], "manual")
-                self.assertNotIn("testIds", item)
-                self.assertTrue(item["manual"]["environment"].strip())
-                self.assertTrue(item["manual"]["reason"].strip())
-                self.assertEqual(set(item), {"key", "sourceIds", "observation", "status", "manual"})
             else:
                 self.assertEqual(item["status"], "retired")
                 self.assertNotIn("testIds", item)
                 self.assertNotIn("manual", item)
                 self.assertEqual(
                     set(item),
-                    {"key", "sourceIds", "observation", "status"},
+                    {"key", "sourceIds", "observation", "status", "retirementReason"},
                 )
 
     def test_automated_test_ids_resolve_to_tests_executed_by_normal_discovery(self) -> None:
@@ -79,18 +73,9 @@ class DataIntegrityVerificationContractTests(unittest.TestCase):
         }
         self.assertEqual(referenced - python_ids - node_ids, set())
 
-    def test_manual_document_contains_exactly_the_non_automatable_observations(self) -> None:
-        expected = {
-            item["key"]: item["observation"]
-            for item in self.contract["observations"]
-            if item["status"] == "manual"
-        }
-        documented = {}
-        for line in MANUAL_PATH.read_text(encoding="utf-8").splitlines():
-            match = re.fullmatch(r"\| (DI-\d+[a-z]?\.\d+) \| (.*?) \| .*? \| .*? \|", line)
-            if match:
-                documented[match.group(1)] = match.group(2)
-        self.assertEqual(documented, expected)
+    def test_no_manual_checklist_or_manual_observations_remain(self) -> None:
+        self.assertFalse(MANUAL_PATH.exists())
+        self.assertNotIn("manual", {item["status"] for item in self.contract["observations"]})
 
 
 if __name__ == "__main__":

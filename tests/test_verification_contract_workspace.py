@@ -26,29 +26,19 @@ class WorkspaceVerificationContractTests(unittest.TestCase):
         self.assertTrue(all(re.fullmatch(r"WS-\d{3}\.\d+", key) for key in keys))
 
         automated = [item for item in observations if item["status"] == "automated"]
-        manual = [item for item in observations if item["status"] == "manual"]
         retired = [item for item in observations if item["status"] == "retired"]
-        self.assertEqual(len(automated) + len(manual) + len(retired), len(observations))
+        self.assertEqual(len(automated) + len(retired), len(observations))
         statuses = {item["status"] for item in observations}
-        self.assertTrue({"automated", "manual"}.issubset(statuses))
-        self.assertTrue(statuses <= {"automated", "manual", "retired"})
+        self.assertIn("automated", statuses)
+        self.assertTrue(statuses <= {"automated", "retired"})
         for item in automated:
             self.assertTrue(item.get("testIds"), item["key"])
             self.assertNotIn("manual", item, item["key"])
             self.assertTrue(all(re.fullmatch(r"(?:node:tests/.+\.cjs::.+|python:tests\..+\.test_.+)", test_id) for test_id in item["testIds"]), item["key"])
-        for item in manual:
-            details = item.get("manual", {})
-            self.assertTrue(details.get("environment", "").strip(), item["key"])
-            self.assertTrue(details.get("reason", "").strip(), item["key"])
-            self.assertNotIn("testIds", item, item["key"])
         for item in retired:
-            self.assertEqual(set(item), {"key", "sourceIds", "observation", "status"}, item["key"])
+            self.assertEqual(set(item), {"key", "sourceIds", "observation", "status", "retirementReason"}, item["key"])
 
-        retained = {}
-        for match in re.finditer(r"^\| (WS-\d{3}\.\d+) \| ([^|]+) \| ([^|]+) \|$", MANUAL.read_text(encoding="utf-8"), re.MULTILINE):
-            retained[match.group(1)] = match.group(3).strip()
-        expected_manual = {item["key"]: item["observation"] for item in manual}
-        self.assertEqual(retained, expected_manual)
+        self.assertFalse(MANUAL.exists(), "the completed checklist is deleted")
 
 if __name__ == "__main__":
     unittest.main()

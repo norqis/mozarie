@@ -615,6 +615,13 @@ async function runBrowserCopyPoolAtScaleCases() {
     await runtime.runBrowserSave(entries.map((entry) => entry.imageId), "_censored", false, "copy");
     assert.equal(runtime.requests.filter((request) => request.path === "/api/save/reserve").length, 800, "a repeated 400-copy save reserves every output independently");
     assert.equal(runtime.saveTargets().length, 400, "a repeated 400-copy save keeps the source target set invariant");
+    const expectedIds = entries.flatMap((entry) => [entry.imageId, entry.imageId]).sort();
+    for (const endpoint of ["reserve", "render", "commit"]) {
+      const actualIds = runtime.requests.filter((request) => request.path === `/api/save/${endpoint}`)
+        .map((request) => JSON.parse(request.options.body).imageId).sort();
+      assert.deepEqual(actualIds, expectedIds, `each of the two batches ${endpoint}s every target exactly once without missing or duplicate outputs`);
+    }
+    assert.equal(runtime.state.settings.saving.parallelism, parallelism, "saving preserves the configured parallelism");
   }
 }
 

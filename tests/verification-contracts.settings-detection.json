@@ -233,7 +233,7 @@
       "observation": "設定値を保持し、出力の重複・欠落が発生しない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_browser_save_runtime.cjs::SD-019 parallel browser save has no missing or duplicate outputs"
+        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > 400 browser copies stay bounded by configured parallelism"
       ]
     },
     {
@@ -320,11 +320,8 @@
         "SD-025"
       ],
       "observation": "実際に配布されたNTD11モデルを読み込み、実画像への推論を開始できる",
-      "status": "manual",
-      "manual": {
-        "environment": "Windows + 配布版NTD11モデル",
-        "reason": "配布モデル本体と実推論結果はCI fixtureへ置換できない"
-      }
+      "status": "retired",
+      "retirementReason": "Windows + 配布版NTD11モデルでの観測は対象外とする。配布モデル本体と実推論結果はCI fixtureへ置換できない"
     },
     {
       "key": "SD-026.1",
@@ -388,11 +385,8 @@
         "SD-028"
       ],
       "observation": "実際に配布されたSensitiveモデルを読み込み、実画像への推論を開始できる",
-      "status": "manual",
-      "manual": {
-        "environment": "Windows + 配布版Sensitiveモデル",
-        "reason": "配布モデル本体と実推論結果はCI fixtureへ置換できない"
-      }
+      "status": "retired",
+      "retirementReason": "Windows + 配布版Sensitiveモデルでの観測は対象外とする。配布モデル本体と実推論結果はCI fixtureへ置換できない"
     },
     {
       "key": "SD-029.1",
@@ -456,11 +450,8 @@
         "SD-031"
       ],
       "observation": "実際に配布された手検出モデルを読み込み、実画像への推論を開始できる",
-      "status": "manual",
-      "manual": {
-        "environment": "Windows + 配布版手検出モデル",
-        "reason": "配布モデル本体と実推論結果はCI fixtureへ置換できない"
-      }
+      "status": "retired",
+      "retirementReason": "Windows + 配布版手検出モデルでの観測は対象外とする。配布モデル本体と実推論結果はCI fixtureへ置換できない"
     },
     {
       "key": "SD-032.1",
@@ -536,11 +527,8 @@
         "SD-034"
       ],
       "observation": "実際に配布された手領域分割モデルを読み込み、実画像の手候補を分割できる",
-      "status": "manual",
-      "manual": {
-        "environment": "Windows + 配布版手領域分割モデル",
-        "reason": "配布モデル本体と実推論結果はCI fixtureへ置換できない"
-      }
+      "status": "retired",
+      "retirementReason": "Windows + 配布版手領域分割モデルでの観測は対象外とする。配布モデル本体と実推論結果はCI fixtureへ置換できない"
     },
     {
       "key": "SD-035.1",
@@ -661,11 +649,8 @@
         "SD-040"
       ],
       "observation": "実際のSAMチェックポイントを各種類で読み込み、実画像の輪郭補正を実行できる",
-      "status": "manual",
-      "manual": {
-        "environment": "Windows + SAM vit_b/vit_l/vit_h実チェックポイント",
-        "reason": "実チェックポイントの読込とVRAM使用はCI fixtureへ置換できない"
-      }
+      "status": "retired",
+      "retirementReason": "Windows + SAM vit_b/vit_l/vit_h実チェックポイントでの観測は対象外とする。実チェックポイントの読込とVRAM使用はCI fixtureへ置換できない"
     },
     {
       "key": "SD-041.1",
@@ -753,7 +738,7 @@
       "sourceIds": [
         "SD-045"
       ],
-      "observation": "選択した物理GPUで処理する",
+      "observation": "設定画面のGPU選択を保存・復元し、CUDAセッション作成へ選択したdevice_idを渡して暗黙のCPU切替を禁止する。",
       "status": "automated",
       "testIds": [
         "node:tests/test_settings_dialog_e2e.cjs::SD-045 SD-046 GPU provider saves and is restored in the settings UI",
@@ -766,18 +751,15 @@
         "SD-045"
       ],
       "observation": "CUDA環境で選択した物理GPU上に実セッションを作成し、実モデル推論を完了できる",
-      "status": "manual",
-      "manual": {
-        "environment": "Windows + CUDA対応物理GPU + 実モデル",
-        "reason": "物理GPUの割当、VRAM、ドライバー、実モデル推論はCIでは再現できない"
-      }
+      "status": "retired",
+      "retirementReason": "Windows + CUDA対応物理GPU + 実モデルでの観測は対象外とする。物理GPUの割当、VRAM、ドライバー、実モデル推論はCIでは再現できない"
     },
     {
       "key": "SD-046.1",
       "sourceIds": [
         "SD-046"
       ],
-      "observation": "選択した物理GPUで処理する",
+      "observation": "設定画面のGPU選択を保存・復元し、列挙順が逆転したDirectMLアダプターを物理IDで照合して選択デバイスへ対応付ける。",
       "status": "automated",
       "testIds": [
         "node:tests/test_settings_dialog_e2e.cjs::SD-045 SD-046 GPU provider saves and is restored in the settings UI",
@@ -801,11 +783,8 @@
         "SD-046"
       ],
       "observation": "DirectML環境で選択した物理GPU上に実セッションを作成し、実モデル推論を完了できる",
-      "status": "manual",
-      "manual": {
-        "environment": "Windows + DirectML対応物理GPU + 実モデル",
-        "reason": "物理GPUの割当、DirectML DLL、VRAM、実モデル推論はCIでは再現できない"
-      }
+      "status": "retired",
+      "retirementReason": "Windows + DirectML対応物理GPU + 実モデルでの観測は対象外とする。物理GPUの割当、DirectML DLL、VRAM、実モデル推論はCIでは再現できない"
     },
     {
       "key": "SD-047.1",
@@ -2336,11 +2315,8 @@
         "SD-142"
       ],
       "observation": "実機では起動後の設定表示、利用者の作業フォルダー、モデル読込案内を確認する",
-      "status": "manual",
-      "manual": {
-        "environment": "Windows 配布版 + 利用者の実作業フォルダー + 実モデル",
-        "reason": "配布版のコピー配置、利用者固有フォルダー権限、実モデル読込案内の一連の確認はCIの一時環境では再現できない"
-      }
+      "status": "retired",
+      "retirementReason": "Windows 配布版 + 利用者の実作業フォルダー + 実モデルでの観測は対象外とする。配布版のコピー配置、利用者固有フォルダー権限、実モデル読込案内の一連の確認はCIの一時環境では再現できない"
     },
     {
       "key": "SD-144.1",
@@ -2394,11 +2370,8 @@
         "SD-145"
       ],
       "observation": "実際のWindows仮想環境でONNX Runtime DLLと選択プロファイルの不一致を検出して起動を止める",
-      "status": "manual",
-      "manual": {
-        "environment": "配布構成のWindows仮想環境 + 実ONNX Runtime DLL",
-        "reason": "実DLLのロード結果はCI fixtureへ置換できない"
-      }
+      "status": "retired",
+      "retirementReason": "配布構成のWindows仮想環境 + 実ONNX Runtime DLLでの観測は対象外とする。実DLLのロード結果はCI fixtureへ置換できない"
     },
     {
       "key": "SD-149.1",
@@ -2441,7 +2414,8 @@
         "SD-025"
       ],
       "observation": "検出精度と候補数の最低値は要求しない",
-      "status": "retired"
+      "status": "retired",
+      "retirementReason": "実モデルの検出精度や候補数は入力画像とモデルに依存するため、精度評価の観測を決定的な自動回帰検証の対象外とする。"
     },
     {
       "key": "SD-028.2",
@@ -2449,7 +2423,8 @@
         "SD-028"
       ],
       "observation": "検出精度と候補数の最低値は要求しない",
-      "status": "retired"
+      "status": "retired",
+      "retirementReason": "実モデルの検出精度や候補数は入力画像とモデルに依存するため、精度評価の観測を決定的な自動回帰検証の対象外とする。"
     },
     {
       "key": "SD-031.2",
@@ -2457,7 +2432,8 @@
         "SD-031"
       ],
       "observation": "検出精度と候補数の最低値は要求しない",
-      "status": "retired"
+      "status": "retired",
+      "retirementReason": "実モデルの検出精度や候補数は入力画像とモデルに依存するため、精度評価の観測を決定的な自動回帰検証の対象外とする。"
     },
     {
       "key": "SD-034.3",
@@ -2465,7 +2441,8 @@
         "SD-034"
       ],
       "observation": "手候補0件なら実行確認済みとしない",
-      "status": "retired"
+      "status": "retired",
+      "retirementReason": "実モデルの検出精度や候補数は入力画像とモデルに依存するため、精度評価の観測を決定的な自動回帰検証の対象外とする。"
     },
     {
       "key": "SD-037.3",
@@ -2473,7 +2450,8 @@
         "SD-037"
       ],
       "observation": "性器候補0件なら実行確認済みとしない",
-      "status": "retired"
+      "status": "retired",
+      "retirementReason": "実モデルの検出精度や候補数は入力画像とモデルに依存するため、精度評価の観測を決定的な自動回帰検証の対象外とする。"
     },
     {
       "key": "SD-048.2",
@@ -2481,7 +2459,8 @@
         "SD-048"
       ],
       "observation": "精度の比較評価は実施しない",
-      "status": "retired"
+      "status": "retired",
+      "retirementReason": "実モデルの検出精度や候補数は入力画像とモデルに依存するため、精度評価の観測を決定的な自動回帰検証の対象外とする。"
     },
     {
       "key": "SD-056.2",
@@ -2489,7 +2468,8 @@
         "SD-056"
       ],
       "observation": "検出精度は評価しない",
-      "status": "retired"
+      "status": "retired",
+      "retirementReason": "実モデルの検出精度や候補数は入力画像とモデルに依存するため、精度評価の観測を決定的な自動回帰検証の対象外とする。"
     },
     {
       "key": "SD-146.2",
@@ -2497,7 +2477,8 @@
         "SD-146"
       ],
       "observation": "候補数や検出精度は評価しない",
-      "status": "retired"
+      "status": "retired",
+      "retirementReason": "実モデルの検出精度や候補数は入力画像とモデルに依存するため、精度評価の観測を決定的な自動回帰検証の対象外とする。"
     },
     {
       "key": "SD-127.2",
@@ -2505,7 +2486,8 @@
         "SD-127"
       ],
       "observation": "候補がない種類は精度確認済みと扱わない",
-      "status": "retired"
+      "status": "retired",
+      "retirementReason": "実モデルの検出精度や候補数は入力画像とモデルに依存するため、精度評価の観測を決定的な自動回帰検証の対象外とする。"
     }
   ]
 }

@@ -42,25 +42,15 @@ class SaveReleaseVerificationContractTests(unittest.TestCase):
                 self.assertTrue(item["testIds"])
                 for test_id in item["testIds"]:
                     self._assert_test_id_is_discovered(test_id)
-            elif item["status"] == "manual":
-                self.assertEqual(item["status"], "manual")
-                self.assertNotIn("testIds", item)
-                self.assertTrue(item["manual"]["environment"].strip())
-                self.assertRegex(item["manual"]["reason"], r"(?:Windowsダイアログ|OS.*権限|実UNC|実ドライブ|ファイルシステム固有|実GPU|公開|実ブラウザー|実起動|機械判定)")
-                self.assertIn("CI", item["manual"]["reason"])
             else:
                 self.assertEqual(item["status"], "retired")
                 self.assertNotIn("testIds", item)
                 self.assertNotIn("manual", item)
-                self.assertIn("検証対象外", item["retired"]["reason"])
+                self.assertTrue(item["retirementReason"].strip())
 
-    def test_manual_document_contains_exactly_the_external_observations(self) -> None:
-        documented = {}
-        for match in re.finditer(r"^\| (SV-\d{3}[a-z]?\.\d+) \| [^|]+ \| [^|]+ \| (.+) \|$", MANUAL_PATH.read_text(encoding="utf-8"), re.MULTILINE):
-            documented[match.group(1)] = match.group(2)
-        expected = {item["key"]: item["observation"] for item in self.contract["observations"] if item["status"] == "manual"}
-        self.assertEqual(documented, expected)
-        self.assertEqual(len(documented), sum(item["status"] == "manual" for item in self.contract["observations"]))
+    def test_no_manual_checklist_or_manual_observations_remain(self) -> None:
+        self.assertFalse(MANUAL_PATH.exists())
+        self.assertNotIn("manual", {item["status"] for item in self.contract["observations"]})
 
     def _assert_test_id_is_discovered(self, test_id: str) -> None:
         kind, target = test_id.split(":", 1)

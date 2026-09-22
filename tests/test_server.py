@@ -4175,6 +4175,32 @@ class MozarieTests(unittest.TestCase):
         self.assertIs(state.sam_predictor, predictor)
         self.assertEqual(state.sam_image_id, "image")
 
+    def test_sd_012_saved_settings_survive_complete_state_restart(self):
+        state = self.new_state()
+        output = self.app_dir / "saved output"
+        output.mkdir()
+        update = {
+            "general": {"language": "en", "open_browser": False, "port": 8899},
+            "display": {"apply_color": "#123456", "overlay_opacity": 0.42, "tool_position": "right"},
+            "importing": {"parallelism": 5},
+            "editing": {"fill_color_tolerance": 37},
+            "detection": {"threshold": 0.73, "parallelism": 3, "default_candidate_padding_px": 9},
+            "saving": {"parallelism": 4, "default_output_directory": str(output), "preserve_directory_structure": False},
+            "shortcuts": {"bindings": {"next": "N"}, "actions": {"renameImage": False}},
+            "confirmations": {"removeImage": False},
+        }
+        saved = copy.deepcopy(state.update_settings(update))
+        self.assertEqual(saved["general"]["language"], "en")
+        self.assertEqual(saved["saving"]["default_output_directory"], str(output.resolve()))
+        self.assertEqual(saved["shortcuts"]["bindings"]["next"], "N")
+        state.shutdown()
+        self._states.remove(state)
+
+        reopened = self.new_state()
+        self.assertIsNot(reopened, state)
+        self.assertEqual(reopened.settings, saved)
+        self.assertEqual(reopened._active_detection_default_padding, 9)
+
     def test_settings_only_probe_a_changed_output_directory_and_saves_general_settings(self):
         state = self.new_state()
         unchanged = copy.deepcopy(state.settings)
@@ -9817,6 +9843,180 @@ image_io._stage_record_replacement(record, rendered, (source.stat().st_mtime_ns,
                 patch.object(detection_module.os, "replace", side_effect=move_then_mark_changed):
             with self.assertRaisesRegex(ClientError, "再読み込み"):
                 state.add_boundary_candidate(image_id, payload)
+
+    def test_sd_130_per_image_candidate_roles_keep_their_own_padding_without_leakage(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for name in ("apply.png", "exclude.png"): Image.new("RGB", (20, 12), "white").save(root / name)
+            state = self.new_state(); records = {item["relativePath"]: state.image_for_id(item["id"]) for item in state.set_root(str(root))}
+            mask = np.ones((12, 20), dtype=np.uint8)
+            apply_segment = [{"class_name": "penis", "confidence": .9, "mask": mask, "source": "target"}]
+            exclude_segment = [{"class_name": "other", "confidence": .9, "mask": mask, "source": "target", "image_exclusions": {"hand": mask}}]
+            outputs = []
+            for record, segments in ((records["apply.png"], apply_segment), (records["exclude.png"], exclude_segment)):
+                with patch.object(state, "_detect_arbitrated_segments", return_value=segments), \
+                        patch.object(state, "_hand_refinement_context", return_value=([], np.zeros_like(mask), [])), \
+                        patch.object(state, "_attach_hand_evidence", side_effect=lambda items, *_args: items), \
+                        patch.object(state, "_finalize_exclusions", side_effect=lambda _rgb, items, *_args, **_kwargs: items):
+                    outputs.append(state._detect_image(Mock(), record, .5, default_padding=3, default_exclude_padding=11))
+            self.assertEqual([(item.role.value, item.expand_px) for item in outputs[0]], [("apply", 3)])
+            self.assertEqual([(item.role.value, item.expand_px) for item in outputs[1]], [("exclude", 11)])
+
+    def test_sd_057_sd_058_pause_stops_new_claims_then_resume_processes_each_remaining_image_once(self):
+        state = self.new_state(); control = core_module.JobControl(); state.job_control = control
+        records = [Mock(image_id=f"image-{index}", relative_path=f"{index}.png") for index in range(5)]
+        state.job = core_module.Job(started_at=time.time(), kind="detect", state="running", total=5,
+                                    image_ids=tuple(record.image_id for record in records))
+        processed: list[int] = []; first_done = threading.Event()
+
+        def process(index, _record):
+            processed.append(index)
+            if index == 0:
+                control.pause_requested.set(); first_done.set()
+
+        worker = threading.Thread(target=lambda: state._run_fixed_workers(records, 1, process, control, None, state.catalog_generation))
+        try:
+            worker.start(); self.assertTrue(first_done.wait(THREAD_TIMEOUT))
+            deadline = time.time() + THREAD_TIMEOUT
+            while state.job.state != "paused" and time.time() < deadline: time.sleep(.01)
+            self.assertEqual(state.job.state, "paused"); self.assertEqual(processed, [0])
+            state.resume_job(); join_thread(worker)
+            self.assertEqual(processed, [0, 1, 2, 3, 4])
+            self.assertEqual(len(processed), len(set(processed)))
+        finally:
+            control.cancel_requested.set()
+            control.pause_requested.clear()
+            join_thread(worker)
+
+    def _assert_sam_variant_never_substitutes(self, variant: str) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); other = next(item for item in ("vit_b", "vit_l", "vit_h") if item != variant)
+            valid_other = root / f"sam_{other}.pth"; valid_other.write_bytes(b"other")
+            state = self.new_state(); state.settings["models"].update({
+                "sam_model_type": variant,
+                "sam_checkpoints": {"vit_b": "", "vit_l": "", "vit_h": "", other: str(valid_other)},
+            })
+            with self.assertRaises(ClientError) as missing:
+                state._configured_sam_path()
+            self.assertEqual(missing.exception.error_code, "sam_checkpoint_missing")
+            wrong = root / f"sam_{variant}.onnx"; wrong.write_bytes(b"wrong-kind")
+            state.settings["models"]["sam_checkpoints"][variant] = str(wrong)
+            with self.assertRaises(ClientError) as invalid:
+                state._configured_sam_path()
+            self.assertEqual(invalid.exception.error_code, "sam_checkpoint_invalid")
+
+    def test_sd_041_vit_b_missing_and_wrong_kind_never_substitutes_another_variant(self):
+        self._assert_sam_variant_never_substitutes("vit_b")
+
+    def test_sd_042_vit_l_missing_and_wrong_kind_never_substitutes_another_variant(self):
+        self._assert_sam_variant_never_substitutes("vit_l")
+
+    def test_sd_043_vit_h_missing_and_wrong_kind_never_substitutes_another_variant(self):
+        self._assert_sam_variant_never_substitutes("vit_h")
+
+    def _sd_optional_detection(self, model_key: str, enabled: bool) -> tuple[list[Candidate], Mock]:
+        directory = tempfile.TemporaryDirectory(); self.addCleanup(directory.cleanup)
+        image = Path(directory.name) / "image.png"; Image.new("RGB", (8, 8), "white").save(image)
+        state = self.new_state(); record = state.image_for_id(state.set_root(directory.name)[0]["id"])
+        state.settings["detection"]["fluid_exclusion_enabled"] = False
+        state.settings["models"].update({"ntd11_enabled": model_key == "ntd11" and enabled, "sensitive_enabled": model_key == "sensitive" and enabled})
+        target = Mock(); target.detect.return_value = []
+        auxiliary = Mock(); mask = np.zeros((8, 8), dtype=np.uint8); mask[2:6, 2:6] = 1
+        auxiliary.detect.return_value = [{"class_name": "penis", "mask": mask, "confidence": .9, "source": model_key}]
+        paths = iter((Path("target.onnx"), Path(f"{model_key}.onnx")))
+        with patch.object(state, "_configured_model_path", side_effect=lambda *_args: next(paths)), \
+                patch.object(detection_module, "TargetSegmenter", return_value=target), \
+                patch.object(detection_module, "GenericYoloSegmenter", return_value=auxiliary) as constructor:
+            models = state._load_detection_models()
+        candidates = state._detect_image(models, record, .5)
+        return candidates, constructor
+
+    def test_sd_024_disabled_ntd11_current_detection_creates_no_auxiliary_candidate(self):
+        candidates, constructor = self._sd_optional_detection("ntd11", False)
+        self.assertEqual(candidates, []); constructor.assert_not_called()
+
+    def test_sd_025_enabled_ntd11_runs_inference_and_creates_its_candidate(self):
+        candidates, constructor = self._sd_optional_detection("ntd11", True)
+        constructor.assert_called_once(); self.assertEqual([(item.label_token, item.source) for item in candidates], [("penis", "ntd11")])
+
+    def test_sd_027_disabled_sensitive_current_detection_creates_no_auxiliary_candidate(self):
+        candidates, constructor = self._sd_optional_detection("sensitive", False)
+        self.assertEqual(candidates, []); constructor.assert_not_called()
+
+    def test_sd_028_enabled_sensitive_runs_inference_and_creates_its_candidate(self):
+        candidates, constructor = self._sd_optional_detection("sensitive", True)
+        constructor.assert_called_once(); self.assertEqual([(item.label_token, item.source) for item in candidates], [("penis", "sensitive")])
+
+    def test_sd_030_disabled_hand_current_detection_creates_no_hand_exclusion(self):
+        with tempfile.TemporaryDirectory() as directory:
+            image = Path(directory) / "image.png"; Image.new("RGB", (8, 8), "white").save(image)
+            state = self.new_state(); record = state.image_for_id(state.set_root(directory)[0]["id"])
+            state.settings["models"]["hand_detection_enabled"] = False
+            state.settings["detection"]["fluid_exclusion_enabled"] = False
+            target = Mock(); mask = np.ones((8, 8), dtype=np.uint8); target.detect.return_value = [{"class_name": "penis", "mask": mask, "confidence": .9, "source": "target"}]
+            hand = Mock(); hand.detect_boxes.return_value = [(1, 1, 5, 5)]
+            with patch.object(detection_module, "HandDetector", return_value=hand) as constructor:
+                candidates = state._detect_image(DetectionModels(target=target), record, .5)
+            constructor.assert_not_called(); hand.detect_boxes.assert_not_called()
+            self.assertEqual([item.role for item in candidates], [core_module.CandidateRole.APPLY])
+
+    def test_sd_031_enabled_hand_runs_box_inference_during_current_detection(self):
+        with tempfile.TemporaryDirectory() as directory:
+            image = Path(directory) / "image.png"; Image.new("RGB", (8, 8), "white").save(image)
+            state = self.new_state(); record = state.image_for_id(state.set_root(directory)[0]["id"])
+            state.settings["models"].update({"hand_detection_enabled": True, "hand_segmentation_enabled": False})
+            state.settings["detection"]["fluid_exclusion_enabled"] = False
+            target = Mock(); target.detect.return_value = []
+            hand = Mock(); hand.detect_boxes.return_value = [(1, 1, 5, 5)]; state.hand_model = hand
+            self.assertEqual(state._detect_image(DetectionModels(target=target), record, .5), [])
+            hand.detect_boxes.assert_called_once()
+
+    def test_sd_033_disabled_hand_segmentation_never_creates_a_specialist_exclusion(self):
+        with tempfile.TemporaryDirectory() as directory:
+            image = Path(directory) / "image.png"; Image.new("RGB", (8, 8), "white").save(image)
+            state = self.new_state(); record = state.image_for_id(state.set_root(directory)[0]["id"])
+            state.settings["models"].update({"hand_detection_enabled": True, "hand_segmentation_enabled": False})
+            state.settings["detection"]["fluid_exclusion_enabled"] = False
+            mask = np.ones((8, 8), dtype=np.uint8); target = Mock(); target.detect.return_value = [{"class_name": "penis", "mask": mask, "confidence": .9, "source": "target"}]
+            hand = Mock(); hand.detect_boxes.return_value = [(1, 1, 5, 5)]; state.hand_model = hand
+            with patch.object(state, "_hand_segmentation_predictor_for") as specialist:
+                candidates = state._detect_image(DetectionModels(target=target), record, .5)
+            specialist.assert_not_called(); self.assertEqual([item.role for item in candidates], [core_module.CandidateRole.APPLY])
+
+    def test_sd_111_sd_112_source_exists_through_prepare_then_integrated_delete_removes_file_and_state(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); source = root / "source.png"; Image.new("RGB", (8, 8), "white").save(source)
+            state = self.new_state(); image_id = state.set_root(str(root))[0]["id"]
+            token = str(uuid.uuid4())
+            prepared = state.prepare_source_delete({"deleteToken": token, "imageIds": [image_id]})
+            self.assertEqual(prepared["preparedImageIds"], [image_id])
+            self.assertTrue(source.is_file()); self.assertIn(image_id, state.images)
+            state.claim_source_delete(token)
+            result = state.delete_images_with_sources({"deleteToken": token, "imageIds": [image_id], "browserDeletedImageIds": []})
+            self.assertEqual(result["removedImageIds"], [image_id])
+            self.assertFalse(source.exists()); self.assertNotIn(image_id, state.images)
+            self.assertNotIn(image_id, state.order)
+            self.assertEqual(state.workspace_store.project_images(state.workspace_id), [])
+
+    def test_folder_scan_loads_every_normal_file_in_deterministic_order(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            expected = []
+            for index in range(80):
+                relative = Path(f"part-{index % 5}") / f"image-{79 - index:03}.png"
+                path = root / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                Image.new("RGB", (8, 8), "white").save(path)
+                expected.append(relative.as_posix())
+            state = self.new_state()
+            state.settings["importing"]["parallelism"] = 4
+
+            records = state.set_root(str(root))
+
+            self.assertEqual(len(records), len(expected))
+            self.assertEqual([record["relativePath"] for record in records], sorted(expected, key=lambda value: (value.casefold(), value)))
+
+
 
 
 if __name__ == "__main__":

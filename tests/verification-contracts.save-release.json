@@ -484,7 +484,8 @@
         "SV-096"
       ],
       "observation": "元フォルダー再接続のWindowsダイアログで許可、取消、別フォルダー選択を行ったとき、表示とOS権限UIが正しい。",
-      "status": "retired"
+      "status": "retired",
+      "retirementReason": "Windows所有のフォルダー選択・許可画面自体は自動検証の対象外とする。選択結果・取消・不一致のアプリ側処理は自動テストで検証する。"
     },
     {
       "key": "SV-029.1",
@@ -672,7 +673,7 @@
       "observation": "現在PJを切り替えず、指定行のPJだけを出力する。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_project_ui_runtime.cjs::project dialogs, source recovery, and project switching > project mask exports preserve project state across empty read-only failure and retry cases"
+        "node:tests/test_project_ui_runtime.cjs::project dialogs, A-B-A switching, failed-open recovery, and duplicate transition guards > project mask exports preserve project state across empty read-only failure and retry cases"
       ]
     },
     {
@@ -683,7 +684,7 @@
       "observation": "直前の候補編集もZIPに反映する。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_project_ui_runtime.cjs::project dialogs, source recovery, and project switching > project mask exports preserve project state across empty read-only failure and retry cases",
+        "node:tests/test_project_ui_runtime.cjs::project dialogs, A-B-A switching, failed-open recovery, and duplicate transition guards > project mask exports preserve project state across empty read-only failure and retry cases",
         "python:tests.test_project_http_coverage.ProjectHttpCoverageTests.test_project_mask_png_zip_and_cleanup"
       ]
     },
@@ -695,7 +696,7 @@
       "observation": "閲覧専用を維持したまま保存できる。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_project_ui_runtime.cjs::project dialogs, source recovery, and project switching > project mask exports preserve project state across empty read-only failure and retry cases"
+        "node:tests/test_project_ui_runtime.cjs::project dialogs, A-B-A switching, failed-open recovery, and duplicate transition guards > project mask exports preserve project state across empty read-only failure and retry cases"
       ]
     },
     {
@@ -706,7 +707,7 @@
       "observation": "2種類のZIP操作だけ無効となり、PJを開く・削除は操作できる。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_project_ui_runtime.cjs::project dialogs, source recovery, and project switching > project mask exports preserve project state across empty read-only failure and retry cases"
+        "node:tests/test_project_ui_runtime.cjs::project dialogs, A-B-A switching, failed-open recovery, and duplicate transition guards > project mask exports preserve project state across empty read-only failure and retry cases"
       ]
     },
     {
@@ -717,7 +718,7 @@
       "observation": "通信エラーを表示し、PJ管理表と対象PJを保持する。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_project_ui_runtime.cjs::project dialogs, source recovery, and project switching > project mask exports preserve project state across empty read-only failure and retry cases"
+        "node:tests/test_project_ui_runtime.cjs::project dialogs, A-B-A switching, failed-open recovery, and duplicate transition guards > project mask exports preserve project state across empty read-only failure and retry cases"
       ]
     },
     {
@@ -728,7 +729,7 @@
       "observation": "再度ZIPを保存できる。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_project_ui_runtime.cjs::project dialogs, source recovery, and project switching > project mask exports preserve project state across empty read-only failure and retry cases"
+        "node:tests/test_project_ui_runtime.cjs::project dialogs, A-B-A switching, failed-open recovery, and duplicate transition guards > project mask exports preserve project state across empty read-only failure and retry cases"
       ]
     },
     {
@@ -759,7 +760,8 @@
         "SV-046"
       ],
       "observation": "アクセス許可を求めるOS操作は実施しない。",
-      "status": "retired"
+      "status": "retired",
+      "retirementReason": "OS所有の権限操作自体は自動検証の対象外とする。許可・拒否結果に対するアプリ側処理は自動テストで検証する。"
     },
     {
       "key": "SV-047.1",
@@ -815,7 +817,7 @@
       "observation": "通信エラーを表示し、現在の作業画面を維持する。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_project_ui_runtime.cjs::project dialogs, source recovery, and project switching > project network failures preserve list order editor state and selected project"
+        "node:tests/test_project_ui_runtime.cjs::project dialogs, A-B-A switching, failed-open recovery, and duplicate transition guards > project network failures preserve list order editor state and selected project"
       ]
     },
     {
@@ -826,7 +828,7 @@
       "observation": "通信エラーを表示し、取得済みの行順と昇降順表示を保持する。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_project_ui_runtime.cjs::project dialogs, source recovery, and project switching > project network failures preserve list order editor state and selected project"
+        "node:tests/test_project_ui_runtime.cjs::project dialogs, A-B-A switching, failed-open recovery, and duplicate transition guards > project network failures preserve list order editor state and selected project"
       ]
     },
     {
@@ -837,7 +839,7 @@
       "observation": "通信エラーを表示し、対象PJと現在の編集を保持する。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_project_ui_runtime.cjs::project dialogs, source recovery, and project switching > project network failures preserve list order editor state and selected project"
+        "node:tests/test_project_ui_runtime.cjs::project dialogs, A-B-A switching, failed-open recovery, and duplicate transition guards > project network failures preserve list order editor state and selected project"
       ]
     },
     {
@@ -848,7 +850,7 @@
       "observation": "通信エラーを表示し、保存前のPJ名・候補・手描き・確認状態を保持する。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_project_ui_runtime.cjs::project dialogs, source recovery, and project switching > project network failures preserve list order editor state and selected project"
+        "node:tests/test_project_ui_runtime.cjs::project dialogs, A-B-A switching, failed-open recovery, and duplicate transition guards > project network failures preserve list order editor state and selected project"
       ]
     },
     {
@@ -925,11 +927,8 @@
         "SV-059"
       ],
       "observation": "実GPUで検出を5回繰り返し、終了後のVRAM基準値が回数に応じて増え続けない。",
-      "status": "manual",
-      "manual": {
-        "environment": "対応GPUと実検出モデルを使用するWindows環境",
-        "reason": "実GPUドライバーのVRAM割当と解放後の基準値はCIのCPU環境では再現できない。"
-      }
+      "status": "retired",
+      "retirementReason": "対応GPUと実検出モデルを使用するWindows環境での観測は対象外とする。実GPUドライバーのVRAM割当と解放後の基準値はCIのCPU環境では再現できない。"
     },
     {
       "key": "SV-060.1",
@@ -961,7 +960,8 @@
         "SV-062"
       ],
       "observation": "バックエンド・フロントエンドの全テストと静的確認が成功している。",
-      "status": "retired"
+      "status": "retired",
+      "retirementReason": "全suite成功はテスト実行基盤とCIの必須checkで検証するため、製品観測を列挙する旧確認表から除外する。"
     },
     {
       "key": "SV-062.2",
@@ -969,7 +969,8 @@
         "SV-062"
       ],
       "observation": "失敗・skip・対象外のテストを残していない。",
-      "status": "retired"
+      "status": "retired",
+      "retirementReason": "失敗・skip・TODOの禁止と参照テストの実行はテスト実行基盤で強制するため、旧確認表の重複した実施項目から除外する。"
     },
     {
       "key": "SV-063.1",
@@ -977,11 +978,8 @@
         "SV-063"
       ],
       "observation": "公開Releaseのタグ、リリース名、ZIP内VERSIONが同じバージョンである。",
-      "status": "manual",
-      "manual": {
-        "environment": "公開GitHub Releaseと公開済みmozarie.zip",
-        "reason": "CIでは未公開Releaseの最終タグ、リリース名、公開assetを観測できないため。"
-      }
+      "status": "retired",
+      "retirementReason": "公開後のタグ・リリース名・ZIP版の照合はリリース実施時の公開状態検証へ移し、未公開変更を検証する回帰チェックリストから除外する。"
     },
     {
       "key": "SV-063.3",
@@ -1013,11 +1011,8 @@
         "SV-064"
       ],
       "observation": "セットアップが完了し、新しい版の画面を開ける。",
-      "status": "manual",
-      "manual": {
-        "environment": "クリーンなWindows環境へ展開した公開Release ZIP",
-        "reason": "CIでは公開ZIPからの対話セットアップ完了と、新版UIの実起動を同じ利用環境で観測できないため。"
-      }
+      "status": "retired",
+      "retirementReason": "クリーンなWindows環境へ展開した公開Release ZIPでの観測は対象外とする。CIでは公開ZIPからの対話セットアップ完了と、新版UIの実起動を同じ利用環境で観測できないため。"
     },
     {
       "key": "SV-065.1",
@@ -1036,11 +1031,8 @@
         "SV-066"
       ],
       "observation": "PRと説明は日本語、リリース名はバージョンだけ。",
-      "status": "manual",
-      "manual": {
-        "environment": "公開GitHub Pull RequestとRelease",
-        "reason": "CIでは公開前のPR本文と最終Release名を公開状態として観測できないため。"
-      }
+      "status": "retired",
+      "retirementReason": "PRの記述言語と公開Release名はリリース実施時の公開状態検証へ移し、製品の回帰チェックリストから除外する。"
     },
     {
       "key": "SV-066.2",
@@ -1048,11 +1040,8 @@
         "SV-066"
       ],
       "observation": "説明は変更内容を簡潔に記載する。",
-      "status": "manual",
-      "manual": {
-        "environment": "公開GitHub Pull RequestとRelease notes",
-        "reason": "CIでは説明が実際の変更内容と一致し簡潔であるかを機械判定できないため。"
-      }
+      "status": "retired",
+      "retirementReason": "実際の変更を過不足なく簡潔に説明しているかは人による編集判断であり、自動回帰検証の対象外とする。"
     },
     {
       "key": "SV-067.1",
@@ -1060,11 +1049,8 @@
         "SV-067"
       ],
       "observation": "マージ後のコミットが一致し、マージ済み作業ブランチが残らない。",
-      "status": "manual",
-      "manual": {
-        "environment": "GitHubのマージ済みPR、main、remote branch一覧",
-        "reason": "CIではマージ後SHAと`refs/heads`、`refs/remotes/origin`を含むremote作業ブランチ削除を公開状態で確定できないため。"
-      }
+      "status": "retired",
+      "retirementReason": "マージ後SHAと作業ブランチ削除はリリース実施時のリポジトリ状態検証へ移し、製品の回帰チェックリストから除外する。"
     },
     {
       "key": "SV-068.1",
@@ -1114,11 +1100,8 @@
         "SV-069"
       ],
       "observation": "実ドライブの空き容量不足から回復する更新で、更新先とバックアップ先を変更せず、容量確保後に完了する。",
-      "status": "manual",
-      "manual": {
-        "environment": "Windowsの実更新先ドライブとバックアップ先ドライブ",
-        "reason": "実ドライブの空き容量、予約領域、別ボリュームの挙動は隔離CI fixtureでは再現できない。"
-      }
+      "status": "retired",
+      "retirementReason": "Windowsの実更新先ドライブとバックアップ先ドライブでの観測は対象外とする。実ドライブの空き容量、予約領域、別ボリュームの挙動は隔離CI fixtureでは再現できない。"
     },
     {
       "key": "SV-070.1",
@@ -1221,11 +1204,10 @@
         "SV-073"
       ],
       "observation": "実ブラウザーでは途中で別版・空応答・404へ変わらず、応答終了後に一時ファイルを解放し、tokenの版不一致を案内することを確認する。",
-      "status": "manual",
-      "manual": {
-        "environment": "実ChromiumとWindowsローカル保存先",
-        "reason": "CIの合成HTTPクライアントでは実ブラウザーのストリーム途中応答、応答終了時の一時ファイル解放、版不一致表示を一続きに観測できないため。"
-      }
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_http_live_endpoints.LiveHttpEndpointTests.test_chromium_save_stream_survives_revision_change_and_releases_temporary_output"
+      ]
     },
     {
       "key": "SV-074.1",
@@ -1281,11 +1263,8 @@
         "SV-075"
       ],
       "observation": "実ブラウザー保存中に一時保存先の書込権限または空き容量を失っても、途中ファイルを残さず利用者へ案内する。",
-      "status": "manual",
-      "manual": {
-        "environment": "Windowsの実保存先、ブラウザー、容量不足またはOS書込権限",
-        "reason": "実ドライブ容量とOSのアクセス許可状態をCIから安全かつ決定的に変更できない。"
-      }
+      "status": "retired",
+      "retirementReason": "Windowsの実保存先、ブラウザー、容量不足またはOS書込権限での観測は対象外とする。実ドライブ容量とOSのアクセス許可状態をCIから安全かつ決定的に変更できない。"
     },
     {
       "key": "SV-076.1",
@@ -1305,11 +1284,8 @@
         "SV-076"
       ],
       "observation": "実リリースZIPを実ドライブへ展開し、容量不足では展開先を変更せず、容量確保後に管理対象だけを展開する。",
-      "status": "manual",
-      "manual": {
-        "environment": "Windowsの実ドライブと公開Release ZIP",
-        "reason": "実ドライブ容量不足と公開配布物を組み合わせた挙動は隔離CI fixtureでは再現できない。"
-      }
+      "status": "retired",
+      "retirementReason": "Windowsの実ドライブと公開Release ZIPでの観測は対象外とする。実ドライブ容量不足と公開配布物を組み合わせた挙動は隔離CI fixtureでは再現できない。"
     },
     {
       "key": "SV-077.1",
@@ -1329,11 +1305,10 @@
         "SV-077"
       ],
       "observation": "実ブラウザーでは`source_restore_failed`を表示し、コピー、元画像、候補、手描き、一覧を保持する。",
-      "status": "manual",
-      "manual": {
-        "environment": "File System Access APIを利用できる実ChromiumとWindowsローカル元画像",
-        "reason": "CIの模擬FileSystemHandleでは実ブラウザーの復元失敗表示と元画像、候補、手描き、一覧の同時保持を観測できないため。"
-      }
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_save_failure_browser_e2e.cjs::source snapshot failure in Chromium preserves source copy candidates draft and catalog"
+      ]
     },
     {
       "key": "SV-077.3",
@@ -1365,11 +1340,8 @@
         "SV-078"
       ],
       "observation": "接続済みの実UNCを保存先として選択し、正規化済み絶対パスが画面と設定へ同期する。",
-      "status": "manual",
-      "manual": {
-        "environment": "Windowsの接続済みUNC共有",
-        "reason": "実UNCの接続、資格情報、名前解決はCI fixtureでは再現できない。"
-      }
+      "status": "retired",
+      "retirementReason": "Windowsの接続済みUNC共有での観測は対象外とする。実UNCの接続、資格情報、名前解決はCI fixtureでは再現できない。"
     },
     {
       "key": "SV-079.1",
@@ -1436,11 +1408,8 @@
         "SV-082"
       ],
       "observation": "UNC、SMB、FAT固有の同名競合でも既存ファイルを上書きせず、確保した名前だけを公開する。",
-      "status": "manual",
-      "manual": {
-        "environment": "Windows上の実UNC、SMB共有、FATボリューム",
-        "reason": "共有サーバーとファイルシステム固有の排他・原子性はローカルCI fixtureと同一ではない。"
-      }
+      "status": "retired",
+      "retirementReason": "Windows上の実UNC、SMB共有、FATボリュームでの観測は対象外とする。共有サーバーとファイルシステム固有の排他・原子性はローカルCI fixtureと同一ではない。"
     },
     {
       "key": "SV-083.1",
@@ -1471,11 +1440,8 @@
         "SV-084"
       ],
       "observation": "保存途中に実UNC接続またはOS削除権限を失い、再起動後も清掃を保留して再試行できる。",
-      "status": "manual",
-      "manual": {
-        "environment": "Windowsの実UNC共有またはOSアクセス許可を変更できる保存先",
-        "reason": "実UNC切断とOS権限変更はCI fixtureでは安全かつ決定的に再現できない。"
-      }
+      "status": "retired",
+      "retirementReason": "Windowsの実UNC共有またはOSアクセス許可を変更できる保存先での観測は対象外とする。実UNC切断とOS権限変更はCI fixtureでは安全かつ決定的に再現できない。"
     },
     {
       "key": "SV-085.1",

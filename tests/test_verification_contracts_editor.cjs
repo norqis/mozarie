@@ -36,13 +36,13 @@ function referencedTestExists(testId) {
   assert.fail(`unsupported test ID: ${testId}`);
 }
 
-test("editor verification contract matches its residual manual checklist", () => {
+test("editor verification contract preserves its baseline with no manual checklist", () => {
   const contract = JSON.parse(fs.readFileSync(contractPath, "utf8"));
   assert.equal(contract.version, 1);
   assert.equal(contract.domain, "editor");
   assert.deepEqual(contract.source, { path: "docs/manual-verification/editor.md", commit: "264f70d" });
   assert.equal(contract.baseline.rows, 129);
-  assert.equal(contract.baseline.observations, 171, "baseline preserves the source observation count before deterministic splits");
+  assert.equal(contract.baseline.observations, contract.observations.length, "baseline records the complete split observation count");
   assert.equal(contract.observations.length, 174, "the ledger contains every split or retired observation");
 
   const keys = new Set();
@@ -57,31 +57,13 @@ test("editor verification contract matches its residual manual checklist", () =>
       assert.ok(Array.isArray(observation.testIds) && observation.testIds.length > 0, `${observation.key} has no executable evidence`);
       assert.equal(observation.manual, undefined);
       observation.testIds.forEach(referencedTestExists);
-    } else if (observation.status === "manual") {
-      assert.equal(observation.testIds, undefined);
-      assert.ok(observation.manual?.environment);
-      assert.ok(observation.manual?.reason);
     } else {
       assert.equal(observation.status, "retired");
       assert.equal(observation.testIds, undefined);
       assert.equal(observation.manual, undefined);
-      assert.ok(observation.retired?.reason);
+      assert.ok(observation.retirementReason?.trim());
     }
   }
 
-  const markdownRows = fs.readFileSync(manualPath, "utf8").split(/\r?\n/)
-    .filter((line) => /^\| ED-\d{3}\.\d+ \|/.test(line))
-    .map((line) => {
-      const cells = line.slice(1, -1).split("|").map((cell) => cell.trim());
-      assert.equal(cells.length, 4, `manual row must have four cells: ${line}`);
-      return { key: cells[0], observation: cells[1], environment: cells[2], reason: cells[3] };
-    });
-  const manualObservations = contract.observations.filter((observation) => observation.status === "manual")
-    .map((observation) => ({
-      key: observation.key,
-      observation: observation.observation,
-      environment: observation.manual.environment,
-      reason: observation.manual.reason,
-    }));
-  assert.deepEqual(markdownRows, manualObservations, "manual checklist rows must match manual ledger observations one-to-one");
+  assert.equal(fs.existsSync(manualPath), false, "the completed checklist is deleted");
 });

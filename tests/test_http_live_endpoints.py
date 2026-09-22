@@ -7,9 +7,11 @@ They cover the browser-facing contract without substituting handler methods.
 from __future__ import annotations
 
 import http.client
+import hashlib
 import io
 import json
 import sqlite3
+import subprocess
 import tempfile
 import threading
 import time
@@ -20,6 +22,7 @@ from pathlib import Path
 
 from PIL import Image, ImageOps, PngImagePlugin
 from tests import prepare_test_app_config
+import numpy as np
 
 import mozarie.http as http_module
 import mozarie.state as state_module
@@ -386,6 +389,37 @@ class LiveHttpEndpointTests(unittest.TestCase):
         with Image.open(io.BytesIO(body)) as image:
             self.assertEqual(image.size, (13, 9))
 
+    def test_over_limit_png_jpeg_webp_catalog_and_assets_preserve_dimensions_without_warnings(self) -> None:
+        for extension, image_format in [("png", "PNG"), ("jpg", "JPEG"), ("webp", "WEBP")]:
+            with Image.new("RGB", (40, 20), "#d04020") as source:
+                options = {}
+                if image_format == "JPEG":
+                    exif = Image.Exif()
+                    exif[274] = 6
+                    options["exif"] = exif
+                source.save(self.source_dir / f"over-limit.{extension}", format=image_format, **options)
+
+        with patch.object(Image, "MAX_IMAGE_PIXELS", 1), warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always", Image.DecompressionBombWarning)
+            status, _headers, body = self.request("POST", "/api/folder", {"path": str(self.source_dir)}, authorized=True)
+            self.assertEqual(status, 200, body.decode("utf-8"))
+            records = {item["relativePath"]: item for item in json.loads(body)["images"]}
+            self.assertEqual(set(records), {"source.png", "over-limit.png", "over-limit.jpg", "over-limit.webp"})
+            assets = []
+            for name, record in records.items():
+                expected = (20, 40) if name.endswith(".jpg") else ((12, 8) if name == "source.png" else (40, 20))
+                self.assertEqual((record["width"], record["height"]), expected)
+                for route in ("image", "thumbnail"):
+                    status, _headers, asset = self.request("GET", f"/api/{route}/{record['id']}")
+                    self.assertEqual(status, 200, name)
+                    assets.append((asset, expected))
+            self.assertEqual(Image.MAX_IMAGE_PIXELS, 1, "requests restore the caller's Pillow guard")
+            self.assertFalse([warning for warning in caught if issubclass(warning.category, Image.DecompressionBombWarning)])
+
+        for asset, expected in assets:
+            with Image.open(io.BytesIO(asset)) as source, ImageOps.exif_transpose(source) as visible:
+                self.assertEqual(visible.size, expected)
+
     def test_exif_rotated_thumbnail_and_editor_asset_have_identical_visual_orientation(self) -> None:
         rotated = self.source_dir / "rotated.jpg"
         exif = Image.Exif(); exif[274] = 6
@@ -602,6 +636,67 @@ class LiveHttpEndpointTests(unittest.TestCase):
         }, authorized=True)
         self.assertEqual(status, 400)
         self.assertEqual(json.loads(body)["error_code"], "input_invalid")
+
+    def test_chromium_save_stream_survives_revision_change_and_releases_temporary_output(self) -> None:
+        pixels = np.random.default_rng(73).integers(0, 256, (1024, 1024, 3), dtype=np.uint8)
+        with Image.fromarray(pixels) as source:
+            source.save(self.source_dir / "source.png")
+        image_id = self.state.set_root(str(self.source_dir))[0]["id"]
+        self.state.set_image_transform(image_id, {"flipH": True, "flipV": False})
+        captured = []
+        render = self.state.render_browser_save
+        revision_changed = threading.Event()
+        first_chunk_sent = threading.Event()
+        transform = self.state.set_image_transform
+        stream_path = MosaicHandler._stream_path
+
+        def capture_render(*args, **kwargs):
+            result = render(*args, **kwargs)
+            if result.response_path is not None:
+                captured.append((result.response_path, hashlib.sha256(result.response_path.read_bytes()).hexdigest()))
+            return result
+
+        def change_revision(*args, **kwargs):
+            self.assertTrue(first_chunk_sent.is_set())
+            self.assertTrue(captured[0][0].exists(), "the first response is still streaming when the browser changes its revision")
+            result = transform(*args, **kwargs)
+            revision_changed.set()
+            return result
+
+        def hold_after_first_chunk(handler, path, content_type, headers):
+            write = handler.wfile.write
+            writes = 0
+
+            def write_and_wait(data):
+                nonlocal writes
+                result = write(data)
+                writes += 1
+                if writes == 2:  # Headers, then the first image chunk.
+                    first_chunk_sent.set()
+                    if not revision_changed.wait(THREAD_TIMEOUT):
+                        raise AssertionError("the browser did not edit the image while the response was streaming")
+                return result
+
+            with patch.object(handler.wfile, "write", side_effect=write_and_wait):
+                return stream_path(handler, path, content_type, headers)
+
+        try:
+            with patch.object(self.state, "render_browser_save", side_effect=capture_render), \
+                    patch.object(self.state, "set_image_transform", side_effect=change_revision), \
+                    patch.object(MosaicHandler, "_stream_path", hold_after_first_chunk):
+                result = subprocess.run(
+                    ["node", str(Path(__file__).with_name("save_stream_live_browser_helper.cjs")), self.origin],
+                    cwd=Path(__file__).resolve().parents[1], text=True, encoding="utf-8", errors="replace",
+                    capture_output=True, timeout=60, check=False,
+                )
+        finally:
+            revision_changed.set()
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        browser_result = json.loads(result.stdout)
+        self.assertEqual(len(captured), 1)
+        response_path, digest = captured[0]
+        self.assertEqual(browser_result["digest"], digest, "the full browser response retains the version opened before the concurrent edit")
+        self.assertFalse(response_path.exists(), "response completion releases the temporary output")
 
     def test_live_browser_save_render_streams_a_stable_image_response(self) -> None:
         status, _headers, body = self.request("POST", "/api/folder", {"path": str(self.source_dir)}, authorized=True)

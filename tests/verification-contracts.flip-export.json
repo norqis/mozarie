@@ -502,11 +502,8 @@
         "FE-031"
       ],
       "observation": "操作回数に応じて待機時RAMが増え続けない",
-      "status": "manual",
-      "manual": {
-        "environment": "4K画像を扱える実Windowsプロセスとタスクマネージャー",
-        "reason": "OSの常駐メモリとGC後の安定値は隔離CIの小fixtureでは再現できないため"
-      }
+      "status": "retired",
+      "retirementReason": "4K画像を扱える実Windowsプロセスとタスクマネージャーでの観測は対象外とする。OSの常駐メモリとGC後の安定値は隔離CIの小fixtureでは再現できないため"
     },
     {
       "key": "FE-032.1",
@@ -998,11 +995,8 @@
         "FE-053"
       ],
       "observation": "回数に応じたRAM増加が続かない",
-      "status": "manual",
-      "manual": {
-        "environment": "4K画像を繰り返し変換できる実Windowsプロセスとタスクマネージャー",
-        "reason": "OS codecとGCを含むデコードバッファ解放後の常駐メモリは隔離CIの小fixtureでは再現できないため"
-      }
+      "status": "retired",
+      "retirementReason": "4K画像を繰り返し変換できる実Windowsプロセスとタスクマネージャーでの観測は対象外とする。OS codecとGCを含むデコードバッファ解放後の常駐メモリは隔離CIの小fixtureでは再現できないため"
     },
     {
       "key": "FE-054.1",
@@ -1454,7 +1448,8 @@
         "FE-077"
       ],
       "observation": "検出精度の良否は判定しない",
-      "status": "retired"
+      "status": "retired",
+      "retirementReason": "検出精度の主観的な評価は製品の決定的な回帰契約に含めない。"
     },
     {
       "key": "FE-078.1",

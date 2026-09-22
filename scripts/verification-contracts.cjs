@@ -163,7 +163,7 @@ function validateContract(contract, options = {}) {
   for (const [index, observation] of contract.observations.entries()) {
     const itemLabel = `${label}.observations[${index}]`;
     requireObject(observation, itemLabel);
-    rejectUnknownFields(observation, ["key", "sourceIds", "observation", "status", "testIds", "manual"], itemLabel);
+    rejectUnknownFields(observation, ["key", "sourceIds", "observation", "status", "testIds", "manual", "retirementReason"], itemLabel);
     const key = requireNonEmptyString(observation.key, `${itemLabel}.key`);
     if (!OBSERVATION_KEY_PATTERN.test(key)) throw new Error(`${itemLabel}.key must be <source ID>.<observation suffix>`);
     if (keys.has(key)) throw new Error(`${label} duplicates observation key ${key}`);
@@ -175,6 +175,7 @@ function validateContract(contract, options = {}) {
     }
     requireNonEmptyString(observation.observation, `${itemLabel}.observation`);
     if (!ALLOWED_STATUSES.has(observation.status)) throw new Error(`${itemLabel}.status must be automated, manual, or retired`);
+    if (observation.status !== "retired" && observation.retirementReason !== undefined) throw new Error(`${itemLabel}.retirementReason is only allowed for retired observations`);
     if (observation.status === "automated") {
       if (!Array.isArray(observation.testIds) || observation.testIds.length === 0) throw new Error(`${itemLabel}.testIds must be non-empty for automated observations`);
       observation.testIds.forEach((testId, testIndex) => validateTestId(testId, `${itemLabel}.testIds[${testIndex}]`));
@@ -184,6 +185,7 @@ function validateContract(contract, options = {}) {
       validateManualDetail(observation.manual, itemLabel);
     } else {
       if (observation.testIds !== undefined || observation.manual !== undefined) throw new Error(`${itemLabel} retired observations cannot carry testIds or manual details`);
+      requireNonEmptyString(observation.retirementReason, `${itemLabel}.retirementReason`);
     }
   }
 

@@ -66,8 +66,36 @@ function validationOptions() {
 }
 
 describe("verification contract schema and manual ledger", () => {
-  test("repository verification contracts satisfy the schema and remaining-manual ledger", () => {
-    assert.doesNotThrow(() => loadContracts());
+  test("repository verification contracts preserve the baseline without remaining manual checks", () => {
+    const contracts = loadContracts();
+    assert.ok(contracts.length > 0);
+    for (const contract of contracts) {
+      assert.equal(contract.observations.some((item) => item.status === "manual"), false, contract.domain);
+      assert.equal(fs.existsSync(path.join(root, contract.source.path)), false, contract.source.path);
+    }
+    assert.equal(fs.existsSync(path.join(root, "docs/manual-verification.md")), false);
+  });
+
+  test("deleted source documents retain baseline coverage and require individual retirement reasons", () => {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), "mozarie-retired-contract-"));
+    try {
+      const contract = fixture();
+      const retired = contract.observations[1];
+      retired.status = "retired";
+      retired.retirementReason = "OS所有の許可画面自体は自動回帰検証の対象外とする。";
+      delete retired.manual;
+      const options = { repositoryRoot: directory, sourceAtCommit: () => baseline };
+      assert.doesNotThrow(() => validateContract(contract, options));
+      assert.throws(() => validateContract(fixture(), options), /missing manual observations/);
+      delete retired.retirementReason;
+      assert.throws(() => validateContract(contract, options), /retirementReason must be a non-empty string/);
+      retired.retirementReason = "OS所有の許可画面自体は対象外とする。";
+      contract.observations.pop();
+      contract.baseline.observations = 1;
+      assert.throws(() => validateContract(contract, options), /source ID coverage differs from the baseline/);
+    } finally {
+      fs.rmSync(directory, { recursive: true, force: true });
+    }
   });
 
   test("accepts a complete baseline and keeps only concrete manual observations in the source document", () => {
