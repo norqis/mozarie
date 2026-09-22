@@ -45,3 +45,15 @@ node --test tests/test_verification_contracts.cjs
 ```
 
 この検証は、基準コミットの全確認IDが `automated`・`manual`・`retired` のいずれかに一度だけ割り当てられていること、実機確認文書に `manual` 以外の行が残っていないこと、重複や欠落がないことを確認します。CIではさらに、`automated` が参照するNode・Pythonテストが収集・実行され、skipやTODOではなく成功したことを実行結果のmanifestで照合します。
+
+## 上部ツールのショートカット
+
+追加した操作と設定表示は隔離したChromiumで検証する。実機確認項目は追加しない。
+
+| 利用者が確認する挙動 | 自動テスト |
+| --- | --- |
+| 全描画ツールの個別キー、Q/Wの左右順・グループ移動・長押し抑止、塗りつぶしポップアップ後のフォーカス | `tests/test_toolbar_shortcuts_e2e.cjs` の `toolbar shortcuts select every drawing mode and cycle each group in visible order` |
+| 1/2枚表示・全体表示・反転・モザイク表示・Undo/Redo | 同ファイルの `toolbar view fit flip preview and history shortcuts perform their visible actions` |
+| 操作別と全体のOFF、入力中・ダイアログ・処理中・閲覧専用・無効ボタン・画像切替・描画中の抑止 | 同ファイルの `toolbar shortcuts obey per-action global focus modal busy and disabled controls` |
+| キー欄の右側のON/OFFスイッチ、右端揃え・下線・交互背景、Tab移動、変更と再読み込み | 同ファイルの `shortcut switches align after key inputs and preserve remapped disabled bindings after reload` |
+| 旧設定の独自キーと有効状態を保持し、新キーの衝突時は未使用キーをOFFで追加、重複保存拒否 | `tests.test_config.SettingsTests.test_toolbar_shortcuts_defaults_are_complete_unique_and_round_trip`、`test_toolbar_shortcuts_migrate_without_claiming_custom_keys` |

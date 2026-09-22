@@ -866,6 +866,7 @@ function bindEvents() {
   $("#modelHelpDialog").addEventListener("cancel", (event) => { event.preventDefault(); $("#modelHelpDialog").close(); });
   lightDismiss($("#modelHelpDialog"), () => $("#modelHelpDialog").close());
   toolRail.addEventListener("keydown", handleToolRailKeydown);
+  $("#settingsShortcutsEnabled").addEventListener("change", (event) => syncShortcutSwitch(event.target));
   toolRailItems().forEach((item) => item.addEventListener("focus", () => setToolRailTabStop(item)));
   setToolRailTabStop();
   document.querySelectorAll(".settings-tab").forEach((button) => {

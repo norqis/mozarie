@@ -1091,21 +1091,51 @@ function handleEditorKeydown(event) {
   return false;
 }
 
+const TOOLBAR_SHORTCUT_BUTTONS = {
+  mosaicBrush: "#brushTool", mosaicFill: "#bucketTool", mosaicEraser: "#mosaicEraserTool",
+  boundaryMenu: "#boundaryTool", boundaryRectangle: "#rectangleTool", boundaryPolygon: "#polygonTool", boundaryBrush: "#boundaryBrushTool",
+  exclusionBrush: "#eraserTool", exclusionFill: "#excludeBucketTool", exclusionEraser: "#excludeEraserTool",
+  singleView: "#singleViewButton", compareView: "#compareViewButton", fitView: "#fitButton",
+  flipHorizontal: "#flipHorizontalButton", flipVertical: "#flipVerticalButton", mosaicPreview: "#mosaicPreviewButton",
+};
+const TOOLBAR_SHORTCUT_CYCLES = {
+  cycleMosaicTool: [["brush", "mosaicBrush"], ["bucket", "mosaicFill"], ["mosaic_eraser", "mosaicEraser"], ["boundary", "boundaryRectangle"], ["polygon", "boundaryPolygon"], ["boundary_brush", "boundaryBrush"]],
+  cycleExclusionTool: [["eraser", "exclusionBrush"], ["exclude_bucket", "exclusionFill"], ["exclude_eraser", "exclusionEraser"]],
+};
+
+function toolbarShortcutButton(action) {
+  const cycle = TOOLBAR_SHORTCUT_CYCLES[action];
+  if (cycle) {
+    const available = cycle.filter(([, name]) => !$(TOOLBAR_SHORTCUT_BUTTONS[name]).disabled);
+    if (!available.length) return null;
+    action = available[(available.findIndex(([tool]) => tool === state.tool) + 1) % available.length][1];
+  }
+  const selector = TOOLBAR_SHORTCUT_BUTTONS[action];
+  const button = selector ? $(selector) : null;
+  return button && !button.disabled ? button : null;
+}
+
 function navigationShortcutAction(event) {
   if (isBusy() || state.importing || isGestureActive() || !state.navigationShortcutsEnabled || hasOpenDialog()) return null;
   const binding = shortcutFromEvent(event);
   const bindings = state.settings?.shortcuts?.bindings || { previous: "ArrowLeft", next: "ArrowRight", previousVisible: "ArrowUp", nextVisible: "ArrowDown", first: "Home", last: "End", reviewAndNext: "Enter", removeImage: "Delete", toggleOverview: "G", undo: "Ctrl+Z", redo: "Ctrl+Shift+Z", renameImage: "F2" };
   const actionForBinding = Object.entries(bindings).find(([, value]) => value === binding)?.[0];
   if (!actionForBinding || state.settings?.shortcuts?.actions?.[actionForBinding] === false) return null;
+  const toolbarAction = TOOLBAR_SHORTCUT_BUTTONS[actionForBinding] || TOOLBAR_SHORTCUT_CYCLES[actionForBinding];
+  const focusedToolbarButton = document.activeElement?.matches?.("#canvasToolRail button:not(:disabled)");
   const currentGalleryItem = document.activeElement?.matches("button.gallery-item.current") && document.activeElement.dataset.id === state.currentId;
   const focusedCatalogItem = document.activeElement?.matches("button.gallery-item, button.overview-item");
-  if (isEditableTarget(document.activeElement) && !(actionForBinding === "removeImage" && currentGalleryItem) && !(actionForBinding === "renameImage" && focusedCatalogItem)) return null;
+  if (isEditableTarget(document.activeElement) && !(toolbarAction && focusedToolbarButton) && !(actionForBinding === "removeImage" && currentGalleryItem) && !(actionForBinding === "renameImage" && focusedCatalogItem)) return null;
   if (actionForBinding === "toggleOverview") return "toggleOverview";
   if (actionForBinding === "renameImage") {
     const focusedId = document.activeElement?.matches("button.gallery-item, button.overview-item") ? document.activeElement.dataset.id : state.currentId;
     return canRenameCatalogImage(state.images.find((image) => image.id === focusedId)) ? { action: "renameImage", imageId: focusedId } : null;
   }
   if (state.viewMode !== "edit") return null;
+  if (toolbarAction) {
+    if (event.repeat || currentImageActionPending() || !state.currentImage || !currentRecord()) return null;
+    return toolbarShortcutButton(actionForBinding) ? actionForBinding : null;
+  }
   if (actionForBinding === "removeImage" && event.repeat) return "removeImageRepeat";
   if (actionForBinding === "removeImage" && !canRemoveCurrentImage()) return null;
   if ((currentImageActionPending() || state.projectReadOnly || currentRecord()?.sourceDimensionsChanged
@@ -1119,7 +1149,8 @@ function handleNavigationKeydown(event) {
   if (!result) return false;
   const action = typeof result === "string" ? result : result.action;
   event.preventDefault();
-  if (action === "toggleOverview") setViewMode(state.viewMode === "overview" ? "edit" : "overview");
+  if (TOOLBAR_SHORTCUT_BUTTONS[action] || TOOLBAR_SHORTCUT_CYCLES[action]) toolbarShortcutButton(action)?.click();
+  else if (action === "toggleOverview") setViewMode(state.viewMode === "overview" ? "edit" : "overview");
   else if (action === "renameImage") openRenameImageDialog(result.imageId);
   else if (action === "previous") moveCurrentBy(-1);
   else if (action === "next") moveCurrentBy(1);

@@ -303,3 +303,57 @@ class SettingsTests(unittest.TestCase):
                     store.save({"general": {"language": "en"}})
             self.assertEqual(local.read_text(encoding="utf-8"), '{"keep": true}')
             self.assertEqual(list(config.glob(".local.json.*.tmp")), [])
+
+    def test_toolbar_shortcuts_defaults_are_complete_unique_and_round_trip(self):
+        defaults = default_settings()
+        expected = {
+            "cycleMosaicTool": "Q", "cycleExclusionTool": "W",
+            "mosaicBrush": "B", "mosaicFill": "K", "mosaicEraser": "E",
+            "boundaryMenu": "T", "boundaryRectangle": "R", "boundaryPolygon": "P", "boundaryBrush": "C",
+            "exclusionBrush": "Shift+B", "exclusionFill": "Shift+K", "exclusionEraser": "Shift+E",
+            "singleView": "1", "compareView": "2", "fitView": "F",
+            "flipHorizontal": "H", "flipVertical": "V", "mosaicPreview": "M",
+        }
+        for action, binding in expected.items():
+            self.assertEqual(defaults["shortcuts"]["bindings"][action], binding)
+            self.assertTrue(defaults["shortcuts"]["actions"][action])
+        self.assertEqual(len(set(defaults["shortcuts"]["bindings"].values())), 30)
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); config = root / "config"; config.mkdir()
+            (config / "defaults.json").write_text(json.dumps(defaults), encoding="utf-8")
+            store = SettingsStore(root)
+            saved = store.save({"shortcuts": {"bindings": {"cycleMosaicTool": "Shift+Q"}, "actions": {"flipVertical": False}}})
+            self.assertEqual(SettingsStore(root).load()["shortcuts"], saved["shortcuts"])
+            self.assertEqual(saved["shortcuts"]["bindings"]["cycleMosaicTool"], "Shift+Q")
+            self.assertFalse(saved["shortcuts"]["actions"]["flipVertical"])
+            with self.assertRaises(SettingsError):
+                store.save({"shortcuts": {"bindings": {"cycleExclusionTool": "Shift+Q"}}})
+            self.assertEqual(SettingsStore(root).load()["shortcuts"], saved["shortcuts"])
+
+    def test_toolbar_shortcuts_migrate_without_claiming_custom_keys(self):
+        legacy_actions = ["previous", "next", "previousVisible", "nextVisible", "first", "last", "reviewAndNext", "removeImage", "toggleOverview", "undo", "redo", "renameImage"]
+        defaults = default_settings()
+        legacy = {"shortcuts": {
+            "enabled": False,
+            "bindings": {action: defaults["shortcuts"]["bindings"][action] for action in legacy_actions},
+            "actions": {action: action != "next" for action in legacy_actions},
+        }}
+        legacy["shortcuts"]["bindings"].update({"previous": "Q", "next": "W", "first": "1", "last": "F", "reviewAndNext": "Shift+B"})
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); config = root / "config"; config.mkdir()
+            (config / "defaults.json").write_text(json.dumps(defaults), encoding="utf-8")
+            (config / "local.json").write_text(json.dumps(legacy), encoding="utf-8")
+            store = SettingsStore(root)
+            shortcuts = store.load()["shortcuts"]
+            self.assertFalse(shortcuts["enabled"])
+            for action in legacy_actions:
+                self.assertEqual(shortcuts["bindings"][action], legacy["shortcuts"]["bindings"][action])
+                self.assertEqual(shortcuts["actions"][action], legacy["shortcuts"]["actions"][action])
+            for action in ("cycleMosaicTool", "cycleExclusionTool", "singleView", "fitView", "exclusionBrush"):
+                self.assertFalse(shortcuts["actions"][action])
+                self.assertNotEqual(shortcuts["bindings"][action], defaults["shortcuts"]["bindings"][action])
+                self.assertNotIn("legacy disabled", shortcuts["bindings"][action])
+            self.assertEqual(shortcuts["bindings"]["mosaicBrush"], "B")
+            self.assertEqual(len(set(shortcuts["bindings"].values())), 30)
+            store.save({"shortcuts": shortcuts})
+            self.assertEqual(SettingsStore(root).load()["shortcuts"], shortcuts)

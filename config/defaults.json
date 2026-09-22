@@ -70,9 +70,27 @@
       "toggleOverview": "G",
       "undo": "Ctrl+Z",
       "redo": "Ctrl+Shift+Z",
-      "renameImage": "F2"
+      "renameImage": "F2",
+      "cycleMosaicTool": "Q",
+      "cycleExclusionTool": "W",
+      "mosaicBrush": "B",
+      "mosaicFill": "K",
+      "mosaicEraser": "E",
+      "boundaryMenu": "T",
+      "boundaryRectangle": "R",
+      "boundaryPolygon": "P",
+      "boundaryBrush": "C",
+      "exclusionBrush": "Shift+B",
+      "exclusionFill": "Shift+K",
+      "exclusionEraser": "Shift+E",
+      "singleView": "1",
+      "compareView": "2",
+      "fitView": "F",
+      "flipHorizontal": "H",
+      "flipVertical": "V",
+      "mosaicPreview": "M"
     },
-    "actions": {"previous": true, "next": true, "previousVisible": true, "nextVisible": true, "first": true, "last": true, "reviewAndNext": true, "removeImage": true, "toggleOverview": true, "undo": true, "redo": true, "renameImage": true}
+    "actions": {"previous": true, "next": true, "previousVisible": true, "nextVisible": true, "first": true, "last": true, "reviewAndNext": true, "removeImage": true, "toggleOverview": true, "undo": true, "redo": true, "renameImage": true, "cycleMosaicTool": true, "cycleExclusionTool": true, "mosaicBrush": true, "mosaicFill": true, "mosaicEraser": true, "boundaryMenu": true, "boundaryRectangle": true, "boundaryPolygon": true, "boundaryBrush": true, "exclusionBrush": true, "exclusionFill": true, "exclusionEraser": true, "singleView": true, "compareView": true, "fitView": true, "flipHorizontal": true, "flipVertical": true, "mosaicPreview": true}
   },
   "confirmations": {
     "clearMasks": true,

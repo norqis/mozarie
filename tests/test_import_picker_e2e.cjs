@@ -11,6 +11,7 @@ const path = require("node:path");
 const { chromium } = require("playwright");
 
 const root = path.resolve(__dirname, "..");
+const shortcutDefaults = require("../config/defaults.json").shortcuts;
 const staticRoot = path.join(root, "static");
 const contentTypes = {
   ".css": "text/css; charset=utf-8",
@@ -186,7 +187,7 @@ function startFixtureServer(options = {}) {
     detection: { mode: "standard", fluid_exclusion_enabled: true, exclude_forced_default: true, threshold: 0.5, parallelism: 2, default_candidate_padding_px: 3, default_exclude_candidate_padding_px: 11, targets: ["penis", "pussy"] },
     shortcuts: {
       enabled: true,
-      bindings: { previous: "ArrowLeft", next: "ArrowRight", previousVisible: "ArrowUp", nextVisible: "ArrowDown", first: "Home", last: "End", reviewAndNext: "Enter", removeImage: "Delete", toggleOverview: "G", undo: "Ctrl+Z", redo: "Ctrl+Shift+Z", renameImage: "F2" },
+      bindings: { ...shortcutDefaults.bindings },
       actions: {},
     }, confirmations: {},
   };
@@ -1332,12 +1333,12 @@ async function runDynamicProjectAndShortcutScenario(browser, fixtureUrl, setting
 
     await page.locator("#settingsButton").click();
     await page.locator("#settingsTabShortcuts").click();
-    const shortcutKeys = ["previous", "next", "previousVisible", "nextVisible", "first", "last", "reviewAndNext", "removeImage", "renameImage", "toggleOverview", "undo", "redo"];
+    const shortcutKeys = ["previous", "next", "previousVisible", "nextVisible", "first", "last", "reviewAndNext", "removeImage", "renameImage", "toggleOverview", "undo", "redo", "cycleMosaicTool", "cycleExclusionTool", "mosaicBrush", "mosaicFill", "mosaicEraser", "boundaryMenu", "boundaryRectangle", "boundaryPolygon", "boundaryBrush", "exclusionBrush", "exclusionFill", "exclusionEraser", "singleView", "compareView", "fitView", "flipHorizontal", "flipVertical", "mosaicPreview"];
     // Keep these page-level shortcuts clear of Chromium's own Ctrl/Alt
     // shortcuts so replay remains focused on the gallery card.
-    const shortcutLetters = shortcutKeys.map((_, index) => String.fromCharCode(65 + index));
+    const shortcutLetters = shortcutKeys.map((_, index) => [..."ABCDEFGHIJKLMNOPQRSTUVWXYZ", "F3", "F4", "F5", "F6"][index]);
     const shortcutBindings = Object.fromEntries(shortcutKeys.map((action, index) => [action, `Shift+${shortcutLetters[index]}`]));
-    assert.equal(await page.locator("[data-shortcut-action]").count(), shortcutKeys.length, "shortcut settings renders the fixed twelve-action inventory");
+    assert.equal(await page.locator("[data-shortcut-action]").count(), shortcutKeys.length, "shortcut settings renders the fixed complete action inventory");
     assert.deepEqual(await page.locator("[data-shortcut-action]").evaluateAll((inputs) => inputs.map((input) => input.dataset.shortcutAction)), shortcutKeys, "shortcut settings exposes every action in its documented order");
     for (const [index, action] of shortcutKeys.entries()) {
       const shortcut = page.locator(`[data-shortcut-action="${action}"]`);
@@ -1360,8 +1361,8 @@ async function runDynamicProjectAndShortcutScenario(browser, fixtureUrl, setting
       && !document.querySelector("#settingsSaveButton").disabled
       && JSON.stringify(state.settings?.shortcuts?.bindings) === JSON.stringify(bindings)
       && JSON.stringify(state.settings?.shortcuts?.actions) === JSON.stringify(actions), [shortcutBindings, shortcutActions]);
-    assert.deepEqual(settingsPayloads.slice(shortcutSaveStart).filter((payload) => payload.search === "?status=0").map((payload) => payload.body.shortcuts), [{ enabled: true, bindings: shortcutBindings, actions: shortcutActions }], "saving shortcut settings posts all twelve exact bindings and enabled actions");
-    assert.deepEqual(await page.evaluate(() => state.settings.shortcuts), { enabled: true, bindings: shortcutBindings, actions: shortcutActions }, "saving shortcut settings updates the live twelve-action shortcut state");
+    assert.deepEqual(settingsPayloads.slice(shortcutSaveStart).filter((payload) => payload.search === "?status=0").map((payload) => payload.body.shortcuts), [{ enabled: true, bindings: shortcutBindings, actions: shortcutActions }], "saving shortcut settings posts all exact bindings and enabled actions");
+    assert.deepEqual(await page.evaluate(() => state.settings.shortcuts), { enabled: true, bindings: shortcutBindings, actions: shortcutActions }, "saving shortcut settings updates the live complete action shortcut state");
     await page.locator("#settingsCloseButton").click();
     const renameCard = page.locator('.gallery-item[data-id="sample"]');
     const playwrightShortcut = (shortcut) => shortcut.replace(/^Ctrl\+/, "Control+");
@@ -3631,7 +3632,7 @@ async function main() {
       const rect = button.getBoundingClientRect(); return rect.width === 28 && rect.height === 28;
     })), true, "all model help buttons, including SAM type, share the compact 28px target");
     await page.locator("#settingsTabShortcuts").click();
-    assert.equal(await page.locator("#shortcutBindings > .form-row").evaluateAll((rows) => rows.length === 12 && rows.every((row) => {
+    assert.equal(await page.locator("#shortcutBindings > .form-row").evaluateAll((rows) => rows.length === 30 && rows.every((row) => {
       const children = [...row.children];
       return children.length === 3 && children.every((child) => Math.abs((child.getBoundingClientRect().y + child.getBoundingClientRect().height / 2) - (row.getBoundingClientRect().y + row.getBoundingClientRect().height / 2)) < 2);
     })), true, "all shortcut bindings keep one three-column row");
@@ -3852,7 +3853,7 @@ async function main() {
     assert.ok(settingsResultBox && resetBox && resetBox.x - (settingsResultBox.x + settingsResultBox.width) <= 12, "settings result stays beside Reset");
     assert.deepEqual(settingsActions.at(-1), { path: "/api/settings/reset", method: "POST" }, "the compact reset button reaches its dedicated API route");
     const shortcutsAfterReset = await page.locator("[data-shortcut-action]").evaluateAll((inputs) => inputs.map((input) => input.value));
-    assert.equal(shortcutsAfterReset.length, 12, "reset restores every shortcut binding before compact save");
+    assert.equal(shortcutsAfterReset.length, Object.keys(shortcutDefaults.bindings).length, "reset restores every shortcut binding before compact save");
     assert.equal(shortcutsAfterReset.every(Boolean) && new Set(shortcutsAfterReset).size === shortcutsAfterReset.length, true, "reset restores valid unique shortcut bindings before compact save");
     const savesBeforeCompactSave = settingsActions.filter((action) => action.path === "/api/settings" && action.method === "POST").length;
     await page.locator("#settingsSaveButton").click();

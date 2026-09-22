@@ -1373,7 +1373,8 @@
       "observation": "描画と履歴位置が変わらない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_settings_actions_e2e.cjs::SD-075 disabled global shortcuts keep an edit unchanged while the Undo button restores it"
+        "node:tests/test_settings_actions_e2e.cjs::SD-075 disabled global shortcuts keep an edit unchanged while the Undo button restores it",
+        "node:tests/test_toolbar_shortcuts_e2e.cjs::toolbar shortcuts obey per-action global focus modal busy and disabled controls"
       ]
     },
     {
@@ -1450,7 +1451,8 @@
       "observation": "保存値を復元する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_settings_dialog_e2e.cjs::SD-105 through SD-110 remove-image shortcut defaults save restore and reset"
+        "node:tests/test_settings_dialog_e2e.cjs::SD-105 through SD-110 remove-image shortcut defaults save restore and reset",
+        "node:tests/test_toolbar_shortcuts_e2e.cjs::shortcut switches align after key inputs and preserve remapped disabled bindings after reload"
       ]
     },
     {
@@ -1697,7 +1699,9 @@
       "observation": "有効な登録キーで対応操作を実行する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_settings_actions_e2e.cjs::SD-076 shortcut performs the visible action only while its action switch is enabled"
+        "node:tests/test_settings_actions_e2e.cjs::SD-076 shortcut performs the visible action only while its action switch is enabled",
+        "node:tests/test_toolbar_shortcuts_e2e.cjs::toolbar shortcuts select every drawing mode and cycle each group in visible order",
+        "node:tests/test_toolbar_shortcuts_e2e.cjs::toolbar view fit flip preview and history shortcuts perform their visible actions"
       ]
     },
     {

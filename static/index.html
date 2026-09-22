@@ -384,7 +384,7 @@
         <label class="choice-row"><input id="settingsExcludeForcedDefault" type="checkbox"><span data-i18n="settings.excludeForcedDefault">新しい除外候補を強制する</span></label>
       </section>
       <section id="settingsPanelShortcuts" class="settings-panel" role="tabpanel" aria-labelledby="settingsTabShortcuts" data-settings-panel="shortcuts" hidden>
-        <label class="choice-row"><input id="settingsShortcutsEnabled" type="checkbox"><span data-i18n="settings.shortcuts">キーボードショートカット</span></label>
+        <div class="shortcut-global-row"><span id="settingsShortcutsLabel" data-i18n="settings.shortcuts">キーボードショートカット</span><label class="model-switch shortcut-switch"><input id="settingsShortcutsEnabled" type="checkbox" role="switch" aria-labelledby="settingsShortcutsLabel"><span class="model-switch-track" aria-hidden="true"><span class="model-switch-knob"></span></span><span class="model-switch-state" data-switch-state>ON</span></label></div>
         <div id="shortcutBindings" class="shortcut-bindings"></div>
         <p class="fixed-note" data-i18n="settings.shortcutHint">キー欄を選択して、割り当てたいキーを押してください。</p>
       </section>

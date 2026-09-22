@@ -797,5 +797,7 @@
   "sourceDelete.singlePending": "{complete} {output} 元画像の削除は保留です。再接続後に再試行します。",
   "sourceDelete.batchPending": "{complete} 元画像の削除は保留です: {names}。再接続後に再試行します。",
   "sourceDelete.notAvailable": "{complete} {output} コピーは保存しましたが、元画像を安全に削除できませんでした。",
-  "sourceDelete.batchNotAvailable": "{complete} コピーは保存しましたが、元画像を安全に削除できませんでした: {names}。"
+  "sourceDelete.batchNotAvailable": "{complete} コピーは保存しましたが、元画像を安全に削除できませんでした: {names}。",
+  "settings.shortcut.cycleMosaicTool": "モザイクツールを順に切替",
+  "settings.shortcut.cycleExclusionTool": "除外ツールを順に切替"
 }

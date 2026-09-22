@@ -797,5 +797,7 @@
   "sourceDelete.singlePending": "{complete} {output} Original deletion is pending. It will retry after reconnecting.",
   "sourceDelete.batchPending": "{complete} Original deletion is pending: {names}. It will retry after reconnecting.",
   "sourceDelete.notAvailable": "{complete} {output} The copy was saved, but the original could not be deleted safely.",
-  "sourceDelete.batchNotAvailable": "{complete} Copies were saved, but these originals could not be deleted safely: {names}."
+  "sourceDelete.batchNotAvailable": "{complete} Copies were saved, but these originals could not be deleted safely: {names}.",
+  "settings.shortcut.cycleMosaicTool": "Cycle mosaic tools",
+  "settings.shortcut.cycleExclusionTool": "Cycle exclusion tools"
 }
