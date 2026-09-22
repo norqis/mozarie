@@ -183,7 +183,8 @@ test("SD-010 changing English to Japanese leaves no translation key visible", { 
     await page.locator("#settingsLanguage").selectOption("en");
     await page.waitForFunction(() => document.documentElement.lang === "en");
     await page.locator("#settingsLanguage").selectOption("ja");
-    await page.waitForFunction(() => document.documentElement.lang === "ja");
+    await page.waitForFunction(() => document.documentElement.lang === "ja"
+      && document.querySelector("#settingsDialogTitle")?.textContent === "設定");
     assert.equal(await page.locator("#settingsDialogTitle").textContent(), "設定");
     assert.equal(await page.locator("#settingsDialog").textContent().then((text) => /settings\.|dialog\./.test(text)), false);
   });
