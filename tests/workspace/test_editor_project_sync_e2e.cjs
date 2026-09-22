@@ -3,7 +3,7 @@
 const assert = require("node:assert/strict");
 const test = require("node:test");
 const { chromium } = require("playwright");
-const { closeServer, startFixtureServer } = require("./test_import_picker_e2e.cjs");
+const { closeServer, startFixtureServer } = require("../test_import_picker_e2e.cjs");
 
 async function openCatalogue(browser, fixture, count) {
   const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });

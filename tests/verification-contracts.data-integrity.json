@@ -273,7 +273,7 @@
       "observation": "A～Hの8画像を表示する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_010_080_browser_contracts.cjs::eight-image gallery and save filters preserve the complete truth table and target snapshot"
+        "node:tests/gallery/test_gallery_save_filters_e2e.cjs::eight-image gallery and save filters preserve the complete truth table and target snapshot"
       ]
     },
     {
@@ -284,7 +284,7 @@
       "observation": "A・Bの2画像だけ表示する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_010_080_browser_contracts.cjs::eight-image gallery and save filters preserve the complete truth table and target snapshot"
+        "node:tests/gallery/test_gallery_save_filters_e2e.cjs::eight-image gallery and save filters preserve the complete truth table and target snapshot"
       ]
     },
     {
@@ -295,7 +295,7 @@
       "observation": "C・Dの2画像だけ表示する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_010_080_browser_contracts.cjs::eight-image gallery and save filters preserve the complete truth table and target snapshot"
+        "node:tests/gallery/test_gallery_save_filters_e2e.cjs::eight-image gallery and save filters preserve the complete truth table and target snapshot"
       ]
     },
     {
@@ -306,7 +306,7 @@
       "observation": "A・Cの2画像だけ表示する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_010_080_browser_contracts.cjs::eight-image gallery and save filters preserve the complete truth table and target snapshot"
+        "node:tests/gallery/test_gallery_save_filters_e2e.cjs::eight-image gallery and save filters preserve the complete truth table and target snapshot"
       ]
     },
     {
@@ -317,7 +317,7 @@
       "observation": "B・Dの2画像だけ表示する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_010_080_browser_contracts.cjs::eight-image gallery and save filters preserve the complete truth table and target snapshot"
+        "node:tests/gallery/test_gallery_save_filters_e2e.cjs::eight-image gallery and save filters preserve the complete truth table and target snapshot"
       ]
     },
     {
@@ -328,7 +328,7 @@
       "observation": "E・F・G・Hの4画像だけ表示する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_010_080_browser_contracts.cjs::eight-image gallery and save filters preserve the complete truth table and target snapshot"
+        "node:tests/gallery/test_gallery_save_filters_e2e.cjs::eight-image gallery and save filters preserve the complete truth table and target snapshot"
       ]
     },
     {
@@ -339,8 +339,8 @@
       "observation": "対象4件でA～Dだけを保存する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_010_080_browser_contracts.cjs::single save ignores a persisted batch filter that excludes the current image",
-        "python:tests.test_di_016_044_state_contracts.DataIntegrityStateContracts.test_filtered_and_single_overwrites_leave_every_non_target_file_byte_identical"
+        "node:tests/gallery/test_gallery_save_filters_e2e.cjs::single save ignores a persisted batch filter that excludes the current image",
+        "python:tests.workspace.test_project_and_output_integrity.DataIntegrityStateContracts.test_filtered_and_single_overwrites_leave_every_non_target_file_byte_identical"
       ]
     },
     {
@@ -351,7 +351,7 @@
       "observation": "非表示のE～Hは含めない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_010_080_browser_contracts.cjs::eight-image gallery and save filters preserve the complete truth table and target snapshot",
+        "node:tests/gallery/test_gallery_save_filters_e2e.cjs::eight-image gallery and save filters preserve the complete truth table and target snapshot",
         "node:tests/test_filters_and_fluid_e2e.cjs::batch save filters images with independent OR checkboxes and persists the selection"
       ]
     },
@@ -363,8 +363,8 @@
       "observation": "対象2件でA・Bだけ保存し、C～Hを変更しない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_010_080_browser_contracts.cjs::single save ignores a persisted batch filter that excludes the current image",
-        "python:tests.test_di_016_044_state_contracts.DataIntegrityStateContracts.test_filtered_and_single_overwrites_leave_every_non_target_file_byte_identical"
+        "node:tests/gallery/test_gallery_save_filters_e2e.cjs::single save ignores a persisted batch filter that excludes the current image",
+        "python:tests.workspace.test_project_and_output_integrity.DataIntegrityStateContracts.test_filtered_and_single_overwrites_leave_every_non_target_file_byte_identical"
       ]
     },
     {
@@ -375,8 +375,8 @@
       "observation": "対象2件でA・Cだけ保存し、B・D・E～Hを変更しない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_010_080_browser_contracts.cjs::single save ignores a persisted batch filter that excludes the current image",
-        "python:tests.test_di_016_044_state_contracts.DataIntegrityStateContracts.test_filtered_and_single_overwrites_leave_every_non_target_file_byte_identical"
+        "node:tests/gallery/test_gallery_save_filters_e2e.cjs::single save ignores a persisted batch filter that excludes the current image",
+        "python:tests.workspace.test_project_and_output_integrity.DataIntegrityStateContracts.test_filtered_and_single_overwrites_leave_every_non_target_file_byte_identical"
       ]
     },
     {
@@ -387,8 +387,8 @@
       "observation": "再び対象4件となり、A～Dだけを処理する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_010_080_browser_contracts.cjs::single save ignores a persisted batch filter that excludes the current image",
-        "python:tests.test_di_016_044_state_contracts.DataIntegrityStateContracts.test_filtered_and_single_overwrites_leave_every_non_target_file_byte_identical"
+        "node:tests/gallery/test_gallery_save_filters_e2e.cjs::single save ignores a persisted batch filter that excludes the current image",
+        "python:tests.workspace.test_project_and_output_integrity.DataIntegrityStateContracts.test_filtered_and_single_overwrites_leave_every_non_target_file_byte_identical"
       ]
     },
     {
@@ -399,8 +399,8 @@
       "observation": "再び対象2件となり、A・Bだけを処理する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_010_080_browser_contracts.cjs::single save ignores a persisted batch filter that excludes the current image",
-        "python:tests.test_di_016_044_state_contracts.DataIntegrityStateContracts.test_filtered_and_single_overwrites_leave_every_non_target_file_byte_identical"
+        "node:tests/gallery/test_gallery_save_filters_e2e.cjs::single save ignores a persisted batch filter that excludes the current image",
+        "python:tests.workspace.test_project_and_output_integrity.DataIntegrityStateContracts.test_filtered_and_single_overwrites_leave_every_non_target_file_byte_identical"
       ]
     },
     {
@@ -411,8 +411,8 @@
       "observation": "再び対象2件となり、A・Cだけを処理する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_010_080_browser_contracts.cjs::single save ignores a persisted batch filter that excludes the current image",
-        "python:tests.test_di_016_044_state_contracts.DataIntegrityStateContracts.test_filtered_and_single_overwrites_leave_every_non_target_file_byte_identical"
+        "node:tests/gallery/test_gallery_save_filters_e2e.cjs::single save ignores a persisted batch filter that excludes the current image",
+        "python:tests.workspace.test_project_and_output_integrity.DataIntegrityStateContracts.test_filtered_and_single_overwrites_leave_every_non_target_file_byte_identical"
       ]
     },
     {
@@ -423,7 +423,7 @@
       "observation": "左の表示2件ではなく、非表示を除くPJ全体A～Dを対象とする",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_010_080_browser_contracts.cjs::eight-image gallery and save filters preserve the complete truth table and target snapshot",
+        "node:tests/gallery/test_gallery_save_filters_e2e.cjs::eight-image gallery and save filters preserve the complete truth table and target snapshot",
         "node:tests/test_filters_and_fluid_e2e.cjs::batch save filters images with independent OR checkboxes and persists the selection"
       ]
     },
@@ -435,7 +435,7 @@
       "observation": "検索結果1件ではなく、非表示を除くPJ全体A～Dを対象とする",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_010_080_browser_contracts.cjs::eight-image gallery and save filters preserve the complete truth table and target snapshot",
+        "node:tests/gallery/test_gallery_save_filters_e2e.cjs::eight-image gallery and save filters preserve the complete truth table and target snapshot",
         "node:tests/test_filters_and_fluid_e2e.cjs::batch save filters images with independent OR checkboxes and persists the selection"
       ]
     },
@@ -447,8 +447,8 @@
       "observation": "Aだけ保存し、B～Hの内容を変更しない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_010_080_browser_contracts.cjs::single save ignores a persisted batch filter that excludes the current image",
-        "python:tests.test_di_016_044_state_contracts.DataIntegrityStateContracts.test_filtered_and_single_overwrites_leave_every_non_target_file_byte_identical"
+        "node:tests/gallery/test_gallery_save_filters_e2e.cjs::single save ignores a persisted batch filter that excludes the current image",
+        "python:tests.workspace.test_project_and_output_integrity.DataIntegrityStateContracts.test_filtered_and_single_overwrites_leave_every_non_target_file_byte_identical"
       ]
     },
     {
@@ -459,7 +459,7 @@
       "observation": "保存対象プルダウンを表示しない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_010_080_browser_contracts.cjs::eight-image gallery and save filters preserve the complete truth table and target snapshot"
+        "node:tests/gallery/test_gallery_save_filters_e2e.cjs::eight-image gallery and save filters preserve the complete truth table and target snapshot"
       ]
     },
     {
@@ -470,7 +470,7 @@
       "observation": "A～Hのモザイク・確認状態・非表示が準備時の組合せで残り、候補や画像を削除しない",
       "status": "automated",
       "testIds": [
-        "python:tests.test_di_016_044_state_contracts.DataIntegrityStateContracts.test_eight_image_project_reopen_history_switch_and_catalog_removal_are_isolated"
+        "python:tests.workspace.test_project_and_output_integrity.DataIntegrityStateContracts.test_eight_image_project_reopen_history_switch_and_catalog_removal_are_isolated"
       ]
     },
     {
@@ -481,7 +481,7 @@
       "observation": "0件と表示して開始を無効にし、「すべて」へ切り替えると保存できる",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_010_080_browser_contracts.cjs::zero-target masked filter disables start and switching to all completes the save"
+        "node:tests/gallery/test_gallery_save_filters_e2e.cjs::zero-target masked filter disables start and switching to all completes the save"
       ]
     },
     {
@@ -492,7 +492,7 @@
       "observation": "0件と表示して開始を無効にし、確認済み画像を作った後はその画像だけを対象にできる",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_010_080_browser_contracts.cjs::eight-image gallery and save filters preserve the complete truth table and target snapshot"
+        "node:tests/gallery/test_gallery_save_filters_e2e.cjs::eight-image gallery and save filters preserve the complete truth table and target snapshot"
       ]
     },
     {
@@ -503,7 +503,7 @@
       "observation": "対象がAの1件になる",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_010_080_browser_contracts.cjs::eight-image gallery and save filters preserve the complete truth table and target snapshot"
+        "node:tests/gallery/test_gallery_save_filters_e2e.cjs::eight-image gallery and save filters preserve the complete truth table and target snapshot"
       ]
     },
     {
@@ -514,7 +514,7 @@
       "observation": "対象がA・Bの2件に戻る",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_010_080_browser_contracts.cjs::eight-image gallery and save filters preserve the complete truth table and target snapshot"
+        "node:tests/gallery/test_gallery_save_filters_e2e.cjs::eight-image gallery and save filters preserve the complete truth table and target snapshot"
       ]
     },
     {
@@ -525,7 +525,7 @@
       "observation": "Aの直前描画だけ戻り、Bの除外とBのUndo位置を保持する",
       "status": "automated",
       "testIds": [
-        "python:tests.test_di_016_044_state_contracts.DataIntegrityStateContracts.test_eight_image_project_reopen_history_switch_and_catalog_removal_are_isolated"
+        "python:tests.workspace.test_project_and_output_integrity.DataIntegrityStateContracts.test_eight_image_project_reopen_history_switch_and_catalog_removal_are_isolated"
       ]
     },
     {
@@ -536,7 +536,7 @@
       "observation": "開いたPJの現在画像だけを戻し、元PJの候補・範囲・履歴位置を変更しない",
       "status": "automated",
       "testIds": [
-        "python:tests.test_di_016_044_state_contracts.DataIntegrityStateContracts.test_eight_image_project_reopen_history_switch_and_catalog_removal_are_isolated"
+        "python:tests.workspace.test_project_and_output_integrity.DataIntegrityStateContracts.test_eight_image_project_reopen_history_switch_and_catalog_removal_are_isolated"
       ]
     },
     {
@@ -547,7 +547,7 @@
       "observation": "8画像の候補・枠・ON/OFF・手描き・確認済み・非表示を保持する",
       "status": "automated",
       "testIds": [
-        "python:tests.test_di_016_044_state_contracts.DataIntegrityStateContracts.test_eight_image_project_reopen_history_switch_and_catalog_removal_are_isolated"
+        "python:tests.workspace.test_project_and_output_integrity.DataIntegrityStateContracts.test_eight_image_project_reopen_history_switch_and_catalog_removal_are_isolated"
       ]
     },
     {
@@ -558,7 +558,7 @@
       "observation": "A～Hを追加読込せず復元し、各画像の範囲と履歴を使える",
       "status": "automated",
       "testIds": [
-        "python:tests.test_di_016_044_state_contracts.DataIntegrityStateContracts.test_eight_image_project_reopen_history_switch_and_catalog_removal_are_isolated"
+        "python:tests.workspace.test_project_and_output_integrity.DataIntegrityStateContracts.test_eight_image_project_reopen_history_switch_and_catalog_removal_are_isolated"
       ]
     },
     {
@@ -569,7 +569,7 @@
       "observation": "Aが一覧から消え、Aの候補・手描き・履歴を操作できない",
       "status": "automated",
       "testIds": [
-        "python:tests.test_di_016_044_state_contracts.DataIntegrityStateContracts.test_eight_image_project_reopen_history_switch_and_catalog_removal_are_isolated"
+        "python:tests.workspace.test_project_and_output_integrity.DataIntegrityStateContracts.test_eight_image_project_reopen_history_switch_and_catalog_removal_are_isolated"
       ]
     },
     {
@@ -580,7 +580,7 @@
       "observation": "B～Hと元ファイルAは残る",
       "status": "automated",
       "testIds": [
-        "python:tests.test_di_016_044_state_contracts.DataIntegrityStateContracts.test_eight_image_project_reopen_history_switch_and_catalog_removal_are_isolated"
+        "python:tests.workspace.test_project_and_output_integrity.DataIntegrityStateContracts.test_eight_image_project_reopen_history_switch_and_catalog_removal_are_isolated"
       ]
     },
     {
@@ -591,7 +591,7 @@
       "observation": "対象PJの画像・元フォルダー関連・候補・手描き・候補枠・履歴・履歴参照が残らない",
       "status": "automated",
       "testIds": [
-        "python:tests.test_di_016_044_state_contracts.DataIntegrityStateContracts.test_project_delete_cascades_every_owned_row_and_preserves_other_project_and_sources"
+        "python:tests.workspace.test_project_and_output_integrity.DataIntegrityStateContracts.test_project_delete_cascades_every_owned_row_and_preserves_other_project_and_sources"
       ]
     },
     {
@@ -602,7 +602,7 @@
       "observation": "別PJの行と元画像は残る",
       "status": "automated",
       "testIds": [
-        "python:tests.test_di_016_044_state_contracts.DataIntegrityStateContracts.test_project_delete_cascades_every_owned_row_and_preserves_other_project_and_sources"
+        "python:tests.workspace.test_project_and_output_integrity.DataIntegrityStateContracts.test_project_delete_cascades_every_owned_row_and_preserves_other_project_and_sources"
       ]
     },
     {
@@ -625,7 +625,7 @@
       "observation": "元画像寸法で、有効な除外候補と手描き除外を合成し、除外消しゴムの部分を差し引いたマスクになる",
       "status": "automated",
       "testIds": [
-        "python:tests.test_di_016_044_state_contracts.DataIntegrityStateContracts.test_mask_exports_preserve_dimensions_roles_erase_padding_and_disabled_candidates"
+        "python:tests.workspace.test_project_and_output_integrity.DataIntegrityStateContracts.test_mask_exports_preserve_dimensions_roles_erase_padding_and_disabled_candidates"
       ]
     },
     {
@@ -647,7 +647,7 @@
       "observation": "各寸法と除外差引き後の範囲が単体出力と一致する",
       "status": "automated",
       "testIds": [
-        "python:tests.test_di_016_044_state_contracts.DataIntegrityStateContracts.test_mask_exports_preserve_dimensions_roles_erase_padding_and_disabled_candidates",
+        "python:tests.workspace.test_project_and_output_integrity.DataIntegrityStateContracts.test_mask_exports_preserve_dimensions_roles_erase_padding_and_disabled_candidates",
         "python:tests.test_project_http_coverage.ProjectHttpCoverageTests.test_project_mask_png_zip_and_cleanup"
       ]
     },
@@ -670,7 +670,7 @@
       "observation": "各寸法と除外範囲が単体出力と一致する",
       "status": "automated",
       "testIds": [
-        "python:tests.test_di_016_044_state_contracts.DataIntegrityStateContracts.test_mask_exports_preserve_dimensions_roles_erase_padding_and_disabled_candidates",
+        "python:tests.workspace.test_project_and_output_integrity.DataIntegrityStateContracts.test_mask_exports_preserve_dimensions_roles_erase_padding_and_disabled_candidates",
         "python:tests.test_project_http_coverage.ProjectHttpCoverageTests.test_project_mask_png_zip_and_cleanup"
       ]
     },
@@ -693,7 +693,7 @@
       "observation": "OFF候補を加工・適用範囲へ含めず、ON候補の範囲は残る",
       "status": "automated",
       "testIds": [
-        "python:tests.test_di_016_044_state_contracts.DataIntegrityStateContracts.test_mask_exports_preserve_dimensions_roles_erase_padding_and_disabled_candidates"
+        "python:tests.workspace.test_project_and_output_integrity.DataIntegrityStateContracts.test_mask_exports_preserve_dimensions_roles_erase_padding_and_disabled_candidates"
       ]
     },
     {
@@ -704,7 +704,7 @@
       "observation": "除外部分の元画像を保持し、モザイクPNGからもその部分を差し引く",
       "status": "automated",
       "testIds": [
-        "python:tests.test_di_016_044_state_contracts.DataIntegrityStateContracts.test_mask_exports_preserve_dimensions_roles_erase_padding_and_disabled_candidates"
+        "python:tests.workspace.test_project_and_output_integrity.DataIntegrityStateContracts.test_mask_exports_preserve_dimensions_roles_erase_padding_and_disabled_candidates"
       ]
     },
     {
@@ -715,7 +715,7 @@
       "observation": "10px側は元候補の周囲10pxを拡張し、画像端より外の画素を作らない",
       "status": "automated",
       "testIds": [
-        "python:tests.test_di_016_044_state_contracts.DataIntegrityStateContracts.test_mask_exports_preserve_dimensions_roles_erase_padding_and_disabled_candidates"
+        "python:tests.workspace.test_project_and_output_integrity.DataIntegrityStateContracts.test_mask_exports_preserve_dimensions_roles_erase_padding_and_disabled_candidates"
       ]
     },
     {
@@ -726,7 +726,7 @@
       "observation": "ファイルごとの形式と寸法を維持し、拡張子だけ別形式にしない",
       "status": "automated",
       "testIds": [
-        "python:tests.test_di_016_044_state_contracts.DataIntegrityStateContracts.test_original_format_overwrite_preserves_each_codec_and_dimensions"
+        "python:tests.workspace.test_project_and_output_integrity.DataIntegrityStateContracts.test_original_format_overwrite_preserves_each_codec_and_dimensions"
       ]
     },
     {
@@ -803,7 +803,7 @@
       "observation": "A・Bの候補・手描きモザイク・除外・除外消しゴムを消し、両画像の確認状態を保持する",
       "status": "automated",
       "testIds": [
-        "python:tests.test_data_integrity_051_070.DataIntegrity051070Tests.test_batch_clear_undo_redo_restores_only_the_selected_images"
+        "python:tests.data_integrity.test_source_state_and_project_restart.DataIntegrity051070Tests.test_batch_clear_undo_redo_restores_only_the_selected_images"
       ]
     },
     {
@@ -814,7 +814,7 @@
       "observation": "表示状態とE・Fの全状態を保持する",
       "status": "automated",
       "testIds": [
-        "python:tests.test_data_integrity_051_070.DataIntegrity051070Tests.test_batch_clear_undo_redo_restores_only_the_selected_images"
+        "python:tests.data_integrity.test_source_state_and_project_restart.DataIntegrity051070Tests.test_batch_clear_undo_redo_restores_only_the_selected_images"
       ]
     },
     {
@@ -825,7 +825,7 @@
       "observation": "A・Bの範囲を復元し、Aの確認済み・Bの未確認を保持する",
       "status": "automated",
       "testIds": [
-        "python:tests.test_data_integrity_051_070.DataIntegrity051070Tests.test_batch_clear_undo_redo_restores_only_the_selected_images"
+        "python:tests.data_integrity.test_source_state_and_project_restart.DataIntegrity051070Tests.test_batch_clear_undo_redo_restores_only_the_selected_images"
       ]
     },
     {
@@ -836,7 +836,7 @@
       "observation": "両画像の表示状態と対象外を変えない",
       "status": "automated",
       "testIds": [
-        "python:tests.test_data_integrity_051_070.DataIntegrity051070Tests.test_batch_clear_undo_redo_restores_only_the_selected_images"
+        "python:tests.data_integrity.test_source_state_and_project_restart.DataIntegrity051070Tests.test_batch_clear_undo_redo_restores_only_the_selected_images"
       ]
     },
     {
@@ -847,7 +847,7 @@
       "observation": "A・Bだけを再びクリアし、確認状態を保持する",
       "status": "automated",
       "testIds": [
-        "python:tests.test_data_integrity_051_070.DataIntegrity051070Tests.test_batch_clear_undo_redo_restores_only_the_selected_images"
+        "python:tests.data_integrity.test_source_state_and_project_restart.DataIntegrity051070Tests.test_batch_clear_undo_redo_restores_only_the_selected_images"
       ]
     },
     {
@@ -858,7 +858,7 @@
       "observation": "表示状態と対象外を変えない",
       "status": "automated",
       "testIds": [
-        "python:tests.test_data_integrity_051_070.DataIntegrity051070Tests.test_batch_clear_undo_redo_restores_only_the_selected_images"
+        "python:tests.data_integrity.test_source_state_and_project_restart.DataIntegrity051070Tests.test_batch_clear_undo_redo_restores_only_the_selected_images"
       ]
     },
     {
@@ -869,7 +869,7 @@
       "observation": "設定の対象2件となり、C～Hを含めない",
       "status": "automated",
       "testIds": [
-        "python:tests.test_data_integrity_051_070.DataIntegrity051070Tests.test_live_browser_directly_checks_selection_project_search_and_save_dialogs"
+        "python:tests.data_integrity.test_source_state_and_project_restart.DataIntegrity051070Tests.test_live_browser_directly_checks_selection_project_search_and_save_dialogs"
       ]
     },
     {
@@ -880,7 +880,7 @@
       "observation": "開始前は検出しない",
       "status": "automated",
       "testIds": [
-        "python:tests.test_data_integrity_051_070.DataIntegrity051070Tests.test_live_browser_directly_checks_selection_project_search_and_save_dialogs"
+        "python:tests.data_integrity.test_source_state_and_project_restart.DataIntegrity051070Tests.test_live_browser_directly_checks_selection_project_search_and_save_dialogs"
       ]
     },
     {
@@ -891,7 +891,7 @@
       "observation": "Aの確認状態だけを切替前に戻す",
       "status": "automated",
       "testIds": [
-        "python:tests.test_data_integrity_051_070.DataIntegrity051070Tests.test_review_hide_show_and_history_preserve_content_and_editability"
+        "python:tests.data_integrity.test_source_state_and_project_restart.DataIntegrity051070Tests.test_review_hide_show_and_history_preserve_content_and_editability"
       ]
     },
     {
@@ -902,7 +902,7 @@
       "observation": "Aの候補・手描き・履歴・確認状態を変えず、再表示後にだけ編集操作を再開できる",
       "status": "automated",
       "testIds": [
-        "python:tests.test_data_integrity_051_070.DataIntegrity051070Tests.test_review_hide_show_and_history_preserve_content_and_editability"
+        "python:tests.data_integrity.test_source_state_and_project_restart.DataIntegrity051070Tests.test_review_hide_show_and_history_preserve_content_and_editability"
       ]
     },
     {
@@ -913,7 +913,7 @@
       "observation": "0件で編集操作を無効にし、画像読込・PJ名変更・削除は操作できる",
       "status": "automated",
       "testIds": [
-        "python:tests.test_data_integrity_051_070.DataIntegrity051070Tests.test_live_browser_directly_checks_selection_project_search_and_save_dialogs"
+        "python:tests.data_integrity.test_source_state_and_project_restart.DataIntegrity051070Tests.test_live_browser_directly_checks_selection_project_search_and_save_dialogs"
       ]
     },
     {
@@ -924,7 +924,7 @@
       "observation": "状態が完了となり、画像数・作成日時と行ごとのZIP・削除を保持する",
       "status": "automated",
       "testIds": [
-        "python:tests.test_data_integrity_051_070.DataIntegrity051070Tests.test_live_browser_directly_checks_selection_project_search_and_save_dialogs"
+        "python:tests.data_integrity.test_source_state_and_project_restart.DataIntegrity051070Tests.test_live_browser_directly_checks_selection_project_search_and_save_dialogs"
       ]
     },
     {
@@ -935,7 +935,7 @@
       "observation": "同じPJが作業中へ変わり、作成日時は不変",
       "status": "automated",
       "testIds": [
-        "python:tests.test_data_integrity_051_070.DataIntegrity051070Tests.test_live_browser_directly_checks_selection_project_search_and_save_dialogs"
+        "python:tests.data_integrity.test_source_state_and_project_restart.DataIntegrity051070Tests.test_live_browser_directly_checks_selection_project_search_and_save_dialogs"
       ]
     },
     {
@@ -946,7 +946,7 @@
       "observation": "応答の更新時刻が増え、表にその日時を表示する",
       "status": "automated",
       "testIds": [
-        "python:tests.test_data_integrity_051_070.DataIntegrity051070Tests.test_live_browser_directly_checks_selection_project_search_and_save_dialogs"
+        "python:tests.data_integrity.test_source_state_and_project_restart.DataIntegrity051070Tests.test_live_browser_directly_checks_selection_project_search_and_save_dialogs"
       ]
     },
     {
@@ -957,7 +957,7 @@
       "observation": "管理表の名前・状態・画像数・元フォルダー・作成日時・更新日時をそれぞれ保持する",
       "status": "automated",
       "testIds": [
-        "python:tests.test_data_integrity_051_070.DataIntegrity051070Tests.test_project_rows_restart_missing_source_and_same_name_sources_are_durable"
+        "python:tests.data_integrity.test_source_state_and_project_restart.DataIntegrity051070Tests.test_project_rows_restart_missing_source_and_same_name_sources_are_durable"
       ]
     },
     {
@@ -968,7 +968,7 @@
       "observation": "不足したフォルダーだけを再指定対象にし、利用可能な画像の読込を妨げない",
       "status": "automated",
       "testIds": [
-        "python:tests.test_data_integrity_051_070.DataIntegrity051070Tests.test_project_rows_restart_missing_source_and_same_name_sources_are_durable"
+        "python:tests.data_integrity.test_source_state_and_project_restart.DataIntegrity051070Tests.test_project_rows_restart_missing_source_and_same_name_sources_are_durable"
       ]
     },
     {
@@ -979,7 +979,7 @@
       "observation": "両画像を別IDで復元し、各モザイク・除外・確認状態・履歴を混ぜない",
       "status": "automated",
       "testIds": [
-        "python:tests.test_data_integrity_051_070.DataIntegrity051070Tests.test_project_rows_restart_missing_source_and_same_name_sources_are_durable"
+        "python:tests.data_integrity.test_source_state_and_project_restart.DataIntegrity051070Tests.test_project_rows_restart_missing_source_and_same_name_sources_are_durable"
       ]
     },
     {
@@ -990,7 +990,7 @@
       "observation": "再表示時は保存前の値となり、PJの画像や編集内容は変わらない",
       "status": "automated",
       "testIds": [
-        "python:tests.test_data_integrity_051_070.DataIntegrity051070Tests.test_live_browser_directly_checks_selection_project_search_and_save_dialogs"
+        "python:tests.data_integrity.test_source_state_and_project_restart.DataIntegrity051070Tests.test_live_browser_directly_checks_selection_project_search_and_save_dialogs"
       ]
     },
     {
@@ -1001,7 +1001,7 @@
       "observation": "0件の案内となり、検索を消すと画像が戻る",
       "status": "automated",
       "testIds": [
-        "python:tests.test_data_integrity_051_070.DataIntegrity051070Tests.test_live_browser_directly_checks_selection_project_search_and_save_dialogs"
+        "python:tests.data_integrity.test_source_state_and_project_restart.DataIntegrity051070Tests.test_live_browser_directly_checks_selection_project_search_and_save_dialogs"
       ]
     },
     {
@@ -1012,7 +1012,7 @@
       "observation": "PJ画像データを消さない",
       "status": "automated",
       "testIds": [
-        "python:tests.test_data_integrity_051_070.DataIntegrity051070Tests.test_live_browser_directly_checks_selection_project_search_and_save_dialogs"
+        "python:tests.data_integrity.test_source_state_and_project_restart.DataIntegrity051070Tests.test_live_browser_directly_checks_selection_project_search_and_save_dialogs"
       ]
     },
     {
@@ -1023,7 +1023,7 @@
       "observation": "実際の適用範囲が0の画像を対象に含めない",
       "status": "automated",
       "testIds": [
-        "python:tests.test_data_integrity_051_070.DataIntegrity051070Tests.test_live_browser_directly_checks_selection_project_search_and_save_dialogs"
+        "python:tests.data_integrity.test_source_state_and_project_restart.DataIntegrity051070Tests.test_live_browser_directly_checks_selection_project_search_and_save_dialogs"
       ]
     },
     {
@@ -1034,7 +1034,7 @@
       "observation": "有効な手描きも残っていなければ対象から外れる",
       "status": "automated",
       "testIds": [
-        "python:tests.test_data_integrity_051_070.DataIntegrity051070Tests.test_live_browser_directly_checks_selection_project_search_and_save_dialogs"
+        "python:tests.data_integrity.test_source_state_and_project_restart.DataIntegrity051070Tests.test_live_browser_directly_checks_selection_project_search_and_save_dialogs"
       ]
     },
     {
@@ -1045,7 +1045,7 @@
       "observation": "候補レコードがあるだけでは含めない",
       "status": "automated",
       "testIds": [
-        "python:tests.test_data_integrity_051_070.DataIntegrity051070Tests.test_live_browser_directly_checks_selection_project_search_and_save_dialogs"
+        "python:tests.data_integrity.test_source_state_and_project_restart.DataIntegrity051070Tests.test_live_browser_directly_checks_selection_project_search_and_save_dialogs"
       ]
     },
     {
@@ -1067,7 +1067,7 @@
       "observation": "開始時の対象を引き継ぎ、完了済みファイルを重複出力しない",
       "status": "automated",
       "testIds": [
-        "python:tests.test_data_integrity_051_070.DataIntegrity051070Tests.test_paused_batch_save_resumes_its_start_snapshot_without_duplicate_outputs"
+        "python:tests.data_integrity.test_source_state_and_project_restart.DataIntegrity051070Tests.test_paused_batch_save_resumes_its_start_snapshot_without_duplicate_outputs"
       ]
     },
     {
@@ -1078,7 +1078,7 @@
       "observation": "保存先未設定を示して保存開始を無効にする",
       "status": "automated",
       "testIds": [
-        "python:tests.test_data_integrity_051_070.DataIntegrity051070Tests.test_live_browser_directly_checks_selection_project_search_and_save_dialogs"
+        "python:tests.data_integrity.test_source_state_and_project_restart.DataIntegrity051070Tests.test_live_browser_directly_checks_selection_project_search_and_save_dialogs"
       ]
     },
     {
@@ -1089,7 +1089,7 @@
       "observation": "選択ダイアログは開かない",
       "status": "automated",
       "testIds": [
-        "python:tests.test_data_integrity_051_070.DataIntegrity051070Tests.test_live_browser_directly_checks_selection_project_search_and_save_dialogs"
+        "python:tests.data_integrity.test_source_state_and_project_restart.DataIntegrity051070Tests.test_live_browser_directly_checks_selection_project_search_and_save_dialogs"
       ]
     },
     {
@@ -1100,7 +1100,7 @@
       "observation": "保存先未設定を示して保存開始を無効にする",
       "status": "automated",
       "testIds": [
-        "python:tests.test_data_integrity_051_070.DataIntegrity051070Tests.test_live_browser_directly_checks_selection_project_search_and_save_dialogs"
+        "python:tests.data_integrity.test_source_state_and_project_restart.DataIntegrity051070Tests.test_live_browser_directly_checks_selection_project_search_and_save_dialogs"
       ]
     },
     {
@@ -1111,7 +1111,7 @@
       "observation": "上書き可能な画像なら上書きへの切替を許可する",
       "status": "automated",
       "testIds": [
-        "python:tests.test_data_integrity_051_070.DataIntegrity051070Tests.test_live_browser_directly_checks_selection_project_search_and_save_dialogs"
+        "python:tests.data_integrity.test_source_state_and_project_restart.DataIntegrity051070Tests.test_live_browser_directly_checks_selection_project_search_and_save_dialogs"
       ]
     },
     {
@@ -1133,7 +1133,7 @@
       "observation": "旧画像の候補Bitmapが積み重ならず、現在画像の候補は全件表示する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_072_079_resource_lifecycles.cjs::candidate and project resource ownership releases every obsolete bitmap while retaining the complete current bundle"
+        "node:tests/resources/test_browser_resource_lifecycle.cjs::candidate and project resource ownership releases every obsolete bitmap while retaining the complete current bundle"
       ]
     },
     {
@@ -1144,7 +1144,7 @@
       "observation": "現在の1組がキャッシュ上限を超えても候補を消さない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_072_079_resource_lifecycles.cjs::candidate and project resource ownership releases every obsolete bitmap while retaining the complete current bundle"
+        "node:tests/resources/test_browser_resource_lifecycle.cjs::candidate and project resource ownership releases every obsolete bitmap while retaining the complete current bundle"
       ]
     },
     {
@@ -1155,7 +1155,7 @@
       "observation": "表示範囲に応じたDOM数へ戻り、切替回数×400のノードを保持しない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_072_079_resource_lifecycles.cjs::repeated settings, project rows, and candidate padding lifecycles retain one owner and send one commit"
+        "node:tests/resources/test_browser_resource_lifecycle.cjs::repeated settings, project rows, and candidate padding lifecycles retain one owner and send one commit"
       ]
     },
     {
@@ -1166,8 +1166,8 @@
       "observation": "閉じたPJの画像・候補・描画用バッファを回数分保持せず、現在PJへ旧画像を表示しない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_072_079_resource_lifecycles.cjs::candidate and project resource ownership releases every obsolete bitmap while retaining the complete current bundle",
-        "node:tests/test_di_072_079_resource_lifecycles.cjs::repeated settings, project rows, and candidate padding lifecycles retain one owner and send one commit"
+        "node:tests/resources/test_browser_resource_lifecycle.cjs::candidate and project resource ownership releases every obsolete bitmap while retaining the complete current bundle",
+        "node:tests/resources/test_browser_resource_lifecycle.cjs::repeated settings, project rows, and candidate padding lifecycles retain one owner and send one commit"
       ]
     },
     {
@@ -1212,7 +1212,7 @@
       "observation": "開閉回数分の切り離された画面要素やイベントリスナーを保持しない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_072_079_resource_lifecycles.cjs::repeated settings, project rows, and candidate padding lifecycles retain one owner and send one commit"
+        "node:tests/resources/test_browser_resource_lifecycle.cjs::repeated settings, project rows, and candidate padding lifecycles retain one owner and send one commit"
       ]
     },
     {
@@ -1223,7 +1223,7 @@
       "observation": "閉じた管理表の行が開閉回数分蓄積しない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_072_079_resource_lifecycles.cjs::repeated settings, project rows, and candidate padding lifecycles retain one owner and send one commit"
+        "node:tests/resources/test_browser_resource_lifecycle.cjs::repeated settings, project rows, and candidate padding lifecycles retain one owner and send one commit"
       ]
     },
     {
@@ -1234,7 +1234,7 @@
       "observation": "小窓用イベントリスナーが蓄積せず、次の枠変更を重複送信しない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_072_079_resource_lifecycles.cjs::repeated settings, project rows, and candidate padding lifecycles retain one owner and send one commit"
+        "node:tests/resources/test_browser_resource_lifecycle.cjs::repeated settings, project rows, and candidate padding lifecycles retain one owner and send one commit"
       ]
     },
     {
@@ -1254,8 +1254,8 @@
       "observation": "削除PJの画像・候補・履歴のブラウザー参照とDBの関連データが残り続けない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_081_125_browser_contracts.cjs::DI-081 deleted project loses every browser source handle while another project is preserved",
-        "python:tests.test_di_016_044_state_contracts.DataIntegrityStateContracts.test_project_delete_cascades_every_owned_row_and_preserves_other_project_and_sources"
+        "node:tests/workspace/test_editor_project_sync_e2e.cjs::DI-081 deleted project loses every browser source handle while another project is preserved",
+        "python:tests.workspace.test_project_and_output_integrity.DataIntegrityStateContracts.test_project_delete_cascades_every_owned_row_and_preserves_other_project_and_sources"
       ]
     },
     {
@@ -1275,7 +1275,7 @@
       "observation": "マウスを離す前から除外が追従し、モザイク側へ手描きを追加しない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_081_125_browser_contracts.cjs::DI-083 exclusion brush paints live without adding a mosaic stroke"
+        "node:tests/workspace/test_editor_project_sync_e2e.cjs::DI-083 exclusion brush paints live without adding a mosaic stroke"
       ]
     },
     {
@@ -1286,7 +1286,7 @@
       "observation": "両画面の同一画像座標へ描画が反映され、片側だけ操作終了まで止まらない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_081_125_browser_contracts.cjs::DI-084 compare view paints the same logical point in both panes before pointerup"
+        "node:tests/workspace/test_editor_project_sync_e2e.cjs::DI-084 compare view paints the same logical point in both panes before pointerup"
       ]
     },
     {
@@ -1297,7 +1297,7 @@
       "observation": "対象2件と表示し、全画像を消すという文言を出さない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_081_125_browser_contracts.cjs::DI-085 through DI-098 clear confirmations preserve the exact visible target set"
+        "node:tests/workspace/test_editor_project_sync_e2e.cjs::DI-085 through DI-098 clear confirmations preserve the exact visible target set"
       ]
     },
     {
@@ -1308,7 +1308,7 @@
       "observation": "非表示を除く対象4件と表示し、焼き込み済み画素は復元しないことを案内する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_081_125_browser_contracts.cjs::DI-085 through DI-098 clear confirmations preserve the exact visible target set"
+        "node:tests/workspace/test_editor_project_sync_e2e.cjs::DI-085 through DI-098 clear confirmations preserve the exact visible target set"
       ]
     },
     {
@@ -1319,8 +1319,8 @@
       "observation": "A・Bの範囲・確認状態・表示状態が変わらず、削除要求を送信しない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_081_125_browser_contracts.cjs::DI-085 through DI-098 clear confirmations preserve the exact visible target set",
-        "python:tests.test_di_081_125_http_contracts.DataIntegrityHttpContracts.test_clear_mask_http_catalogue_and_sqlite_share_the_exact_A_to_H_state"
+        "node:tests/workspace/test_editor_project_sync_e2e.cjs::DI-085 through DI-098 clear confirmations preserve the exact visible target set",
+        "python:tests.http.test_workspace_mutation_authority.DataIntegrityHttpContracts.test_clear_mask_http_catalogue_and_sqlite_share_the_exact_A_to_H_state"
       ]
     },
     {
@@ -1331,8 +1331,8 @@
       "observation": "直後の画面・画像一覧API・DBがすべてAの確認済みと対象外の確認状態を保持する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_081_125_browser_contracts.cjs::DI-085 through DI-098 clear confirmations preserve the exact visible target set",
-        "python:tests.test_di_081_125_http_contracts.DataIntegrityHttpContracts.test_clear_mask_http_catalogue_and_sqlite_share_the_exact_A_to_H_state"
+        "node:tests/workspace/test_editor_project_sync_e2e.cjs::DI-085 through DI-098 clear confirmations preserve the exact visible target set",
+        "python:tests.http.test_workspace_mutation_authority.DataIntegrityHttpContracts.test_clear_mask_http_catalogue_and_sqlite_share_the_exact_A_to_H_state"
       ]
     },
     {
@@ -1343,8 +1343,8 @@
       "observation": "直後の画面・画像一覧API・DBがすべてA・Bの確認状態とE・Fの状態を保持する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_081_125_browser_contracts.cjs::DI-085 through DI-098 clear confirmations preserve the exact visible target set",
-        "python:tests.test_di_081_125_http_contracts.DataIntegrityHttpContracts.test_clear_mask_http_catalogue_and_sqlite_share_the_exact_A_to_H_state"
+        "node:tests/workspace/test_editor_project_sync_e2e.cjs::DI-085 through DI-098 clear confirmations preserve the exact visible target set",
+        "python:tests.http.test_workspace_mutation_authority.DataIntegrityHttpContracts.test_clear_mask_http_catalogue_and_sqlite_share_the_exact_A_to_H_state"
       ]
     },
     {
@@ -1355,7 +1355,7 @@
       "observation": "対象は確認済みのA・Cの2件",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_081_125_browser_contracts.cjs::DI-085 through DI-098 clear confirmations preserve the exact visible target set"
+        "node:tests/workspace/test_editor_project_sync_e2e.cjs::DI-085 through DI-098 clear confirmations preserve the exact visible target set"
       ]
     },
     {
@@ -1366,8 +1366,8 @@
       "observation": "未確認のBと非表示E・Gを含めず、画面・画像一覧API・DBで対象集合が一致する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_081_125_browser_contracts.cjs::DI-085 through DI-098 clear confirmations preserve the exact visible target set",
-        "python:tests.test_di_081_125_http_contracts.DataIntegrityHttpContracts.test_clear_mask_http_catalogue_and_sqlite_share_the_exact_A_to_H_state"
+        "node:tests/workspace/test_editor_project_sync_e2e.cjs::DI-085 through DI-098 clear confirmations preserve the exact visible target set",
+        "python:tests.http.test_workspace_mutation_authority.DataIntegrityHttpContracts.test_clear_mask_http_catalogue_and_sqlite_share_the_exact_A_to_H_state"
       ]
     },
     {
@@ -1378,7 +1378,7 @@
       "observation": "確認状態が閉じる前と一致し、再開したときだけ確認済みから未確認へ変化しない",
       "status": "automated",
       "testIds": [
-        "python:tests.test_di_081_125_state_contracts.DataIntegrityStateContracts.test_clear_masks_is_atomic_per_target_and_undo_redo_restores_flags_and_ranges"
+        "python:tests.workspace.test_workspace_mutation_integrity.DataIntegrityStateContracts.test_clear_masks_is_atomic_per_target_and_undo_redo_restores_flags_and_ranges"
       ]
     },
     {
@@ -1389,8 +1389,8 @@
       "observation": "範囲が履歴位置へ戻り、現在の確認状態を画面・画像一覧API・DBで保持する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_081_125_browser_contracts.cjs::DI-092 and DI-093 durable undo redo reconcile the visible range and review state",
-        "python:tests.test_di_081_125_http_contracts.DataIntegrityHttpContracts.test_clear_mask_http_catalogue_and_sqlite_share_the_exact_A_to_H_state"
+        "node:tests/workspace/test_editor_project_sync_e2e.cjs::DI-092 and DI-093 durable undo redo reconcile the visible range and review state",
+        "python:tests.http.test_workspace_mutation_authority.DataIntegrityHttpContracts.test_clear_mask_http_catalogue_and_sqlite_share_the_exact_A_to_H_state"
       ]
     },
     {
@@ -1401,8 +1401,8 @@
       "observation": "対象範囲が消え、画面・画像一覧API・DBで現在の確認状態を保持する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_081_125_browser_contracts.cjs::DI-092 and DI-093 durable undo redo reconcile the visible range and review state",
-        "python:tests.test_di_081_125_http_contracts.DataIntegrityHttpContracts.test_clear_mask_http_catalogue_and_sqlite_share_the_exact_A_to_H_state"
+        "node:tests/workspace/test_editor_project_sync_e2e.cjs::DI-092 and DI-093 durable undo redo reconcile the visible range and review state",
+        "python:tests.http.test_workspace_mutation_authority.DataIntegrityHttpContracts.test_clear_mask_http_catalogue_and_sqlite_share_the_exact_A_to_H_state"
       ]
     },
     {
@@ -1413,7 +1413,7 @@
       "observation": "Aだけが範囲なしとなり、確認済みを保持する",
       "status": "automated",
       "testIds": [
-        "python:tests.test_di_081_125_http_contracts.DataIntegrityHttpContracts.test_clear_mask_http_catalogue_and_sqlite_share_the_exact_A_to_H_state"
+        "python:tests.http.test_workspace_mutation_authority.DataIntegrityHttpContracts.test_clear_mask_http_catalogue_and_sqlite_share_the_exact_A_to_H_state"
       ]
     },
     {
@@ -1424,7 +1424,7 @@
       "observation": "B・E・Fの範囲、C・E・Gの確認済み、E～Hの非表示を保持する",
       "status": "automated",
       "testIds": [
-        "python:tests.test_di_081_125_http_contracts.DataIntegrityHttpContracts.test_clear_mask_http_catalogue_and_sqlite_share_the_exact_A_to_H_state"
+        "python:tests.http.test_workspace_mutation_authority.DataIntegrityHttpContracts.test_clear_mask_http_catalogue_and_sqlite_share_the_exact_A_to_H_state"
       ]
     },
     {
@@ -1435,8 +1435,8 @@
       "observation": "表示中A～Dだけが範囲なしとなり、各画像の確認状態を保持する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_081_125_browser_contracts.cjs::DI-085 through DI-098 clear confirmations preserve the exact visible target set",
-        "python:tests.test_di_081_125_http_contracts.DataIntegrityHttpContracts.test_clear_mask_http_catalogue_and_sqlite_share_the_exact_A_to_H_state"
+        "node:tests/workspace/test_editor_project_sync_e2e.cjs::DI-085 through DI-098 clear confirmations preserve the exact visible target set",
+        "python:tests.http.test_workspace_mutation_authority.DataIntegrityHttpContracts.test_clear_mask_http_catalogue_and_sqlite_share_the_exact_A_to_H_state"
       ]
     },
     {
@@ -1447,7 +1447,7 @@
       "observation": "E～Hの候補・手描き・確認状態・非表示と画像ファイルの画素は変えない",
       "status": "automated",
       "testIds": [
-        "python:tests.test_di_081_125_http_contracts.DataIntegrityHttpContracts.test_clear_mask_http_catalogue_and_sqlite_share_the_exact_A_to_H_state"
+        "python:tests.http.test_workspace_mutation_authority.DataIntegrityHttpContracts.test_clear_mask_http_catalogue_and_sqlite_share_the_exact_A_to_H_state"
       ]
     },
     {
@@ -1458,7 +1458,7 @@
       "observation": "対象0件を表示し、保存開始を無効にする",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_081_125_browser_contracts.cjs::DI-085 through DI-098 clear confirmations preserve the exact visible target set"
+        "node:tests/workspace/test_editor_project_sync_e2e.cjs::DI-085 through DI-098 clear confirmations preserve the exact visible target set"
       ]
     },
     {
@@ -1469,7 +1469,7 @@
       "observation": "確認済みの対象A・Cの2件を表示し、保存開始できる",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_081_125_browser_contracts.cjs::DI-085 through DI-098 clear confirmations preserve the exact visible target set"
+        "node:tests/workspace/test_editor_project_sync_e2e.cjs::DI-085 through DI-098 clear confirmations preserve the exact visible target set"
       ]
     },
     {
@@ -1480,7 +1480,7 @@
       "observation": "非表示のE～Hを含めずA～Dの4件を対象とする",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_081_125_browser_contracts.cjs::DI-085 through DI-098 clear confirmations preserve the exact visible target set"
+        "node:tests/workspace/test_editor_project_sync_e2e.cjs::DI-085 through DI-098 clear confirmations preserve the exact visible target set"
       ]
     },
     {
@@ -1491,7 +1491,7 @@
       "observation": "500にならず保存できる",
       "status": "automated",
       "testIds": [
-        "python:tests.test_di_081_125_state_contracts.DataIntegrityStateContracts.test_projectless_undo_state_single_overwrite_commits_before_reapplying_edits"
+        "python:tests.workspace.test_workspace_mutation_integrity.DataIntegrityStateContracts.test_projectless_undo_state_single_overwrite_commits_before_reapplying_edits"
       ]
     },
     {
@@ -1502,7 +1502,7 @@
       "observation": "出力はUndo後の向きと手描き範囲を反映し、名前付きPJを作成しない",
       "status": "automated",
       "testIds": [
-        "python:tests.test_di_081_125_state_contracts.DataIntegrityStateContracts.test_projectless_undo_state_single_overwrite_commits_before_reapplying_edits"
+        "python:tests.workspace.test_workspace_mutation_integrity.DataIntegrityStateContracts.test_projectless_undo_state_single_overwrite_commits_before_reapplying_edits"
       ]
     },
     {
@@ -1513,8 +1513,8 @@
       "observation": "どちらも500にならず、各出力の反転状態と範囲が開始時の対象ごとに一致する",
       "status": "automated",
       "testIds": [
-        "python:tests.test_di_081_125_state_contracts.DataIntegrityStateContracts.test_projectless_undo_state_single_overwrite_commits_before_reapplying_edits",
-        "python:tests.test_di_081_125_state_contracts.DataIntegrityStateContracts.test_projectless_non_undo_single_and_batch_overwrites_commit_captured_edits"
+        "python:tests.workspace.test_workspace_mutation_integrity.DataIntegrityStateContracts.test_projectless_undo_state_single_overwrite_commits_before_reapplying_edits",
+        "python:tests.workspace.test_workspace_mutation_integrity.DataIntegrityStateContracts.test_projectless_non_undo_single_and_batch_overwrites_commit_captured_edits"
       ]
     },
     {
@@ -1525,7 +1525,7 @@
       "observation": "モザイクと手描きに通常／強制除外・除外消しゴムを反映し、透過部分の白いRGB値を範囲にせず、単体とZIPの対応PNGで局所範囲が一致する",
       "status": "automated",
       "testIds": [
-        "python:tests.test_di_016_044_state_contracts.DataIntegrityStateContracts.test_mask_exports_preserve_dimensions_roles_erase_padding_and_disabled_candidates",
+        "python:tests.workspace.test_project_and_output_integrity.DataIntegrityStateContracts.test_mask_exports_preserve_dimensions_roles_erase_padding_and_disabled_candidates",
         "python:tests.test_project_export_mask_alpha.ProjectExportMaskAlphaTests.test_project_zip_export_uses_rgba_alpha_for_manual_mosaic_and_exclude_masks",
         "python:tests.test_project_export_mask_alpha.ProjectExportMaskAlphaTests.test_rgba_and_la_candidates_use_alpha_for_preview_save_and_exports"
       ]
@@ -1547,7 +1547,7 @@
       "observation": "遷移要求は表示中PJと世代を期待値として送る",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_081_125_browser_contracts.cjs::DI-102 DI-118 DI-123 and DI-124 send captured authority and resync one complete snapshot"
+        "node:tests/workspace/test_editor_project_sync_e2e.cjs::DI-102 DI-118 DI-123 and DI-124 send captured authority and resync one complete snapshot"
       ]
     },
     {
@@ -1558,8 +1558,8 @@
       "observation": "古い世代は stale_catalog として受理されず、応答喪失・エラー後は `/api/images` のPJ・画像・catalogGeneration を再取得して画面と一致させる",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_081_125_browser_contracts.cjs::DI-102 DI-118 DI-123 and DI-124 send captured authority and resync one complete snapshot",
-        "node:tests/test_di_081_125_browser_contracts.cjs::DI-102 lost and general-error project mutations both resync the complete authoritative catalogue"
+        "node:tests/workspace/test_editor_project_sync_e2e.cjs::DI-102 DI-118 DI-123 and DI-124 send captured authority and resync one complete snapshot",
+        "node:tests/workspace/test_editor_project_sync_e2e.cjs::DI-102 lost and general-error project mutations both resync the complete authoritative catalogue"
       ]
     },
     {
@@ -1570,8 +1570,8 @@
       "observation": "PJごとの復元・削除は projectId index を使い、削除要求の完了後に該当PJのブラウザー保持ソースだけが残らない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_081_125_browser_contracts.cjs::DI-081 deleted project loses every browser source handle while another project is preserved",
-        "node:tests/test_di_081_125_browser_contracts.cjs::DI-103 DI-104 and DI-125 source cleanup removes only authoritatively absent owners"
+        "node:tests/workspace/test_editor_project_sync_e2e.cjs::DI-081 deleted project loses every browser source handle while another project is preserved",
+        "node:tests/workspace/test_editor_project_sync_e2e.cjs::DI-103 DI-104 and DI-125 source cleanup removes only authoritatively absent owners"
       ]
     },
     {
@@ -1582,8 +1582,8 @@
       "observation": "別PJの保持ソースと復元結果は変わらない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_081_125_browser_contracts.cjs::DI-081 deleted project loses every browser source handle while another project is preserved",
-        "node:tests/test_di_081_125_browser_contracts.cjs::DI-103 DI-104 and DI-125 source cleanup removes only authoritatively absent owners"
+        "node:tests/workspace/test_editor_project_sync_e2e.cjs::DI-081 deleted project loses every browser source handle while another project is preserved",
+        "node:tests/workspace/test_editor_project_sync_e2e.cjs::DI-103 DI-104 and DI-125 source cleanup removes only authoritatively absent owners"
       ]
     },
     {
@@ -1594,7 +1594,7 @@
       "observation": "削除済みまたはサーバーに存在しないPJの保持ソースは次回起動時に消える",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_081_125_browser_contracts.cjs::DI-103 DI-104 and DI-125 source cleanup removes only authoritatively absent owners"
+        "node:tests/workspace/test_editor_project_sync_e2e.cjs::DI-103 DI-104 and DI-125 source cleanup removes only authoritatively absent owners"
       ]
     },
     {
@@ -1605,7 +1605,7 @@
       "observation": "応答喪失や起動時にPJが残る場合はcleanup intentと保持ソースを残し、明確な4xx拒否はその要求のintentだけを解除する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_081_125_browser_contracts.cjs::DI-103 DI-104 and DI-125 source cleanup removes only authoritatively absent owners"
+        "node:tests/workspace/test_editor_project_sync_e2e.cjs::DI-103 DI-104 and DI-125 source cleanup removes only authoritatively absent owners"
       ]
     },
     {
@@ -1616,7 +1616,7 @@
       "observation": "別タブのintentを消さない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_081_125_browser_contracts.cjs::DI-103 DI-104 and DI-125 source cleanup removes only authoritatively absent owners"
+        "node:tests/workspace/test_editor_project_sync_e2e.cjs::DI-103 DI-104 and DI-125 source cleanup removes only authoritatively absent owners"
       ]
     },
     {
@@ -1627,7 +1627,7 @@
       "observation": "別PJの編集は書出し完了を待たず保存される",
       "status": "automated",
       "testIds": [
-        "python:tests.test_di_081_125_state_contracts.DataIntegrityStateContracts.test_project_export_uses_one_temp_sqlite_snapshot_streams_rows_and_always_cleans_it"
+        "python:tests.workspace.test_workspace_mutation_integrity.DataIntegrityStateContracts.test_project_export_uses_one_temp_sqlite_snapshot_streams_rows_and_always_cleans_it"
       ]
     },
     {
@@ -1638,7 +1638,7 @@
       "observation": "ZIP内の各PNGは出力開始時点のPJ状態で揃い、途中編集前後の世代を混在させない",
       "status": "automated",
       "testIds": [
-        "python:tests.test_di_081_125_state_contracts.DataIntegrityStateContracts.test_project_export_uses_one_temp_sqlite_snapshot_streams_rows_and_always_cleans_it"
+        "python:tests.workspace.test_workspace_mutation_integrity.DataIntegrityStateContracts.test_project_export_uses_one_temp_sqlite_snapshot_streams_rows_and_always_cleans_it"
       ]
     },
     {
@@ -1649,7 +1649,7 @@
       "observation": "WALが出力時間に比例して増え続けない",
       "status": "automated",
       "testIds": [
-        "python:tests.test_di_081_125_state_contracts.DataIntegrityStateContracts.test_export_reader_does_not_pin_live_workspace_wal_and_startup_removes_stale_export"
+        "python:tests.workspace.test_workspace_mutation_integrity.DataIntegrityStateContracts.test_export_reader_does_not_pin_live_workspace_wal_and_startup_removes_stale_export"
       ]
     },
     {
@@ -1660,7 +1660,7 @@
       "observation": "ZIP内の全PNGは開始時点の世代で揃い、更新した画像のZIPは更新前、PJ画面・DBは更新後の範囲になる",
       "status": "automated",
       "testIds": [
-        "python:tests.test_di_081_125_state_contracts.DataIntegrityStateContracts.test_project_export_uses_one_temp_sqlite_snapshot_streams_rows_and_always_cleans_it"
+        "python:tests.workspace.test_workspace_mutation_integrity.DataIntegrityStateContracts.test_project_export_uses_one_temp_sqlite_snapshot_streams_rows_and_always_cleans_it"
       ]
     },
     {
@@ -1671,7 +1671,7 @@
       "observation": "一時SQLiteはデータフォルダーに作成し、全件マスクを同時保持せず1画像ずつ読み出す",
       "status": "automated",
       "testIds": [
-        "python:tests.test_di_081_125_state_contracts.DataIntegrityStateContracts.test_project_export_uses_one_temp_sqlite_snapshot_streams_rows_and_always_cleans_it",
+        "python:tests.workspace.test_workspace_mutation_integrity.DataIntegrityStateContracts.test_project_export_uses_one_temp_sqlite_snapshot_streams_rows_and_always_cleans_it",
         "python:tests.test_project_workspace_coverage.ProjectWorkspaceCoverageTests.test_project_export_streams_three_ordered_queries_and_one_image_payload"
       ]
     },
@@ -1683,7 +1683,7 @@
       "observation": "成功・失敗のどちらでも終了後に `mozarie-export-*` を残さない",
       "status": "automated",
       "testIds": [
-        "python:tests.test_di_081_125_state_contracts.DataIntegrityStateContracts.test_project_export_uses_one_temp_sqlite_snapshot_streams_rows_and_always_cleans_it"
+        "python:tests.workspace.test_workspace_mutation_integrity.DataIntegrityStateContracts.test_project_export_uses_one_temp_sqlite_snapshot_streams_rows_and_always_cleans_it"
       ]
     },
     {
@@ -1703,7 +1703,7 @@
       "observation": "起動時の整理後に一時SQLiteを残さず、途中ZIPの状態を通常のPJデータや次の書出しへ混ぜない",
       "status": "automated",
       "testIds": [
-        "python:tests.test_di_081_125_state_contracts.DataIntegrityStateContracts.test_export_reader_does_not_pin_live_workspace_wal_and_startup_removes_stale_export"
+        "python:tests.workspace.test_workspace_mutation_integrity.DataIntegrityStateContracts.test_export_reader_does_not_pin_live_workspace_wal_and_startup_removes_stale_export"
       ]
     },
     {
@@ -1714,7 +1714,7 @@
       "observation": "PJ切替との競合では操作と切替が直列化される",
       "status": "automated",
       "testIds": [
-        "python:tests.test_di_081_125_state_contracts.DataIntegrityStateContracts.test_project_switch_serializes_flag_and_two_image_candidate_batches_without_cross_project_leaks"
+        "python:tests.workspace.test_workspace_mutation_integrity.DataIntegrityStateContracts.test_project_switch_serializes_flag_and_two_image_candidate_batches_without_cross_project_leaks"
       ]
     },
     {
@@ -1725,8 +1725,8 @@
       "observation": "操作が先なら旧PJだけを更新してから切り替え、切替が先なら旧要求を `stale_catalog` として拒否する",
       "status": "automated",
       "testIds": [
-        "python:tests.test_di_081_125_http_contracts.DataIntegrityHttpContracts.test_delayed_old_project_candidate_request_is_stale_and_candidate_failures_publish_nothing",
-        "python:tests.test_di_081_125_state_contracts.DataIntegrityStateContracts.test_project_switch_serializes_flag_and_two_image_candidate_batches_without_cross_project_leaks",
+        "python:tests.http.test_workspace_mutation_authority.DataIntegrityHttpContracts.test_delayed_old_project_candidate_request_is_stale_and_candidate_failures_publish_nothing",
+        "python:tests.workspace.test_workspace_mutation_integrity.DataIntegrityStateContracts.test_project_switch_serializes_flag_and_two_image_candidate_batches_without_cross_project_leaks",
         "python:tests.test_server.MozarieTests.test_flag_change_does_not_publish_after_the_catalog_changes_during_a_write"
       ]
     },
@@ -1738,9 +1738,9 @@
       "observation": "切替先PJのDBと画面を変更せず、500を返さない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_081_125_browser_contracts.cjs::DI-109 DI-111 and DI-124 delayed mutations retain A authority and leave the switched B screen intact",
-        "python:tests.test_di_081_125_http_contracts.DataIntegrityHttpContracts.test_delayed_old_project_candidate_request_is_stale_and_candidate_failures_publish_nothing",
-        "python:tests.test_di_081_125_state_contracts.DataIntegrityStateContracts.test_project_switch_serializes_flag_and_two_image_candidate_batches_without_cross_project_leaks",
+        "node:tests/workspace/test_editor_project_sync_e2e.cjs::DI-109 DI-111 and DI-124 delayed mutations retain A authority and leave the switched B screen intact",
+        "python:tests.http.test_workspace_mutation_authority.DataIntegrityHttpContracts.test_delayed_old_project_candidate_request_is_stale_and_candidate_failures_publish_nothing",
+        "python:tests.workspace.test_workspace_mutation_integrity.DataIntegrityStateContracts.test_project_switch_serializes_flag_and_two_image_candidate_batches_without_cross_project_leaks",
         "python:tests.test_server.MozarieTests.test_flag_change_does_not_publish_after_the_catalog_changes_during_a_write"
       ]
     },
@@ -1752,7 +1752,7 @@
       "observation": "PJ切替との競合では、A・Bの候補状態と履歴は両方変更されてから切り替わるか、両方保持して切り替わる",
       "status": "automated",
       "testIds": [
-        "python:tests.test_di_081_125_state_contracts.DataIntegrityStateContracts.test_project_switch_serializes_flag_and_two_image_candidate_batches_without_cross_project_leaks"
+        "python:tests.workspace.test_workspace_mutation_integrity.DataIntegrityStateContracts.test_project_switch_serializes_flag_and_two_image_candidate_batches_without_cross_project_leaks"
       ]
     },
     {
@@ -1763,7 +1763,7 @@
       "observation": "切替先PJに片方だけの確定を残さない",
       "status": "automated",
       "testIds": [
-        "python:tests.test_di_081_125_state_contracts.DataIntegrityStateContracts.test_project_switch_serializes_flag_and_two_image_candidate_batches_without_cross_project_leaks"
+        "python:tests.workspace.test_workspace_mutation_integrity.DataIntegrityStateContracts.test_project_switch_serializes_flag_and_two_image_candidate_batches_without_cross_project_leaks"
       ]
     },
     {
@@ -1774,9 +1774,9 @@
       "observation": "遅延したPJ A要求は `stale_catalog` となり、PJ A・PJ BのDBと画面を更新しない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_081_125_browser_contracts.cjs::DI-109 DI-111 and DI-124 delayed mutations retain A authority and leave the switched B screen intact",
-        "node:tests/test_di_081_125_browser_contracts.cjs::DI-118 transition response and stale second tab converge on one complete catalogue snapshot",
-        "python:tests.test_di_081_125_http_contracts.DataIntegrityHttpContracts.test_delayed_old_project_candidate_request_is_stale_and_candidate_failures_publish_nothing"
+        "node:tests/workspace/test_editor_project_sync_e2e.cjs::DI-109 DI-111 and DI-124 delayed mutations retain A authority and leave the switched B screen intact",
+        "node:tests/workspace/test_editor_project_sync_e2e.cjs::DI-118 transition response and stale second tab converge on one complete catalogue snapshot",
+        "python:tests.http.test_workspace_mutation_authority.DataIntegrityHttpContracts.test_delayed_old_project_candidate_request_is_stale_and_candidate_failures_publish_nothing"
       ]
     },
     {
@@ -1787,7 +1787,7 @@
       "observation": "`candidate_not_found` または `source_mismatch` となり、Aの候補状態・候補revision・履歴も変更しない",
       "status": "automated",
       "testIds": [
-        "python:tests.test_di_081_125_http_contracts.DataIntegrityHttpContracts.test_delayed_old_project_candidate_request_is_stale_and_candidate_failures_publish_nothing"
+        "python:tests.http.test_workspace_mutation_authority.DataIntegrityHttpContracts.test_delayed_old_project_candidate_request_is_stale_and_candidate_failures_publish_nothing"
       ]
     },
     {
@@ -1798,8 +1798,8 @@
       "observation": "DBまたは候補データ読込失敗時もA・Bとも公開前の候補状態と履歴を保持する",
       "status": "automated",
       "testIds": [
-        "python:tests.test_di_081_125_state_contracts.DataIntegrityStateContracts.test_project_switch_serializes_flag_and_two_image_candidate_batches_without_cross_project_leaks",
-        "python:tests.test_di_081_125_http_contracts.DataIntegrityHttpContracts.test_delayed_old_project_candidate_request_is_stale_and_candidate_failures_publish_nothing"
+        "python:tests.workspace.test_workspace_mutation_integrity.DataIntegrityStateContracts.test_project_switch_serializes_flag_and_two_image_candidate_batches_without_cross_project_leaks",
+        "python:tests.http.test_workspace_mutation_authority.DataIntegrityHttpContracts.test_delayed_old_project_candidate_request_is_stale_and_candidate_failures_publish_nothing"
       ]
     },
     {
@@ -1810,7 +1810,7 @@
       "observation": "同時転送中の同一import sessionだけは開始時の世代で並列追加でき、各公開で世代を更新する",
       "status": "automated",
       "testIds": [
-        "python:tests.test_di_081_125_state_contracts.DataIntegrityStateContracts.test_same_import_session_publishes_parallel_images_and_other_sessions_cannot_mutate_it"
+        "python:tests.workspace.test_workspace_mutation_integrity.DataIntegrityStateContracts.test_same_import_session_publishes_parallel_images_and_other_sessions_cannot_mutate_it"
       ]
     },
     {
@@ -1821,7 +1821,7 @@
       "observation": "active 0後の次転送は直前公開世代と一致しなければ拒否する",
       "status": "automated",
       "testIds": [
-        "python:tests.test_di_081_125_state_contracts.DataIntegrityStateContracts.test_import_sessions_keep_parallel_owner_generation_and_release_only_their_own_state"
+        "python:tests.workspace.test_workspace_mutation_integrity.DataIntegrityStateContracts.test_import_sessions_keep_parallel_owner_generation_and_release_only_their_own_state"
       ]
     },
     {
@@ -1832,7 +1832,7 @@
       "observation": "タブBの古い要求と別sessionの追加は拒否され、追加済み画像を上書きしない",
       "status": "automated",
       "testIds": [
-        "python:tests.test_di_081_125_state_contracts.DataIntegrityStateContracts.test_same_import_session_publishes_parallel_images_and_other_sessions_cannot_mutate_it"
+        "python:tests.workspace.test_workspace_mutation_integrity.DataIntegrityStateContracts.test_same_import_session_publishes_parallel_images_and_other_sessions_cannot_mutate_it"
       ]
     },
     {
@@ -1867,8 +1867,8 @@
       "observation": "前の転送の成功応答が返る前にactive数を解放し、完了要求が保留されず次のimportを開始できる",
       "status": "automated",
       "testIds": [
-        "python:tests.test_di_081_125_http_contracts.DataIntegrityHttpContracts.test_next_import_session_starts_before_prior_file_success_response_returns",
-        "python:tests.test_di_081_125_state_contracts.DataIntegrityStateContracts.test_same_import_session_publishes_parallel_images_and_other_sessions_cannot_mutate_it",
+        "python:tests.http.test_workspace_mutation_authority.DataIntegrityHttpContracts.test_next_import_session_starts_before_prior_file_success_response_returns",
+        "python:tests.workspace.test_workspace_mutation_integrity.DataIntegrityStateContracts.test_same_import_session_publishes_parallel_images_and_other_sessions_cannot_mutate_it",
         "python:tests.test_server.MozarieTests.test_import_transfer_blocks_catalog_mutation_while_http_body_is_pending"
       ]
     },
@@ -1880,7 +1880,7 @@
       "observation": "最後の転送終了で取消状態を含む完了要求を解放する",
       "status": "automated",
       "testIds": [
-        "python:tests.test_di_081_125_state_contracts.DataIntegrityStateContracts.test_import_sessions_keep_parallel_owner_generation_and_release_only_their_own_state"
+        "python:tests.workspace.test_workspace_mutation_integrity.DataIntegrityStateContracts.test_import_sessions_keep_parallel_owner_generation_and_release_only_their_own_state"
       ]
     },
     {
@@ -1891,8 +1891,8 @@
       "observation": "失敗・取消した非稼働sessionは次の明示開始で置換でき、別sessionの画像を変更しない",
       "status": "automated",
       "testIds": [
-        "python:tests.test_di_081_125_state_contracts.DataIntegrityStateContracts.test_import_sessions_keep_parallel_owner_generation_and_release_only_their_own_state",
-        "python:tests.test_di_081_125_state_contracts.DataIntegrityStateContracts.test_same_import_session_publishes_parallel_images_and_other_sessions_cannot_mutate_it"
+        "python:tests.workspace.test_workspace_mutation_integrity.DataIntegrityStateContracts.test_import_sessions_keep_parallel_owner_generation_and_release_only_their_own_state",
+        "python:tests.workspace.test_workspace_mutation_integrity.DataIntegrityStateContracts.test_same_import_session_publishes_parallel_images_and_other_sessions_cannot_mutate_it"
       ]
     },
     {
@@ -1903,7 +1903,7 @@
       "observation": "開始時のPJ・session IDが一致すると安全に解放する",
       "status": "automated",
       "testIds": [
-        "python:tests.test_di_081_125_state_contracts.DataIntegrityStateContracts.test_same_import_session_publishes_parallel_images_and_other_sessions_cannot_mutate_it"
+        "python:tests.workspace.test_workspace_mutation_integrity.DataIntegrityStateContracts.test_same_import_session_publishes_parallel_images_and_other_sessions_cannot_mutate_it"
       ]
     },
     {
@@ -1914,8 +1914,8 @@
       "observation": "切替先のPJや一覧を変更せず、完了済み・未知sessionの終了は冪等で、別session IDでは追加を受け付けない",
       "status": "automated",
       "testIds": [
-        "python:tests.test_di_081_125_state_contracts.DataIntegrityStateContracts.test_import_sessions_keep_parallel_owner_generation_and_release_only_their_own_state",
-        "python:tests.test_di_081_125_state_contracts.DataIntegrityStateContracts.test_same_import_session_publishes_parallel_images_and_other_sessions_cannot_mutate_it"
+        "python:tests.workspace.test_workspace_mutation_integrity.DataIntegrityStateContracts.test_import_sessions_keep_parallel_owner_generation_and_release_only_their_own_state",
+        "python:tests.workspace.test_workspace_mutation_integrity.DataIntegrityStateContracts.test_same_import_session_publishes_parallel_images_and_other_sessions_cannot_mutate_it"
       ]
     },
     {
@@ -1926,7 +1926,7 @@
       "observation": "タブAの成功応答と `/api/images` に含まれるPJ・画像・root・sources・needsSource・catalogGenerationは同じ遷移時点の組合せとなる",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_081_125_browser_contracts.cjs::DI-118 transition response and stale second tab converge on one complete catalogue snapshot"
+        "node:tests/workspace/test_editor_project_sync_e2e.cjs::DI-118 transition response and stale second tab converge on one complete catalogue snapshot"
       ]
     },
     {
@@ -1949,7 +1949,7 @@
       "observation": "タブBは応答スナップショット取得後に実行されるか、古い世代として拒否され、異なるPJの内容と世代を混ぜない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_081_125_browser_contracts.cjs::DI-118 transition response and stale second tab converge on one complete catalogue snapshot"
+        "node:tests/workspace/test_editor_project_sync_e2e.cjs::DI-118 transition response and stale second tab converge on one complete catalogue snapshot"
       ]
     },
     {
@@ -1960,7 +1960,7 @@
       "observation": "一括変更はPJ AのDBと画面へ全件そろって反映されてから切り替わるか、古い要求として拒否される",
       "status": "automated",
       "testIds": [
-        "python:tests.test_di_081_125_state_contracts.DataIntegrityStateContracts.test_project_switch_serializes_flag_and_two_image_candidate_batches_without_cross_project_leaks",
+        "python:tests.workspace.test_workspace_mutation_integrity.DataIntegrityStateContracts.test_project_switch_serializes_flag_and_two_image_candidate_batches_without_cross_project_leaks",
         "python:tests.test_http_live_endpoints.LiveHttpEndpointTests.test_flag_write_keeps_catalogue_state_consistent_across_a_sqlite_wait"
       ]
     },
@@ -1972,7 +1972,7 @@
       "observation": "PJ Bの状態やcatalogGenerationをPJ Aの応答に混ぜない",
       "status": "automated",
       "testIds": [
-        "python:tests.test_di_081_125_state_contracts.DataIntegrityStateContracts.test_project_switch_serializes_flag_and_two_image_candidate_batches_without_cross_project_leaks",
+        "python:tests.workspace.test_workspace_mutation_integrity.DataIntegrityStateContracts.test_project_switch_serializes_flag_and_two_image_candidate_batches_without_cross_project_leaks",
         "python:tests.test_server.MozarieTests.test_flag_change_does_not_publish_after_the_catalog_changes_during_a_write"
       ]
     },
@@ -1984,7 +1984,7 @@
       "observation": "画面は直前のPJ・画像・候補・catalogGenerationを保持する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_081_125_browser_contracts.cjs::DI-120 and DI-123 definitive project-open failure preserves the prior catalogue draft and source handle"
+        "node:tests/workspace/test_editor_project_sync_e2e.cjs::DI-120 and DI-123 definitive project-open failure preserves the prior catalogue draft and source handle"
       ]
     },
     {
@@ -1995,8 +1995,8 @@
       "observation": "開けなかったPJは元フォルダーの記録、確認済み状態、反転状態、PJ状態を変更しない",
       "status": "automated",
       "testIds": [
-        "python:tests.test_di_081_125_state_contracts.DataIntegrityStateContracts.test_failed_target_project_open_preserves_its_own_review_flip_and_status",
-        "node:tests/test_di_081_125_browser_contracts.cjs::DI-120 and DI-123 definitive project-open failure preserves the prior catalogue draft and source handle",
+        "python:tests.workspace.test_workspace_mutation_integrity.DataIntegrityStateContracts.test_failed_target_project_open_preserves_its_own_review_flip_and_status",
+        "node:tests/workspace/test_editor_project_sync_e2e.cjs::DI-120 and DI-123 definitive project-open failure preserves the prior catalogue draft and source handle",
         "python:tests.test_project_native_relink_http.ProjectNativeRelinkHttpTests.test_relink_rejections_leave_source_and_live_catalog_unchanged"
       ]
     },
@@ -2008,7 +2008,7 @@
       "observation": "読込失敗前のPJまたは無名一覧、候補、catalogGenerationを保持する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_081_125_browser_contracts.cjs::DI-121 failed image workspace load never publishes a partial browser selection",
+        "node:tests/workspace/test_editor_project_sync_e2e.cjs::DI-121 failed image workspace load never publishes a partial browser selection",
         "python:tests.test_server.MozarieTests.test_workspace_restore_rejects_corrupt_candidate_without_partial_display",
         "python:tests.test_server.MozarieTests.test_workspace_restore_rejects_invalid_candidate_metadata"
       ]
@@ -2021,7 +2021,7 @@
       "observation": "失敗した読込先を途中状態で公開せず、古い一覧を保持したブラウザーと食い違わない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_081_125_browser_contracts.cjs::DI-121 failed image workspace load never publishes a partial browser selection",
+        "node:tests/workspace/test_editor_project_sync_e2e.cjs::DI-121 failed image workspace load never publishes a partial browser selection",
         "python:tests.test_server.MozarieTests.test_workspace_restore_rejects_corrupt_candidate_without_partial_display",
         "python:tests.test_server.MozarieTests.test_workspace_restore_rejects_invalid_candidate_metadata"
       ]
@@ -2034,7 +2034,7 @@
       "observation": "対象画像の候補・有効モザイク・履歴は全件まとめて確定するか、全件保持する",
       "status": "automated",
       "testIds": [
-        "python:tests.test_di_081_125_state_contracts.DataIntegrityStateContracts.test_project_switch_serializes_flag_and_two_image_candidate_batches_without_cross_project_leaks",
+        "python:tests.workspace.test_workspace_mutation_integrity.DataIntegrityStateContracts.test_project_switch_serializes_flag_and_two_image_candidate_batches_without_cross_project_leaks",
         "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_candidate_history_batch_and_failure_guards",
         "python:tests.test_server.MozarieTests.test_batch_candidate_padding_hundred_candidates_writes_one_history_and_no_png"
       ]
@@ -2047,8 +2047,8 @@
       "observation": "処理中も一覧取得と既存画面の更新が長時間停止せず、切替後のPJへ候補や履歴を混ぜない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_081_125_browser_contracts.cjs::DI-122 many-image candidate enable delete and padding APIs leave catalogue reads and browser frames responsive",
-        "python:tests.test_di_081_125_state_contracts.DataIntegrityStateContracts.test_project_switch_serializes_flag_and_two_image_candidate_batches_without_cross_project_leaks",
+        "node:tests/workspace/test_editor_project_sync_e2e.cjs::DI-122 many-image candidate enable delete and padding APIs leave catalogue reads and browser frames responsive",
+        "python:tests.workspace.test_workspace_mutation_integrity.DataIntegrityStateContracts.test_project_switch_serializes_flag_and_two_image_candidate_batches_without_cross_project_leaks",
         "python:tests.test_server.MozarieTests.test_candidate_compose_keeps_catalog_responsive_and_rejects_revision_race"
       ]
     },
@@ -2060,8 +2060,8 @@
       "observation": "stale_catalogの409後は一度だけ権威スナップショットへ置換し、PJ・root・画像・source一覧・不足native source表示・現在画像・候補キャッシュを混ぜない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_081_125_browser_contracts.cjs::DI-102 DI-118 DI-123 and DI-124 send captured authority and resync one complete snapshot",
-        "node:tests/test_di_081_125_browser_contracts.cjs::DI-118 transition response and stale second tab converge on one complete catalogue snapshot"
+        "node:tests/workspace/test_editor_project_sync_e2e.cjs::DI-102 DI-118 DI-123 and DI-124 send captured authority and resync one complete snapshot",
+        "node:tests/workspace/test_editor_project_sync_e2e.cjs::DI-118 transition response and stale second tab converge on one complete catalogue snapshot"
       ]
     },
     {
@@ -2072,7 +2072,7 @@
       "observation": "確定400では同一PJの下書きとhandle対応を不要に初期化しない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_081_125_browser_contracts.cjs::DI-120 and DI-123 definitive project-open failure preserves the prior catalogue draft and source handle"
+        "node:tests/workspace/test_editor_project_sync_e2e.cjs::DI-120 and DI-123 definitive project-open failure preserves the prior catalogue draft and source handle"
       ]
     },
     {
@@ -2083,9 +2083,9 @@
       "observation": "完了側は一覧取得の要求直前に保持したPJ・catalogGenerationと応答を照合する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_081_125_browser_contracts.cjs::DI-124 real import save detection clear undo and redo completion handlers capture authority before listing",
-        "node:tests/test_di_081_125_browser_contracts.cjs::DI-109 DI-111 and DI-124 delayed mutations retain A authority and leave the switched B screen intact",
-        "node:tests/test_di_081_125_browser_contracts.cjs::DI-102 DI-118 DI-123 and DI-124 send captured authority and resync one complete snapshot"
+        "node:tests/workspace/test_editor_project_sync_e2e.cjs::DI-124 real import save detection clear undo and redo completion handlers capture authority before listing",
+        "node:tests/workspace/test_editor_project_sync_e2e.cjs::DI-109 DI-111 and DI-124 delayed mutations retain A authority and leave the switched B screen intact",
+        "node:tests/workspace/test_editor_project_sync_e2e.cjs::DI-102 DI-118 DI-123 and DI-124 send captured authority and resync one complete snapshot"
       ]
     },
     {
@@ -2096,8 +2096,8 @@
       "observation": "自身の更新だけなら編集状態を保持し、別PJ遷移なら一覧全体をPJ・画像・root・source一覧・needsSourceを含む権威スナップショットへ置換する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_081_125_browser_contracts.cjs::DI-102 DI-118 DI-123 and DI-124 send captured authority and resync one complete snapshot",
-        "node:tests/test_di_081_125_browser_contracts.cjs::DI-118 transition response and stale second tab converge on one complete catalogue snapshot"
+        "node:tests/workspace/test_editor_project_sync_e2e.cjs::DI-102 DI-118 DI-123 and DI-124 send captured authority and resync one complete snapshot",
+        "node:tests/workspace/test_editor_project_sync_e2e.cjs::DI-118 transition response and stale second tab converge on one complete catalogue snapshot"
       ]
     },
     {
@@ -2121,8 +2121,8 @@
       "observation": "旧PJの現在画像、候補、root、cache、source handleを新PJの画像へ残さない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_081_125_browser_contracts.cjs::DI-102 DI-118 DI-123 and DI-124 send captured authority and resync one complete snapshot",
-        "node:tests/test_di_081_125_browser_contracts.cjs::DI-118 transition response and stale second tab converge on one complete catalogue snapshot"
+        "node:tests/workspace/test_editor_project_sync_e2e.cjs::DI-102 DI-118 DI-123 and DI-124 send captured authority and resync one complete snapshot",
+        "node:tests/workspace/test_editor_project_sync_e2e.cjs::DI-118 transition response and stale second tab converge on one complete catalogue snapshot"
       ]
     },
     {
@@ -2133,7 +2133,7 @@
       "observation": "削除commit前に記録した片付け対象は、再起動後の権威PJ状態で削除済みなら該当画像の保存済みハンドルだけを消す",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_081_125_browser_contracts.cjs::DI-103 DI-104 and DI-125 source cleanup removes only authoritatively absent owners",
+        "node:tests/workspace/test_editor_project_sync_e2e.cjs::DI-103 DI-104 and DI-125 source cleanup removes only authoritatively absent owners",
         "node:tests/test_source_delete_e2e.cjs::Delete shortcut keeps a durable source-delete intent through claim and acknowledges the committed receipt"
       ]
     },
@@ -2145,8 +2145,8 @@
       "observation": "存在中・未確定時は記録を保持し、明確な拒否を受けた削除要求だけ記録を消す",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_081_125_browser_contracts.cjs::DI-125 definitive image-delete commit 4xx removes only its own durable cleanup intent",
-        "node:tests/test_di_081_125_browser_contracts.cjs::DI-103 DI-104 and DI-125 source cleanup removes only authoritatively absent owners",
+        "node:tests/workspace/test_editor_project_sync_e2e.cjs::DI-125 definitive image-delete commit 4xx removes only its own durable cleanup intent",
+        "node:tests/workspace/test_editor_project_sync_e2e.cjs::DI-103 DI-104 and DI-125 source cleanup removes only authoritatively absent owners",
         "node:tests/test_source_delete_e2e.cjs::unknown browser-source deletion remains recoverable instead of silently committing or cancelling"
       ]
     },
@@ -2158,7 +2158,7 @@
       "observation": "A・B・C・D・E・F・G・H",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_126_202_browser_contracts.cjs::DI-126 through DI-157 render the complete M U R N H truth table in catalogue order"
+        "node:tests/gallery/test_filter_navigation_and_delete_e2e.cjs::DI-126 through DI-157 render the complete M U R N H truth table in catalogue order"
       ]
     },
     {
@@ -2169,7 +2169,7 @@
       "observation": "A・B",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_126_202_browser_contracts.cjs::DI-126 through DI-157 render the complete M U R N H truth table in catalogue order"
+        "node:tests/gallery/test_filter_navigation_and_delete_e2e.cjs::DI-126 through DI-157 render the complete M U R N H truth table in catalogue order"
       ]
     },
     {
@@ -2180,7 +2180,7 @@
       "observation": "C・D",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_126_202_browser_contracts.cjs::DI-126 through DI-157 render the complete M U R N H truth table in catalogue order"
+        "node:tests/gallery/test_filter_navigation_and_delete_e2e.cjs::DI-126 through DI-157 render the complete M U R N H truth table in catalogue order"
       ]
     },
     {
@@ -2191,7 +2191,7 @@
       "observation": "A・C",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_126_202_browser_contracts.cjs::DI-126 through DI-157 render the complete M U R N H truth table in catalogue order"
+        "node:tests/gallery/test_filter_navigation_and_delete_e2e.cjs::DI-126 through DI-157 render the complete M U R N H truth table in catalogue order"
       ]
     },
     {
@@ -2202,7 +2202,7 @@
       "observation": "B・D",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_126_202_browser_contracts.cjs::DI-126 through DI-157 render the complete M U R N H truth table in catalogue order"
+        "node:tests/gallery/test_filter_navigation_and_delete_e2e.cjs::DI-126 through DI-157 render the complete M U R N H truth table in catalogue order"
       ]
     },
     {
@@ -2213,7 +2213,7 @@
       "observation": "E・F・G・H",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_126_202_browser_contracts.cjs::DI-126 through DI-157 render the complete M U R N H truth table in catalogue order"
+        "node:tests/gallery/test_filter_navigation_and_delete_e2e.cjs::DI-126 through DI-157 render the complete M U R N H truth table in catalogue order"
       ]
     },
     {
@@ -2224,7 +2224,7 @@
       "observation": "A・B・C・D",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_126_202_browser_contracts.cjs::DI-126 through DI-157 render the complete M U R N H truth table in catalogue order"
+        "node:tests/gallery/test_filter_navigation_and_delete_e2e.cjs::DI-126 through DI-157 render the complete M U R N H truth table in catalogue order"
       ]
     },
     {
@@ -2235,7 +2235,7 @@
       "observation": "A・B・C",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_126_202_browser_contracts.cjs::DI-126 through DI-157 render the complete M U R N H truth table in catalogue order"
+        "node:tests/gallery/test_filter_navigation_and_delete_e2e.cjs::DI-126 through DI-157 render the complete M U R N H truth table in catalogue order"
       ]
     },
     {
@@ -2246,7 +2246,7 @@
       "observation": "A・B・D",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_126_202_browser_contracts.cjs::DI-126 through DI-157 render the complete M U R N H truth table in catalogue order"
+        "node:tests/gallery/test_filter_navigation_and_delete_e2e.cjs::DI-126 through DI-157 render the complete M U R N H truth table in catalogue order"
       ]
     },
     {
@@ -2257,7 +2257,7 @@
       "observation": "A・B・E・F・G・H",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_126_202_browser_contracts.cjs::DI-126 through DI-157 render the complete M U R N H truth table in catalogue order"
+        "node:tests/gallery/test_filter_navigation_and_delete_e2e.cjs::DI-126 through DI-157 render the complete M U R N H truth table in catalogue order"
       ]
     },
     {
@@ -2268,7 +2268,7 @@
       "observation": "A・C・D",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_126_202_browser_contracts.cjs::DI-126 through DI-157 render the complete M U R N H truth table in catalogue order"
+        "node:tests/gallery/test_filter_navigation_and_delete_e2e.cjs::DI-126 through DI-157 render the complete M U R N H truth table in catalogue order"
       ]
     },
     {
@@ -2279,7 +2279,7 @@
       "observation": "B・C・D",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_126_202_browser_contracts.cjs::DI-126 through DI-157 render the complete M U R N H truth table in catalogue order"
+        "node:tests/gallery/test_filter_navigation_and_delete_e2e.cjs::DI-126 through DI-157 render the complete M U R N H truth table in catalogue order"
       ]
     },
     {
@@ -2290,7 +2290,7 @@
       "observation": "C・D・E・F・G・H",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_126_202_browser_contracts.cjs::DI-126 through DI-157 render the complete M U R N H truth table in catalogue order"
+        "node:tests/gallery/test_filter_navigation_and_delete_e2e.cjs::DI-126 through DI-157 render the complete M U R N H truth table in catalogue order"
       ]
     },
     {
@@ -2301,7 +2301,7 @@
       "observation": "A・B・C・D",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_126_202_browser_contracts.cjs::DI-126 through DI-157 render the complete M U R N H truth table in catalogue order"
+        "node:tests/gallery/test_filter_navigation_and_delete_e2e.cjs::DI-126 through DI-157 render the complete M U R N H truth table in catalogue order"
       ]
     },
     {
@@ -2312,7 +2312,7 @@
       "observation": "A・C・E・F・G・H",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_126_202_browser_contracts.cjs::DI-126 through DI-157 render the complete M U R N H truth table in catalogue order"
+        "node:tests/gallery/test_filter_navigation_and_delete_e2e.cjs::DI-126 through DI-157 render the complete M U R N H truth table in catalogue order"
       ]
     },
     {
@@ -2323,7 +2323,7 @@
       "observation": "B・D・E・F・G・H",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_126_202_browser_contracts.cjs::DI-126 through DI-157 render the complete M U R N H truth table in catalogue order"
+        "node:tests/gallery/test_filter_navigation_and_delete_e2e.cjs::DI-126 through DI-157 render the complete M U R N H truth table in catalogue order"
       ]
     },
     {
@@ -2334,7 +2334,7 @@
       "observation": "A・B・C・D",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_126_202_browser_contracts.cjs::DI-126 through DI-157 render the complete M U R N H truth table in catalogue order"
+        "node:tests/gallery/test_filter_navigation_and_delete_e2e.cjs::DI-126 through DI-157 render the complete M U R N H truth table in catalogue order"
       ]
     },
     {
@@ -2345,7 +2345,7 @@
       "observation": "A・B・C・D",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_126_202_browser_contracts.cjs::DI-126 through DI-157 render the complete M U R N H truth table in catalogue order"
+        "node:tests/gallery/test_filter_navigation_and_delete_e2e.cjs::DI-126 through DI-157 render the complete M U R N H truth table in catalogue order"
       ]
     },
     {
@@ -2356,7 +2356,7 @@
       "observation": "A・B・C・D・E・F・G・H",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_126_202_browser_contracts.cjs::DI-126 through DI-157 render the complete M U R N H truth table in catalogue order"
+        "node:tests/gallery/test_filter_navigation_and_delete_e2e.cjs::DI-126 through DI-157 render the complete M U R N H truth table in catalogue order"
       ]
     },
     {
@@ -2367,7 +2367,7 @@
       "observation": "A・B・C・D",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_126_202_browser_contracts.cjs::DI-126 through DI-157 render the complete M U R N H truth table in catalogue order"
+        "node:tests/gallery/test_filter_navigation_and_delete_e2e.cjs::DI-126 through DI-157 render the complete M U R N H truth table in catalogue order"
       ]
     },
     {
@@ -2378,7 +2378,7 @@
       "observation": "A・B・C・E・F・G・H",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_126_202_browser_contracts.cjs::DI-126 through DI-157 render the complete M U R N H truth table in catalogue order"
+        "node:tests/gallery/test_filter_navigation_and_delete_e2e.cjs::DI-126 through DI-157 render the complete M U R N H truth table in catalogue order"
       ]
     },
     {
@@ -2389,7 +2389,7 @@
       "observation": "A・B・D・E・F・G・H",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_126_202_browser_contracts.cjs::DI-126 through DI-157 render the complete M U R N H truth table in catalogue order"
+        "node:tests/gallery/test_filter_navigation_and_delete_e2e.cjs::DI-126 through DI-157 render the complete M U R N H truth table in catalogue order"
       ]
     },
     {
@@ -2400,7 +2400,7 @@
       "observation": "A・B・C・D",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_126_202_browser_contracts.cjs::DI-126 through DI-157 render the complete M U R N H truth table in catalogue order"
+        "node:tests/gallery/test_filter_navigation_and_delete_e2e.cjs::DI-126 through DI-157 render the complete M U R N H truth table in catalogue order"
       ]
     },
     {
@@ -2411,7 +2411,7 @@
       "observation": "A・C・D・E・F・G・H",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_126_202_browser_contracts.cjs::DI-126 through DI-157 render the complete M U R N H truth table in catalogue order"
+        "node:tests/gallery/test_filter_navigation_and_delete_e2e.cjs::DI-126 through DI-157 render the complete M U R N H truth table in catalogue order"
       ]
     },
     {
@@ -2422,7 +2422,7 @@
       "observation": "B・C・D・E・F・G・H",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_126_202_browser_contracts.cjs::DI-126 through DI-157 render the complete M U R N H truth table in catalogue order"
+        "node:tests/gallery/test_filter_navigation_and_delete_e2e.cjs::DI-126 through DI-157 render the complete M U R N H truth table in catalogue order"
       ]
     },
     {
@@ -2433,7 +2433,7 @@
       "observation": "A・B・C・D・E・F・G・H",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_126_202_browser_contracts.cjs::DI-126 through DI-157 render the complete M U R N H truth table in catalogue order"
+        "node:tests/gallery/test_filter_navigation_and_delete_e2e.cjs::DI-126 through DI-157 render the complete M U R N H truth table in catalogue order"
       ]
     },
     {
@@ -2444,7 +2444,7 @@
       "observation": "A・B・C・D",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_126_202_browser_contracts.cjs::DI-126 through DI-157 render the complete M U R N H truth table in catalogue order"
+        "node:tests/gallery/test_filter_navigation_and_delete_e2e.cjs::DI-126 through DI-157 render the complete M U R N H truth table in catalogue order"
       ]
     },
     {
@@ -2455,7 +2455,7 @@
       "observation": "A・B・C・D・E・F・G・H",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_126_202_browser_contracts.cjs::DI-126 through DI-157 render the complete M U R N H truth table in catalogue order"
+        "node:tests/gallery/test_filter_navigation_and_delete_e2e.cjs::DI-126 through DI-157 render the complete M U R N H truth table in catalogue order"
       ]
     },
     {
@@ -2466,7 +2466,7 @@
       "observation": "A・B・C・D・E・F・G・H",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_126_202_browser_contracts.cjs::DI-126 through DI-157 render the complete M U R N H truth table in catalogue order"
+        "node:tests/gallery/test_filter_navigation_and_delete_e2e.cjs::DI-126 through DI-157 render the complete M U R N H truth table in catalogue order"
       ]
     },
     {
@@ -2477,7 +2477,7 @@
       "observation": "A・B・C・D・E・F・G・H",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_126_202_browser_contracts.cjs::DI-126 through DI-157 render the complete M U R N H truth table in catalogue order"
+        "node:tests/gallery/test_filter_navigation_and_delete_e2e.cjs::DI-126 through DI-157 render the complete M U R N H truth table in catalogue order"
       ]
     },
     {
@@ -2488,7 +2488,7 @@
       "observation": "A・B・C・D・E・F・G・H",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_126_202_browser_contracts.cjs::DI-126 through DI-157 render the complete M U R N H truth table in catalogue order"
+        "node:tests/gallery/test_filter_navigation_and_delete_e2e.cjs::DI-126 through DI-157 render the complete M U R N H truth table in catalogue order"
       ]
     },
     {
@@ -2499,7 +2499,7 @@
       "observation": "A・B・C・D・E・F・G・H",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_126_202_browser_contracts.cjs::DI-126 through DI-157 render the complete M U R N H truth table in catalogue order"
+        "node:tests/gallery/test_filter_navigation_and_delete_e2e.cjs::DI-126 through DI-157 render the complete M U R N H truth table in catalogue order"
       ]
     },
     {
@@ -2521,7 +2521,7 @@
       "observation": "削除画像の白い未選択表示や古いキャンバスを残さない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_158_185_browser_contracts.cjs::DI-158 DI-164 and DI-165 actual deletion replaces the canvas at every position and clears an all-item selection"
+        "node:tests/gallery/test_filtered_action_authority_e2e.cjs::DI-158 DI-164 and DI-165 actual deletion replaces the canvas at every position and clears an all-item selection"
       ]
     },
     {
@@ -2554,7 +2554,7 @@
       "observation": "操作前の左一覧表示集合の先頭一致画像を開く",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_158_185_browser_contracts.cjs::DI-158 DI-160 and DI-166 delete against the captured filtered order and keep authority on cancel or stale response"
+        "node:tests/gallery/test_filtered_action_authority_e2e.cjs::DI-158 DI-160 and DI-166 delete against the captured filtered order and keep authority on cancel or stale response"
       ]
     },
     {
@@ -2565,7 +2565,7 @@
       "observation": "絞り込み外の次画像や全画像順の次画像を開かない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_158_185_browser_contracts.cjs::DI-158 DI-160 and DI-166 delete against the captured filtered order and keep authority on cancel or stale response"
+        "node:tests/gallery/test_filtered_action_authority_e2e.cjs::DI-158 DI-160 and DI-166 delete against the captured filtered order and keep authority on cancel or stale response"
       ]
     },
     {
@@ -2576,7 +2576,7 @@
       "observation": "両操作とも押下時の左一覧表示順だけを対象にする",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_158_185_browser_contracts.cjs::DI-161 DI-181 and DI-182 review and hide clicks preserve the captured filtered successor contract"
+        "node:tests/gallery/test_filtered_action_authority_e2e.cjs::DI-161 DI-181 and DI-182 review and hide clicks preserve the captured filtered successor contract"
       ]
     },
     {
@@ -2587,7 +2587,7 @@
       "observation": "次の一致画像だけを開き、末尾と1件では確認済みまたは非表示になった現在画像とキャンバスを保持し、直前へ戻らない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_158_185_browser_contracts.cjs::DI-161 DI-181 and DI-182 review and hide clicks preserve the captured filtered successor contract"
+        "node:tests/gallery/test_filtered_action_authority_e2e.cjs::DI-161 DI-181 and DI-182 review and hide clicks preserve the captured filtered successor contract"
       ]
     },
     {
@@ -2598,7 +2598,7 @@
       "observation": "絞り込み外では先頭の一致画像を開く",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_158_185_browser_contracts.cjs::DI-161 DI-181 and DI-182 review and hide clicks preserve the captured filtered successor contract"
+        "node:tests/gallery/test_filtered_action_authority_e2e.cjs::DI-161 DI-181 and DI-182 review and hide clicks preserve the captured filtered successor contract"
       ]
     },
     {
@@ -2609,7 +2609,7 @@
       "observation": "Hで表示する既に非表示の現在画像は閲覧できるが、処理対象にしない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_158_185_browser_contracts.cjs::DI-161 DI-164 DI-168 DI-181 DI-183 and DI-185 use the captured visible order for every successor boundary"
+        "node:tests/gallery/test_filtered_action_authority_e2e.cjs::DI-161 DI-164 DI-168 DI-181 DI-183 and DI-185 use the captured visible order for every successor boundary"
       ]
     },
     {
@@ -2620,7 +2620,7 @@
       "observation": "対象外画像を開かない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_158_185_browser_contracts.cjs::DI-161 DI-181 and DI-182 review and hide clicks preserve the captured filtered successor contract"
+        "node:tests/gallery/test_filtered_action_authority_e2e.cjs::DI-161 DI-181 and DI-182 review and hide clicks preserve the captured filtered successor contract"
       ]
     },
     {
@@ -2631,7 +2631,7 @@
       "observation": "表示外になった画像は選択数と実際の対象から外れる",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_158_185_browser_contracts.cjs::DI-162 through DI-177 selected actions use only the selection still visible after filter search and folder changes"
+        "node:tests/gallery/test_filtered_action_authority_e2e.cjs::DI-162 through DI-177 selected actions use only the selection still visible after filter search and folder changes"
       ]
     },
     {
@@ -2642,7 +2642,7 @@
       "observation": "表示中・選択中と表示する一括操作は、その時点の一覧表示集合内だけを対象にする",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_158_185_browser_contracts.cjs::DI-162 through DI-177 selected actions use only the selection still visible after filter search and folder changes"
+        "node:tests/gallery/test_filtered_action_authority_e2e.cjs::DI-162 through DI-177 selected actions use only the selection still visible after filter search and folder changes"
       ]
     },
     {
@@ -2653,7 +2653,7 @@
       "observation": "PJ全体・すべてと明示した保存操作の対象は変えない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_158_185_browser_contracts.cjs::DI-170 through DI-180 explicit all-image scope ignores view filters and excludes every hidden image"
+        "node:tests/gallery/test_filtered_action_authority_e2e.cjs::DI-170 through DI-180 explicit all-image scope ignores view filters and excludes every hidden image"
       ]
     },
     {
@@ -2664,7 +2664,7 @@
       "observation": "現在画像とキャンバスを保持する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_158_185_browser_contracts.cjs::DI-163 and DI-184 deleting another selected image preserves the current unsaved canvas and draft"
+        "node:tests/gallery/test_filtered_action_authority_e2e.cjs::DI-163 and DI-184 deleting another selected image preserves the current unsaved canvas and draft"
       ]
     },
     {
@@ -2675,7 +2675,7 @@
       "observation": "削除対象、選択数、一覧表示、残る画像を一致させる",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_158_185_browser_contracts.cjs::DI-163 and DI-184 deleting another selected image preserves the current unsaved canvas and draft"
+        "node:tests/gallery/test_filtered_action_authority_e2e.cjs::DI-163 and DI-184 deleting another selected image preserves the current unsaved canvas and draft"
       ]
     },
     {
@@ -2686,7 +2686,7 @@
       "observation": "操作前の一覧表示順で削除されない次の一致画像、末尾では削除されない直前一致画像を開く",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_158_185_browser_contracts.cjs::DI-158 DI-164 and DI-165 actual deletion replaces the canvas at every position and clears an all-item selection"
+        "node:tests/gallery/test_filtered_action_authority_e2e.cjs::DI-158 DI-164 and DI-165 actual deletion replaces the canvas at every position and clears an all-item selection"
       ]
     },
     {
@@ -2697,7 +2697,7 @@
       "observation": "削除対象と現在画像を混ぜず、古いキャンバスを残さない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_158_185_browser_contracts.cjs::DI-158 DI-164 and DI-165 actual deletion replaces the canvas at every position and clears an all-item selection"
+        "node:tests/gallery/test_filtered_action_authority_e2e.cjs::DI-158 DI-164 and DI-165 actual deletion replaces the canvas at every position and clears an all-item selection"
       ]
     },
     {
@@ -2719,7 +2719,7 @@
       "observation": "選択数は0となり、削除済みIDを操作対象にしない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_158_185_browser_contracts.cjs::DI-158 DI-164 and DI-165 actual deletion replaces the canvas at every position and clears an all-item selection"
+        "node:tests/gallery/test_filtered_action_authority_e2e.cjs::DI-158 DI-164 and DI-165 actual deletion replaces the canvas at every position and clears an all-item selection"
       ]
     },
     {
@@ -2730,8 +2730,8 @@
       "observation": "削除要求を送らず、一覧順・絞り込み・選択集合・現在画像・キャンバス・PJデータを保持する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_158_185_browser_contracts.cjs::DI-158 DI-160 and DI-166 delete against the captured filtered order and keep authority on cancel or stale response",
-        "node:tests/test_di_158_185_browser_contracts.cjs::DI-166 DI-167 DI-171 and DI-184 batch delete cancellation conflict and disconnect preserve authority"
+        "node:tests/gallery/test_filtered_action_authority_e2e.cjs::DI-158 DI-160 and DI-166 delete against the captured filtered order and keep authority on cancel or stale response",
+        "node:tests/gallery/test_filtered_action_authority_e2e.cjs::DI-166 DI-167 DI-171 and DI-184 batch delete cancellation conflict and disconnect preserve authority"
       ]
     },
     {
@@ -2742,7 +2742,7 @@
       "observation": "権威一覧へ同期し、成功表示や削除後の選択を先行して出さない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_158_185_browser_contracts.cjs::DI-166 DI-167 DI-171 and DI-184 batch delete cancellation conflict and disconnect preserve authority"
+        "node:tests/gallery/test_filtered_action_authority_e2e.cjs::DI-166 DI-167 DI-171 and DI-184 batch delete cancellation conflict and disconnect preserve authority"
       ]
     },
     {
@@ -2753,7 +2753,7 @@
       "observation": "現在画像とキャンバスは同期後の一覧にだけ対応する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_158_185_browser_contracts.cjs::DI-166 DI-167 DI-171 and DI-184 batch delete cancellation conflict and disconnect preserve authority"
+        "node:tests/gallery/test_filtered_action_authority_e2e.cjs::DI-166 DI-167 DI-171 and DI-184 batch delete cancellation conflict and disconnect preserve authority"
       ]
     },
     {
@@ -2764,9 +2764,9 @@
       "observation": "currentまたはpendingの削除が確定した場合だけ、操作前の左一覧または一覧表示順で次の残存候補、末尾では直前候補、候補なしでは未選択へ整合する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_158_185_browser_contracts.cjs::DI-168 DI-183 and DI-184 pending image deletion invalidates stale loads and restores only authoritative survivors",
-        "node:tests/test_di_158_185_browser_contracts.cjs::DI-168 and DI-183 disconnected pending deletion resumes from the committed receipt after reload",
-        "node:tests/test_di_158_185_browser_contracts.cjs::DI-158 DI-164 and DI-165 actual deletion replaces the canvas at every position and clears an all-item selection"
+        "node:tests/gallery/test_filtered_action_authority_e2e.cjs::DI-168 DI-183 and DI-184 pending image deletion invalidates stale loads and restores only authoritative survivors",
+        "node:tests/gallery/test_filtered_action_authority_e2e.cjs::DI-168 and DI-183 disconnected pending deletion resumes from the committed receipt after reload",
+        "node:tests/gallery/test_filtered_action_authority_e2e.cjs::DI-158 DI-164 and DI-165 actual deletion replaces the canvas at every position and clears an all-item selection"
       ]
     },
     {
@@ -2777,9 +2777,9 @@
       "observation": "現在以外の単体削除では削除確定後も操作前のpending画像、なければ現在画像を権威一覧から選び直す",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_158_185_browser_contracts.cjs::DI-168 DI-183 and DI-184 pending image deletion invalidates stale loads and restores only authoritative survivors",
-        "node:tests/test_di_158_185_browser_contracts.cjs::DI-168 and DI-183 disconnected pending deletion resumes from the committed receipt after reload",
-        "node:tests/test_di_158_185_browser_contracts.cjs::DI-163 and DI-184 deleting another selected image preserves the current unsaved canvas and draft"
+        "node:tests/gallery/test_filtered_action_authority_e2e.cjs::DI-168 DI-183 and DI-184 pending image deletion invalidates stale loads and restores only authoritative survivors",
+        "node:tests/gallery/test_filtered_action_authority_e2e.cjs::DI-168 and DI-183 disconnected pending deletion resumes from the committed receipt after reload",
+        "node:tests/gallery/test_filtered_action_authority_e2e.cjs::DI-163 and DI-184 deleting another selected image preserves the current unsaved canvas and draft"
       ]
     },
     {
@@ -2790,8 +2790,8 @@
       "observation": "未確定も同じ選択を復元し、古いキャンバスや白い未選択状態を残さない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_158_185_browser_contracts.cjs::DI-168 DI-183 and DI-184 pending image deletion invalidates stale loads and restores only authoritative survivors",
-        "node:tests/test_di_158_185_browser_contracts.cjs::DI-168 and DI-183 disconnected pending deletion resumes from the committed receipt after reload"
+        "node:tests/gallery/test_filtered_action_authority_e2e.cjs::DI-168 DI-183 and DI-184 pending image deletion invalidates stale loads and restores only authoritative survivors",
+        "node:tests/gallery/test_filtered_action_authority_e2e.cjs::DI-168 and DI-183 disconnected pending deletion resumes from the committed receipt after reload"
       ]
     },
     {
@@ -2802,7 +2802,7 @@
       "observation": "各操作、位置表示、ボタンの有効状態はすべて左一覧の表示集合だけを基準にする",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_126_202_browser_contracts.cjs::DI-169 navigation and controls use only the current left-list filter"
+        "node:tests/gallery/test_filter_navigation_and_delete_e2e.cjs::DI-169 navigation and controls use only the current left-list filter"
       ]
     },
     {
@@ -2813,7 +2813,7 @@
       "observation": "表示外の現在画像からnext／nextVisibleは先頭一致、previous／previousVisibleは末尾一致へ進み、表示集合が0件では移動しない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_126_202_browser_contracts.cjs::DI-169 navigation and controls use only the current left-list filter"
+        "node:tests/gallery/test_filter_navigation_and_delete_e2e.cjs::DI-169 navigation and controls use only the current left-list filter"
       ]
     },
     {
@@ -2824,7 +2824,7 @@
       "observation": "A～Dの4件を対象として表示する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_158_185_browser_contracts.cjs::DI-170.1 all-image detection shows and sends exactly A-D from A-H regardless of both view filters"
+        "node:tests/gallery/test_filtered_action_authority_e2e.cjs::DI-170.1 all-image detection shows and sends exactly A-D from A-H regardless of both view filters"
       ]
     },
     {
@@ -2835,7 +2835,7 @@
       "observation": "左一覧または一覧表示の絞り込みでは狭めず、非表示だけを常に除外する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_158_185_browser_contracts.cjs::DI-170 through DI-180 explicit all-image scope ignores view filters and excludes every hidden image"
+        "node:tests/gallery/test_filtered_action_authority_e2e.cjs::DI-170 through DI-180 explicit all-image scope ignores view filters and excludes every hidden image"
       ]
     },
     {
@@ -2846,7 +2846,7 @@
       "observation": "選択数、確認件数、送信する画像ID、削除対象は実行時の表示集合との積集合だけになる",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_158_185_browser_contracts.cjs::DI-166 DI-167 DI-171 and DI-184 batch delete cancellation conflict and disconnect preserve authority"
+        "node:tests/gallery/test_filtered_action_authority_e2e.cjs::DI-166 DI-167 DI-171 and DI-184 batch delete cancellation conflict and disconnect preserve authority"
       ]
     },
     {
@@ -2857,7 +2857,7 @@
       "observation": "取消・409・切断では権威応答前に削除や現在画像移動を確定しない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_158_185_browser_contracts.cjs::DI-166 DI-167 DI-171 and DI-184 batch delete cancellation conflict and disconnect preserve authority"
+        "node:tests/gallery/test_filtered_action_authority_e2e.cjs::DI-166 DI-167 DI-171 and DI-184 batch delete cancellation conflict and disconnect preserve authority"
       ]
     },
     {
@@ -2868,7 +2868,7 @@
       "observation": "選択数と送信画像IDは実行時の表示集合との積集合だけになる",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_158_185_browser_contracts.cjs::DI-162 through DI-177 selected actions use only the selection still visible after filter search and folder changes"
+        "node:tests/gallery/test_filtered_action_authority_e2e.cjs::DI-162 through DI-177 selected actions use only the selection still visible after filter search and folder changes"
       ]
     },
     {
@@ -2879,7 +2879,7 @@
       "observation": "取消・409・切断では対象外の非表示状態を変えず、確定応答後だけ一覧を更新する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_158_185_browser_contracts.cjs::DI-172.2 DI-173.2 DI-176.2 DI-177.2 selection flags publish only C after success and never on cancelled conflicted or disconnected requests"
+        "node:tests/gallery/test_filtered_action_authority_e2e.cjs::DI-172.2 DI-173.2 DI-176.2 DI-177.2 selection flags publish only C after success and never on cancelled conflicted or disconnected requests"
       ]
     },
     {
@@ -2890,7 +2890,7 @@
       "observation": "選択数と送信画像IDは実行時の表示集合との積集合だけになる",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_158_185_browser_contracts.cjs::DI-162 through DI-177 selected actions use only the selection still visible after filter search and folder changes"
+        "node:tests/gallery/test_filtered_action_authority_e2e.cjs::DI-162 through DI-177 selected actions use only the selection still visible after filter search and folder changes"
       ]
     },
     {
@@ -2901,7 +2901,7 @@
       "observation": "取消・409・切断では対象外の表示状態を変えず、確定応答後だけ一覧を更新する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_158_185_browser_contracts.cjs::DI-172.2 DI-173.2 DI-176.2 DI-177.2 selection flags publish only C after success and never on cancelled conflicted or disconnected requests"
+        "node:tests/gallery/test_filtered_action_authority_e2e.cjs::DI-172.2 DI-173.2 DI-176.2 DI-177.2 selection flags publish only C after success and never on cancelled conflicted or disconnected requests"
       ]
     },
     {
@@ -2912,7 +2912,7 @@
       "observation": "選択数、確認件数、送信画像ID、クリア対象は実行時の表示集合との積集合だけになる",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_158_185_browser_contracts.cjs::DI-162 through DI-177 selected actions use only the selection still visible after filter search and folder changes"
+        "node:tests/gallery/test_filtered_action_authority_e2e.cjs::DI-162 through DI-177 selected actions use only the selection still visible after filter search and folder changes"
       ]
     },
     {
@@ -2923,7 +2923,7 @@
       "observation": "取消・409・切断では候補・手描き・確認状態を先行変更しない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_158_185_browser_contracts.cjs::DI-174.2 DI-179.1 DI-179.2 clear actions use exact selected or all-image IDs and preserve state through cancel conflict and disconnect"
+        "node:tests/gallery/test_filtered_action_authority_e2e.cjs::DI-174.2 DI-179.1 DI-179.2 clear actions use exact selected or all-image IDs and preserve state through cancel conflict and disconnect"
       ]
     },
     {
@@ -2934,7 +2934,7 @@
       "observation": "表示した対象件数と検出要求の画像IDは実行時の表示集合との積集合だけになる",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_158_185_browser_contracts.cjs::DI-162 through DI-177 selected actions use only the selection still visible after filter search and folder changes"
+        "node:tests/gallery/test_filtered_action_authority_e2e.cjs::DI-162 through DI-177 selected actions use only the selection still visible after filter search and folder changes"
       ]
     },
     {
@@ -2945,7 +2945,7 @@
       "observation": "取消・409・切断では検出ジョブや候補を先行して開始・更新しない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_158_185_browser_contracts.cjs::DI-175.2 DI-178.2 detection cancel conflict disconnect and held success never publish a job or candidates early"
+        "node:tests/gallery/test_filtered_action_authority_e2e.cjs::DI-175.2 DI-178.2 detection cancel conflict disconnect and held success never publish a job or candidates early"
       ]
     },
     {
@@ -2956,7 +2956,7 @@
       "observation": "選択数と送信画像IDは実行時の表示集合との積集合だけになる",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_158_185_browser_contracts.cjs::DI-162 through DI-177 selected actions use only the selection still visible after filter search and folder changes"
+        "node:tests/gallery/test_filtered_action_authority_e2e.cjs::DI-162 through DI-177 selected actions use only the selection still visible after filter search and folder changes"
       ]
     },
     {
@@ -2967,7 +2967,7 @@
       "observation": "取消・409・切断では対象外を確認済みにせず、確定応答後だけ状態を更新する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_158_185_browser_contracts.cjs::DI-172.2 DI-173.2 DI-176.2 DI-177.2 selection flags publish only C after success and never on cancelled conflicted or disconnected requests"
+        "node:tests/gallery/test_filtered_action_authority_e2e.cjs::DI-172.2 DI-173.2 DI-176.2 DI-177.2 selection flags publish only C after success and never on cancelled conflicted or disconnected requests"
       ]
     },
     {
@@ -2978,7 +2978,7 @@
       "observation": "選択数と送信画像IDは実行時の表示集合との積集合だけになる",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_158_185_browser_contracts.cjs::DI-162 through DI-177 selected actions use only the selection still visible after filter search and folder changes"
+        "node:tests/gallery/test_filtered_action_authority_e2e.cjs::DI-162 through DI-177 selected actions use only the selection still visible after filter search and folder changes"
       ]
     },
     {
@@ -2989,7 +2989,7 @@
       "observation": "取消・409・切断では対象外を未確認にせず、確定応答後だけ状態を更新する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_158_185_browser_contracts.cjs::DI-172.2 DI-173.2 DI-176.2 DI-177.2 selection flags publish only C after success and never on cancelled conflicted or disconnected requests"
+        "node:tests/gallery/test_filtered_action_authority_e2e.cjs::DI-172.2 DI-173.2 DI-176.2 DI-177.2 selection flags publish only C after success and never on cancelled conflicted or disconnected requests"
       ]
     },
     {
@@ -3000,7 +3000,7 @@
       "observation": "明示的な全画像操作は表示集合と無関係に非表示を除くPJ全体の画像IDを対象とする",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_158_185_browser_contracts.cjs::DI-170 through DI-180 explicit all-image scope ignores view filters and excludes every hidden image"
+        "node:tests/gallery/test_filtered_action_authority_e2e.cjs::DI-170 through DI-180 explicit all-image scope ignores view filters and excludes every hidden image"
       ]
     },
     {
@@ -3011,7 +3011,7 @@
       "observation": "取消・409・切断ではジョブと候補を先行変更しない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_158_185_browser_contracts.cjs::DI-175.2 DI-178.2 detection cancel conflict disconnect and held success never publish a job or candidates early"
+        "node:tests/gallery/test_filtered_action_authority_e2e.cjs::DI-175.2 DI-178.2 detection cancel conflict disconnect and held success never publish a job or candidates early"
       ]
     },
     {
@@ -3022,8 +3022,8 @@
       "observation": "明示的な全体操作は表示集合を使わず、非表示を除く画像だけと確認件数・送信画像IDが一致する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_158_185_browser_contracts.cjs::DI-174.2 DI-179.1 DI-179.2 clear actions use exact selected or all-image IDs and preserve state through cancel conflict and disconnect",
-        "node:tests/test_di_158_185_browser_contracts.cjs::DI-179.1 DI-179.2 catalogue clear changes no list or current image until its authoritative success response"
+        "node:tests/gallery/test_filtered_action_authority_e2e.cjs::DI-174.2 DI-179.1 DI-179.2 clear actions use exact selected or all-image IDs and preserve state through cancel conflict and disconnect",
+        "node:tests/gallery/test_filtered_action_authority_e2e.cjs::DI-179.1 DI-179.2 catalogue clear changes no list or current image until its authoritative success response"
       ]
     },
     {
@@ -3034,8 +3034,8 @@
       "observation": "取消・409・切断では一覧・候補・手描き・現在画像を先行変更しない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_158_185_browser_contracts.cjs::DI-174.2 DI-179.1 DI-179.2 clear actions use exact selected or all-image IDs and preserve state through cancel conflict and disconnect",
-        "node:tests/test_di_158_185_browser_contracts.cjs::DI-179.1 DI-179.2 catalogue clear changes no list or current image until its authoritative success response"
+        "node:tests/gallery/test_filtered_action_authority_e2e.cjs::DI-174.2 DI-179.1 DI-179.2 clear actions use exact selected or all-image IDs and preserve state through cancel conflict and disconnect",
+        "node:tests/gallery/test_filtered_action_authority_e2e.cjs::DI-179.1 DI-179.2 catalogue clear changes no list or current image until its authoritative success response"
       ]
     },
     {
@@ -3046,7 +3046,7 @@
       "observation": "保存対象の表示件数と送信画像IDは非表示を除くPJ全体と一致し、絞り込み・検索・フォルダーで狭めない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_158_185_browser_contracts.cjs::DI-180.1 DI-180.2 all-image save uses exact non-hidden IDs and produces nothing on close conflict disconnect or before success"
+        "node:tests/gallery/test_filtered_action_authority_e2e.cjs::DI-180.1 DI-180.2 all-image save uses exact non-hidden IDs and produces nothing on close conflict disconnect or before success"
       ]
     },
     {
@@ -3057,7 +3057,7 @@
       "observation": "取消・409・切断では出力・確認状態・編集データを先行変更しない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_158_185_browser_contracts.cjs::DI-180.1 DI-180.2 all-image save uses exact non-hidden IDs and produces nothing on close conflict disconnect or before success"
+        "node:tests/gallery/test_filtered_action_authority_e2e.cjs::DI-180.1 DI-180.2 all-image save uses exact non-hidden IDs and produces nothing on close conflict disconnect or before success"
       ]
     },
     {
@@ -3068,8 +3068,8 @@
       "observation": "3操作とも操作前の表示集合を使う",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_158_185_browser_contracts.cjs::DI-161 DI-181 and DI-182 review and hide clicks preserve the captured filtered successor contract",
-        "node:tests/test_di_158_185_browser_contracts.cjs::DI-158 DI-160 and DI-166 delete against the captured filtered order and keep authority on cancel or stale response"
+        "node:tests/gallery/test_filtered_action_authority_e2e.cjs::DI-161 DI-181 and DI-182 review and hide clicks preserve the captured filtered successor contract",
+        "node:tests/gallery/test_filtered_action_authority_e2e.cjs::DI-158 DI-160 and DI-166 delete against the captured filtered order and keep authority on cancel or stale response"
       ]
     },
     {
@@ -3091,7 +3091,7 @@
       "observation": "非表示にして次へと確認済みにして次へは次だけを開き、末尾と1件で次がなければ変更後の現在画像とキャンバスを保持し、直前へ戻らない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_158_185_browser_contracts.cjs::DI-161 DI-181 and DI-182 review and hide clicks preserve the captured filtered successor contract"
+        "node:tests/gallery/test_filtered_action_authority_e2e.cjs::DI-161 DI-181 and DI-182 review and hide clicks preserve the captured filtered successor contract"
       ]
     },
     {
@@ -3102,8 +3102,8 @@
       "observation": "絞り込み外の現在画像では3操作とも先頭の一致画像を開く",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_158_185_browser_contracts.cjs::DI-161 DI-181 and DI-182 review and hide clicks preserve the captured filtered successor contract",
-        "node:tests/test_di_158_185_browser_contracts.cjs::DI-158 DI-160 and DI-166 delete against the captured filtered order and keep authority on cancel or stale response"
+        "node:tests/gallery/test_filtered_action_authority_e2e.cjs::DI-161 DI-181 and DI-182 review and hide clicks preserve the captured filtered successor contract",
+        "node:tests/gallery/test_filtered_action_authority_e2e.cjs::DI-158 DI-160 and DI-166 delete against the captured filtered order and keep authority on cancel or stale response"
       ]
     },
     {
@@ -3114,7 +3114,7 @@
       "observation": "Hで表示する既に非表示の現在画像は閲覧できるが、非表示処理の対象にしない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_158_185_browser_contracts.cjs::DI-161 DI-181 and DI-182 review and hide clicks preserve the captured filtered successor contract"
+        "node:tests/gallery/test_filtered_action_authority_e2e.cjs::DI-161 DI-181 and DI-182 review and hide clicks preserve the captured filtered successor contract"
       ]
     },
     {
@@ -3125,8 +3125,8 @@
       "observation": "削除の取消、各操作の遅延中・409・通信断では応答確定前に現在画像とキャンバスを移動・消去しない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_158_185_browser_contracts.cjs::DI-181.6 delayed conflicted and disconnected review or hide never move or erase the current editor early",
-        "node:tests/test_di_158_185_browser_contracts.cjs::DI-158 DI-160 and DI-166 delete against the captured filtered order and keep authority on cancel or stale response"
+        "node:tests/gallery/test_filtered_action_authority_e2e.cjs::DI-181.6 delayed conflicted and disconnected review or hide never move or erase the current editor early",
+        "node:tests/gallery/test_filtered_action_authority_e2e.cjs::DI-158 DI-160 and DI-166 delete against the captured filtered order and keep authority on cancel or stale response"
       ]
     },
     {
@@ -3137,7 +3137,7 @@
       "observation": "非表示成功後に次の一致画像がなければ、非表示になった現在画像とキャンバスを保持し、未選択・空キャンバスにも直前画像にも移らない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_158_185_browser_contracts.cjs::DI-161 DI-181 and DI-182 review and hide clicks preserve the captured filtered successor contract"
+        "node:tests/gallery/test_filtered_action_authority_e2e.cjs::DI-161 DI-181 and DI-182 review and hide clicks preserve the captured filtered successor contract"
       ]
     },
     {
@@ -3148,7 +3148,7 @@
       "observation": "Hで現在画像が表示集合に残る場合も同じ結果とする",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_158_185_browser_contracts.cjs::DI-161 DI-181 and DI-182 review and hide clicks preserve the captured filtered successor contract"
+        "node:tests/gallery/test_filtered_action_authority_e2e.cjs::DI-161 DI-181 and DI-182 review and hide clicks preserve the captured filtered successor contract"
       ]
     },
     {
@@ -3159,8 +3159,8 @@
       "observation": "削除開始時に遅延中選択を明示的に失効し、削除対象を現在画像・候補・キャンバスとして再表示しない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_158_185_browser_contracts.cjs::DI-168 DI-183 and DI-184 pending image deletion invalidates stale loads and restores only authoritative survivors",
-        "node:tests/test_di_158_185_browser_contracts.cjs::DI-168 and DI-183 disconnected pending deletion resumes from the committed receipt after reload"
+        "node:tests/gallery/test_filtered_action_authority_e2e.cjs::DI-168 DI-183 and DI-184 pending image deletion invalidates stale loads and restores only authoritative survivors",
+        "node:tests/gallery/test_filtered_action_authority_e2e.cjs::DI-168 and DI-183 disconnected pending deletion resumes from the committed receipt after reload"
       ]
     },
     {
@@ -3171,8 +3171,8 @@
       "observation": "削除確定後は遅延中の削除対象を優先した操作前の一覧表示順で残存候補を選び、遅延中画像が削除対象外または未確定なら削除前のpending画像、なければ現在画像を権威一覧から選び直す",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_158_185_browser_contracts.cjs::DI-168 DI-183 and DI-184 pending image deletion invalidates stale loads and restores only authoritative survivors",
-        "node:tests/test_di_158_185_browser_contracts.cjs::DI-168 and DI-183 disconnected pending deletion resumes from the committed receipt after reload"
+        "node:tests/gallery/test_filtered_action_authority_e2e.cjs::DI-168 DI-183 and DI-184 pending image deletion invalidates stale loads and restores only authoritative survivors",
+        "node:tests/gallery/test_filtered_action_authority_e2e.cjs::DI-168 and DI-183 disconnected pending deletion resumes from the committed receipt after reload"
       ]
     },
     {
@@ -3183,8 +3183,8 @@
       "observation": "候補がなければ未選択となる",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_158_185_browser_contracts.cjs::DI-168 DI-183 and DI-184 pending image deletion invalidates stale loads and restores only authoritative survivors",
-        "node:tests/test_di_158_185_browser_contracts.cjs::DI-168 and DI-183 disconnected pending deletion resumes from the committed receipt after reload"
+        "node:tests/gallery/test_filtered_action_authority_e2e.cjs::DI-168 DI-183 and DI-184 pending image deletion invalidates stale loads and restores only authoritative survivors",
+        "node:tests/gallery/test_filtered_action_authority_e2e.cjs::DI-168 and DI-183 disconnected pending deletion resumes from the committed receipt after reload"
       ]
     },
     {
@@ -3195,10 +3195,10 @@
       "observation": "現在画像と編集状態が権威一覧で有効なままなら、強制再読込せず未保存の手描き・キャンバス・下書きを保持する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_158_185_browser_contracts.cjs::DI-163 and DI-184 deleting another selected image preserves the current unsaved canvas and draft",
-        "node:tests/test_di_158_185_browser_contracts.cjs::DI-166 DI-167 DI-171 and DI-184 batch delete cancellation conflict and disconnect preserve authority",
-        "node:tests/test_di_158_185_browser_contracts.cjs::DI-181.6 delayed conflicted and disconnected review or hide never move or erase the current editor early",
-        "node:tests/test_di_158_185_browser_contracts.cjs::DI-184 same-project return synchronization preserves a still-authoritative editor draft"
+        "node:tests/gallery/test_filtered_action_authority_e2e.cjs::DI-163 and DI-184 deleting another selected image preserves the current unsaved canvas and draft",
+        "node:tests/gallery/test_filtered_action_authority_e2e.cjs::DI-166 DI-167 DI-171 and DI-184 batch delete cancellation conflict and disconnect preserve authority",
+        "node:tests/gallery/test_filtered_action_authority_e2e.cjs::DI-181.6 delayed conflicted and disconnected review or hide never move or erase the current editor early",
+        "node:tests/gallery/test_filtered_action_authority_e2e.cjs::DI-184 same-project return synchronization preserves a still-authoritative editor draft"
       ]
     },
     {
@@ -3209,8 +3209,8 @@
       "observation": "再同期で現在画像が無効になった場合だけ、権威一覧に残るpending画像、なければ現在画像を選び直す",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_158_185_browser_contracts.cjs::DI-168 DI-183 and DI-184 pending image deletion invalidates stale loads and restores only authoritative survivors",
-        "node:tests/test_di_158_185_browser_contracts.cjs::DI-168 and DI-183 disconnected pending deletion resumes from the committed receipt after reload"
+        "node:tests/gallery/test_filtered_action_authority_e2e.cjs::DI-168 DI-183 and DI-184 pending image deletion invalidates stale loads and restores only authoritative survivors",
+        "node:tests/gallery/test_filtered_action_authority_e2e.cjs::DI-168 and DI-183 disconnected pending deletion resumes from the committed receipt after reload"
       ]
     },
     {
@@ -3221,7 +3221,7 @@
       "observation": "論理集合だけでなくカードと行の視覚順・DOM順も元のA～H順を保つ",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_126_202_browser_contracts.cjs::DI-185 repeated filter and folder changes restore visual and DOM catalogue order"
+        "node:tests/gallery/test_filter_navigation_and_delete_e2e.cjs::DI-185 repeated filter and folder changes restore visual and DOM catalogue order"
       ]
     },
     {
@@ -3232,9 +3232,9 @@
       "observation": "条件を外して再表示したカード、別行へ移った行、仮想表示へ戻った行の順序が過去の表示順に残らず、Tab順・読み上げ順・画面上の順序と一括選択・削除後の次画像の順序が一致する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_126_202_browser_contracts.cjs::DI-185 repeated filter and folder changes restore visual and DOM catalogue order",
-        "node:tests/test_di_126_202_browser_contracts.cjs::DI-185 virtualized rows preserve screen reading and keyboard order",
-        "node:tests/test_di_158_185_browser_contracts.cjs::DI-161 DI-164 DI-168 DI-181 DI-183 and DI-185 use the captured visible order for every successor boundary",
+        "node:tests/gallery/test_filter_navigation_and_delete_e2e.cjs::DI-185 repeated filter and folder changes restore visual and DOM catalogue order",
+        "node:tests/gallery/test_filter_navigation_and_delete_e2e.cjs::DI-185 virtualized rows preserve screen reading and keyboard order",
+        "node:tests/gallery/test_filtered_action_authority_e2e.cjs::DI-161 DI-164 DI-168 DI-181 DI-183 and DI-185 use the captured visible order for every successor boundary",
         "node:tests/test_source_delete_e2e.cjs::batch source deletion keeps the current canvas when another selected image fails, then moves only after the current image commits"
       ]
     },
@@ -3246,7 +3246,7 @@
       "observation": "ブラウザーから送る画像・PJのDELETEには本文と`Content-Length`がなく、`X-Mozarie-Expected-Project-Id`と`X-Mozarie-Expected-Catalog-Generation`を送る",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_126_202_browser_contracts.cjs::DI-186 browser image and project DELETE requests are bodyless and carry catalogue headers"
+        "node:tests/gallery/test_filter_navigation_and_delete_e2e.cjs::DI-186 browser image and project DELETE requests are bodyless and carry catalogue headers"
       ]
     },
     {
@@ -3257,9 +3257,9 @@
       "observation": "対象だけを削除し、残る画像・PJ・候補・手描き編集を変えない",
       "status": "automated",
       "testIds": [
-        "python:tests.test_di_126_202_http_contracts.DataIntegrityHttpContracts.test_bodyless_image_delete_keeps_alive_for_catalog_and_next_candidate_gets",
-        "python:tests.test_di_126_202_http_contracts.DataIntegrityHttpContracts.test_bodyless_project_delete_keeps_alive_and_updates_projects_and_current_snapshot",
-        "python:tests.test_di_126_202_http_contracts.DataIntegrityHttpContracts.test_bodyless_candidate_and_manual_deletes_preserve_other_image_workspace"
+        "python:tests.http.test_request_framing_and_delete_authority.DataIntegrityHttpContracts.test_bodyless_image_delete_keeps_alive_for_catalog_and_next_candidate_gets",
+        "python:tests.http.test_request_framing_and_delete_authority.DataIntegrityHttpContracts.test_bodyless_project_delete_keeps_alive_and_updates_projects_and_current_snapshot",
+        "python:tests.http.test_request_framing_and_delete_authority.DataIntegrityHttpContracts.test_bodyless_candidate_and_manual_deletes_preserve_other_image_workspace"
       ]
     },
     {
@@ -3270,7 +3270,7 @@
       "observation": "候補削除は画面では下書きのPOST保存であり、このDELETE確認には含めない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_126_202_browser_contracts.cjs::DI-186 candidate removal persists the workspace draft with POST instead of DELETE"
+        "node:tests/gallery/test_filter_navigation_and_delete_e2e.cjs::DI-186 candidate removal persists the workspace draft with POST instead of DELETE"
       ]
     },
     {
@@ -3281,7 +3281,7 @@
       "observation": "本文を全て読んでから同じ世代照合を行い、対応する本文なしDELETEと同じ結果になる",
       "status": "automated",
       "testIds": [
-        "python:tests.test_di_126_202_http_contracts.DataIntegrityHttpContracts.test_bodyless_and_legacy_delete_forms_are_equivalent_for_all_routes"
+        "python:tests.http.test_request_framing_and_delete_authority.DataIntegrityHttpContracts.test_bodyless_and_legacy_delete_forms_are_equivalent_for_all_routes"
       ]
     },
     {
@@ -3292,8 +3292,8 @@
       "observation": "JSON以外、壊れたJSON、JSON配列、正しくない世代は削除せず、該当する400または409を返す",
       "status": "automated",
       "testIds": [
-        "python:tests.test_di_126_202_http_contracts.DataIntegrityHttpContracts.test_every_delete_route_rejects_malformed_bodies_without_mutation",
-        "python:tests.test_di_126_202_http_contracts.DataIntegrityHttpContracts.test_valid_stale_legacy_delete_body_returns_409_on_all_routes_without_changes"
+        "python:tests.http.test_request_framing_and_delete_authority.DataIntegrityHttpContracts.test_every_delete_route_rejects_malformed_bodies_without_mutation",
+        "python:tests.http.test_request_framing_and_delete_authority.DataIntegrityHttpContracts.test_valid_stale_legacy_delete_body_returns_409_on_all_routes_without_changes"
       ]
     },
     {
@@ -3304,7 +3304,7 @@
       "observation": "いずれも400と`Connection: close`を返し、接続を再利用できない",
       "status": "automated",
       "testIds": [
-        "python:tests.test_di_126_202_http_contracts.DataIntegrityHttpContracts.test_ambiguous_delete_framing_and_get_bodies_close_without_a_follow_up"
+        "python:tests.http.test_request_framing_and_delete_authority.DataIntegrityHttpContracts.test_ambiguous_delete_framing_and_get_bodies_close_without_a_follow_up"
       ]
     },
     {
@@ -3315,7 +3315,7 @@
       "observation": "後続要求を処理せず、GETは状態を変えない",
       "status": "automated",
       "testIds": [
-        "python:tests.test_di_126_202_http_contracts.DataIntegrityHttpContracts.test_ambiguous_delete_framing_and_get_bodies_close_without_a_follow_up"
+        "python:tests.http.test_request_framing_and_delete_authority.DataIntegrityHttpContracts.test_ambiguous_delete_framing_and_get_bodies_close_without_a_follow_up"
       ]
     },
     {
@@ -3326,7 +3326,7 @@
       "observation": "未読本文を残す失敗は400または409と`Connection: close`を返し、次の要求を同じ接続で処理しない",
       "status": "automated",
       "testIds": [
-        "python:tests.test_di_126_202_http_contracts.DataIntegrityHttpContracts.test_json_post_and_binary_import_framing_failures_do_not_mutate_state"
+        "python:tests.http.test_request_framing_and_delete_authority.DataIntegrityHttpContracts.test_json_post_and_binary_import_framing_failures_do_not_mutate_state"
       ]
     },
     {
@@ -3337,7 +3337,7 @@
       "observation": "画像追加はファイル・画像一覧・PJ・世代を変更しない",
       "status": "automated",
       "testIds": [
-        "python:tests.test_di_126_202_http_contracts.DataIntegrityHttpContracts.test_json_post_and_binary_import_framing_failures_do_not_mutate_state"
+        "python:tests.http.test_request_framing_and_delete_authority.DataIntegrityHttpContracts.test_json_post_and_binary_import_framing_failures_do_not_mutate_state"
       ]
     },
     {
@@ -3348,7 +3348,7 @@
       "observation": "DELETEの応答は`Connection: close`を返し、後続要求を処理しない",
       "status": "automated",
       "testIds": [
-        "python:tests.test_di_126_202_http_contracts.DataIntegrityHttpContracts.test_unavailable_workspace_delete_closes_and_only_a_new_connection_recreates"
+        "python:tests.http.test_request_framing_and_delete_authority.DataIntegrityHttpContracts.test_unavailable_workspace_delete_closes_and_only_a_new_connection_recreates"
       ]
     },
     {
@@ -3359,7 +3359,7 @@
       "observation": "新しい接続からの復旧操作だけを受け付ける",
       "status": "automated",
       "testIds": [
-        "python:tests.test_di_126_202_http_contracts.DataIntegrityHttpContracts.test_unavailable_workspace_delete_closes_and_only_a_new_connection_recreates"
+        "python:tests.http.test_request_framing_and_delete_authority.DataIntegrityHttpContracts.test_unavailable_workspace_delete_closes_and_only_a_new_connection_recreates"
       ]
     },
     {
@@ -3370,7 +3370,7 @@
       "observation": "DELETEと続く2つのGETが成功し、接続を閉じない",
       "status": "automated",
       "testIds": [
-        "python:tests.test_di_126_202_http_contracts.DataIntegrityHttpContracts.test_bodyless_image_delete_keeps_alive_for_catalog_and_next_candidate_gets"
+        "python:tests.http.test_request_framing_and_delete_authority.DataIntegrityHttpContracts.test_bodyless_image_delete_keeps_alive_for_catalog_and_next_candidate_gets"
       ]
     },
     {
@@ -3381,8 +3381,8 @@
       "observation": "削除画像は一覧・候補・編集対象から消え、次画像だけを表示する",
       "status": "automated",
       "testIds": [
-        "python:tests.test_di_126_202_http_contracts.DataIntegrityHttpContracts.test_bodyless_image_delete_keeps_alive_for_catalog_and_next_candidate_gets",
-        "node:tests/test_di_126_202_browser_contracts.cjs::DI-191 deleted editor target advances to the next browser image"
+        "python:tests.http.test_request_framing_and_delete_authority.DataIntegrityHttpContracts.test_bodyless_image_delete_keeps_alive_for_catalog_and_next_candidate_gets",
+        "node:tests/gallery/test_filter_navigation_and_delete_e2e.cjs::DI-191 deleted editor target advances to the next browser image"
       ]
     },
     {
@@ -3393,7 +3393,7 @@
       "observation": "候補取得は次画像の候補だけを返し、削除画像または古い本文を次の要求として扱わない",
       "status": "automated",
       "testIds": [
-        "python:tests.test_di_126_202_http_contracts.DataIntegrityHttpContracts.test_bodyless_image_delete_keeps_alive_for_catalog_and_next_candidate_gets"
+        "python:tests.http.test_request_framing_and_delete_authority.DataIntegrityHttpContracts.test_bodyless_image_delete_keeps_alive_for_catalog_and_next_candidate_gets"
       ]
     },
     {
@@ -3404,7 +3404,7 @@
       "observation": "DELETEと続くGETが成功し、削除PJはPJ一覧と現在カタログから消える",
       "status": "automated",
       "testIds": [
-        "python:tests.test_di_126_202_http_contracts.DataIntegrityHttpContracts.test_bodyless_project_delete_keeps_alive_and_updates_projects_and_current_snapshot"
+        "python:tests.http.test_request_framing_and_delete_authority.DataIntegrityHttpContracts.test_bodyless_project_delete_keeps_alive_and_updates_projects_and_current_snapshot"
       ]
     },
     {
@@ -3415,7 +3415,7 @@
       "observation": "残るPJ・画像と世代はサーバーの応答どおりで、削除要求のヘッダーや本文が次のGETに混ざらない",
       "status": "automated",
       "testIds": [
-        "python:tests.test_di_126_202_http_contracts.DataIntegrityHttpContracts.test_bodyless_project_delete_keeps_alive_and_updates_projects_and_current_snapshot"
+        "python:tests.http.test_request_framing_and_delete_authority.DataIntegrityHttpContracts.test_bodyless_project_delete_keeps_alive_and_updates_projects_and_current_snapshot"
       ]
     },
     {
@@ -3426,7 +3426,7 @@
       "observation": "DELETEは状態を変更せず409を返すが接続は維持する",
       "status": "automated",
       "testIds": [
-        "python:tests.test_di_126_202_http_contracts.DataIntegrityHttpContracts.test_stale_bodyless_delete_keeps_alive_and_returns_authoritative_snapshot"
+        "python:tests.http.test_request_framing_and_delete_authority.DataIntegrityHttpContracts.test_stale_bodyless_delete_keeps_alive_and_returns_authoritative_snapshot"
       ]
     },
     {
@@ -3437,8 +3437,8 @@
       "observation": "直後のGETは現在の権威スナップショットと世代を返し、画面はその一覧へ再同期する",
       "status": "automated",
       "testIds": [
-        "python:tests.test_di_126_202_http_contracts.DataIntegrityHttpContracts.test_stale_bodyless_delete_keeps_alive_and_returns_authoritative_snapshot",
-        "node:tests/test_di_126_202_browser_contracts.cjs::DI-193 stale delete resync replaces the browser catalogue"
+        "python:tests.http.test_request_framing_and_delete_authority.DataIntegrityHttpContracts.test_stale_bodyless_delete_keeps_alive_and_returns_authoritative_snapshot",
+        "node:tests/gallery/test_filter_navigation_and_delete_e2e.cjs::DI-193 stale delete resync replaces the browser catalogue"
       ]
     },
     {
@@ -3449,7 +3449,7 @@
       "observation": "候補と手描き作業領域のDELETEも期待値ヘッダーだけで成功する",
       "status": "automated",
       "testIds": [
-        "python:tests.test_di_126_202_http_contracts.DataIntegrityHttpContracts.test_bodyless_candidate_and_manual_deletes_preserve_other_image_workspace"
+        "python:tests.http.test_request_framing_and_delete_authority.DataIntegrityHttpContracts.test_bodyless_candidate_and_manual_deletes_preserve_other_image_workspace"
       ]
     },
     {
@@ -3460,7 +3460,7 @@
       "observation": "直後のGETは削除済み状態を返し、別画像・別PJの候補と手描き編集を変更しない",
       "status": "automated",
       "testIds": [
-        "python:tests.test_di_126_202_http_contracts.DataIntegrityHttpContracts.test_bodyless_candidate_and_manual_deletes_preserve_other_image_workspace"
+        "python:tests.http.test_request_framing_and_delete_authority.DataIntegrityHttpContracts.test_bodyless_candidate_and_manual_deletes_preserve_other_image_workspace"
       ]
     },
     {
@@ -3471,7 +3471,7 @@
       "observation": "各DELETEは削除せず403と`Connection: close`を返す",
       "status": "automated",
       "testIds": [
-        "python:tests.test_di_126_202_http_contracts.DataIntegrityHttpContracts.test_all_delete_routes_reject_bad_token_and_origin_then_new_connections_recover_state"
+        "python:tests.http.test_request_framing_and_delete_authority.DataIntegrityHttpContracts.test_all_delete_routes_reject_bad_token_and_origin_then_new_connections_recover_state"
       ]
     },
     {
@@ -3482,7 +3482,7 @@
       "observation": "後続GETは同じ接続で処理されず、新しい正しい接続からは元の画像・PJ・候補・手描き編集を取得できる",
       "status": "automated",
       "testIds": [
-        "python:tests.test_di_126_202_http_contracts.DataIntegrityHttpContracts.test_all_delete_routes_reject_bad_token_and_origin_then_new_connections_recover_state"
+        "python:tests.http.test_request_framing_and_delete_authority.DataIntegrityHttpContracts.test_all_delete_routes_reject_bad_token_and_origin_then_new_connections_recover_state"
       ]
     },
     {
@@ -3493,14 +3493,14 @@
       "observation": "`501`、`Unsupported method`、またはDELETE本文が後続要求として解析された記録がない",
       "status": "automated",
       "testIds": [
-        "python:tests.test_di_126_202_http_contracts.DataIntegrityHttpContracts.test_bodyless_image_delete_keeps_alive_for_catalog_and_next_candidate_gets",
-        "python:tests.test_di_126_202_http_contracts.DataIntegrityHttpContracts.test_bodyless_project_delete_keeps_alive_and_updates_projects_and_current_snapshot",
-        "python:tests.test_di_126_202_http_contracts.DataIntegrityHttpContracts.test_bodyless_candidate_and_manual_deletes_preserve_other_image_workspace",
-        "python:tests.test_di_126_202_http_contracts.DataIntegrityHttpContracts.test_bodyless_and_legacy_delete_forms_are_equivalent_for_all_routes",
-        "python:tests.test_di_126_202_http_contracts.DataIntegrityHttpContracts.test_valid_stale_legacy_delete_body_returns_409_on_all_routes_without_changes",
-        "python:tests.test_di_126_202_http_contracts.DataIntegrityHttpContracts.test_stale_bodyless_delete_keeps_alive_and_returns_authoritative_snapshot",
-        "python:tests.test_di_126_202_http_contracts.DataIntegrityHttpContracts.test_all_delete_routes_reject_bad_token_and_origin_then_new_connections_recover_state",
-        "python:tests.test_di_126_202_http_contracts.DataIntegrityHttpContracts.test_delete_protocol_matrix_has_only_expected_status_and_connection_results"
+        "python:tests.http.test_request_framing_and_delete_authority.DataIntegrityHttpContracts.test_bodyless_image_delete_keeps_alive_for_catalog_and_next_candidate_gets",
+        "python:tests.http.test_request_framing_and_delete_authority.DataIntegrityHttpContracts.test_bodyless_project_delete_keeps_alive_and_updates_projects_and_current_snapshot",
+        "python:tests.http.test_request_framing_and_delete_authority.DataIntegrityHttpContracts.test_bodyless_candidate_and_manual_deletes_preserve_other_image_workspace",
+        "python:tests.http.test_request_framing_and_delete_authority.DataIntegrityHttpContracts.test_bodyless_and_legacy_delete_forms_are_equivalent_for_all_routes",
+        "python:tests.http.test_request_framing_and_delete_authority.DataIntegrityHttpContracts.test_valid_stale_legacy_delete_body_returns_409_on_all_routes_without_changes",
+        "python:tests.http.test_request_framing_and_delete_authority.DataIntegrityHttpContracts.test_stale_bodyless_delete_keeps_alive_and_returns_authoritative_snapshot",
+        "python:tests.http.test_request_framing_and_delete_authority.DataIntegrityHttpContracts.test_all_delete_routes_reject_bad_token_and_origin_then_new_connections_recover_state",
+        "python:tests.http.test_request_framing_and_delete_authority.DataIntegrityHttpContracts.test_delete_protocol_matrix_has_only_expected_status_and_connection_results"
       ]
     },
     {
@@ -3511,11 +3511,11 @@
       "observation": "各応答は手順で示した成功・400・403・409と接続状態に一致する",
       "status": "automated",
       "testIds": [
-        "python:tests.test_di_126_202_http_contracts.DataIntegrityHttpContracts.test_valid_stale_legacy_delete_body_returns_409_on_all_routes_without_changes",
-        "python:tests.test_di_126_202_http_contracts.DataIntegrityHttpContracts.test_stale_bodyless_delete_keeps_alive_and_returns_authoritative_snapshot",
-        "python:tests.test_di_126_202_http_contracts.DataIntegrityHttpContracts.test_all_delete_routes_reject_bad_token_and_origin_then_new_connections_recover_state",
-        "python:tests.test_di_126_202_http_contracts.DataIntegrityHttpContracts.test_delete_protocol_matrix_has_only_expected_status_and_connection_results",
-        "python:tests.test_di_126_202_http_contracts.DataIntegrityHttpContracts.test_every_delete_route_rejects_malformed_bodies_without_mutation"
+        "python:tests.http.test_request_framing_and_delete_authority.DataIntegrityHttpContracts.test_valid_stale_legacy_delete_body_returns_409_on_all_routes_without_changes",
+        "python:tests.http.test_request_framing_and_delete_authority.DataIntegrityHttpContracts.test_stale_bodyless_delete_keeps_alive_and_returns_authoritative_snapshot",
+        "python:tests.http.test_request_framing_and_delete_authority.DataIntegrityHttpContracts.test_all_delete_routes_reject_bad_token_and_origin_then_new_connections_recover_state",
+        "python:tests.http.test_request_framing_and_delete_authority.DataIntegrityHttpContracts.test_delete_protocol_matrix_has_only_expected_status_and_connection_results",
+        "python:tests.http.test_request_framing_and_delete_authority.DataIntegrityHttpContracts.test_every_delete_route_rejects_malformed_bodies_without_mutation"
       ]
     },
     {
@@ -3526,7 +3526,7 @@
       "observation": "本文を読まずに400と`Connection: close`を返し、同じ接続の後続要求を処理しない",
       "status": "automated",
       "testIds": [
-        "python:tests.test_di_126_202_http_contracts.DataIntegrityHttpContracts.test_huge_import_numeric_headers_close_without_mutation_or_protocol_errors"
+        "python:tests.http.test_request_framing_and_delete_authority.DataIntegrityHttpContracts.test_huge_import_numeric_headers_close_without_mutation_or_protocol_errors"
       ]
     },
     {
@@ -3537,7 +3537,7 @@
       "observation": "画像・一覧・PJ・カタログ世代・インポート状態を変更せず、サーバーログに500・501・`Unsupported method`がない",
       "status": "automated",
       "testIds": [
-        "python:tests.test_di_126_202_http_contracts.DataIntegrityHttpContracts.test_huge_import_numeric_headers_close_without_mutation_or_protocol_errors"
+        "python:tests.http.test_request_framing_and_delete_authority.DataIntegrityHttpContracts.test_huge_import_numeric_headers_close_without_mutation_or_protocol_errors"
       ]
     },
     {
@@ -3548,7 +3548,7 @@
       "observation": "本文を読まずに400と`Connection: close`を返し、同じ接続の後続要求を処理しない",
       "status": "automated",
       "testIds": [
-        "python:tests.test_di_126_202_http_contracts.DataIntegrityHttpContracts.test_huge_import_numeric_headers_close_without_mutation_or_protocol_errors"
+        "python:tests.http.test_request_framing_and_delete_authority.DataIntegrityHttpContracts.test_huge_import_numeric_headers_close_without_mutation_or_protocol_errors"
       ]
     },
     {
@@ -3559,7 +3559,7 @@
       "observation": "画像・一覧・PJ・カタログ世代・インポート状態を変更せず、サーバーログに500・501・`Unsupported method`がない",
       "status": "automated",
       "testIds": [
-        "python:tests.test_di_126_202_http_contracts.DataIntegrityHttpContracts.test_huge_import_numeric_headers_close_without_mutation_or_protocol_errors"
+        "python:tests.http.test_request_framing_and_delete_authority.DataIntegrityHttpContracts.test_huge_import_numeric_headers_close_without_mutation_or_protocol_errors"
       ]
     },
     {
@@ -3570,7 +3570,7 @@
       "observation": "本文を読まずに400と`Connection: close`を返し、同じ接続の後続要求を処理しない",
       "status": "automated",
       "testIds": [
-        "python:tests.test_di_126_202_http_contracts.DataIntegrityHttpContracts.test_huge_import_numeric_headers_close_without_mutation_or_protocol_errors"
+        "python:tests.http.test_request_framing_and_delete_authority.DataIntegrityHttpContracts.test_huge_import_numeric_headers_close_without_mutation_or_protocol_errors"
       ]
     },
     {
@@ -3581,7 +3581,7 @@
       "observation": "画像・一覧・PJ・カタログ世代・インポート状態を変更せず、サーバーログに500・501・`Unsupported method`がない",
       "status": "automated",
       "testIds": [
-        "python:tests.test_di_126_202_http_contracts.DataIntegrityHttpContracts.test_huge_import_numeric_headers_close_without_mutation_or_protocol_errors"
+        "python:tests.http.test_request_framing_and_delete_authority.DataIntegrityHttpContracts.test_huge_import_numeric_headers_close_without_mutation_or_protocol_errors"
       ]
     },
     {
@@ -3592,7 +3592,7 @@
       "observation": "POSTは400と`input_invalid`を返すが接続を閉じない",
       "status": "automated",
       "testIds": [
-        "python:tests.test_di_126_202_http_contracts.DataIntegrityHttpContracts.test_huge_json_integer_is_consumed_and_the_connection_remains_usable"
+        "python:tests.http.test_request_framing_and_delete_authority.DataIntegrityHttpContracts.test_huge_json_integer_is_consumed_and_the_connection_remains_usable"
       ]
     },
     {
@@ -3603,7 +3603,7 @@
       "observation": "続くGETは200で現在の権威一覧と世代を返し、画像・PJ・カタログ世代を変更しない",
       "status": "automated",
       "testIds": [
-        "python:tests.test_di_126_202_http_contracts.DataIntegrityHttpContracts.test_huge_json_integer_is_consumed_and_the_connection_remains_usable"
+        "python:tests.http.test_request_framing_and_delete_authority.DataIntegrityHttpContracts.test_huge_json_integer_is_consumed_and_the_connection_remains_usable"
       ]
     },
     {
@@ -3614,7 +3614,7 @@
       "observation": "サーバーログに500・501・`Unsupported method`がない",
       "status": "automated",
       "testIds": [
-        "python:tests.test_di_126_202_http_contracts.DataIntegrityHttpContracts.test_huge_json_integer_is_consumed_and_the_connection_remains_usable"
+        "python:tests.http.test_request_framing_and_delete_authority.DataIntegrityHttpContracts.test_huge_json_integer_is_consumed_and_the_connection_remains_usable"
       ]
     },
     {
@@ -3625,7 +3625,7 @@
       "observation": "セッション用ディレクトリ作成失敗は500と`Connection: close`を返し、続くGETを同じ接続で処理しない",
       "status": "automated",
       "testIds": [
-        "python:tests.test_di_126_202_http_contracts.DataIntegrityHttpContracts.test_import_session_directory_failure_closes_without_state_change"
+        "python:tests.http.test_request_framing_and_delete_authority.DataIntegrityHttpContracts.test_import_session_directory_failure_closes_without_state_change"
       ]
     },
     {
@@ -3636,7 +3636,7 @@
       "observation": "画像・一覧・PJ・カタログ世代・インポート状態を変更せず、サーバーログに501・`Unsupported method`がない",
       "status": "automated",
       "testIds": [
-        "python:tests.test_di_126_202_http_contracts.DataIntegrityHttpContracts.test_import_session_directory_failure_closes_without_state_change"
+        "python:tests.http.test_request_framing_and_delete_authority.DataIntegrityHttpContracts.test_import_session_directory_failure_closes_without_state_change"
       ]
     },
     {
@@ -3647,7 +3647,7 @@
       "observation": "本文の途中の保存失敗は500と`Connection: close`を返し、部分的な一時ファイルを残さず、続くGETを同じ接続で処理しない",
       "status": "automated",
       "testIds": [
-        "python:tests.test_di_126_202_http_contracts.DataIntegrityHttpContracts.test_partial_import_write_failure_removes_temporary_file_and_closes"
+        "python:tests.http.test_request_framing_and_delete_authority.DataIntegrityHttpContracts.test_partial_import_write_failure_removes_temporary_file_and_closes"
       ]
     },
     {
@@ -3658,7 +3658,7 @@
       "observation": "画像・一覧・PJ・カタログ世代・インポート状態を変更せず、サーバーログに501・`Unsupported method`がない",
       "status": "automated",
       "testIds": [
-        "python:tests.test_di_126_202_http_contracts.DataIntegrityHttpContracts.test_partial_import_write_failure_removes_temporary_file_and_closes"
+        "python:tests.http.test_request_framing_and_delete_authority.DataIntegrityHttpContracts.test_partial_import_write_failure_removes_temporary_file_and_closes"
       ]
     },
     {
@@ -3681,7 +3681,7 @@
       "observation": "Eの候補・手描き・反転・確認状態を変えず、A～Dの閲覧・確認済み管理・Eの再表示と完全削除は使える",
       "status": "automated",
       "testIds": [
-        "python:tests.test_di_203_265_gap_contracts.RemainingDataIntegrityContracts.test_hidden_image_work_isolated_while_other_images_change_then_reshows_and_deletes_completely"
+        "python:tests.data_integrity.test_persistence_and_authority_transactions.RemainingDataIntegrityContracts.test_hidden_image_work_isolated_while_other_images_change_then_reshows_and_deletes_completely"
       ]
     },
     {
@@ -3727,7 +3727,7 @@
       "observation": "開始後のAの非表示変更はそのZIPの内容を変えず、次回ZIPからAを除外する",
       "status": "automated",
       "testIds": [
-        "python:tests.test_di_203_265_gap_contracts.RemainingDataIntegrityContracts.test_project_export_snapshot_ignores_later_hidden_change_and_next_export_excludes_it"
+        "python:tests.data_integrity.test_persistence_and_authority_transactions.RemainingDataIntegrityContracts.test_project_export_snapshot_ignores_later_hidden_change_and_next_export_excludes_it"
       ]
     },
     {
@@ -3786,7 +3786,7 @@
       "observation": "レンダー中と有効トークン中は`operation_in_progress`で拒否し、保存完了または期限切れ後は非表示にできる",
       "status": "automated",
       "testIds": [
-        "python:tests.test_di_203_265_gap_contracts.RemainingDataIntegrityContracts.test_active_render_and_token_block_hide_but_unhide_and_completion_preserve_snapshot"
+        "python:tests.data_integrity.test_persistence_and_authority_transactions.RemainingDataIntegrityContracts.test_active_render_and_token_block_hide_but_unhide_and_completion_preserve_snapshot"
       ]
     },
     {
@@ -3797,7 +3797,7 @@
       "observation": "再表示は常に許可し、レンダー済みデータへ非表示画像を混ぜない",
       "status": "automated",
       "testIds": [
-        "python:tests.test_di_203_265_gap_contracts.RemainingDataIntegrityContracts.test_active_render_and_token_block_hide_but_unhide_and_completion_preserve_snapshot"
+        "python:tests.data_integrity.test_persistence_and_authority_transactions.RemainingDataIntegrityContracts.test_active_render_and_token_block_hide_but_unhide_and_completion_preserve_snapshot"
       ]
     },
     {
@@ -3867,7 +3867,7 @@
       "observation": "成否や候補数にかかわらず画像一覧の件数・全画像ID・相対パスと元画像ファイルを変更しない",
       "status": "automated",
       "testIds": [
-        "python:tests.test_di_203_265_gap_contracts.RemainingDataIntegrityContracts.test_detection_cleanup_failure_preserves_catalog_candidate_manual_review_and_history"
+        "python:tests.data_integrity.test_persistence_and_authority_transactions.RemainingDataIntegrityContracts.test_detection_cleanup_failure_preserves_catalog_candidate_manual_review_and_history"
       ]
     },
     {
@@ -3949,7 +3949,7 @@
       "observation": "不正値は画像・PJ・カタログ世代・他sessionを変更せず入力エラーになる",
       "status": "automated",
       "testIds": [
-        "python:tests.test_di_203_265_gap_contracts.RemainingDataIntegrityContracts.test_invalid_manual_transfer_values_leave_image_project_catalog_epoch_and_other_session_unchanged"
+        "python:tests.data_integrity.test_persistence_and_authority_transactions.RemainingDataIntegrityContracts.test_invalid_manual_transfer_values_leave_image_project_catalog_epoch_and_other_session_unchanged"
       ]
     },
     {
@@ -3960,7 +3960,7 @@
       "observation": "取得は待機せず、最後に公開した同一時点の進捗を返す",
       "status": "automated",
       "testIds": [
-        "python:tests.test_di_203_265_gap_contracts.RemainingDataIntegrityContracts.test_job_snapshot_never_waits_for_writer_and_is_an_immutable_consistent_copy"
+        "python:tests.data_integrity.test_persistence_and_authority_transactions.RemainingDataIntegrityContracts.test_job_snapshot_never_waits_for_writer_and_is_an_immutable_consistent_copy"
       ]
     },
     {
@@ -4101,8 +4101,8 @@
       "observation": "更新日時・サイズを再照合する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_203_265_source_delete_runtime.cjs::source-delete permission, revalidation, persistence, and recovery contracts",
-        "python:tests.test_di_203_265_gap_contracts.RemainingDataIntegrityContracts.test_source_delete_revalidates_mtime_and_size_and_replay_is_exactly_once"
+        "node:tests/source_files/test_delete_recovery_runtime.cjs::source-delete permission, revalidation, persistence, and recovery contracts",
+        "python:tests.data_integrity.test_persistence_and_authority_transactions.RemainingDataIntegrityContracts.test_source_delete_revalidates_mtime_and_size_and_replay_is_exactly_once"
       ]
     },
     {
@@ -4113,7 +4113,7 @@
       "observation": "失敗画像は一覧・元画像・作業状態を保持し、有効画像だけ削除する",
       "status": "automated",
       "testIds": [
-        "python:tests.test_di_203_265_gap_contracts.RemainingDataIntegrityContracts.test_source_delete_revalidates_mtime_and_size_and_replay_is_exactly_once",
+        "python:tests.data_integrity.test_persistence_and_authority_transactions.RemainingDataIntegrityContracts.test_source_delete_revalidates_mtime_and_size_and_replay_is_exactly_once",
         "node:tests/test_source_delete_e2e.cjs::batch source deletion keeps the current canvas when another selected image fails, then moves only after the current image commits"
       ]
     },
@@ -4137,7 +4137,7 @@
       "observation": "削除確認直後、下書き保存や通信の前に親directory handleの`readwrite`権限を要求する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_203_265_source_delete_runtime.cjs::source-delete permission, revalidation, persistence, and recovery contracts"
+        "node:tests/source_files/test_delete_recovery_runtime.cjs::source-delete permission, revalidation, persistence, and recovery contracts"
       ]
     },
     {
@@ -4148,7 +4148,7 @@
       "observation": "`parentHandle.removeEntry`直前に親からファイルhandleを再解決し、同一entry・サイズ・更新日時を照合する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_203_265_source_delete_runtime.cjs::source-delete permission, revalidation, persistence, and recovery contracts"
+        "node:tests/source_files/test_delete_recovery_runtime.cjs::source-delete permission, revalidation, persistence, and recovery contracts"
       ]
     },
     {
@@ -4159,7 +4159,7 @@
       "observation": "条件を満たさない画像は一覧とMozarie内データを保持して理由を表示し、成功画像だけ完全削除する",
       "status": "automated",
       "testIds": [
-        "python:tests.test_di_203_265_gap_contracts.RemainingDataIntegrityContracts.test_source_delete_revalidates_mtime_and_size_and_replay_is_exactly_once",
+        "python:tests.data_integrity.test_persistence_and_authority_transactions.RemainingDataIntegrityContracts.test_source_delete_revalidates_mtime_and_size_and_replay_is_exactly_once",
         "node:tests/test_source_delete_e2e.cjs::batch source deletion keeps the current canvas when another selected image fails, then moves only after the current image commits"
       ]
     },
@@ -4171,8 +4171,8 @@
       "observation": "同じトークンは削除を二重実行せず、確定済みの画像一覧・成功件数・画像ごとの失敗理由を返す",
       "status": "automated",
       "testIds": [
-        "python:tests.test_di_203_265_gap_contracts.RemainingDataIntegrityContracts.test_source_delete_revalidates_mtime_and_size_and_replay_is_exactly_once",
-        "node:tests/test_di_203_265_source_delete_runtime.cjs::source-delete lost commit response retries the same token without duplicating the terminal result"
+        "python:tests.data_integrity.test_persistence_and_authority_transactions.RemainingDataIntegrityContracts.test_source_delete_revalidates_mtime_and_size_and_replay_is_exactly_once",
+        "node:tests/source_files/test_delete_recovery_runtime.cjs::source-delete lost commit response retries the same token without duplicating the terminal result"
       ]
     },
     {
@@ -4183,8 +4183,8 @@
       "observation": "終端結果の受領後にackし、元画像を先に消したブラウザーでも、応答消失後の再送で作業一覧を整合させる",
       "status": "automated",
       "testIds": [
-        "python:tests.test_di_203_265_gap_contracts.RemainingDataIntegrityContracts.test_already_missing_browser_source_commits_once_and_cascades_all_work",
-        "node:tests/test_di_203_265_source_delete_runtime.cjs::source-delete lost commit response retries the same token without duplicating the terminal result"
+        "python:tests.data_integrity.test_persistence_and_authority_transactions.RemainingDataIntegrityContracts.test_already_missing_browser_source_commits_once_and_cascades_all_work",
+        "node:tests/source_files/test_delete_recovery_runtime.cjs::source-delete lost commit response retries the same token without duplicating the terminal result"
       ]
     },
     {
@@ -4252,7 +4252,7 @@
       "observation": "永続化した削除トークンの状態を再照会する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_203_265_source_delete_runtime.cjs::source-delete startup recovery reconciles a lost prepare, an already-missing entry, and an empty receipt",
+        "node:tests/source_files/test_delete_recovery_runtime.cjs::source-delete startup recovery reconciles a lost prepare, an already-missing entry, and an empty receipt",
         "node:tests/test_source_delete_e2e.cjs::unknown browser-source deletion remains recoverable instead of silently committing or cancelling"
       ]
     },
@@ -4264,7 +4264,7 @@
       "observation": "すでに消えたブラウザー元画像は同じトークンでMozarie内削除を一度だけ完了し、一覧・候補・手描き・履歴を整合させる",
       "status": "automated",
       "testIds": [
-        "python:tests.test_di_203_265_gap_contracts.RemainingDataIntegrityContracts.test_already_missing_browser_source_commits_once_and_cascades_all_work"
+        "python:tests.data_integrity.test_persistence_and_authority_transactions.RemainingDataIntegrityContracts.test_already_missing_browser_source_commits_once_and_cascades_all_work"
       ]
     },
     {
@@ -4309,7 +4309,7 @@
       "observation": "保留中はCMD warningとstatusの`cleanup_pending`で確認する",
       "status": "automated",
       "testIds": [
-        "python:tests.test_di_203_265_gap_contracts.RemainingDataIntegrityContracts.test_source_delete_cleanup_failure_reports_cleanup_pending_and_cmd_warning"
+        "python:tests.data_integrity.test_persistence_and_authority_transactions.RemainingDataIntegrityContracts.test_source_delete_cleanup_failure_reports_cleanup_pending_and_cmd_warning"
       ]
     },
     {
@@ -4331,7 +4331,7 @@
       "observation": "prepareはworkspace・PJ・カタログ世代・対象ID・元画像fingerprintを保存し、statusは再起動後も同じ結果を返す",
       "status": "automated",
       "testIds": [
-        "python:tests.test_di_203_265_gap_contracts.RemainingDataIntegrityContracts.test_source_delete_prepare_persists_authority_targets_and_fingerprint_across_restart"
+        "python:tests.data_integrity.test_persistence_and_authority_transactions.RemainingDataIntegrityContracts.test_source_delete_prepare_persists_authority_targets_and_fingerprint_across_restart"
       ]
     },
     {
@@ -4410,7 +4410,7 @@
       "observation": "`deleting`を先にIndexedDBへ保存する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_203_265_source_delete_runtime.cjs::source-delete browser phases persist deleting before I/O and distinguish missing from unknown"
+        "node:tests/source_files/test_delete_recovery_runtime.cjs::source-delete browser phases persist deleting before I/O and distinguish missing from unknown"
       ]
     },
     {
@@ -4421,8 +4421,8 @@
       "observation": "親に同名entryがなければbrowserDeletedとして確定し、存在する場合は削除を取消または再試行する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_203_265_source_delete_runtime.cjs::source-delete browser phases persist deleting before I/O and distinguish missing from unknown",
-        "node:tests/test_di_203_265_source_delete_runtime.cjs::source-delete startup recovery reconciles a lost prepare, an already-missing entry, and an empty receipt"
+        "node:tests/source_files/test_delete_recovery_runtime.cjs::source-delete browser phases persist deleting before I/O and distinguish missing from unknown",
+        "node:tests/source_files/test_delete_recovery_runtime.cjs::source-delete startup recovery reconciles a lost prepare, an already-missing entry, and an empty receipt"
       ]
     },
     {
@@ -4433,7 +4433,7 @@
       "observation": "権限不明・NotFound以外の例外はpendingを保持して再照会でき、未確認の元画像をMozarie側だけ削除しない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_203_265_source_delete_runtime.cjs::source-delete browser phases persist deleting before I/O and distinguish missing from unknown",
+        "node:tests/source_files/test_delete_recovery_runtime.cjs::source-delete browser phases persist deleting before I/O and distinguish missing from unknown",
         "node:tests/test_source_delete_e2e.cjs::unknown browser-source deletion remains recoverable instead of silently committing or cancelling"
       ]
     },
@@ -4457,9 +4457,9 @@
       "status": "automated",
       "testIds": [
         "node:tests/test_source_delete_e2e.cjs::browser-only source preflight failures stay in console and never reach server prepare",
-        "python:tests.test_di_203_265_gap_contracts.RemainingDataIntegrityContracts.test_source_delete_prepare_failure_is_written_to_cmd_log",
-        "python:tests.test_di_203_265_gap_contracts.RemainingDataIntegrityContracts.test_source_delete_revalidates_mtime_and_size_and_replay_is_exactly_once",
-        "python:tests.test_di_203_265_gap_contracts.RemainingDataIntegrityContracts.test_source_delete_cleanup_failure_reports_cleanup_pending_and_cmd_warning",
+        "python:tests.data_integrity.test_persistence_and_authority_transactions.RemainingDataIntegrityContracts.test_source_delete_prepare_failure_is_written_to_cmd_log",
+        "python:tests.data_integrity.test_persistence_and_authority_transactions.RemainingDataIntegrityContracts.test_source_delete_revalidates_mtime_and_size_and_replay_is_exactly_once",
+        "python:tests.data_integrity.test_persistence_and_authority_transactions.RemainingDataIntegrityContracts.test_source_delete_cleanup_failure_reports_cleanup_pending_and_cmd_warning",
         "python:tests.test_http_live_endpoints.LiveHttpEndpointTests.test_source_delete_commit_failure_is_written_to_cmd_log"
       ]
     },
@@ -4471,7 +4471,7 @@
       "observation": "同じ画像は最初の理由だけを1件返す",
       "status": "automated",
       "testIds": [
-        "python:tests.test_di_203_265_gap_contracts.RemainingDataIntegrityContracts.test_source_delete_returns_only_the_first_reason_for_one_image"
+        "python:tests.data_integrity.test_persistence_and_authority_transactions.RemainingDataIntegrityContracts.test_source_delete_returns_only_the_first_reason_for_one_image"
       ]
     },
     {
@@ -4494,7 +4494,7 @@
       "observation": "`requestPermission`は確認ダイアログの実行クリック内で開始し、close後や下書き保存後に開始しない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_203_265_source_delete_runtime.cjs::source-delete permission, revalidation, persistence, and recovery contracts",
+        "node:tests/source_files/test_delete_recovery_runtime.cjs::source-delete permission, revalidation, persistence, and recovery contracts",
         "node:tests/test_source_delete_e2e.cjs::confirmation accept starts source permission inside the actual click callback before close or draft work"
       ]
     },
@@ -4506,8 +4506,8 @@
       "observation": "キャンセル時は権限要求を出さず、複数親の拒否・例外は画像別の失敗として集計する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_203_265_source_delete_runtime.cjs::source-delete permission, revalidation, persistence, and recovery contracts",
-        "node:tests/test_di_203_265_source_delete_runtime.cjs::source-delete refuses file I/O when the durable local intent cannot be written"
+        "node:tests/source_files/test_delete_recovery_runtime.cjs::source-delete permission, revalidation, persistence, and recovery contracts",
+        "node:tests/source_files/test_delete_recovery_runtime.cjs::source-delete refuses file I/O when the durable local intent cannot be written"
       ]
     },
     {
@@ -4527,7 +4527,7 @@
       "observation": "復旧intentを保存できないことを明示して`removeEntry`へ進まない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_203_265_source_delete_runtime.cjs::source-delete refuses file I/O when the durable local intent cannot be written"
+        "node:tests/source_files/test_delete_recovery_runtime.cjs::source-delete refuses file I/O when the durable local intent cannot be written"
       ]
     },
     {
@@ -4539,7 +4539,7 @@
       "status": "automated",
       "testIds": [
         "node:tests/test_source_delete_e2e.cjs::Delete shortcut keeps a durable source-delete intent through claim and acknowledges the committed receipt",
-        "node:tests/test_di_203_265_source_delete_runtime.cjs::source-delete startup recovery reconciles a lost prepare, an already-missing entry, and an empty receipt"
+        "node:tests/source_files/test_delete_recovery_runtime.cjs::source-delete startup recovery reconciles a lost prepare, an already-missing entry, and an empty receipt"
       ]
     },
     {
@@ -4550,7 +4550,7 @@
       "observation": "同じ画像の新しいprepareは古いprepared receiptを置換し、終端receiptはackで削除する",
       "status": "automated",
       "testIds": [
-        "python:tests.test_di_203_265_gap_contracts.RemainingDataIntegrityContracts.test_new_source_delete_prepare_replaces_older_prepared_receipt_and_terminal_ack_removes_it"
+        "python:tests.data_integrity.test_persistence_and_authority_transactions.RemainingDataIntegrityContracts.test_new_source_delete_prepare_replaces_older_prepared_receipt_and_terminal_ack_removes_it"
       ]
     },
     {
@@ -4573,8 +4573,8 @@
       "observation": "隔離ファイルが実際に存在しない場合だけ後処理済みと扱い、他のOSErrorは安全な例外種別を理由としてpending保持する",
       "status": "automated",
       "testIds": [
-        "python:tests.test_di_203_265_gap_contracts.RemainingDataIntegrityContracts.test_source_delete_cleanup_distinguishes_missing_quarantine_from_temporary_oserror_and_retries",
-        "python:tests.test_di_203_265_gap_contracts.RemainingDataIntegrityContracts.test_missing_source_delete_quarantine_is_the_only_absence_treated_as_completed"
+        "python:tests.data_integrity.test_persistence_and_authority_transactions.RemainingDataIntegrityContracts.test_source_delete_cleanup_distinguishes_missing_quarantine_from_temporary_oserror_and_retries",
+        "python:tests.data_integrity.test_persistence_and_authority_transactions.RemainingDataIntegrityContracts.test_missing_source_delete_quarantine_is_the_only_absence_treated_as_completed"
       ]
     },
     {
@@ -4585,7 +4585,7 @@
       "observation": "pendingも起動ごとに再検証し、一時的な共有・権限・I/O失敗が解消した場合は安全にunlinkしてcommittedへ進む",
       "status": "automated",
       "testIds": [
-        "python:tests.test_di_203_265_gap_contracts.RemainingDataIntegrityContracts.test_source_delete_cleanup_distinguishes_missing_quarantine_from_temporary_oserror_and_retries"
+        "python:tests.data_integrity.test_persistence_and_authority_transactions.RemainingDataIntegrityContracts.test_source_delete_cleanup_distinguishes_missing_quarantine_from_temporary_oserror_and_retries"
       ]
     },
     {
@@ -4619,7 +4619,7 @@
       "observation": "ステージ済みPNGも通常のdata URLと同じPNG・寸法・alpha/grayscale検証を通過して保存される",
       "status": "automated",
       "testIds": [
-        "python:tests.test_di_203_265_gap_contracts.RemainingDataIntegrityContracts.test_staged_manual_png_uses_the_same_shape_channel_and_decode_contract_as_data_urls"
+        "python:tests.data_integrity.test_persistence_and_authority_transactions.RemainingDataIntegrityContracts.test_staged_manual_png_uses_the_same_shape_channel_and_decode_contract_as_data_urls"
       ]
     },
     {
@@ -4654,7 +4654,7 @@
       "observation": "切断後はwriter claimを解放して次の開始が未完転送を放棄・回収する",
       "status": "automated",
       "testIds": [
-        "python:tests.test_di_203_265_gap_contracts.RemainingDataIntegrityContracts.test_manual_transfer_disconnect_cleanup_retry_and_logs_preserve_committed_work"
+        "python:tests.data_integrity.test_persistence_and_authority_transactions.RemainingDataIntegrityContracts.test_manual_transfer_disconnect_cleanup_retry_and_logs_preserve_committed_work"
       ]
     },
     {
@@ -4688,7 +4688,7 @@
       "observation": "すでに削除済みの一時ディレクトリは回収済みとして扱い、元のstale_catalogなどの失敗理由を変えない",
       "status": "automated",
       "testIds": [
-        "python:tests.test_di_203_265_gap_contracts.RemainingDataIntegrityContracts.test_missing_manual_staging_directory_does_not_replace_the_original_commit_failure"
+        "python:tests.data_integrity.test_persistence_and_authority_transactions.RemainingDataIntegrityContracts.test_missing_manual_staging_directory_does_not_replace_the_original_commit_failure"
       ]
     },
     {
@@ -4711,7 +4711,7 @@
       "observation": "CMDには開始・レイヤーbytes・確定、または失敗理由・一時転送の破棄・確定済み一時データの片付けを区別して記録する",
       "status": "automated",
       "testIds": [
-        "python:tests.test_di_203_265_gap_contracts.RemainingDataIntegrityContracts.test_manual_transfer_disconnect_cleanup_retry_and_logs_preserve_committed_work",
+        "python:tests.data_integrity.test_persistence_and_authority_transactions.RemainingDataIntegrityContracts.test_manual_transfer_disconnect_cleanup_retry_and_logs_preserve_committed_work",
         "python:tests.test_http_live_endpoints.LiveHttpEndpointTests.test_live_manual_layer_transfer_persists_and_recovers_after_cancel_or_commit_failure"
       ]
     },
@@ -4746,7 +4746,7 @@
       "observation": "CMDには固定ルートの開始・bytes・成功/失敗件数・完了または放棄を記録する",
       "status": "automated",
       "testIds": [
-        "python:tests.test_di_203_265_gap_contracts.RemainingDataIntegrityContracts.test_fixed_browser_import_session_logs_start_bytes_counts_completion_and_abandonment"
+        "python:tests.data_integrity.test_persistence_and_authority_transactions.RemainingDataIntegrityContracts.test_fixed_browser_import_session_logs_start_bytes_counts_completion_and_abandonment"
       ]
     },
     {
@@ -4769,7 +4769,7 @@
       "observation": "隔離した保存状態とループバックHTTPで、未確定tokenが時刻だけでは失効せず、完了応答の一時出力を回収し、保存状態確認の開始・完了・所要をログに記録する。",
       "status": "automated",
       "testIds": [
-        "python:tests.test_di_203_265_gap_contracts.RemainingDataIntegrityContracts.test_browser_save_tokens_survive_time_and_status_ack_cleans_only_the_terminal_token",
+        "python:tests.data_integrity.test_persistence_and_authority_transactions.RemainingDataIntegrityContracts.test_browser_save_tokens_survive_time_and_status_ack_cleans_only_the_terminal_token",
         "python:tests.test_http_live_endpoints.LiveHttpEndpointTests.test_live_browser_save_render_streams_a_stable_image_response"
       ]
     },
@@ -4781,7 +4781,7 @@
       "observation": "DB確定は成功のまま返し、削除できないステージングだけをCMDへ保留として記録する",
       "status": "automated",
       "testIds": [
-        "python:tests.test_di_203_265_gap_contracts.RemainingDataIntegrityContracts.test_manual_transfer_disconnect_cleanup_retry_and_logs_preserve_committed_work"
+        "python:tests.data_integrity.test_persistence_and_authority_transactions.RemainingDataIntegrityContracts.test_manual_transfer_disconnect_cleanup_retry_and_logs_preserve_committed_work"
       ]
     },
     {
@@ -4792,7 +4792,7 @@
       "observation": "次の手描き操作で削除を再試行し、候補・手描き・履歴・確認状態を巻き戻さない",
       "status": "automated",
       "testIds": [
-        "python:tests.test_di_203_265_gap_contracts.RemainingDataIntegrityContracts.test_manual_transfer_disconnect_cleanup_retry_and_logs_preserve_committed_work"
+        "python:tests.data_integrity.test_persistence_and_authority_transactions.RemainingDataIntegrityContracts.test_manual_transfer_disconnect_cleanup_retry_and_logs_preserve_committed_work"
       ]
     },
     {
@@ -4815,7 +4815,7 @@
       "observation": "隔離した保存状態でcommit後のstatusを再取得でき、pending・unknown・committedを区別し、ackは対象の確定tokenだけを清掃する。",
       "status": "automated",
       "testIds": [
-        "python:tests.test_di_203_265_gap_contracts.RemainingDataIntegrityContracts.test_browser_save_tokens_survive_time_and_status_ack_cleans_only_the_terminal_token"
+        "python:tests.data_integrity.test_persistence_and_authority_transactions.RemainingDataIntegrityContracts.test_browser_save_tokens_survive_time_and_status_ack_cleans_only_the_terminal_token"
       ]
     },
     {
@@ -4850,7 +4850,7 @@
       "observation": "画面は内部エラーではなく「画像一覧が変わりました」の案内を表示し、現在の一覧へ同期後に再実行できる",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_158_185_browser_contracts.cjs::DI-158 DI-160 and DI-166 delete against the captured filtered order and keep authority on cancel or stale response"
+        "node:tests/gallery/test_filtered_action_authority_e2e.cjs::DI-158 DI-160 and DI-166 delete against the captured filtered order and keep authority on cancel or stale response"
       ]
     },
     {
@@ -4886,7 +4886,7 @@
       "observation": "対象catalogの全画像だけを削除し、呼び出し側から相対パス集合を渡して部分削除する経路を持たない",
       "status": "automated",
       "testIds": [
-        "python:tests.test_di_203_265_gap_contracts.RemainingDataIntegrityContracts.test_catalog_clear_removes_only_every_image_in_the_active_catalog_and_never_accepts_paths",
+        "python:tests.data_integrity.test_persistence_and_authority_transactions.RemainingDataIntegrityContracts.test_catalog_clear_removes_only_every_image_in_the_active_catalog_and_never_accepts_paths",
         "python:tests.test_http_live_endpoints.LiveHttpEndpointTests.test_public_api_has_no_relative_path_partial_delete_route"
       ]
     },
@@ -4899,7 +4899,7 @@
       "status": "automated",
       "testIds": [
         "python:tests.test_http_live_endpoints.LiveHttpEndpointTests.test_live_binary_import_validates_then_stages_an_image",
-        "python:tests.test_di_126_202_http_contracts.DataIntegrityHttpContracts.test_partial_import_write_failure_removes_temporary_file_and_closes"
+        "python:tests.http.test_request_framing_and_delete_authority.DataIntegrityHttpContracts.test_partial_import_write_failure_removes_temporary_file_and_closes"
       ]
     },
     {
@@ -4910,8 +4910,8 @@
       "observation": "続く要求を本文の残りとして解釈せず、501 `Unsupported method`を出さない",
       "status": "automated",
       "testIds": [
-        "python:tests.test_di_126_202_http_contracts.DataIntegrityHttpContracts.test_partial_import_write_failure_removes_temporary_file_and_closes",
-        "python:tests.test_di_126_202_http_contracts.DataIntegrityHttpContracts.test_import_session_directory_failure_closes_without_state_change"
+        "python:tests.http.test_request_framing_and_delete_authority.DataIntegrityHttpContracts.test_partial_import_write_failure_removes_temporary_file_and_closes",
+        "python:tests.http.test_request_framing_and_delete_authority.DataIntegrityHttpContracts.test_import_session_directory_failure_closes_without_state_change"
       ]
     },
     {
@@ -5003,7 +5003,7 @@
       "observation": "候補、確認済み、非表示、反転、元画像変更状態を保持し、同じ候補BLOBを二重に読込まない",
       "status": "automated",
       "testIds": [
-        "python:tests.test_di_203_265_gap_contracts.RemainingDataIntegrityContracts.test_bulk_hydration_preserves_candidates_flags_transform_and_source_mismatch_together"
+        "python:tests.data_integrity.test_persistence_and_authority_transactions.RemainingDataIntegrityContracts.test_bulk_hydration_preserves_candidates_flags_transform_and_source_mismatch_together"
       ]
     },
     {
@@ -5047,7 +5047,7 @@
       "observation": "既存候補・手描き・確認状態・一覧を変更しない",
       "status": "automated",
       "testIds": [
-        "python:tests.test_di_203_265_gap_contracts.RemainingDataIntegrityContracts.test_detection_cleanup_failure_preserves_catalog_candidate_manual_review_and_history"
+        "python:tests.data_integrity.test_persistence_and_authority_transactions.RemainingDataIntegrityContracts.test_detection_cleanup_failure_preserves_catalog_candidate_manual_review_and_history"
       ]
     },
     {
@@ -5176,7 +5176,7 @@
       "observation": "Windowsが古い候補PNGの削除を一時的に拒否しても削除操作は成功し、候補revisionと履歴は各1回だけ進む",
       "status": "automated",
       "testIds": [
-        "python:tests.test_di_203_265_gap_contracts.RemainingDataIntegrityContracts.test_windows_locked_candidate_delete_commits_once_then_reopens_without_resurrection"
+        "python:tests.data_integrity.test_persistence_and_authority_transactions.RemainingDataIntegrityContracts.test_windows_locked_candidate_delete_commits_once_then_reopens_without_resurrection"
       ]
     },
     {
@@ -5187,7 +5187,7 @@
       "observation": "画面とPJ再開は候補を削除済みとして一致し、他候補を変えない",
       "status": "automated",
       "testIds": [
-        "python:tests.test_di_203_265_gap_contracts.RemainingDataIntegrityContracts.test_windows_locked_candidate_delete_commits_once_then_reopens_without_resurrection"
+        "python:tests.data_integrity.test_persistence_and_authority_transactions.RemainingDataIntegrityContracts.test_windows_locked_candidate_delete_commits_once_then_reopens_without_resurrection"
       ]
     },
     {
@@ -5446,7 +5446,7 @@
       "observation": "単体保存には適用しない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_di_010_080_browser_contracts.cjs::single save ignores a persisted batch filter that excludes the current image"
+        "node:tests/gallery/test_gallery_save_filters_e2e.cjs::single save ignores a persisted batch filter that excludes the current image"
       ]
     }
   ]
