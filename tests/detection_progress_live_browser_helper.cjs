@@ -28,6 +28,12 @@ async function main() {
       await page.locator("#detectCurrentButton").click();
       await preparing();
     };
+    const waitForTerminal = async (expectedState, nextButton) => {
+      await page.waitForFunction(({ expectedState, nextButton }) =>
+        state.job?.state === expectedState && !state.processing && !state.pollInFlight
+        && !currentImageActionPending() && !document.querySelector(nextButton).disabled,
+      { expectedState, nextButton });
+    };
     await page.goto(origin, { waitUntil: "domcontentloaded" });
     await page.waitForFunction(() => state.settings && state.images.length === 1 && !state.projectOperationPending);
     await page.locator(".gallery-item").first().click();
@@ -47,20 +53,21 @@ async function main() {
     await release("inference");
     await preparing();
     await release("hand");
-    await page.waitForFunction(() => state.job?.state === "complete" && !state.processing);
+    await waitForTerminal("complete", "#detectCurrentButton");
     assert.equal(await page.locator("#processingDialog").evaluate((dialog) => dialog.open), false);
     assert.equal(await page.locator("#detectCurrentButton").isEnabled(), true);
 
     const cachedRun = page.waitForResponse((response) => new URL(response.url()).pathname === "/api/detect" && response.request().method() === "POST");
     await page.locator("#detectCurrentButton").click();
     await cachedRun;
-    await page.waitForFunction(() => state.job?.state === "complete" && !state.processing);
+    await waitForTerminal("complete", "#detectCurrentButton");
     assert.equal((await (await context.request.get(`${origin}/api/job`)).json()).phase, "");
 
     await release("reset-error");
     await start();
     await release("target");
-    await page.waitForFunction(() => state.job?.state === "error" && !state.processing && document.querySelector("#errorDialog").open);
+    await waitForTerminal("error", "#errorDialogClose");
+    assert.equal(await page.locator("#errorDialog").evaluate((dialog) => dialog.open), true);
     assert.equal(await page.locator("#processingDialog").evaluate((dialog) => dialog.open), false);
     assert.equal((await (await context.request.get(`${origin}/api/job`)).json()).phase, "");
     await page.locator("#errorDialogClose").click();
@@ -71,7 +78,7 @@ async function main() {
     await page.waitForFunction(() => state.job?.cancelRequested);
     assert.equal(await page.locator("#processingCancelButton").isDisabled(), true);
     await release("target");
-    await page.waitForFunction(() => state.job?.state === "cancelled" && !state.processing);
+    await waitForTerminal("cancelled", "#detectionSettingsButton");
     assert.equal(await page.locator("#detectionSettingsButton").isEnabled(), true);
     assert.deepEqual(errors, []);
   } finally {
