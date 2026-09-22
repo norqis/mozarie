@@ -143,7 +143,7 @@ async function restoreBrowserProjectSourcesForCurrentCatalog(catalogSources = []
         if (child.kind === "file") {
           for (const sourceId of canonicalSourceIds) for (const image of imagesByDirectorySource.get(sourceId)?.get(relativePath) || []) {
             stagedAccess.set(image.id, {
-              fileHandle: child, parentHandle: handle, name: child.name, sourceId: image.sourceId, relativePath,
+              fileHandle: child, parentHandle: handle, rootHandle: source.handle, name: child.name, sourceId: image.sourceId, relativePath,
               sourceKind: "browser-directory", size: image.sizeBytes, lastModified: Math.round(Number(image.mtimeNs) / 1000000),
             });
           }

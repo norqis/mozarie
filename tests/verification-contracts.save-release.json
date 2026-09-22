@@ -467,10 +467,14 @@
       "sourceIds": [
         "SV-096"
       ],
-      "observation": "再接続の取消・拒否・不一致では出力と削除を開始せず、許可後だけコピー成功後の元画像削除を確定する。",
+      "observation": "再接続の取消・拒否・不一致では出力と削除を開始せず、許可後だけコピー成功後の元画像削除を確定する。保存ごとに権限を確認し、同じフォルダー配下の画像には許可を共有する。",
       "status": "automated",
       "testIds": [
         "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > browser source preflight rejects cancel denial mismatch and changes",
+        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > directory save permissions are shared across files and repeated batches",
+        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > standalone file grants are queried and restored without duplicate requests",
+        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > denied revoked and inactive save grants preserve source and output",
+        "node:tests/test_folder_permissions_e2e.cjs::project folder restore retains each nested file's direct parent",
         "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > copy then source delete follows durable commit"
       ]
     },

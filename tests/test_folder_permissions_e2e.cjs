@@ -97,6 +97,37 @@ test("project folder restore retains each nested file's direct parent", { timeou
     assert.deepEqual(await page.evaluate(() => window.__folderPicker.calls), [{ mode: "readwrite", id: "mozarie-project-source", active: true }], "the project-folder picker asks for write access inside the click");
     assert.match(savedSourceId(), /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i, "the saved browser handle keeps its original request UUID");
     assert.notEqual(savedSourceId(), canonicalBrowserSourceId, "the API's canonical source ID differs from the remembered request UUID");
+    assert.equal(await page.evaluate(() => new Set([...state.sourceAccess.values()].map((access) => access.rootHandle)).size === 1 && Boolean(state.sourceAccess.get("folder-0").rootHandle)), true, "folder import shares its root handle across nested sources");
+    await page.evaluate(() => {
+      window.__saveGrantStates = { active: [], completed: 0, error: null };
+      window.__folderPermission.mode = "prompt";
+      window.__folderPermission.queries = []; window.__folderPermission.requests = [];
+      const request = FileSystemDirectoryHandle.prototype.requestPermission;
+      FileSystemDirectoryHandle.prototype.requestPermission = async function (options) {
+        window.__saveGrantStates.active.push(navigator.userActivation.isActive);
+        const permission = await request.call(this, options);
+        if (permission === "granted") window.__folderPermission.mode = permission;
+        return permission;
+      };
+      const save = document.createElement("button");
+      save.id = "permission-fixture-save"; save.textContent = "Save permission fixture";
+      save.addEventListener("click", async () => {
+        try {
+          const ids = state.images.map((image) => image.id);
+          const preparation = beginSaveSourcePreparation(ids, "overwrite", false);
+          await ensureSaveSources(ids, "overwrite", false, "original", preparation);
+          window.__saveGrantStates.completed += 1;
+        } catch (error) { window.__saveGrantStates.error = error.code || error.message; }
+      });
+      (document.querySelector("dialog[open]") || document.body).append(save);
+    });
+    for (const completed of [1, 2]) {
+      await page.locator("#permission-fixture-save").click();
+      await page.waitForFunction((expected) => window.__saveGrantStates.completed === expected || window.__saveGrantStates.error, completed);
+      assert.equal(await page.evaluate(() => window.__saveGrantStates.error), null);
+    }
+    assert.deepEqual(await page.evaluate(() => window.__folderPermission), { mode: "granted", queries: ["readwrite", "readwrite"], requests: ["readwrite"] }, "nested image batches reuse one root grant and recheck it on each save");
+    assert.deepEqual(await page.evaluate(() => window.__saveGrantStates.active), [true], "the request still runs under the save click's user activation after querying");
 
     await page.reload({ waitUntil: "domcontentloaded" });
     await page.waitForFunction(() => state.project?.id === "folder-project" && state.images.length === 3 && state.sourceAccess.size === 3 && !state.importing);
@@ -105,9 +136,9 @@ test("project folder restore retains each nested file's direct parent", { timeou
       const root = await (await navigator.storage.getDirectory()).getDirectoryHandle("mozarie-folder-permission-e2e");
       const one = await root.getDirectoryHandle("one"); const deep = await one.getDirectoryHandle("deep");
       const expected = new Map([["same.png", root], ["one/same.png", one], ["one/deep/same.png", deep]]);
-      return Promise.all(state.images.map(async (image) => ({ path: image.relativePath, directParent: await expected.get(image.relativePath).isSameEntry(state.sourceAccess.get(image.id).parentHandle) })));
+      return Promise.all(state.images.map(async (image) => ({ path: image.relativePath, directParent: await expected.get(image.relativePath).isSameEntry(state.sourceAccess.get(image.id).parentHandle), root: await root.isSameEntry(state.sourceAccess.get(image.id).rootHandle) })));
     }), [
-      { path: "same.png", directParent: true }, { path: "one/same.png", directParent: true }, { path: "one/deep/same.png", directParent: true },
+      { path: "same.png", directParent: true, root: true }, { path: "one/same.png", directParent: true, root: true }, { path: "one/deep/same.png", directParent: true, root: true },
     ], "a reload restores source access from IndexedDB with the directory that directly contains each file");
     assert.deepEqual(await page.evaluate(() => [...state.sourceAccess.values()].map((access) => access.sourceId)), [canonicalBrowserSourceId, canonicalBrowserSourceId, canonicalBrowserSourceId], "a browser-directory source restores the API's canonical source ID rather than the remembered request UUID");
     assert.equal(await page.evaluate(async () => {

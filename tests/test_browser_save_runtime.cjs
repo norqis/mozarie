@@ -321,6 +321,94 @@ async function runParentlessBrowserSourcePreparationCase() {
   assert.equal(parentRequests, 0, "the picker-provided writable parent is verified without another prompt");
 }
 
+function permissionSourceFixture(t, { root = false, parent = false, permission = "prompt", count = 4 } = {}) {
+  const images = Array.from({ length: count }, (_, index) => ({ id: `permission-${index}`, relativePath: `folder-${index % 2}/image-${index}.png`, sourceKind: "session" }));
+  const runtime = createRuntime({ initialImages: images, commit: () => jsonResponse({}) });
+  runtime.navigator.userActivation = { isActive: true };
+  const handles = [];
+  const makePermissionHandle = () => {
+    const handle = { permission };
+    handle.queryPermission = t.mock.fn(async (options) => { assert.equal(options.mode, "readwrite"); return handle.permission; });
+    handle.requestPermission = t.mock.fn(async () => {
+      assert.equal(runtime.navigator.userActivation.isActive, true);
+      assert.ok(handles.every((entry) => !entry.getFile || entry.getFile.mock.callCount() === 0), "permission requests precede source I/O");
+      return handle.permission = "granted";
+    });
+    handles.push(handle);
+    return handle;
+  };
+  const rootHandle = root ? makePermissionHandle() : null;
+  const parentHandle = parent ? makePermissionHandle() : null;
+  for (const image of images) {
+    const fileHandle = makePermissionHandle();
+    fileHandle.name = image.relativePath.split("/").at(-1);
+    fileHandle.getFile = t.mock.fn(async () => sourceBlob(fileHandle.name, 3, 34));
+    runtime.state.sourceAccess.set(image.id, { fileHandle, parentHandle, rootHandle, size: 3, lastModified: 34 });
+  }
+  const prepare = async (mode = "overwrite", deleteOriginal = false, format = "original") => {
+    const ids = images.map((image) => image.id);
+    const prepared = runtime.beginSaveSourcePreparation(ids, mode, deleteOriginal, format);
+    await runtime.ensureSaveSources(ids, mode, deleteOriginal, format, prepared);
+  };
+  return { runtime, images, handles, rootHandle, parentHandle, prepare };
+}
+
+async function runSharedDirectorySavePermissionCase(t) {
+  for (const kind of ["root", "parent"]) {
+    const fixture = permissionSourceFixture(t, { [kind]: true, parent: true });
+    const directory = kind === "root" ? fixture.rootHandle : fixture.parentHandle;
+    await fixture.prepare();
+    await fixture.prepare();
+    // Rename and copy-delete need the same grant; their direct parent is kept.
+    await fixture.prepare("overwrite", false, "jpg");
+    await fixture.prepare("copy", true);
+    assert.equal(directory.queryPermission.mock.callCount(), 4, "each batch checks current browser permission once per shared directory");
+    assert.equal(directory.requestPermission.mock.callCount(), 1, "one grant covers every file and repeated batches");
+    for (const handle of fixture.handles.filter((handle) => handle !== directory)) {
+      assert.equal(handle.requestPermission.mock.callCount(), 0, "descendant files and folders never prompt separately");
+      assert.equal(handle.queryPermission.mock.callCount(), 0, "one ancestor check covers all descendants");
+      if (handle.getFile) assert.equal(handle.getFile.mock.callCount(), 4, "every source is still checked for external changes");
+    }
+    const changed = fixture.runtime.state.sourceAccess.get(fixture.images[0].id);
+    changed.lastModified -= 1;
+    await assert.rejects(fixture.prepare(), { code: "stale_asset" });
+    assert.equal(directory.requestPermission.mock.callCount(), 1, "stale files do not trigger another grant");
+  }
+}
+
+async function runFileOnlySavePermissionCase(t) {
+  const granted = permissionSourceFixture(t, { permission: "granted" });
+  await granted.prepare();
+  assert.ok(granted.handles.every((handle) => handle.requestPermission.mock.callCount() === 0));
+  const restored = permissionSourceFixture(t);
+  await restored.prepare();
+  await restored.prepare();
+  assert.ok(restored.handles.every((handle) => handle.requestPermission.mock.callCount() === 1), "restored standalone files reacquire their individual grants once");
+  assert.ok(restored.handles.every((handle) => handle.queryPermission.mock.callCount() === 2), "no stale permission cache survives a batch");
+  // The same handle may be shared by multiple catalog entries.
+  const shared = permissionSourceFixture(t, { count: 2 });
+  shared.runtime.state.sourceAccess.set(shared.images[1].id, shared.runtime.state.sourceAccess.get(shared.images[0].id));
+  await shared.prepare();
+  assert.equal(shared.handles[0].requestPermission.mock.callCount(), 1);
+  assert.equal(shared.handles[1].requestPermission.mock.callCount(), 0);
+}
+
+async function runDeniedSavePermissionCase(t) {
+  for (const options of [{ root: true, parent: true, permission: "denied" }, { permission: "denied" }, { permission: "prompt" }]) {
+    const fixture = permissionSourceFixture(t, options);
+    if (options.permission === "prompt") fixture.runtime.navigator.userActivation.isActive = false;
+    await assert.rejects(fixture.prepare(), { code: "source_permission_denied" });
+    assert.ok(fixture.handles.every((handle) => handle.requestPermission.mock.callCount() === 0), "denial or missing user activation never opens another prompt");
+    assert.ok(fixture.handles.every((handle) => !handle.getFile || handle.getFile.mock.callCount() === 0));
+    assert.equal(fixture.runtime.requests.length, 0, "failed grants do not start output work");
+  }
+  const revoked = permissionSourceFixture(t, { parent: true, permission: "granted" });
+  await revoked.prepare();
+  revoked.parentHandle.permission = "denied";
+  await assert.rejects(revoked.prepare(), { code: "source_permission_denied" });
+  assert.equal(revoked.parentHandle.requestPermission.mock.callCount(), 0, "a revoked grant is honored on the next batch");
+}
+
 async function runSingleCopyKeepsEditorStateCase() {
   const image = { id: "image-1", relativePath: "source.png", width: 32, height: 32, candidateCount: 1, enabledCandidateCount: 1, reviewed: false, hidden: false };
   const images = [image];
@@ -1743,6 +1831,9 @@ nodeTest("failed copy reports failure and never deletes its original source", as
 });
 
 nodeTest("browser save runtime contracts", async (t) => {
+  await t.test("directory save permissions are shared across files and repeated batches", runSharedDirectorySavePermissionCase);
+  await t.test("standalone file grants are queried and restored without duplicate requests", runFileOnlySavePermissionCase);
+  await t.test("denied revoked and inactive save grants preserve source and output", runDeniedSavePermissionCase);
   await t.test("output directory picker preserves absolute path and cancellation", runOutputDirectoryPermissionCases);
   await t.test("browser source preflight rejects cancel denial mismatch and changes", runBrowserSourcePreflightFailureCases);
   await t.test("parentless browser source preparation preserves edited metadata", runParentlessBrowserSourcePreparationCase);

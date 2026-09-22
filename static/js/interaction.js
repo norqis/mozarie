@@ -720,7 +720,7 @@ async function rememberImportedSource(result, session) {
   for (const imported of result.data.imported || []) {
     if (imported.clientKey !== result.clientKey || !result.entry.fileHandle || !imported.imageId) continue;
     state.sourceAccess.set(imported.imageId, {
-      fileHandle: result.entry.fileHandle, parentHandle: result.entry.parentHandle || null,
+      fileHandle: result.entry.fileHandle, parentHandle: result.entry.parentHandle || null, rootHandle: result.entry.rootHandle || null,
       name: result.entry.file.name, size: result.entry.file.size, lastModified: result.entry.file.lastModified,
       sourceId: result.sourceId, clientKey: result.clientKey, relativePath: result.entry.relativePath, sourceKind: session.sourceKind,
     });
@@ -974,7 +974,7 @@ async function importDirectoryHandle(directoryHandle, session = beginImportSessi
     async function collect(handle, relativePath = "", parentHandle = null) {
       if (!await waitForImportSession(session)) return;
       const path = relativePath ? `${relativePath}/${handle.name}` : handle.name;
-      if (handle.kind === "file") entries.push({ handle, relativePath: path, parentHandle });
+      if (handle.kind === "file") entries.push({ handle, relativePath: path, parentHandle, rootHandle: directoryHandle });
       else for await (const child of handle.values()) await collect(child, path, handle);
     }
     for await (const handle of directoryHandle.values()) await collect(handle, "", directoryHandle);
@@ -1000,7 +1000,7 @@ async function importProjectDirectoryHandle(directoryHandle, projectId, sourceId
     async function collect(handle, relativePath = "", parentHandle = null) {
       if (!await waitForImportSession(session)) return;
       const path = relativePath ? `${relativePath}/${handle.name}` : handle.name;
-      if (handle.kind === "file") entries.push({ handle, relativePath: path, parentHandle });
+      if (handle.kind === "file") entries.push({ handle, relativePath: path, parentHandle, rootHandle: directoryHandle });
       else for await (const child of handle.values()) await collect(child, path, handle);
     }
     for await (const handle of directoryHandle.values()) await collect(handle, "", directoryHandle);
