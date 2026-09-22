@@ -37,6 +37,10 @@ nodeTest("frontend shard coverage merges every Node map and available browser V8
   const temporaryRoot = fs.mkdtempSync(path.join(os.tmpdir(), "mozarie-frontend-coverage-"));
   try {
     const shards = [path.join(temporaryRoot, "shard-0"), path.join(temporaryRoot, "shard-1")];
+    const shardInputs = [
+      { directory: shards[0], browserCoverageRequired: true },
+      { directory: shards[1], browserCoverageRequired: true },
+    ];
     const sharedFile = path.join(temporaryRoot, "shared.js");
     for (const [index, shard] of shards.entries()) {
       fs.mkdirSync(path.join(shard, "node"), { recursive: true });
@@ -45,7 +49,7 @@ nodeTest("frontend shard coverage merges every Node map and available browser V8
     }
     let verified = false;
     let written = false;
-    await mergeFrontendShardCoverage(shards, path.join(temporaryRoot, "report"), {
+    await mergeFrontendShardCoverage(shardInputs, path.join(temporaryRoot, "report"), {
       async browserCoverageMap(entries) { return browserCoverageMap(entries); },
       verifyCoverage(map) {
         assert.equal(map.fileCoverageFor(sharedFile).toJSON().s[0], 5, "the same statement's counts are added across shards");
@@ -58,16 +62,32 @@ nodeTest("frontend shard coverage merges every Node map and available browser V8
     assert.equal(verified, true, "the merged map is verified after all shard inputs");
     assert.equal(written, true, "the verified map is written once");
 
+    fs.rmSync(path.join(shards[0], "browser-v8.json"));
+    const nodeOnlyAndEmitter = [{ ...shardInputs[0], browserCoverageRequired: false }, shardInputs[1]];
+    await mergeFrontendShardCoverage(nodeOnlyAndEmitter, path.join(temporaryRoot, "node-only-shard"), {
+      verifyCoverage() {}, writeCoverageReports() {},
+    });
+
+    fs.writeFileSync(path.join(shards[0], "browser-v8.json"), JSON.stringify([validEntry]), "utf8");
+    await assert.rejects(mergeFrontendShardCoverage(nodeOnlyAndEmitter, path.join(temporaryRoot, "unexpected-browser"), {
+      verifyCoverage() {}, writeCoverageReports() {},
+    }), /browser coverage is unexpected/);
+    fs.rmSync(path.join(shards[0], "browser-v8.json"));
+
     fs.rmSync(path.join(shards[1], "browser-v8.json"));
-    await assert.rejects(mergeFrontendShardCoverage(shards, path.join(temporaryRoot, "missing-browser"), {
+    await assert.rejects(mergeFrontendShardCoverage(nodeOnlyAndEmitter, path.join(temporaryRoot, "missing-browser"), {
       verifyCoverage() {}, writeCoverageReports() {},
     }), /browser coverage is missing/);
 
     fs.writeFileSync(path.join(shards[1], "browser-v8.json"), "{", "utf8");
-    await assert.rejects(mergeFrontendShardCoverage(shards, path.join(temporaryRoot, "bad-report"), {
+    await assert.rejects(mergeFrontendShardCoverage(nodeOnlyAndEmitter, path.join(temporaryRoot, "bad-report"), {
       verifyCoverage() {},
       writeCoverageReports() {},
     }), /browser coverage is missing or corrupt/);
+
+    await assert.rejects(mergeFrontendShardCoverage(shardInputs.map((shard) => ({ ...shard, browserCoverageRequired: false })), path.join(temporaryRoot, "no-producer"), {
+      verifyCoverage() {}, writeCoverageReports() {},
+    }), /no browser V8 producer/);
   } finally {
     fs.rmSync(temporaryRoot, { recursive: true, force: true });
   }

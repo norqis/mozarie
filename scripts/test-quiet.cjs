@@ -3,7 +3,7 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const { assertNoSkippedUnittestTests } = require("./test-result-policy.cjs");
-const { frontendPerformanceTestFiles, frontendTestArguments, frontendTestFiles, selectedFrontendTestFiles } = require("./test-discovery.cjs");
+const { browserCoverageTestFiles, frontendPerformanceTestFiles, frontendTestArguments, frontendTestFiles, selectedFrontendTestFiles } = require("./test-discovery.cjs");
 const { loadContracts, readManifest, validateAutomatedExecution } = require("./verification-contracts.cjs");
 const { frontendContracts } = require("./frontend-verification-contracts.cjs");
 
@@ -504,7 +504,10 @@ async function aggregateFrontendShards(temporaryRoot, artifacts, shardArtifacts,
     nodeManifest: readManifest(path.join(path.dirname(performancePaths[0]), "frontend-node-manifest.json")),
   });
   const mergeCoverage = dependencies.mergeCoverage || require("./coverage-js.cjs").mergeFrontendShardCoverage;
-  await mergeCoverage(records.map((record) => record.directory), path.join(directory, "report"));
+  await mergeCoverage(records.map((record) => ({
+    directory: record.directory,
+    browserCoverageRequired: record.manifest.selected.some((file) => browserCoverageTestFiles.includes(file)),
+  })), path.join(directory, "report"));
   if (!fs.existsSync(path.join(directory, "report", "coverage-final.json"))) throw new Error("aggregated frontend coverage JSON was not created");
   const verifyContracts = dependencies.verifyContracts || ((manifests) => validateAutomatedExecution(frontendContracts(), { languages: ["node"], nodeManifests: manifests }));
   const nodeManifests = [...records.map((record) => record.nodeManifest), performance.nodeManifest];

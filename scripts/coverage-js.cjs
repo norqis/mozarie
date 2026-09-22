@@ -134,16 +134,21 @@ function readJson(file, label) {
   catch (error) { throw new Error(`${label} is missing or corrupt (${file}): ${error.message}`); }
 }
 
-async function mergeFrontendShardCoverage(shardDirectories, reportDirectory, dependencies = {}) {
-  if (!shardDirectories.length) throw new Error("frontend shard coverage has no inputs");
+async function mergeFrontendShardCoverage(shards, reportDirectory, dependencies = {}) {
+  if (!shards.length) throw new Error("frontend shard coverage has no inputs");
   const convertBrowser = dependencies.browserCoverageMap || browserCoverageMap;
   const verify = dependencies.verifyCoverage || verifyCoverage;
   const write = dependencies.writeCoverageReports || writeCoverageReports;
   const combined = createCoverageMap({});
-  for (const directory of shardDirectories) {
+  if (!shards.some((shard) => shard.browserCoverageRequired)) throw new Error("frontend shard coverage has no browser V8 producer");
+  for (const { directory, browserCoverageRequired } of shards) {
     combined.merge(createCoverageMap(readJson(path.join(directory, "node", "coverage-final.json"), "frontend shard Node coverage")));
     const browserFile = path.join(directory, "browser-v8.json");
-    if (!fs.existsSync(browserFile)) throw new Error(`frontend shard browser coverage is missing (${browserFile})`);
+    if (!fs.existsSync(browserFile)) {
+      if (browserCoverageRequired) throw new Error(`frontend shard browser coverage is missing (${browserFile})`);
+      continue;
+    }
+    if (!browserCoverageRequired) throw new Error(`frontend shard browser coverage is unexpected (${browserFile})`);
     combined.merge(await convertBrowser(readJson(browserFile, "frontend shard browser coverage")));
   }
   verify(combined);

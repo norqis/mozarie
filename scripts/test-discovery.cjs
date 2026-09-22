@@ -5,6 +5,7 @@ const path = require("node:path");
 
 const root = path.resolve(__dirname, "..");
 const testDirectory = path.join(root, "tests");
+const browserCoverageTestFiles = ["tests/test_import_picker_e2e.cjs"];
 
 function frontendTestFiles(directory = testDirectory, prefix = "tests") {
   const files = [];
@@ -37,4 +38,4 @@ function selectedFrontendTestFiles(files, shardIndex, shardTotal) {
   return files.filter((_, position) => position % shardTotal === shardIndex);
 }
 
-module.exports = { frontendPerformanceTestFiles, frontendTestArguments, frontendTestFiles, selectedFrontendTestFiles };
+module.exports = { browserCoverageTestFiles, frontendPerformanceTestFiles, frontendTestArguments, frontendTestFiles, selectedFrontendTestFiles };
