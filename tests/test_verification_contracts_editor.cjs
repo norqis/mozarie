@@ -2,21 +2,20 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const test = require("node:test");
+const { frontendPerformanceTestFiles, frontendTestFiles } = require("../scripts/test-discovery.cjs");
 
 const repoRoot = path.join(__dirname, "..");
 const contractPath = path.join(__dirname, "verification-contracts.editor.json");
 const manualPath = path.join(repoRoot, "docs", "manual-verification", "editor.md");
+const discoveredNodeFiles = new Set([...frontendTestFiles(), ...frontendPerformanceTestFiles()]);
 
 function referencedTestExists(testId) {
   if (testId.startsWith("node:")) {
     const [relativePath, qualifiedName] = testId.slice("node:".length).split("::");
     assert.ok(relativePath && qualifiedName, `invalid Node test ID: ${testId}`);
-    const sourcePath = path.join(repoRoot, relativePath);
-    assert.ok(fs.existsSync(sourcePath), `missing Node test file: ${relativePath}`);
-    const source = fs.readFileSync(sourcePath, "utf8");
-    for (const name of qualifiedName.split(" > ")) {
-      assert.ok(source.includes(name), `Node test name is not declared in ${relativePath}: ${name}`);
-    }
+    assert.ok(discoveredNodeFiles.has(relativePath), `Node test file is not in normal discovery: ${relativePath}`);
+    // Generated subtest names and legacy <file> IDs are execution results.
+    // The shared manifest validator requires their exact IDs to run and pass.
     return;
   }
   if (testId.startsWith("python:")) {
