@@ -73,6 +73,16 @@ async function renderedPixel(page, x, y) {
 test("direct editor boundary and gesture observations", { timeout: 150000 }, async (t) => {
   const fixture = await startFixtureServer(); const browser = await chromium.launch({ headless: true });
   const context = await browser.newContext({ viewport: { width: 1280, height: 900 } }); const page = await context.newPage();
+  const paddingMasks = await page.evaluate(() => Object.fromEntries([0, 8].map((padding) => {
+    const mask = document.createElement("canvas"); mask.width = mask.height = 240;
+    mask.getContext("2d").fillRect(20 - padding, 20 - padding, 20 + padding * 2, 20 + padding * 2);
+    return [padding, mask.toDataURL("image/png").split(",")[1]];
+  })));
+  await page.route(/\/api\/mask\/sample\/(apply|exclude)\?/, async (route) => {
+    const padding = Number(new URL(route.request().url()).searchParams.get("expandPx") || 0);
+    assert.ok(paddingMasks[padding], `a seeded candidate mask exists for padding ${padding}`);
+    await route.fulfill({ status: 200, contentType: "image/png", body: Buffer.from(paddingMasks[padding], "base64") });
+  });
   try {
     await t.test("ED-020.1 rectangle drag renders the diagonal-corner rectangle", async () => {
       await setup(page, fixture.url); await selectBoundaryTool(page, "#rectangleTool"); await drag(page, [{ x: 40, y: 50 }, { x: 120, y: 140 }]);
@@ -333,7 +343,7 @@ test("direct editor boundary and gesture observations", { timeout: 150000 }, asy
         });
         if (scenario === "toggle") await page.locator('[data-candidate-blink-id="apply"] .candidate-toggle').click();
         if (scenario === "forced") await page.locator('[data-candidate-blink-id="exclude"] .candidate-forced').click();
-        if (scenario === "padding") { await page.locator('[data-candidate-blink-id="apply"] .candidate-padding-button').click(); await page.locator("#candidatePaddingInput").fill("8"); await page.locator("#candidatePaddingConfirm").click(); }
+        if (scenario === "padding") { await page.locator('[data-candidate-blink-id="apply"] .candidate-padding-button').click(); await page.locator("#candidatePaddingInput").fill("8"); await page.waitForFunction(() => state.candidatePaddingPreviewImages.has("apply")); assert.equal(await page.locator("#errorDialog").evaluate((dialog) => dialog.open), false, "valid mask preview does not open an error dialog"); await page.locator("#candidatePaddingConfirm").click(); }
         if (scenario === "batch") await page.locator('[data-candidate-batch="apply:toggle"]').click();
         await page.waitForFunction(() => state.history.length === 1 && state.historyIndex === 1 && state.candidateUpdateChains.size === 0 && state.candidateBatchPending.size === 0);
         const edited = await page.evaluate(() => state.candidates.map(({ id, enabled, forced, expandPx }) => ({ id, enabled, forced, expandPx })));
@@ -349,11 +359,14 @@ test("direct editor boundary and gesture observations", { timeout: 150000 }, asy
       await setup(page, fixture.url);
       await page.evaluate(() => {
         state.settings.shortcuts.bindings.undo = "Ctrl+Z"; state.settings.shortcuts.bindings.redo = "Ctrl+Shift+Z";
-        restoreSnapshot = async (historyIndex) => { rebuildManualMaskFromHistory(historyIndex); state.historyIndex = historyIndex; updateHistoryButtons(); renderCatalogViews(); };
         resetHistoryToCurrentManualMask();
-        publishWorkspaceFlags(state.currentId, { reviewed: true }); recordHistoryOperation({ kind: "workspaceFlag" });
-        publishWorkspaceFlags(state.currentId, { reviewed: false }); recordHistoryOperation({ kind: "workspaceFlag" }); renderCatalogViews();
       });
+      for (const historyIndex of [1, 2]) {
+        await page.locator('.gallery-item[data-id="sample"]').click({ button: "right" });
+        await page.locator("#toggleReviewMenuItem").click();
+        await page.waitForFunction((index) => state.historyIndex === index && state.imageMutationChains.size === 0, historyIndex);
+      }
+      assert.deepEqual(await page.evaluate(() => state.history.map(({ reviewedBefore, reviewedAfter }) => [reviewedBefore, reviewedAfter])), [[false, true], [true, false]], "explicit review actions capture their before and after choices");
       assert.deepEqual(await page.evaluate(() => [state.history.length, currentRecord().reviewed, state.reviewedImageIds.has(state.currentId)]), [2, false, false]);
       await page.locator("#undoButton").click(); await page.waitForFunction(() => state.historyIndex === 1); assert.deepEqual(await page.evaluate(() => [currentRecord().reviewed, state.reviewedImageIds.has(state.currentId)]), [true, true]);
       await page.evaluate(() => { document.querySelectorAll("[data-gallery-filter]").forEach((input) => { input.checked = input.dataset.galleryFilter === "reviewed"; }); document.querySelector('[data-gallery-filter="reviewed"]').dispatchEvent(new Event("change", { bubbles: true })); });
@@ -362,10 +375,11 @@ test("direct editor boundary and gesture observations", { timeout: 150000 }, asy
       assert.deepEqual(await page.locator(".gallery-item").evaluateAll((items) => items.map((item) => item.dataset.id)), [], "reviewed filter updates after Redo returns the image to unreviewed");
       await page.evaluate(() => { document.querySelectorAll("[data-gallery-filter]").forEach((input) => { input.checked = input.dataset.galleryFilter === "unreviewed"; }); document.querySelector('[data-gallery-filter="unreviewed"]').dispatchEvent(new Event("change", { bubbles: true })); });
       assert.deepEqual(new Set(await page.locator(".gallery-item").evaluateAll((items) => items.map((item) => item.dataset.id))), new Set(["sample", "sample-two"]));
-      await page.evaluate(() => {
-        resetHistoryToCurrentManualMask(); publishWorkspaceFlags(state.currentId, { hidden: true }); recordHistoryOperation({ kind: "workspaceFlag" });
-        publishWorkspaceFlags(state.currentId, { hidden: false }); recordHistoryOperation({ kind: "workspaceFlag" }); renderCatalogViews();
-      });
+      await page.evaluate(() => resetHistoryToCurrentManualMask());
+      for (const historyIndex of [1, 2]) {
+        await page.locator("#removeCurrentImageButton").click();
+        await page.waitForFunction((index) => state.historyIndex === index && state.imageMutationChains.size === 0, historyIndex);
+      }
       await page.evaluate(() => focusCanvas()); await page.keyboard.press("Control+Z"); await page.waitForFunction(() => state.historyIndex === 1);
       assert.deepEqual(await page.evaluate(() => [currentRecord().hidden, state.hiddenImageIds.has(state.currentId)]), [true, true]);
       await page.evaluate(() => { document.querySelectorAll("[data-gallery-filter]").forEach((input) => { input.checked = input.dataset.galleryFilter === "hidden"; }); document.querySelector('[data-gallery-filter="hidden"]').dispatchEvent(new Event("change", { bubbles: true })); });
@@ -427,18 +441,20 @@ test("direct editor boundary and gesture observations", { timeout: 150000 }, asy
           state.candidateImages = new Map([["apply", mask], ["exclude", mask]]); state.removedCandidateIds = new Set(); resetHistoryToCurrentManualMask();
           setCandidateDisplayMode(["apply"], "normal"); state.blinkPhase = true; state.mosaicPreviewEnabled = false; mosaicCtx.fillStyle = "#345"; mosaicCtx.fillRect(0, 0, 8, 8);
           const baseline = state.candidates.map((candidate) => ({ ...candidate }));
-          api = async () => { const error = new TypeError(failure === "disconnect" ? "Failed to fetch" : "stale"); if (failure !== "disconnect") error.code = failure; throw error; };
+          window.__candidateFailureRequests = [];
+          api = async (path, options = {}) => { window.__candidateFailureRequests.push({ path, method: options.method }); const error = new TypeError(failure === "disconnect" ? "Failed to fetch" : "stale"); if (failure !== "disconnect") error.code = failure; throw error; };
           reconcileCurrentCandidates = async () => { state.candidates = baseline.map((candidate) => ({ ...candidate })); renderCandidates(); render(); return true; };
           flushMaskComposition(); renderCandidates(); render();
         }, failure);
-        const snapshot = () => page.evaluate(() => ({ candidates: state.candidates.map(({ id, enabled, forced, expandPx }) => ({ id, enabled, forced, expandPx })), history: [state.history.length, state.historyIndex], mask: combinedCanvas.toDataURL(), reviewed: currentRecord().reviewed === true, range: { ids: [...state.blinkCandidateIds], modes: [...state.blinkModes.entries()] }, preview: { enabled: state.mosaicPreviewEnabled, pixels: mosaicCanvas.toDataURL() }, list: [...document.querySelectorAll("#candidatePane .candidate-row")].map((row) => ({ id: row.dataset.candidateBlinkId, className: row.className, controls: [...row.querySelectorAll("button")].map((button) => [button.className, button.getAttribute("aria-pressed"), button.disabled]) })) }));
+        const snapshot = () => page.evaluate(() => { flushRender(); return ({ candidates: state.candidates.map(({ id, enabled, forced, expandPx }) => ({ id, enabled, forced, expandPx })), history: [state.history.length, state.historyIndex], mask: combinedCanvas.toDataURL(), reviewed: currentRecord().reviewed === true, range: { ids: [...state.blinkCandidateIds], modes: [...state.blinkModes.entries()] }, preview: { enabled: state.mosaicPreviewEnabled, pixels: mosaicCanvas.toDataURL() }, list: [...document.querySelectorAll("#candidatePane .candidate-row")].map((row) => ({ id: row.dataset.candidateBlinkId, className: row.className, controls: [...row.querySelectorAll("button")].map((button) => [button.className, button.getAttribute("aria-pressed"), button.disabled]) })) }); });
         const before = await snapshot();
         if (scenario === "toggle") await page.locator('[data-candidate-blink-id="apply"] .candidate-toggle').click();
         if (scenario === "forced") await page.locator('[data-candidate-blink-id="exclude"] .candidate-forced').click();
-        if (scenario === "padding") { await page.locator('[data-candidate-blink-id="apply"] .candidate-padding-button').click(); await page.locator("#candidatePaddingInput").fill("8"); await page.locator("#candidatePaddingConfirm").click(); }
+        if (scenario === "padding") { await page.locator('[data-candidate-blink-id="apply"] .candidate-padding-button').click(); await page.locator("#candidatePaddingInput").fill("8"); await page.waitForFunction(() => state.candidatePaddingPreviewImages.has("apply")); assert.equal(await page.locator("#errorDialog").evaluate((dialog) => dialog.open), false, "valid mask preview does not open an error dialog"); await page.locator("#candidatePaddingConfirm").click(); }
         if (scenario === "batch") await page.locator('[data-candidate-batch="apply:toggle"]').click();
-        await page.waitForFunction(() => state.candidateUpdateChains.size === 0 && state.candidateBatchPending.size === 0 && !candidateControlLocked(state.currentId));
+        await page.waitForFunction(() => state.candidateUpdateChains.size === 0 && state.candidateBatchPending.size === 0 && !candidateControlLocked(state.currentId) && state.candidatePaddingPreviewImages.size === 0);
         const after = await snapshot();
+        assert.ok(await page.evaluate(() => window.__candidateFailureRequests.some(({ path, method }) => method === "POST" && (path.startsWith("/api/candidate/") || path === "/api/candidates/batch"))), `${scenario} ${failure} reaches its intended candidate mutation failure`);
         assert.deepEqual(after, before, `${scenario} ${failure} restores range, preview, list, candidate, review and history state`);
       }
     });

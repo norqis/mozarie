@@ -62,14 +62,14 @@ const context = {
   calculatedBlockSize: () => 4, currentRecord: () => state.images[0], mosaicDivisor: () => 2, normaliseDivisor: (value) => Number(value),
   markMaskDirty() {}, markDraftDirty() {}, flushMaskComposition() {}, requestMosaicPreview() {}, scheduleManualWorkspaceSave() {}, setStatusKey() {},
   canvasHasPixels: () => true, setReviewed() {}, updateCandidateStatus() {}, refreshCurrentReviewAndMask() {}, renderCandidates() {},
-  refreshMaskStatus() {}, releaseCandidateBundles() {}, markImagesUnreviewed() {}, renderCatalogViews() {}, updateNavigationControls() {},
+  refreshMaskStatus() {}, releaseCandidateBundles() {}, renderCatalogViews() {}, updateNavigationControls() {},
   updateActionButtons() {}, closeProcessing() {}, beginCatalogEpoch: () => 1, isCurrentCatalogEpoch: () => true, clearStatus() {}, flushAllWorkspaceMutations: async () => {},
   clearStoredCatalogState() {}, resetCatalog() {}, releaseImageCaches() {}, clearEditor() {}, updateSelectionActionBar() {}, renderOverview() {},
   selectedImages: () => state.images, closeBatchMoreMenus() {}, setHidden: async () => {}, setReviewed: async () => {}, openDetectionDialog() {},
   clearMasks: async () => {}, removeImageFromCatalog: async () => {}, shortcutFromEvent: (event) => event.binding,
   isEditableTarget: () => false, isTextEditableTarget: () => false, hasOpenDialog: () => false, isGestureActive: () => false,
   moveCurrentBy(distance) { navigationActions.push(distance); }, selectImage() {}, reviewAndMoveNext() {}, setViewMode(mode) { state.viewMode = mode; },
-  isReviewed: () => false, isHidden: () => false,
+  isReviewed: () => false, isHidden: () => false, canRemoveImagesFromList: (images) => images.length > 0,
   api: async () => ({ settings: state.settings }), showModalFromInvoker() {}, showUserError(error) { userErrors.push(error); },
 };
 
@@ -174,6 +174,7 @@ async function interactionUserEventWorkflowTest() {
   assert.equal(contextMenuPrevented, true, "a mouse context-menu event must suppress the browser menu");
   assert.equal(element("#catalogContextMenu").popoverOpen, true, "a mouse context-menu event must open the catalog actions");
   assert.equal(element("#copyImagePathMenuItem").hidden, false, "a source-backed image exposes copy-path action");
+  assert.equal(element("#removeFromListMenuItem").disabled, false, "the list-removal action uses its available-record gate");
   test.closeCatalogContextMenu({ restoreFocus: false });
   assert.equal(element("#catalogContextMenu").popoverOpen, false, "closing the catalog actions hides the popover");
 
