@@ -6738,7 +6738,10 @@ class MozarieTests(unittest.TestCase):
                 original_alpha = original.getchannel("A") if original.mode in {"RGBA", "LA"} else original.convert("L")
                 self.assertTrue(np.array_equal(np.asarray(normalized_alpha), np.asarray(original_alpha)))
             self.assertFalse(state.manual_workspace(first_id)["manualEnabled"])
-            self.assertEqual(state.workspace_store.image_state(first_id), (False, False))
+            self.assertEqual(state.workspace_store.image_state(first_id), (False, True))
+            self.assertTrue(state.image_for_id(first_id).reviewed)
+            self.assertEqual(state.workspace_store.image_state(second_id), (False, False))
+            self.assertFalse(state.image_for_id(second_id).reviewed)
             self.assertEqual(second.read_bytes(), original_second)
 
     def test_apply_all_empty_masks_completes_without_changing_images(self):
