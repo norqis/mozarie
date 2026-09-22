@@ -165,17 +165,17 @@ async function runFrontendCases() {
           fs.writeFileSync(path.join(report, "coverage-final.json"), "{}");
           return "# tests 44";
         }
-        if (label === "frontend performance") return "# tests 1";
+        if (label === "frontend performance") return "# tests 2";
         return "";
       },
     });
     assert.deepEqual(calls.map(({ label }) => label), ["frontend syntax", "frontend coverage", "frontend performance"], "performance runs once only after successful syntax and coverage checks");
-    assert.equal(calls[2].args.includes("tests/test_gallery_performance_e2e.cjs"), true, "the 20k gallery scenario is the only quiet-runner performance target");
+    assert.deepEqual(calls[2].args.slice(-2), ["tests/test_gallery_performance_e2e.cjs", "tests/test_mosaic_drag_performance_e2e.cjs"], "gallery and 4K drag scenarios run together without coverage");
     assert.equal(calls[2].options.env.MOZARIE_JS_COVERAGE, undefined, "the performance run is not instrumented for JavaScript coverage");
     assert.equal(path.basename(calls[1].options.env.MOZARIE_NODE_TEST_MANIFEST), "frontend-node-manifest.json", "coverage writes structured Node execution evidence");
     assert.equal(path.basename(calls[2].options.env.MOZARIE_NODE_TEST_MANIFEST), "frontend-performance-manifest.json", "performance writes separate structured Node execution evidence");
     assert.deepEqual(verifiedManifests.map((file) => path.basename(file)), ["frontend-node-manifest.json", "frontend-performance-manifest.json"], "contract validation receives both completed frontend manifests");
-    assert.match(summary, /44 coverage tests; 1 performance tests/, "the compact result distinguishes coverage and performance runs");
+    assert.match(summary, /44 coverage tests; 2 performance tests/, "the compact result distinguishes coverage and performance runs");
     assert.deepEqual(runner.performanceEnvironment({ MOZARIE_JS_COVERAGE: "1", MOZARIE_BROWSER_COVERAGE_FILE: "browser.json", NODE_V8_COVERAGE: "v8", KEEP: "value" }), { KEEP: "value" }, "the performance environment removes all coverage instrumentation");
 
     await assert.rejects(runner.runFrontend(temporaryRoot, null, {

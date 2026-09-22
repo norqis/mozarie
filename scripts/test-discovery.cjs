@@ -6,6 +6,7 @@ const path = require("node:path");
 const root = path.resolve(__dirname, "..");
 const testDirectory = path.join(root, "tests");
 const browserCoverageTestFiles = ["tests/test_import_picker_e2e.cjs"];
+const performanceTestFiles = ["tests/test_gallery_performance_e2e.cjs", "tests/test_mosaic_drag_performance_e2e.cjs"];
 
 function frontendTestFiles(directory = testDirectory, prefix = "tests") {
   const files = [];
@@ -15,14 +16,13 @@ function frontendTestFiles(directory = testDirectory, prefix = "tests") {
     else if (entry.isFile() && /^test_.*\.cjs$/.test(entry.name)) files.push(relativePath);
   }
   return files
-    .filter((file) => file !== "tests/test_gallery_performance_e2e.cjs")
+    .filter((file) => !performanceTestFiles.includes(file))
     .sort((left, right) => left < right ? -1 : left > right ? 1 : 0);
 }
 
 function frontendPerformanceTestFiles() {
-  const file = "tests/test_gallery_performance_e2e.cjs";
-  if (!fs.existsSync(path.join(root, file))) throw new Error(`missing frontend performance test: ${file}`);
-  return [file];
+  for (const file of performanceTestFiles) if (!fs.existsSync(path.join(root, file))) throw new Error(`missing frontend performance test: ${file}`);
+  return [...performanceTestFiles];
 }
 
 function frontendTestArguments(files = frontendTestFiles()) {

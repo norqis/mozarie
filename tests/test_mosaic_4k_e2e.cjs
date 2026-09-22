@@ -38,12 +38,11 @@ test("4K drag renders a preview before pointerup with one bounded worker", { tim
           return super.postMessage(payload, transfer);
         }
       };
-      window.__dragRoiMetrics = { paint: [], patchStarts: [], patchLatency: [], fullCompose: 0, finalFullCompose: 0, finalFullPreview: 0, fullMaskBitmap: 0, patchMaskBitmap: 0, fullMaskRead: 0, toBlob: 0, pendingMax: 0, watchFinal: false };
+      window.__dragRoiMetrics = { paint: [], patchStarts: [], patchLatency: [], fullCompose: 0, finalFullCompose: 0, finalFullPreview: 0, fullMaskBitmap: 0, patchMaskBitmap: 0, fullMaskRead: 0, finalFullMaskRead: 0, finalFullManualRead: 0, toBlob: 0, watchFinal: false };
       const nativePaint = paintPendingManualStroke;
       paintPendingManualStroke = () => {
         const started = performance.now(); const result = nativePaint();
         window.__dragRoiMetrics.paint.push(performance.now() - started);
-        window.__dragRoiMetrics.pendingMax = Math.max(window.__dragRoiMetrics.pendingMax, state.mosaicPending ? 1 : 0);
         return result;
       };
       const nativeCompose = composeCurrentMask;
@@ -72,7 +71,13 @@ test("4K drag renders a preview before pointerup with one bounded worker", { tim
       const nativeMaskRead = combinedCtx.getImageData.bind(combinedCtx);
       combinedCtx.getImageData = (...args) => {
         if (state.activeStroke && args[2] === combinedCanvas.width && args[3] === combinedCanvas.height) window.__dragRoiMetrics.fullMaskRead += 1;
+        if (window.__dragRoiMetrics.watchFinal && args[2] === combinedCanvas.width && args[3] === combinedCanvas.height) window.__dragRoiMetrics.finalFullMaskRead += 1;
         return nativeMaskRead(...args);
+      };
+      const nativeManualRead = addCtx.getImageData.bind(addCtx);
+      addCtx.getImageData = (...args) => {
+        if (window.__dragRoiMetrics.watchFinal && args[2] === addCanvas.width && args[3] === addCanvas.height) window.__dragRoiMetrics.finalFullManualRead += 1;
+        return nativeManualRead(...args);
       };
       const nativeToBlob = HTMLCanvasElement.prototype.toBlob;
       HTMLCanvasElement.prototype.toBlob = function(...args) {
@@ -93,6 +98,7 @@ test("4K drag renders a preview before pointerup with one bounded worker", { tim
       exclusion.getContext("2d").fillRect(0, 0, 32, 32);
       state.candidates = Array.from({ length: 8 }, (_, index) => ({ id: `exclude-${index}`, role: "exclude", enabled: true, forced: true }));
       state.candidateImages = new Map(state.candidates.map((candidate) => [candidate.id, exclusion])); state.removedCandidateIds = new Set();
+      state.maskStatus.set("sample", false);
       state.mosaicPreviewEnabled = true; fitImage(); requestMosaicPreview();
       const rect = canvas.getBoundingClientRect(); const logical = { x: 1840, y: 1080 };
       return {
@@ -104,7 +110,7 @@ test("4K drag renders a preview before pointerup with one bounded worker", { tim
       };
     });
     await page.waitForFunction(() => !state.mosaicWorkerBusy && state.mosaicSourceId && !state.mosaicPreviewRequested);
-    await page.evaluate(() => { window.__dragRoiMetrics = { paint: [], patchStarts: [], patchLatency: [], fullCompose: 0, finalFullCompose: 0, finalFullPreview: 0, fullMaskBitmap: 0, patchMaskBitmap: 0, fullMaskRead: 0, toBlob: 0, pendingMax: 0, watchFinal: false }; });
+    await page.evaluate(() => { window.__dragRoiMetrics = { paint: [], patchStarts: [], patchLatency: [], fullCompose: 0, finalFullCompose: 0, finalFullPreview: 0, fullMaskBitmap: 0, patchMaskBitmap: 0, fullMaskRead: 0, finalFullMaskRead: 0, finalFullManualRead: 0, toBlob: 0, watchFinal: false }; });
     await page.locator("#brushTool").click();
     await page.mouse.move(geometry.x, geometry.y);
     await page.mouse.down();
@@ -128,7 +134,6 @@ test("4K drag renders a preview before pointerup with one bounded worker", { tim
     assert.ok(dragMetrics.patchP95 < 33.4, `4K preview patch p95 stays under one 30fps frame (${dragMetrics.patchP95.toFixed(1)}ms)`);
     assert.equal(dragMetrics.fullMaskRead, 0, "dragging never reads the complete combined mask");
     assert.equal(dragMetrics.toBlob, 0, "dragging never serializes a canvas");
-    assert.ok(dragMetrics.pendingMax <= 1, "dragging retains at most one newest worker patch");
     assert.equal(await page.evaluate(() => state.candidates.filter((candidate) => candidate.role === "exclude" && candidate.enabled).length), 8, "the drag stays within the 8-exclusion workload");
     const pointerUpAt = await page.evaluate(() => { window.__dragRoiMetrics.watchFinal = true; return performance.now(); });
     await page.mouse.up();
@@ -141,14 +146,27 @@ test("4K drag renders a preview before pointerup with one bounded worker", { tim
       busy: state.mosaicWorkerBusy,
       finalFullCompose: window.__dragRoiMetrics.finalFullCompose,
       finalFullPreview: window.__dragRoiMetrics.finalFullPreview,
+      finalFullMaskRead: window.__dragRoiMetrics.finalFullMaskRead,
+      finalFullManualRead: window.__dragRoiMetrics.finalFullManualRead,
     }), pointerUpAt);
     assert.ok(metrics.completionMs < 1500, `4K preview settles after pointerup within the explicit limit (${metrics.completionMs.toFixed(1)}ms)`);
     assert.equal(metrics.finalFullCompose, 0, "pointerup keeps the final composition inside the dirty ROI");
     assert.equal(metrics.finalFullPreview, 0, "pointerup keeps the final preview inside the dirty ROI");
+    assert.ok(metrics.finalFullMaskRead <= 1, "brush completion leaves at most the one persistence snapshot as a full 4K mask read");
+    assert.equal(metrics.finalFullManualRead, 0, "additive brush completion avoids a full 4K manual-layer read");
     assert.equal(metrics.workerMax, 1, "4K preview creates at most one mosaic worker");
     assert.equal(metrics.active, 1, "the reusable worker remains singular after the settled frame");
     assert.equal(metrics.pending, false, "4K preview has no retained pending frame after settling");
     assert.equal(metrics.busy, false, "4K preview does not keep CPU work running after settling");
+    assert.equal(await page.evaluate(() => state.maskStatus.get("sample")), true, "the completed brush publishes its effective-mask status");
+    await page.locator("#mosaicEraserTool").click();
+    await page.locator("#brushSize").fill("300");
+    await page.locator("#brushSize").dispatchEvent("input");
+    await page.mouse.move(geometry.x, geometry.y); await page.mouse.down();
+    await page.mouse.move(geometry.endX, geometry.endY, { steps: 8 }); await page.mouse.up();
+    await page.waitForFunction(() => !state.activeStroke && !state.manualMaskPresent && state.maskStatus.get("sample") === false);
+    assert.equal(await page.evaluate(({ logical }) => combinedCtx.getImageData(logical.x, logical.y, 1, 1).data[3], geometry), 0,
+      "erasing the last manual stroke still clears the effective mask and its status");
     console.log(`4K focused preview: paintP95=${dragMetrics.p95.toFixed(1)}ms patchP95=${dragMetrics.patchP95.toFixed(1)}ms complete=${metrics.completionMs.toFixed(1)}ms workers=${metrics.workerMax}`);
   } finally {
     await context?.close();
@@ -227,6 +245,90 @@ test("public preview re-enable restores its canvas and pointer cancellation rest
       enabled: state.manualEnabled,
       draftDirty: state.draftDirty,
     })), { prior: 255, cancelledStart: 0, cancelledCurve: 0, enabled: false, draftDirty: false }, "a public pointer cancellation restores existing pixels and all durable-stroke state after a curved retraced gesture");
+  } finally {
+    await context?.close();
+    await browser.close();
+    fixture.server.closeAllConnections();
+    await closeServer(fixture.server);
+  }
+});
+
+test("4K durable brush keeps candidate masks, reads its dirty area, and cancels with bounded rollback tiles", { timeout: 60000 }, async () => {
+  const fixture = await startFixtureServer();
+  const browser = await chromium.launch();
+  let context;
+  try {
+    context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+    const page = await context.newPage();
+    page.setDefaultTimeout(25000);
+    await page.addInitScript(() => {
+      window.showOpenFilePicker = async () => [];
+      window.showDirectoryPicker = async () => ({ async *values() {} });
+    });
+    await page.goto(fixture.url, { waitUntil: "domcontentloaded" });
+    await page.locator('.gallery-item[data-id="sample"]').click();
+    await page.waitForFunction(() => state.currentId === "sample" && state.currentImage);
+    const points = await page.evaluate(async () => {
+      state.mosaicPreviewEnabled = false;
+      releaseMosaicPreview();
+      const image = document.createElement("canvas"); image.width = 3840; image.height = 2160;
+      image.getContext("2d").fillRect(0, 0, image.width, image.height);
+      state.currentImage = await createImageBitmap(image);
+      const record = currentRecord(); record.width = image.width; record.height = image.height;
+      canvasSizeForImage(record); prepareOriginalImage(); resetCurrentDraft();
+      const candidateMask = (left, top) => {
+        const mask = document.createElement("canvas"); mask.width = image.width; mask.height = image.height;
+        mask.getContext("2d").fillRect(left, top, 20, 20);
+        return mask;
+      };
+      state.candidates = [
+        { id: "apply", role: "apply", enabled: true, forced: true },
+        { id: "ordinary-exclusion", role: "exclude", enabled: true, forced: false },
+        { id: "forced-exclusion", role: "exclude", enabled: true, forced: true },
+      ];
+      state.candidateImages = new Map([
+        ["apply", candidateMask(100, 100)],
+        ["ordinary-exclusion", candidateMask(100, 100)],
+        ["forced-exclusion", candidateMask(600, 600)],
+      ]);
+      state.removedCandidateIds = new Set();
+      state.manualExclusionForced = true;
+      state.historyDurable = true; state.project = { id: "durable-4k-brush-fixture" };
+      state.maskStatus.set("sample", false);
+      markMaskDirty(); composeCurrentMask(); fitImage();
+      const rect = canvas.getBoundingClientRect();
+      const screen = (x, y) => ({ x: rect.left + state.view.x + x * state.view.scale, y: rect.top + state.view.y + y * state.view.scale });
+      return { start: screen(950, 850), end: screen(990, 850), startPixel: { x: 950, y: 850 }, endPixel: { x: 990, y: 850 } };
+    });
+    await page.locator("#brushTool").click();
+    await page.mouse.move(points.start.x, points.start.y);
+    await page.mouse.down();
+    await page.mouse.move(points.end.x, points.end.y, { steps: 8 });
+    await page.waitForFunction(({ x, y }) => state.activeStroke?.points.length > 1 && addCtx.getImageData(x, y, 1, 1).data[3] > 0, points.startPixel);
+    const during = await page.evaluate(() => {
+      const stroke = state.activeStroke;
+      return {
+        tileCount: [...stroke.rollback.values()].reduce((total, tiles) => total + tiles.size, 0),
+        changed: combinedCtx.getImageData(950, 850, 1, 1).data[3],
+        coveredCandidate: combinedCtx.getImageData(110, 110, 1, 1).data[3],
+        untouched: combinedCtx.getImageData(2500, 1500, 1, 1).data[3],
+      };
+    });
+    assert.equal(during.changed, 255, "the live brush pixel reaches the composed 4K mask");
+    assert.equal(during.coveredCandidate, 0, "the nonforced exclusion still removes its apply candidate");
+    assert.equal(during.untouched, 0, "outside the stroke and candidate area stays clear");
+    assert.ok(during.tileCount > 0 && during.tileCount <= 4, `short durable stroke stores only nearby rollback tiles (${during.tileCount})`);
+    await page.evaluate(({ x, y }) => canvas.dispatchEvent(new PointerEvent("pointercancel", {
+      pointerId: 1, bubbles: true, cancelable: true, clientX: x, clientY: y, button: 0, buttons: 0,
+    })), points.end);
+    await page.waitForFunction(() => !state.activeStroke);
+    assert.deepEqual(await page.evaluate(() => ({
+      stroke: addCtx.getImageData(950, 850, 1, 1).data[3],
+      mask: combinedCtx.getImageData(950, 850, 1, 1).data[3],
+      candidate: combinedCtx.getImageData(110, 110, 1, 1).data[3],
+      manualPresent: state.manualMaskPresent,
+      status: state.maskStatus.get("sample"),
+    })), { stroke: 0, mask: 0, candidate: 0, manualPresent: false, status: false }, "cancellation restores pixels, candidate result, and durable editor state");
   } finally {
     await context?.close();
     await browser.close();

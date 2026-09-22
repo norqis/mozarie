@@ -731,8 +731,8 @@ function setReviewed(image, reviewed) {
     return saved;
   });
 }
-function refreshCurrentReviewAndMask() {
-  return refreshMaskStatus(true);
+function refreshCurrentReviewAndMask(additiveRoi = null) {
+  return refreshMaskStatus(true, additiveRoi);
 }
 function imageIndex(imageId = state.currentId) { return state.images.findIndex((image) => image.id === imageId); }
 function hasOpenDialog() { return [...document.querySelectorAll("dialog")].some((dialog) => dialog.open); }
