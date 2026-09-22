@@ -604,7 +604,7 @@ class RemainingDataIntegrityContracts(unittest.TestCase):
         self.assertEqual(len(operation_before["items"]), 1)
         item = operation_before["items"][0]
         self.assertEqual(item["imageId"], image_id)
-        self.assertEqual(item["sourcePath"], str(source))
+        self.assertEqual(item["sourcePath"], str(source.resolve()))
         self.assertEqual((item["mtimeNs"], item["sizeBytes"]), expected_fingerprint)
         self.assertIsInstance(item["fileIdentity"], str)
         self.assertTrue(item["fileIdentity"], "prepare stores the real source file identity")
