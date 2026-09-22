@@ -10,6 +10,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 CONTRACT_PATH = ROOT / "tests" / "verification-contracts.save-release.json"
 MANUAL_PATH = ROOT / "docs" / "manual-verification" / "save-release.md"
+NODE_TEST_PATH = re.compile(r"tests/(?:[A-Za-z0-9_-]+/)*test_[A-Za-z0-9_-]+\.cjs")
 
 
 class SaveReleaseVerificationContractTests(unittest.TestCase):
@@ -52,6 +53,22 @@ class SaveReleaseVerificationContractTests(unittest.TestCase):
         self.assertFalse(MANUAL_PATH.exists())
         self.assertNotIn("manual", {item["status"] for item in self.contract["observations"]})
 
+    def test_nested_node_test_paths_reject_traversal_and_non_test_files(self) -> None:
+        self._assert_test_id_is_discovered(
+            "node:tests/gallery/test_gallery_and_save_runtime.cjs::gallery and save interactions"
+        )
+        for relative_path in (
+            "tests/../test_gallery_and_save_runtime.cjs",
+            "tests/gallery/../test_gallery_and_save_runtime.cjs",
+            r"tests\gallery\test_gallery_and_save_runtime.cjs",
+            "tests/gallery/gallery_and_save_runtime.cjs",
+            "tests/gallery/test_gallery_and_save_runtime.cjs\n",
+        ):
+            with self.subTest(relative_path=relative_path), self.assertRaises(AssertionError):
+                self._assert_test_id_is_discovered(
+                    f"node:{relative_path}::gallery and save interactions"
+                )
+
     def _assert_test_id_is_discovered(self, test_id: str) -> None:
         kind, target = test_id.split(":", 1)
         if kind == "python":
@@ -63,7 +80,7 @@ class SaveReleaseVerificationContractTests(unittest.TestCase):
             return
         self.assertEqual(kind, "node", test_id)
         relative_path, title = target.split("::", 1)
-        self.assertRegex(relative_path, r"^tests/test_.+\.cjs$")
+        self.assertIsNotNone(NODE_TEST_PATH.fullmatch(relative_path), test_id)
         source = (ROOT / relative_path).read_text(encoding="utf-8")
         titles = title.split(" > ")
         self.assertRegex(source, rf"(?:nodeTest|test)\(\s*(['\"]){re.escape(titles[0])}\1", test_id)
