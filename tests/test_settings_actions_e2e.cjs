@@ -192,9 +192,16 @@ test("SD-104 global shortcut disable blocks arrow navigation while visible navig
 test("SD-115 remapped remove shortcut replaces Delete and performs one source deletion", { timeout: 60000 }, async () => {
   await select("sample"); await configureShortcut("removeImage", "Ctrl+D", true);
   await page.evaluate(() => { state.settings.confirmations.removeImage = false; }); await page.locator('.gallery-item[data-id="sample"]').focus();
-  await page.keyboard.press("Delete"); await page.waitForTimeout(80); assert.equal(fixture.sourceDeleteRequests.length, 0);
-  await page.keyboard.press("Control+D"); await page.waitForFunction(() => !state.images.some((image) => image.id === "sample"));
-  assert.deepEqual(fixture.sourceDeleteRequests.map((request) => request.path), ["/api/catalog/delete-source/prepare", "/api/catalog/delete-source/claim", "/api/catalog/delete-source"]);
+  await page.keyboard.press("Delete");
+  assert.deepEqual(await page.evaluate(() => ({ deleting: state.catalogMutation, imageIds: state.images.map((image) => image.id) })), { deleting: false, imageIds: ["sample", "sample-two"] });
+  assert.equal(fixture.sourceDeleteRequests.length, 0);
+  const [acknowledgment] = await Promise.all([
+    page.waitForResponse((response) => new URL(response.url()).pathname === "/api/catalog/delete-source/ack" && response.request().method() === "POST"),
+    page.keyboard.press("Control+D"),
+  ]);
+  assert.equal(acknowledgment.ok(), true);
+  await page.waitForFunction(() => !state.catalogMutation && !state.images.some((image) => image.id === "sample"));
+  assert.deepEqual(fixture.sourceDeleteRequests.map((request) => request.path), ["/api/catalog/delete-source/prepare", "/api/catalog/delete-source/claim", "/api/catalog/delete-source", "/api/catalog/delete-source/ack"]);
 });
 
 test("SD-116 duplicate remove shortcut does not dispatch two visible actions", { timeout: 60000 }, async () => {
