@@ -5,7 +5,7 @@ const path = require("node:path");
 const { assertNoSkippedUnittestTests } = require("./test-result-policy.cjs");
 const { frontendPerformanceTestFiles, frontendTestArguments, frontendTestFiles, selectedFrontendTestFiles } = require("./test-discovery.cjs");
 const { loadContracts, readManifest, validateAutomatedExecution } = require("./verification-contracts.cjs");
-const { controlEvidenceContract } = require("../tests/ui-control-manifest.cjs");
+const { frontendContracts } = require("./frontend-verification-contracts.cjs");
 
 const root = path.resolve(__dirname, "..");
 const DEFAULT_COMMAND_TIMEOUT_MS = 5 * 60 * 1000;
@@ -506,7 +506,7 @@ async function aggregateFrontendShards(temporaryRoot, artifacts, shardArtifacts,
   const mergeCoverage = dependencies.mergeCoverage || require("./coverage-js.cjs").mergeFrontendShardCoverage;
   await mergeCoverage(records.map((record) => record.directory), path.join(directory, "report"));
   if (!fs.existsSync(path.join(directory, "report", "coverage-final.json"))) throw new Error("aggregated frontend coverage JSON was not created");
-  const verifyContracts = dependencies.verifyContracts || ((manifests) => validateAutomatedExecution(loadContracts(), { languages: ["node"], nodeManifests: manifests }));
+  const verifyContracts = dependencies.verifyContracts || ((manifests) => validateAutomatedExecution(frontendContracts(), { languages: ["node"], nodeManifests: manifests }));
   const nodeManifests = [...records.map((record) => record.nodeManifest), performance.nodeManifest];
   verifyContracts(nodeManifests);
   const count = nodeManifests.reduce((total, manifest) => total + manifest.tests.length, 0);
@@ -523,7 +523,7 @@ function performanceEnvironment(source = process.env) {
 
 async function runFrontend(temporaryRoot, artifacts, dependencies = {}) {
   const run = dependencies.requiredCommand || requiredCommand;
-  const verifyContracts = dependencies.verifyContracts || ((manifestPaths) => validateAutomatedExecution([...loadContracts(), controlEvidenceContract()], { languages: ["node"], nodeManifests: manifestPaths.map(readManifest) }));
+  const verifyContracts = dependencies.verifyContracts || ((manifestPaths) => validateAutomatedExecution(frontendContracts(), { languages: ["node"], nodeManifests: manifestPaths.map(readManifest) }));
   const directory = artifactDirectory(temporaryRoot, artifacts, "frontend");
   const coverageManifest = path.join(directory, "frontend-node-manifest.json");
   const performanceManifest = path.join(directory, "frontend-performance-manifest.json");

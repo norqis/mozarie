@@ -140,16 +140,12 @@ async function mergeFrontendShardCoverage(shardDirectories, reportDirectory, dep
   const verify = dependencies.verifyCoverage || verifyCoverage;
   const write = dependencies.writeCoverageReports || writeCoverageReports;
   const combined = createCoverageMap({});
-  let browserInputs = 0;
   for (const directory of shardDirectories) {
     combined.merge(createCoverageMap(readJson(path.join(directory, "node", "coverage-final.json"), "frontend shard Node coverage")));
     const browserFile = path.join(directory, "browser-v8.json");
-    if (fs.existsSync(browserFile)) {
-      combined.merge(await convertBrowser(readJson(browserFile, "frontend shard browser coverage")));
-      browserInputs += 1;
-    }
+    if (!fs.existsSync(browserFile)) throw new Error(`frontend shard browser coverage is missing (${browserFile})`);
+    combined.merge(await convertBrowser(readJson(browserFile, "frontend shard browser coverage")));
   }
-  if (!browserInputs) throw new Error("frontend shard coverage has no browser V8 input");
   verify(combined);
   write(combined, reportDirectory);
   return combined;

@@ -5,8 +5,8 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const { frontendPerformanceTestFiles, frontendTestArguments, frontendTestFiles } = require("./test-discovery.cjs");
-const { loadContracts, readManifest, validateAutomatedExecution } = require("./verification-contracts.cjs");
-const { controlEvidenceContract } = require("../tests/ui-control-manifest.cjs");
+const { readManifest, validateAutomatedExecution } = require("./verification-contracts.cjs");
+const { frontendContracts } = require("./frontend-verification-contracts.cjs");
 
 const root = path.resolve(__dirname, "..");
 function run(files = frontendTestFiles(), environment = process.env) {
@@ -25,7 +25,7 @@ if (require.main === module) {
     const performanceManifest = path.join(directory, "frontend-performance-manifest.json");
     run(frontendTestFiles(), { ...process.env, MOZARIE_NODE_TEST_MANIFEST: coverageManifest });
     if (!process.exitCode) run(frontendPerformanceTestFiles(), { ...process.env, MOZARIE_NODE_TEST_MANIFEST: performanceManifest });
-    if (!process.exitCode) validateAutomatedExecution([...loadContracts(), controlEvidenceContract()], {
+    if (!process.exitCode) validateAutomatedExecution(frontendContracts(), {
       languages: ["node"],
       nodeManifests: [readManifest(coverageManifest), readManifest(performanceManifest)],
     });
