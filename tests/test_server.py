@@ -1374,7 +1374,7 @@ class MozarieTests(unittest.TestCase):
         preview["models"]["target_segmentation"] = "unsaved.onnx"
         status = {"models": {"target_segmentation": {"valid": False, "reasonCode": "missing"}}}
         with patch.object(state.settings_store, "validate_update", return_value=preview) as validate, \
-             patch.object(state.settings_store, "save") as save, \
+             patch.object(state.settings_store, "save_validated") as save, \
              patch.object(state, "settings_status", return_value=status) as settings_status:
             self.assertEqual(state.preview_settings_status(preview), status)
         validate.assert_called_once_with(preview)
@@ -1455,7 +1455,7 @@ class MozarieTests(unittest.TestCase):
                 update["models"].update({"provider": "gpu", "gpu_device": gpu_device})
                 with patch.object(state_module, "onnx_execution_status", return_value=("cuda", True)), \
                      patch.object(state_module, "torch_module", return_value=types.SimpleNamespace(cuda=cuda)), \
-                     patch.object(state.settings_store, "save") as save, \
+                     patch.object(state.settings_store, "save_validated") as save, \
                      self.assertRaisesRegex(ClientError, "選択したGPU") as raised:
                     state.update_settings(update)
                 self.assertEqual(raised.exception.error_code, "gpu_unsupported")
@@ -1465,7 +1465,7 @@ class MozarieTests(unittest.TestCase):
         update["models"].update({"provider": "gpu", "gpu_device": 0})
         with patch.object(state_module, "onnx_execution_status", return_value=("cuda", True)), \
              patch.object(state_module, "torch_module", return_value=types.SimpleNamespace(cuda=cuda)), \
-             patch.object(state.settings_store, "save", return_value=update) as save:
+             patch.object(state.settings_store, "save_validated", return_value=update) as save:
             state.update_settings(update)
         save.assert_called_once_with(update)
 
@@ -1473,7 +1473,7 @@ class MozarieTests(unittest.TestCase):
         unchanged_invalid["models"].update({"provider": "gpu", "gpu_device": 1})
         state.settings = unchanged_invalid
         with patch.object(state, "_require_supported_gpu", side_effect=AssertionError("unchanged GPU must not be probed")) as probe, \
-             patch.object(state.settings_store, "save", return_value=unchanged_invalid) as save:
+             patch.object(state.settings_store, "save_validated", return_value=unchanged_invalid) as save:
             state.update_settings(unchanged_invalid)
         probe.assert_not_called()
         save.assert_called_once_with(unchanged_invalid)
@@ -4169,7 +4169,7 @@ class MozarieTests(unittest.TestCase):
         predictor = object()
         state.sam_predictor = predictor
         state.sam_image_id = "image"
-        with patch.object(state, "_require_supported_gpu"), patch.object(state.settings_store, "save", return_value=next_settings):
+        with patch.object(state, "_require_supported_gpu"), patch.object(state.settings_store, "save_validated", return_value=next_settings):
             state.update_settings(next_settings)
         self.assertIsNone(state.models)
         self.assertIs(state.sam_predictor, predictor)
@@ -4201,34 +4201,20 @@ class MozarieTests(unittest.TestCase):
         self.assertEqual(reopened.settings, saved)
         self.assertEqual(reopened._active_detection_default_padding, 9)
 
-    def test_settings_only_probe_a_changed_output_directory_and_saves_general_settings(self):
+    def test_settings_save_validates_once_without_probing_output_directory(self):
         state = self.new_state()
-        unchanged = copy.deepcopy(state.settings)
-        with patch.object(state, "_require_supported_gpu"), patch.object(state_module, "validate_output_directory_ready") as ready, \
-             patch.object(state.settings_store, "save", return_value=unchanged) as save:
-            state.update_settings(unchanged)
-        ready.assert_not_called()
-        save.assert_called_once_with(unchanged)
-
-        changed = copy.deepcopy(state.settings)
-        changed["general"]["language"] = "en" if changed["general"]["language"] == "ja" else "ja"
-        with patch.object(state, "_require_supported_gpu"), patch.object(state_module, "validate_output_directory_ready") as ready, \
-             patch.object(state.settings_store, "save", return_value=changed) as save:
-            state.update_settings(changed)
-        ready.assert_not_called()
-        save.assert_called_once_with(changed)
-
-        with tempfile.TemporaryDirectory() as directory:
-            changed_output = copy.deepcopy(state.settings)
-            changed_output["saving"]["default_output_directory"] = directory
-            expected_output = copy.deepcopy(changed_output)
-            canonical = str(Path(directory).resolve())
-            expected_output["saving"]["default_output_directory"] = canonical
-            with patch.object(state, "_require_supported_gpu"), patch.object(state_module, "validate_output_directory_ready") as ready, \
-                 patch.object(state.settings_store, "save", return_value=expected_output) as save:
-                state.update_settings(changed_output)
-        ready.assert_called_once_with(canonical)
-        save.assert_called_once_with(expected_output)
+        output = self.app_dir / "not-created"
+        update = {"general": {"language": "en"}, "saving": {"default_output_directory": str(output)}}
+        with patch.object(state.settings_store, "validate_update", wraps=state.settings_store.validate_update) as validate, \
+             patch.object(tempfile, "NamedTemporaryFile", wraps=tempfile.NamedTemporaryFile) as temporary:
+            saved = state.update_settings(update)
+        validate.assert_called_once_with(update)
+        self.assertEqual(temporary.call_count, 1, "only the atomic settings write creates a temporary file")
+        self.assertEqual(temporary.call_args.kwargs["dir"], state.settings_store.local_path.parent)
+        self.assertEqual(saved["saving"]["default_output_directory"], str(output))
+        self.assertEqual(saved["general"]["language"], "en")
+        self.assertEqual(state.settings_store.load(), saved)
+        self.assertFalse(output.exists())
 
     def test_output_directory_only_update_does_not_probe_an_unchanged_gpu(self):
         state = self.new_state()
@@ -4239,28 +4225,15 @@ class MozarieTests(unittest.TestCase):
         self.assertEqual(settings["saving"]["default_output_directory"], output)
         probe.assert_not_called()
 
-    def test_output_validation_uses_its_dedicated_user_error_and_does_not_save(self):
+    def test_settings_reset_removes_override_without_probing_output_directory(self):
         state = self.new_state()
-        changed = copy.deepcopy(state.settings)
-        changed["saving"]["default_output_directory"] = r"C:\\unavailable"
-        with patch.object(state_module, "validate_output_directory_ready", side_effect=OSError("denied")), \
-             patch.object(state.settings_store, "save") as save:
-            with self.assertRaises(ClientError) as raised:
-                state.update_settings(changed)
-        self.assertEqual(raised.exception.error_code, "output_folder_unavailable")
-        save.assert_not_called()
-
-    def test_failed_reset_output_validation_keeps_the_existing_machine_override(self):
-        state = self.new_state()
-        before = copy.deepcopy(state.settings)
-        with patch.object(state.settings_store, "default_settings", return_value=copy.deepcopy(before)), \
-             patch.object(state_module, "validate_output_directory_ready", side_effect=OSError("denied")), \
-             patch.object(state.settings_store, "reset") as reset:
-            with self.assertRaises(ClientError) as raised:
-                state.reset_settings()
-        self.assertEqual(raised.exception.error_code, "output_folder_unavailable")
-        reset.assert_not_called()
-        self.assertEqual(state.settings, before)
+        state.update_settings({"general": {"language": "en"}})
+        with patch.object(tempfile, "NamedTemporaryFile", wraps=tempfile.NamedTemporaryFile) as temporary:
+            settings = state.reset_settings()
+        temporary.assert_not_called()
+        self.assertFalse(state.settings_store.local_path.exists())
+        self.assertEqual(settings, state.settings_store.default_settings())
+        self.assertEqual(state.settings, settings)
 
     def test_hand_segmentation_setting_keeps_onnx_sessions(self):
         state = self.new_state()
@@ -4269,7 +4242,7 @@ class MozarieTests(unittest.TestCase):
         next_settings["models"]["hand_segmentation_enabled"] = True
         models = object()
         state.models = models
-        with patch.object(state, "_require_supported_gpu"), patch.object(state.settings_store, "save", return_value=next_settings):
+        with patch.object(state, "_require_supported_gpu"), patch.object(state.settings_store, "save_validated", return_value=next_settings):
             state.update_settings(next_settings)
         self.assertIs(state.models, models)
 
@@ -4279,7 +4252,7 @@ class MozarieTests(unittest.TestCase):
         state.sam_predictor = sam; state.hand_segmentation_predictor = handseg
         next_settings = copy.deepcopy(state.settings)
         next_settings["models"]["target_segmentation"] = str(self.app_dir / "another.onnx")
-        with patch.object(state, "_require_supported_gpu"), patch.object(state.settings_store, "save", return_value=next_settings), \
+        with patch.object(state, "_require_supported_gpu"), patch.object(state.settings_store, "save_validated", return_value=next_settings), \
              patch.object(state, "_release_gpu_cache") as release:
             state.update_settings(next_settings)
         self.assertIsNone(state.models)
@@ -4295,7 +4268,7 @@ class MozarieTests(unittest.TestCase):
         state.models = models
         state.sam_predictor = object()
         state.sam_image_id = "image"
-        with patch.object(state, "_require_supported_gpu"), patch.object(state.settings_store, "save", return_value=next_settings):
+        with patch.object(state, "_require_supported_gpu"), patch.object(state.settings_store, "save_validated", return_value=next_settings):
             state.update_settings(next_settings)
         self.assertIs(state.models, models)
         self.assertIsNone(state.sam_predictor)

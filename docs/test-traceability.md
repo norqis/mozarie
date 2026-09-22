@@ -63,7 +63,7 @@ node --test tests/test_verification_contracts.cjs
 
 ## 設定・ブラウザー取り込みの回帰境界
 
-`tests/test_settings_import_regressions.py` と `tests/test_import_drop_contract.cjs` は、SD-011・013・018・149、WS-012・013・137へ対応する。消えた既定保存先を保った設定保存、変更先の検証、初期化、実保存時の拒否、File/handle両経路、端数ミリ秒、失敗後の再取り込みを検証する。実HTTP・SQLiteとChromiumを接続した試験で、設定保存・色許容範囲・全画像検出の要求・ファイル選択・ドロップ・パス入力を操作する。推論要求だけはGPU境界で応答を代替し、設定と取り込みのHTTPは代替しない。
+`tests/test_settings_import_regressions.py` と `tests/test_import_drop_contract.cjs` は、SD-011・013・018・149、WS-012・013・137へ対応する。消えた既定保存先と新しい未作成の絶対パスを保った設定保存、相対パス・NULの拒否、初期化、実保存時の拒否、File/handle両経路、端数ミリ秒、失敗後の再取り込みを検証する。実HTTP・SQLiteとChromiumを接続した試験で、設定保存・色許容範囲・全画像検出の要求・ファイル選択・ドロップ・パス入力を操作する。推論要求だけはGPU境界で応答を代替し、設定と取り込みのHTTPは代替しない。
 
 画像ごとの取り込み応答は一覧世代だけを読み、一覧全体は最後の要求で一度取得する。32枚のHTTP試験で全画像の識別情報・mtimeと世代を確認し、画像ごとに一覧全体を作成しないことを固定する。256枚の小PNG・逐次HTTP・通常のSQLite同期によるローカル計測では、旧処理を再現した比較が8.481秒・一覧作成257回、新処理が7.022秒・1回だった。これは当該fixtureの測定値であり、大画像や実ドライブ全般の所要を保証しない。
 個別の検出設定は、保存・取消し・保存失敗・再読込後の実行値と一括設定の保持を実ブラウザーで確認します。モデル準備の表示は実HTTP・ジョブ処理とCPUのモデル境界fixtureを通し、準備、一時停止、再開、推論、追加モデル準備、完了、失敗、取消しを確認します。表示契約に実GPUや利用者の画像は必要ありません。
@@ -72,3 +72,5 @@ node --test tests/test_verification_contracts.cjs
 元画像の変更検知・同寸法の受け入れ・範囲の拡縮・クリア・PJへの移行でも、確認済み／未確認の両方を維持する。WS-027 のPython契約で再起動と全履歴のUndo/Redoまで確認する。
 
 一般設定の検証・保存は、検出ダイアログの取消し後も保存済みの対象を使うことを確認します。
+
+設定保存・初期化では保存先の存在や書込み可否を検査しない。`test_settings_save_validates_once_without_probing_output_directory` は更新の検証が一度で、既存の原子的書込みだけが一時ファイルを作ることを確認する。`test_settings_reset_removes_override_without_probing_output_directory` は初期化時に保存先への試し書きを行わないことを確認する。実保存とフォルダー選択時の検証は維持する。

@@ -154,7 +154,8 @@
       "status": "automated",
       "testIds": [
         "node:tests/test_settings_dialog_e2e.cjs::SD-013 resetting settings replaces edited controls with returned defaults",
-        "python:tests.test_settings_import_regressions.SettingsImportRegressionTests.test_reset_restores_builtin_output_after_previous_output_disappears"
+        "python:tests.test_settings_import_regressions.SettingsImportRegressionTests.test_reset_restores_builtin_output_after_previous_output_disappears",
+        "python:tests.test_server.MozarieTests.test_settings_reset_removes_override_without_probing_output_directory"
       ]
     },
     {
@@ -2379,12 +2380,14 @@
       "sourceIds": [
         "SD-149"
       ],
-      "observation": "保存先だけの変更ではGPUの診断やモデル読込を始めず、実在する絶対パスだけを保存する",
+      "observation": "保存先は絶対パスの形式を検証して保存し、未作成の場所でも設定を保持する。GPU診断や保存先への書込み試験を始めない",
       "status": "automated",
       "testIds": [
         "python:tests.test_server.MozarieTests.test_output_directory_only_update_does_not_probe_an_unchanged_gpu",
-        "python:tests.test_settings_import_regressions.SettingsImportRegressionTests.test_new_unavailable_or_invalid_output_is_rejected_without_mutating_settings",
-        "python:tests.test_settings_import_regressions.SettingsImportRegressionTests.test_copy_save_still_rejects_the_missing_output_and_preserves_the_source"
+        "python:tests.test_settings_import_regressions.SettingsImportRegressionTests.test_invalid_output_syntax_is_rejected_without_mutating_settings",
+        "python:tests.test_settings_import_regressions.SettingsImportRegressionTests.test_copy_save_still_rejects_the_missing_output_and_preserves_the_source",
+        "python:tests.test_settings_import_regressions.SettingsImportRegressionTests.test_new_missing_absolute_output_is_saved_with_other_settings",
+        "python:tests.test_server.MozarieTests.test_settings_save_validates_once_without_probing_output_directory"
       ]
     },
     {

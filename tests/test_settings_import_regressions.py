@@ -92,14 +92,26 @@ class SettingsImportRegressionTests(unittest.TestCase):
         self.assertEqual(reloaded["saving"]["parallelism"], 11)
         self.assertFalse(self.output.exists())
 
-    def test_new_unavailable_or_invalid_output_is_rejected_without_mutating_settings(self) -> None:
+    def test_new_missing_absolute_output_is_saved_with_other_settings(self) -> None:
+        output = self.root / "not-created" / "later-output"
+        status, payload = self.request("/api/settings?status=0", {
+            "saving": {"default_output_directory": str(output)},
+            "editing": {"fill_color_tolerance": 99}, "importing": {"parallelism": 7},
+        })
+        self.assertEqual(status, 200, payload)
+        self.assertEqual(payload["settings"]["saving"]["default_output_directory"], str(output))
+        self.assertEqual(payload["settings"]["editing"]["fill_color_tolerance"], 99)
+        self.assertEqual(payload["settings"]["importing"]["parallelism"], 7)
+        self.assertEqual(self.state.settings_store.load(), payload["settings"])
+        self.assertFalse(output.parent.exists())
+
+    def test_invalid_output_syntax_is_rejected_without_mutating_settings(self) -> None:
         before = copy.deepcopy(self.state.settings)
         raw_before = self.state.settings_store.local_path.read_bytes()
-        for value, code in [(str(self.root / "other-missing"), "output_folder_unavailable"),
-                            ("relative-output", "invalid_settings"), ("bad\0path", "invalid_settings")]:
+        for value in ("relative-output", "bad\0path"):
             with self.subTest(value=value), self.assertRaises(ClientError) as error:
                 self.state.update_settings({"editing": {"fill_color_tolerance": 99}, "saving": {"default_output_directory": value}})
-            self.assertEqual(error.exception.error_code, code)
+            self.assertEqual(error.exception.error_code, "invalid_settings")
             self.assertEqual(self.state.settings, before)
             self.assertEqual(self.state.settings_store.local_path.read_bytes(), raw_before)
 
