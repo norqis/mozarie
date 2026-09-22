@@ -25,7 +25,8 @@ class LiveDetectionProgressBrowserTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             app = root / "app"
-            shutil.copytree(repository / "config", app / "config")
+            (app / "config").mkdir(parents=True)
+            shutil.copy2(repository / "config" / "defaults.json", app / "config" / "defaults.json")
             source = root / "source"
             source.mkdir()
             Image.new("RGB", (16, 12), "white").save(source / "progress.png")
