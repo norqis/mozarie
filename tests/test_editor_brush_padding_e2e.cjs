@@ -42,6 +42,7 @@ async function snapshot(page) {
   return page.evaluate(() => ({
     mask: [...combinedCtx.getImageData(0, 0, 128, 96).data],
     preview: [...mosaicCtx.getImageData(0, 0, 128, 96).data],
+    layers: [addCanvas, exclusionCanvas, exclusionEraseCanvas].map((layer) => layer.toDataURL()),
   }));
 }
 
@@ -62,6 +63,7 @@ test("brush boundaries survive candidate padding preview transitions", { timeout
       await page.mouse.move(points[1].x, points[1].y, { steps: 3 }); await page.mouse.up();
       await page.waitForFunction(() => !state.mosaicWorkerBusy && !state.mosaicPreviewRequested);
       const after = await snapshot(page);
+      assert.notEqual(after.layers[tool === "eraser" ? 1 : tool === "exclude_eraser" ? 2 : 0], before.layers[tool === "eraser" ? 1 : tool === "exclude_eraser" ? 2 : 0], "the actual pointer drag modifies its intended manual layer");
       for (let y = 0; y < 96; y += 1) for (let x = 0; x < 128; x += 1) {
         if (Math.hypot(x + .5 - Math.max(startX, Math.min(startX + 5, x + .5)), y + .5 - 65) <= 6) continue;
         const i = (y * 128 + x) * 4;
@@ -72,6 +74,10 @@ test("brush boundaries survive candidate padding preview transitions", { timeout
       assert.ok(savedMask.every((value, index) => value === after.mask[index]), "the saved mask uses the corrected circle boundary");
       await page.evaluate(async () => { await restoreSnapshot(0); flushMaskComposition(); await flushWorkspaceDraft(state.currentId); });
       assert.ok((await snapshot(page)).mask.every((value, index) => value === before.mask[index]), "undo restores the original mask including the distant candidate");
+      await page.evaluate((x) => { beginManualStroke({ x, y: 65 }); appendManualStrokePoint({ x: x + 5, y: 65 }); paintPendingManualStroke(); cancelManualStroke(); flushMaskComposition(); }, startX);
+      const cancelled = await snapshot(page);
+      assert.deepEqual(cancelled.layers, before.layers, "cancelling a new stroke restores all manual layers");
+      assert.ok(cancelled.mask.every((value, index) => value === before.mask[index]), "stroke cancellation preserves distant candidate and fluid contours");
       await page.unroute("**/api/mask/sample/synthetic?*");
     });
 
