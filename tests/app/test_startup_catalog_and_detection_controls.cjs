@@ -10,7 +10,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const vm = require("node:vm");
 
-const jsRoot = path.join(__dirname, "..", "static", "js");
+const jsRoot = path.join(__dirname, "..", "..", "static", "js");
 
 class Element {
   constructor(id = "") {

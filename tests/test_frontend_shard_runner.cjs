@@ -52,15 +52,16 @@ test("frontend shard manifests reject missing, duplicate, failed, skipped, and m
   ], 2, discovered), /unexpected test set/);
 });
 
-test("frontend performance manifest requires the one discovered performance file and passing results", () => {
-  const file = "tests/test_gallery_performance_e2e.cjs";
+test("frontend performance manifest requires every discovered performance file and passing results", () => {
+  const files = frontendPerformanceTestFiles();
   const valid = {
-    manifest: { schema: 1, kind: "performance", discovered: [file], selected: [file], status: "passed" },
-    nodeManifest: { schema: 1, tests: [{ id: `node:${file}::<file>`, status: "pass" }] },
+    manifest: { schema: 1, kind: "performance", discovered: files, selected: files, status: "passed" },
+    nodeManifest: { schema: 1, tests: files.map((file) => ({ id: `node:${file}::<file>`, status: "pass" })) },
   };
-  assert.equal(runner.validateFrontendPerformanceRecord(valid, [file]), valid);
-  assert.throws(() => runner.validateFrontendPerformanceRecord({ ...valid, manifest: { ...valid.manifest, status: "failed" } }, [file]), /did not pass/);
-  assert.throws(() => runner.validateFrontendPerformanceRecord({ ...valid, manifest: { ...valid.manifest, selected: [] } }, [file]), /unexpected test set/);
+  assert.equal(runner.validateFrontendPerformanceRecord(valid, files), valid);
+  assert.throws(() => runner.validateFrontendPerformanceRecord({ ...valid, manifest: { ...valid.manifest, status: "failed" } }, files), /did not pass/);
+  assert.throws(() => runner.validateFrontendPerformanceRecord({ ...valid, manifest: { ...valid.manifest, selected: [] } }, files), /unexpected test set/);
+  assert.throws(() => runner.validateFrontendPerformanceRecord({ ...valid, nodeManifest: { schema: 1, tests: valid.nodeManifest.tests.slice(0, 1) } }, files), /did not execute selected file/);
 });
 
 test("frontend aggregate enforces the control-evidence contract", async () => {

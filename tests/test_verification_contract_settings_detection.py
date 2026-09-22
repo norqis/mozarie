@@ -27,21 +27,23 @@ class SettingsDetectionVerificationContractTests(unittest.TestCase):
 
         python_ids: set[str] = set()
         node_ids: set[str] = set()
-        for path in (ROOT / "tests").glob("test_*.py"):
+        for path in (ROOT / "tests").rglob("test_*.py"):
             tree = ast.parse(path.read_text(encoding="utf-8"))
+            module = ".".join(path.relative_to(ROOT).with_suffix("").parts)
             for class_node in (node for node in tree.body if isinstance(node, ast.ClassDef)):
                 for method in class_node.body:
                     if isinstance(method, (ast.FunctionDef, ast.AsyncFunctionDef)) and method.name.startswith("test_"):
-                        python_ids.add(f"python:tests.{path.stem}.{class_node.name}.{method.name}")
-        for path in (ROOT / "tests").glob("test_*.cjs"):
+                        python_ids.add(f"python:{module}.{class_node.name}.{method.name}")
+        for path in (ROOT / "tests").rglob("test_*.cjs"):
             source = path.read_text(encoding="utf-8")
+            relative_path = path.relative_to(ROOT).as_posix()
             for match in re.finditer(r"(?:nodeTest|test)\(\s*[\"']([^\"']+)[\"']", source):
-                node_ids.add(f"node:tests/{path.name}::{match.group(1)}")
+                node_ids.add(f"node:{relative_path}::{match.group(1)}")
             if path.name == "test_settings_actions_e2e.cjs":
                 for match in re.finditer(r'\["(SD-(?:07[6-9]|08[0-4]))",', source):
-                    node_ids.add(f"node:tests/{path.name}::{match.group(1)} shortcut performs the visible action only while its action switch is enabled")
+                    node_ids.add(f"node:{relative_path}::{match.group(1)} shortcut performs the visible action only while its action switch is enabled")
                 for match in re.finditer(r'\["(SD-09[0-5]|SD-089)",', source):
-                    node_ids.add(f"node:tests/{path.name}::{match.group(1)} confirmation setting gates the real confirmation dialog without changing its operation target")
+                    node_ids.add(f"node:{relative_path}::{match.group(1)} confirmation setting gates the real confirmation dialog without changing its operation target")
 
         for item in observations:
             self.assertTrue(item["observation"].strip())

@@ -320,10 +320,10 @@ class DataIntegrity051070Tests(unittest.TestCase):
         expected_path = self.root / "restart-projects.json"
         expected_path.write_text(json.dumps(list(before_restart.values()), ensure_ascii=False), encoding="utf-8")
         try:
-            helper = Path(__file__).with_name("data_integrity_project_restart_table_helper.cjs")
+            helper = Path(__file__).resolve().parents[1] / "project_restart_table_live_browser_helper.cjs"
             result = subprocess.run(
                 ["node", str(helper), f"http://127.0.0.1:{server.server_port}", str(expected_path)],
-                cwd=Path(__file__).resolve().parents[1], env={**os.environ, "PYTHONUTF8": "1"},
+                cwd=Path(__file__).resolve().parents[2], env={**os.environ, "PYTHONUTF8": "1"},
                 text=True, encoding="utf-8", errors="replace", capture_output=True, timeout=60, check=False,
             )
             self.assertEqual(result.returncode, 0, f"restart project table helper failed\nstdout:\n{result.stdout}\nstderr:\n{result.stderr}")
@@ -454,13 +454,13 @@ class DataIntegrity051070Tests(unittest.TestCase):
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         try:
-            helper = Path(__file__).with_name("data_integrity_051_070_live_browser_helper.cjs")
+            helper = Path(__file__).resolve().parents[1] / "source_state_live_browser_helper.cjs"
             result = subprocess.run(
                 [
                     "node", str(helper), f"http://127.0.0.1:{server.server_port}", active_id,
                     empty["id"], completed["id"], images["A.png"], images["B.png"], images["C.png"], images["D.png"],
                 ],
-                cwd=Path(__file__).resolve().parents[1],
+                cwd=Path(__file__).resolve().parents[2],
                 env={**os.environ, "PYTHONUTF8": "1"},
                 text=True,
                 encoding="utf-8",

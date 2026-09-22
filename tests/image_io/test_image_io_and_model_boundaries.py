@@ -14,7 +14,7 @@ from urllib.error import URLError
 import numpy as np
 from PIL import Image
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from mozarie import image_io
 from mozarie.core import ClientError, ImageRecord

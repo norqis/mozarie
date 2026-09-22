@@ -140,7 +140,8 @@ test("SD-088 a focused text field receives navigation keys without moving the cu
   const port = page.locator("#settingsPort"); await port.focus(); await page.keyboard.press("ArrowRight");
   assert.equal(await page.evaluate(() => state.currentId), "sample");
   await page.locator("#settingsCloseButton").click();
-  await page.waitForFunction(() => !document.querySelector("#settingsDialog").open && !currentImageActionPending());
+  await page.waitForFunction(() => !document.querySelector("#settingsDialog").open
+    && document.activeElement?.id === "settingsButton" && !currentImageActionPending());
   await page.locator("#editorCanvas").focus();
   assert.equal(await page.evaluate(() => document.activeElement?.id), "editorCanvas");
   await page.keyboard.press("ArrowRight");

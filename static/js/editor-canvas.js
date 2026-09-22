@@ -395,8 +395,10 @@ async function reconcileCurrentCandidates(imageId, generation) {
 }
 
 
-function canvasHasPixels(context, target) {
-  const pixels = context.getImageData(0, 0, target.width, target.height).data;
+function canvasHasPixels(context, target, roi = null) {
+  const pixels = roi
+    ? context.getImageData(roi.left, roi.top, roi.right - roi.left, roi.bottom - roi.top).data
+    : context.getImageData(0, 0, target.width, target.height).data;
   for (let index = 3; index < pixels.length; index += 4) if (pixels[index]) return true;
   return false;
 }
@@ -1022,11 +1024,16 @@ function maskStatusWithoutCandidate(candidateId) {
   return hasMask;
 }
 
-function refreshMaskStatus(renderGalleryAfter = false) {
+function refreshMaskStatus(renderGalleryAfter = false, additiveRoi = null) {
   if (!state.currentId || !state.currentImage) return;
   const record = currentRecord();
-  const previous = state.maskStatus.has(state.currentId) ? state.maskStatus.get(state.currentId) : Boolean(record && Number(record.enabledCandidateCount || 0) > 0);
-  const current = hasEffectiveMask();
+  const hadStatus = state.maskStatus.has(state.currentId);
+  const previous = hadStatus ? state.maskStatus.get(state.currentId) : Boolean(record && Number(record.enabledCandidateCount || 0) > 0);
+  // A brush can only add effective pixels.  With a known prior status, read
+  // only its composed dirty area when the image was previously empty.
+  const current = additiveRoi && hadStatus
+    ? (previous || (flushMaskComposition(), canvasHasPixels(combinedCtx, combinedCanvas, additiveRoi)))
+    : hasEffectiveMask();
   state.maskStatus.set(state.currentId, current);
   if (renderGalleryAfter && previous !== current) renderCatalogViews();
   else updateActionButtons();

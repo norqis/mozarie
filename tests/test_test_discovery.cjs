@@ -24,8 +24,8 @@ try {
 
 assert.strictEqual(frontend.frontendTestFiles, frontendTestFiles, "the ordinary frontend runner uses the shared discovery policy");
 assert.deepEqual(coverage.testFiles, frontend.frontendTestFiles(), "coverage runs exactly the frontend runner's deterministic test list");
-assert.deepEqual(frontendPerformanceTestFiles(), ["tests/test_gallery_performance_e2e.cjs"], "the 20k gallery test is discovered as the single non-coverage performance suite");
-assert.equal(frontendTestFiles().includes("tests/test_gallery_performance_e2e.cjs"), false, "coverage discovery excludes the uninstrumented performance suite");
+assert.deepEqual(frontendPerformanceTestFiles(), ["tests/test_gallery_performance_e2e.cjs", "tests/test_mosaic_drag_performance_e2e.cjs"], "gallery and 4K drag performance run together without coverage instrumentation");
+for (const file of frontendPerformanceTestFiles()) assert.equal(frontendTestFiles().includes(file), false, `${file} is excluded from coverage discovery`);
 assert.ok(browserCoverageTestFiles.length > 0, "browser coverage has an explicit producer inventory");
 for (const file of browserCoverageTestFiles) {
   assert.ok(frontendTestFiles().includes(file), `${file} is included in coverage discovery`);

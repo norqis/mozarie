@@ -18,7 +18,7 @@
       "observation": "現在画像名を表示し、対象を絞るプルダウンは出さない。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_gallery_save_coverage.cjs::gallery and save interactions > single and batch save modal preferences and controls",
+        "node:tests/gallery/test_gallery_and_save_runtime.cjs::gallery and save interactions > single and batch save modal preferences and controls",
         "node:tests/test_bulk_views_save_preferences_e2e.cjs::bulk displays and save preferences in Chromium"
       ]
     },
@@ -30,7 +30,7 @@
       "observation": "空欄を許可し、必須入力エラーを出さない。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_gallery_save_coverage.cjs::gallery and save interactions > single and batch save modal preferences and controls",
+        "node:tests/gallery/test_gallery_and_save_runtime.cjs::gallery and save interactions > single and batch save modal preferences and controls",
         "node:tests/test_bulk_views_save_preferences_e2e.cjs::bulk displays and save preferences in Chromium"
       ]
     },
@@ -42,7 +42,7 @@
       "observation": "末尾が空のまま残る。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_gallery_save_coverage.cjs::gallery and save interactions > single and batch save modal preferences and controls",
+        "node:tests/gallery/test_gallery_and_save_runtime.cjs::gallery and save interactions > single and batch save modal preferences and controls",
         "node:tests/test_bulk_views_save_preferences_e2e.cjs::bulk displays and save preferences in Chromium"
       ]
     },
@@ -54,7 +54,7 @@
       "observation": "単一の空末尾を一括へ流用せず、一括の既定末尾を表示する。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_gallery_save_coverage.cjs::gallery and save interactions > single and batch save modal preferences and controls",
+        "node:tests/gallery/test_gallery_and_save_runtime.cjs::gallery and save interactions > single and batch save modal preferences and controls",
         "node:tests/test_bulk_views_save_preferences_e2e.cjs::bulk displays and save preferences in Chromium"
       ]
     },
@@ -99,7 +99,7 @@
       "observation": "ファイルを出力せず編集画面へ戻る。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_gallery_save_coverage.cjs::gallery and save interactions > single and batch save modal preferences and controls",
+        "node:tests/gallery/test_gallery_and_save_runtime.cjs::gallery and save interactions > single and batch save modal preferences and controls",
         "node:tests/test_bulk_views_save_preferences_e2e.cjs::bulk displays and save preferences in Chromium"
       ]
     },
@@ -166,7 +166,7 @@
       "observation": "保存対象の選択と件数を表示する。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_gallery_save_coverage.cjs::gallery and save interactions > single and batch save modal preferences and controls",
+        "node:tests/gallery/test_gallery_and_save_runtime.cjs::gallery and save interactions > single and batch save modal preferences and controls",
         "node:tests/test_bulk_views_save_preferences_e2e.cjs::bulk displays and save preferences in Chromium"
       ]
     },
@@ -178,7 +178,7 @@
       "observation": "非表示を除く一覧全件を含み、以前保存した表示画像も含む。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_gallery_save_coverage.cjs::gallery and save interactions > batch save filters count and select the exact visible set"
+        "node:tests/gallery/test_gallery_and_save_runtime.cjs::gallery and save interactions > batch save filters count and select the exact visible set"
       ]
     },
     {
@@ -189,7 +189,7 @@
       "observation": "非表示を除くモザイクのある画像だけを数え、同じ対象を保存する。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_gallery_save_coverage.cjs::gallery and save interactions > batch save filters count and select the exact visible set"
+        "node:tests/gallery/test_gallery_and_save_runtime.cjs::gallery and save interactions > batch save filters count and select the exact visible set"
       ]
     },
     {
@@ -200,7 +200,7 @@
       "observation": "非表示を除く確認済み画像だけを数え、出力済みでも除外しない。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_gallery_save_coverage.cjs::gallery and save interactions > batch save filters count and select the exact visible set"
+        "node:tests/gallery/test_gallery_and_save_runtime.cjs::gallery and save interactions > batch save filters count and select the exact visible set"
       ]
     },
     {
@@ -211,7 +211,7 @@
       "observation": "非表示を除いた件数だけを表示・出力する。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_gallery_save_coverage.cjs::gallery and save interactions > batch save filters count and select the exact visible set"
+        "node:tests/gallery/test_gallery_and_save_runtime.cjs::gallery and save interactions > batch save filters count and select the exact visible set"
       ]
     },
     {
@@ -322,7 +322,7 @@
       "observation": "同じページの間は各モーダルの選択を保ち、JPGの強制OFFで利用者の保持選択を失わない。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_gallery_save_coverage.cjs::gallery and save interactions > PNG JPG PNG restores metadata preference and reload restores defaults"
+        "node:tests/gallery/test_gallery_and_save_runtime.cjs::gallery and save interactions > PNG JPG PNG restores metadata preference and reload restores defaults"
       ]
     },
     {
@@ -333,7 +333,7 @@
       "observation": "再読込後は既定値へ戻る。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_gallery_save_coverage.cjs::gallery and save interactions > PNG JPG PNG restores metadata preference and reload restores defaults"
+        "node:tests/gallery/test_gallery_and_save_runtime.cjs::gallery and save interactions > PNG JPG PNG restores metadata preference and reload restores defaults"
       ]
     },
     {
@@ -344,7 +344,7 @@
       "observation": "明示した一括対象だけは開くたびに反映する。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_gallery_save_coverage.cjs::gallery and save interactions > single and batch save modal preferences and controls"
+        "node:tests/gallery/test_gallery_and_save_runtime.cjs::gallery and save interactions > single and batch save modal preferences and controls"
       ]
     },
     {
@@ -596,7 +596,7 @@
       "observation": "元画像寸法のPNGで、除外を差し引いた範囲を出力する。",
       "status": "automated",
       "testIds": [
-        "python:tests.test_project_http_coverage.ProjectHttpCoverageTests.test_single_mosaic_mask_export_is_original_size_l_png_with_exclusion_subtracted"
+        "python:tests.http.test_project_http_endpoints.ProjectHttpCoverageTests.test_single_mosaic_mask_export_is_original_size_l_png_with_exclusion_subtracted"
       ]
     },
     {
@@ -607,7 +607,7 @@
       "observation": "非表示画像では開始できない。",
       "status": "automated",
       "testIds": [
-        "python:tests.test_project_http_coverage.ProjectHttpCoverageTests.test_project_mask_png_zip_and_cleanup"
+        "python:tests.http.test_project_http_endpoints.ProjectHttpCoverageTests.test_project_mask_png_zip_and_cleanup"
       ]
     },
     {
@@ -629,7 +629,7 @@
       "observation": "非表示画像では開始できない。",
       "status": "automated",
       "testIds": [
-        "python:tests.test_project_http_coverage.ProjectHttpCoverageTests.test_project_mask_png_zip_and_cleanup"
+        "python:tests.http.test_project_http_endpoints.ProjectHttpCoverageTests.test_project_mask_png_zip_and_cleanup"
       ]
     },
     {
@@ -651,7 +651,7 @@
       "observation": "そのPJの表示画像だけのモザイク範囲をZIPに含め、非表示画像のPNGを含めない。",
       "status": "automated",
       "testIds": [
-        "python:tests.test_project_http_coverage.ProjectHttpCoverageTests.test_project_mask_png_zip_and_cleanup"
+        "python:tests.http.test_project_http_endpoints.ProjectHttpCoverageTests.test_project_mask_png_zip_and_cleanup"
       ]
     },
     {
@@ -662,7 +662,7 @@
       "observation": "そのPJの表示画像だけの除外範囲をZIPに含め、非表示画像のPNGを含めない。",
       "status": "automated",
       "testIds": [
-        "python:tests.test_project_http_coverage.ProjectHttpCoverageTests.test_project_mask_png_zip_and_cleanup"
+        "python:tests.http.test_project_http_endpoints.ProjectHttpCoverageTests.test_project_mask_png_zip_and_cleanup"
       ]
     },
     {
@@ -685,7 +685,7 @@
       "status": "automated",
       "testIds": [
         "node:tests/test_project_ui_runtime.cjs::project dialogs, A-B-A switching, failed-open recovery, and duplicate transition guards > project mask exports preserve project state across empty read-only failure and retry cases",
-        "python:tests.test_project_http_coverage.ProjectHttpCoverageTests.test_project_mask_png_zip_and_cleanup"
+        "python:tests.http.test_project_http_endpoints.ProjectHttpCoverageTests.test_project_mask_png_zip_and_cleanup"
       ]
     },
     {
@@ -939,7 +939,7 @@
       "status": "automated",
       "testIds": [
         "python:tests.test_server.MozarieTests.test_terminal_gpu_release_allows_detection_models_to_reload",
-        "python:tests.test_jobs_saving_coverage.JobsSavingCoverageTests.test_job_thread_releases_gpu_once_after_every_terminal_worker_path"
+        "python:tests.jobs.test_job_control_and_saving.JobsSavingCoverageTests.test_job_thread_releases_gpu_once_after_every_terminal_worker_path"
       ]
     },
     {
@@ -951,7 +951,7 @@
       "status": "automated",
       "testIds": [
         "python:tests.test_server.MozarieTests.test_model_verification_occurs_once_for_a_loaded_model_set",
-        "python:tests.test_jobs_saving_coverage.JobsSavingCoverageTests.test_terminal_release_keeps_cpu_model_cache"
+        "python:tests.jobs.test_job_control_and_saving.JobsSavingCoverageTests.test_terminal_release_keeps_cpu_model_cache"
       ]
     },
     {
@@ -1217,7 +1217,7 @@
       "observation": "現在表示・切替中・`galleryFilteredImages()`上の実際の前後だけを保持・先読みする。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_gallery_save_coverage.cjs::gallery and save interactions > filtered navigation owns only actual neighbors and wrap destinations",
+        "node:tests/gallery/test_gallery_and_save_runtime.cjs::gallery and save interactions > filtered navigation owns only actual neighbors and wrap destinations",
         "node:tests/test_resources.cjs::resource ownership contracts > current pending filtered neighbors and hover are the only retained images"
       ]
     },
@@ -1229,7 +1229,7 @@
       "observation": "絞り込み外では既存の前へ末尾・次へ先頭の移動先だけを保持し、切替直後に旧フィルターのBitmapと要求を解放・取消する。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_gallery_save_coverage.cjs::gallery and save interactions > filtered navigation owns only actual neighbors and wrap destinations",
+        "node:tests/gallery/test_gallery_and_save_runtime.cjs::gallery and save interactions > filtered navigation owns only actual neighbors and wrap destinations",
         "node:tests/test_resources.cjs::resource ownership contracts > filter and hover changes close stale bitmaps and abort stale requests"
       ]
     },
@@ -1546,7 +1546,7 @@
       "observation": "応答待ちは保存先・選択ダイアログ・開始だけを抑止し、「保存後に一覧から削除」などの保存条件は変更できる。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_gallery_save_coverage.cjs::gallery and save interactions > single and batch save modal preferences and controls",
+        "node:tests/gallery/test_gallery_and_save_runtime.cjs::gallery and save interactions > single and batch save modal preferences and controls",
         "node:tests/test_bulk_views_save_preferences_e2e.cjs::bulk displays and save preferences in Chromium"
       ]
     },
@@ -1558,7 +1558,7 @@
       "observation": "応答後は保存を開始できる。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_gallery_save_coverage.cjs::gallery and save interactions > single and batch save modal preferences and controls",
+        "node:tests/gallery/test_gallery_and_save_runtime.cjs::gallery and save interactions > single and batch save modal preferences and controls",
         "node:tests/test_bulk_views_save_preferences_e2e.cjs::bulk displays and save preferences in Chromium"
       ]
     }

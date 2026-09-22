@@ -6,7 +6,7 @@ const path = require("node:path");
 const test = require("node:test");
 const vm = require("node:vm");
 const { chromium } = require("playwright");
-const { closeServer, startFixtureServer } = require("./test_import_picker_e2e.cjs");
+const { closeServer, startFixtureServer } = require("../test_import_picker_e2e.cjs");
 
 function bitmap(id) {
   return { id, closed: false, close() { assert.equal(this.closed, false, `${id} closes once`); this.closed = true; } };
@@ -36,7 +36,7 @@ test("candidate and project resource ownership releases every obsolete bitmap wh
     candidateCacheKey: (imageId, revision) => `${imageId}:${revision}`,
     galleryNavigationNeighbors: () => [], galleryFilteredImages: () => [],
   };
-  const source = fs.readFileSync(path.join(__dirname, "..", "static", "js", "resources.js"), "utf8");
+  const source = fs.readFileSync(path.join(__dirname, "..", "..", "static", "js", "resources.js"), "utf8");
   vm.runInNewContext(source, context, { filename: "resources.js" });
   vm.runInNewContext("globalThis.resourceTest = { syncResourceOwnership };", context);
 
@@ -262,5 +262,41 @@ test("repeated settings, project rows, and candidate padding lifecycles retain o
     assert.equal(projectRelease.empty, true, "closed project pixels cannot remain presented as the current image");
   } finally {
     await context?.close(); await browser.close(); fixture.server.closeAllConnections(); await closeServer(fixture.server);
+  }
+});
+
+test("repeated settings and project dialog lifecycles reuse their DOM instead of accumulating rows or controls", { timeout: 60000 }, async () => {
+  const fixture = await startFixtureServer();
+  const browser = await chromium.launch({ headless: true });
+  let context;
+  try {
+    context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+    const page = await context.newPage();
+    await page.goto(fixture.url, { waitUntil: "domcontentloaded" });
+    await page.waitForFunction(() => state.settings && state.images.length === 2);
+    const initialSettingsNodes = await page.locator("#settingsDialog *").count();
+    for (let index = 0; index < 12; index += 1) {
+      await page.locator("#settingsButton").click();
+      await page.waitForFunction(() => document.querySelector("#settingsDialog").open);
+      assert.equal(await page.locator("#settingsDialog *").count(), initialSettingsNodes, "each settings open reuses the same bounded form DOM");
+      await page.locator("#settingsCloseButton").click();
+      await page.waitForFunction(() => !document.querySelector("#settingsDialog").open);
+    }
+    assert.equal(await page.locator("#settingsDialog").count(), 1, "settings lifecycle retains exactly one dialog root");
+
+    for (let index = 0; index < 12; index += 1) {
+      await page.evaluate(() => showProjectList());
+      await page.waitForFunction(() => document.querySelector("#projectListDialog").open && document.querySelectorAll("#projectListBody tr").length > 0);
+      const rowIds = await page.locator("#projectListBody tr").evaluateAll((rows) => rows.map((row) => row.dataset.projectId));
+      assert.equal(new Set(rowIds).size, rowIds.length, "each project-manager open replaces its rows without retaining duplicates");
+      await page.locator("#projectListClose").click();
+      await page.waitForFunction(() => !document.querySelector("#projectListDialog").open);
+    }
+    assert.equal(await page.locator("#projectListDialog").count(), 1, "project manager lifecycle retains exactly one dialog root");
+  } finally {
+    await context?.close();
+    await browser.close();
+    fixture.server.closeAllConnections();
+    await closeServer(fixture.server);
   }
 });

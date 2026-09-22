@@ -53,17 +53,17 @@ class DataIntegrityVerificationContractTests(unittest.TestCase):
     def test_automated_test_ids_resolve_to_tests_executed_by_normal_discovery(self) -> None:
         python_ids: set[str] = set()
         node_ids: set[str] = set()
-        for path in (ROOT / "tests").glob("test_*.py"):
+        for path in (ROOT / "tests").rglob("test_*.py"):
             tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-            module = f"tests.{path.stem}"
+            module = ".".join(path.relative_to(ROOT).with_suffix("").parts)
             for class_node in (node for node in tree.body if isinstance(node, ast.ClassDef)):
                 for method in class_node.body:
                     if isinstance(method, (ast.FunctionDef, ast.AsyncFunctionDef)) and method.name.startswith("test_"):
                         python_ids.add(f"python:{module}.{class_node.name}.{method.name}")
-        for path in (ROOT / "tests").glob("test_*.cjs"):
+        for path in (ROOT / "tests").rglob("test_*.cjs"):
             source = path.read_text(encoding="utf-8")
             for match in re.finditer(r"(?m)^\s*(?:test|nodeTest)\(\s*([\"'])(.*?)\1", source):
-                node_ids.add(f"node:tests/{path.name}::{match.group(2)}")
+                node_ids.add(f"node:{path.relative_to(ROOT).as_posix()}::{match.group(2)}")
 
         referenced = {
             test_id

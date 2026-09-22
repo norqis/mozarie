@@ -626,7 +626,7 @@ class SettingsCoverageTests(unittest.TestCase):
             validate_output_directory_ready("relative")
 
     def test_validate_settings_reports_each_public_enum_and_model_type_error(self) -> None:
-        defaults = json.loads((Path(__file__).resolve().parents[1] / "config" / "defaults.json").read_text(encoding="utf-8"))
+        defaults = json.loads((Path(__file__).resolve().parents[2] / "config" / "defaults.json").read_text(encoding="utf-8"))
         cases = (
             (("general", "language"), "de", "language"),
             (("models", "sam_model_type"), "unknown", "sam_model_type"),

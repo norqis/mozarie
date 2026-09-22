@@ -3,7 +3,7 @@
 const assert = require("node:assert/strict");
 const test = require("node:test");
 const { chromium } = require("playwright");
-const { closeServer, startFixtureServer } = require("./test_import_picker_e2e.cjs");
+const { closeServer, startFixtureServer } = require("../test_import_picker_e2e.cjs");
 
 async function openCatalogue(browser, fixture, count) {
   const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
@@ -407,7 +407,27 @@ test("DI-103 DI-104 and DI-125 source cleanup removes only authoritatively absen
     });
     await page.reload({ waitUntil: "domcontentloaded" });
     await page.waitForFunction(() => state.settings && state.images.length === 2);
-    await page.waitForFunction(async () => (await rememberedProjectSources("boot-gone")).directories.length === 0);
+    await page.waitForFunction(async () => {
+      const db = await directoryCatalogStore();
+      if (!db) return false;
+      try {
+        return await new Promise((resolve, reject) => {
+          const transaction = db.transaction(["projectSources", "directories"]);
+          const sourceRequest = transaction.objectStore("projectSources").index("projectId").getAll(IDBKeyRange.only("boot-gone"));
+          const cleanupRequest = transaction.objectStore("directories").get(PROJECT_SOURCE_CLEANUP_KEY);
+          sourceRequest.onerror = () => reject(sourceRequest.error);
+          cleanupRequest.onerror = () => reject(cleanupRequest.error);
+          transaction.onerror = () => reject(transaction.error);
+          transaction.onabort = () => reject(transaction.error);
+          transaction.oncomplete = () => {
+            const cleanup = cleanupRequest.result || {};
+            const intents = cleanup.intents || (cleanup.projectIds || []).map((projectId) => ({ projectId }));
+            resolve(sourceRequest.result.length === 0 && !intents.some((intent) => intent.projectId === "boot-gone"));
+          };
+        });
+      } catch { return false; }
+      finally { db.close(); }
+    });
     assert.deepEqual(await page.evaluate(async () => rememberedProjectSources("boot-gone")), { files: [], directories: [] },
       "the next application startup removes handles for a project absent from the authoritative project list");
     const imageRestart = await page.evaluate(async () => {

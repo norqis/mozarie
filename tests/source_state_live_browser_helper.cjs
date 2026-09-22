@@ -1,6 +1,6 @@
 "use strict";
 
-// Owned by test_data_integrity_051_070.py so every request crosses the real
+// Owned by data_integrity/test_source_state_and_project_restart.py so every request crosses the real
 // HTTP server, filesystem catalogue, and SQLite workspace.
 const assert = require("node:assert/strict");
 const { chromium } = require("playwright");

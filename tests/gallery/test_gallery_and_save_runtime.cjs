@@ -4,7 +4,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const vm = require("node:vm");
 
-const jsRoot = path.join(__dirname, "..", "static", "js");
+const jsRoot = path.join(__dirname, "..", "..", "static", "js");
 const imageDisplayPathSource = fs.readFileSync(path.join(jsRoot, "core.js"), "utf8").match(/function imageDisplayPath\(image\) \{[\s\S]*?\n\}/)?.[0];
 
 function sourceBlob(name, size, lastModified) {

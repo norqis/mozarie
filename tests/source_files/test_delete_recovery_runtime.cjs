@@ -5,7 +5,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const test = require("node:test");
 
-const source = fs.readFileSync(path.join(__dirname, "..", "static", "js", "interaction.js"), "utf8");
+const source = fs.readFileSync(path.join(__dirname, "..", "..", "static", "js", "interaction.js"), "utf8");
 
 function range(first, after) {
   const start = source.indexOf(first);

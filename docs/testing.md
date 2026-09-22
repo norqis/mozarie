@@ -26,7 +26,7 @@ AIには対象の利用者観測を一つずつ示し、初期状態、操作、
 
 固定時間の待機、`skip`、`TODO`、文字列が含まれるだけの確認は作らない。ブラウザーでは locator、応答、状態遷移を待ち、fixtureは専用の一時状態で閉じる。追加したテストは、対象の変更を意図的に壊したときに失敗することを確認し、人が差分を読んでから採用する。coverageの数字を上げる目的でテストを増やさない。
 
-`tests/` 配下の `test_*.cjs` は再帰的に同じ順序で通常実行とcoverageへ渡す。`test_gallery_performance_e2e.cjs`だけはcoverageから外し、`test-quiet` の `frontend` と `all` がcoverage成功後に非instrumentedで1回実行する。Nodeの構造化テスト結果でSKIP/TODOが一件でも報告された実行は失敗にする。Windows専用のPython試験はWindows CIで実行するため、backendもskip 0件を要求する。
+`tests/` 配下の `test_*.cjs` は再帰的に同じ順序で通常実行とcoverageへ渡す。`test_gallery_performance_e2e.cjs` と `test_mosaic_drag_performance_e2e.cjs` はcoverageから外し、`test-quiet` の `frontend` と `all` がcoverage成功後に非instrumentedで1回実行する。Nodeの構造化テスト結果でSKIP/TODOが一件でも報告された実行は失敗にする。Windows専用のPython試験はWindows CIで実行するため、backendもskip 0件を要求する。
 
 Pythonの自動テストは製品の`.venv`を参照・変更しない。リポジトリ直下に`.venv-test`を作成し、`requirements-test.txt`だけを入れて`node scripts/test-quiet.cjs`を実行する。別の隔離環境を使う場合は`MOZARIE_TEST_PYTHON`へそのPython実行ファイルを指定する。製品`.venv`配下は指定できない。
 
@@ -54,11 +54,11 @@ Pythonの自動テストは製品の`.venv`を参照・変更しない。リポ�
 
 ## CIとcoverage
 
-CIは隔離fixtureで実行できるテストを常に実行する。frontend jobはcoverageを完了してから、非instrumentedの20,000件カタログ性能試験を1回実行する。Playwrightは利用者に見える画面と隔離した`BrowserContext`を使い、固定待機ではなくlocatorや応答などのweb-first条件で待つ。coverageは全対象のレポートを毎回生成し、未検証の境界を見つける補助にする。100%などの数値を合否条件にせず、損失・破損・権限・復旧の重要経路を人が確認する。数値達成のためのテスト、内部実装を固定するテスト、skipによる見かけの成功を作らない。実行時間やメモリが増える回帰は、小さいfixtureで件数に比例しないことを確認する。
+CIは隔離fixtureで実行できるテストを常に実行する。frontend jobはcoverageを完了してから、非instrumentedの20,000件カタログと4Kブラシ操作の性能試験を各1回実行する。ブラシ試験は入力イベントから実際のプレビュー描画までの時間をブラウザー内で測り、著しい遅延の回帰を検出する。Playwrightは利用者に見える画面と隔離した`BrowserContext`を使い、固定待機ではなくlocatorや応答などのweb-first条件で待つ。coverageは全対象のレポートを毎回生成し、未検証の境界を見つける補助にする。100%などの数値を合否条件にせず、損失・破損・権限・復旧の重要経路を人が確認する。数値達成のためのテスト、内部実装を固定するテスト、skipによる見かけの成功を作らない。実行時間やメモリが増える回帰は、小さいfixtureで件数に比例しないことを確認する。
 
 CIのfrontend通常テストは、再帰探索したファイル一覧を辞書順に並べ、位置を二つのshardへ交互に割り当てる。各shard内はブラウザーfixtureのCPU競合を避けるため一並列のまま実行し、完全な探索一覧・選択一覧・実行結果・Node coverage・browser V8 coverageを別々のartifactへ保存する。集約jobは両shardのindex、探索一覧、期待partition、和集合、重複、pass、skip、todoを検査してからcoverageを結合し、確認項目の契約台帳を一度だけ照合する。新しいテストファイルは手動一覧を更新せず、どちらか一方へ必ず割り当てられる。
 
-20,000件カタログ性能試験は通常shardへ混ぜず、専用jobで一度だけ実行する。集約jobはそのmanifestと成功結果も必須にする。公開される必須checkは集約jobの `frontend` とし、shardまたは性能jobの失敗を明示して失敗する。ローカルの `npm test` は従来どおり全frontendテストを直列実行する。`test-quiet frontend` の12分上限は、その全件直列実行が停止したことを検出する監視時間であり、製品データや処理件数の上限ではない。
+20,000件カタログと4Kブラシの性能試験は通常shardへ混ぜず、専用jobで一度だけ実行する。集約jobは両テストのmanifestと成功結果も必須にする。公開される必須checkは集約jobの `frontend` とし、shardまたは性能jobの失敗を明示して失敗する。ローカルの `npm test` は従来どおり全frontendテストを直列実行する。`test-quiet frontend` の12分上限は、その全件直列実行が停止したことを検出する監視時間であり、製品データや処理件数の上限ではない。
 
 各suiteの子プロセスには用途別の上限時間を置き、失敗または時間切れでは経過時間と完全な標準出力・標準エラーをsuite artifactへ残す。CIはcoverageの有無にかかわらずsuite artifact全体をuploadする。ローカルでbackendの実行環境を明示する必要がある場合だけ、`MOZARIE_TEST_PYTHON`にPython実行ファイルを指定する。製品用`.venv`やGPU設定はテスト実行環境の選択に使わない。
 

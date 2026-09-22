@@ -1232,13 +1232,17 @@ function completeManualStroke() {
   paintPendingManualStroke();
   state.activeStroke = null;
   if (!stroke?.points?.length || !isProcessableImage(currentRecord())) return;
-  if (stroke.tool === "brush") refreshManualLayerPresence("add", ...(state.manualExclusionForced ? [] : ["exclusion"]));
+  if (stroke.tool === "brush") {
+    // Pointerdown is inside the image and paints its first pixel immediately.
+    state.manualMaskPresent = true;
+    if (!state.manualExclusionForced) refreshManualLayerPresence("exclusion");
+  }
   else if (stroke.tool === "mosaic_eraser") refreshManualLayerPresence("add");
   else if (stroke.tool === "eraser" || stroke.tool === "exclude_bucket") refreshManualLayerPresence("exclusion", "exclusionErase");
   else if (stroke.tool === "exclude_eraser") refreshManualLayerPresence("exclusionErase");
   scheduleManualWorkspaceSave();
   recordHistoryOperation(stroke);
-  updateHistoryButtons(); updateCandidateStatus(); refreshCurrentReviewAndMask(); requestMosaicPreview(stroke.dirtyRoi); renderCandidates();
+  updateHistoryButtons(); updateCandidateStatus(); refreshCurrentReviewAndMask(stroke.tool === "brush" ? stroke.dirtyRoi : null); requestMosaicPreview(stroke.dirtyRoi); renderCandidates();
 }
 
 function invalidateProjectHistoryRefresh(imageId) {

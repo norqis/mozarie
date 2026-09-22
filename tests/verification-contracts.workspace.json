@@ -97,7 +97,7 @@
       "observation": "復元は入力だけを戻し、OKで保存名を確定する。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_interaction_coverage.cjs::interaction and catalog mutation controls"
+        "node:tests/editor/test_browser_interaction_runtime.cjs::interaction and catalog mutation controls"
       ]
     },
     {
@@ -109,7 +109,7 @@
       "status": "automated",
       "testIds": [
         "python:tests.test_recursive_save_rename.StudioStateNativeRenameTests.test_public_rename_is_metadata_only_and_survives_reopen_with_workspace_state",
-        "node:tests/test_interaction_coverage.cjs::interaction and catalog mutation controls"
+        "node:tests/editor/test_browser_interaction_runtime.cjs::interaction and catalog mutation controls"
       ]
     },
     {
@@ -161,7 +161,7 @@
       "status": "automated",
       "testIds": [
         "python:tests.test_updater.UpdaterTests.test_run_honors_explicit_mozarie_python_without_creating_a_venv",
-        "node:tests/test_app_core_detection_coverage.cjs::application startup, catalog state, and detection controls",
+        "node:tests/app/test_startup_catalog_and_detection_controls.cjs::application startup, catalog state, and detection controls",
         "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
       ]
     },
@@ -408,7 +408,7 @@
       "observation": "両画像を別の画像として扱い、片方の編集をもう片方へ反映しない",
       "status": "automated",
       "testIds": [
-        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_same_named_images_from_different_paths_keep_edits_isolated"
+        "python:tests.workspace.test_project_catalog_lifecycle.ProjectCatalogCoverageTests.test_same_named_images_from_different_paths_keep_edits_isolated"
       ]
     },
     {
@@ -485,12 +485,12 @@
       "observation": "その画像だけ確認済みになり、編集・元画像変更の受け入れ・PJへの移行・編集の取り消し・再起動後も明示的な確認操作まで保持する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_gallery_save_coverage.cjs::gallery and save interactions",
+        "node:tests/gallery/test_gallery_and_save_runtime.cjs::gallery and save interactions",
         "node:tests/test_workspace_flags_runtime.cjs::workspace flag runtime contracts",
         "node:tests/test_review_list_removal_e2e.cjs::review choices survive editing and list-only removal preserves source access boundaries > brush undo redo and hidden labels retain the explicit reviewed flag",
-        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_review_choice_survives_edits_history_restart_and_list_removal",
+        "python:tests.workspace.test_project_catalog_lifecycle.ProjectCatalogCoverageTests.test_review_choice_survives_edits_history_restart_and_list_removal",
         "python:tests.test_workspace.WorkspaceTests.test_edit_history_ignores_legacy_review_values",
-        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_source_mismatch_acceptance_preserves_both_review_choices_across_restart",
+        "python:tests.workspace.test_project_catalog_lifecycle.ProjectCatalogCoverageTests.test_source_mismatch_acceptance_preserves_both_review_choices_across_restart",
         "python:tests.test_workspace.WorkspaceTests.test_projectless_promotion_preserves_review_choices_through_every_history_step"
       ]
     },
@@ -502,7 +502,7 @@
       "observation": "その画像の確認済み表示が消え、未確認は緑にならない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_gallery_save_coverage.cjs::gallery and save interactions",
+        "node:tests/gallery/test_gallery_and_save_runtime.cjs::gallery and save interactions",
         "node:tests/test_workspace_flags_runtime.cjs::workspace flag runtime contracts"
       ]
     },
@@ -514,7 +514,7 @@
       "observation": "対象だけ通常一覧から隠れ、状態は非表示と表示し、元ファイル・編集データ・確認フラグは残る",
       "status": "automated",
       "testIds": [
-        "node:tests/test_gallery_save_coverage.cjs::gallery and save interactions",
+        "node:tests/gallery/test_gallery_and_save_runtime.cjs::gallery and save interactions",
         "node:tests/test_workspace_flags_runtime.cjs::workspace flag runtime contracts",
         "node:tests/test_review_list_removal_e2e.cjs::review choices survive editing and list-only removal preserves source access boundaries > brush undo redo and hidden labels retain the explicit reviewed flag"
       ]
@@ -527,7 +527,7 @@
       "observation": "通常一覧へ戻り、編集データを保持する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_gallery_save_coverage.cjs::gallery and save interactions",
+        "node:tests/gallery/test_gallery_and_save_runtime.cjs::gallery and save interactions",
         "node:tests/test_workspace_flags_runtime.cjs::workspace flag runtime contracts"
       ]
     },
@@ -539,7 +539,7 @@
       "observation": "表示順で1つ前の画像へ移動する。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_gallery_save_coverage.cjs::gallery and save interactions"
+        "node:tests/gallery/test_gallery_and_save_runtime.cjs::gallery and save interactions"
       ]
     },
     {
@@ -550,7 +550,7 @@
       "observation": "先頭を越えない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_gallery_save_coverage.cjs::gallery and save interactions"
+        "node:tests/gallery/test_gallery_and_save_runtime.cjs::gallery and save interactions"
       ]
     },
     {
@@ -561,7 +561,7 @@
       "observation": "表示順で1つ次の画像へ移動する。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_gallery_save_coverage.cjs::gallery and save interactions"
+        "node:tests/gallery/test_gallery_and_save_runtime.cjs::gallery and save interactions"
       ]
     },
     {
@@ -572,7 +572,7 @@
       "observation": "末尾を越えない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_gallery_save_coverage.cjs::gallery and save interactions"
+        "node:tests/gallery/test_gallery_and_save_runtime.cjs::gallery and save interactions"
       ]
     },
     {
@@ -693,7 +693,7 @@
       "observation": "画像一覧とフィルター・検索・フォルダー選択を表示する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_gallery_save_coverage.cjs::gallery and save interactions",
+        "node:tests/gallery/test_gallery_and_save_runtime.cjs::gallery and save interactions",
         "node:tests/test_filters_and_fluid_e2e.cjs::filter popover combines checked states and review-at-tail stays on the filtered image"
       ]
     },
@@ -761,7 +761,7 @@
       "status": "automated",
       "testIds": [
         "node:tests/test_workspace_contract_browser.cjs::mosaic and no-mosaic filters use current effective masks and always exclude hidden images",
-        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_effective_mosaic_pixels_are_apply_plus_manual_minus_exclusion"
+        "python:tests.workspace.test_project_catalog_lifecycle.ProjectCatalogCoverageTests.test_effective_mosaic_pixels_are_apply_plus_manual_minus_exclusion"
       ]
     },
     {
@@ -773,7 +773,7 @@
       "status": "automated",
       "testIds": [
         "node:tests/test_workspace_contract_browser.cjs::mosaic and no-mosaic filters use current effective masks and always exclude hidden images",
-        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_candidate_update_refreshes_no_mosaic_membership_without_stale_state"
+        "python:tests.workspace.test_project_catalog_lifecycle.ProjectCatalogCoverageTests.test_candidate_update_refreshes_no_mosaic_membership_without_stale_state"
       ]
     },
     {
@@ -784,7 +784,7 @@
       "observation": "非表示ではなく、確認済みまたはモザイクありの画像を表示する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_gallery_save_coverage.cjs::gallery and save interactions",
+        "node:tests/gallery/test_gallery_and_save_runtime.cjs::gallery and save interactions",
         "node:tests/test_filters_and_fluid_e2e.cjs::filter popover combines checked states and review-at-tail stays on the filtered image"
       ]
     },
@@ -796,7 +796,7 @@
       "observation": "非表示ではなく、未確認またはモザイクなしの画像を表示する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_gallery_save_coverage.cjs::gallery and save interactions",
+        "node:tests/gallery/test_gallery_and_save_runtime.cjs::gallery and save interactions",
         "node:tests/test_filters_and_fluid_e2e.cjs::filter popover combines checked states and review-at-tail stays on the filtered image"
       ]
     },
@@ -808,7 +808,7 @@
       "observation": "前者は非表示画像だけを表示する。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_gallery_save_coverage.cjs::gallery and save interactions",
+        "node:tests/gallery/test_gallery_and_save_runtime.cjs::gallery and save interactions",
         "node:tests/test_filters_and_fluid_e2e.cjs::filter popover combines checked states and review-at-tail stays on the filtered image"
       ]
     },
@@ -820,7 +820,7 @@
       "observation": "後者は非表示画像と通常表示のモザイクあり画像を表示する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_gallery_save_coverage.cjs::gallery and save interactions",
+        "node:tests/gallery/test_gallery_and_save_runtime.cjs::gallery and save interactions",
         "node:tests/test_filters_and_fluid_e2e.cjs::filter popover combines checked states and review-at-tail stays on the filtered image"
       ]
     },
@@ -832,7 +832,7 @@
       "observation": "一致する名前だけ表示する。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_gallery_save_coverage.cjs::gallery and save interactions",
+        "node:tests/gallery/test_gallery_and_save_runtime.cjs::gallery and save interactions",
         "node:tests/test_filters_and_fluid_e2e.cjs::filter popover combines checked states and review-at-tail stays on the filtered image"
       ]
     },
@@ -844,7 +844,7 @@
       "observation": "空欄へ戻すと検索による絞り込みが解除される",
       "status": "automated",
       "testIds": [
-        "node:tests/test_gallery_save_coverage.cjs::gallery and save interactions",
+        "node:tests/gallery/test_gallery_and_save_runtime.cjs::gallery and save interactions",
         "node:tests/test_filters_and_fluid_e2e.cjs::filter popover combines checked states and review-at-tail stays on the filtered image"
       ]
     },
@@ -856,7 +856,7 @@
       "observation": "そのフォルダーの画像だけを表示する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_gallery_save_coverage.cjs::gallery and save interactions",
+        "node:tests/gallery/test_gallery_and_save_runtime.cjs::gallery and save interactions",
         "node:tests/test_filters_and_fluid_e2e.cjs::filter popover combines checked states and review-at-tail stays on the filtered image"
       ]
     },
@@ -879,7 +879,7 @@
       "observation": "クリックした画像を個別に選択・解除する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_gallery_save_coverage.cjs::gallery and save interactions",
+        "node:tests/gallery/test_gallery_and_save_runtime.cjs::gallery and save interactions",
         "node:tests/test_filters_and_fluid_e2e.cjs::filter popover combines checked states and review-at-tail stays on the filtered image"
       ]
     },
@@ -891,7 +891,7 @@
       "observation": "起点から終点までの表示順の範囲を選択する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_gallery_save_coverage.cjs::gallery and save interactions",
+        "node:tests/gallery/test_gallery_and_save_runtime.cjs::gallery and save interactions",
         "node:tests/test_filters_and_fluid_e2e.cjs::filter popover combines checked states and review-at-tail stays on the filtered image"
       ]
     },
@@ -903,7 +903,7 @@
       "observation": "一括選択が解除され、通常の画像操作へ戻る",
       "status": "automated",
       "testIds": [
-        "node:tests/test_gallery_save_coverage.cjs::gallery and save interactions",
+        "node:tests/gallery/test_gallery_and_save_runtime.cjs::gallery and save interactions",
         "node:tests/test_filters_and_fluid_e2e.cjs::filter popover combines checked states and review-at-tail stays on the filtered image"
       ]
     },
@@ -1015,7 +1015,7 @@
       "status": "automated",
       "testIds": [
         "node:tests/test_workspace_contract_browser.cjs::batch mask clear removes project data for exactly two selected images and preserves sources and the unselected image",
-        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_clear_two_images_removes_only_their_project_data_and_keeps_all_source_files"
+        "python:tests.workspace.test_project_catalog_lifecycle.ProjectCatalogCoverageTests.test_clear_two_images_removes_only_their_project_data_and_keeps_all_source_files"
       ]
     },
     {
@@ -1048,7 +1048,7 @@
       "observation": "入力名のPJを作り、元PJの編集を保持する",
       "status": "automated",
       "testIds": [
-        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_project_switch_close_restart_and_rename_restore_rich_state_without_cross_project_leakage"
+        "python:tests.workspace.test_project_catalog_lifecycle.ProjectCatalogCoverageTests.test_project_switch_close_restart_and_rename_restore_rich_state_without_cross_project_leakage"
       ]
     },
     {
@@ -1059,7 +1059,7 @@
       "observation": "一覧と現在PJの名前が更新され、画像・履歴は残る",
       "status": "automated",
       "testIds": [
-        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_project_switch_close_restart_and_rename_restore_rich_state_without_cross_project_leakage",
+        "python:tests.workspace.test_project_catalog_lifecycle.ProjectCatalogCoverageTests.test_project_switch_close_restart_and_rename_restore_rich_state_without_cross_project_leakage",
         "node:tests/test_project_ui_runtime.cjs::project creation, cancellation, duplicate rejection, table columns, and relink payload preserve workspace state"
       ]
     },
@@ -1072,7 +1072,7 @@
       "status": "automated",
       "testIds": [
         "node:tests/test_project_ui_runtime.cjs::duplicate project guidance asks for another name while the current project remains intact",
-        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_normalized_duplicate_project_names_are_rejected_without_replacing_current_work"
+        "python:tests.workspace.test_project_catalog_lifecycle.ProjectCatalogCoverageTests.test_normalized_duplicate_project_names_are_rejected_without_replacing_current_work"
       ]
     },
     {
@@ -1083,7 +1083,7 @@
       "observation": "同一名として拒否し、現在の作業を保持する",
       "status": "automated",
       "testIds": [
-        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_normalized_duplicate_project_names_are_rejected_without_replacing_current_work"
+        "python:tests.workspace.test_project_catalog_lifecycle.ProjectCatalogCoverageTests.test_normalized_duplicate_project_names_are_rejected_without_replacing_current_work"
       ]
     },
     {
@@ -1204,7 +1204,7 @@
       "observation": "画像一覧を閉じ、PJと画像データを保持する",
       "status": "automated",
       "testIds": [
-        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_project_switch_close_restart_and_rename_restore_rich_state_without_cross_project_leakage"
+        "python:tests.workspace.test_project_catalog_lifecycle.ProjectCatalogCoverageTests.test_project_switch_close_restart_and_rename_restore_rich_state_without_cross_project_leakage"
       ]
     },
     {
@@ -1215,7 +1215,7 @@
       "observation": "画像一覧・候補・手描き・確認状態・非表示を復元する",
       "status": "automated",
       "testIds": [
-        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_project_switch_close_restart_and_rename_restore_rich_state_without_cross_project_leakage"
+        "python:tests.workspace.test_project_catalog_lifecycle.ProjectCatalogCoverageTests.test_project_switch_close_restart_and_rename_restore_rich_state_without_cross_project_leakage"
       ]
     },
     {
@@ -1226,7 +1226,7 @@
       "observation": "保存済み状態を復元し、別PJのデータを混ぜない",
       "status": "automated",
       "testIds": [
-        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_project_switch_close_restart_and_rename_restore_rich_state_without_cross_project_leakage"
+        "python:tests.workspace.test_project_catalog_lifecycle.ProjectCatalogCoverageTests.test_project_switch_close_restart_and_rename_restore_rich_state_without_cross_project_leakage"
       ]
     },
     {
@@ -1248,7 +1248,7 @@
       "observation": "一覧を閉じ、PJ管理に完了と表示する。",
       "status": "automated",
       "testIds": [
-        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_project_completion_and_deletion_have_exact_persistent_outcomes",
+        "python:tests.workspace.test_project_catalog_lifecycle.ProjectCatalogCoverageTests.test_project_completion_and_deletion_have_exact_persistent_outcomes",
         "node:tests/test_project_ui_runtime.cjs::project close, complete, resume, and delete produce exact workspace outcomes"
       ]
     },
@@ -1260,7 +1260,7 @@
       "observation": "画像データは保持する",
       "status": "automated",
       "testIds": [
-        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_project_completion_and_deletion_have_exact_persistent_outcomes"
+        "python:tests.workspace.test_project_catalog_lifecycle.ProjectCatalogCoverageTests.test_project_completion_and_deletion_have_exact_persistent_outcomes"
       ]
     },
     {
@@ -1283,7 +1283,7 @@
       "status": "automated",
       "testIds": [
         "node:tests/test_workspace_contract_browser.cjs::completed projects keep browsing and exports enabled while every mutation stays disabled",
-        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_project_switch_close_restart_and_rename_restore_rich_state_without_cross_project_leakage"
+        "python:tests.workspace.test_project_catalog_lifecycle.ProjectCatalogCoverageTests.test_project_switch_close_restart_and_rename_restore_rich_state_without_cross_project_leakage"
       ]
     },
     {
@@ -1316,7 +1316,7 @@
       "observation": "そのPJだけ消え、現在のPJと編集は保持する",
       "status": "automated",
       "testIds": [
-        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_project_completion_and_deletion_have_exact_persistent_outcomes"
+        "python:tests.workspace.test_project_catalog_lifecycle.ProjectCatalogCoverageTests.test_project_completion_and_deletion_have_exact_persistent_outcomes"
       ]
     },
     {
@@ -1327,7 +1327,7 @@
       "observation": "現在PJと関連データが消え、空の作業画面へ戻る",
       "status": "automated",
       "testIds": [
-        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_project_completion_and_deletion_have_exact_persistent_outcomes"
+        "python:tests.workspace.test_project_catalog_lifecycle.ProjectCatalogCoverageTests.test_project_completion_and_deletion_have_exact_persistent_outcomes"
       ]
     },
     {
@@ -1382,7 +1382,7 @@
       "observation": "変更したファイルだけを警告一覧へ表示する",
       "status": "automated",
       "testIds": [
-        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_multi_source_reopen_reconciles_before_one_replace_and_keeps_dimension_lock"
+        "python:tests.workspace.test_project_catalog_lifecycle.ProjectCatalogCoverageTests.test_multi_source_reopen_reconciles_before_one_replace_and_keeps_dimension_lock"
       ]
     },
     {
@@ -1393,7 +1393,7 @@
       "observation": "対象の編集を保持し、確認済みの更新時刻へ更新する",
       "status": "automated",
       "testIds": [
-        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_source_mismatch_keep_resize_and_clear_have_exact_scoped_results"
+        "python:tests.workspace.test_project_catalog_lifecycle.ProjectCatalogCoverageTests.test_source_mismatch_keep_resize_and_clear_have_exact_scoped_results"
       ]
     },
     {
@@ -1404,7 +1404,7 @@
       "observation": "変更対象のモザイク・除外を削除し、他画像は保持する",
       "status": "automated",
       "testIds": [
-        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_source_mismatch_keep_resize_and_clear_have_exact_scoped_results"
+        "python:tests.workspace.test_project_catalog_lifecycle.ProjectCatalogCoverageTests.test_source_mismatch_keep_resize_and_clear_have_exact_scoped_results"
       ]
     },
     {
@@ -1415,7 +1415,7 @@
       "observation": "新寸法に合わせて編集を保持し、対象画像の古いUndo履歴をリセットする",
       "status": "automated",
       "testIds": [
-        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_source_mismatch_keep_resize_and_clear_have_exact_scoped_results"
+        "python:tests.workspace.test_project_catalog_lifecycle.ProjectCatalogCoverageTests.test_source_mismatch_keep_resize_and_clear_have_exact_scoped_results"
       ]
     },
     {
@@ -1426,7 +1426,7 @@
       "observation": "対象画像の範囲と履歴を削除する",
       "status": "automated",
       "testIds": [
-        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_source_mismatch_keep_resize_and_clear_have_exact_scoped_results"
+        "python:tests.workspace.test_project_catalog_lifecycle.ProjectCatalogCoverageTests.test_source_mismatch_keep_resize_and_clear_have_exact_scoped_results"
       ]
     },
     {
@@ -1437,7 +1437,7 @@
       "observation": "利用可能画像は表示し、不足したnative-folderだけの再指定を案内する。",
       "status": "automated",
       "testIds": [
-        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_project_open_refetches_usable_images_sources_and_only_missing_native_folders"
+        "python:tests.workspace.test_project_catalog_lifecycle.ProjectCatalogCoverageTests.test_project_open_refetches_usable_images_sources_and_only_missing_native_folders"
       ]
     },
     {
@@ -1448,7 +1448,7 @@
       "observation": "再取得後もPJ・画像・source一覧と不足表示が一致する",
       "status": "automated",
       "testIds": [
-        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_project_open_refetches_usable_images_sources_and_only_missing_native_folders"
+        "python:tests.workspace.test_project_catalog_lifecycle.ProjectCatalogCoverageTests.test_project_open_refetches_usable_images_sources_and_only_missing_native_folders"
       ]
     },
     {
@@ -1505,7 +1505,7 @@
       "observation": "元フォルダーにファイルがあっても削除済みのPJ画像を復活させない",
       "status": "automated",
       "testIds": [
-        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_removed_project_image_does_not_revive_when_source_still_exists"
+        "python:tests.workspace.test_project_catalog_lifecycle.ProjectCatalogCoverageTests.test_removed_project_image_does_not_revive_when_source_still_exists"
       ]
     },
     {
@@ -1527,7 +1527,7 @@
       "observation": "画像データを消してPJを閉じる。",
       "status": "automated",
       "testIds": [
-        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_clear_project_images_closes_live_project_but_keeps_empty_project_and_sources"
+        "python:tests.workspace.test_project_catalog_lifecycle.ProjectCatalogCoverageTests.test_clear_project_images_closes_live_project_but_keeps_empty_project_and_sources"
       ]
     },
     {
@@ -1538,7 +1538,7 @@
       "observation": "PJ自体は空で残り、元ファイルは残る",
       "status": "automated",
       "testIds": [
-        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_clear_project_images_closes_live_project_but_keeps_empty_project_and_sources"
+        "python:tests.workspace.test_project_catalog_lifecycle.ProjectCatalogCoverageTests.test_clear_project_images_closes_live_project_but_keeps_empty_project_and_sources"
       ]
     },
     {
@@ -1571,7 +1571,7 @@
       "observation": "最後に表示したPJまたは無名作業だけが一覧と編集対象に残る",
       "status": "automated",
       "testIds": [
-        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_unnamed_workspace_switch_publishes_atomically_and_rolls_back_failed_replacement"
+        "python:tests.workspace.test_project_catalog_lifecycle.ProjectCatalogCoverageTests.test_unnamed_workspace_switch_publishes_atomically_and_rolls_back_failed_replacement"
       ]
     },
     {
@@ -1710,7 +1710,7 @@
       "observation": "削除を拒否し、PJ・画像・候補・履歴を保持する。",
       "status": "automated",
       "testIds": [
-        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_delete_project_handles_current_read_only_noncurrent_and_thumbnail_failure",
+        "python:tests.workspace.test_project_catalog_lifecycle.ProjectCatalogCoverageTests.test_delete_project_handles_current_read_only_noncurrent_and_thumbnail_failure",
         "node:tests/test_project_ui_runtime.cjs::project dialogs, A-B-A switching, failed-open recovery, and duplicate transition guards"
       ]
     },
@@ -1722,7 +1722,7 @@
       "observation": "処理完了後に削除すると対象PJだけを削除できる",
       "status": "automated",
       "testIds": [
-        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_delete_project_handles_current_read_only_noncurrent_and_thumbnail_failure",
+        "python:tests.workspace.test_project_catalog_lifecycle.ProjectCatalogCoverageTests.test_delete_project_handles_current_read_only_noncurrent_and_thumbnail_failure",
         "node:tests/test_project_ui_runtime.cjs::project dialogs, A-B-A switching, failed-open recovery, and duplicate transition guards"
       ]
     },
@@ -2122,7 +2122,7 @@
       "observation": "すべてが1操作ずつの永続履歴で戻り、やり直せる。",
       "status": "automated",
       "testIds": [
-        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_every_unnamed_workspace_edit_undoes_and_redoes_one_step_without_touching_other_images",
+        "python:tests.workspace.test_project_catalog_lifecycle.ProjectCatalogCoverageTests.test_every_unnamed_workspace_edit_undoes_and_redoes_one_step_without_touching_other_images",
         "python:tests.test_project_history_live_browser.LiveProjectHistoryBrowserTests.test_browser_undo_redo_round_trips_localized_durable_manual_layers"
       ]
     },
@@ -2134,7 +2134,7 @@
       "observation": "対象外画像の状態は変わらない",
       "status": "automated",
       "testIds": [
-        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_every_unnamed_workspace_edit_undoes_and_redoes_one_step_without_touching_other_images"
+        "python:tests.workspace.test_project_catalog_lifecycle.ProjectCatalogCoverageTests.test_every_unnamed_workspace_edit_undoes_and_redoes_one_step_without_touching_other_images"
       ]
     },
     {
@@ -2145,7 +2145,7 @@
       "observation": "同じ画像ID、候補、手描き、確認済み・非表示、反転、Undo/Redo位置を復元する。",
       "status": "automated",
       "testIds": [
-        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_unnamed_restart_and_promotion_preserve_full_identity_state_and_history"
+        "python:tests.workspace.test_project_catalog_lifecycle.ProjectCatalogCoverageTests.test_unnamed_restart_and_promotion_preserve_full_identity_state_and_history"
       ]
     },
     {
@@ -2156,7 +2156,7 @@
       "observation": "PJ一覧には無名作業を表示しない",
       "status": "automated",
       "testIds": [
-        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_unnamed_restart_and_promotion_preserve_full_identity_state_and_history"
+        "python:tests.workspace.test_project_catalog_lifecycle.ProjectCatalogCoverageTests.test_unnamed_restart_and_promotion_preserve_full_identity_state_and_history"
       ]
     },
     {
@@ -2167,7 +2167,7 @@
       "observation": "画面を置き換えず、同じ画像IDと履歴のまま名前付きPJになる。",
       "status": "automated",
       "testIds": [
-        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_unnamed_restart_and_promotion_preserve_full_identity_state_and_history"
+        "python:tests.workspace.test_project_catalog_lifecycle.ProjectCatalogCoverageTests.test_unnamed_restart_and_promotion_preserve_full_identity_state_and_history"
       ]
     },
     {
@@ -2178,7 +2178,7 @@
       "observation": "名前保存前のUndo/Redoも続けて使える",
       "status": "automated",
       "testIds": [
-        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_unnamed_restart_and_promotion_preserve_full_identity_state_and_history"
+        "python:tests.workspace.test_project_catalog_lifecycle.ProjectCatalogCoverageTests.test_unnamed_restart_and_promotion_preserve_full_identity_state_and_history"
       ]
     },
     {
@@ -2200,7 +2200,7 @@
       "observation": "Bの読込失敗時はAの画像・候補・履歴・選択を保持する",
       "status": "automated",
       "testIds": [
-        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_unnamed_workspace_switch_publishes_atomically_and_rolls_back_failed_replacement"
+        "python:tests.workspace.test_project_catalog_lifecycle.ProjectCatalogCoverageTests.test_unnamed_workspace_switch_publishes_atomically_and_rolls_back_failed_replacement"
       ]
     },
     {
@@ -2235,7 +2235,7 @@
       "observation": "成功時だけ作業用workspace、source、画像とactive情報を公開する。",
       "status": "automated",
       "testIds": [
-        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_unnamed_workspace_switch_publishes_atomically_and_rolls_back_failed_replacement"
+        "python:tests.workspace.test_project_catalog_lifecycle.ProjectCatalogCoverageTests.test_unnamed_workspace_switch_publishes_atomically_and_rolls_back_failed_replacement"
       ]
     },
     {
@@ -2247,7 +2247,7 @@
       "status": "automated",
       "testIds": [
         "node:tests/test_folder_permissions_e2e.cjs::unnamed browser workspace promotion keeps its actual directory and browser-file handles under the same workspace id",
-        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_unnamed_workspace_switch_publishes_atomically_and_rolls_back_failed_replacement"
+        "python:tests.workspace.test_project_catalog_lifecycle.ProjectCatalogCoverageTests.test_unnamed_workspace_switch_publishes_atomically_and_rolls_back_failed_replacement"
       ]
     },
     {
@@ -2261,7 +2261,7 @@
         "node:tests/test_import_picker_e2e.cjs::import picker browser coverage",
         "python:tests.test_http_live_endpoints.LiveHttpEndpointTests.test_named_project_open_discards_active_projectless_catalog_across_restart",
         "python:tests.test_server.MozarieTests.test_projectless_browser_workspace_detaches_without_leaving_an_active_record",
-        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_unnamed_workspace_switch_publishes_atomically_and_rolls_back_failed_replacement"
+        "python:tests.workspace.test_project_catalog_lifecycle.ProjectCatalogCoverageTests.test_unnamed_workspace_switch_publishes_atomically_and_rolls_back_failed_replacement"
       ]
     },
     {
@@ -2272,7 +2272,7 @@
       "observation": "Bの作業を公開できた時だけactive情報、一覧、候補、履歴をBへ切り替え、Aの内部workspaceを破棄する。",
       "status": "automated",
       "testIds": [
-        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_unnamed_workspace_switch_publishes_atomically_and_rolls_back_failed_replacement"
+        "python:tests.workspace.test_project_catalog_lifecycle.ProjectCatalogCoverageTests.test_unnamed_workspace_switch_publishes_atomically_and_rolls_back_failed_replacement"
       ]
     },
     {
@@ -2283,7 +2283,7 @@
       "observation": "公開に失敗した場合はAの一覧・候補・履歴とactive情報を保持し、Bの内部workspaceを残さない",
       "status": "automated",
       "testIds": [
-        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_unnamed_workspace_switch_publishes_atomically_and_rolls_back_failed_replacement"
+        "python:tests.workspace.test_project_catalog_lifecycle.ProjectCatalogCoverageTests.test_unnamed_workspace_switch_publishes_atomically_and_rolls_back_failed_replacement"
       ]
     },
     {
@@ -2342,7 +2342,7 @@
       "observation": "対象画像の読み込み失敗を画面に示し、サーバーを停止させない。",
       "status": "automated",
       "testIds": [
-        "python:tests.test_http_full_coverage.HttpBoundaryCoverageTests.test_thumbnail_normalizes_pillow_decode_errors",
+        "python:tests.http.test_http_request_boundaries.HttpBoundaryCoverageTests.test_thumbnail_normalizes_pillow_decode_errors",
         "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
       ]
     },
@@ -2354,7 +2354,7 @@
       "observation": "通常画像の表示を続けられる",
       "status": "automated",
       "testIds": [
-        "python:tests.test_http_full_coverage.HttpBoundaryCoverageTests.test_thumbnail_normalizes_pillow_decode_errors",
+        "python:tests.http.test_http_request_boundaries.HttpBoundaryCoverageTests.test_thumbnail_normalizes_pillow_decode_errors",
         "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
       ]
     },
@@ -2408,7 +2408,7 @@
       "observation": "`internal_error`ではなく画像またはマスクの読み込み失敗を画面に示し、サーバーを停止させない。",
       "status": "automated",
       "testIds": [
-        "python:tests.test_jobs_saving_coverage.JobsSavingCoverageTests.test_saving_input_and_render_boundary_failures",
+        "python:tests.jobs.test_job_control_and_saving.JobsSavingCoverageTests.test_saving_input_and_render_boundary_failures",
         "python:tests.test_protocol_retry_contracts.StatefulRetryContracts.test_browser_mask_read_failure_keeps_token_retryable_and_same_state_retry_overwrites_source"
       ]
     },
@@ -2420,7 +2420,7 @@
       "observation": "失敗後も通常画像を保存できる",
       "status": "automated",
       "testIds": [
-        "python:tests.test_jobs_saving_coverage.JobsSavingCoverageTests.test_saving_input_and_render_boundary_failures",
+        "python:tests.jobs.test_job_control_and_saving.JobsSavingCoverageTests.test_saving_input_and_render_boundary_failures",
         "python:tests.test_protocol_retry_contracts.StatefulRetryContracts.test_browser_mask_read_failure_keeps_token_retryable_and_same_state_retry_overwrites_source"
       ]
     },
@@ -2441,7 +2441,7 @@
       "observation": "対象画像の読み込み失敗を画面に示し、サーバーを停止させない。",
       "status": "automated",
       "testIds": [
-        "python:tests.test_jobs_saving_coverage.JobsSavingCoverageTests.test_saving_input_and_render_boundary_failures",
+        "python:tests.jobs.test_job_control_and_saving.JobsSavingCoverageTests.test_saving_input_and_render_boundary_failures",
         "python:tests.test_protocol_retry_contracts.StatefulRetryContracts.test_apply_render_read_failure_releases_job_and_same_state_retry_writes_output"
       ]
     },
@@ -2453,7 +2453,7 @@
       "observation": "失敗後も新しい保存を開始できる",
       "status": "automated",
       "testIds": [
-        "python:tests.test_jobs_saving_coverage.JobsSavingCoverageTests.test_saving_input_and_render_boundary_failures",
+        "python:tests.jobs.test_job_control_and_saving.JobsSavingCoverageTests.test_saving_input_and_render_boundary_failures",
         "python:tests.test_protocol_retry_contracts.StatefulRetryContracts.test_apply_render_read_failure_releases_job_and_same_state_retry_writes_output"
       ]
     },
@@ -2623,7 +2623,7 @@
       "testIds": [
         "node:tests/test_review_list_removal_e2e.cjs::review choices survive editing and list-only removal preserves source access boundaries > orange footer removes from the filtered list and navigates next then previous",
         "node:tests/test_review_list_removal_e2e.cjs::review choices survive editing and list-only removal preserves source access boundaries > gallery context and overview multiselection remove only their targets",
-        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_review_choice_survives_edits_history_restart_and_list_removal"
+        "python:tests.workspace.test_project_catalog_lifecycle.ProjectCatalogCoverageTests.test_review_choice_survives_edits_history_restart_and_list_removal"
       ]
     },
     {

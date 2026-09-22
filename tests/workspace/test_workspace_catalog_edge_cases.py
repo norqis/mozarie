@@ -214,7 +214,7 @@ class StateCatalogExtraCoverageTests(unittest.TestCase):
         self.root = Path(self.temp.name)
         app = self.root / "app"
         (app / "config").mkdir(parents=True)
-        (app / "config" / "defaults.json").write_bytes((Path(__file__).resolve().parents[1] / "config" / "defaults.json").read_bytes())
+        (app / "config" / "defaults.json").write_bytes((Path(__file__).resolve().parents[2] / "config" / "defaults.json").read_bytes())
         with patch.object(state_module, "APP_DIR", app):
             self.state = StudioState(self.root / "cache", self.root / "sessions")
 
@@ -844,7 +844,7 @@ class FinalCatalogCoverageTests(unittest.TestCase):
         app = self.root / "app"
         (app / "config").mkdir(parents=True)
         (app / "config" / "defaults.json").write_bytes(
-            (Path(__file__).resolve().parents[1] / "config" / "defaults.json").read_bytes()
+            (Path(__file__).resolve().parents[2] / "config" / "defaults.json").read_bytes()
         )
         with patch.object(state_module, "APP_DIR", app):
             self.state = StudioState(self.root / "cache", self.root / "sessions")

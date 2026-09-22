@@ -153,7 +153,7 @@ class StateAndCatalogCoverageTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.root = Path(self.temp.name)
         self.app = self.root / "app"; (self.app / "config").mkdir(parents=True)
-        defaults = Path(__file__).resolve().parents[1] / "config" / "defaults.json"
+        defaults = Path(__file__).resolve().parents[2] / "config" / "defaults.json"
         (self.app / "config" / "defaults.json").write_bytes(defaults.read_bytes())
         self.cache = self.root / "cache"
         with patch.object(state_module, "APP_DIR", self.app):

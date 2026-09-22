@@ -3,7 +3,7 @@
 const assert = require("node:assert/strict");
 const test = require("node:test");
 const { chromium } = require("playwright");
-const { closeServer, startFixtureServer } = require("./test_import_picker_e2e.cjs");
+const { closeServer, startFixtureServer } = require("../test_import_picker_e2e.cjs");
 
 const catalogue = [
   ["A", "one/A.png", true, false, false],
