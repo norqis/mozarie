@@ -26,6 +26,8 @@ jobs:
       PYTHONUTF8: "1"
     steps:
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
       - run: git fetch --no-tags --depth=1 origin refs/tags/v0.5.13:refs/tags/v0.5.13
       - uses: actions/setup-python@v6
         with:
@@ -59,6 +61,8 @@ jobs:
       PYTHONUTF8: "1"
     steps:
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
       - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
@@ -88,18 +92,87 @@ jobs:
           if-no-files-found: warn
           include-hidden-files: true
 
-  frontend:
+  frontend-shards:
+    name: frontend shard ${{ matrix.shard }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1]
     steps:
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v7
         with:
           node-version: '22'
           cache: npm
       - run: npm ci
       - run: npx playwright install --with-deps chromium --only-shell
-      - run: node scripts/test-quiet.cjs frontend --artifacts "${{ runner.temp }}/mozarie-coverage"
+      - run: node scripts/test-quiet.cjs frontend-shard --shard-index ${{ matrix.shard }} --shard-total 2 --artifacts "${{ runner.temp }}/mozarie-coverage"
+      - if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: frontend-coverage-${{ matrix.shard }}
+          path: ${{ runner.temp }}/mozarie-coverage/frontend-shard-${{ matrix.shard }}
+          if-no-files-found: warn
+
+  frontend-performance:
+    name: frontend performance
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium --only-shell
+      - run: node scripts/test-quiet.cjs frontend-performance --artifacts "${{ runner.temp }}/mozarie-coverage"
+      - if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: frontend-performance
+          path: ${{ runner.temp }}/mozarie-coverage/frontend-performance
+          if-no-files-found: warn
+
+  frontend:
+    name: frontend
+    if: always()
+    needs: [frontend-shards, frontend-performance]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm run check
+      - name: Require successful frontend shards and performance
+        if: needs.frontend-shards.result != 'success' || needs.frontend-performance.result != 'success'
+        run: |
+          echo "frontend shards: ${{ needs.frontend-shards.result }}, performance: ${{ needs.frontend-performance.result }}" >&2
+          exit 1
+      - if: always()
+        uses: actions/download-artifact@v7
+        with:
+          pattern: frontend-coverage-*
+          path: ${{ runner.temp }}/frontend-shards
+          merge-multiple: false
+      - if: always()
+        uses: actions/download-artifact@v7
+        with:
+          name: frontend-performance
+          path: ${{ runner.temp }}/frontend-performance
+      - run: node scripts/test-quiet.cjs frontend-aggregate --shard-artifacts "${{ runner.temp }}/frontend-shards" --performance-artifacts "${{ runner.temp }}/frontend-performance" --artifacts "${{ runner.temp }}/mozarie-coverage"
       - if: always()
         uses: actions/upload-artifact@v6
         with:

@@ -1,7 +1,7 @@
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
-const { controls, anonymousStaticControls, dynamicControls, dynamicSurfaceContracts, scenarioContracts } = require("./ui-control-manifest.cjs");
+const { controls, anonymousStaticControls, dynamicControls, dynamicSurfaceContracts, scenarioContracts, controlEvidenceContract } = require("./ui-control-manifest.cjs");
 
 const html = fs.readFileSync(path.join(__dirname, "..", "static", "index.html"), "utf8");
 const resultKinds = new Set(["api", "canvas", "dialog", "disabled", "dom", "download", "history", "navigation", "value"]);
@@ -33,7 +33,13 @@ for (const control of controls) {
   assert.match(control.assertionId, new RegExp(`^${control.scenario}:`), `${control.id} needs a stable browser-ledger assertion id`);
   assert.equal(control.predicateId, control.assertionId, `${control.id} must bind its manifest assertion to one predicate registry id`);
   assert.ok(control.expected);
-  if (control.exemptReason !== undefined) assert.match(control.exemptReason, /\S/, `${control.id} exemption needs a concrete reason`);
+  if (control.exemptReason !== undefined) {
+    assert.match(control.exemptReason, /\S/, `${control.id} exemption needs a concrete reason`);
+    assert.ok(Array.isArray(control.testIds) && control.testIds.length, `${control.id} exemption needs executed test evidence`);
+    control.testIds.forEach((testId) => assert.match(testId, /^node:tests\/test_[^:]+\.cjs::\S.+$/, `${control.id} needs a complete Node test ID`));
+  } else {
+    assert.equal(control.testIds, undefined, `${control.id} active ledger control must not carry exemption evidence`);
+  }
 }
 assert.equal(new Set(dynamicControls.map((control) => control.selector)).size, dynamicControls.length, "dynamic control selectors must be unique");
 for (const control of dynamicControls) {
@@ -64,4 +70,7 @@ for (const control of [...controls, ...dynamicControls]) {
 }
 const assertionIds = [...controls, ...dynamicControls].map((control) => control.assertionId);
 assert.equal(new Set(assertionIds).size, assertionIds.length, "every manifest entry maps to exactly one browser-ledger assertion id");
+const evidence = controlEvidenceContract();
+assert.deepEqual(evidence.observations.map((item) => item.key).sort(), controls.filter((control) => control.exemptReason).map((control) => `CONTROL-${control.id}`).sort(), "every exemption and only exemptions enter strict execution evidence");
+assert.equal(evidence.observations.every((item) => item.status === "automated" && item.testIds.length > 0), true, "strict evidence entries reference executable tests");
 console.log(`test_ui_control_manifest: ${controls.length} id controls and ${dynamicControls.length} dynamic contracts`);

@@ -97,7 +97,7 @@ async function testBoundApplicationEvents() {
   group("[data-model-help]", ["help-target", "help-fluid"]); element("help-target").dataset.modelHelp = "target"; element("help-fluid").dataset.modelHelp = "fluid";
   group(".settings-tab", ["settings-tab"]); element("settings-tab").dataset.settingsTab = "models";
   group("[data-model-toggle]", ["toggle-hand"]); element("toggle-hand").dataset.modelToggle = "hand_detection"; element("toggle-hand").checked = true;
-  group("#detectTargetPenis, #detectTargetPussy, #dialogTargetPenis, #dialogTargetPussy", ["dialogTargetPussy", "targetPenis"]); element("dialogTargetPussy").checked = true; element("targetPenis").checked = true;
+  group("#dialogTargetPenis, #dialogTargetPussy", ["dialogTargetPussy", "targetPenis"]); element("dialogTargetPussy").checked = true; element("targetPenis").checked = true;
   group("[data-detection-image-filter]", ["detectionFilter"]); element("detectionFilter").dataset.detectionImageFilter = "unreviewed"; element("detectionFilter").checked = true;
   group("[data-apply-image-filter]", ["applyFilter"]); element("applyFilter").dataset.applyImageFilter = "masked"; element("applyFilter").checked = true;
   group('input[name="batchSaveMode"]', ["batchMode"]); group('input[name="singleSaveMode"]', ["singleMode"]);
@@ -125,7 +125,8 @@ async function testBoundApplicationEvents() {
     isHidden: (image) => Boolean(image?.hidden), isReviewed: () => false, currentImageActionPending: () => false, hasDurableHistory: () => false, isProcessableImage: (image) => Boolean(image && !image.hidden), processableImages: (images = state.images) => images.filter((image) => !image.hidden), allImageDetectionTargets: (images = state.images) => images.filter((image) => !image.hidden), pointFromEvent: (event) => ({ x: event.clientX || 1, y: event.clientY || 1 }),
     clampPoint: (point) => point, compareEventSide: () => "right", compareEventOffset: () => 0, normaliseDivisor: () => 32,
     compareSplitLimits: () => ({ fixed: false, minimum: .2, maximum: .8 }), clampCompareSplit: (value) => Math.max(.2, Math.min(.8, value)), persistCompareSplit: note("persistCompareSplit"),
-    detectionTargets: () => ["penis"], detectionConfidence: () => .5, canDetectBoundary: () => Boolean(context.canBoundary),
+    detectionTargets: () => ["penis"], persistedDetectionTargets: () => ["penis"], detectionConfidence: () => .5,
+    persistedFluidColorFill: () => ({ enabled: true, tolerance: 26 }), canDetectBoundary: () => Boolean(context.canBoundary),
     hasBoundaryDraft: () => Boolean(context.hasDraft), polygonVertexAt: () => -1, completedPolygonVertexAt: () => null,
     polygonIsValid: () => true, polygonRoi: () => ({ left: 1 }), roiFromPoints: () => ({ left: 1 }), pointForRoi: () => ({ x: 1, y: 1 }),
     rectangleDraftAt: () => null, boundaryDragStarted: () => true, imageHasMask: () => true,
@@ -133,7 +134,7 @@ async function testBoundApplicationEvents() {
   const submitRenameImage = note("submitRenameImage");
   context.submitRenameImage = submitRenameImage;
   for (const name of [
-    "openSettings", "selectSettingsTab", "moveSettingsTab", "saveSettings", "resetSettings", "chooseSettingsOutputDirectory", "chooseSettingsModelFile", "startModelDownload", "cancelModelDownload", "beginModelDownload", "syncProviderSelection", "markModelStatusDirty", "selectSamVariant", "startUpdate", "handleToolRailKeydown", "setToolRailTabStop", "setModelCardEnabled", "setHandSegmentationAvailable", "setPrecisionDetectionEnabled", "refreshSettingsStatus", "setFluidExclusionEnabled", "pickImageFiles", "pickImageDirectory", "importDroppedFiles", "loadFolder", "openDetectionDialog", "validateDetectionTargets", "syncDetectionDialog", "resetDetectionDialogState", "runDetection", "saveAll", "saveCurrent", "setDisplayMode", "fitImage", "updateCompareSplitter", "render", "updateBrushCursor", "updateBrushSize", "setHidden", "clearMasks", "closeBatchMoreMenus", "closeFilterPopovers", "syncResourceOwnership", "clearCatalog", "renderGallery", "setViewMode", "runNavigationAction", "moveCurrentBy", "reviewAndMoveNext", "removeImageFromCatalog", "hideAndMoveNext", "runSelectionAction", "clearBatchSelection", "renderOverview", "updateSelectionActionBar", "batchCandidateOperation", "toggleCandidateDisplay", "toggleCandidateEffective", "renderShortcutBindings", "setTool", "setBoundaryModeMenuOpen", "addBoundaryCandidate", "cancelBoundary", "setMosaicPreviewEnabled", "requestMosaicPreview", "updateBlockSizeDisplay", "setDetectionConfidence", "syncDetectionTargetSwitch", "syncDetectionFluidColorFill", "validateDetectionFluidColorFill", "startDetectionFromDialog", "restoreSnapshot", "resizeRenderCanvas", "refreshApplyTargets", "chooseOutputDirectory", "syncApplyMode", "controlApply", "startApplyFromDialog", "chooseSingleOutputDirectory", "syncSingleSaveMode", "startSingleSave", "showProcessing", "updateProgress", "scheduleJobPoll", "showUserError", "cancelDetection", "setReviewed", "closeCatalogContextMenu", "copyContextMenuImagePath", "setGalleryDropOverlay", "beginBoundaryBrushStroke", "appendBoundaryBrushPoint", "beginManualStroke", "appendManualStrokePoint", "fillAt", "completeManualStroke", "cancelManualStroke", "completeBoundaryBrushStroke", "flushRender", "focusElement", "closeBoundaryModeMenu", "cancelFillWork", "handleWindowKeydown", "addBoundaryDraft", "loadTranslations", "updateBoundaryActions", "setSettingsForm", "initCandidatePaddingPopover"
+    "openSettings", "selectSettingsTab", "moveSettingsTab", "saveSettings", "resetSettings", "chooseSettingsOutputDirectory", "chooseSettingsModelFile", "startModelDownload", "cancelModelDownload", "beginModelDownload", "syncProviderSelection", "markModelStatusDirty", "selectSamVariant", "startUpdate", "handleToolRailKeydown", "setToolRailTabStop", "setModelCardEnabled", "setHandSegmentationAvailable", "setPrecisionDetectionEnabled", "refreshSettingsStatus", "setFluidExclusionEnabled", "pickImageFiles", "pickImageDirectory", "importDroppedFiles", "loadFolder", "openDetectionDialog", "validateDetectionTargets", "syncDetectionDialog", "resetDetectionDialogState", "runDetection", "saveAll", "saveCurrent", "setDisplayMode", "fitImage", "updateCompareSplitter", "render", "updateBrushCursor", "updateBrushSize", "setHidden", "clearMasks", "closeBatchMoreMenus", "closeFilterPopovers", "syncResourceOwnership", "clearCatalog", "renderGallery", "setViewMode", "runNavigationAction", "moveCurrentBy", "reviewAndMoveNext", "removeImageFromCatalog", "removeImagesFromList", "removeContextImagesFromList", "hideAndMoveNext", "runSelectionAction", "clearBatchSelection", "renderOverview", "updateSelectionActionBar", "batchCandidateOperation", "toggleCandidateDisplay", "toggleCandidateEffective", "renderShortcutBindings", "setTool", "setBoundaryModeMenuOpen", "addBoundaryCandidate", "cancelBoundary", "undoBoundaryDraft", "setMosaicPreviewEnabled", "requestMosaicPreview", "updateBlockSizeDisplay", "setDetectionConfidence", "syncDetectionTargetSwitch", "syncDetectionFluidColorFill", "validateDetectionFluidColorFill", "startDetectionFromDialog", "restoreSnapshot", "resizeRenderCanvas", "refreshApplyTargets", "chooseOutputDirectory", "syncApplyMode", "controlApply", "startApplyFromDialog", "chooseSingleOutputDirectory", "syncSingleSaveMode", "startSingleSave", "showProcessing", "updateProgress", "scheduleJobPoll", "showUserError", "cancelDetection", "setReviewed", "closeCatalogContextMenu", "copyContextMenuImagePath", "setGalleryDropOverlay", "beginBoundaryBrushStroke", "appendBoundaryBrushPoint", "beginManualStroke", "appendManualStrokePoint", "fillAt", "completeManualStroke", "cancelManualStroke", "completeBoundaryBrushStroke", "flushRender", "focusElement", "closeBoundaryModeMenu", "cancelFillWork", "handleWindowKeydown", "addBoundaryDraft", "loadTranslations", "updateBoundaryActions", "setSettingsForm", "initCandidatePaddingPopover"
   ]) context[name] = note(name);
   context.openSettings = async () => { calls.push(["openSettings"]); };
   context.reconcileOverviewSelection = note("reconcileOverviewSelection");
@@ -151,11 +152,15 @@ async function testBoundApplicationEvents() {
   const event = (extra = {}) => ({ button: 0, pointerId: 1, clientX: 5, clientY: 5, buttons: 1, isPrimary: true, target: null, currentTarget: null, preventDefault() { this.prevented = true; }, ...extra });
   const fire = async (id, name, extra) => { const callback = element(id).listeners.get(name); assert.ok(callback, `${id} ${name} is bound`); await callback(event(extra)); };
 
-  for (const id of ["#settingsButton", "#updateToast", "#settingsCloseButton", "picker", "downloader", "#modelDownloadCancel", "#modelDownloadStart", "#modelDownloadCopy", "#modelDownloadClose", "#checkUpdateButton", "help-target", "help-fluid", "#modelHelpCopy", "#modelHelpCloseButton", "#pickImages", "#pickFolderFiles", "#loadFolderButton", "#detectAllButton", "#detectCurrentButton", "#saveAllButton", "#saveButton", "#singleViewButton", "#compareViewButton", "#fitButton", "#removeCurrentImageButton", "#clearCurrentMasksButton", "#clearAllMasksButton", "#clearCatalogButton", "#overviewButton", "#closeOverviewButton", "#previousImageButton", "#nextImageButton", "#reviewAndNextButton", "#removeAndNextButton", "#hideAndNextButton", "selectionAction", "#selectionClearButton", "#batchModeButton", "candidateBatch", "candidateDisplay", "candidateEffective", "#brushTool", "#mosaicEraserTool", "#eraserTool", "#excludeEraserTool", "#boundaryTool", "#bucketTool", "#excludeBucketTool", "#rectangleTool", "#polygonTool", "#boundaryBrushTool", "#boundaryCancelButton", "#mosaicPreviewButton", "#undoButton", "#redoButton", "#collapseGalleryButton", "#collapseInspectorButton", "#chooseOutputDirectoryButton", "#mosaicHelpButton", "#mosaicHelpCloseButton", "#applyCloseButton", "#applyCancelButton", "#singleSaveChooseOutputDirectoryButton", "#singleSaveCloseButton", "#toggleReviewMenuItem", "#copyImagePathMenuItem", "#removeImageMenuItem"]) await fire(id, "click");
+  for (const id of ["#settingsButton", "#updateToast", "#settingsCloseButton", "picker", "downloader", "#modelDownloadCancel", "#modelDownloadStart", "#modelDownloadCopy", "#modelDownloadClose", "#checkUpdateButton", "help-target", "help-fluid", "#modelHelpCopy", "#modelHelpCloseButton", "#pickImages", "#pickFolderFiles", "#loadFolderButton", "#detectAllButton", "#detectCurrentButton", "#detectionSettingsButton", "#saveAllButton", "#saveButton", "#singleViewButton", "#compareViewButton", "#fitButton", "#removeCurrentImageButton", "#clearCurrentMasksButton", "#clearAllMasksButton", "#clearCatalogButton", "#overviewButton", "#closeOverviewButton", "#previousImageButton", "#nextImageButton", "#reviewAndNextButton", "#removeAndNextButton", "#removeFromListButton", "#hideAndNextButton", "selectionAction", "#selectionClearButton", "#batchModeButton", "candidateBatch", "candidateDisplay", "candidateEffective", "#brushTool", "#mosaicEraserTool", "#eraserTool", "#excludeEraserTool", "#boundaryTool", "#bucketTool", "#excludeBucketTool", "#rectangleTool", "#polygonTool", "#boundaryBrushTool", "#boundaryCancelButton", "#mosaicPreviewButton", "#undoButton", "#redoButton", "#collapseGalleryButton", "#collapseInspectorButton", "#chooseOutputDirectoryButton", "#mosaicHelpButton", "#mosaicHelpCloseButton", "#applyCloseButton", "#applyCancelButton", "#singleSaveChooseOutputDirectoryButton", "#singleSaveCloseButton", "#toggleReviewMenuItem", "#copyImagePathMenuItem", "#removeImageMenuItem", "#removeFromListMenuItem"]) await fire(id, "click");
+  const detectionSettingsCall = calls.find(([name, , options]) => name === "openDetectionDialog" && options?.settingsOnly);
+  assert.equal(detectionSettingsCall?.[1].length, 0, "detection settings opens without selecting images to process");
+  assert.equal(calls.find(([name]) => name === "removeImagesFromList")?.[1][0], state.currentImage, "the footer list removal uses the current record");
+  assert.ok(calls.some(([name]) => name === "removeContextImagesFromList"), "context list removal uses its selection-aware action");
   context.canBoundary = false; await fire("#boundaryDetectButton", "click"); context.canBoundary = true; await fire("#boundaryDetectButton", "click");
   await fire("#settingsProvider", "change"); await fire("modelControl", "input"); await fire("modelControl", "change"); await fire("samVariant", "change"); await fire("toggle-hand", "change"); await fire("#settingsPrecisionToggle", "change"); await fire("#settingsFluidToggle", "change");
   await fire("#folderPath", "keydown", { key: "Enter" }); await fire("galleryFilter", "change"); await fire("overviewFilter", "change"); await fire("#overviewQuery", "input", { target: { value: "cowgirl" } }); await fire("#overviewFolder", "change", { target: { value: "folder" } });
-  await fire("#brushSize", "input"); await fire("#divisor", "input"); await fire("#applyDivisor", "input"); await fire("#confidence", "input"); await fire("#detectConfidenceRange", "input"); await fire("#detectConfidenceNumber", "input"); await fire("dialogTargetPussy", "change"); await fire("targetPenis", "change"); await fire("detectionFilter", "change");
+  await fire("#brushSize", "input"); await fire("#divisor", "input"); await fire("#applyDivisor", "input"); await fire("#detectConfidenceRange", "input"); await fire("#detectConfidenceNumber", "input"); await fire("dialogTargetPussy", "change"); await fire("targetPenis", "change"); await fire("detectionFilter", "change");
   await fire("#detectForm", "submit"); await fire("#detectCancelButton", "click"); await fire("#applyForm", "submit"); await fire("batchMode", "change"); await fire("applyFilter", "change"); await fire("#singleSaveForm", "submit"); await fire("singleMode", "change"); await fire("#settingsLanguage", "change", { target: { value: "en" } });
   state.processing = { kind: "import", state: "running" }; state.importSession = {}; await fire("#processingPauseButton", "click"); await fire("#processingCancelButton", "click"); state.processing = { kind: "detect", state: "paused" }; element("#processingCancelButton").disabled = false; await fire("#processingPauseButton", "click"); await fire("#processingCancelButton", "click");
   await fire("#gallery", "dragenter", { dataTransfer: { types: ["Files"] } }); await fire("#gallery", "dragover", { dataTransfer: { types: ["Files"] } }); await fire("#gallery", "dragleave", { relatedTarget: null }); await fire("#gallery", "drop", { dataTransfer: { files: [{}] } });
@@ -176,7 +181,7 @@ async function testBoundApplicationEvents() {
   context.api = async () => { publicationPauseRequests += 1; return { kind: "detect", state: "running" }; };
   await fire("#processingPauseButton", "click");
   assert.equal(publicationPauseRequests, 0, "a disabled publication-wait pause control cannot send a rejected pause request");
-  context.busy = true; await fire("galleryFilter", "change"); await fire("overviewFilter", "change"); await fire("#divisor", "input"); await fire("#confidence", "input"); await fire("#fitButton", "click"); await element("#editorCanvas").listeners.get("pointerdown")(event()); context.busy = false;
+  context.busy = true; await fire("galleryFilter", "change"); await fire("overviewFilter", "change"); await fire("#divisor", "input"); await fire("#fitButton", "click"); await element("#editorCanvas").listeners.get("pointerdown")(event()); context.busy = false;
   context.polygonVertexAt = () => 0; state.tool = "polygon"; state.polygonPoints = [{ x: 1, y: 1 }]; await canvas.listeners.get("pointerdown")(event()); await canvas.listeners.get("pointermove")(event()); await canvas.listeners.get("pointerup")(event()); context.polygonVertexAt = () => -1; state.boundaryDrafts = [{ id: "draft", points: [{ x: 1, y: 1 }], roi: {} }]; context.completedPolygonVertexAt = () => ({ draft: state.boundaryDrafts[0], index: 0 }); await canvas.listeners.get("pointerdown")(event()); state.drawing = true; await canvas.listeners.get("pointermove")(event()); await canvas.listeners.get("pointerup")(event()); context.completedPolygonVertexAt = () => null; state.polygonPoints = [{}, {}, {}]; await canvas.listeners.get("pointerdown")(event()); state.polygonPoints = [{}, {}, {}, {}]; state.drawing = true; await canvas.listeners.get("pointerup")(event());
   state.tool = "brush"; await canvas.listeners.get("pointerdown")(event()); state.activeStroke = {}; await canvas.listeners.get("pointercancel")(event()); await canvas.listeners.get("pointerdown")(event()); state.activeStroke = {}; await canvas.listeners.get("pointerup")(event()); state.tool = "boundary_brush"; await canvas.listeners.get("pointerdown")(event()); state.drawing = true; await canvas.listeners.get("pointermove")(event()); await canvas.listeners.get("pointerup")(event()); await canvas.listeners.get("pointerdown")(event()); state.drawing = true; await canvas.listeners.get("pointercancel")(event()); state.tool = "boundary"; const draft = { id: "rectangle" }; context.rectangleDraftAt = () => draft; await canvas.listeners.get("pointerdown")(event()); await canvas.listeners.get("pointerup")(event()); context.rectangleDraftAt = () => null;
   context.hasDraft = false; element("#catalogContextMenu").open = false; await keydown(event({ key: "q" })); element("#boundaryModeMenu").hidden = false; await document.listeners.get("pointerdown")(event({ target: element("other") })); element("#boundaryModeMenu").hidden = true; element("#catalogContextMenu").open = true; await document.listeners.get("pointerdown")(event({ target: element("other") }));
@@ -344,7 +349,7 @@ async function testCoreBoundaryAndWorkspaceBehaviour() {
   };
   const source = fs.readFileSync(path.join(jsRoot, "core.js"), "utf8");
   vm.runInNewContext(source, context, { filename: path.join(jsRoot, "core.js") });
-  vm.runInNewContext("globalThis.coreCoverage={ state, t, validCandidateTokens, showUserError, responseError, loadTranslations, api, setStatus, setStatusKey, showProcessing, progressText, processingCurrentPath, catalogRecordMatches, cancelFillWork, abortCatalogLoads, publishWorkspaceFlags, saveWorkspaceFlag, saveTargets, setHidden, selectCatalogImage, refreshReviewViews, markImagesUnreviewed, refreshCurrentReviewAndMask, clearBoundaryConstruction, updateActionButtons, updateCandidateBatchButtons, setMosaicPreviewEnabled, loadFolder, formatDuration, normaliseDetectionConfidence, normaliseDivisor, calculatedBlockSize, isBusy, resetCatalog };", context, { filename: "test-core-exports.js" });
+  vm.runInNewContext("globalThis.coreCoverage={ state, t, validCandidateTokens, showUserError, responseError, loadTranslations, api, setStatus, setStatusKey, showProcessing, progressText, processingCurrentPath, catalogRecordMatches, cancelFillWork, abortCatalogLoads, publishWorkspaceFlags, saveWorkspaceFlag, saveTargets, setHidden, selectCatalogImage, refreshReviewViews, setReviewed, refreshCurrentReviewAndMask, clearBoundaryConstruction, updateActionButtons, updateCandidateBatchButtons, setMosaicPreviewEnabled, loadFolder, formatDuration, normaliseDetectionConfidence, normaliseDivisor, calculatedBlockSize, isBusy, resetCatalog };", context, { filename: "test-core-exports.js" });
   const test = context.coreCoverage;
   const coreState = test.state;
   Object.assign(coreState, state);
@@ -406,27 +411,46 @@ async function testCoreBoundaryAndWorkspaceBehaviour() {
 
   const reviewCalls = [];
   let reviewRefreshes = 0;
-  context.setReviewed = (image, reviewed) => {
-    reviewCalls.push([image.id, reviewed]);
-    return Promise.resolve(image.reviewResult);
+  context.queueWorkspaceFlags = async (imageId, flags) => {
+    reviewCalls.push([imageId, flags.reviewed]);
+    if (imageId === "failed-review") throw new Error("review save failed");
+    return flags;
   };
-  const reviewed = { id: "reviewed", relativePath: "reviewed.png", reviewResult: true };
-  const failedReview = { id: "failed-review", relativePath: "failed.png", reviewResult: false };
-  const unreviewed = { id: "unreviewed", relativePath: "unreviewed.png", reviewResult: true };
+  const reviewed = { id: "reviewed", relativePath: "reviewed.png", reviewed: true };
+  const failedReview = { id: "failed-review", relativePath: "failed.png", reviewed: true };
+  const unreviewed = { id: "unreviewed", relativePath: "unreviewed.png", reviewed: false };
   coreState.images.push(reviewed, failedReview, unreviewed);
   coreState.reviewedImageIds.add("reviewed");
   coreState.reviewedImageIds.add("failed-review");
   const originalRefreshReviewViews = context.refreshReviewViews;
   context.refreshReviewViews = (...args) => { reviewRefreshes += 1; return originalRefreshReviewViews(...args); };
-  assert.equal(test.markImagesUnreviewed(["missing", "unreviewed"], true), false, "missing and unreviewed images do not report a review change");
-  assert.equal(test.markImagesUnreviewed(["reviewed"], false), true, "a reviewed image is marked for clearing without an immediate rerender");
-  await Promise.resolve();
-  assert.deepEqual(reviewCalls, [["reviewed", false]], "the reviewed image sends one clear request");
-  assert.equal(reviewRefreshes, 0, "renderAfter false suppresses the completion rerender");
-  assert.equal(test.markImagesUnreviewed(["reviewed", "failed-review"], true), true, "reviewed images report a pending clear with renderAfter true");
-  await Promise.resolve();
-  assert.deepEqual(reviewCalls, [["reviewed", false], ["reviewed", false], ["failed-review", false]], "reviewed records use the real mark helper for both successful and failed saves");
-  assert.equal(reviewRefreshes, 1, "only a successful clear rerenders when renderAfter is true");
+  for (const image of [reviewed, unreviewed]) {
+    coreState.currentId = image.id;
+    for (const maskChanged of [false, true]) {
+      context.refreshMaskStatus = (renderAfter) => {
+        assert.equal(renderAfter, true, "mask refresh requests its normal view update");
+        return maskChanged;
+      };
+      assert.equal(test.refreshCurrentReviewAndMask(), maskChanged, "edit refresh reports only the mask change");
+      assert.equal(image.reviewed, image === reviewed, "edit refresh preserves the record review choice");
+      assert.equal(coreState.reviewedImageIds.has(image.id), image === reviewed, "edit refresh preserves the published review choice");
+    }
+  }
+  assert.deepEqual(reviewCalls, [], "edit refresh never sends an automatic review flag request");
+  assert.equal(reviewRefreshes, 0, "edit refresh does not schedule a separate review change render");
+  assert.equal(await test.setReviewed(reviewed, false), true, "explicit unreview saves successfully");
+  assert.equal(reviewed.reviewed, false);
+  assert.equal(coreState.reviewedImageIds.has(reviewed.id), false);
+  assert.equal(await test.setReviewed(reviewed, true), true, "explicit review saves successfully");
+  assert.equal(reviewed.reviewed, true);
+  assert.equal(coreState.reviewedImageIds.has(reviewed.id), true);
+  assert.equal(await test.setReviewed(failedReview, false), false, "failed explicit review saves restore the prior choice");
+  assert.equal(failedReview.reviewed, true);
+  assert.equal(coreState.reviewedImageIds.has(failedReview.id), true);
+  assert.deepEqual(reviewCalls, [["reviewed", false], ["reviewed", true], ["failed-review", false]]);
+  assert.equal(reviewRefreshes, 2, "only successful explicit review changes refresh the review views");
+  coreState.currentId = null;
+  context.refreshMaskStatus = () => false;
   test.clearBoundaryConstruction();
   coreState.translations = {
     "duration.hour": "duration hour", "duration.minute": "duration minute", "duration.second": "duration second",
@@ -451,7 +475,8 @@ async function testCoreBoundaryAndWorkspaceBehaviour() {
   coreState.images = [{ id: "one", relativePath: "one.png" }, { id: "two", relativePath: "two.png" }];
   const preparing = { kind: "detect", state: "running", phase: "preparing_models", completed: 0, total: 2, imageIds: ["one", "two"], completedImageIds: [] };
   assert.match(test.progressText(preparing), /0/, "model preparation keeps the stable progress count");
-  assert.equal(test.processingCurrentPath(preparing), "one.png", "model preparation keeps the first unfinished filename visible");
+  coreState.translations["processing.preparingModels"] = "Preparing models";
+  assert.equal(test.processingCurrentPath(preparing), "Preparing models", "model preparation hides unfinished filenames");
   assert.equal(test.processingCurrentPath({ ...preparing, phase: "detecting", completedImageIds: ["one"] }), "two.png", "phase changes do not clear the next filename");
   assert.equal(test.processingCurrentPath({ ...preparing, processed: 1, phase: "detecting" }), "", "parallel staged counts never guess a next filename out of completion order");
   assert.equal(test.processingCurrentPath({ kind: "apply", current: "saving.png" }), "saving.png", "non-detection jobs keep their reported path");
@@ -584,10 +609,14 @@ async function testCoreBoundaryAndWorkspaceBehaviour() {
   coreState.images = [savedBeforeRemoval];
   coreState.images.some = () => false;
   assert.equal(await test.setHidden(savedBeforeRemoval, true), false, "a flag response for a removed catalog record is not published");
-  const refreshed = { id: "new", relativePath: "new.png", reviewed: true, reviewResult: true };
+  const refreshed = { id: "new", relativePath: "new.png", reviewed: true };
   coreState.images = [refreshed]; coreState.currentId = "new"; coreState.reviewedImageIds = new Set(["new"]);
   context.refreshMaskStatus = () => false;
-  assert.equal(test.refreshCurrentReviewAndMask(), true, "a review-only refresh rerenders review views");
+  const reviewRequestCount = reviewCalls.length;
+  assert.equal(test.refreshCurrentReviewAndMask(), false, "an unchanged mask does not report a review-only change");
+  assert.equal(refreshed.reviewed, true);
+  assert.equal(coreState.reviewedImageIds.has("new"), true);
+  assert.equal(reviewCalls.length, reviewRequestCount, "refreshing a reviewed image sends no review flag request");
   coreState.saving = true;
   test.setMosaicPreviewEnabled(true);
   coreState.saving = false;

@@ -7,10 +7,11 @@ They cover the browser-facing contract without substituting handler methods.
 from __future__ import annotations
 
 import http.client
+import hashlib
 import io
 import json
 import sqlite3
-import shutil
+import subprocess
 import tempfile
 import threading
 import time
@@ -19,7 +20,9 @@ import warnings
 from unittest.mock import patch
 from pathlib import Path
 
-from PIL import Image, PngImagePlugin
+from PIL import Image, ImageOps, PngImagePlugin
+from tests import prepare_test_app_config
+import numpy as np
 
 import mozarie.http as http_module
 import mozarie.state as state_module
@@ -45,7 +48,7 @@ class LiveHttpEndpointTests(unittest.TestCase):
         self._temporary_directory = tempfile.TemporaryDirectory()
         root = Path(self._temporary_directory.name).resolve()
         self.app_dir = root / "app"
-        shutil.copytree(Path(__file__).resolve().parents[1] / "config", self.app_dir / "config")
+        prepare_test_app_config(self.app_dir)
         self.source_dir = root / "images"
         self.source_dir.mkdir()
         Image.new("RGB", (12, 8), "white").save(self.source_dir / "source.png")
@@ -95,6 +98,70 @@ class LiveHttpEndpointTests(unittest.TestCase):
             return response.status, dict(response.getheaders()), response.read()
         finally:
             connection.close()
+
+    def test_named_project_open_discards_active_projectless_catalog_across_restart(self) -> None:
+        status, _headers, body = self.request("POST", "/api/projects", {"name": "Named target"}, authorized=True)
+        self.assertEqual(status, 200, body.decode("utf-8") if status != 200 else "")
+        named_id = json.loads(body)["project"]["id"]
+        status, _headers, body = self.request("POST", "/api/folder", {"path": str(self.source_dir)}, authorized=True)
+        self.assertEqual(status, 200, body.decode("utf-8") if status != 200 else "")
+        status, _headers, body = self.request("POST", "/api/project/close", {}, authorized=True)
+        self.assertEqual(status, 200, body.decode("utf-8") if status != 200 else "")
+
+        session_id = "cc1cfba8-f5d9-4cd5-a64c-5a3ce14ad125"
+        source_id = "cc1cfba8-f5d9-4cd5-a64c-5a3ce14ad126"
+        expected_generation = self.state.catalog_generation
+        status, _headers, body = self.request("POST", "/api/import/start", {"sessionId": session_id}, authorized=True)
+        self.assertEqual(status, 200, body.decode("utf-8") if status != 200 else "")
+        encoded = io.BytesIO(); Image.new("RGB", (9, 7), "blue").save(encoded, format="PNG")
+        image_bytes = encoded.getvalue()
+        status, _headers, body = self.raw_request("POST", "/api/import/file", image_bytes, {
+            "Origin": self.origin, "X-Mozarie-Token": self.state.session_token,
+            "Content-Type": "application/octet-stream", "X-Mozarie-Name": "browser.png",
+            "X-Mozarie-Relative-Path": "browser.png", "X-Mozarie-Client-Key": "projectless-browser-file",
+            "X-Mozarie-Source-Kind": "browser-files", "X-Mozarie-Source-Id": source_id,
+            "X-Mozarie-Import-Intent": "add", "X-Mozarie-Import-Session": session_id,
+            "X-Mozarie-File-Mtime": "0", "X-Mozarie-File-Size": str(len(image_bytes)),
+        })
+        self.assertEqual(status, 200, body.decode("utf-8") if status != 200 else "")
+        imported = json.loads(body); old_workspace_id = self.state.workspace_id
+        self.assertEqual(len(imported["imported"]), 1)
+        finish_payload = json.dumps({
+            "sessionId": session_id, "expectedProjectId": "", "expectedCatalogGeneration": expected_generation,
+            "completed": 1, "failed": False, "cancelled": False,
+        }).encode("utf-8")
+        status, _headers, body = self.raw_request("POST", "/api/import/finish", finish_payload, {
+            "Origin": self.origin, "X-Mozarie-Token": self.state.session_token, "Content-Type": "application/json",
+            "X-Mozarie-Expected-Project-Id": "", "X-Mozarie-Expected-Catalog-Generation": str(expected_generation),
+        })
+        self.assertEqual(status, 200, body.decode("utf-8") if status != 200 else "")
+        self.assertIsNotNone(old_workspace_id)
+        self.assertEqual(self.state.workspace_store.active_projectless_catalog(), old_workspace_id)
+        self.assertIsNotNone(self.state.workspace_store.project(old_workspace_id or ""))
+        self.assertEqual([image.relative_path for image in self.state.images.values()], ["browser.png"])
+        projectless_sources = self.state.workspace_store.project_sources(old_workspace_id)
+        self.assertEqual(len(projectless_sources), 1)
+        self.assertEqual((projectless_sources[0]["kind"], projectless_sources[0]["identity"]), ("browser-files", source_id))
+
+        status, _headers, body = self.request("POST", "/api/project/open", {"projectId": named_id}, authorized=True)
+        self.assertEqual(status, 200, body.decode("utf-8") if status != 200 else "")
+        self.assertEqual(self.state.catalog_id, named_id)
+        self.assertEqual(self.state.workspace_id, named_id, "named projects use their project ID as the live durable workspace")
+        self.assertIsNone(self.state.workspace_store.active_projectless_catalog())
+        self.assertIsNone(self.state.workspace_store.project(old_workspace_id or ""))
+        self.assertIsNotNone(self.state.workspace_store.project(named_id))
+
+        self.state.shutdown()
+        reopened = StudioState(self.state.cache_dir, self.state.session_base_dir)
+        try:
+            self.assertIsNone(reopened.workspace_id)
+            self.assertIsNone(reopened.workspace_store.active_projectless_catalog())
+            self.assertEqual(reopened.order, [])
+            self.assertIsNone(reopened.workspace_store.project(old_workspace_id or ""))
+            opened = reopened.open_project(named_id)
+            self.assertEqual(opened["project"]["id"], named_id)
+        finally:
+            reopened.shutdown()
 
     def raw_request(self, method: str, path: str, body: bytes, headers: dict[str, str]) -> tuple[int, dict[str, str], bytes]:
         if method != "GET" and "X-Mozarie-Expected-Catalog-Generation" not in headers:
@@ -186,6 +253,22 @@ class LiveHttpEndpointTests(unittest.TestCase):
         status, _headers, body = self.request("POST", "/api/unknown", {}, authorized=True)
         self.assertEqual(status, 404)
         self.assertEqual(json.loads(body)["error_code"], "api_not_found")
+
+    def test_public_api_has_no_relative_path_partial_delete_route(self) -> None:
+        """DI-243.1: deletion accepts opaque image IDs, never path fragments."""
+        status, _headers, body = self.request("POST", "/api/folder", {"path": str(self.source_dir)}, authorized=True)
+        self.assertEqual(status, 200, body.decode("utf-8"))
+        image_id = json.loads(body)["images"][0]["id"]
+        for method, route in (
+            ("DELETE", "/api/catalog/path/source.png"),
+            ("POST", "/api/catalog/delete-relative-path"),
+            ("POST", "/api/project/image/source.png/delete"),
+        ):
+            status, _headers, response = self.request(method, route, {"relativePath": "source.png"}, authorized=True)
+            self.assertEqual(status, 404, (method, route, response.decode("utf-8")))
+            self.assertEqual(json.loads(response)["error_code"], "api_not_found")
+        self.assertEqual([item["id"] for item in self.state.list_images()], [image_id])
+        self.assertTrue((self.source_dir / "source.png").is_file())
 
     def test_delete_json_body_is_fully_consumed_before_the_next_request(self) -> None:
         _status, _headers, body = self.request("POST", "/api/folder", {"path": str(self.source_dir)}, authorized=True)
@@ -306,6 +389,58 @@ class LiveHttpEndpointTests(unittest.TestCase):
         with Image.open(io.BytesIO(body)) as image:
             self.assertEqual(image.size, (13, 9))
 
+    def test_unlimited_png_jpeg_webp_catalog_and_assets_preserve_dimensions(self) -> None:
+        for extension, image_format in [("png", "PNG"), ("jpg", "JPEG"), ("webp", "WEBP")]:
+            with Image.new("RGB", (40, 20), "#d04020") as source:
+                options = {}
+                if image_format == "JPEG":
+                    exif = Image.Exif()
+                    exif[274] = 6
+                    options["exif"] = exif
+                source.save(self.source_dir / f"over-limit.{extension}", format=image_format, **options)
+
+        self.assertIsNone(Image.MAX_IMAGE_PIXELS)
+        status, _headers, body = self.request("POST", "/api/folder", {"path": str(self.source_dir)}, authorized=True)
+        self.assertEqual(status, 200, body.decode("utf-8"))
+        records = {item["relativePath"]: item for item in json.loads(body)["images"]}
+        self.assertEqual(set(records), {"source.png", "over-limit.png", "over-limit.jpg", "over-limit.webp"})
+        assets = []
+        for name, record in records.items():
+            expected = (20, 40) if name.endswith(".jpg") else ((12, 8) if name == "source.png" else (40, 20))
+            self.assertEqual((record["width"], record["height"]), expected)
+            for route in ("image", "thumbnail"):
+                status, _headers, asset = self.request("GET", f"/api/{route}/{record['id']}")
+                self.assertEqual(status, 200, name)
+                assets.append((asset, expected))
+        self.assertIsNone(Image.MAX_IMAGE_PIXELS)
+
+        for asset, expected in assets:
+            with Image.open(io.BytesIO(asset)) as source, ImageOps.exif_transpose(source) as visible:
+                self.assertEqual(visible.size, expected)
+
+    def test_exif_rotated_thumbnail_and_editor_asset_have_identical_visual_orientation(self) -> None:
+        rotated = self.source_dir / "rotated.jpg"
+        exif = Image.Exif(); exif[274] = 6
+        source = Image.new("RGB", (40, 20), "black")
+        for x in range(20):
+            for y in range(20): source.putpixel((x, y), (255, 0, 0))
+        source.save(rotated, format="JPEG", quality=100, exif=exif)
+        status, _headers, body = self.request("POST", "/api/folder", {"path": str(self.source_dir)}, authorized=True)
+        self.assertEqual(status, 200)
+        record = next(item for item in json.loads(body)["images"] if item["relativePath"] == "rotated.jpg")
+        self.assertEqual((record["width"], record["height"]), (20, 40))
+        status, _headers, editor_body = self.request("GET", f"/api/image/{record['id']}")
+        self.assertEqual(status, 200)
+        status, _headers, thumbnail_body = self.request("GET", f"/api/thumbnail/{record['id']}")
+        self.assertEqual(status, 200)
+        with Image.open(io.BytesIO(editor_body)) as raw_editor, Image.open(io.BytesIO(thumbnail_body)) as raw_thumbnail:
+            editor = ImageOps.exif_transpose(raw_editor).convert("RGB")
+            thumbnail = ImageOps.exif_transpose(raw_thumbnail).convert("RGB")
+            self.assertEqual(editor.size, thumbnail.size)
+            self.assertEqual(editor.size, (20, 40))
+            self.assertGreater(editor.crop((0, 0, 20, 20)).resize((1, 1)).getpixel((0, 0))[0], 200)
+            self.assertGreater(thumbnail.crop((0, 0, 20, 20)).resize((1, 1)).getpixel((0, 0))[0], 200)
+
     def test_live_manual_layer_transfer_persists_and_recovers_after_cancel_or_commit_failure(self) -> None:
         """Run the browser's begin/layer/commit protocol through a real server."""
         status, _headers, body = self.request("POST", "/api/projects", {"name": "Manual transfer"}, authorized=True)
@@ -391,7 +526,8 @@ class LiveHttpEndpointTests(unittest.TestCase):
 
         failed = "00000000-0000-4000-8000-000000000104"
         begin(failed, ["add"]); layer(failed, "add", layers["add"])
-        with patch.object(self.state, "save_manual_workspace", side_effect=ClientError("保存に失敗しました。", "workspace_write_failed")):
+        with patch.object(self.state, "save_manual_workspace", side_effect=ClientError("保存に失敗しました。", "workspace_write_failed")), \
+             self.assertLogs("mozarie", level="WARNING") as failure_log:
             status, _headers, response = self.request(
                 "POST", f"/api/workspace/manual/{image_id}/commit", {**base_payload, "sessionId": failed}, authorized=True,
             )
@@ -399,6 +535,7 @@ class LiveHttpEndpointTests(unittest.TestCase):
         self.assertEqual(json.loads(response)["error_code"], "workspace_write_failed")
         self.assertNotIn(failed, self.state._manual_uploads)
         self.assertEqual(self.state.manual_workspace(image_id)["add"], persisted["add"])
+        self.assertTrue(any("error_code=workspace_write_failed" in line and "所要=" in line for line in failure_log.output))
 
         retry = "00000000-0000-4000-8000-000000000105"
         begin(retry, ["add"]); layer(retry, "add", layers["add"])
@@ -414,6 +551,11 @@ class LiveHttpEndpointTests(unittest.TestCase):
         status, _headers, body = self.request("POST", "/api/folder", {"path": str(self.source_dir)}, authorized=True)
         self.assertEqual(status, 200, body.decode("utf-8"))
         image_id = json.loads(body)["images"][0]["id"]
+        before = {
+            "catalog": self.state.catalog_snapshot(include_sources=True),
+            "workspace": self.state.workspace_store.export_state(image_id),
+            "projects": self.state.projects(),
+        }
         with warnings.catch_warnings():
             warnings.simplefilter("error", DeprecationWarning)
             status, headers, body = self.request("GET", f"/api/project/mask/{image_id}/mosaic")
@@ -421,6 +563,11 @@ class LiveHttpEndpointTests(unittest.TestCase):
         self.assertEqual(headers["Content-Type"], "image/png")
         with Image.open(io.BytesIO(body)) as mask:
             self.assertEqual((mask.mode, mask.size), ("L", (12, 8)))
+        self.assertEqual({
+            "catalog": self.state.catalog_snapshot(include_sources=True),
+            "workspace": self.state.workspace_store.export_state(image_id),
+            "projects": self.state.projects(),
+        }, before, "warnings-as-errors export preserves the complete project state")
 
     def test_source_delete_rejects_a_same_fingerprint_foreign_replacement(self) -> None:
         status, _headers, body = self.request("POST", "/api/folder", {"path": str(self.source_dir)}, authorized=True)
@@ -452,6 +599,27 @@ class LiveHttpEndpointTests(unittest.TestCase):
         self.assertEqual(source.read_bytes(), bytes(foreign_bytes))
         self.assertFalse(any(self.source_dir.glob(".source.png.mozarie-delete-*")))
 
+    def test_source_delete_commit_failure_is_written_to_cmd_log(self) -> None:
+        """DI-230.2: a server-reached commit exception is logged with its safe code."""
+        status, _headers, body = self.request("POST", "/api/folder", {"path": str(self.source_dir)}, authorized=True)
+        self.assertEqual(status, 200, body.decode("utf-8"))
+        image_id = json.loads(body)["images"][0]["id"]
+        token = "00000000-0000-4000-8000-000000230201"
+        for route, payload in (
+            ("/api/catalog/delete-source/prepare", {"imageIds": [image_id], "deleteToken": token}),
+            ("/api/catalog/delete-source/claim", {"deleteToken": token}),
+        ):
+            status, _headers, body = self.request("POST", route, payload, authorized=True)
+            self.assertEqual(status, 200, body.decode("utf-8"))
+        with patch.object(self.state, "delete_images_with_sources", side_effect=ClientError("commit failed", "workspace_write_failed")), \
+             self.assertLogs("mozarie", level="WARNING") as captured:
+            status, _headers, body = self.request("POST", "/api/catalog/delete-source", {
+                "imageIds": [image_id], "deleteToken": token, "browserDeletedImageIds": [],
+            }, authorized=True)
+        self.assertEqual(status, 400)
+        self.assertEqual(json.loads(body)["error_code"], "workspace_write_failed")
+        self.assertTrue(any("操作失敗: 元画像を完全削除" in line and "error_code=workspace_write_failed" in line and "所要=" in line for line in captured.output))
+
     def test_save_reserve_requires_a_canonical_uuid_token(self) -> None:
         status, _headers, body = self.request("POST", "/api/folder", {"path": str(self.source_dir)}, authorized=True)
         self.assertEqual(status, 200, body.decode("utf-8") if status != 200 else "")
@@ -467,10 +635,87 @@ class LiveHttpEndpointTests(unittest.TestCase):
         self.assertEqual(status, 400)
         self.assertEqual(json.loads(body)["error_code"], "input_invalid")
 
+    def test_chromium_save_stream_survives_revision_change_and_releases_temporary_output(self) -> None:
+        pixels = np.random.default_rng(73).integers(0, 256, (1024, 1024, 3), dtype=np.uint8)
+        with Image.fromarray(pixels) as source:
+            source.save(self.source_dir / "source.png")
+        image_id = self.state.set_root(str(self.source_dir))[0]["id"]
+        self.state.set_image_transform(image_id, {"flipH": True, "flipV": False})
+        captured = []
+        render = self.state.render_browser_save
+        revision_changed = threading.Event()
+        first_chunk_sent = threading.Event()
+        transform = self.state.set_image_transform
+        stream_path = MosaicHandler._stream_path
+
+        def capture_render(*args, **kwargs):
+            result = render(*args, **kwargs)
+            if result.response_path is not None:
+                captured.append((result.response_path, hashlib.sha256(result.response_path.read_bytes()).hexdigest()))
+            return result
+
+        def change_revision(*args, **kwargs):
+            self.assertTrue(first_chunk_sent.is_set())
+            self.assertTrue(captured[0][0].exists(), "the first response is still streaming when the browser changes its revision")
+            result = transform(*args, **kwargs)
+            revision_changed.set()
+            return result
+
+        def hold_after_first_chunk(handler, path, content_type, headers):
+            write = handler.wfile.write
+            writes = 0
+
+            def write_and_wait(data):
+                nonlocal writes
+                result = write(data)
+                writes += 1
+                if writes == 2:  # Headers, then the first image chunk.
+                    first_chunk_sent.set()
+                    if not revision_changed.wait(THREAD_TIMEOUT):
+                        raise AssertionError("the browser did not edit the image while the response was streaming")
+                return result
+
+            with patch.object(handler.wfile, "write", side_effect=write_and_wait):
+                return stream_path(handler, path, content_type, headers)
+
+        try:
+            with patch.object(self.state, "render_browser_save", side_effect=capture_render), \
+                    patch.object(self.state, "set_image_transform", side_effect=change_revision), \
+                    patch.object(MosaicHandler, "_stream_path", hold_after_first_chunk):
+                result = subprocess.run(
+                    ["node", str(Path(__file__).with_name("save_stream_live_browser_helper.cjs")), self.origin],
+                    cwd=Path(__file__).resolve().parents[1], text=True, encoding="utf-8", errors="replace",
+                    capture_output=True, timeout=60, check=False,
+                )
+        finally:
+            revision_changed.set()
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        browser_result = json.loads(result.stdout)
+        self.assertEqual(len(captured), 1)
+        response_path, digest = captured[0]
+        self.assertEqual(browser_result["digest"], digest, "the full browser response retains the version opened before the concurrent edit")
+        self.assertFalse(response_path.exists(), "response completion releases the temporary output")
+
     def test_live_browser_save_render_streams_a_stable_image_response(self) -> None:
         status, _headers, body = self.request("POST", "/api/folder", {"path": str(self.source_dir)}, authorized=True)
         self.assertEqual(status, 200, body.decode("utf-8") if status != 200 else "")
         image_id = json.loads(body)["images"][0]["id"]
+        mask_path = self.state.cache_dir / image_id / "stable-render.png"
+        mask_path.parent.mkdir(parents=True, exist_ok=True)
+        Image.new("L", (12, 8), 255).save(mask_path)
+        with self.state.image_io_lock(image_id), self.state.lock:
+            self.state._commit_candidate_snapshot(
+                image_id,
+                [Candidate("stable-render", "penis", .9, mask_path)],
+                replace=True,
+            )
+        self.state.set_candidate_state(image_id, "stable-render", {"enabled": False})
+        self.state.set_image_flags(image_id, {"reviewed": True})
+        state_before_render = {
+            "catalog": self.state.catalog_snapshot(include_sources=True),
+            "candidate": self.state.candidate_snapshot(image_id),
+            "reviewed": self.state.images[image_id].reviewed,
+        }
         client_save_token = "00000000-0000-4000-8000-000000000001"
         status, _headers, body = self.request("POST", "/api/save/reserve", {
             "imageId": image_id,
@@ -481,21 +726,52 @@ class LiveHttpEndpointTests(unittest.TestCase):
             "keepMetadata": True,
         }, authorized=True)
         self.assertEqual(status, 200, body.decode("utf-8") if status != 200 else "")
-        status, headers, body = self.request("POST", "/api/save/render", {
-            "imageId": image_id,
-            "candidateRevision": self.state._candidate_revision(image_id),
-            "clientSaveToken": client_save_token,
-            "divisor": 100,
-            "draft": None,
-            "copyToDefault": False,
-            "format": "original",
-            "keepMetadata": True,
-        }, authorized=True)
+        response_paths: list[Path] = []
+        original_render = self.state.render_browser_save
+
+        def capture_render(*args, **kwargs):
+            rendered = original_render(*args, **kwargs)
+            if rendered.response_path is not None:
+                response_paths.append(rendered.response_path)
+            return rendered
+
+        with patch.object(self.state, "render_browser_save", side_effect=capture_render):
+            status, headers, body = self.request("POST", "/api/save/render", {
+                "imageId": image_id,
+                "candidateRevision": self.state._candidate_revision(image_id),
+                "clientSaveToken": client_save_token,
+                "divisor": 100,
+                "draft": None,
+                "copyToDefault": False,
+                "format": "original",
+                "keepMetadata": True,
+            }, authorized=True)
         self.assertEqual(status, 200, body.decode("utf-8") if status != 200 else "")
         self.assertEqual(headers["Content-Type"], "image/png")
         self.assertTrue(headers.get("X-Mozarie-Save-Token"))
+        with self.assertLogs("mozarie", level="INFO") as status_log:
+            status_code, _status_headers, status_body = self.request("POST", "/api/save/status", {
+                "imageId": image_id,
+                "candidateRevision": self.state._candidate_revision(image_id),
+                "saveToken": headers["X-Mozarie-Save-Token"],
+                "sourceAction": "overwrite",
+            }, authorized=True)
+        self.assertEqual(status_code, 200, status_body.decode("utf-8"))
+        self.assertTrue(any("操作開始: ブラウザー保存状態確認" in line for line in status_log.output))
+        self.assertTrue(any("操作完了: ブラウザー保存状態確認" in line and "所要=" in line for line in status_log.output))
         with Image.open(io.BytesIO(body)) as rendered:
             self.assertEqual((rendered.mode, rendered.size), ("RGB", (12, 8)))
+        self.assertTrue(response_paths)
+        for _ in range(50):
+            if all(not path.exists() for path in response_paths):
+                break
+            time.sleep(.01)
+        self.assertTrue(all(not path.exists() for path in response_paths), "response completion removes every temporary render")
+        self.assertEqual({
+            "catalog": self.state.catalog_snapshot(include_sources=True),
+            "candidate": self.state.candidate_snapshot(image_id),
+            "reviewed": self.state.images[image_id].reviewed,
+        }, state_before_render, "streaming the response does not mutate image, candidate, or review state")
 
     def test_live_edited_name_moves_native_source_only_after_overwrite_and_reopens_canonically(self) -> None:
         status, _headers, body = self.request("POST", "/api/projects", {"name": "Edited HTTP save"}, authorized=True)
@@ -722,6 +998,9 @@ class LiveHttpEndpointTests(unittest.TestCase):
         }, authorized=True)
         self.assertEqual(status, 200, body.decode("utf-8") if status != 200 else "")
         self.assertTrue(self.state.manual_workspace(image_id)["add"].startswith("data:image/png;base64,"))
+        self.state.set_image_flags(image_id, {"reviewed": True})
+        history_before_save = self.state.workspace_store.history_status(image_id)
+        self.assertTrue(history_before_save["canUndo"])
 
         client_token = "00000000-0000-4000-8000-000000000021"
         save_options = {
@@ -763,6 +1042,8 @@ class LiveHttpEndpointTests(unittest.TestCase):
             reopened_manual = reopened.manual_workspace(image_id)
             self.assertIsNotNone(reopened_manual)
             self.assertTrue(reopened_manual["add"].startswith("data:image/png;base64,"))
+            self.assertTrue(reopened.images[image_id].reviewed)
+            self.assertEqual(reopened.workspace_store.history_status(image_id), history_before_save)
         finally:
             reopened.shutdown()
 

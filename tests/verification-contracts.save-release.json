@@ -1,0 +1,1566 @@
+{
+  "version": 1,
+  "domain": "save-release",
+  "source": {
+    "path": "docs/manual-verification/save-release.md",
+    "commit": "264f70d"
+  },
+  "baseline": {
+    "rows": 93,
+    "observations": 138
+  },
+  "observations": [
+    {
+      "key": "SV-001.1",
+      "sourceIds": [
+        "SV-001"
+      ],
+      "observation": "現在画像名を表示し、対象を絞るプルダウンは出さない。",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_gallery_save_coverage.cjs::gallery and save interactions > single and batch save modal preferences and controls",
+        "node:tests/test_bulk_views_save_preferences_e2e.cjs::bulk displays and save preferences in Chromium"
+      ]
+    },
+    {
+      "key": "SV-002.1",
+      "sourceIds": [
+        "SV-002"
+      ],
+      "observation": "空欄を許可し、必須入力エラーを出さない。",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_gallery_save_coverage.cjs::gallery and save interactions > single and batch save modal preferences and controls",
+        "node:tests/test_bulk_views_save_preferences_e2e.cjs::bulk displays and save preferences in Chromium"
+      ]
+    },
+    {
+      "key": "SV-003.1",
+      "sourceIds": [
+        "SV-003"
+      ],
+      "observation": "末尾が空のまま残る。",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_gallery_save_coverage.cjs::gallery and save interactions > single and batch save modal preferences and controls",
+        "node:tests/test_bulk_views_save_preferences_e2e.cjs::bulk displays and save preferences in Chromium"
+      ]
+    },
+    {
+      "key": "SV-004.1",
+      "sourceIds": [
+        "SV-004"
+      ],
+      "observation": "単一の空末尾を一括へ流用せず、一括の既定末尾を表示する。",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_gallery_save_coverage.cjs::gallery and save interactions > single and batch save modal preferences and controls",
+        "node:tests/test_bulk_views_save_preferences_e2e.cjs::bulk displays and save preferences in Chromium"
+      ]
+    },
+    {
+      "key": "SV-005.1",
+      "sourceIds": [
+        "SV-005"
+      ],
+      "observation": "元名と同じ拡張子で現在画像1件だけを保存する。",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > copy reserve render commit acknowledgement succeeds"
+      ]
+    },
+    {
+      "key": "SV-006.1",
+      "sourceIds": [
+        "SV-006"
+      ],
+      "observation": "既存ファイルを保持し、連番名で保存する。",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_server.MozarieTests.test_copy_destination_keeps_existing_files_and_has_no_numeric_search_cap"
+      ]
+    },
+    {
+      "key": "SV-007.1",
+      "sourceIds": [
+        "SV-007"
+      ],
+      "observation": "拡張子の前へ指定文字列を追加する。",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_recursive_save_rename.RecursiveSaveTests.test_copy_uses_edited_basename_before_format_and_suffix"
+      ]
+    },
+    {
+      "key": "SV-009.1",
+      "sourceIds": [
+        "SV-009"
+      ],
+      "observation": "ファイルを出力せず編集画面へ戻る。",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_gallery_save_coverage.cjs::gallery and save interactions > single and batch save modal preferences and controls",
+        "node:tests/test_bulk_views_save_preferences_e2e.cjs::bulk displays and save preferences in Chromium"
+      ]
+    },
+    {
+      "key": "SV-010.1",
+      "sourceIds": [
+        "SV-010"
+      ],
+      "observation": "取消ボタンが操作でき、元画像の内容と更新時刻を変えず保存画面へ戻る。",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_filters_and_fluid_e2e.cjs::single overwrite confirmation cancel returns to save dialog with source bytes and mtime unchanged"
+      ]
+    },
+    {
+      "key": "SV-011.1",
+      "sourceIds": [
+        "SV-011"
+      ],
+      "observation": "実行ボタンが操作でき、指定画像だけを保存内容で置き換える。",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > browser overwrite replaces only the selected source"
+      ]
+    },
+    {
+      "key": "SV-012.1",
+      "sourceIds": [
+        "SV-012"
+      ],
+      "observation": "実行ボタンが操作でき、コピーの成功後にだけ元画像を削除する。",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > copy success deletes original only after commit"
+      ]
+    },
+    {
+      "key": "SV-013.1",
+      "sourceIds": [
+        "SV-013"
+      ],
+      "observation": "候補・マスク・確認済み・非表示・一覧画像を保持する。",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > saving twice keeps catalog masks flags and candidates"
+      ]
+    },
+    {
+      "key": "SV-014.1",
+      "sourceIds": [
+        "SV-014"
+      ],
+      "observation": "前回の出力済み状態で除外せず、もう一度保存できる。",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > saving twice keeps catalog masks flags and candidates"
+      ]
+    },
+    {
+      "key": "SV-015.1",
+      "sourceIds": [
+        "SV-015"
+      ],
+      "observation": "保存対象の選択と件数を表示する。",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_gallery_save_coverage.cjs::gallery and save interactions > single and batch save modal preferences and controls",
+        "node:tests/test_bulk_views_save_preferences_e2e.cjs::bulk displays and save preferences in Chromium"
+      ]
+    },
+    {
+      "key": "SV-016.1",
+      "sourceIds": [
+        "SV-016"
+      ],
+      "observation": "非表示を除く一覧全件を含み、以前保存した表示画像も含む。",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_gallery_save_coverage.cjs::gallery and save interactions > batch save filters count and select the exact visible set"
+      ]
+    },
+    {
+      "key": "SV-017.1",
+      "sourceIds": [
+        "SV-017"
+      ],
+      "observation": "非表示を除くモザイクのある画像だけを数え、同じ対象を保存する。",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_gallery_save_coverage.cjs::gallery and save interactions > batch save filters count and select the exact visible set"
+      ]
+    },
+    {
+      "key": "SV-018.1",
+      "sourceIds": [
+        "SV-018"
+      ],
+      "observation": "非表示を除く確認済み画像だけを数え、出力済みでも除外しない。",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_gallery_save_coverage.cjs::gallery and save interactions > batch save filters count and select the exact visible set"
+      ]
+    },
+    {
+      "key": "SV-019.1",
+      "sourceIds": [
+        "SV-019"
+      ],
+      "observation": "非表示を除いた件数だけを表示・出力する。",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_gallery_save_coverage.cjs::gallery and save interactions > batch save filters count and select the exact visible set"
+      ]
+    },
+    {
+      "key": "SV-020.1",
+      "sourceIds": [
+        "SV-020"
+      ],
+      "observation": "対象画像をそれぞれ出力し、元画像を保持する。",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > 400 browser copies stay bounded by configured parallelism"
+      ]
+    },
+    {
+      "key": "SV-021.1",
+      "sourceIds": [
+        "SV-021"
+      ],
+      "observation": "実行ボタンが操作でき、対象画像だけを上書きし、対象外の元画像を保持する。",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > browser overwrite replaces only the selected source"
+      ]
+    },
+    {
+      "key": "SV-022.1",
+      "sourceIds": [
+        "SV-022"
+      ],
+      "observation": "空欄を許容し、同名競合時は連番にする。",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_server.MozarieTests.test_copy_destination_keeps_existing_files_and_has_no_numeric_search_cap"
+      ]
+    },
+    {
+      "key": "SV-023.1",
+      "sourceIds": [
+        "SV-023"
+      ],
+      "observation": "指定粒度で出力し、候補マスクの形状は変わらない。",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_server.MozarieTests.test_browser_save_uses_1_over_100_block_size_and_keeps_png_metadata"
+      ]
+    },
+    {
+      "key": "SV-025.1",
+      "sourceIds": [
+        "SV-025"
+      ],
+      "observation": "進行中の処理が落ち着いた後に新規出力を開始しない。",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > in-flight pause settles current output and resume saves only unprocessed images"
+      ]
+    },
+    {
+      "key": "SV-026.1",
+      "sourceIds": [
+        "SV-026"
+      ],
+      "observation": "未処理画像を保存し、完了済み画像を重複出力しない。",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > in-flight pause settles current output and resume saves only unprocessed images"
+      ]
+    },
+    {
+      "key": "SV-027.1",
+      "sourceIds": [
+        "SV-027"
+      ],
+      "observation": "未処理分を成功扱いにせず、操作を再有効化する。",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > save cancellation stops unstarted work",
+        "python:tests.test_server.MozarieTests.test_cancelled_or_failed_apply_reports_only_successfully_completed_images"
+      ]
+    },
+    {
+      "key": "SV-028.1",
+      "sourceIds": [
+        "SV-028"
+      ],
+      "observation": "対象画像と編集データが残る。",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > saving twice keeps catalog masks flags and candidates"
+      ]
+    },
+    {
+      "key": "SV-028.2",
+      "sourceIds": [
+        "SV-028"
+      ],
+      "observation": "保存で一覧を削除しない。",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > saving twice keeps catalog masks flags and candidates"
+      ]
+    },
+    {
+      "key": "SV-091.1",
+      "sourceIds": [
+        "SV-091"
+      ],
+      "observation": "同じページの間は各モーダルの選択を保ち、JPGの強制OFFで利用者の保持選択を失わない。",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_gallery_save_coverage.cjs::gallery and save interactions > PNG JPG PNG restores metadata preference and reload restores defaults"
+      ]
+    },
+    {
+      "key": "SV-091.2",
+      "sourceIds": [
+        "SV-091"
+      ],
+      "observation": "再読込後は既定値へ戻る。",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_gallery_save_coverage.cjs::gallery and save interactions > PNG JPG PNG restores metadata preference and reload restores defaults"
+      ]
+    },
+    {
+      "key": "SV-091.3",
+      "sourceIds": [
+        "SV-091"
+      ],
+      "observation": "明示した一括対象だけは開くたびに反映する。",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_gallery_save_coverage.cjs::gallery and save interactions > single and batch save modal preferences and controls"
+      ]
+    },
+    {
+      "key": "SV-092.1",
+      "sourceIds": [
+        "SV-092"
+      ],
+      "observation": "保存が確定した画像だけを一覧から外す。",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > remove after save removes committed images only",
+        "node:tests/test_bulk_views_save_preferences_e2e.cjs::bulk displays and save preferences in Chromium"
+      ]
+    },
+    {
+      "key": "SV-092.2",
+      "sourceIds": [
+        "SV-092"
+      ],
+      "observation": "先頭は次、末尾は前を選び、別の表示中画像は変えない。",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > remove after save updates selection and UI"
+      ]
+    },
+    {
+      "key": "SV-092.3",
+      "sourceIds": [
+        "SV-092"
+      ],
+      "observation": "元ファイルと保存先出力は保持する。",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_server.MozarieTests.test_remove_saved_images_from_catalog_keeps_all_source_files"
+      ]
+    },
+    {
+      "key": "SV-093.1",
+      "sourceIds": [
+        "SV-093"
+      ],
+      "observation": "完了済みだけを一回の一覧削除で外す。",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > remove after save removes committed images only",
+        "node:tests/test_bulk_views_save_preferences_e2e.cjs::bulk displays and save preferences in Chromium"
+      ]
+    },
+    {
+      "key": "SV-093.2",
+      "sourceIds": [
+        "SV-093"
+      ],
+      "observation": "保存失敗・取消で出力を巻き戻さず、一覧削除だけが失敗したときは保存済みだが削除できなかったことを表示する。",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > remove after save respects enablement and failures"
+      ]
+    },
+    {
+      "key": "SV-094.1",
+      "sourceIds": [
+        "SV-094"
+      ],
+      "observation": "ONでは元フォルダーからの相対構成を保つ。",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_recursive_save_rename.RecursiveSaveTests.test_preserve_structure_keeps_the_source_relative_parent_in_the_reserved_output"
+      ]
+    },
+    {
+      "key": "SV-094.2",
+      "sourceIds": [
+        "SV-094"
+      ],
+      "observation": "OFFの最終名重複は保存・下書き確定・出力作成の前に原因と次の操作を示して停止し、連番を付けて続行しない。",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_recursive_save_rename.RecursiveSaveTests.test_flatten_selected_set_collision_after_format_and_suffix_has_no_output_probe"
+      ]
+    },
+    {
+      "key": "SV-095.1",
+      "sourceIds": [
+        "SV-095"
+      ],
+      "observation": "コピーは編集名と選んだ形式で出力し、元画像と編集名を保持する。",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > edited-name copy uses selected format and keeps source metadata",
+        "python:tests.test_recursive_save_rename.RecursiveSaveTests.test_copy_uses_edited_basename_before_format_and_suffix"
+      ]
+    },
+    {
+      "key": "SV-095.2",
+      "sourceIds": [
+        "SV-095"
+      ],
+      "observation": "元画像への適用は指定名で保存できた後にだけ旧名を削除し、元名を更新する。",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > formatted overwrite replaces source after success",
+        "python:tests.test_recursive_save_rename.WorkspaceRenameTests.test_original_save_retargets_native_aliases_and_keeps_alias_edit"
+      ]
+    },
+    {
+      "key": "SV-095.3",
+      "sourceIds": [
+        "SV-095"
+      ],
+      "observation": "競合・保存失敗では旧画像を残す。",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > formatted overwrite collision preserves original",
+        "python:tests.test_recursive_save_rename.StudioStateNativeRenameTests.test_edited_name_collision_keeps_original_and_edit"
+      ]
+    },
+    {
+      "key": "SV-096.1",
+      "sourceIds": [
+        "SV-096"
+      ],
+      "observation": "再接続の取消・拒否・不一致では出力と削除を開始せず、許可後だけコピー成功後の元画像削除を確定する。保存ごとに権限を確認し、同じフォルダー配下の画像には許可を共有する。",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > browser source preflight rejects cancel denial mismatch and changes",
+        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > directory save permissions are shared across files and repeated batches",
+        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > standalone file grants are queried and restored without duplicate requests",
+        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > denied revoked and inactive save grants preserve source and output",
+        "node:tests/test_folder_permissions_e2e.cjs::project folder restore retains each nested file's direct parent",
+        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > copy then source delete follows durable commit"
+      ]
+    },
+    {
+      "key": "SV-096.2",
+      "sourceIds": [
+        "SV-096"
+      ],
+      "observation": "元フォルダー再接続のWindowsダイアログで許可、取消、別フォルダー選択を行ったとき、表示とOS権限UIが正しい。",
+      "status": "retired",
+      "retirementReason": "Windows所有のフォルダー選択・許可画面自体は自動検証の対象外とする。選択結果・取消・不一致のアプリ側処理は自動テストで検証する。"
+    },
+    {
+      "key": "SV-029.1",
+      "sourceIds": [
+        "SV-029"
+      ],
+      "observation": "寸法・形式を保持し、モザイク範囲に加工を反映する。",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_server.MozarieTests.test_png_metadata_is_preserved_after_save"
+      ]
+    },
+    {
+      "key": "SV-030.1",
+      "sourceIds": [
+        "SV-030"
+      ],
+      "observation": "寸法を保持し、編集画面と同じ向きのJPEGとして開ける。",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_server.MozarieTests.test_exif_rotated_jpeg_uses_normalized_mask_coordinates",
+        "python:tests.test_server.MozarieTests.test_jpeg_metadata_is_preserved_after_save"
+      ]
+    },
+    {
+      "key": "SV-031.1",
+      "sourceIds": [
+        "SV-031"
+      ],
+      "observation": "WebPとして開け、モザイク範囲が反映される。",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_server.MozarieTests.test_webp_metadata_is_preserved_after_save"
+      ]
+    },
+    {
+      "key": "SV-032.1",
+      "sourceIds": [
+        "SV-032"
+      ],
+      "observation": "透過部分を保持し、加工対象以外の透過を塗りつぶさない。",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_server.MozarieTests.test_transparent_png_save_preserves_size_alpha_and_unmasked_pixels"
+      ]
+    },
+    {
+      "key": "SV-033.1",
+      "sourceIds": [
+        "SV-033"
+      ],
+      "observation": "parametersの文字列が一致し、画像を開ける。",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_server.MozarieTests.test_png_metadata_is_preserved_after_save"
+      ]
+    },
+    {
+      "key": "SV-034.1",
+      "sourceIds": [
+        "SV-034"
+      ],
+      "observation": "除外後の合成範囲だけにモザイクがかかる。",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_server.MozarieTests.test_candidate_exclusion_render_preserves_excluded_pixels_dimensions_and_state"
+      ]
+    },
+    {
+      "key": "SV-034a.1",
+      "sourceIds": [
+        "SV-034a"
+      ],
+      "observation": "全候補を除外した画像はモザイク画素を出力せず、一部除外した画像は除外部分を除いた候補範囲だけにモザイクを出力する。",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_server.MozarieTests.test_candidate_exclusion_render_preserves_excluded_pixels_dimensions_and_state"
+      ]
+    },
+    {
+      "key": "SV-034a.2",
+      "sourceIds": [
+        "SV-034a"
+      ],
+      "observation": "対象外画像・候補・除外状態を変えない。",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_server.MozarieTests.test_candidate_exclusion_render_preserves_excluded_pixels_dimensions_and_state"
+      ]
+    },
+    {
+      "key": "SV-035.1",
+      "sourceIds": [
+        "SV-035"
+      ],
+      "observation": "加工なしの画像を出力し、一覧から外さない。",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_server.MozarieTests.test_apply_all_empty_masks_completes_without_changing_images",
+        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > remove after save removes committed images only"
+      ]
+    },
+    {
+      "key": "SV-036.1",
+      "sourceIds": [
+        "SV-036"
+      ],
+      "observation": "元画像寸法のPNGで、除外を差し引いた範囲を出力する。",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_project_http_coverage.ProjectHttpCoverageTests.test_single_mosaic_mask_export_is_original_size_l_png_with_exclusion_subtracted"
+      ]
+    },
+    {
+      "key": "SV-036.2",
+      "sourceIds": [
+        "SV-036"
+      ],
+      "observation": "非表示画像では開始できない。",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_project_http_coverage.ProjectHttpCoverageTests.test_project_mask_png_zip_and_cleanup"
+      ]
+    },
+    {
+      "key": "SV-037.1",
+      "sourceIds": [
+        "SV-037"
+      ],
+      "observation": "元画像寸法のPNGで、除外範囲を出力する。",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_project_export_mask_alpha.ProjectExportMaskAlphaTests.test_project_zip_export_uses_rgba_alpha_for_manual_mosaic_and_exclude_masks"
+      ]
+    },
+    {
+      "key": "SV-037.2",
+      "sourceIds": [
+        "SV-037"
+      ],
+      "observation": "非表示画像では開始できない。",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_project_http_coverage.ProjectHttpCoverageTests.test_project_mask_png_zip_and_cleanup"
+      ]
+    },
+    {
+      "key": "SV-038.1",
+      "sourceIds": [
+        "SV-038"
+      ],
+      "observation": "指定した枠の拡張を含む範囲を出力する。",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_server.MozarieTests.test_exported_mask_contains_the_configured_candidate_expansion"
+      ]
+    },
+    {
+      "key": "SV-039.1",
+      "sourceIds": [
+        "SV-039"
+      ],
+      "observation": "そのPJの表示画像だけのモザイク範囲をZIPに含め、非表示画像のPNGを含めない。",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_project_http_coverage.ProjectHttpCoverageTests.test_project_mask_png_zip_and_cleanup"
+      ]
+    },
+    {
+      "key": "SV-040.1",
+      "sourceIds": [
+        "SV-040"
+      ],
+      "observation": "そのPJの表示画像だけの除外範囲をZIPに含め、非表示画像のPNGを含めない。",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_project_http_coverage.ProjectHttpCoverageTests.test_project_mask_png_zip_and_cleanup"
+      ]
+    },
+    {
+      "key": "SV-041.1",
+      "sourceIds": [
+        "SV-041"
+      ],
+      "observation": "現在PJを切り替えず、指定行のPJだけを出力する。",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_project_ui_runtime.cjs::project dialogs, A-B-A switching, failed-open recovery, and duplicate transition guards > project mask exports preserve project state across empty read-only failure and retry cases"
+      ]
+    },
+    {
+      "key": "SV-042.1",
+      "sourceIds": [
+        "SV-042"
+      ],
+      "observation": "直前の候補編集もZIPに反映する。",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_project_ui_runtime.cjs::project dialogs, A-B-A switching, failed-open recovery, and duplicate transition guards > project mask exports preserve project state across empty read-only failure and retry cases",
+        "python:tests.test_project_http_coverage.ProjectHttpCoverageTests.test_project_mask_png_zip_and_cleanup"
+      ]
+    },
+    {
+      "key": "SV-043.1",
+      "sourceIds": [
+        "SV-043"
+      ],
+      "observation": "閲覧専用を維持したまま保存できる。",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_project_ui_runtime.cjs::project dialogs, A-B-A switching, failed-open recovery, and duplicate transition guards > project mask exports preserve project state across empty read-only failure and retry cases"
+      ]
+    },
+    {
+      "key": "SV-044.1",
+      "sourceIds": [
+        "SV-044"
+      ],
+      "observation": "2種類のZIP操作だけ無効となり、PJを開く・削除は操作できる。",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_project_ui_runtime.cjs::project dialogs, A-B-A switching, failed-open recovery, and duplicate transition guards > project mask exports preserve project state across empty read-only failure and retry cases"
+      ]
+    },
+    {
+      "key": "SV-045.1",
+      "sourceIds": [
+        "SV-045"
+      ],
+      "observation": "通信エラーを表示し、PJ管理表と対象PJを保持する。",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_project_ui_runtime.cjs::project dialogs, A-B-A switching, failed-open recovery, and duplicate transition guards > project mask exports preserve project state across empty read-only failure and retry cases"
+      ]
+    },
+    {
+      "key": "SV-045.2",
+      "sourceIds": [
+        "SV-045"
+      ],
+      "observation": "再度ZIPを保存できる。",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_project_ui_runtime.cjs::project dialogs, A-B-A switching, failed-open recovery, and duplicate transition guards > project mask exports preserve project state across empty read-only failure and retry cases"
+      ]
+    },
+    {
+      "key": "SV-046.1",
+      "sourceIds": [
+        "SV-046"
+      ],
+      "observation": "書き込み失敗を示し、保存完了を表示しない。",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > copy render failure preserves source and state"
+      ]
+    },
+    {
+      "key": "SV-046.2",
+      "sourceIds": [
+        "SV-046"
+      ],
+      "observation": "元画像を削除しない。",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > copy render failure preserves source and state"
+      ]
+    },
+    {
+      "key": "SV-046.3",
+      "sourceIds": [
+        "SV-046"
+      ],
+      "observation": "アクセス許可を求めるOS操作は実施しない。",
+      "status": "retired",
+      "retirementReason": "OS所有の権限操作自体は自動検証の対象外とする。許可・拒否結果に対するアプリ側処理は自動テストで検証する。"
+    },
+    {
+      "key": "SV-047.1",
+      "sourceIds": [
+        "SV-047"
+      ],
+      "observation": "元画像変更を案内し、無確認で上書きしない。",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > source change during render rejects overwrite",
+        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > fractional source timestamps remain saveable after catalog restore",
+        "python:tests.test_server.MozarieTests.test_filesystem_save_rejects_change_during_source_read"
+      ]
+    },
+    {
+      "key": "SV-048.1",
+      "sourceIds": [
+        "SV-048"
+      ],
+      "observation": "対象画像の不足を案内し、別画像の不具合と表示しない。",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > browser source preflight rejects cancel denial mismatch and changes"
+      ]
+    },
+    {
+      "key": "SV-050.1",
+      "sourceIds": [
+        "SV-050"
+      ],
+      "observation": "未取得の保存結果を成功表示しない。",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > recoverable commit failures reconcile token state"
+      ]
+    },
+    {
+      "key": "SV-050.2",
+      "sourceIds": [
+        "SV-050"
+      ],
+      "observation": "再接続後はサーバーの進捗を表示する。",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_filters_and_fluid_e2e.cjs::server save progress is restored in the UI after an offline poll reconnects"
+      ]
+    },
+    {
+      "key": "SV-051.1",
+      "sourceIds": [
+        "SV-051"
+      ],
+      "observation": "通信エラーを表示し、現在の作業画面を維持する。",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_project_ui_runtime.cjs::project dialogs, A-B-A switching, failed-open recovery, and duplicate transition guards > project network failures preserve list order editor state and selected project"
+      ]
+    },
+    {
+      "key": "SV-052.1",
+      "sourceIds": [
+        "SV-052"
+      ],
+      "observation": "通信エラーを表示し、取得済みの行順と昇降順表示を保持する。",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_project_ui_runtime.cjs::project dialogs, A-B-A switching, failed-open recovery, and duplicate transition guards > project network failures preserve list order editor state and selected project"
+      ]
+    },
+    {
+      "key": "SV-053.1",
+      "sourceIds": [
+        "SV-053"
+      ],
+      "observation": "通信エラーを表示し、対象PJと現在の編集を保持する。",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_project_ui_runtime.cjs::project dialogs, A-B-A switching, failed-open recovery, and duplicate transition guards > project network failures preserve list order editor state and selected project"
+      ]
+    },
+    {
+      "key": "SV-054.1",
+      "sourceIds": [
+        "SV-054"
+      ],
+      "observation": "通信エラーを表示し、保存前のPJ名・候補・手描き・確認状態を保持する。",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_project_ui_runtime.cjs::project dialogs, A-B-A switching, failed-open recovery, and duplicate transition guards > project network failures preserve list order editor state and selected project"
+      ]
+    },
+    {
+      "key": "SV-055.1",
+      "sourceIds": [
+        "SV-055"
+      ],
+      "observation": "削除成功と表示せず、一覧とPJを保持する。",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_filters_and_fluid_e2e.cjs::catalog clear failure keeps the project and list, and closing the real error dialog restores actions"
+      ]
+    },
+    {
+      "key": "SV-056.1",
+      "sourceIds": [
+        "SV-056"
+      ],
+      "observation": "元の画面へ戻り、実行中でない操作を再び使える。",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_filters_and_fluid_e2e.cjs::catalog clear failure keeps the project and list, and closing the real error dialog restores actions"
+      ]
+    },
+    {
+      "key": "SV-057.1",
+      "sourceIds": [
+        "SV-057"
+      ],
+      "observation": "4K画像の手描きがpointerup前に反映され、ROI描画がフレーム予算内に収まる。",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_mosaic_4k_e2e.cjs::4K drag renders a preview before pointerup with one bounded worker"
+      ]
+    },
+    {
+      "key": "SV-057.2",
+      "sourceIds": [
+        "SV-057"
+      ],
+      "observation": "履歴回数を増やしても履歴canvasを解放し、応答を鈍化させる保持物を残さない。",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_project_history_browser_e2e.cjs::project Ctrl+Z flushes the durable edit and keeps browser history canvases released"
+      ]
+    },
+    {
+      "key": "SV-058.1",
+      "sourceIds": [
+        "SV-058"
+      ],
+      "observation": "DOMとメモリが繰り返しで増え続けず、全件の画像本体を再取得し続けない。",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_gallery_performance_e2e.cjs::20k gallery DOM decoded cache and full-image requests stay bounded",
+        "node:tests/test_resources.cjs::resource ownership contracts > 400 selections keep decoded image ownership bounded"
+      ]
+    },
+    {
+      "key": "SV-059.1",
+      "sourceIds": [
+        "SV-059"
+      ],
+      "observation": "検出の終了時に推論モデルとGPUキャッシュの解放処理を実行する。",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_server.MozarieTests.test_gpu_oom_discards_all_cached_models_once",
+        "python:tests.test_server.MozarieTests.test_terminal_gpu_release_allows_detection_models_to_reload"
+      ]
+    },
+    {
+      "key": "SV-059.2",
+      "sourceIds": [
+        "SV-059"
+      ],
+      "observation": "実GPUで検出を5回繰り返し、終了後のVRAM基準値が回数に応じて増え続けない。",
+      "status": "retired",
+      "retirementReason": "対応GPUと実検出モデルを使用するWindows環境での観測は対象外とする。実GPUドライバーのVRAM割当と解放後の基準値はCIのCPU環境では再現できない。"
+    },
+    {
+      "key": "SV-060.1",
+      "sourceIds": [
+        "SV-060"
+      ],
+      "observation": "GPU処理が残り続けず、次の検出を開始できる。",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_server.MozarieTests.test_terminal_gpu_release_allows_detection_models_to_reload",
+        "python:tests.test_jobs_saving_coverage.JobsSavingCoverageTests.test_job_thread_releases_gpu_once_after_every_terminal_worker_path"
+      ]
+    },
+    {
+      "key": "SV-061.1",
+      "sourceIds": [
+        "SV-061"
+      ],
+      "observation": "既存モデルを再利用し、毎回同じモデルの準備を繰り返さない。",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_server.MozarieTests.test_model_verification_occurs_once_for_a_loaded_model_set",
+        "python:tests.test_jobs_saving_coverage.JobsSavingCoverageTests.test_terminal_release_keeps_cpu_model_cache"
+      ]
+    },
+    {
+      "key": "SV-062.1",
+      "sourceIds": [
+        "SV-062"
+      ],
+      "observation": "バックエンド・フロントエンドの全テストと静的確認が成功している。",
+      "status": "retired",
+      "retirementReason": "全suite成功はテスト実行基盤とCIの必須checkで検証するため、製品観測を列挙する旧確認表から除外する。"
+    },
+    {
+      "key": "SV-062.2",
+      "sourceIds": [
+        "SV-062"
+      ],
+      "observation": "失敗・skip・対象外のテストを残していない。",
+      "status": "retired",
+      "retirementReason": "失敗・skip・TODOの禁止と参照テストの実行はテスト実行基盤で強制するため、旧確認表の重複した実施項目から除外する。"
+    },
+    {
+      "key": "SV-063.1",
+      "sourceIds": [
+        "SV-063"
+      ],
+      "observation": "公開Releaseのタグ、リリース名、ZIP内VERSIONが同じバージョンである。",
+      "status": "retired",
+      "retirementReason": "公開後のタグ・リリース名・ZIP版の照合はリリース実施時の公開状態検証へ移し、未公開変更を検証する回帰チェックリストから除外する。"
+    },
+    {
+      "key": "SV-063.3",
+      "sourceIds": [
+        "SV-063"
+      ],
+      "observation": "公開用ZIPは`server.py`、`mozarie`、`static`、`config/defaults.json`、`run.bat`、`setup.bat`、`update.bat`、`VERSION`、`README.md`、`LICENSE`、`.gitignore`、`.gitattributes`を含む。",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_runtime_contract.RuntimeContractTests.test_release_archive_excludes_development_only_files",
+        "python:tests.test_updater.UpdaterTests.test_next_release_archive_is_accepted_by_v0513_updater"
+      ]
+    },
+    {
+      "key": "SV-063.2",
+      "sourceIds": [
+        "SV-063"
+      ],
+      "observation": "`AGENTS.md`、`docs`は含まない。",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_runtime_contract.RuntimeContractTests.test_release_archive_excludes_development_only_files",
+        "python:tests.test_updater.UpdaterTests.test_next_release_archive_is_accepted_by_v0513_updater"
+      ]
+    },
+    {
+      "key": "SV-064.1",
+      "sourceIds": [
+        "SV-064"
+      ],
+      "observation": "セットアップが完了し、新しい版の画面を開ける。",
+      "status": "retired",
+      "retirementReason": "クリーンなWindows環境へ展開した公開Release ZIPでの観測は対象外とする。CIでは公開ZIPからの対話セットアップ完了と、新版UIの実起動を同じ利用環境で観測できないため。"
+    },
+    {
+      "key": "SV-065.1",
+      "sourceIds": [
+        "SV-065"
+      ],
+      "observation": "更新後のVERSIONがリリースと一致し、設定とPJデータを保持する。",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_updater.UpdaterTests.test_apply_updates_code_and_preserves_user_data_and_batch"
+      ]
+    },
+    {
+      "key": "SV-066.1",
+      "sourceIds": [
+        "SV-066"
+      ],
+      "observation": "PRと説明は日本語、リリース名はバージョンだけ。",
+      "status": "retired",
+      "retirementReason": "PRの記述言語と公開Release名はリリース実施時の公開状態検証へ移し、製品の回帰チェックリストから除外する。"
+    },
+    {
+      "key": "SV-066.2",
+      "sourceIds": [
+        "SV-066"
+      ],
+      "observation": "説明は変更内容を簡潔に記載する。",
+      "status": "retired",
+      "retirementReason": "実際の変更を過不足なく簡潔に説明しているかは人による編集判断であり、自動回帰検証の対象外とする。"
+    },
+    {
+      "key": "SV-067.1",
+      "sourceIds": [
+        "SV-067"
+      ],
+      "observation": "マージ後のコミットが一致し、マージ済み作業ブランチが残らない。",
+      "status": "retired",
+      "retirementReason": "マージ後SHAと作業ブランチ削除はリリース実施時のリポジトリ状態検証へ移し、製品の回帰チェックリストから除外する。"
+    },
+    {
+      "key": "SV-068.1",
+      "sourceIds": [
+        "SV-068"
+      ],
+      "observation": "空いている連番を探索して保存する。",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_server.MozarieTests.test_copy_destination_keeps_existing_files_and_has_no_numeric_search_cap"
+      ]
+    },
+    {
+      "key": "SV-068.2",
+      "sourceIds": [
+        "SV-068"
+      ],
+      "observation": "固定の連番上限で失敗せず、既存ファイルを上書きしない。",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_server.MozarieTests.test_copy_destination_keeps_existing_files_and_has_no_numeric_search_cap",
+        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > exclusive writable never replaces an existing output"
+      ]
+    },
+    {
+      "key": "SV-069.1",
+      "sourceIds": [
+        "SV-069"
+      ],
+      "observation": "Release assetの状態、SHA-256、サイズ、ZIP構造、容量見積り、失敗時の非変更、再試行を隔離fixtureで検証する。",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_updater.UpdaterTests.test_release_asset_must_be_the_immutable_mozarie_asset",
+        "python:tests.test_updater.UpdaterTests.test_download_rejects_a_digest_or_size_mismatch",
+        "python:tests.test_updater.UpdaterTests.test_download_capacity_failure_preserves_existing_archive_and_retry_replaces_it",
+        "python:tests.test_updater.UpdaterTests.test_download_publish_failure_preserves_existing_archive_and_retry_replaces_it",
+        "python:tests.test_updater.UpdaterTests.test_safe_extract_rejects_invalid_paths_without_writing_outside_destination",
+        "python:tests.test_updater.UpdaterTests.test_safe_extract_rejects_precreated_directory_symlink",
+        "python:tests.test_updater.UpdaterTests.test_apply_rolls_back_only_mutated_files_on_failure",
+        "python:tests.test_updater.UpdaterTests.test_dependency_update_apply_failure_keeps_a_retryable_pending_update",
+        "python:tests.test_updater.UpdaterTests.test_update_storage_aggregates_same_volume_extract_rollback_and_incoming_copy_and_retries_without_mutation"
+      ]
+    },
+    {
+      "key": "SV-069.2",
+      "sourceIds": [
+        "SV-069"
+      ],
+      "observation": "実ドライブの空き容量不足から回復する更新で、更新先とバックアップ先を変更せず、容量確保後に完了する。",
+      "status": "retired",
+      "retirementReason": "Windowsの実更新先ドライブとバックアップ先ドライブでの観測は対象外とする。実ドライブの空き容量、予約領域、別ボリュームの挙動は隔離CI fixtureでは再現できない。"
+    },
+    {
+      "key": "SV-070.1",
+      "sourceIds": [
+        "SV-070"
+      ],
+      "observation": "実効並列数は対象数と利用者設定だけで決め、8件・メモリ量による固定上限を適用しない。",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > 400 browser copies stay bounded by configured parallelism",
+        "python:tests.test_server.MozarieTests.test_import_session_records_requested_and_effective_parallelism_without_a_fixed_cap"
+      ]
+    },
+    {
+      "key": "SV-070.2",
+      "sourceIds": [
+        "SV-070"
+      ],
+      "observation": "Networkの同時要求数は実効並列数を超えず、全対象が完了する。",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > 400 browser copies stay bounded by configured parallelism",
+        "python:tests.test_server.MozarieTests.test_import_session_records_requested_and_effective_parallelism_without_a_fixed_cap"
+      ]
+    },
+    {
+      "key": "SV-070.3",
+      "sourceIds": [
+        "SV-070"
+      ],
+      "observation": "メモリ不足時は既存の明示エラーで停止する。",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_server.MozarieTests.test_explicit_memory_error_has_a_stable_memory_code",
+        "python:tests.test_server.MozarieTests.test_detection_worker_maps_plain_exception_ort_oom"
+      ]
+    },
+    {
+      "key": "SV-071.1",
+      "sourceIds": [
+        "SV-071"
+      ],
+      "observation": "画像応答はサーバーの一時ファイルからストリームされ、完成画像の応答用RAM複製を残さない。",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_http_live_endpoints.LiveHttpEndpointTests.test_live_browser_save_render_streams_a_stable_image_response",
+        "python:tests.test_server.MozarieTests.test_browser_file_system_copy_token_keeps_no_backend_render_temp"
+      ]
+    },
+    {
+      "key": "SV-071.2",
+      "sourceIds": [
+        "SV-071"
+      ],
+      "observation": "コピーと無加工応答の一時ファイルは応答終了後、上書き用の一時ファイルはcommitまたは取消後にだけ消える。",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_server.MozarieTests.test_browser_file_system_copy_token_keeps_no_backend_render_temp",
+        "python:tests.test_server.MozarieTests.test_browser_copy_render_writes_configured_unicode_destination_before_commit",
+        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > partial streamed output is aborted and removed"
+      ]
+    },
+    {
+      "key": "SV-072.1",
+      "sourceIds": [
+        "SV-072"
+      ],
+      "observation": "現在・切替中・隣接・ホバー中の画像だけを保持し、古い画像・候補要求を取消してBitmapを解放する。",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_resources.cjs::resource ownership contracts > current pending filtered neighbors and hover are the only retained images",
+        "node:tests/test_resources.cjs::resource ownership contracts > filter and hover changes close stale bitmaps and abort stale requests"
+      ]
+    },
+    {
+      "key": "SV-072.2",
+      "sourceIds": [
+        "SV-072"
+      ],
+      "observation": "画像数に比例する固定容量キャッシュ、固定prefetch件数・固定並列枠を持たず、選択回数ごとにRAMが増え続けない。",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_resources.cjs::resource ownership contracts > 400 selections keep decoded image ownership bounded"
+      ]
+    },
+    {
+      "key": "SV-073.1",
+      "sourceIds": [
+        "SV-073"
+      ],
+      "observation": "CIで単一版のストリーム応答とtokenを確認する。",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_http_live_endpoints.LiveHttpEndpointTests.test_live_browser_save_render_streams_a_stable_image_response"
+      ]
+    },
+    {
+      "key": "SV-073.2",
+      "sourceIds": [
+        "SV-073"
+      ],
+      "observation": "実ブラウザーでは途中で別版・空応答・404へ変わらず、応答終了後に一時ファイルを解放し、tokenの版不一致を案内することを確認する。",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_http_live_endpoints.LiveHttpEndpointTests.test_chromium_save_stream_survives_revision_change_and_releases_temporary_output"
+      ]
+    },
+    {
+      "key": "SV-074.1",
+      "sourceIds": [
+        "SV-074"
+      ],
+      "observation": "現在表示・切替中・`galleryFilteredImages()`上の実際の前後だけを保持・先読みする。",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_gallery_save_coverage.cjs::gallery and save interactions > filtered navigation owns only actual neighbors and wrap destinations",
+        "node:tests/test_resources.cjs::resource ownership contracts > current pending filtered neighbors and hover are the only retained images"
+      ]
+    },
+    {
+      "key": "SV-074.2",
+      "sourceIds": [
+        "SV-074"
+      ],
+      "observation": "絞り込み外では既存の前へ末尾・次へ先頭の移動先だけを保持し、切替直後に旧フィルターのBitmapと要求を解放・取消する。",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_gallery_save_coverage.cjs::gallery and save interactions > filtered navigation owns only actual neighbors and wrap destinations",
+        "node:tests/test_resources.cjs::resource ownership contracts > filter and hover changes close stale bitmaps and abort stale requests"
+      ]
+    },
+    {
+      "key": "SV-075.1",
+      "sourceIds": [
+        "SV-075"
+      ],
+      "observation": "ホバーと画面切替で画像保持と要求を解放する。",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_resources.cjs::resource ownership contracts > filter and hover changes close stale bitmaps and abort stale requests"
+      ]
+    },
+    {
+      "key": "SV-075.2",
+      "sourceIds": [
+        "SV-075"
+      ],
+      "observation": "書込失敗を保存失敗として扱い、途中の一時ファイルを残さない。",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > partial streamed output is aborted and removed",
+        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > browser copy render failure cancels its reservation",
+        "python:tests.test_server.MozarieTests.test_browser_copy_render_keeps_source_and_candidates_when_output_sync_fails"
+      ]
+    },
+    {
+      "key": "SV-075.3",
+      "sourceIds": [
+        "SV-075"
+      ],
+      "observation": "実ブラウザー保存中に一時保存先の書込権限または空き容量を失っても、途中ファイルを残さず利用者へ案内する。",
+      "status": "retired",
+      "retirementReason": "Windowsの実保存先、ブラウザー、容量不足またはOS書込権限での観測は対象外とする。実ドライブ容量とOSのアクセス許可状態をCIから安全かつ決定的に変更できない。"
+    },
+    {
+      "key": "SV-076.1",
+      "sourceIds": [
+        "SV-076"
+      ],
+      "observation": "未作成の展開先を作成し、管理対象だけを安全に展開する。",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_updater.UpdaterTests.test_safe_extract_accepts_github_wrapper_directory",
+        "python:tests.test_updater.UpdaterTests.test_apply_updates_code_and_preserves_user_data_and_batch"
+      ]
+    },
+    {
+      "key": "SV-076.2",
+      "sourceIds": [
+        "SV-076"
+      ],
+      "observation": "実リリースZIPを実ドライブへ展開し、容量不足では展開先を変更せず、容量確保後に管理対象だけを展開する。",
+      "status": "retired",
+      "retirementReason": "Windowsの実ドライブと公開Release ZIPでの観測は対象外とする。実ドライブ容量不足と公開配布物を組み合わせた挙動は隔離CI fixtureでは再現できない。"
+    },
+    {
+      "key": "SV-077.1",
+      "sourceIds": [
+        "SV-077"
+      ],
+      "observation": "CIで事前のbyte materialization、コピー保持、削除・確定の停止を確認する。",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_save_source_snapshot_contract.cjs::a source snapshot reads durable bytes before destructive work and restores the original name and type",
+        "node:tests/test_save_source_snapshot_contract.cjs::a definitive delete commit rejection restores the exact materialized source bytes"
+      ]
+    },
+    {
+      "key": "SV-077.2",
+      "sourceIds": [
+        "SV-077"
+      ],
+      "observation": "実ブラウザーでは`source_restore_failed`を表示し、コピー、元画像、候補、手描き、一覧を保持する。",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_save_failure_browser_e2e.cjs::source snapshot failure in Chromium preserves source copy candidates draft and catalog"
+      ]
+    },
+    {
+      "key": "SV-077.3",
+      "sourceIds": [
+        "SV-077"
+      ],
+      "observation": "復旧時は元名・形式・バイト列を戻す。",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_save_source_snapshot_contract.cjs::a source snapshot reads durable bytes before destructive work and restores the original name and type",
+        "node:tests/test_save_source_snapshot_contract.cjs::a definitive delete commit rejection restores the exact materialized source bytes"
+      ]
+    },
+    {
+      "key": "SV-078.1",
+      "sourceIds": [
+        "SV-078"
+      ],
+      "observation": "相対形式を拒否し、日本語を含む正規化済み絶対パスを設定と保存画面へ同期する。",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > normalized output directory is displayed",
+        "python:tests.test_server.MozarieTests.test_output_directory_picker_normalizes_existing_absolute_hint_and_releases_lock"
+      ]
+    },
+    {
+      "key": "SV-078.2",
+      "sourceIds": [
+        "SV-078"
+      ],
+      "observation": "接続済みの実UNCを保存先として選択し、正規化済み絶対パスが画面と設定へ同期する。",
+      "status": "retired",
+      "retirementReason": "Windowsの接続済みUNC共有での観測は対象外とする。実UNCの接続、資格情報、名前解決はCI fixtureでは再現できない。"
+    },
+    {
+      "key": "SV-079.1",
+      "sourceIds": [
+        "SV-079"
+      ],
+      "observation": "サーバーが選択済み保存先へ原子的に出力する。",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > copy reserve render commit acknowledgement succeeds",
+        "python:tests.test_server.MozarieTests.test_browser_copy_render_writes_configured_unicode_destination_before_commit"
+      ]
+    },
+    {
+      "key": "SV-079.2",
+      "sourceIds": [
+        "SV-079"
+      ],
+      "observation": "browser handle は元画像の読込・削除だけに使い、出力先にhandle名や相対パスを使わない。",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > copy reserve render commit acknowledgement succeeds",
+        "python:tests.test_server.MozarieTests.test_browser_copy_render_writes_configured_unicode_destination_before_commit"
+      ]
+    },
+    {
+      "key": "SV-080.1",
+      "sourceIds": [
+        "SV-080"
+      ],
+      "observation": "クライアント生成UUIDトークンでpending/commit/cancelを再開し、通信不明だけでトークンを捨てない。",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > client UUID pending token survives a tab restart and resumes cancellation"
+      ]
+    },
+    {
+      "key": "SV-081.1",
+      "sourceIds": [
+        "SV-081"
+      ],
+      "observation": "未確定のstage・予約・隔離元画像を安全に回復し、Workspace receipt がある出力と元画像を巻き戻さない。",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_save_recovery.SaveRecoveryTests.test_workspace_receipt_wins_and_keeps_the_final_output",
+        "python:tests.test_server.MozarieTests.test_background_copy_receipt_recovers_the_private_stage_at_startup_without_removing_output"
+      ]
+    },
+    {
+      "key": "SV-082.1",
+      "sourceIds": [
+        "SV-082"
+      ],
+      "observation": "ローカルWindowsの同名競合とファイルロックで、既存ファイルを上書きせず確保名だけを公開する。",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_server.MozarieTests.test_windows_locked_source_rejects_overwrite_and_preserves_original",
+        "python:tests.test_save_recovery.SaveRecoveryTests.test_publish_stage_records_its_handle_identity_before_replacement_can_win"
+      ]
+    },
+    {
+      "key": "SV-082.2",
+      "sourceIds": [
+        "SV-082"
+      ],
+      "observation": "UNC、SMB、FAT固有の同名競合でも既存ファイルを上書きせず、確保した名前だけを公開する。",
+      "status": "retired",
+      "retirementReason": "Windows上の実UNC、SMB共有、FATボリュームでの観測は対象外とする。共有サーバーとファイルシステム固有の排他・原子性はローカルCI fixtureと同一ではない。"
+    },
+    {
+      "key": "SV-083.1",
+      "sourceIds": [
+        "SV-083"
+      ],
+      "observation": "出力を保持し、別の削除トークンが準備→claim→browser削除→確定→ackを一度だけ再開する。",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > copy then source delete follows durable commit",
+        "python:tests.test_server.MozarieTests.test_expired_claimed_copy_survives_delete_commit"
+      ]
+    },
+    {
+      "key": "SV-084.1",
+      "sourceIds": [
+        "SV-084"
+      ],
+      "observation": "清掃失敗を保留し、stage清掃と最終出力の所有判定を分離して再試行する。",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_save_recovery.SaveRecoveryTests.test_stage_failure_keeps_rollback_pending_until_it_is_clean"
+      ]
+    },
+    {
+      "key": "SV-084.2",
+      "sourceIds": [
+        "SV-084"
+      ],
+      "observation": "保存途中に実UNC接続またはOS削除権限を失い、再起動後も清掃を保留して再試行できる。",
+      "status": "retired",
+      "retirementReason": "Windowsの実UNC共有またはOSアクセス許可を変更できる保存先での観測は対象外とする。実UNC切断とOS権限変更はCI fixtureでは安全かつ決定的に再現できない。"
+    },
+    {
+      "key": "SV-085.1",
+      "sourceIds": [
+        "SV-085"
+      ],
+      "observation": "出力を巻き戻さず、再試行で両方の記録を完了する。",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_save_recovery.SaveRecoveryTests.test_receipt_ack_retries_after_workspace_delete_failure"
+      ]
+    },
+    {
+      "key": "SV-086.1",
+      "sourceIds": [
+        "SV-086"
+      ],
+      "observation": "読出し不能時は元画像を削除せず出力を保持する。",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > source_restore_failed is shown and preserves source editor and catalog state",
+        "node:tests/test_save_source_snapshot_contract.cjs::a definitive delete commit rejection restores the exact materialized source bytes"
+      ]
+    },
+    {
+      "key": "SV-086.2",
+      "sourceIds": [
+        "SV-086"
+      ],
+      "observation": "4xx後は永続化snapshotから復元し、復元不能時は成功表示しない。",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > source_restore_failed is shown and preserves source editor and catalog state",
+        "node:tests/test_save_source_snapshot_contract.cjs::a definitive delete commit rejection restores the exact materialized source bytes"
+      ]
+    },
+    {
+      "key": "SV-087.1",
+      "sourceIds": [
+        "SV-087"
+      ],
+      "observation": "確定済みの元画像・出力・一覧を巻き戻さず成功を表示する。",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > recoverable commit failures reconcile token state",
+        "python:tests.test_server.MozarieTests.test_browser_overwrite_keeps_the_committed_receipt_when_journal_finishing_is_unavailable"
+      ]
+    },
+    {
+      "key": "SV-087.2",
+      "sourceIds": [
+        "SV-087"
+      ],
+      "observation": "未回収のreceiptだけを保持し、journal復旧後のackまたは起動時回復で後処理を完了する。",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > recoverable commit failures reconcile token state",
+        "python:tests.test_server.MozarieTests.test_browser_overwrite_keeps_the_committed_receipt_when_journal_finishing_is_unavailable"
+      ]
+    },
+    {
+      "key": "SV-087.3",
+      "sourceIds": [
+        "SV-087"
+      ],
+      "observation": "確定前のjournal失敗では出力予約を解放して失敗を表示する。",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > reserve journal failure is visible and starts no output",
+        "python:tests.test_server.MozarieTests.test_browser_save_reserve_failure_releases_the_output_name"
+      ]
+    },
+    {
+      "key": "SV-088.1",
+      "sourceIds": [
+        "SV-088"
+      ],
+      "observation": "更新途中の状態を保持し、同じVERSIONでも更新を再試行する。",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_updater.UpdaterTests.test_dependency_update_apply_failure_keeps_a_retryable_pending_update",
+        "python:tests.test_updater.UpdaterTests.test_gpu_smoke_failure_retries_the_same_version"
+      ]
+    },
+    {
+      "key": "SV-088.2",
+      "sourceIds": [
+        "SV-088"
+      ],
+      "observation": "成功後は更新途中の印を消し、設定・モデル・作業データを保持する。",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_updater.UpdaterTests.test_dependency_update_success_marks_ready_and_clears_pending_update",
+        "python:tests.test_updater.UpdaterTests.test_apply_updates_code_and_preserves_user_data_and_batch"
+      ]
+    },
+    {
+      "key": "SV-089.1",
+      "sourceIds": [
+        "SV-089"
+      ],
+      "observation": "応答待ちは保存先・選択ダイアログ・開始だけを抑止し、「保存後に一覧から削除」などの保存条件は変更できる。",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_gallery_save_coverage.cjs::gallery and save interactions > single and batch save modal preferences and controls",
+        "node:tests/test_bulk_views_save_preferences_e2e.cjs::bulk displays and save preferences in Chromium"
+      ]
+    },
+    {
+      "key": "SV-089.2",
+      "sourceIds": [
+        "SV-089"
+      ],
+      "observation": "応答後は保存を開始できる。",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_gallery_save_coverage.cjs::gallery and save interactions > single and batch save modal preferences and controls",
+        "node:tests/test_bulk_views_save_preferences_e2e.cjs::bulk displays and save preferences in Chromium"
+      ]
+    }
+  ]
+}

@@ -202,7 +202,6 @@ class CatalogMixin:
                 draft["hasEffectiveMask"] = self._effective_mask_for_draft(image_id, candidates, draft)
         self.candidates[image_id] = candidates
         self.candidate_revisions[image_id] = revision
-        self.images[image_id].reviewed = False
         return revision
 
     def _commit_candidate_snapshot_outside_state_lock(
@@ -222,7 +221,7 @@ class CatalogMixin:
             effective = self._effective_mask_for_draft(image_id, candidates, draft)
             pending = self.workspace_store.prepare_candidate_state(
                 image_id, revision, candidates, effective, replace=replace, history_group=history_group,
-                expected_revision=expected_revision, preserve_reviewed=True,
+                expected_revision=expected_revision,
             )
         else:
             projectless_draft = self.projectless_manual_drafts.get(image_id)
@@ -995,6 +994,8 @@ class CatalogMixin:
             return self._open_project(catalog_id, resume=resume)
 
     def _open_project(self, catalog_id: str, *, resume: bool = False) -> dict[str, Any]:
+        with self.lock:
+            discard_workspace_id = self.workspace_id if self.catalog_id is None else None
         project = self.workspace_store.project(catalog_id)
         if not project:
             raise ClientError("プロジェクトが見つかりません。", "project_not_found")
@@ -1038,6 +1039,7 @@ class CatalogMixin:
                     publish_catalog_id=catalog_id, publish_read_only=project["status"] == "completed",
                     publish_source_mismatches=staged_source_mismatches,
                     publish_sources=sources,
+                    discard_workspace_id=discard_workspace_id,
                 )
             except Exception:
                 self.workspace_store.rollback_project_open(catalog_id, rollback)
@@ -1143,8 +1145,12 @@ class CatalogMixin:
         """Compose a project ZIP one image at a time from raw workspace BLOBs."""
         if kind not in {"mosaic", "exclude"}:
             raise ClientError("マスク種別が正しくありません。", "input_invalid")
-        for state in self.workspace_store.iter_project_export_states(project_id):
-            yield state["image"], self._export_workspace_mask_raw(state, kind)
+        states = self.workspace_store.iter_project_export_states(project_id)
+        try:
+            for state in states:
+                yield state["image"], self._export_workspace_mask_raw(state, kind)
+        finally:
+            states.close()
 
     @staticmethod
     def _raw_workspace_mask(raw: bytes | None, width: int, height: int) -> np.ndarray | None:
@@ -2055,7 +2061,6 @@ class CatalogMixin:
                 for record in records:
                     self.candidates[record.image_id] = []
                     self.candidate_revisions[record.image_id] = revisions[record.image_id]
-                    record.reviewed = False
             self._delete_mask_files(mask_paths, [self.cache_dir / record.image_id for record in records])
         return len(records)
 
@@ -2656,7 +2661,6 @@ class CatalogMixin:
                     # The manual row, its normalized removal IDs, exact candidate
                     # revision, and gallery scalar are one SQLite transaction.
                     self.workspace_store.save_manual(image_id, committed, self._decode_workspace_mask)
-                    self.images[image_id].reviewed = False
                 except ValueError as exc:
                     raise ClientError("手描き状態を保存できません。", "workspace_write_failed") from exc
 
@@ -2996,7 +3000,7 @@ class CatalogMixin:
                 candidates = [replace(item) for item in self.candidates.get(image_id, [])]
                 candidate = next((item for item in candidates if item.candidate_id == candidate_id), None)
                 if candidate is None:
-                    raise ClientError("検出候補が見つかりません。", "catalog_changed")
+                    raise ClientError("検出候補が見つかりません。", "candidate_not_found")
                 replace_snapshot = False
                 if "role" in payload:
                     if payload["role"] not in {"apply", "exclude"}:
@@ -3160,7 +3164,6 @@ class CatalogMixin:
                             draft["hasEffectiveMask"] = projectless_effective[image_id]
                         self.candidates[image_id] = updates[image_id]
                         self.candidate_revisions[image_id] = revisions[image_id]
-                        self.images[image_id].reviewed = False
                     result = revisions
                 self._delete_mask_files(delete_paths, [])
                 return result

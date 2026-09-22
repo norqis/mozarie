@@ -11,6 +11,7 @@ const path = require("node:path");
 const { chromium } = require("playwright");
 
 const root = path.resolve(__dirname, "..");
+const shortcutDefaults = require("../config/defaults.json").shortcuts;
 const staticRoot = path.join(root, "static");
 const contentTypes = {
   ".css": "text/css; charset=utf-8",
@@ -104,7 +105,7 @@ async function waitForFixtureReady(page) {
   await page.waitForFunction(() => state.settings && state.job && state.images.length === 2);
 }
 
-function startFixtureServer() {
+function startFixtureServer(options = {}) {
   const detectRequests = [];
   const applyRequests = [];
   const settingsRequests = [];
@@ -121,6 +122,7 @@ function startFixtureServer() {
     }
   };
   const updateRequests = [];
+  const updateStarts = [];
   const modelPickerRequests = [];
   const modelDownloadRequests = [];
   let modelDownloadJobs = 0;
@@ -139,9 +141,13 @@ function startFixtureServer() {
   let currentJob = { kind: "idle", state: "idle" };
   const saveTokens = new Map();
   const sourceDeletes = new Map();
+  let holdSourceDeletePrepare = false;
+  const pendingSourceDeletePrepares = [];
   const sourceDeleteRequests = [];
   let holdSourceDeleteClaim = false;
   let sourceDeleteCommitFailureIds = new Set();
+  let sourceDeleteCleanupPendingCount = 0;
+  let forceSourceDeletePrepareEmpty = false;
   const pendingSourceDeleteClaims = [];
   const saveRequests = [];
   const renameRequests = [];
@@ -156,6 +162,7 @@ function startFixtureServer() {
   ];
   let catalog = structuredClone(initialCatalog);
   let catalogGeneration = 1;
+  const activeProject = options.activeProject || null;
   const listedProjects = [{
     id: "ledger-project", name: "Ledger project", status: "working", imageCount: 1,
     sourceRoot: "G:\\ledger-source", createdAt: "2026-09-16T00:00:00Z", updatedAt: "2026-09-16T00:01:00Z",
@@ -167,7 +174,7 @@ function startFixtureServer() {
     workspace: false,
     workspaceId: null,
     historyDurable: false,
-    project: null,
+    project: activeProject,
     readOnly: false,
     sources: [],
     needsSource: false,
@@ -177,10 +184,10 @@ function startFixtureServer() {
     models: { target_segmentation: "", ntd11: "", ntd11_enabled: false, sensitive: "", sensitive_enabled: false, hand_detection: "", hand_detection_enabled: false, sam_checkpoints: { vit_b: "", vit_l: "", vit_h: "" }, sam_model_type: "vit_b", provider: "gpu", gpu_device: 0 },
     display: { apply_color: "#ff3d4d", exclude_color: "#28d3ff", overlay_opacity: 0.78, mosaic_preview: true, tool_position: "left" },
     importing: { parallelism: 3 }, editing: { fill_color_tolerance: 20 }, saving: { parallelism: 2, default_output_directory: "G:\\fixture-output" },
-    detection: { mode: "standard", fluid_exclusion_enabled: true, exclude_forced_default: true, threshold: 0.5, parallelism: 2, default_candidate_padding_px: 3, targets: ["penis", "pussy"] },
+    detection: { mode: "standard", fluid_exclusion_enabled: true, exclude_forced_default: true, threshold: 0.5, parallelism: 2, default_candidate_padding_px: 3, default_exclude_candidate_padding_px: 11, targets: ["penis", "pussy"] },
     shortcuts: {
       enabled: true,
-      bindings: { previous: "ArrowLeft", next: "ArrowRight", previousVisible: "ArrowUp", nextVisible: "ArrowDown", first: "Home", last: "End", reviewAndNext: "Enter", removeImage: "Delete", toggleOverview: "G", undo: "Ctrl+Z", redo: "Ctrl+Shift+Z", renameImage: "F2" },
+      bindings: { ...shortcutDefaults.bindings },
       actions: {},
     }, confirmations: {},
   };
@@ -285,6 +292,11 @@ function startFixtureServer() {
       response.end(JSON.stringify({ projects: [] }));
       return;
     }
+    if (/^\/api\/project\/masks\/[^/]+\/(mosaic|exclude)$/.test(requestPath) && request.method === "GET") {
+      response.writeHead(200, { "Content-Type": "application/zip", "Content-Disposition": "attachment; filename=fixture.zip" });
+      response.end(Buffer.from("fixture-zip"));
+      return;
+    }
     if (requestPath === "/api/folder" && request.method === "POST") {
       let body = ""; for await (const chunk of request) body += chunk;
       folderRequests.push(JSON.parse(body));
@@ -312,10 +324,11 @@ function startFixtureServer() {
       let body = ""; for await (const chunk of request) body += chunk;
       const { imageIds = [], deleteToken, expectedProjectId, expectedCatalogGeneration } = JSON.parse(body);
       sourceDeleteRequests.push({ path: requestPath, expectedProjectId, expectedCatalogGeneration, headerProjectId: request.headers["x-mozarie-expected-project-id"], headerCatalogGeneration: request.headers["x-mozarie-expected-catalog-generation"] });
-      if (expectedProjectId !== null || expectedCatalogGeneration !== catalogGeneration) { response.writeHead(409, { "Content-Type": "application/json" }); response.end(JSON.stringify({ error_code: "stale_catalog" })); return; }
-      const preparedImageIds = catalog.filter((image) => imageIds.includes(image.id)).map((image) => image.id);
+      if (expectedProjectId !== (activeProject?.id || null) || expectedCatalogGeneration !== catalogGeneration) { response.writeHead(409, { "Content-Type": "application/json" }); response.end(JSON.stringify({ error_code: "stale_catalog" })); return; }
+      const preparedImageIds = forceSourceDeletePrepareEmpty ? [] : catalog.filter((image) => imageIds.includes(image.id)).map((image) => image.id);
       const preparedSourceKinds = Object.fromEntries(catalog.filter((image) => preparedImageIds.includes(image.id)).map((image) => [image.id, image.sourceKind]));
       sourceDeletes.set(deleteToken, { state: "prepared", imageIds: preparedImageIds, preparedSourceKinds });
+      if (holdSourceDeletePrepare) await new Promise((resolve) => pendingSourceDeletePrepares.push(resolve));
       response.writeHead(200, { "Content-Type": "application/json" });
       response.end(JSON.stringify({ committed: false, deleteToken, state: "prepared", preparedImageIds, failed: [] }));
       return;
@@ -324,7 +337,7 @@ function startFixtureServer() {
       let body = ""; for await (const chunk of request) body += chunk;
       const { deleteToken, expectedProjectId, expectedCatalogGeneration } = JSON.parse(body);
       sourceDeleteRequests.push({ path: requestPath, expectedProjectId, expectedCatalogGeneration, headerProjectId: request.headers["x-mozarie-expected-project-id"], headerCatalogGeneration: request.headers["x-mozarie-expected-catalog-generation"] });
-      if (expectedProjectId !== null || expectedCatalogGeneration !== catalogGeneration) { response.writeHead(409, { "Content-Type": "application/json" }); response.end(JSON.stringify({ error_code: "stale_catalog" })); return; }
+      if (expectedProjectId !== (activeProject?.id || null) || expectedCatalogGeneration !== catalogGeneration) { response.writeHead(409, { "Content-Type": "application/json" }); response.end(JSON.stringify({ error_code: "stale_catalog" })); return; }
       const operation = sourceDeletes.get(deleteToken);
       if (!operation) { response.writeHead(409, { "Content-Type": "application/json" }); response.end(JSON.stringify({ error_code: "source_delete_not_prepared" })); return; }
       operation.state = "claimed";
@@ -336,13 +349,13 @@ function startFixtureServer() {
       let body = ""; for await (const chunk of request) body += chunk;
       const payload = JSON.parse(body); const operation = sourceDeletes.get(payload.deleteToken);
       sourceDeleteRequests.push({ path: requestPath, expectedProjectId: payload.expectedProjectId, expectedCatalogGeneration: payload.expectedCatalogGeneration, headerProjectId: request.headers["x-mozarie-expected-project-id"], headerCatalogGeneration: request.headers["x-mozarie-expected-catalog-generation"] });
-      if (payload.expectedProjectId !== null || payload.expectedCatalogGeneration !== catalogGeneration) { response.writeHead(409, { "Content-Type": "application/json" }); response.end(JSON.stringify({ error_code: "stale_catalog" })); return; }
+      if (payload.expectedProjectId !== (activeProject?.id || null) || payload.expectedCatalogGeneration !== catalogGeneration) { response.writeHead(409, { "Content-Type": "application/json" }); response.end(JSON.stringify({ error_code: "stale_catalog" })); return; }
       const imageIds = operation?.imageIds?.filter((imageId) => payload.imageIds.includes(imageId)) || [];
       const removedImageIds = catalog.filter((image) => imageIds.includes(image.id) && !sourceDeleteCommitFailureIds.has(image.id)).map((image) => image.id);
       catalog = catalog.filter((image) => !removedImageIds.includes(image.id));
       if (removedImageIds.length) catalogGeneration += 1;
       const failed = imageIds.filter((imageId) => sourceDeleteCommitFailureIds.has(imageId)).map((imageId) => ({ imageId, reason: "source_changed" }));
-      const result = { state: "committed", images: catalog, catalogGeneration, removedImageIds, failed, prepareFailures: [], cleanupPendingCount: 0 };
+      const result = { state: "committed", images: catalog, catalogGeneration, removedImageIds, failed, prepareFailures: [], cleanupPendingCount: sourceDeleteCleanupPendingCount };
       if (operation) Object.assign(operation, result);
       response.writeHead(200, { "Content-Type": "application/json" }); response.end(JSON.stringify(result));
       return;
@@ -350,6 +363,7 @@ function startFixtureServer() {
     if ((requestPath === "/api/catalog/delete-source/status" || requestPath === "/api/catalog/delete-source/cancel" || requestPath === "/api/catalog/delete-source/release" || requestPath === "/api/catalog/delete-source/ack") && request.method === "POST") {
       let body = ""; for await (const chunk of request) body += chunk;
       const { deleteToken } = JSON.parse(body); const operation = sourceDeletes.get(deleteToken);
+      sourceDeleteRequests.push({ path: requestPath, deleteToken });
       if (!operation) { response.writeHead(409, { "Content-Type": "application/json" }); response.end(JSON.stringify({ error_code: "source_delete_not_prepared" })); return; }
       if (requestPath.endsWith("/cancel")) operation.state = "cancelled";
       if (requestPath.endsWith("/release")) operation.state = "prepared";
@@ -532,6 +546,13 @@ function startFixtureServer() {
       reply();
       return;
     }
+    if (requestPath === "/api/update/start" && request.method === "POST") {
+      for await (const _chunk of request) { /* consume request */ }
+      updateStarts.push({ method: request.method });
+      response.writeHead(200, { "Content-Type": "application/json" });
+      response.end(JSON.stringify({ ok: true }));
+      return;
+    }
     if (requestPath === "/api/model-file/pick" && request.method === "POST") {
       let body = ""; for await (const chunk of request) body += chunk;
       modelPickerRequests.push(JSON.parse(body));
@@ -666,7 +687,7 @@ function startFixtureServer() {
     server.listen(0, "127.0.0.1", () => {
       server.off("error", reject);
       const { port } = server.address();
-      resolve({ server, url: `http://127.0.0.1:${port}`, detectRequests, applyRequests, saveRequests, renameRequests, catalogRemoveRequests, folderRequests, setFolderImportFailures: (failures) => { folderImportFailures = structuredClone(failures); }, catalogImageIds: () => catalog.map((image) => image.id), sourceDeleteRequests, sourceDeleteOperations: () => structuredClone([...sourceDeletes.entries()]), setSourceDeleteOperation: (token, operation) => sourceDeletes.set(token, structuredClone(operation)), setSourceDeleteCommitFailureIds: (imageIds) => { sourceDeleteCommitFailureIds = new Set(imageIds); }, holdSourceDeleteClaim: (value) => { holdSourceDeleteClaim = value; }, releaseSourceDeleteClaims: () => { holdSourceDeleteClaim = false; pendingSourceDeleteClaims.splice(0).forEach((resume) => resume()); }, settingsRequests, settingsPayloads, settingsActions, settingsStatusRequests, waitForSettingsStatusRequests: (count) => settingsStatusRequests.length >= count ? Promise.resolve() : new Promise((resolve) => settingsStatusWaiters.push({ count, resolve })), updateRequests, modelPickerRequests, modelDownloadRequests, modelDownloadJobs: () => modelDownloadJobs, modelDownloadPolls: () => modelDownloadPolls, cancelRequests: () => cancelRequests, holdDetection: (value) => { holdDetection = value; }, holdSaveRender: (value) => { holdSaveRender = value; }, releaseSaveRenders: () => { holdSaveRender = false; pendingSaveRenders.splice(0).forEach((resume) => resume()); }, failCancel: (value) => { cancelShouldFail = value; }, failNextSettingsSave: () => { failNextSettingsSave = true; }, failModelDownloadStatus: (value) => { failModelDownloadStatus = value; }, resetModelDownload: () => { modelDownloadJob = { state: "idle", paths: {} }; }, resetScenario: () => { catalog = structuredClone(initialCatalog); catalogGeneration += 1; saveTokens.clear(); sourceDeletes.clear(); sourceDeleteRequests.length = 0; pendingSourceDeleteClaims.splice(0).forEach((resume) => resume()); holdSourceDeleteClaim = false; sourceDeleteCommitFailureIds = new Set(); saveRequests.length = 0; renameRequests.length = 0; catalogRemoveRequests.length = 0; folderRequests.length = 0; folderImportFailures = []; currentJob = { kind: "idle", state: "idle" }; }, setCatalog: (images) => { catalog = structuredClone(images); }, setDefaultOutputDirectory: (value) => { settings.saving.default_output_directory = value; }, resetJob: () => { currentJob = { kind: "idle", state: "idle" }; }, finishCancel: () => { currentJob = { ...currentJob, state: "cancelled", current: "" }; }, finishApply: () => { currentJob = { ...currentJob, state: "complete", completed: currentJob.total, current: "", completedImageIds: currentJob.imageIds }; }, setUpdateAvailable: (value) => { updateAvailable = value; }, deferFullSettings: () => { deferFullSettings = true; }, releaseNextFullSettings: () => { pendingFullSettings.shift()?.(); }, releaseFullSettings: () => { deferFullSettings = false; pendingFullSettings.splice(0).forEach((reply) => reply()); }, deferUpdateStatus: () => { deferUpdateStatus = true; }, releaseUpdateStatus: () => { deferUpdateStatus = false; pendingUpdateStatus.splice(0).forEach((reply) => reply()); } });
+      resolve({ server, url: `http://127.0.0.1:${port}`, detectRequests, applyRequests, saveRequests, renameRequests, catalogRemoveRequests, folderRequests, setFolderImportFailures: (failures) => { folderImportFailures = structuredClone(failures); }, catalogImageIds: () => catalog.map((image) => image.id), sourceDeleteRequests, sourceDeleteOperations: () => structuredClone([...sourceDeletes.entries()]), setSourceDeleteOperation: (token, operation) => sourceDeletes.set(token, structuredClone(operation)), setSourceDeleteCommitFailureIds: (imageIds) => { sourceDeleteCommitFailureIds = new Set(imageIds); }, setSourceDeleteCleanupPendingCount: (count) => { sourceDeleteCleanupPendingCount = count; }, setSourceDeletePrepareEmpty: (value) => { forceSourceDeletePrepareEmpty = value; }, holdSourceDeletePrepare: (value) => { holdSourceDeletePrepare = value; }, releaseSourceDeletePrepares: () => { holdSourceDeletePrepare = false; pendingSourceDeletePrepares.splice(0).forEach((resume) => resume()); }, holdSourceDeleteClaim: (value) => { holdSourceDeleteClaim = value; }, releaseSourceDeleteClaims: () => { holdSourceDeleteClaim = false; pendingSourceDeleteClaims.splice(0).forEach((resume) => resume()); }, settingsRequests, settingsPayloads, settingsActions, settingsStatusRequests, waitForSettingsStatusRequests: (count) => settingsStatusRequests.length >= count ? Promise.resolve() : new Promise((resolve) => settingsStatusWaiters.push({ count, resolve })), updateRequests, updateStarts, modelPickerRequests, modelDownloadRequests, modelDownloadJobs: () => modelDownloadJobs, modelDownloadPolls: () => modelDownloadPolls, cancelRequests: () => cancelRequests, holdDetection: (value) => { holdDetection = value; }, finishDetection: () => { currentJob = { ...currentJob, state: "complete", completed: currentJob.total, processed: currentJob.total, current: "", completedImageIds: currentJob.imageIds }; }, holdSaveRender: (value) => { holdSaveRender = value; }, releaseSaveRenders: () => { holdSaveRender = false; pendingSaveRenders.splice(0).forEach((resume) => resume()); }, failCancel: (value) => { cancelShouldFail = value; }, failNextSettingsSave: () => { failNextSettingsSave = true; }, failModelDownloadStatus: (value) => { failModelDownloadStatus = value; }, resetModelDownload: () => { modelDownloadJob = { state: "idle", paths: {} }; }, resetScenario: () => { catalog = structuredClone(initialCatalog); catalogGeneration += 1; saveTokens.clear(); sourceDeletes.clear(); sourceDeleteRequests.length = 0; pendingSourceDeletePrepares.splice(0).forEach((resume) => resume()); pendingSourceDeleteClaims.splice(0).forEach((resume) => resume()); holdSourceDeletePrepare = false; holdSourceDeleteClaim = false; sourceDeleteCommitFailureIds = new Set(); sourceDeleteCleanupPendingCount = 0; forceSourceDeletePrepareEmpty = false; saveRequests.length = 0; renameRequests.length = 0; catalogRemoveRequests.length = 0; folderRequests.length = 0; folderImportFailures = []; currentJob = { kind: "idle", state: "idle" }; }, setCatalog: (images) => { catalog = structuredClone(images); }, setDefaultOutputDirectory: (value) => { settings.saving.default_output_directory = value; }, resetJob: () => { currentJob = { kind: "idle", state: "idle" }; }, finishCancel: () => { currentJob = { ...currentJob, state: "cancelled", current: "" }; }, finishApply: () => { currentJob = { ...currentJob, state: "complete", completed: currentJob.total, current: "", completedImageIds: currentJob.imageIds }; }, setUpdateAvailable: (value) => { updateAvailable = value; }, setSettings: (value) => { settings = structuredClone(value); }, deferFullSettings: () => { deferFullSettings = true; }, releaseNextFullSettings: () => { pendingFullSettings.shift()?.(); }, releaseFullSettings: () => { deferFullSettings = false; pendingFullSettings.splice(0).forEach((reply) => reply()); }, deferUpdateStatus: () => { deferUpdateStatus = true; }, releaseUpdateStatus: () => { deferUpdateStatus = false; pendingUpdateStatus.splice(0).forEach((reply) => reply()); } });
     });
   });
 }
@@ -1264,6 +1285,7 @@ async function runDynamicProjectAndShortcutScenario(browser, fixtureUrl, setting
   const page = await newCoveredPage(browser, { viewport: { width: 1280, height: 900 } });
   const restoredFileRequests = [];
   const sameSourceOpenRequests = [];
+  let ledgerImages = [];
   let restoringProjectSource = false;
   let restoreCatalogGeneration = null;
   try {
@@ -1287,14 +1309,20 @@ async function runDynamicProjectAndShortcutScenario(browser, fixtureUrl, setting
     });
     await page.route("**/api/project/open", async (route) => {
       const request = route.request();
-      sameSourceOpenRequests.push(JSON.parse(request.postData() || "{}"));
+      const payload = JSON.parse(request.postData() || "{}");
+      sameSourceOpenRequests.push(payload);
+      const ledgerProject = payload.projectId === "ledger-project";
       await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({
-        project: { id: "same-source-second", name: "Second source", status: "working", imageCount: 0, sourceRoot: "G:\\same-source" },
-        images: [], root: "G:\\same-source", sources: [], needsSource: false, readOnly: false,
+        project: ledgerProject
+          ? { id: "ledger-project", name: "Ledger project", status: "working", imageCount: 1, sourceRoot: "G:\\ledger-source" }
+          : { id: "same-source-second", name: "Second source", status: "working", imageCount: 0, sourceRoot: "G:\\same-source" },
+        images: ledgerProject ? ledgerImages : [], root: ledgerProject ? "G:\\ledger-source" : "G:\\same-source", sources: [], needsSource: false, readOnly: false,
       }) });
     });
     await page.goto(fixtureUrl, { waitUntil: "domcontentloaded" });
     await waitForFixtureReady(page);
+    ledgerImages = await page.evaluate(() => state.images.filter((image) => image.id === "sample"));
+    assert.deepEqual(ledgerImages.map((image) => image.id), ["sample"], "the project fixture owns the image used by the later rename shortcut checks");
 
     await page.locator("#projectButton").click();
     await page.locator("#projectOpenList").click();
@@ -1308,22 +1336,46 @@ async function runDynamicProjectAndShortcutScenario(browser, fixtureUrl, setting
     }
     recordDynamicControl("[data-project-sort]");
 
+    await page.locator('[data-project-action="open"]').click();
+    await page.waitForFunction(() => document.querySelector("#projectListDialog")?.open === false && state.project?.id === "ledger-project");
+    await page.locator('.gallery-item[data-id="sample"]').waitFor({ state: "visible" });
+    assert.equal(sameSourceOpenRequests.length, 1, "opening the listed project sends one project-open request");
+    assert.equal(sameSourceOpenRequests.at(-1).projectId, "ledger-project", "Open submits the exact selected row project");
+    assert.equal(sameSourceOpenRequests.at(-1).resume, false, "Open does not silently resume the working project");
+    assert.equal(Number.isInteger(sameSourceOpenRequests.at(-1).expectedCatalogGeneration), true, "Open carries the visible catalog generation");
+    recordDynamicControl('[data-project-action="open"]');
+
+    await page.locator("#projectButton").click(); await page.locator("#projectOpenList").click();
+    await page.locator('[data-project-action="mosaic"]').waitFor();
+    const [mosaicDownload] = await Promise.all([page.waitForEvent("download"), page.locator('[data-project-action="mosaic"]').click()]);
+    assert.equal(mosaicDownload.suggestedFilename(), "Ledger project-mosaic-masks.zip", "Mosaic ZIP exports the exact selected project with its visible name");
+    recordDynamicControl('[data-project-action="mosaic"]');
+
+    await page.waitForFunction(() => document.querySelector('[data-project-action="exclude"]')?.disabled === false);
+    const [excludeDownload] = await Promise.all([page.waitForEvent("download"), page.locator('[data-project-action="exclude"]').click()]);
+    assert.equal(excludeDownload.suggestedFilename(), "Ledger project-exclude-masks.zip", "Exclusion ZIP exports the exact selected project with its visible name");
+    recordDynamicControl('[data-project-action="exclude"]');
+
     await page.locator('[data-project-action="delete"]').click();
     await page.waitForFunction(() => document.querySelector("#projectDeleteDialog")?.open === true);
     assert.equal(await page.locator("#projectDeleteConfirm").isDisabled(), false, "project delete action opens an actionable confirmation for the selected row");
-    recordDynamicControl("[data-project-action]");
+    assert.match(await page.locator("#projectDeleteTarget").textContent(), /Ledger project/, "Delete names the exact selected project before mutation");
+    recordDynamicControl('[data-project-action="delete"]');
     await page.locator("#projectDeleteCancel").click();
     await page.locator("#projectListClose").click();
 
     await page.locator("#settingsButton").click();
     await page.locator("#settingsTabShortcuts").click();
-    const shortcutKeys = ["previous", "next", "previousVisible", "nextVisible", "first", "last", "reviewAndNext", "removeImage", "renameImage", "toggleOverview", "undo", "redo"];
-    const shortcutBindings = Object.fromEntries(shortcutKeys.map((action, index) => [action, `Ctrl+Shift+Alt+${String.fromCharCode(65 + index)}`]));
-    assert.equal(await page.locator("[data-shortcut-action]").count(), shortcutKeys.length, "shortcut settings renders the fixed twelve-action inventory");
+    const shortcutKeys = ["previous", "next", "previousVisible", "nextVisible", "first", "last", "reviewAndNext", "removeImage", "renameImage", "toggleOverview", "undo", "redo", "cycleMosaicTool", "cycleExclusionTool", "mosaicBrush", "mosaicFill", "mosaicEraser", "boundaryMenu", "boundaryRectangle", "boundaryPolygon", "boundaryBrush", "exclusionBrush", "exclusionFill", "exclusionEraser", "singleView", "compareView", "fitView", "flipHorizontal", "flipVertical", "mosaicPreview"];
+    // Keep these page-level shortcuts clear of Chromium's own Ctrl/Alt
+    // shortcuts so replay remains focused on the gallery card.
+    const shortcutLetters = shortcutKeys.map((_, index) => [..."ABCDEFGHIJKLMNOPQRSTUVWXYZ", "F3", "F4", "F5", "F6"][index]);
+    const shortcutBindings = Object.fromEntries(shortcutKeys.map((action, index) => [action, `Shift+${shortcutLetters[index]}`]));
+    assert.equal(await page.locator("[data-shortcut-action]").count(), shortcutKeys.length, "shortcut settings renders the fixed complete action inventory");
     assert.deepEqual(await page.locator("[data-shortcut-action]").evaluateAll((inputs) => inputs.map((input) => input.dataset.shortcutAction)), shortcutKeys, "shortcut settings exposes every action in its documented order");
     for (const [index, action] of shortcutKeys.entries()) {
       const shortcut = page.locator(`[data-shortcut-action="${action}"]`);
-      await shortcut.focus(); await page.keyboard.press(`Control+Shift+Alt+${String.fromCharCode(65 + index)}`);
+      await shortcut.press(`Shift+${shortcutLetters[index]}`);
       assert.equal(await shortcut.inputValue(), shortcutBindings[action], `${action} records its exact keyboard binding through the public handler`);
     }
     recordDynamicControl("[data-shortcut-action]");
@@ -1338,28 +1390,35 @@ async function runDynamicProjectAndShortcutScenario(browser, fixtureUrl, setting
     recordDynamicControl("[data-shortcut-enabled]");
     const shortcutSaveStart = settingsPayloads.length;
     await page.locator("#settingsSaveButton").click();
-    await page.waitForFunction(() => document.querySelector("#settingsResult").textContent === "設定を保存しました。");
-    assert.deepEqual(settingsPayloads.slice(shortcutSaveStart).filter((payload) => payload.search === "?status=0").map((payload) => payload.body.shortcuts), [{ enabled: true, bindings: shortcutBindings, actions: shortcutActions }], "saving shortcut settings posts all twelve exact bindings and enabled actions");
-    assert.deepEqual(await page.evaluate(() => state.settings.shortcuts), { enabled: true, bindings: shortcutBindings, actions: shortcutActions }, "saving shortcut settings updates the live twelve-action shortcut state");
+    await page.waitForFunction(([bindings, actions]) => document.querySelector("#settingsResult").textContent === "設定を保存しました。"
+      && !document.querySelector("#settingsSaveButton").disabled
+      && JSON.stringify(state.settings?.shortcuts?.bindings) === JSON.stringify(bindings)
+      && JSON.stringify(state.settings?.shortcuts?.actions) === JSON.stringify(actions), [shortcutBindings, shortcutActions]);
+    assert.deepEqual(settingsPayloads.slice(shortcutSaveStart).filter((payload) => payload.search === "?status=0").map((payload) => payload.body.shortcuts), [{ enabled: true, bindings: shortcutBindings, actions: shortcutActions }], "saving shortcut settings posts all exact bindings and enabled actions");
+    assert.deepEqual(await page.evaluate(() => state.settings.shortcuts), { enabled: true, bindings: shortcutBindings, actions: shortcutActions }, "saving shortcut settings updates the live complete action shortcut state");
     await page.locator("#settingsCloseButton").click();
     const renameCard = page.locator('.gallery-item[data-id="sample"]');
     const playwrightShortcut = (shortcut) => shortcut.replace(/^Ctrl\+/, "Control+");
-    await renameCard.focus(); await page.keyboard.press(playwrightShortcut(shortcutBindings.renameImage));
-    await page.waitForFunction(() => document.querySelector("#renameImageDialog").open && state.renameImage?.imageId === "sample");
+    await renameCard.scrollIntoViewIfNeeded(); await renameCard.press(playwrightShortcut(shortcutBindings.renameImage));
+    await page.locator("#renameImageDialog").waitFor({ state: "visible" });
+    assert.equal(await page.evaluate(() => state.renameImage?.imageId), "sample", "the enabled rename shortcut opens for the focused image");
     await page.locator("#renameImageCancel").click(); await page.waitForFunction(() => !document.querySelector("#renameImageDialog").open);
     await page.locator("#settingsButton").click(); await page.locator("#settingsTabShortcuts").click();
     await page.locator('[data-shortcut-enabled="renameImage"]').uncheck();
     const renameDisabledSaveStart = settingsPayloads.length;
-    await page.locator("#settingsSaveButton").click(); await page.waitForFunction(() => document.querySelector("#settingsResult").textContent === "設定を保存しました。");
+    await page.locator("#settingsSaveButton").click(); await page.waitForFunction(() => document.querySelector("#settingsResult").textContent === "設定を保存しました。"
+      && !document.querySelector("#settingsSaveButton").disabled && state.settings?.shortcuts?.actions?.renameImage === false);
     assert.deepEqual(settingsPayloads.slice(renameDisabledSaveStart).filter((payload) => payload.search === "?status=0").map((payload) => payload.body.shortcuts.actions.renameImage), [false], "saving the disabled rename action posts its exact action state");
-    await page.locator("#settingsCloseButton").click(); await renameCard.focus(); await page.keyboard.press(playwrightShortcut(shortcutBindings.renameImage));
+    await page.locator("#settingsCloseButton").click(); await renameCard.scrollIntoViewIfNeeded(); await renameCard.press(playwrightShortcut(shortcutBindings.renameImage));
     assert.equal(await page.locator("#renameImageDialog").evaluate((dialog) => dialog.open), false, "a disabled custom rename shortcut does not open the dialog");
     await page.locator("#settingsButton").click(); await page.locator("#settingsTabShortcuts").click(); await page.locator('[data-shortcut-enabled="renameImage"]').check();
     const renameEnabledSaveStart = settingsPayloads.length;
-    await page.locator("#settingsSaveButton").click(); await page.waitForFunction(() => document.querySelector("#settingsResult").textContent === "設定を保存しました。");
+    await page.locator("#settingsSaveButton").click(); await page.waitForFunction(() => document.querySelector("#settingsResult").textContent === "設定を保存しました。"
+      && !document.querySelector("#settingsSaveButton").disabled && state.settings?.shortcuts?.actions?.renameImage === true);
     assert.deepEqual(settingsPayloads.slice(renameEnabledSaveStart).filter((payload) => payload.search === "?status=0").map((payload) => payload.body.shortcuts.actions.renameImage), [true], "saving the re-enabled rename action posts its exact action state");
-    await page.locator("#settingsCloseButton").click(); await renameCard.focus(); await page.keyboard.press(playwrightShortcut(shortcutBindings.renameImage));
-    await page.waitForFunction(() => document.querySelector("#renameImageDialog").open && state.renameImage?.imageId === "sample");
+    await page.locator("#settingsCloseButton").click(); await renameCard.scrollIntoViewIfNeeded(); await renameCard.press(playwrightShortcut(shortcutBindings.renameImage));
+    await page.locator("#renameImageDialog").waitFor({ state: "visible" });
+    assert.equal(await page.evaluate(() => state.renameImage?.imageId), "sample", "the re-enabled rename shortcut opens for the focused image");
     await page.locator("#renameImageCancel").click();
 
     // Restore one browser file source through its visible recovery action.
@@ -1418,6 +1477,7 @@ async function runDynamicProjectAndShortcutScenario(browser, fixtureUrl, setting
 
     // A matching-source list uses its selected row when its public Open
     // action posts the target project id.
+    const sameSourceOpenStart = sameSourceOpenRequests.length;
     await page.evaluate(() => showSameSourceDialog([
       { id: "same-source-first", name: "First source", status: "working", imageCount: 1 },
       { id: "same-source-second", name: "Second source", status: "working", imageCount: 2 },
@@ -1425,8 +1485,8 @@ async function runDynamicProjectAndShortcutScenario(browser, fixtureUrl, setting
     await page.locator("#sameSourceList button").nth(1).click();
     await page.locator("#sameSourceOpen").click();
     await page.waitForFunction(() => state.project?.id === "same-source-second");
-    assert.equal(sameSourceOpenRequests.length, 1, "opening a matching source sends one project-open request");
-    assert.equal(sameSourceOpenRequests[0].projectId, "same-source-second", "opening a matching source posts the project selected from the generated list");
+    assert.equal(sameSourceOpenRequests.length - sameSourceOpenStart, 1, "opening a matching source sends one project-open request");
+    assert.equal(sameSourceOpenRequests.at(-1).projectId, "same-source-second", "opening a matching source posts the project selected from the generated list");
     recordDynamicControl("#sameSourceList button");
   } finally {
     await stopCoveredPage(page, true);
@@ -2000,7 +2060,7 @@ async function runExhaustiveAddedScenarios(page, fixtureUrl, resetScenario) {
     await page.waitForFunction(() => state.overviewFilter.size === 0);
   }
   await page.locator("#overviewFilterButton").click();
-  for (const action of ["remove", "hide", "show", "clear", "detect", "reviewed", "unreviewed"]) {
+  for (const action of ["remove", "removeFromList", "hide", "show", "clear", "detect", "reviewed", "unreviewed"]) {
     resetScenario(); await setupFixture();
     if (action === "show") await page.evaluate(() => { const image = state.images.find((item) => item.id === "sample"); state.hiddenImageIds.add(image.id); image.hidden = true; renderCatalogViews(); });
     if (action === "clear") await page.evaluate(() => { state.maskStatus.set("sample", true); currentRecord().candidateCount = 1; renderCatalogViews(); });
@@ -2012,7 +2072,7 @@ async function runExhaustiveAddedScenarios(page, fixtureUrl, resetScenario) {
     if (action === "detect") {
       await page.waitForFunction(() => document.querySelector("#detectDialog").open);
       await page.locator("#detectCancelButton").click(); await page.waitForFunction(() => !document.querySelector("#detectDialog").open);
-    } else if (action === "remove") await page.waitForFunction(() => !state.images.some((image) => image.id === "sample"));
+    } else if (["remove", "removeFromList"].includes(action)) await page.waitForFunction(() => !state.images.some((image) => image.id === "sample"));
     else if (action === "hide") await page.waitForFunction(() => isHidden(state.images.find((image) => image.id === "sample")));
     else if (action === "show") await page.waitForFunction(() => !isHidden(state.images.find((image) => image.id === "sample")));
     else if (action === "clear") await page.waitForFunction(() => state.maskStatus.get("sample") !== true && state.images.find((image) => image.id === "sample")?.candidateCount === 0);
@@ -2303,6 +2363,8 @@ async function runControlLedger(page, fixtureUrl, contracts, finishCancel, holdS
     nextImageButton: async (before, after) => { await page.waitForFunction((current) => state.currentId !== current, before.state.current); assert.notEqual((await snapshot()).state.current, before.state.current, "nextImageButton must navigate"); },
     reviewAndNextButton: async (before, after) => { await page.waitForFunction((id) => currentRecord()?.id === id && currentRecord()?.reviewed === true, before.state.current); assert.notDeepEqual((await snapshot()).state.images, before.state.images, "reviewAndNextButton must mark the image reviewed"); },
     hideAndNextButton: async (before, after) => { await page.waitForFunction((id) => currentRecord()?.id !== id || Boolean(currentRecord()?.hidden), before.state.current); assert.notDeepEqual((await snapshot()).state.images, before.state.images, "hideAndNextButton must hide the image"); },
+    removeFromListButton: async (before) => { await page.waitForFunction((id) => !state.images.some((image) => image.id === id), before.state.current); assert.ok(!(await snapshot()).state.imageIds.includes(before.state.current)); },
+    removeFromListMenuItem: async (before) => { await page.waitForFunction((count) => state.images.length < count, before.state.imageIds.length); assert.equal(await page.locator("#catalogContextMenu").evaluate((menu) => menu.matches(":popover-open")), false); },
     removeAndNextButton: dialog("confirmDialog", true, "removeAndNextButton"), removeCurrentImageButton: async (before) => { await page.waitForFunction((count) => state.hiddenImageIds.size !== count, before.state.hiddenCount); assert.notEqual((await snapshot()).state.hiddenCount, before.state.hiddenCount, "removeCurrentImageButton must toggle hidden state"); },
     boundaryDetectButton: (before, after) => apiChanged(before, after, "boundaryDetectButton", "/api/boundary"),
     boundaryCancelButton: (before, after) => assert.equal(after.flags.boundaryActionsHidden, true, "boundaryCancelButton must hide boundary actions"),
@@ -2363,6 +2425,7 @@ async function runControlLedger(page, fixtureUrl, contracts, finishCancel, holdS
       const result = await page.evaluate(() => window.__sourceDeleteResumeLedger);
       assert.deepEqual(result, { permissionCalls: 1, resumeCalls: 1, resumeWithPermission: true }, "sourceDeleteResume requests the cached parent-handle permission once and hides after the public click");
     },
+    detectionSettingsButton: dialog("detectDialog", true, "detectionSettingsButton"),
     detectAllButton: dialog("detectDialog", true, "detectAllButton"), detectCancelButton: dialog("detectDialog", false, "detectCancelButton"),
     detectStartButton: dialog("processingDialog", true, "detectStartButton"),
     settingsCloseButton: dialog("settingsDialog", false, "settingsCloseButton"),
@@ -2643,7 +2706,7 @@ async function runControlLedger(page, fixtureUrl, contracts, finishCancel, holdS
   await assertHistoryControlReady("undoButton");
   assert.deepEqual(pageErrors.slice(errorsBeforeHistoryPointer), [], "the isolated public brush gesture does not raise a page error");
   await click("undoButton"); await assertHistoryControlReady("redoButton"); await click("redoButton");
-  for (const id of ["detectTargetPenis", "detectTargetPussy", "confidence"]) await input(id, id === "confidence" ? "0.51" : true);
+  await click("detectionSettingsButton"); await page.locator("#detectCancelButton").click();
 
   // Detection includes the disabled boundary action before a boundary is
   // created by the main pixel scenario.  The disabled state is asserted here;
@@ -2721,7 +2784,10 @@ async function runControlLedger(page, fixtureUrl, contracts, finishCancel, holdS
   await input("renameImageFilename", "sample-ledger.png"); await click("renameImageConfirm");
   await page.locator('.gallery-item[data-id="sample"]').click({ button: "right" }); await click("removeImageMenuItem");
   await closeDialogs();
-  await setupFixture(); await click("removeAndNextButton");
+  await setupFixture(); await click("removeFromListButton");
+  resetScenario(); await setupFixture();
+  await page.locator('.gallery-item[data-id="sample"]').click({ button: "right" }); await click("removeFromListMenuItem");
+  resetScenario(); await setupFixture(); await click("removeAndNextButton");
   if (await page.locator("#confirmDialog").evaluate((dialog) => dialog.open)) await click("confirmAccept");
   resetScenario();
   await setupFixture();
@@ -3606,7 +3672,7 @@ async function main() {
       const rect = button.getBoundingClientRect(); return rect.width === 28 && rect.height === 28;
     })), true, "all model help buttons, including SAM type, share the compact 28px target");
     await page.locator("#settingsTabShortcuts").click();
-    assert.equal(await page.locator("#shortcutBindings > .form-row").evaluateAll((rows) => rows.length === 12 && rows.every((row) => {
+    assert.equal(await page.locator("#shortcutBindings > .form-row").evaluateAll((rows) => rows.length === 30 && rows.every((row) => {
       const children = [...row.children];
       return children.length === 3 && children.every((child) => Math.abs((child.getBoundingClientRect().y + child.getBoundingClientRect().height / 2) - (row.getBoundingClientRect().y + row.getBoundingClientRect().height / 2)) < 2);
     })), true, "all shortcut bindings keep one three-column row");
@@ -3632,6 +3698,10 @@ async function main() {
     await page.waitForFunction(() => document.querySelector("#updateStatus").textContent.includes("最新"));
     await page.locator("#settingsDialog").evaluate((dialog) => dialog.close());
     assert.equal(await page.locator("#bucketToleranceControl").isVisible(), false, "bucket tolerance is hidden until the fill tool is selected");
+    assert.equal(await page.locator("#boundaryTool").isDisabled(), true, "an empty editor keeps mutation tools disabled after transient locks settle");
+    assert.equal(await page.locator("#boundaryTool").getAttribute("data-disabled-by-lock"), null, "the empty-editor disabled state is not owned by a stale transient lock");
+    await page.evaluate(() => resyncCatalog()); await page.waitForFunction(() => state.images.length > 0);
+    await page.locator(".gallery-item").first().click(); await page.waitForFunction(() => Boolean(state.currentId && state.currentImage));
     await page.locator("#boundaryTool").click();
     await page.locator("#bucketTool").click();
     assert.equal(await page.locator("#bucketToleranceControl").isVisible(), true, "bucket tolerance appears for the fill tool");
@@ -3655,6 +3725,7 @@ async function main() {
     await page.locator("#brushTool").click();
     assert.equal(await page.locator("#bucketToleranceControl").isVisible(), false, "bucket tolerance hides when switching away from fill");
     assert.deepEqual(await page.evaluate(() => [$("#bucketTool").getAttribute("aria-expanded"), $("#excludeBucketTool").getAttribute("aria-expanded")]), ["false", "false"], "leaving the fill tools collapses both tolerance controls");
+    await page.evaluate(() => { clearCurrentImageSelection(); updateActionButtons(); });
     for (const selector of ["#removeAndNextButton", "#hideAndNextButton"]) assert.equal(await page.locator(selector).isDisabled(), true, `${selector} is disabled without a selected image`);
     assert.equal(await page.locator("[data-candidate-batch]").evaluateAll((buttons) => buttons.every((button) => button.disabled)), true, "candidate batch actions are disabled without a selected image or candidate");
     await selectFixtureImage(page, pageErrors, consoleErrors);
@@ -3822,7 +3893,7 @@ async function main() {
     assert.ok(settingsResultBox && resetBox && resetBox.x - (settingsResultBox.x + settingsResultBox.width) <= 12, "settings result stays beside Reset");
     assert.deepEqual(settingsActions.at(-1), { path: "/api/settings/reset", method: "POST" }, "the compact reset button reaches its dedicated API route");
     const shortcutsAfterReset = await page.locator("[data-shortcut-action]").evaluateAll((inputs) => inputs.map((input) => input.value));
-    assert.equal(shortcutsAfterReset.length, 12, "reset restores every shortcut binding before compact save");
+    assert.equal(shortcutsAfterReset.length, Object.keys(shortcutDefaults.bindings).length, "reset restores every shortcut binding before compact save");
     assert.equal(shortcutsAfterReset.every(Boolean) && new Set(shortcutsAfterReset).size === shortcutsAfterReset.length, true, "reset restores valid unique shortcut bindings before compact save");
     const savesBeforeCompactSave = settingsActions.filter((action) => action.path === "/api/settings" && action.method === "POST").length;
     await page.locator("#settingsSaveButton").click();
@@ -3840,9 +3911,9 @@ async function main() {
     }
     await assertToolRailLayout(page, "top");
     await page.locator("#canvasStage").evaluate((stage) => { stage.dataset.toolPosition = "left"; });
-    for (const [language, labels] of [["ja", ["削除", "非表示にして次へ", "確認済にして次へ"]], ["en", ["Delete", "Hide and next", "Mark reviewed and next"]]]) {
+    for (const [language, labels] of [["ja", ["削除", "一覧から削除", "非表示にして次へ", "確認済にして次へ"]], ["en", ["Delete", "Remove from list", "Hide and next", "Mark reviewed and next"]]]) {
       await page.evaluate((locale) => loadTranslations(locale), language);
-      assert.deepEqual(await page.locator(".canvas-navigation-bar > button").evaluateAll((buttons) => buttons.slice(-3).map((button) => button.textContent.trim())), labels, `${language} navigation actions follow the requested order`);
+      assert.deepEqual(await page.locator(".canvas-navigation-bar > button").evaluateAll((buttons) => buttons.slice(-4).map((button) => button.textContent.trim())), labels, `${language} navigation actions follow the requested order`);
       await assertCompactNavigationLayout(page, language);
     }
     await page.evaluate(() => loadTranslations("ja"));
@@ -3940,10 +4011,13 @@ async function main() {
     await selectFixtureImage(page, pageErrors, consoleErrors);
     assert.equal(await page.locator("#removeAndNextButton").isDisabled(), false, "remove and next enables after selecting an image");
     assert.equal(await page.locator("#hideAndNextButton").isDisabled(), false, "hide and next enables after selecting an image");
-    await page.locator("#confidence").evaluate((input) => {
+    await page.locator("#detectionSettingsButton").click();
+    await page.locator("#detectConfidenceRange").evaluate((input) => {
       input.value = "1.00";
       input.dispatchEvent(new Event("input", { bubbles: true }));
     });
+    await page.locator("#detectStartButton").click();
+    await page.waitForFunction(() => !document.querySelector("#detectDialog").open);
     const detectionControls = await page.evaluate(() => {
       const saved = [...state.settings.detection.targets];
       state.settings.detection.targets = [];
@@ -3968,21 +4042,24 @@ async function main() {
     assert.equal(Object.hasOwn(detectRequests[0], "mode"), false, "current-image detection must not submit a mode override");
     resetJob();
     await page.evaluate(async () => { await pollJob(); closeProcessing(); });
-    await page.locator("label.target-chip:has(#detectTargetPussy)").click();
-    await page.waitForFunction(() => document.querySelector("#detectTargetPussy").checked === false);
+    await page.locator("#detectionSettingsButton").click();
+    await page.locator("label.target-chip:has(#dialogTargetPussy)").click();
+    await page.locator("#detectStartButton").click();
+    await page.waitForFunction(() => !document.querySelector("#detectDialog").open);
     detectionRequest = page.waitForResponse((response) => new URL(response.url()).pathname === "/api/detect" && response.request().method() === "POST");
     await page.locator("#detectCurrentButton").click();
     await detectionRequest;
     assert.deepEqual(detectRequests[1].targetClasses, ["penis"], "current-image detection uses the visible penis-only choice");
     resetJob();
     await page.evaluate(async () => { await pollJob(); closeProcessing(); });
-    await page.locator("label.target-chip:has(#detectTargetPenis)").click();
-    await page.waitForFunction(() => document.querySelector("#detectTargetPenis").checked === false);
-    await page.locator("#detectCurrentButton").click();
-    assert.equal(detectRequests.length, 2, "current-image detection must not start without a selected target");
-    assert.match(await page.locator("#detectionTargetValidation").textContent(), /penis|pussy/, "current-image detection explains which target to select");
-    await page.locator("label.target-chip:has(#detectTargetPussy)").click();
-    await page.waitForFunction(() => document.querySelector("#detectTargetPussy").checked === true);
+    await page.locator("#detectionSettingsButton").click();
+    await page.locator("label.target-chip:has(#dialogTargetPenis)").click();
+    assert.equal(await page.locator("#detectStartButton").isDisabled(), true, "settings cannot save an empty target selection");
+    assert.equal(detectRequests.length, 2, "settings never starts detection");
+    assert.match(await page.locator("#detectTargetValidation").textContent(), /penis|pussy/);
+    await page.locator("label.target-chip:has(#dialogTargetPussy)").click();
+    await page.locator("#detectStartButton").click();
+    await page.waitForFunction(() => !document.querySelector("#detectDialog").open);
     detectionRequest = page.waitForResponse((response) => new URL(response.url()).pathname === "/api/detect" && response.request().method() === "POST");
     await page.locator("#detectCurrentButton").click();
     await detectionRequest;
@@ -3994,7 +4071,8 @@ async function main() {
     const persistedDetection = await page.evaluate(() => structuredClone(state.settings.detection));
     failNextSettingsSave();
     await page.locator("#detectAllButton").click();
-    await page.locator("#dialogTargetPussy").evaluate((input) => { input.checked = false; input.dispatchEvent(new Event("change", { bubbles: true })); });
+    await page.locator("label.target-chip:has(#dialogTargetPenis)").click();
+    await page.locator("label.target-chip:has(#dialogTargetPussy)").click();
     await page.locator("#detectConfidenceNumber").fill("0.67");
     await page.locator("#detectParallelism").fill("4");
     await page.locator("#detectStartButton").click();
@@ -4013,7 +4091,7 @@ async function main() {
     assert.equal(detectRequests.length, currentDetectionRequests, "opening settings must not start another detection");
     await page.locator("#detectConfidenceNumber").fill("0.67");
     assert.equal(await page.locator("#detectParallelism").isDisabled(), false, "GPU keeps the same editable worker control");
-    assert.equal(await page.locator("#detectParallelism").inputValue(), "2", "the saved worker count is shown without rewriting it");
+    assert.equal(await page.locator("#detectParallelism").inputValue(), "4", "a failed save keeps the draft worker count for retry");
     await page.locator("#settingsProvider").evaluate((select) => { select.value = "cpu"; select.dispatchEvent(new Event("change", { bubbles: true })); });
     await page.locator("#detectParallelism").fill("4");
     await page.locator("#settingsProvider").evaluate((select) => { select.value = "gpu"; select.dispatchEvent(new Event("change", { bubbles: true })); });
@@ -4426,7 +4504,7 @@ async function main() {
     await page.locator("#batchModeButton").click();
     assert.equal(await page.locator("#batchModeButton").getAttribute("aria-pressed"), "true", "batch edit is an explicit overview mode");
     assert.equal(await page.locator("#overviewSelectionBar").isVisible(), true, "batch controls appear immediately below the overview toolbar");
-    assert.equal(await page.locator('[data-selection-action]').count(), 7, "overview batch edit retains all seven actions");
+    assert.equal(await page.locator('[data-selection-action]').count(), 8, "overview batch edit retains all eight actions");
     await page.locator('.overview-item[data-id="sample"]').focus();
     await page.keyboard.press("Space");
     await page.locator('.overview-item[data-id="sample-two"]').click();
@@ -4512,9 +4590,9 @@ async function main() {
         const toolbar = box("#canvasToolRail"); const stage = box("#canvasStage"); const controls = [...document.querySelectorAll(".candidate-section-actions > button")].map((node) => { const rect = node.getBoundingClientRect(); return { left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom, width: rect.width, height: rect.height, text: node.textContent }; });
         const candidateOverflow = [...document.querySelectorAll(".candidate-section-actions, .candidate-row")].some((node) => node.scrollWidth > node.clientWidth || node.scrollHeight > node.clientHeight);
         const candidateHit = [...document.querySelectorAll(".candidate-section-actions > button")].every((button) => { const rect = button.getBoundingClientRect(); const target = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2); return button === target || button.contains(target); });
-        const targetChoices = document.querySelector(".candidate-pane .target-choices"); const targetPane = document.querySelector(".candidate-pane"); const targetBounds = targetChoices.getBoundingClientRect(); const paneBounds = targetPane.getBoundingClientRect(); const targetInputs = [...targetChoices.querySelectorAll('input[type="checkbox"]')]; const targetChips = [...targetChoices.querySelectorAll(".target-chip")]; const targetLabel = targetChoices.querySelector(".target-choices-label").getBoundingClientRect();
+        const targetButton = document.querySelector("#detectionSettingsButton"); const targetBounds = targetButton.getBoundingClientRect(); const paneBounds = document.querySelector(".candidate-pane").getBoundingClientRect();
         const blockHeading = document.querySelector(".block-control-heading"); const blockLabel = blockHeading.querySelector('label[for="divisor"]'); const blockHelp = document.querySelector("#mosaicHelpButton"); const headingBox = blockHeading.getBoundingClientRect(); const labelBox = blockLabel.getBoundingClientRect(); const helpBox = blockHelp.getBoundingClientRect();
-        return { toolbar, stage, controls, candidateOverflow, candidateHit, targets: { count: targetInputs.length, native: targetInputs.every((input) => input.type === "checkbox"), oneLine: new Set([targetLabel.top, ...targetChips.map((item) => item.getBoundingClientRect().top)].map(Math.round)).size === 1, centered: targetChips.every((chip) => Math.abs((chip.getBoundingClientRect().top + chip.getBoundingClientRect().bottom) / 2 - (targetLabel.top + targetLabel.bottom) / 2) <= 1), withinPane: targetBounds.left >= paneBounds.left && targetBounds.right <= paneBounds.right, compact: targetChips.every((chip) => { const rect = chip.getBoundingClientRect(); return rect.height >= 26 && rect.height <= 28; }), selected: targetChips.every((chip) => chip.classList.contains("is-selected")), tracksAbsent: !targetChoices.querySelector(".target-switch-track") }, overviewFilterButton: document.querySelector("#overviewFilterButton").textContent, orientation: document.querySelector("#canvasToolRail").getAttribute("aria-orientation"), help: { label: blockHelp.getAttribute("aria-label"), title: blockHelp.title, parent: blockHelp.parentElement.className, nestedInLabel: Boolean(blockHelp.closest("label")), followsLabel: helpBox.left >= labelBox.right, fitsHeading: headingBox.left <= labelBox.left && headingBox.right >= helpBox.right && headingBox.width >= labelBox.width + helpBox.width }, toolPosition: document.querySelector("#settingsToolPosition") };
+        return { toolbar, stage, controls, candidateOverflow, candidateHit, targets: { visible: targetBounds.width > 0 && targetBounds.height > 0, withinPane: targetBounds.left >= paneBounds.left && targetBounds.right <= paneBounds.right }, overviewFilterButton: document.querySelector("#overviewFilterButton").textContent, orientation: document.querySelector("#canvasToolRail").getAttribute("aria-orientation"), help: { label: blockHelp.getAttribute("aria-label"), title: blockHelp.title, parent: blockHelp.parentElement.className, nestedInLabel: Boolean(blockHelp.closest("label")), followsLabel: helpBox.left >= labelBox.right, fitsHeading: headingBox.left <= labelBox.left && headingBox.right >= helpBox.right && headingBox.width >= labelBox.width + helpBox.width }, toolPosition: document.querySelector("#settingsToolPosition") };
       });
       assert.ok(editor.toolbar.left === editor.stage.left && editor.toolbar.right === editor.stage.right && editor.toolbar.top === editor.stage.top && editor.toolbar.height > 30, `toolbar fills the editor top at ${width}/${language}`);
       assert.equal(editor.toolPosition, null, "legacy tool position control is absent");
@@ -4528,17 +4606,19 @@ async function main() {
       assert.equal(editor.controls.filter((control) => control.text === (language === "ja" ? "検出範囲" : "Detection range")).length, 2, `both candidate sections expose a detection-range button at ${width}/${language}`);
       assert.equal(editor.candidateOverflow, false, `candidate controls do not overflow at ${width}/${language}`);
       assert.equal(editor.candidateHit, true, `candidate display segments own their hit targets at ${width}/${language}`);
-      assert.equal(editor.targets.count === 2 && editor.targets.native && editor.targets.oneLine && editor.targets.centered && editor.targets.withinPane && editor.targets.compact && editor.targets.selected && editor.targets.tracksAbsent, true, `target label and chips stay compact and aligned at ${width}/${language}: ${JSON.stringify(editor.targets)}`);
+      assert.equal(editor.targets.visible && editor.targets.withinPane, true, `detection settings button fits the sidebar at ${width}/${language}`);
       if (width === 1024 && language === "ja") {
-        const penis = page.locator("#detectTargetPenis"); const pussy = page.locator("#detectTargetPussy");
+        await page.locator("#detectionSettingsButton").click();
+        const penis = page.locator("#dialogTargetPenis"); const pussy = page.locator("#dialogTargetPussy");
         await penis.focus(); await penis.press("Space");
         assert.equal(await penis.isChecked(), false, "keyboard toggles the penis target off");
-        assert.equal(await page.locator("#detectTargetPenis").evaluate((input) => input.closest(".target-chip").classList.contains("is-selected")), false, "an unselected target uses the neutral chip");
+        assert.equal(await page.locator("#dialogTargetPenis").evaluate((input) => input.closest(".target-chip").classList.contains("is-selected")), false, "an unselected target uses the neutral chip");
         await pussy.focus(); await pussy.press("Space");
-        const zeroTargets = await page.evaluate(() => ({ targets: settingsPayload().detection.targets, visible: !document.querySelector("#detectionTargetValidation").hidden, text: document.querySelector("#detectionTargetValidation").textContent }));
+        const zeroTargets = await page.evaluate(() => ({ targets: detectionTargets(), visible: !document.querySelector("#detectTargetValidation").hidden, text: document.querySelector("#detectTargetValidation").textContent }));
         assert.deepEqual(zeroTargets.targets, [], "settings payload preserves an explicit empty target selection");
         assert.equal(zeroTargets.visible && zeroTargets.text === "penis または pussy を選択してください。", true, "empty target selection shows localized inline validation");
         await penis.focus(); await penis.press("Space"); await pussy.focus(); await pussy.press("Space");
+        await page.locator("#detectCancelButton").click();
       }
       await page.locator("#mosaicHelpButton").click();
       const mosaicHelp = await page.locator("#mosaicHelpDialog").evaluate((dialog) => {

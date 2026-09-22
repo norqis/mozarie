@@ -153,8 +153,10 @@ async function runArtifactCases() {
 async function runFrontendCases() {
   const temporaryRoot = fs.mkdtempSync(path.join(os.tmpdir(), "mozarie-quiet-frontend-"));
   const calls = [];
+  let verifiedManifests = null;
   try {
     const summary = await runner.runFrontend(temporaryRoot, null, {
+      verifyContracts(manifests) { verifiedManifests = manifests; },
       async requiredCommand(label, command, args, options) {
         calls.push({ label, command, args, options });
         if (label === "frontend coverage") {
@@ -170,10 +172,14 @@ async function runFrontendCases() {
     assert.deepEqual(calls.map(({ label }) => label), ["frontend syntax", "frontend coverage", "frontend performance"], "performance runs once only after successful syntax and coverage checks");
     assert.equal(calls[2].args.includes("tests/test_gallery_performance_e2e.cjs"), true, "the 20k gallery scenario is the only quiet-runner performance target");
     assert.equal(calls[2].options.env.MOZARIE_JS_COVERAGE, undefined, "the performance run is not instrumented for JavaScript coverage");
+    assert.equal(path.basename(calls[1].options.env.MOZARIE_NODE_TEST_MANIFEST), "frontend-node-manifest.json", "coverage writes structured Node execution evidence");
+    assert.equal(path.basename(calls[2].options.env.MOZARIE_NODE_TEST_MANIFEST), "frontend-performance-manifest.json", "performance writes separate structured Node execution evidence");
+    assert.deepEqual(verifiedManifests.map((file) => path.basename(file)), ["frontend-node-manifest.json", "frontend-performance-manifest.json"], "contract validation receives both completed frontend manifests");
     assert.match(summary, /44 coverage tests; 1 performance tests/, "the compact result distinguishes coverage and performance runs");
     assert.deepEqual(runner.performanceEnvironment({ MOZARIE_JS_COVERAGE: "1", MOZARIE_BROWSER_COVERAGE_FILE: "browser.json", NODE_V8_COVERAGE: "v8", KEEP: "value" }), { KEEP: "value" }, "the performance environment removes all coverage instrumentation");
 
     await assert.rejects(runner.runFrontend(temporaryRoot, null, {
+      verifyContracts() {},
       async requiredCommand(label, command, args, options) {
         if (label === "frontend coverage") {
           const report = path.join(options.env.MOZARIE_JS_COVERAGE_DIR, "report");
@@ -191,6 +197,11 @@ async function runFrontendCases() {
 }
 
 assert.deepEqual(runner.parseArguments(["frontend", "--artifacts", "coverage-artifacts"]).suite, "frontend", "the requested suite is parsed");
+assert.deepEqual(runner.parseArguments(["frontend-shard", "--shard-index", "1", "--shard-total", "2"]).shardIndex, 1, "a frontend shard has a stable zero-based index");
+assert.equal(runner.parseArguments(["frontend-performance"]).suite, "frontend-performance", "the performance suite is independently runnable");
+assert.equal(runner.parseArguments(["frontend-aggregate", "--shard-artifacts", "coverage-artifacts", "--performance-artifacts", "performance-artifacts"]).suite, "frontend-aggregate", "frontend aggregate requires shard and performance artifacts");
+assert.throws(() => runner.parseArguments(["frontend-shard"]), /usage/, "frontend shard requires an explicit partition");
+assert.throws(() => runner.parseArguments(["frontend-aggregate", "--shard-artifacts", "coverage-artifacts"]), /usage/, "frontend aggregate cannot omit the performance artifact");
 assert.deepEqual(runner.parseArguments(["backend", "--shard-index", "1", "--shard-total", "2"]).shardIndex, 1, "a backend shard has a stable zero-based index");
 assert.throws(() => runner.parseArguments(["backend", "--shard-index", "2", "--shard-total", "2"]), /usage/, "an out-of-range backend shard is rejected before execution");
 assert.equal(runner.parseArguments(["backend-aggregate", "--shard-artifacts", "coverage-artifacts"]).suite, "backend-aggregate", "the aggregate runner requires downloaded shard artifacts");

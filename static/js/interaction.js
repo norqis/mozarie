@@ -76,7 +76,7 @@ function closeBoundaryModeMenu({ restoreFocus = false } = {}) {
 }
 function updateBrushSize(value) {
   if (isBusy() || state.importing) return;
-  const input = $("#brushSize"); input.value = Math.max(1, Math.round(value));
+  const input = $("#brushSize"); input.value = Math.min(300, Math.max(1, Math.round(Number(value)) || 1));
   $("#brushSizeValue").textContent = t("editor.pixels", { value: input.value }); render(); updateBrushCursor();
 }
 function updateBlockSizeDisplay() {
@@ -224,6 +224,7 @@ function openCatalogContextMenu(event, imageId) {
   rename.title = renameAvailable ? "" : t("context.renameUnavailableHelp");
   $("#copyImagePathMenuItem").hidden = !image.sourcePath;
   $("#removeImageMenuItem").textContent = t(isHidden(image) ? "editor.show" : "editor.hide");
+  $("#removeFromListMenuItem").disabled = !canRemoveImagesFromList([image]);
   const menu = $("#catalogContextMenu");
   const cardRect = state.contextMenuOrigin?.getBoundingClientRect?.();
   const clientX = !keyboardEvent && Number.isFinite(event.clientX) ? event.clientX : (cardRect ? cardRect.left + Math.min(24, cardRect.width / 2) : 8);
@@ -366,7 +367,7 @@ async function browserDeleteHandle(entry, image, requestPermission = false) {
   const resolved = await entry.parentHandle.getFileHandle(entry.name);
   if (resolved.isSameEntry && !await resolved.isSameEntry(entry.fileHandle)) throw codedError("stale_asset");
   const file = await resolved.getFile();
-  if (file.size !== image.sizeBytes || file.lastModified * 1_000_000 !== image.mtimeNs) throw codedError("stale_asset");
+  if (file.size !== image.sizeBytes || Math.round(file.lastModified) * 1_000_000 !== image.mtimeNs) throw codedError("stale_asset");
   await entry.parentHandle.removeEntry(entry.name);
 }
 async function preflightBrowserSourceDelete(images, permissionFailures = []) {
@@ -383,7 +384,7 @@ async function preflightBrowserSourceDelete(images, permissionFailures = []) {
       const resolved = await entry.parentHandle.getFileHandle(entry.name);
       if (resolved.isSameEntry && !await resolved.isSameEntry(entry.fileHandle)) throw codedError("stale_asset");
       const file = await resolved.getFile();
-      if (file.size !== image.sizeBytes || file.lastModified * 1_000_000 !== image.mtimeNs) throw codedError("stale_asset");
+      if (file.size !== image.sizeBytes || Math.round(file.lastModified) * 1_000_000 !== image.mtimeNs) throw codedError("stale_asset");
       ready.push(image);
     } catch (error) { failed.push({ imageId: image.id, reason: error?.code || "source_delete_failed" }); }
   }
@@ -448,6 +449,8 @@ async function recoverPendingBrowserDeletes(pending) {
 async function resumePendingSourceDeletes(requestPermission = false) {
   const pendingDeletes = await pendingSourceDeletes();
   if (!pendingDeletes.length) return;
+  const pendingImageIds = new Set(pendingDeletes.flatMap((pending) => pending.imageIds || []));
+  const recoverySelection = deletionSelectionSnapshot(pendingImageIds, galleryFilteredImages());
   for (const pending of pendingDeletes) {
     try {
       let status;
@@ -515,7 +518,11 @@ async function resumePendingSourceDeletes(requestPermission = false) {
       // Keep prepared and cleanup-pending operations until a terminal receipt is acknowledged.
     }
   }
-  await resyncCatalog().catch(() => null);
+  const snapshot = await resyncCatalog().catch(() => null);
+  if (snapshot) {
+    await restoreDeletionSelection(recoverySelection, pendingImageIds);
+    if (!state.currentImage && state.images[0]) await selectImage(state.images[0].id, true, { saveCurrentDraft: false });
+  }
 }
 
 async function resumePendingSourceDeletesFromUser() {
@@ -586,7 +593,9 @@ async function permanentlyDeleteImages(images, visibleImages) {
     }
     const removed = new Set(data.removedImageIds || []);
     for (const image of images.filter((item) => removed.has(item.id))) {
-      releaseImageCaches(image.id); state.sourceAccess.delete(image.id); state.drafts.delete(image.id); state.maskStatus.delete(image.id); clearReviewForRemovedImage(image);
+      invalidateProjectHistoryRefresh(image.id);
+      releaseImageCaches(image.id); releaseCandidateBundles(image.id); clearCandidateMutationState(image.id);
+      state.sourceAccess.delete(image.id); state.drafts.delete(image.id); state.projectHistory.delete(image.id); state.maskStatus.delete(image.id); clearReviewForRemovedImage(image);
       state.selectedImageIds.delete(image.id);
     }
     state.images = data.images || state.images;
@@ -607,13 +616,39 @@ async function permanentlyDeleteImages(images, visibleImages) {
   } catch (error) {
     await restoreDeletionSelection(selection, imageIds);
     showUserError(error);
-  } finally { state.catalogMutation = false; updateActionButtons(); }
+  } finally { state.catalogMutation = false; updateActionButtons(); updateSelectionActionBar(); }
 }
 
 async function removeImageFromCatalog(imageId = state.contextMenuImageId) {
   if (!canRemoveCurrentImage() || imageId !== state.currentId) return;
   const image = state.images.find((item) => item.id === imageId);
   if (image) await permanentlyDeleteImages([image], galleryFilteredImages());
+}
+
+async function removeImagesFromList(images, visibleImages = galleryFilteredImages()) {
+  if (!canRemoveImagesFromList(images)) return;
+  const ids = new Set(images.map((image) => image.id));
+  const selection = deletionSelectionSnapshot(ids, visibleImages);
+  const epoch = state.catalogEpoch;
+  state.catalogMutation = true; updateActionButtons();
+  try {
+    await flushAllImageMutations();
+    await flushAllWorkspaceMutations();
+    if (!await removeSavedCatalogEntries([...ids], epoch, selection)) return;
+    if (!state.images.length) { state.batchMode = false; clearBatchSelection(); }
+    updateSelectionActionBar();
+    setStatusKey("status.removedFromList", { count: ids.size }, "success");
+  } catch (error) {
+    if (isCurrentCatalogEpoch(epoch)) showUserError(error);
+  } finally { state.catalogMutation = false; updateActionButtons(); updateSelectionActionBar(); }
+}
+
+function removeContextImagesFromList() {
+  const image = state.images.find((item) => item.id === state.contextMenuImageId);
+  const fromOverview = Boolean(state.contextMenuOrigin?.closest("#overviewGrid"));
+  const images = fromOverview && state.batchMode && state.selectedImageIds.has(image?.id) ? selectedImages() : image ? [image] : [];
+  closeCatalogContextMenu();
+  return removeImagesFromList(images, fromOverview ? overviewImages() : galleryFilteredImages());
 }
 
 async function runSelectionAction(action) {
@@ -641,6 +676,7 @@ async function runSelectionAction(action) {
   if (action === "remove") {
     await permanentlyDeleteImages(images, overviewImages());
   }
+  if (action === "removeFromList") await removeImagesFromList(images, overviewImages());
 }
 
 function droppedFile(file, relativePath = file.name, fileHandle = null, parentHandle = null) {
@@ -648,16 +684,28 @@ function droppedFile(file, relativePath = file.name, fileHandle = null, parentHa
 }
 
 async function directFilesFromDrop(dataTransfer) {
-  const handles = await Promise.all([...dataTransfer.items]
-    .filter((item) => item.kind === "file")
-    .map((item) => item.getAsFileSystemHandle()));
+  // Both APIs must be called during the drop event, before its data store is
+  // protected again. Keep File snapshots when handle access is unsupported,
+  // rejected, or returns null (for example a drag from another application).
+  const files = [...(dataTransfer.files || [])];
+  const items = [...(dataTransfer.items || [])].filter((item) => item.kind === "file");
+  const pending = items.map((item, index) => {
+    const file = item.getAsFile?.() || files[index] || null;
+    let handle;
+    try { handle = item.getAsFileSystemHandle?.(); } catch { handle = null; }
+    return Promise.resolve(handle).catch(() => null).then((handle) => ({ handle, file }));
+  });
+  const snapshots = pending.length ? await Promise.all(pending) : files.map((file) => ({ handle: null, file }));
   const entries = [];
-  async function collectHandle(handle, parent = "", parentHandle = null) {
+  async function collectHandle(handle, parent = "", parentHandle = null, file = null) {
     const relativePath = parent ? `${parent}/${handle.name}` : handle.name;
-    if (handle.kind === "file") entries.push({ handle, relativePath, parentHandle });
+    if (handle.kind === "file") entries.push({ handle, relativePath, parentHandle, ...(file ? { file } : {}) });
     else for await (const entry of handle.values()) await collectHandle(entry, relativePath, handle);
   }
-  for (const handle of handles) if (handle) await collectHandle(handle);
+  for (const { handle, file } of snapshots) {
+    if (handle) await collectHandle(handle, "", null, file);
+    else if (file) entries.push(droppedFile(file, file.webkitRelativePath || file.name));
+  }
   return { handleEntries: entries };
 }
 
@@ -712,7 +760,7 @@ async function rememberImportedSource(result, session) {
   for (const imported of result.data.imported || []) {
     if (imported.clientKey !== result.clientKey || !result.entry.fileHandle || !imported.imageId) continue;
     state.sourceAccess.set(imported.imageId, {
-      fileHandle: result.entry.fileHandle, parentHandle: result.entry.parentHandle || null,
+      fileHandle: result.entry.fileHandle, parentHandle: result.entry.parentHandle || null, rootHandle: result.entry.rootHandle || null,
       name: result.entry.file.name, size: result.entry.file.size, lastModified: result.entry.file.lastModified,
       sourceId: result.sourceId, clientKey: result.clientKey, relativePath: result.entry.relativePath, sourceKind: session.sourceKind,
     });
@@ -847,7 +895,7 @@ async function importSingleFile(entry, clientKey, catalogId = null, sourceId = n
       "X-Mozarie-Name": encodeURIComponent(entry.file.name),
       "X-Mozarie-Relative-Path": encodeURIComponent(entry.relativePath),
       "X-Mozarie-Client-Key": encodeURIComponent(clientKey),
-      "X-Mozarie-File-Mtime": String(Math.max(0, Number(entry.file.lastModified || 0))),
+      "X-Mozarie-File-Mtime": String(Math.max(0, Math.round(Number(entry.file.lastModified || 0)))),
       "X-Mozarie-File-Size": String(Math.max(0, Number(entry.file.size || 0))),
       ...(sourceId ? { "X-Mozarie-Source-Id": encodeURIComponent(sourceId) } : {}),
       ...(sourceKind ? { "X-Mozarie-Source-Kind": sourceKind } : {}),
@@ -933,9 +981,9 @@ async function waitForImportSession(session) {
 }
 
 async function importHandleEntries(entries, session) {
-  return importFiles(entries.map((entry) => ({
+  return importFiles(entries.map((entry) => entry.handle ? ({
     ...entry, name: entry.handle.name, getFile: () => entry.handle.getFile(), fileHandle: entry.handle,
-  })), session);
+  }) : entry), session);
 }
 
 async function importFileHandles(handles, session = beginImportSession()) {
@@ -966,7 +1014,7 @@ async function importDirectoryHandle(directoryHandle, session = beginImportSessi
     async function collect(handle, relativePath = "", parentHandle = null) {
       if (!await waitForImportSession(session)) return;
       const path = relativePath ? `${relativePath}/${handle.name}` : handle.name;
-      if (handle.kind === "file") entries.push({ handle, relativePath: path, parentHandle });
+      if (handle.kind === "file") entries.push({ handle, relativePath: path, parentHandle, rootHandle: directoryHandle });
       else for await (const child of handle.values()) await collect(child, path, handle);
     }
     for await (const handle of directoryHandle.values()) await collect(handle, "", directoryHandle);
@@ -992,7 +1040,7 @@ async function importProjectDirectoryHandle(directoryHandle, projectId, sourceId
     async function collect(handle, relativePath = "", parentHandle = null) {
       if (!await waitForImportSession(session)) return;
       const path = relativePath ? `${relativePath}/${handle.name}` : handle.name;
-      if (handle.kind === "file") entries.push({ handle, relativePath: path, parentHandle });
+      if (handle.kind === "file") entries.push({ handle, relativePath: path, parentHandle, rootHandle: directoryHandle });
       else for await (const child of handle.values()) await collect(child, path, handle);
     }
     for await (const handle of directoryHandle.values()) await collect(handle, "", directoryHandle);
@@ -1045,6 +1093,8 @@ async function pickImageDirectory() {
 }
 
 async function importDroppedFiles(event) {
+  if (!event.dataTransfer?.types?.includes("Files") && !event.dataTransfer?.files?.length
+      && ![...(event.dataTransfer?.items || [])].some((item) => item.kind === "file")) return;
   event.preventDefault();
   event.stopPropagation();
   setGalleryDropOverlay(false);
@@ -1072,6 +1122,7 @@ function handleEditorKeydown(event) {
   const historyBinding = (binding === shortcuts.undo && enabled.undo !== false) || (binding === shortcuts.redo && enabled.redo !== false);
   if (!currentImageActionPending() && !state.projectReadOnly && currentRecord() && !currentRecord()?.sourceDimensionsChanged && historyBinding) {
     event.preventDefault();
+    if (direction === "undo" && undoBoundaryDraft()) return true;
     if (hasDurableHistory()) {
       if (canRestoreProjectHistory(direction)) void restoreProjectHistory(direction);
     } else if (direction === "undo" ? state.historyIndex > 0 : state.historyIndex < state.history.length) {
@@ -1082,21 +1133,51 @@ function handleEditorKeydown(event) {
   return false;
 }
 
+const TOOLBAR_SHORTCUT_BUTTONS = {
+  mosaicBrush: "#brushTool", mosaicFill: "#bucketTool", mosaicEraser: "#mosaicEraserTool",
+  boundaryMenu: "#boundaryTool", boundaryRectangle: "#rectangleTool", boundaryPolygon: "#polygonTool", boundaryBrush: "#boundaryBrushTool",
+  exclusionBrush: "#eraserTool", exclusionFill: "#excludeBucketTool", exclusionEraser: "#excludeEraserTool",
+  singleView: "#singleViewButton", compareView: "#compareViewButton", fitView: "#fitButton",
+  flipHorizontal: "#flipHorizontalButton", flipVertical: "#flipVerticalButton", mosaicPreview: "#mosaicPreviewButton",
+};
+const TOOLBAR_SHORTCUT_CYCLES = {
+  cycleMosaicTool: [["brush", "mosaicBrush"], ["bucket", "mosaicFill"], ["mosaic_eraser", "mosaicEraser"], ["boundary", "boundaryRectangle"], ["polygon", "boundaryPolygon"], ["boundary_brush", "boundaryBrush"]],
+  cycleExclusionTool: [["eraser", "exclusionBrush"], ["exclude_bucket", "exclusionFill"], ["exclude_eraser", "exclusionEraser"]],
+};
+
+function toolbarShortcutButton(action) {
+  const cycle = TOOLBAR_SHORTCUT_CYCLES[action];
+  if (cycle) {
+    const available = cycle.filter(([, name]) => !$(TOOLBAR_SHORTCUT_BUTTONS[name]).disabled);
+    if (!available.length) return null;
+    action = available[(available.findIndex(([tool]) => tool === state.tool) + 1) % available.length][1];
+  }
+  const selector = TOOLBAR_SHORTCUT_BUTTONS[action];
+  const button = selector ? $(selector) : null;
+  return button && !button.disabled ? button : null;
+}
+
 function navigationShortcutAction(event) {
   if (isBusy() || state.importing || isGestureActive() || !state.navigationShortcutsEnabled || hasOpenDialog()) return null;
   const binding = shortcutFromEvent(event);
   const bindings = state.settings?.shortcuts?.bindings || { previous: "ArrowLeft", next: "ArrowRight", previousVisible: "ArrowUp", nextVisible: "ArrowDown", first: "Home", last: "End", reviewAndNext: "Enter", removeImage: "Delete", toggleOverview: "G", undo: "Ctrl+Z", redo: "Ctrl+Shift+Z", renameImage: "F2" };
   const actionForBinding = Object.entries(bindings).find(([, value]) => value === binding)?.[0];
   if (!actionForBinding || state.settings?.shortcuts?.actions?.[actionForBinding] === false) return null;
+  const toolbarAction = TOOLBAR_SHORTCUT_BUTTONS[actionForBinding] || TOOLBAR_SHORTCUT_CYCLES[actionForBinding];
+  const focusedToolbarButton = document.activeElement?.matches?.("#canvasToolRail button:not(:disabled)");
   const currentGalleryItem = document.activeElement?.matches("button.gallery-item.current") && document.activeElement.dataset.id === state.currentId;
   const focusedCatalogItem = document.activeElement?.matches("button.gallery-item, button.overview-item");
-  if (isEditableTarget(document.activeElement) && !(actionForBinding === "removeImage" && currentGalleryItem) && !(actionForBinding === "renameImage" && focusedCatalogItem)) return null;
+  if (isEditableTarget(document.activeElement) && !(toolbarAction && focusedToolbarButton) && !(actionForBinding === "removeImage" && currentGalleryItem) && !(actionForBinding === "renameImage" && focusedCatalogItem)) return null;
   if (actionForBinding === "toggleOverview") return "toggleOverview";
   if (actionForBinding === "renameImage") {
     const focusedId = document.activeElement?.matches("button.gallery-item, button.overview-item") ? document.activeElement.dataset.id : state.currentId;
     return canRenameCatalogImage(state.images.find((image) => image.id === focusedId)) ? { action: "renameImage", imageId: focusedId } : null;
   }
   if (state.viewMode !== "edit") return null;
+  if (toolbarAction) {
+    if (event.repeat || currentImageActionPending() || !state.currentImage || !currentRecord()) return null;
+    return toolbarShortcutButton(actionForBinding) ? actionForBinding : null;
+  }
   if (actionForBinding === "removeImage" && event.repeat) return "removeImageRepeat";
   if (actionForBinding === "removeImage" && !canRemoveCurrentImage()) return null;
   if ((currentImageActionPending() || state.projectReadOnly || currentRecord()?.sourceDimensionsChanged
@@ -1110,7 +1191,8 @@ function handleNavigationKeydown(event) {
   if (!result) return false;
   const action = typeof result === "string" ? result : result.action;
   event.preventDefault();
-  if (action === "toggleOverview") setViewMode(state.viewMode === "overview" ? "edit" : "overview");
+  if (TOOLBAR_SHORTCUT_BUTTONS[action] || TOOLBAR_SHORTCUT_CYCLES[action]) toolbarShortcutButton(action)?.click();
+  else if (action === "toggleOverview") setViewMode(state.viewMode === "overview" ? "edit" : "overview");
   else if (action === "renameImage") openRenameImageDialog(result.imageId);
   else if (action === "previous") moveCurrentBy(-1);
   else if (action === "next") moveCurrentBy(1);

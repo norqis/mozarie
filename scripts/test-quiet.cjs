@@ -3,7 +3,9 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const { assertNoSkippedUnittestTests } = require("./test-result-policy.cjs");
-const { frontendPerformanceTestFiles, frontendTestArguments } = require("./test-discovery.cjs");
+const { browserCoverageTestFiles, frontendPerformanceTestFiles, frontendTestArguments, frontendTestFiles, selectedFrontendTestFiles } = require("./test-discovery.cjs");
+const { loadContracts, readManifest, validateAutomatedExecution } = require("./verification-contracts.cjs");
+const { frontendContracts } = require("./frontend-verification-contracts.cjs");
 
 const root = path.resolve(__dirname, "..");
 const DEFAULT_COMMAND_TIMEOUT_MS = 5 * 60 * 1000;
@@ -12,7 +14,8 @@ const COMMAND_TIMEOUTS = {
   "backend coverage": 2 * 60 * 1000,
   "backend coverage XML": 2 * 60 * 1000,
   "frontend syntax": 2 * 60 * 1000,
-  "frontend coverage": 8 * 60 * 1000,
+  "frontend coverage": 12 * 60 * 1000,
+  "frontend coverage shard": 12 * 60 * 1000,
   "frontend performance": 4 * 60 * 1000,
 };
 
@@ -22,29 +25,36 @@ function parseArguments(argv) {
   let shardIndex = null;
   let shardTotal = null;
   let shardArtifacts = null;
+  let performanceArtifacts = null;
   for (let index = 0; index < rest.length; index += 1) {
     const option = rest[index];
     const value = rest[index + 1];
-    if (!value || !["--artifacts", "--shard-index", "--shard-total", "--shard-artifacts"].includes(option)) {
-      throw new Error("usage: node scripts/test-quiet.cjs [backend|backend-aggregate|frontend|all] [--artifacts DIRECTORY] [--shard-index INDEX --shard-total TOTAL] [--shard-artifacts DIRECTORY]");
+    if (!value || !["--artifacts", "--shard-index", "--shard-total", "--shard-artifacts", "--performance-artifacts"].includes(option)) {
+      throw new Error("usage: node scripts/test-quiet.cjs [backend|backend-aggregate|frontend|frontend-shard|frontend-performance|frontend-aggregate|all] [--artifacts DIRECTORY] [--shard-index INDEX --shard-total TOTAL] [--shard-artifacts DIRECTORY] [--performance-artifacts DIRECTORY]");
     }
     if (option === "--artifacts") artifacts = path.resolve(value);
     if (option === "--shard-artifacts") shardArtifacts = path.resolve(value);
+    if (option === "--performance-artifacts") performanceArtifacts = path.resolve(value);
     if (option === "--shard-index") shardIndex = Number(value);
     if (option === "--shard-total") shardTotal = Number(value);
     index += 1;
   }
-  if (!["backend", "backend-aggregate", "frontend", "all"].includes(suite)
+  const shardSuite = suite === "backend" || suite === "frontend-shard";
+  const aggregateSuite = suite === "backend-aggregate" || suite === "frontend-aggregate";
+  if (!["backend", "backend-aggregate", "frontend", "frontend-shard", "frontend-performance", "frontend-aggregate", "all"].includes(suite)
     || (shardIndex !== null && (!Number.isInteger(shardIndex) || shardIndex < 0))
     || (shardTotal !== null && (!Number.isInteger(shardTotal) || shardTotal < 1))
     || ((shardIndex === null) !== (shardTotal === null))
     || (shardIndex !== null && shardIndex >= shardTotal)
-    || (suite !== "backend" && (shardIndex !== null || shardTotal !== null))
-    || (suite !== "backend-aggregate" && shardArtifacts !== null)
-    || (suite === "backend-aggregate" && !shardArtifacts)) {
-    throw new Error("usage: node scripts/test-quiet.cjs [backend|backend-aggregate|frontend|all] [--artifacts DIRECTORY] [--shard-index INDEX --shard-total TOTAL] [--shard-artifacts DIRECTORY]");
+    || (suite === "frontend-shard" && shardIndex === null)
+    || (!shardSuite && (shardIndex !== null || shardTotal !== null))
+    || (!aggregateSuite && shardArtifacts !== null)
+    || (aggregateSuite && !shardArtifacts)
+    || (suite !== "frontend-aggregate" && performanceArtifacts !== null)
+    || (suite === "frontend-aggregate" && !performanceArtifacts)) {
+    throw new Error("usage: node scripts/test-quiet.cjs [backend|backend-aggregate|frontend|frontend-shard|frontend-performance|frontend-aggregate|all] [--artifacts DIRECTORY] [--shard-index INDEX --shard-total TOTAL] [--shard-artifacts DIRECTORY] [--performance-artifacts DIRECTORY]");
   }
-  return { suite, artifacts, shardIndex, shardTotal, shardArtifacts };
+  return { suite, artifacts, shardIndex, shardTotal, shardArtifacts, performanceArtifacts };
 }
 
 function runCommand(command, args, options = {}) {
@@ -296,6 +306,11 @@ async function runBackend(temporaryRoot, artifacts, shard = {}) {
   const env = backendEnvironment(temporaryRoot, coverageFile);
   const tests = await requiredCommand("backend tests", python, ["-m", "coverage", "run", path.join("scripts", "unittest-shard.py"), "--shard-index", String(shardIndex), "--shard-total", String(shardTotal), "--manifest", manifest], { env, artifactDirectory: directory });
   assertNoSkippedUnittestTests(tests);
+  validateAutomatedExecution(loadContracts(), {
+    languages: ["python"],
+    pythonManifests: [readManifest(manifest)],
+    requireAllExecuted: shardTotal === 1,
+  });
   await requiredCommand("backend coverage", python, ["-m", "coverage", "report"], { env, artifactDirectory: directory });
   await requiredCommand("backend coverage XML", python, ["-m", "coverage", "xml", "-o", coverageXml], { env, artifactDirectory: directory });
   const xml = fs.readFileSync(coverageXml, "utf8");
@@ -354,6 +369,7 @@ async function aggregateBackendShards(temporaryRoot, artifacts, shardArtifacts, 
   const manifestPaths = recursiveFiles(shardArtifacts, "backend-manifest.json");
   const entries = manifestPaths.map((manifestPath) => ({ path: manifestPath, manifest: JSON.parse(fs.readFileSync(manifestPath, "utf8")) }));
   const { discovered, manifests } = validateBackendShardManifests(entries.map((entry) => entry.manifest), expectedTotal);
+  validateAutomatedExecution(loadContracts(), { languages: ["python"], pythonManifests: manifests });
   const inputs = path.join(directory, "coverage-input");
   fs.mkdirSync(inputs, { recursive: true });
   for (const manifest of manifests) {
@@ -375,6 +391,131 @@ async function aggregateBackendShards(temporaryRoot, artifacts, shardArtifacts, 
   return `backend: passed (${discovered.length} tests across ${manifests.length} shards; coverage report line ${rates.line}%, branch ${rates.branch}%)`;
 }
 
+function frontendResultFile(testId) {
+  return typeof testId === "string" && testId.startsWith("node:") ? testId.slice(5).split("::", 1)[0] : null;
+}
+
+function validateFrontendNodeManifest(nodeManifest, selected, label) {
+  if (nodeManifest?.schema !== 1 || !Array.isArray(nodeManifest.tests) || !nodeManifest.tests.length) throw new Error(`${label} has an invalid or empty Node test manifest`);
+  const ids = new Set();
+  for (const result of nodeManifest.tests) {
+    if (!result || typeof result.id !== "string" || !["pass", "fail", "skip", "todo"].includes(result.status)) throw new Error(`${label} has an invalid Node test result`);
+    if (ids.has(result.id)) throw new Error(`${label} duplicates Node test ${result.id}`);
+    ids.add(result.id);
+    if (!selected.includes(frontendResultFile(result.id))) throw new Error(`${label} executed a test outside its selected files: ${result.id}`);
+    if (result.status !== "pass") throw new Error(`${label} has ${result.status} test ${result.id}`);
+  }
+  for (const file of selected) {
+    if (!nodeManifest.tests.some((result) => frontendResultFile(result.id) === file)) throw new Error(`${label} did not execute selected file ${file}`);
+  }
+}
+
+function validateFrontendShardManifests(records, expectedTotal = 2, expectedDiscovered = frontendTestFiles()) {
+  if (records.length !== expectedTotal) throw new Error(`frontend shard manifests are incomplete: expected ${expectedTotal}, found ${records.length}`);
+  const byIndex = new Map();
+  const allTestIds = new Set();
+  for (const record of records) {
+    const manifest = record.manifest;
+    const { index, total } = manifest?.shard || {};
+    if (manifest?.schema !== 1 || total !== expectedTotal || !Number.isInteger(index) || index < 0 || index >= total) throw new Error("frontend shard manifest has invalid shard metadata");
+    if (byIndex.has(index)) throw new Error(`frontend shard manifests duplicate shard ${index}`);
+    if (JSON.stringify(manifest.discovered) !== JSON.stringify(expectedDiscovered)) throw new Error(`frontend shard ${index} has mismatched discovery`);
+    const expected = selectedFrontendTestFiles(expectedDiscovered, index, expectedTotal);
+    if (JSON.stringify(manifest.selected) !== JSON.stringify(expected)) throw new Error(`frontend shard ${index} selected an unexpected test set`);
+    if (manifest.status !== "passed") throw new Error(`frontend shard ${index} did not pass (${manifest.status})`);
+    validateFrontendNodeManifest(record.nodeManifest, expected, `frontend shard ${index}`);
+    for (const result of record.nodeManifest.tests) {
+      if (allTestIds.has(result.id)) throw new Error(`frontend shard manifests execute ${result.id} more than once`);
+      allTestIds.add(result.id);
+    }
+    byIndex.set(index, record);
+  }
+  for (let index = 0; index < expectedTotal; index += 1) if (!byIndex.has(index)) throw new Error(`frontend shard manifests are missing shard ${index}`);
+  const selectedUnion = [...byIndex.values()].flatMap((record) => record.manifest.selected);
+  if (selectedUnion.length !== expectedDiscovered.length || new Set(selectedUnion).size !== expectedDiscovered.length) throw new Error("frontend shard selected-file union is incomplete or duplicated");
+  return [...byIndex.entries()].sort(([left], [right]) => left - right).map(([, record]) => record);
+}
+
+function validateFrontendPerformanceRecord(record, expectedFiles = frontendPerformanceTestFiles()) {
+  const manifest = record.manifest;
+  if (manifest?.schema !== 1 || manifest.kind !== "performance" || JSON.stringify(manifest.discovered) !== JSON.stringify(expectedFiles)
+    || JSON.stringify(manifest.selected) !== JSON.stringify(expectedFiles)) throw new Error("frontend performance manifest has an unexpected test set");
+  if (manifest.status !== "passed") throw new Error(`frontend performance did not pass (${manifest.status})`);
+  validateFrontendNodeManifest(record.nodeManifest, expectedFiles, "frontend performance");
+  return record;
+}
+
+async function runFrontendShard(temporaryRoot, artifacts, shard = {}, dependencies = {}) {
+  const run = dependencies.requiredCommand || requiredCommand;
+  const shardIndex = shard.index;
+  const shardTotal = shard.total;
+  const directory = artifactDirectory(temporaryRoot, artifacts, `frontend-shard-${shardIndex}`);
+  const manifest = path.join(directory, "frontend-shard-manifest.json");
+  const nodeManifest = path.join(directory, "frontend-node-manifest.json");
+  const output = await run("frontend coverage shard", process.execPath, [path.join("scripts", "coverage-js.cjs"),
+    "--shard-index", String(shardIndex), "--shard-total", String(shardTotal), "--manifest", manifest], {
+    env: { ...process.env, MOZARIE_JS_COVERAGE_DIR: directory, MOZARIE_NODE_TEST_MANIFEST: nodeManifest }, artifactDirectory: directory,
+  });
+  const discovered = frontendTestFiles();
+  const selected = selectedFrontendTestFiles(discovered, shardIndex, shardTotal);
+  const shardManifest = readManifest(manifest);
+  if (shardManifest.schema !== 1 || shardManifest.shard?.index !== shardIndex || shardManifest.shard?.total !== shardTotal
+    || JSON.stringify(shardManifest.discovered) !== JSON.stringify(discovered) || JSON.stringify(shardManifest.selected) !== JSON.stringify(selected)
+    || shardManifest.status !== "passed") throw new Error(`frontend shard ${shardIndex} wrote an invalid execution manifest`);
+  validateFrontendNodeManifest(readManifest(nodeManifest), selected, `frontend shard ${shardIndex}`);
+  return `frontend shard ${shardIndex + 1}/${shardTotal}: passed (${testCount(output)} tests)`;
+}
+
+async function runFrontendPerformance(temporaryRoot, artifacts, dependencies = {}) {
+  const run = dependencies.requiredCommand || requiredCommand;
+  const directory = artifactDirectory(temporaryRoot, artifacts, "frontend-performance");
+  const manifestPath = path.join(directory, "frontend-performance-manifest.json");
+  const nodeManifestPath = path.join(directory, "frontend-node-manifest.json");
+  const files = frontendPerformanceTestFiles();
+  const manifest = { schema: 1, kind: "performance", discovered: files, selected: files, status: "error" };
+  fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+  try {
+    const output = await run("frontend performance", process.execPath, frontendTestArguments(files), {
+      env: { ...performanceEnvironment(), MOZARIE_NODE_TEST_MANIFEST: nodeManifestPath }, artifactDirectory: directory,
+    });
+    manifest.status = "passed";
+    fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+    validateFrontendPerformanceRecord({ manifest, nodeManifest: readManifest(nodeManifestPath) });
+    return `frontend performance: passed (${testCount(output)} tests)`;
+  } catch (error) {
+    manifest.status = "failed";
+    fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+    throw error;
+  }
+}
+
+async function aggregateFrontendShards(temporaryRoot, artifacts, shardArtifacts, performanceArtifacts, expectedTotal = 2, dependencies = {}) {
+  const directory = artifactDirectory(temporaryRoot, artifacts, "frontend");
+  const shardRecords = recursiveFiles(shardArtifacts, "frontend-shard-manifest.json").map((manifestPath) => ({
+    directory: path.dirname(manifestPath),
+    manifest: readManifest(manifestPath),
+    nodeManifest: readManifest(path.join(path.dirname(manifestPath), "frontend-node-manifest.json")),
+  }));
+  const records = validateFrontendShardManifests(shardRecords, expectedTotal);
+  const performancePaths = recursiveFiles(performanceArtifacts, "frontend-performance-manifest.json");
+  if (performancePaths.length !== 1) throw new Error(`frontend performance artifacts are incomplete: expected 1, found ${performancePaths.length}`);
+  const performance = validateFrontendPerformanceRecord({
+    manifest: readManifest(performancePaths[0]),
+    nodeManifest: readManifest(path.join(path.dirname(performancePaths[0]), "frontend-node-manifest.json")),
+  });
+  const mergeCoverage = dependencies.mergeCoverage || require("./coverage-js.cjs").mergeFrontendShardCoverage;
+  await mergeCoverage(records.map((record) => ({
+    directory: record.directory,
+    browserCoverageRequired: record.manifest.selected.some((file) => browserCoverageTestFiles.includes(file)),
+  })), path.join(directory, "report"));
+  if (!fs.existsSync(path.join(directory, "report", "coverage-final.json"))) throw new Error("aggregated frontend coverage JSON was not created");
+  const verifyContracts = dependencies.verifyContracts || ((manifests) => validateAutomatedExecution(frontendContracts(), { languages: ["node"], nodeManifests: manifests }));
+  const nodeManifests = [...records.map((record) => record.nodeManifest), performance.nodeManifest];
+  verifyContracts(nodeManifests);
+  const count = nodeManifests.reduce((total, manifest) => total + manifest.tests.length, 0);
+  return `frontend: passed (${count} tests across ${expectedTotal} coverage shards and 1 performance job; JavaScript coverage report created)`;
+}
+
 function performanceEnvironment(source = process.env) {
   const env = { ...source };
   delete env.MOZARIE_JS_COVERAGE;
@@ -385,19 +526,23 @@ function performanceEnvironment(source = process.env) {
 
 async function runFrontend(temporaryRoot, artifacts, dependencies = {}) {
   const run = dependencies.requiredCommand || requiredCommand;
+  const verifyContracts = dependencies.verifyContracts || ((manifestPaths) => validateAutomatedExecution(frontendContracts(), { languages: ["node"], nodeManifests: manifestPaths.map(readManifest) }));
   const directory = artifactDirectory(temporaryRoot, artifacts, "frontend");
+  const coverageManifest = path.join(directory, "frontend-node-manifest.json");
+  const performanceManifest = path.join(directory, "frontend-performance-manifest.json");
   await run("frontend syntax", process.platform === "win32" ? "npm.cmd" : "npm", ["run", "check"], { env: process.env, artifactDirectory: directory });
   const output = await run("frontend coverage", process.execPath, [path.join("scripts", "coverage-js.cjs")], {
-    env: { ...process.env, MOZARIE_JS_COVERAGE_DIR: directory }, artifactDirectory: directory,
+    env: { ...process.env, MOZARIE_JS_COVERAGE_DIR: directory, MOZARIE_NODE_TEST_MANIFEST: coverageManifest }, artifactDirectory: directory,
   });
   if (!fs.existsSync(path.join(directory, "report", "coverage-final.json"))) throw new Error("frontend coverage JSON was not created");
   const performance = await run("frontend performance", process.execPath, frontendTestArguments(frontendPerformanceTestFiles()), {
-    env: performanceEnvironment(), artifactDirectory: directory,
+    env: { ...performanceEnvironment(), MOZARIE_NODE_TEST_MANIFEST: performanceManifest }, artifactDirectory: directory,
   });
+  verifyContracts([coverageManifest, performanceManifest]);
   return `frontend: passed (${testCount(output)} coverage tests; ${testCount(performance)} performance tests; JavaScript coverage report created)`;
 }
 
-async function runSuites({ suite, artifacts, shardIndex = null, shardTotal = null, shardArtifacts = null }, dependencies = {}) {
+async function runSuites({ suite, artifacts, shardIndex = null, shardTotal = null, shardArtifacts = null, performanceArtifacts = null }, dependencies = {}) {
   const makeTemporaryDirectory = dependencies.temporaryDirectory || temporaryDirectory;
   const removeDirectory = dependencies.removeDirectory || ((directory) => fs.rmSync(directory, { recursive: true, force: true }));
   const temporaryRoot = makeTemporaryDirectory();
@@ -407,6 +552,9 @@ async function runSuites({ suite, artifacts, shardIndex = null, shardTotal = nul
     if (suite === "backend" || suite === "all") summaries.push(await (dependencies.runBackend || runBackend)(temporaryRoot, artifacts, { index: shardIndex ?? 0, total: shardTotal ?? 1 }));
     if (suite === "backend-aggregate") summaries.push(await (dependencies.aggregateBackendShards || aggregateBackendShards)(temporaryRoot, artifacts, shardArtifacts));
     if (suite === "frontend" || suite === "all") summaries.push(await (dependencies.runFrontend || runFrontend)(temporaryRoot, artifacts));
+    if (suite === "frontend-shard") summaries.push(await (dependencies.runFrontendShard || runFrontendShard)(temporaryRoot, artifacts, { index: shardIndex, total: shardTotal }));
+    if (suite === "frontend-performance") summaries.push(await (dependencies.runFrontendPerformance || runFrontendPerformance)(temporaryRoot, artifacts));
+    if (suite === "frontend-aggregate") summaries.push(await (dependencies.aggregateFrontendShards || aggregateFrontendShards)(temporaryRoot, artifacts, shardArtifacts, performanceArtifacts));
     const afterArtifacts = workspaceArtifacts(dependencies.workspaceDirectory || root);
     const createdArtifacts = afterArtifacts.filter((artifact) => !beforeArtifacts.includes(artifact));
     if (createdArtifacts.length) throw new Error(`test runner created workspace artifacts: ${createdArtifacts.join(", ")}`);
@@ -421,4 +569,4 @@ async function main(argv = process.argv.slice(2)) {
 
 if (require.main === module) main().catch((error) => { console.error(error.message || error); process.exitCode = 1; });
 
-module.exports = { aggregateBackendShards, artifactDirectory, backendEnvironment, coverageRates, diagnostic, parseArguments, performanceEnvironment, recursiveFiles, requiredCommand, runCommand, runFrontend, runSuites, selectedShardTestIds, temporaryDirectory, testCount, testPythonExecutable, validateBackendShardManifests, verifyBackendCoverage, workspaceArtifacts, writeFailureArtifact };
+module.exports = { aggregateBackendShards, aggregateFrontendShards, artifactDirectory, backendEnvironment, coverageRates, diagnostic, frontendResultFile, parseArguments, performanceEnvironment, recursiveFiles, requiredCommand, runCommand, runFrontend, runFrontendPerformance, runFrontendShard, runSuites, selectedShardTestIds, temporaryDirectory, testCount, testPythonExecutable, validateBackendShardManifests, validateFrontendNodeManifest, validateFrontendPerformanceRecord, validateFrontendShardManifests, verifyBackendCoverage, workspaceArtifacts, writeFailureArtifact };

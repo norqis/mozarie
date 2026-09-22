@@ -4,10 +4,11 @@
 // invokes it once after the coverage-friendly suite, so the 20k catalogue is
 // exercised without instrumenting or repeating the larger browser scenario.
 const assert = require("node:assert/strict");
+const nodeTest = require("node:test");
 const { chromium } = require("playwright");
 const { closeServer, startFixtureServer } = require("./test_import_picker_e2e.cjs");
 
-async function main() {
+async function runGalleryPerformanceScenario() {
   let browser;
   let server;
   let url;
@@ -24,6 +25,8 @@ async function main() {
     browser = await chromium.launch();
     const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
     const page = await context.newPage();
+    const fullImageRequests = [];
+    page.on("request", (request) => { if (/\/api\/image\//.test(new URL(request.url()).pathname)) fullImageRequests.push(request.url()); });
     await page.addInitScript(() => {
       window.showOpenFilePicker = async () => [];
       window.showDirectoryPicker = async () => ({ async *values() {} });
@@ -39,6 +42,8 @@ async function main() {
       assert.ok(renderElapsed <= 2000, `20k catalogue renders after its API response within the extreme-regression budget (actual ${renderElapsed.toFixed(1)}ms)`);
       assert.ok(mounted < 2000, `20k catalogue keeps mounted cards below the structural virtualization limit (actual ${mounted})`);
       const timings = [];
+      const mountedSamples = [mounted];
+      const decodedCacheSamples = [];
       for (let index = 0; index < 10; index += 1) {
         let started = performance.now();
         await page.locator("#overviewButton").click();
@@ -56,9 +61,14 @@ async function main() {
         await page.waitForFunction((value) => state.galleryFilter instanceof Set && state.galleryFilter.size === 1 && state.galleryFilter.has(value), filter);
         await page.locator("#galleryFilterButton").click();
         timings.push(performance.now() - started);
+        mountedSamples.push(await page.locator(".gallery-item, .overview-item").count());
+        decodedCacheSamples.push(await page.evaluate(() => state.imageCache?.items?.size || 0));
       }
       const p95 = [...timings].sort((left, right) => left - right)[Math.ceil(timings.length * 0.95) - 1];
       assert.ok(p95 <= 500, `gallery state changes stay within the extreme-regression p95 budget (actual ${p95.toFixed(1)}ms)`);
+      assert.ok(Math.max(...mountedSamples) < 2000, "repeated filtering and view switches keep the mounted DOM window bounded");
+      assert.ok(Math.max(...decodedCacheSamples) <= 3, "repeated filtering and view switches keep decoded full-size image ownership bounded");
+      assert.ok(fullImageRequests.length <= 3, `catalogue switches do not refetch all 20k full-size images (actual ${fullImageRequests.length})`);
       console.log(`browser performance: 20k app-render=${renderElapsed.toFixed(1)}ms mounted=${mounted} switch-filter-p95=${p95.toFixed(1)}ms`);
     } finally {
       await context.close();
@@ -70,9 +80,4 @@ async function main() {
   }
 }
 
-if (require.main === module) {
-  main().catch((error) => {
-    console.error(error);
-    process.exitCode = 1;
-  });
-}
+nodeTest("20k gallery DOM decoded cache and full-image requests stay bounded", runGalleryPerformanceScenario);

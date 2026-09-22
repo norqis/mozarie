@@ -69,7 +69,7 @@ class WorkspaceCoverageTests(unittest.TestCase):
             store.set_image_flags(image_id, hidden=True, reviewed=True)
             changed = store.reconcile_images(catalog, [image_record(size=11)], source)["image.png"]
             self.assertTrue(changed["changed"])
-            self.assertFalse(changed["reviewed"])
+            self.assertTrue(changed["reviewed"])
             store.commit_save(image_id, mtime_ns=22, size_bytes=12, candidate_revision=4, clear_workspace=True)
             self.assertEqual(store.hydrate_candidates(image_id, root / "cache", lambda *_args: None)[0], 4)
             store.commit_save(image_id, mtime_ns=23, size_bytes=13, clear_workspace=False)

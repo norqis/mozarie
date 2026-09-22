@@ -2,6 +2,7 @@ import io
 import tempfile
 import time
 import unittest
+from unittest import mock
 from pathlib import Path
 
 import numpy as np
@@ -51,8 +52,14 @@ class CandidateExpandTests(unittest.TestCase):
     def test_large_padding_uses_image_space_and_saturates_without_a_large_kernel(self):
         source = np.zeros((17, 31), dtype=np.uint8)
         source[8, 15] = 255
-        self.assertTrue(np.all(expand_mask(source, 34) == 255))
-        self.assertFalse(np.any(expand_mask(np.zeros_like(source), 34)))
+        diagonal = int(np.ceil(np.hypot(source.shape[0] - 1, source.shape[1] - 1)))
+        self.assertEqual(diagonal, 34)
+        with mock.patch("mozarie.masks.cv2.getStructuringElement") as kernel, \
+             mock.patch("mozarie.masks.cv2.distanceTransform") as distance:
+            self.assertTrue(np.all(expand_mask(source, diagonal) == 255))
+            self.assertFalse(np.any(expand_mask(np.zeros_like(source), diagonal)))
+        kernel.assert_not_called()
+        distance.assert_not_called()
 
     def test_4k_large_padding_uses_a_bounded_image_space_operation(self):
         source = np.zeros((2160, 3840), dtype=np.uint8)

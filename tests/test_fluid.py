@@ -286,6 +286,16 @@ class FluidTests(unittest.TestCase):
         zero_tolerance = expand_white_fluid_mask(rgb, seed, allowed, 0, alpha=alpha)
         self.assertEqual(np.argwhere(zero_tolerance > 0).tolist(), [[2, 1]])
 
+    def test_legacy_rgb_fluid_expansion_matches_fully_opaque_alpha(self):
+        rgb = np.full((9, 9, 3), 210, dtype=np.uint8)
+        rgb[4, 4] = (226, 226, 226)
+        allowed = np.ones((9, 9), dtype=np.uint8) * 255
+        seed = np.zeros_like(allowed); seed[4, 4] = 255
+        legacy = expand_white_fluid_mask(rgb, seed, allowed, 26)
+        opaque = expand_white_fluid_mask(rgb, seed, allowed, 26, alpha=np.ones_like(allowed) * 255)
+        self.assertTrue(np.array_equal(legacy, opaque))
+        self.assertEqual(np.count_nonzero(legacy), 81)
+
     def test_expand_white_fluid_mask_has_no_component_count_limit(self):
         rgb = np.zeros((20, 40, 3), dtype=np.uint8)
         allowed = np.zeros((20, 40), dtype=np.uint8)

@@ -1096,6 +1096,7 @@ function addBoundaryDraft(draft) {
   const item = { id: boundaryDraftId(), ...draft };
   state.boundaryDrafts.push(item);
   state.boundaryActiveId = item.id;
+  updateHistoryButtons();
   return item;
 }
 

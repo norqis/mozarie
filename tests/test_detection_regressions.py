@@ -77,6 +77,60 @@ class DetectionIntegrityRegressionTests(unittest.TestCase):
             finally:
                 state.shutdown()
 
+    def test_rgba_alpha_is_enforced_by_standard_high_precision_and_boundary_routes(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            pixels = np.zeros((8, 8, 4), dtype=np.uint8)
+            pixels[:, :4] = (20, 40, 60, 255)
+            pixels[:, 4:] = (220, 230, 240, 0)
+            Image.fromarray(pixels).save(root / "transparent.png")
+            state = StudioState(root / "cache", root / "sessions")
+            try:
+                record = state.image_for_id(state.set_root(str(root))[0]["id"])
+                full = np.full((8, 8), 255, dtype=np.uint8)
+
+                for mode in ("standard", "high_precision"):
+                    segment = {"class_name": "penis", "confidence": 0.8, "mask": full.copy(), "source": "target"}
+                    seen: list[np.ndarray] = []
+                    predictor = Mock()
+                    with patch.object(state, "_detect_arbitrated_segments", side_effect=lambda _models, rgb, *_args: seen.append(rgb.copy()) or [segment]), \
+                         patch.object(state, "_hand_refinement_context", return_value=([segment], np.zeros_like(full), [])), \
+                         patch.object(state, "_attach_hand_evidence", side_effect=lambda items, *_args: items), \
+                         patch.object(state, "_sam_predictor_for", side_effect=lambda _record, rgb: seen.append(rgb.copy()) or predictor), \
+                         patch.object(state, "_high_precision_segments_with_predictor", side_effect=lambda _rgb, items, _predictor: items), \
+                         patch.object(state, "_finalize_exclusions", side_effect=lambda _rgb, items, *_args, **_kwargs: items):
+                        candidates = state._detect_image(Mock(), record, 0.5, mode=mode)
+                    self.assertTrue(seen)
+                    self.assertTrue(all(np.all(rgb[:, 4:] == 0) for rgb in seen))
+                    with Image.open(candidates[0].mask_path) as mask:
+                        candidate_mask = np.asarray(mask)
+                    self.assertTrue(np.all(candidate_mask[:, :4] == 255))
+                    self.assertTrue(np.all(candidate_mask[:, 4:] == 0))
+
+                state.set_image_flags(record.image_id, {"reviewed": True})
+                boundary_seen: list[np.ndarray] = []
+                boundary_predictor = Mock()
+                boundary_predictor.predict.return_value = (np.asarray([full > 0]), np.asarray([0.9]), None)
+                with patch.object(state, "_sam_predictor_for", side_effect=lambda _record, rgb: boundary_seen.append(rgb.copy()) or boundary_predictor), \
+                     patch.object(state, "_boundary_hand_boxes", return_value=[]), \
+                     patch.object(state, "_finalize_exclusions", side_effect=lambda _rgb, items, *_args, **_kwargs: items), \
+                     patch.object(state, "_release_gpu_job_memory"):
+                    state.add_boundary_candidate(record.image_id, {
+                        "roi": {"left": 0, "top": 0, "right": 8, "bottom": 8},
+                        "point": {"x": 2, "y": 2},
+                    })
+                self.assertTrue(state.images[record.image_id].reviewed)
+                self.assertTrue(state.workspace_store.image_state(record.image_id)[1])
+                self.assertEqual(len(boundary_seen), 1)
+                self.assertTrue(np.all(boundary_seen[0][:, 4:] == 0))
+                boundary = state.candidates[record.image_id][-1]
+                with Image.open(boundary.mask_path) as mask:
+                    boundary_mask = np.asarray(mask)
+                self.assertTrue(np.all(boundary_mask[:, :4] == 255))
+                self.assertTrue(np.all(boundary_mask[:, 4:] == 0))
+            finally:
+                state.shutdown()
+
     def test_rgb_inference_pixels_are_unchanged(self) -> None:
         image = Image.new("RGB", (2, 1), (7, 8, 9))
         rgb, alpha = _inference_pixels(image)
@@ -95,6 +149,22 @@ class DetectionIntegrityRegressionTests(unittest.TestCase):
         self.assertEqual(len(result), 2)
         self.assertEqual(result[0]["_consensus_sources"], frozenset({"target", "ntd11"}))
         self.assertEqual(result[1]["_consensus_sources"], frozenset({"target"}))
+
+    def test_source_priority_beats_confidence_independent_of_input_order(self) -> None:
+        mask = np.zeros((12, 12), dtype=np.uint8); mask[2:10, 2:10] = 255
+        for ordered in (
+            [("sensitive", .99), ("ntd11", .98), ("target", .20)],
+            [("target", .20), ("sensitive", .99), ("ntd11", .98)],
+        ):
+            with self.subTest(order=[source for source, _confidence in ordered]):
+                result = arbitrate_segment_sources([
+                    {"class_name": "penis", "confidence": confidence, "mask": mask.copy(), "source": source}
+                    for source, confidence in ordered
+                ])
+                self.assertEqual(len(result), 1)
+                self.assertEqual(result[0]["source"], "target")
+                self.assertEqual(result[0]["confidence"], .20)
+                self.assertEqual(result[0]["_consensus_sources"], frozenset({"target", "ntd11", "sensitive"}))
 
     def test_single_auxiliary_duplicate_keeps_existing_consensus(self) -> None:
         mask = np.zeros((8, 8), dtype=np.uint8); mask[2:6, 2:6] = 255
@@ -122,6 +192,9 @@ class DetectionIntegrityRegressionTests(unittest.TestCase):
                 raise AssertionError("hand masks must not be materialized as an N-by-H-by-W array")
 
         self.assertEqual(StudioState._hand_boxes_over_apply(boxes, NoStackList([left, right])), expected)
+
+        many = NoStackList([left.copy() if index % 2 == 0 else right.copy() for index in range(256)])
+        self.assertEqual(StudioState._hand_boxes_over_apply(boxes, many), expected)
 
 
 if __name__ == "__main__":

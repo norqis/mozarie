@@ -22,6 +22,113 @@ async function freshPage(browser, fixture, initScript = null, expectedImageCount
   return { context, page };
 }
 
+test("server save progress is restored in the UI after an offline poll reconnects", { timeout: 60000 }, async () => {
+  const fixture = await startFixtureServer();
+  const browser = await chromium.launch({ headless: true });
+  let context; let page;
+  try {
+    ({ context, page } = await freshPage(browser, fixture));
+    await page.evaluate(() => { clearTimeout(state.jobPollTimer); state.jobPollTimer = null; });
+    let requests = 0;
+    await page.route("**/api/job", async (route) => {
+      requests += 1;
+      if (requests === 1) { await route.abort("failed"); return; }
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ kind: "apply", state: "running", total: 5, completed: 3, current: "three.png", startedAt: 99, imageIds: ["sample", "sample-two"] }) });
+    });
+    await page.evaluate(() => pollJob());
+    assert.equal(await page.evaluate(() => state.pollFailures), 1, "the offline poll is retained as a reconnect failure");
+    await page.evaluate(() => { clearTimeout(state.jobPollTimer); state.jobPollTimer = null; return pollJob(); });
+    assert.equal(await page.evaluate(() => state.pollFailures), 0, "a successful reconnect clears the poll failure count");
+    assert.deepEqual(await page.evaluate(() => ({ value: document.querySelector("#applyProgress").value, max: document.querySelector("#applyProgress").max, current: document.querySelector("#applyCurrentName").textContent, text: document.querySelector("#applyProgressText").textContent, open: document.querySelector("#applyDialog").open })), {
+      value: 3, max: 5, current: "three.png", text: "ファイル保存の進行状況: 3 / 5件 完了", open: true,
+    }, "the reconnected server state, rather than stale client progress, is shown in the save UI");
+  } finally {
+    await context?.close();
+    await browser.close();
+    await closeServer(fixture.server);
+  }
+});
+
+test("catalog clear failure keeps the project and list, and closing the real error dialog restores actions", { timeout: 60000 }, async () => {
+  const fixture = await startFixtureServer();
+  const browser = await chromium.launch({ headless: true });
+  let context; let page;
+  try {
+    ({ context, page } = await freshPage(browser, fixture));
+    await page.evaluate(() => {
+      state.settings.confirmations.clearCatalog = true;
+      state.project = { id: "project-kept", name: "Kept project", status: "working" };
+      renderProjectCurrent();
+    });
+    const before = await page.evaluate(() => ({ imageIds: state.images.map((image) => image.id), currentId: state.currentId, project: structuredClone(state.project) }));
+    const resyncSnapshot = await page.evaluate(() => ({ images: structuredClone(state.images), root: state.root || "G:/fixture", catalogGeneration: state.serverCatalogGeneration, workspace: true, workspaceId: state.project.id, historyDurable: true, project: structuredClone(state.project), readOnly: false, sources: [], needsSource: false }));
+    await page.route("**/api/images", (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(resyncSnapshot) }));
+    await page.route("**/api/catalog/clear", (route) => route.fulfill({ status: 500, contentType: "application/json", body: JSON.stringify({ error_code: "workspace_database_error" }) }));
+    await page.locator("#batchMoreButton").click();
+    await page.locator("#clearCatalogButton").click();
+    assert.equal(await page.locator("#confirmDialog").evaluate((dialog) => dialog.open), true, "catalog clear opens its product confirmation before the action");
+    await page.locator("#confirmAccept").click();
+    await page.waitForFunction(() => document.querySelector("#errorDialog").open && state.catalogMutation === false);
+    assert.deepEqual(await page.evaluate(() => ({ imageIds: state.images.map((image) => image.id), currentId: state.currentId, project: structuredClone(state.project) })), before, "a failed clear never reports success by discarding the list, selection, or project");
+    assert.equal(await page.locator("#errorDialogTitle").textContent(), "作業内容を保存できません", "the failure is presented through the real user error dialog");
+
+    await page.locator("#errorDialogClose").click();
+    assert.equal(await page.locator("#errorDialog").evaluate((dialog) => dialog.open), false, "the error dialog returns to the prior screen");
+    assert.equal(await page.locator("#saveAllButton").isEnabled(), true, "save actions are reusable after the error closes");
+    await page.locator("#batchMoreButton").click();
+    assert.equal(await page.locator("#clearCatalogButton").isEnabled(), true, "the failed catalog action itself is reusable after the error closes");
+  } finally {
+    await context?.close();
+    await browser.close();
+    await closeServer(fixture.server);
+  }
+});
+
+test("single overwrite confirmation cancel returns to save dialog with source bytes and mtime unchanged", { timeout: 60000 }, async () => {
+  const fixture = await startFixtureServer();
+  const browser = await chromium.launch({ headless: true });
+  let context; let page;
+  try {
+    ({ context, page } = await freshPage(browser, fixture));
+    await page.locator('.gallery-item[data-id="sample"]').click();
+    await page.waitForFunction(() => state.currentId === "sample" && state.currentImage);
+    const before = await page.evaluate(async () => {
+      const bytes = Uint8Array.from(atob("iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAEElEQVR4nGP8zwACTGCSAQANHQEDgslx/wAAAABJRU5ErkJggg=="), (value) => value.charCodeAt(0));
+      const parentHandle = await navigator.storage.getDirectory();
+      const fileHandle = await parentHandle.getFileHandle("cancel-overwrite.png", { create: true });
+      const writable = await fileHandle.createWritable(); await writable.write(bytes); await writable.close();
+      const file = await fileHandle.getFile();
+      const image = state.images.find((entry) => entry.id === "sample");
+      image.sourceKind = "session"; image.relativePath = file.name; image.sizeBytes = file.size; image.mtimeNs = file.lastModified * 1_000_000;
+      state.sourceAccess.set(image.id, { fileHandle, name: file.name, size: file.size, lastModified: file.lastModified, relativePath: file.name, sourceKind: "browser-files" });
+      state.settings.confirmations.overwriteSource = true;
+      addCtx.fillStyle = "#fff"; addCtx.fillRect(0, 0, 1, 1); markMaskDirty(); refreshMaskStatus(true);
+      return { bytes: [...new Uint8Array(await file.arrayBuffer())], lastModified: file.lastModified };
+    });
+    await page.waitForFunction(() => !document.querySelector("#saveButton").disabled);
+    await page.locator("#saveButton").click();
+    await page.waitForFunction(() => document.querySelector("#singleSaveDialog").open);
+    await page.locator("#singleSaveOverwriteMode").check();
+    const requestsBefore = fixture.saveRequests.length;
+    await page.locator("#singleSaveStartButton").click();
+    await page.waitForFunction(() => document.querySelector("#confirmDialog").open);
+    assert.equal(await page.locator("#confirmCancel").isEnabled(), true, "the overwrite confirmation exposes an operable Cancel button");
+    await page.locator("#confirmCancel").click();
+    await page.waitForFunction(() => !state.saveStarting && !state.saving && !document.querySelector("#confirmDialog").open);
+    assert.equal(await page.locator("#singleSaveDialog").evaluate((dialog) => dialog.open), true, "Cancel returns to the same single-save dialog");
+    const after = await page.evaluate(async () => {
+      const file = await (await navigator.storage.getDirectory()).getFileHandle("cancel-overwrite.png").then((handle) => handle.getFile());
+      return { bytes: [...new Uint8Array(await file.arrayBuffer())], lastModified: file.lastModified };
+    });
+    assert.deepEqual(after, before, "Cancel leaves the source bytes and last-modified timestamp exactly unchanged");
+    assert.equal(fixture.saveRequests.length, requestsBefore, "Cancel creates no save reservation or output");
+  } finally {
+    await context?.close();
+    await browser.close();
+    await closeServer(fixture.server);
+  }
+});
+
 test("filter popover combines checked states and review-at-tail stays on the filtered image", { timeout: 60000 }, async () => {
   const fixture = await startFixtureServer();
   fixture.setCatalog([
@@ -72,7 +179,14 @@ test("all-image detection submits the fluid color-fill settings with default tol
     });
     await page.locator("#detectAllButton").click();
     await page.waitForFunction(() => document.querySelector("#detectDialog").open);
+    assert.equal(await page.locator('label[for="detectFluidColorFillEnabled"], #detectFluidColorFillEnabled').count() > 0, true);
+    assert.match(await page.locator("#detectFluidColorFillEnabled").getAttribute("aria-label"), /精液候補を色で広げる|fluid/i);
+    assert.match(await page.locator("#detectFluidColorFillTolerance").getAttribute("aria-label"), /許容範囲|tolerance/i);
+    assert.equal(await page.locator("#detectFluidColorFillTolerance").getAttribute("min"), "0");
+    assert.equal(await page.locator("#detectFluidColorFillTolerance").getAttribute("max"), "255");
+    assert.equal(await page.locator("#detectFluidColorFillEnabled").isChecked(), true, "color expansion is enabled by default");
     assert.equal(await page.locator("#detectFluidColorFillTolerance").inputValue(), "26", "the all-image dialog starts at the configured default tolerance");
+    assert.equal(await page.locator("#bucketTolerance").inputValue(), "20", "the manual fill tool keeps its independent tolerance");
     await page.locator("#detectFluidColorFillTolerance").fill("27");
     await page.locator("#detectFluidColorFillEnabled").uncheck();
     await page.locator("#detectStartButton").click();
@@ -80,10 +194,93 @@ test("all-image detection submits the fluid color-fill settings with default tol
     assert.deepEqual(await page.evaluate(() => window.__detectPayloads[0]), {
       imageIds: ["sample", "sample-two"], confidence: 0.5, parallelism: 2, targetClasses: ["penis", "pussy"], fluidColorFillEnabled: false, fluidColorFillTolerance: 27,
     }, "the modal sends an explicit fluid-fill switch and tolerance with the detection request");
+    assert.equal(fixture.settingsPayloads.at(-1).body.detection.fluid_color_fill_enabled, false);
+    assert.equal(fixture.settingsPayloads.at(-1).body.detection.fluid_color_fill_tolerance, 27);
+    await page.waitForFunction(() => !state.processing && !isBusy());
+    await page.locator("#detectAllButton").click();
+    assert.equal(await page.locator("#detectFluidColorFillEnabled").isChecked(), false, "saved OFF is restored when the dialog reopens");
+    assert.equal(await page.locator("#detectFluidColorFillTolerance").inputValue(), "27", "saved tolerance is restored when the dialog reopens");
+    assert.equal(await page.locator("#detectFluidColorFillTolerance").isDisabled(), true, "OFF visibly disables its dependent tolerance input");
+    assert.equal(await page.locator("#bucketTolerance").inputValue(), "20", "auto-detection settings never rewrite manual fill tolerance");
   } finally {
     await context?.close();
     await browser.close();
     await closeServer(fixture.server);
+  }
+});
+
+test("SD-136 fluid color tolerance accepts inclusive bounds and rejects values outside 0 through 255", { timeout: 60000 }, async () => {
+  const fixture = await startFixtureServer();
+  const browser = await chromium.launch({ headless: true });
+  let context; let page;
+  try {
+    ({ context, page } = await freshPage(browser, fixture));
+    await page.locator("#detectAllButton").click();
+    const before = fixture.detectRequests.length;
+    for (const invalid of ["-1", "256", ""]) {
+      await page.locator("#detectFluidColorFillTolerance").fill(invalid);
+      await page.evaluate(() => startDetectionFromDialog({ preventDefault() {} }));
+      assert.equal(fixture.detectRequests.length, before);
+      assert.equal(await page.locator("#detectFluidColorFillTolerance").getAttribute("aria-invalid"), "true");
+    }
+    for (const valid of ["0", "255"]) {
+      await page.locator("#detectFluidColorFillTolerance").fill(valid);
+      const response = page.waitForResponse((item) => new URL(item.url()).pathname === "/api/detect" && item.request().method() === "POST");
+      await page.locator("#detectStartButton").click();
+      await response;
+      assert.equal(fixture.detectRequests.at(-1).fluidColorFillTolerance, Number(valid));
+      await page.waitForFunction(() => !state.processing && !isBusy());
+      await page.locator("#detectAllButton").click();
+      assert.equal(await page.locator("#detectFluidColorFillTolerance").inputValue(), valid);
+    }
+  } finally {
+    await context?.close();
+    await browser.close();
+    await closeServer(fixture.server);
+  }
+});
+
+test("SD-139 disabling fluid color fill visibly disables tolerance without changing its value", { timeout: 60000 }, async () => {
+  const fixture = await startFixtureServer();
+  const browser = await chromium.launch({ headless: true });
+  let context;
+  try {
+    const { context: openedContext, page } = await freshPage(browser, fixture); context = openedContext;
+    await page.locator("#detectAllButton").click();
+    await page.locator("#detectFluidColorFillTolerance").fill("41");
+    await page.locator("#detectFluidColorFillEnabled").uncheck();
+    assert.equal(await page.locator("#detectFluidColorFillTolerance").isDisabled(), true);
+    assert.equal(await page.locator("#detectFluidColorFillTolerance").inputValue(), "41");
+    await page.locator("#detectFluidColorFillEnabled").check();
+    assert.equal(await page.locator("#detectFluidColorFillTolerance").isEnabled(), true);
+    assert.equal(await page.locator("#detectFluidColorFillTolerance").inputValue(), "41");
+  } finally {
+    await context?.close(); await browser.close(); await closeServer(fixture.server);
+  }
+});
+
+test("SD-140 current-image detection uses the saved fluid switch and tolerance without opening the dialog", { timeout: 60000 }, async () => {
+  const fixture = await startFixtureServer();
+  const browser = await chromium.launch({ headless: true });
+  let context;
+  try {
+    const { context: openedContext, page } = await freshPage(browser, fixture); context = openedContext;
+    await page.locator("#detectAllButton").click();
+    await page.locator("#detectFluidColorFillTolerance").fill("37");
+    await page.locator("#detectFluidColorFillEnabled").uncheck();
+    await page.locator("#detectStartButton").click();
+    await page.waitForFunction(() => !state.processing && !isBusy());
+    await page.locator('.gallery-item[data-id="sample"]').click();
+    await page.waitForFunction(() => state.currentId === "sample" && Boolean(state.currentImage));
+    const request = page.waitForRequest((item) => new URL(item.url()).pathname === "/api/detect" && item.method() === "POST");
+    assert.equal(await page.locator("#detectDialog").evaluate((dialog) => dialog.open), false);
+    await page.locator("#detectCurrentButton").click();
+    const payload = JSON.parse((await request).postData());
+    assert.equal(payload.fluidColorFillEnabled, false);
+    assert.equal(payload.fluidColorFillTolerance, 37);
+    assert.deepEqual(payload.imageIds, ["sample"]);
+  } finally {
+    await context?.close(); await browser.close(); await closeServer(fixture.server);
   }
 });
 

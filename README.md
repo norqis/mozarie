@@ -123,10 +123,6 @@ GPUを使う場合は、**設定 > 検出**で選択します。GPUが対応し�
 - **GPU、CUDA、DirectMLのエラー:** ほかのGPUアプリを閉じる、別のGPUを選ぶ、またはCPUへ切り替えてください。
 - **解決しない:** エラー文を添えて[Issues](https://github.com/norqis/mozarie/issues)へ報告してください。
 
-## 実機確認
-
-[実機確認手順](https://github.com/norqis/mozarie/blob/main/docs/manual-verification.md)に従って確認してください。
-
 ## テスト
 
 依存関係を準備して、バックエンドとフロントエンドのテストを実行します。
@@ -138,7 +134,7 @@ npm ci
 node scripts/test-quiet.cjs all
 ```
 
-自動テストはHTTP、SQLite、実ファイル、ブラウザーUIの契約を確認します。`frontend`と`all`はcoverage完了後に、coverageを付けない20,000件カタログ性能試験も1回実行します。リリース前には[実機確認手順](https://github.com/norqis/mozarie/blob/main/docs/manual-verification.md)も実施してください。
+自動テストはHTTP、SQLite、実ファイル、ブラウザーUIの契約を確認します。`frontend`と`all`はcoverage完了後に、coverageを付けない20,000件カタログ性能試験も1回実行します。確認範囲と検証対象外の扱いは[自動テストとの対応](https://github.com/norqis/mozarie/blob/main/docs/test-traceability.md)に記載しています。
 
 ## ライセンス
 

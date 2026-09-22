@@ -1,0 +1,2654 @@
+{
+  "version": 1,
+  "domain": "workspace",
+  "source": {
+    "path": "docs/manual-verification/workspace.md",
+    "commit": "264f70d"
+  },
+  "baseline": {
+    "rows": 138,
+    "observations": 235
+  },
+  "observations": [
+    {
+      "key": "WS-143.1",
+      "sourceIds": [
+        "WS-143"
+      ],
+      "observation": "初回選択とフォルダーの明示復元は削除に必要な書込み許可を求める。",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_folder_permissions_e2e.cjs::browser directory restore keeps canonical source paths separate",
+        "node:tests/test_folder_permissions_e2e.cjs::project folder restore retains each nested file's direct parent"
+      ]
+    },
+    {
+      "key": "WS-143.2",
+      "sourceIds": [
+        "WS-143"
+      ],
+      "observation": "再読込後も保存済みrequest IDから同じbrowser-directory sourceのAPI正規IDへ復元し、孫画像だけを孫フォルダーから削除または保存して親・子の同名画像を残す。",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_folder_permissions_e2e.cjs::reload-restored grandchild handle writes and deletes only its direct same-name entry"
+      ]
+    },
+    {
+      "key": "WS-143.3",
+      "sourceIds": [
+        "WS-143"
+      ],
+      "observation": "許可がない自動復元は確認を出さず、取消は一覧と読込状態を保持する。",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_folder_permissions_e2e.cjs::browser directory restore keeps canonical source paths separate",
+        "node:tests/test_folder_permissions_e2e.cjs::project folder restore retains each nested file's direct parent"
+      ]
+    },
+    {
+      "key": "WS-143.4",
+      "sourceIds": [
+        "WS-143"
+      ],
+      "observation": "親・子・孫の実フォルダーで初回許可、拒否、復元、取消、孫だけの削除・保存を確認する。",
+      "status": "retired",
+      "retirementReason": "Chromium File System Access許可UIと実階層フォルダーでの観測は対象外とする。書込み許可プロンプトとOS所有の親子directory handle削除先はheadless擬似handleで完全には観測できない。"
+    },
+    {
+      "key": "WS-142.1",
+      "sourceIds": [
+        "WS-142"
+      ],
+      "observation": "同じフォルダーの再読込では画像ID・手描き・履歴が保持され、再編集と再起動後の復元が成功する。",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_unnamed_folder_reload.UnnamedFolderReloadTests.test_same_folder_reload_keeps_history_manual_edits_and_allows_switch",
+        "python:tests.test_server.MozarieTests.test_workspace_restores_flags_masks_and_manual_edits_after_restart"
+      ]
+    },
+    {
+      "key": "WS-142.2",
+      "sourceIds": [
+        "WS-142"
+      ],
+      "observation": "別フォルダーへの切替後も手描きが保存される。",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_unnamed_folder_reload.UnnamedFolderReloadTests.test_same_folder_reload_keeps_history_manual_edits_and_allows_switch",
+        "python:tests.test_server.MozarieTests.test_workspace_restores_flags_masks_and_manual_edits_after_restart"
+      ]
+    },
+    {
+      "key": "WS-141.1",
+      "sourceIds": [
+        "WS-141"
+      ],
+      "observation": "中央モーダルの左下に元名復元、右下にOKとその左に取消を表示する。",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_project_ui_runtime.cjs::project dialogs, A-B-A switching, failed-open recovery, and duplicate transition guards"
+      ]
+    },
+    {
+      "key": "WS-141.2",
+      "sourceIds": [
+        "WS-141"
+      ],
+      "observation": "復元は入力だけを戻し、OKで保存名を確定する。",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_interaction_coverage.cjs::interaction and catalog mutation controls"
+      ]
+    },
+    {
+      "key": "WS-141.3",
+      "sourceIds": [
+        "WS-141"
+      ],
+      "observation": "元ファイルと元の相対名、画像ID・候補・手描き・状態・反転・履歴は変更せず、編集名を別に保持して再表示する。",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_recursive_save_rename.StudioStateNativeRenameTests.test_public_rename_is_metadata_only_and_survives_reopen_with_workspace_state",
+        "node:tests/test_interaction_coverage.cjs::interaction and catalog mutation controls"
+      ]
+    },
+    {
+      "key": "WS-001.1",
+      "sourceIds": [
+        "WS-001"
+      ],
+      "observation": "依存準備と実行環境確認が完了し、完了案内が出る",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_updater.UpdaterTests.test_setup_batch_reports_venv_and_running_states_without_marking_ready"
+      ]
+    },
+    {
+      "key": "WS-001.2",
+      "sourceIds": [
+        "WS-001"
+      ],
+      "observation": "新規展開先でsetup.batを実行し、外部依存の導入と完了案内を確認する。",
+      "status": "retired",
+      "retirementReason": "新規Windows環境と実ネットワークでの観測は対象外とする。未導入のPython・pip・GPU依存を実際に取得する初回setupの所要と外部インストーラー結果は隔離CIで固定できない。"
+    },
+    {
+      "key": "WS-002.1",
+      "sourceIds": [
+        "WS-002"
+      ],
+      "observation": "既存環境の確認が完了し、二重起動と誤認しない",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_updater.UpdaterTests.test_setup_batch_reports_venv_and_running_states_without_marking_ready"
+      ]
+    },
+    {
+      "key": "WS-002.2",
+      "sourceIds": [
+        "WS-002"
+      ],
+      "observation": "同じ展開先でsetup.batを再実行し、既存環境を壊さず完了することを確認する。",
+      "status": "retired",
+      "retirementReason": "依存導入済みWindows環境での観測は対象外とする。既存仮想環境・pipキャッシュ・実プロセスとの組合せは隔離fixtureで忠実に再現できない。"
+    },
+    {
+      "key": "WS-003.1",
+      "sourceIds": [
+        "WS-003"
+      ],
+      "observation": "ページを開け、設定と画像読み込みが使える",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_updater.UpdaterTests.test_run_honors_explicit_mozarie_python_without_creating_a_venv",
+        "node:tests/test_app_core_detection_coverage.cjs::application startup, catalog state, and detection controls",
+        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
+      ]
+    },
+    {
+      "key": "WS-003.2",
+      "sourceIds": [
+        "WS-003"
+      ],
+      "observation": "run.batから実ブラウザーが開き、ページへ接続できることを確認する。",
+      "status": "retired",
+      "retirementReason": "Windowsデスクトップと既定ブラウザーでの観測は対象外とする。既定ブラウザーの起動と実ウィンドウ表示はheadless CIから観測できない。"
+    },
+    {
+      "key": "WS-004.1",
+      "sourceIds": [
+        "WS-004"
+      ],
+      "observation": "画像位置は未選択表示。",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
+      ]
+    },
+    {
+      "key": "WS-004.2",
+      "sourceIds": [
+        "WS-004"
+      ],
+      "observation": "保存・検出は無効、設定・読み込みは有効",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
+      ]
+    },
+    {
+      "key": "WS-005.1",
+      "sourceIds": [
+        "WS-005"
+      ],
+      "observation": "設定ボタン左に「Mozarieに接続できません」を赤字で表示する",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
+      ]
+    },
+    {
+      "key": "WS-006.1",
+      "sourceIds": [
+        "WS-006"
+      ],
+      "observation": "赤い接続案内が消え、再操作できる",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
+      ]
+    },
+    {
+      "key": "WS-007.1",
+      "sourceIds": [
+        "WS-007"
+      ],
+      "observation": "使用中ポートを示し、別原因の依存エラーを表示しない",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_server.MozarieTests.test_main_reports_bind_error_without_traceback"
+      ]
+    },
+    {
+      "key": "WS-008.1",
+      "sourceIds": [
+        "WS-008"
+      ],
+      "observation": "パス入力・画像選択・フォルダー選択が表示され、閉じると消える",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
+      ]
+    },
+    {
+      "key": "WS-009.1",
+      "sourceIds": [
+        "WS-009"
+      ],
+      "observation": "配下の対応画像が一覧へ入り、初期スクロール位置が先頭となる",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage",
+        "python:tests.test_server.MozarieTests.test_folder_scan_publishes_five_thousand_valid_images_sorted_and_reports_the_broken_file"
+      ]
+    },
+    {
+      "key": "WS-010.1",
+      "sourceIds": [
+        "WS-010"
+      ],
+      "observation": "Aの画像・編集中画像を残さずBの画像だけへ置き換わる。",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
+      ]
+    },
+    {
+      "key": "WS-010.2",
+      "sourceIds": [
+        "WS-010"
+      ],
+      "observation": "件数・サムネイル・編集対象・入力パスがBと一致し、初期スクロール位置が先頭となる",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
+      ]
+    },
+    {
+      "key": "WS-011.1",
+      "sourceIds": [
+        "WS-011"
+      ],
+      "observation": "BをPJへ追加せず、画面はBだけの無名作業へ切り替わる。",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
+      ]
+    },
+    {
+      "key": "WS-011.2",
+      "sourceIds": [
+        "WS-011"
+      ],
+      "observation": "元PJを開き直すとAの画像・編集状態を復元する",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
+      ]
+    },
+    {
+      "key": "WS-012.1",
+      "sourceIds": [
+        "WS-012"
+      ],
+      "observation": "ドロップ画像を追加し、ブラウザーを画像URLへ遷移させない",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage",
+        "python:tests.test_settings_import_regressions.SettingsImportRegressionTests.test_live_browser_settings_detection_and_file_entry_points",
+        "node:tests/test_import_drop_contract.cjs::drop snapshots every File and handle request before the transfer becomes protected",
+        "node:tests/test_import_drop_contract.cjs::drop accepts unsupported handle APIs and FileList-only transfers"
+      ]
+    },
+    {
+      "key": "WS-013.1",
+      "sourceIds": [
+        "WS-013"
+      ],
+      "observation": "配下の対応画像を追加し、処理後にドロップ案内が消える",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage",
+        "node:tests/test_import_drop_contract.cjs::drop keeps native handles, nested relative paths, and each immediate parent"
+      ]
+    },
+    {
+      "key": "WS-014.1",
+      "sourceIds": [
+        "WS-014"
+      ],
+      "observation": "Bの読み込み中の操作はAのPJへ保存される。",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
+      ]
+    },
+    {
+      "key": "WS-014.2",
+      "sourceIds": [
+        "WS-014"
+      ],
+      "observation": "Bの読み込みは破棄されず完了し、画面はBだけの無名作業へ切り替わる。",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
+      ]
+    },
+    {
+      "key": "WS-014.3",
+      "sourceIds": [
+        "WS-014"
+      ],
+      "observation": "元PJ Aを開き直すと、一括確認済み・一括非表示と反転または手描き編集をすべて復元する",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
+      ]
+    },
+    {
+      "key": "WS-016.1",
+      "sourceIds": [
+        "WS-016"
+      ],
+      "observation": "開けないファイル名を案内し、PNGのサムネイルと編集画像を表示する",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage",
+        "python:tests.test_http_import_regression.FolderLoadLoggingContractTests.test_folder_scan_keeps_valid_images_and_enumerates_every_failed_file"
+      ]
+    },
+    {
+      "key": "WS-017.1",
+      "sourceIds": [
+        "WS-017"
+      ],
+      "observation": "透過部分と画像の形状を保持する",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_image_validation.InputImageValidationTests.test_transparent_png_preserves_shape_and_alpha_pixels"
+      ]
+    },
+    {
+      "key": "WS-018.1",
+      "sourceIds": [
+        "WS-018"
+      ],
+      "observation": "サムネイルと編集画像の向きが一致する",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_http_live_endpoints.LiveHttpEndpointTests.test_exif_rotated_thumbnail_and_editor_asset_have_identical_visual_orientation"
+      ]
+    },
+    {
+      "key": "WS-019.1",
+      "sourceIds": [
+        "WS-019"
+      ],
+      "observation": "文字化けせず、名前が隣の操作へ重ならない",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_workspace_ui_browser.cjs::long Japanese gallery filename remains legible beside metadata"
+      ]
+    },
+    {
+      "key": "WS-020.1",
+      "sourceIds": [
+        "WS-020"
+      ],
+      "observation": "両画像を別の画像として扱い、片方の編集をもう片方へ反映しない",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_same_named_images_from_different_paths_keep_edits_isolated"
+      ]
+    },
+    {
+      "key": "WS-021.1",
+      "sourceIds": [
+        "WS-021"
+      ],
+      "observation": "進行中の処理が落ち着いた後に新しい画像の読み込みが増えない",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
+      ]
+    },
+    {
+      "key": "WS-022.1",
+      "sourceIds": [
+        "WS-022"
+      ],
+      "observation": "未処理画像から進捗が再開する",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
+      ]
+    },
+    {
+      "key": "WS-023.1",
+      "sourceIds": [
+        "WS-023"
+      ],
+      "observation": "完了済みの扱いを画面に示し、新規処理を止め、操作を再有効化する",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
+      ]
+    },
+    {
+      "key": "WS-024.1",
+      "sourceIds": [
+        "WS-024"
+      ],
+      "observation": "画像数と一覧対象が一致し、先頭・途中・末尾のサムネイルが表示される",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
+      ]
+    },
+    {
+      "key": "WS-025.1",
+      "sourceIds": [
+        "WS-025"
+      ],
+      "observation": "スクロール位置と編集中画像を変えず、その画像のメニューを開く",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
+      ]
+    },
+    {
+      "key": "WS-026.1",
+      "sourceIds": [
+        "WS-026"
+      ],
+      "observation": "対象画像の元パスをコピーし、選択画像を変更しない",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
+      ]
+    },
+    {
+      "key": "WS-027.1",
+      "sourceIds": [
+        "WS-027"
+      ],
+      "observation": "その画像だけ確認済みになり、編集・元画像変更の受け入れ・PJへの移行・編集の取り消し・再起動後も明示的な確認操作まで保持する",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_gallery_save_coverage.cjs::gallery and save interactions",
+        "node:tests/test_workspace_flags_runtime.cjs::workspace flag runtime contracts",
+        "node:tests/test_review_list_removal_e2e.cjs::review choices survive editing and list-only removal preserves source access boundaries > brush undo redo and hidden labels retain the explicit reviewed flag",
+        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_review_choice_survives_edits_history_restart_and_list_removal",
+        "python:tests.test_workspace.WorkspaceTests.test_edit_history_ignores_legacy_review_values",
+        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_source_mismatch_acceptance_preserves_both_review_choices_across_restart",
+        "python:tests.test_workspace.WorkspaceTests.test_projectless_promotion_preserves_review_choices_through_every_history_step"
+      ]
+    },
+    {
+      "key": "WS-028.1",
+      "sourceIds": [
+        "WS-028"
+      ],
+      "observation": "その画像の確認済み表示が消え、未確認は緑にならない",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_gallery_save_coverage.cjs::gallery and save interactions",
+        "node:tests/test_workspace_flags_runtime.cjs::workspace flag runtime contracts"
+      ]
+    },
+    {
+      "key": "WS-029.1",
+      "sourceIds": [
+        "WS-029"
+      ],
+      "observation": "対象だけ通常一覧から隠れ、状態は非表示と表示し、元ファイル・編集データ・確認フラグは残る",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_gallery_save_coverage.cjs::gallery and save interactions",
+        "node:tests/test_workspace_flags_runtime.cjs::workspace flag runtime contracts",
+        "node:tests/test_review_list_removal_e2e.cjs::review choices survive editing and list-only removal preserves source access boundaries > brush undo redo and hidden labels retain the explicit reviewed flag"
+      ]
+    },
+    {
+      "key": "WS-030.1",
+      "sourceIds": [
+        "WS-030"
+      ],
+      "observation": "通常一覧へ戻り、編集データを保持する",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_gallery_save_coverage.cjs::gallery and save interactions",
+        "node:tests/test_workspace_flags_runtime.cjs::workspace flag runtime contracts"
+      ]
+    },
+    {
+      "key": "WS-031.1",
+      "sourceIds": [
+        "WS-031"
+      ],
+      "observation": "表示順で1つ前の画像へ移動する。",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_gallery_save_coverage.cjs::gallery and save interactions"
+      ]
+    },
+    {
+      "key": "WS-031.2",
+      "sourceIds": [
+        "WS-031"
+      ],
+      "observation": "先頭を越えない",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_gallery_save_coverage.cjs::gallery and save interactions"
+      ]
+    },
+    {
+      "key": "WS-032.1",
+      "sourceIds": [
+        "WS-032"
+      ],
+      "observation": "表示順で1つ次の画像へ移動する。",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_gallery_save_coverage.cjs::gallery and save interactions"
+      ]
+    },
+    {
+      "key": "WS-032.2",
+      "sourceIds": [
+        "WS-032"
+      ],
+      "observation": "末尾を越えない",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_gallery_save_coverage.cjs::gallery and save interactions"
+      ]
+    },
+    {
+      "key": "WS-033.1",
+      "sourceIds": [
+        "WS-033"
+      ],
+      "observation": "押下時の左一覧フィルター順だけをスナップショットとして使う。",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_filters_and_fluid_e2e.cjs::OR filters move from an outside current image to the first match, through the middle, and keep a one-item tail selected"
+      ]
+    },
+    {
+      "key": "WS-033.2",
+      "sourceIds": [
+        "WS-033"
+      ],
+      "observation": "現在画像が確認済み化で一覧から外れても、次の一致画像を飛ばさず開く。",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_filters_and_fluid_e2e.cjs::OR filters move from an outside current image to the first match, through the middle, and keep a one-item tail selected"
+      ]
+    },
+    {
+      "key": "WS-033.3",
+      "sourceIds": [
+        "WS-033"
+      ],
+      "observation": "絞り込み外なら先頭の一致画像を開く。",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_filters_and_fluid_e2e.cjs::OR filters move from an outside current image to the first match, through the middle, and keep a one-item tail selected"
+      ]
+    },
+    {
+      "key": "WS-033.4",
+      "sourceIds": [
+        "WS-033"
+      ],
+      "observation": "末尾と1件で次がなければ、確認済みになった現在画像とキャンバスを保持し、直前の画像へ戻らない",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_filters_and_fluid_e2e.cjs::OR filters move from an outside current image to the first match, through the middle, and keep a one-item tail selected"
+      ]
+    },
+    {
+      "key": "WS-034.1",
+      "sourceIds": [
+        "WS-034"
+      ],
+      "observation": "押下時の左一覧フィルター順だけをスナップショットとして使う。",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_filters_and_fluid_e2e.cjs::filtered review and hide keep their tail, while deletion selects the previous filtered image"
+      ]
+    },
+    {
+      "key": "WS-034.2",
+      "sourceIds": [
+        "WS-034"
+      ],
+      "observation": "次の一致画像を開き、絞り込み外なら先頭の一致画像を開く。",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_filters_and_fluid_e2e.cjs::filtered review and hide keep their tail, while deletion selects the previous filtered image"
+      ]
+    },
+    {
+      "key": "WS-034.3",
+      "sourceIds": [
+        "WS-034"
+      ],
+      "observation": "末尾と1件で次がなければ、非表示になった現在画像とキャンバスを保持し、直前の画像へ戻らない。",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_filters_and_fluid_e2e.cjs::filtered review and hide keep their tail, while deletion selects the previous filtered image"
+      ]
+    },
+    {
+      "key": "WS-034.4",
+      "sourceIds": [
+        "WS-034"
+      ],
+      "observation": "Hで表示する既に非表示の現在画像は閲覧できるが、処理対象にはしない",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_filters_and_fluid_e2e.cjs::filtered review and hide keep their tail, while deletion selects the previous filtered image"
+      ]
+    },
+    {
+      "key": "WS-035.1",
+      "sourceIds": [
+        "WS-035"
+      ],
+      "observation": "現在画像と一覧・編集データを保持する",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_source_delete_e2e.cjs::source-delete confirmation can be skipped, restored in settings, and cancelled without changing the preference"
+      ]
+    },
+    {
+      "key": "WS-036.1",
+      "sourceIds": [
+        "WS-036"
+      ],
+      "observation": "対象の元画像・一覧・PJデータを完全削除し、表示中フィルターの次画像へ移動する",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_source_delete_e2e.cjs::Delete shortcut keeps a durable source-delete intent through claim and acknowledges the committed receipt"
+      ]
+    },
+    {
+      "key": "WS-037.1",
+      "sourceIds": [
+        "WS-037"
+      ],
+      "observation": "画像一覧とフィルター・検索・フォルダー選択を表示する",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_gallery_save_coverage.cjs::gallery and save interactions",
+        "node:tests/test_filters_and_fluid_e2e.cjs::filter popover combines checked states and review-at-tail stays on the filtered image"
+      ]
+    },
+    {
+      "key": "WS-038.1",
+      "sourceIds": [
+        "WS-038"
+      ],
+      "observation": "編集中画像へ戻り、その編集を保持する",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_workspace_contract_browser.cjs::returning to an edited image restores its manual pixels and history"
+      ]
+    },
+    {
+      "key": "WS-039.1",
+      "sourceIds": [
+        "WS-039"
+      ],
+      "observation": "両画面でボタン直下に縦並びの項目が開き、画面端では表示域内へ収まる。",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_workspace_contract_browser.cjs::filter popovers close accessibly and retain search, folder, and checkbox state across views"
+      ]
+    },
+    {
+      "key": "WS-039.2",
+      "sourceIds": [
+        "WS-039"
+      ],
+      "observation": "Esc・外側クリックで閉じ、Tabで項目と続く操作へ標準どおりフォーカス移動できる。",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_workspace_contract_browser.cjs::filter popovers close accessibly and retain search, folder, and checkbox state across views"
+      ]
+    },
+    {
+      "key": "WS-039.3",
+      "sourceIds": [
+        "WS-039"
+      ],
+      "observation": "画面切替・ペイン折りたたみで浮いたメニューを残さない。",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_workspace_contract_browser.cjs::filter popovers close accessibly and retain search, folder, and checkbox state across views"
+      ]
+    },
+    {
+      "key": "WS-039.4",
+      "sourceIds": [
+        "WS-039"
+      ],
+      "observation": "閉じた後も選択状態と検索・フォルダーの絞り込みを保持し、非表示も含む全画像を表示する",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_workspace_contract_browser.cjs::filter popovers close accessibly and retain search, folder, and checkbox state across views"
+      ]
+    },
+    {
+      "key": "WS-040.1",
+      "sourceIds": [
+        "WS-040"
+      ],
+      "observation": "非表示ではなく、除外差引き後も有効なモザイク範囲がある画像を、確認状態に関係なく表示する",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_workspace_contract_browser.cjs::mosaic and no-mosaic filters use current effective masks and always exclude hidden images",
+        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_effective_mosaic_pixels_are_apply_plus_manual_minus_exclusion"
+      ]
+    },
+    {
+      "key": "WS-041.1",
+      "sourceIds": [
+        "WS-041"
+      ],
+      "observation": "非表示ではなく、更新後に有効なモザイク範囲が0の画像だけを表示し、更新前のモザイク状態を残さない",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_workspace_contract_browser.cjs::mosaic and no-mosaic filters use current effective masks and always exclude hidden images",
+        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_candidate_update_refreshes_no_mosaic_membership_without_stale_state"
+      ]
+    },
+    {
+      "key": "WS-042.1",
+      "sourceIds": [
+        "WS-042"
+      ],
+      "observation": "非表示ではなく、確認済みまたはモザイクありの画像を表示する",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_gallery_save_coverage.cjs::gallery and save interactions",
+        "node:tests/test_filters_and_fluid_e2e.cjs::filter popover combines checked states and review-at-tail stays on the filtered image"
+      ]
+    },
+    {
+      "key": "WS-043.1",
+      "sourceIds": [
+        "WS-043"
+      ],
+      "observation": "非表示ではなく、未確認またはモザイクなしの画像を表示する",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_gallery_save_coverage.cjs::gallery and save interactions",
+        "node:tests/test_filters_and_fluid_e2e.cjs::filter popover combines checked states and review-at-tail stays on the filtered image"
+      ]
+    },
+    {
+      "key": "WS-044.1",
+      "sourceIds": [
+        "WS-044"
+      ],
+      "observation": "前者は非表示画像だけを表示する。",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_gallery_save_coverage.cjs::gallery and save interactions",
+        "node:tests/test_filters_and_fluid_e2e.cjs::filter popover combines checked states and review-at-tail stays on the filtered image"
+      ]
+    },
+    {
+      "key": "WS-044.2",
+      "sourceIds": [
+        "WS-044"
+      ],
+      "observation": "後者は非表示画像と通常表示のモザイクあり画像を表示する",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_gallery_save_coverage.cjs::gallery and save interactions",
+        "node:tests/test_filters_and_fluid_e2e.cjs::filter popover combines checked states and review-at-tail stays on the filtered image"
+      ]
+    },
+    {
+      "key": "WS-045.1",
+      "sourceIds": [
+        "WS-045"
+      ],
+      "observation": "一致する名前だけ表示する。",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_gallery_save_coverage.cjs::gallery and save interactions",
+        "node:tests/test_filters_and_fluid_e2e.cjs::filter popover combines checked states and review-at-tail stays on the filtered image"
+      ]
+    },
+    {
+      "key": "WS-045.2",
+      "sourceIds": [
+        "WS-045"
+      ],
+      "observation": "空欄へ戻すと検索による絞り込みが解除される",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_gallery_save_coverage.cjs::gallery and save interactions",
+        "node:tests/test_filters_and_fluid_e2e.cjs::filter popover combines checked states and review-at-tail stays on the filtered image"
+      ]
+    },
+    {
+      "key": "WS-046.1",
+      "sourceIds": [
+        "WS-046"
+      ],
+      "observation": "そのフォルダーの画像だけを表示する",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_gallery_save_coverage.cjs::gallery and save interactions",
+        "node:tests/test_filters_and_fluid_e2e.cjs::filter popover combines checked states and review-at-tail stays on the filtered image"
+      ]
+    },
+    {
+      "key": "WS-047.1",
+      "sourceIds": [
+        "WS-047"
+      ],
+      "observation": "画像選択操作と選択数を表示する",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
+      ]
+    },
+    {
+      "key": "WS-048.1",
+      "sourceIds": [
+        "WS-048"
+      ],
+      "observation": "クリックした画像を個別に選択・解除する",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_gallery_save_coverage.cjs::gallery and save interactions",
+        "node:tests/test_filters_and_fluid_e2e.cjs::filter popover combines checked states and review-at-tail stays on the filtered image"
+      ]
+    },
+    {
+      "key": "WS-049.1",
+      "sourceIds": [
+        "WS-049"
+      ],
+      "observation": "起点から終点までの表示順の範囲を選択する",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_gallery_save_coverage.cjs::gallery and save interactions",
+        "node:tests/test_filters_and_fluid_e2e.cjs::filter popover combines checked states and review-at-tail stays on the filtered image"
+      ]
+    },
+    {
+      "key": "WS-050.1",
+      "sourceIds": [
+        "WS-050"
+      ],
+      "observation": "一括選択が解除され、通常の画像操作へ戻る",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_gallery_save_coverage.cjs::gallery and save interactions",
+        "node:tests/test_filters_and_fluid_e2e.cjs::filter popover combines checked states and review-at-tail stays on the filtered image"
+      ]
+    },
+    {
+      "key": "WS-051.1",
+      "sourceIds": [
+        "WS-051"
+      ],
+      "observation": "選択画像だけを確認済みにする。",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_workspace_contract_browser.cjs::batch flag actions change only selected images and report the selection count"
+      ]
+    },
+    {
+      "key": "WS-051.2",
+      "sourceIds": [
+        "WS-051"
+      ],
+      "observation": "未選択画像の状態を保持する",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_workspace_contract_browser.cjs::batch flag actions change only selected images and report the selection count"
+      ]
+    },
+    {
+      "key": "WS-052.1",
+      "sourceIds": [
+        "WS-052"
+      ],
+      "observation": "選択画像だけを未確認にする。",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_workspace_contract_browser.cjs::batch flag actions change only selected images and report the selection count"
+      ]
+    },
+    {
+      "key": "WS-052.2",
+      "sourceIds": [
+        "WS-052"
+      ],
+      "observation": "未選択画像の状態を保持する",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_workspace_contract_browser.cjs::batch flag actions change only selected images and report the selection count"
+      ]
+    },
+    {
+      "key": "WS-053.1",
+      "sourceIds": [
+        "WS-053"
+      ],
+      "observation": "選択画像だけを非表示にする。",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_workspace_contract_browser.cjs::batch flag actions change only selected images and report the selection count"
+      ]
+    },
+    {
+      "key": "WS-053.2",
+      "sourceIds": [
+        "WS-053"
+      ],
+      "observation": "未選択画像の状態を保持する",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_workspace_contract_browser.cjs::batch flag actions change only selected images and report the selection count"
+      ]
+    },
+    {
+      "key": "WS-054.1",
+      "sourceIds": [
+        "WS-054"
+      ],
+      "observation": "選択画像だけを再表示にする。",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_workspace_contract_browser.cjs::batch flag actions change only selected images and report the selection count"
+      ]
+    },
+    {
+      "key": "WS-054.2",
+      "sourceIds": [
+        "WS-054"
+      ],
+      "observation": "未選択画像の状態を保持する",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_workspace_contract_browser.cjs::batch flag actions change only selected images and report the selection count"
+      ]
+    },
+    {
+      "key": "WS-055.1",
+      "sourceIds": [
+        "WS-055"
+      ],
+      "observation": "選択数・一覧・PJデータが変わらない",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_workspace_contract_browser.cjs::batch source deletion cancel sends no delete and preserves selection, list, and project"
+      ]
+    },
+    {
+      "key": "WS-056.1",
+      "sourceIds": [
+        "WS-056"
+      ],
+      "observation": "指定2画像のPJデータだけを消し、元ファイルと未選択画像を保持する",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_workspace_contract_browser.cjs::batch mask clear removes project data for exactly two selected images and preserves sources and the unselected image",
+        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_clear_two_images_removes_only_their_project_data_and_keeps_all_source_files"
+      ]
+    },
+    {
+      "key": "WS-057.1",
+      "sourceIds": [
+        "WS-057"
+      ],
+      "observation": "現在画像操作が無効になり、切替前の画像へ遅れて処理しない",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_workspace_contract_browser.cjs::image switching disables save detection and candidate editing until the new image is authoritative"
+      ]
+    },
+    {
+      "key": "WS-058.1",
+      "sourceIds": [
+        "WS-058"
+      ],
+      "observation": "既存候補・手描き・確認済み・非表示を作成PJへ引き継ぐ",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_project_ui_runtime.cjs::project creation, cancellation, duplicate rejection, table columns, and relink payload preserve workspace state"
+      ]
+    },
+    {
+      "key": "WS-059.1",
+      "sourceIds": [
+        "WS-059"
+      ],
+      "observation": "入力名のPJを作り、元PJの編集を保持する",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_project_switch_close_restart_and_rename_restore_rich_state_without_cross_project_leakage"
+      ]
+    },
+    {
+      "key": "WS-060.1",
+      "sourceIds": [
+        "WS-060"
+      ],
+      "observation": "一覧と現在PJの名前が更新され、画像・履歴は残る",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_project_switch_close_restart_and_rename_restore_rich_state_without_cross_project_leakage",
+        "node:tests/test_project_ui_runtime.cjs::project creation, cancellation, duplicate rejection, table columns, and relink payload preserve workspace state"
+      ]
+    },
+    {
+      "key": "WS-061.1",
+      "sourceIds": [
+        "WS-061"
+      ],
+      "observation": "重複名を案内し、既存PJを置換しない",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_project_ui_runtime.cjs::duplicate project guidance asks for another name while the current project remains intact",
+        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_normalized_duplicate_project_names_are_rejected_without_replacing_current_work"
+      ]
+    },
+    {
+      "key": "WS-062.1",
+      "sourceIds": [
+        "WS-062"
+      ],
+      "observation": "同一名として拒否し、現在の作業を保持する",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_normalized_duplicate_project_names_are_rejected_without_replacing_current_work"
+      ]
+    },
+    {
+      "key": "WS-063.1",
+      "sourceIds": [
+        "WS-063"
+      ],
+      "observation": "PJの追加・名前変更を行わない",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_project_ui_runtime.cjs::project creation, cancellation, duplicate rejection, table columns, and relink payload preserve workspace state"
+      ]
+    },
+    {
+      "key": "WS-064.1",
+      "sourceIds": [
+        "WS-064"
+      ],
+      "observation": "名前・状態・画像数・元フォルダー・作成日時・更新日時・行操作を表で表示する",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_project_ui_runtime.cjs::project creation, cancellation, duplicate rejection, table columns, and relink payload preserve workspace state"
+      ]
+    },
+    {
+      "key": "WS-065.1",
+      "sourceIds": [
+        "WS-065"
+      ],
+      "observation": "その行のPJを開く",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_project_ui_runtime.cjs::project creation, cancellation, duplicate rejection, table columns, and relink payload preserve workspace state"
+      ]
+    },
+    {
+      "key": "WS-066.1",
+      "sourceIds": [
+        "WS-066"
+      ],
+      "observation": "PJを開かず、選択による別操作パネルを出さない",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_project_ui_runtime.cjs::project creation, cancellation, duplicate rejection, table columns, and relink payload preserve workspace state"
+      ]
+    },
+    {
+      "key": "WS-067.1",
+      "sourceIds": [
+        "WS-067"
+      ],
+      "observation": "名前の昇順に行を並べ、その列の昇順三角を表示する",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_workspace_contract_browser.cjs::project table sorts actual rows in both directions for name, creation, and update"
+      ]
+    },
+    {
+      "key": "WS-068.1",
+      "sourceIds": [
+        "WS-068"
+      ],
+      "observation": "名前の降順に行を並べ、その列の降順三角を表示する",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_workspace_contract_browser.cjs::project table sorts actual rows in both directions for name, creation, and update"
+      ]
+    },
+    {
+      "key": "WS-069.1",
+      "sourceIds": [
+        "WS-069"
+      ],
+      "observation": "作成日時の昇順に行を並べ、その列の昇順三角を表示する",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_workspace_contract_browser.cjs::project table sorts actual rows in both directions for name, creation, and update"
+      ]
+    },
+    {
+      "key": "WS-070.1",
+      "sourceIds": [
+        "WS-070"
+      ],
+      "observation": "作成日時の降順に行を並べ、その列の降順三角を表示する",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_workspace_contract_browser.cjs::project table sorts actual rows in both directions for name, creation, and update"
+      ]
+    },
+    {
+      "key": "WS-071.1",
+      "sourceIds": [
+        "WS-071"
+      ],
+      "observation": "更新日時の昇順に行を並べ、その列の昇順三角を表示する",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_workspace_contract_browser.cjs::project table sorts actual rows in both directions for name, creation, and update"
+      ]
+    },
+    {
+      "key": "WS-072.1",
+      "sourceIds": [
+        "WS-072"
+      ],
+      "observation": "更新日時の降順に行を並べ、その列の降順三角を表示する",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_workspace_contract_browser.cjs::project table sorts actual rows in both directions for name, creation, and update"
+      ]
+    },
+    {
+      "key": "WS-073.1",
+      "sourceIds": [
+        "WS-073"
+      ],
+      "observation": "画像一覧を閉じ、PJと画像データを保持する",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_project_switch_close_restart_and_rename_restore_rich_state_without_cross_project_leakage"
+      ]
+    },
+    {
+      "key": "WS-074.1",
+      "sourceIds": [
+        "WS-074"
+      ],
+      "observation": "画像一覧・候補・手描き・確認状態・非表示を復元する",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_project_switch_close_restart_and_rename_restore_rich_state_without_cross_project_leakage"
+      ]
+    },
+    {
+      "key": "WS-075.1",
+      "sourceIds": [
+        "WS-075"
+      ],
+      "observation": "保存済み状態を復元し、別PJのデータを混ぜない",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_project_switch_close_restart_and_rename_restore_rich_state_without_cross_project_leakage"
+      ]
+    },
+    {
+      "key": "WS-076.1",
+      "sourceIds": [
+        "WS-076"
+      ],
+      "observation": "作業中のまま画像一覧を保持する",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_project_ui_runtime.cjs::project completion and deletion cancellation preserve the exact project and image list"
+      ]
+    },
+    {
+      "key": "WS-077.1",
+      "sourceIds": [
+        "WS-077"
+      ],
+      "observation": "一覧を閉じ、PJ管理に完了と表示する。",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_project_completion_and_deletion_have_exact_persistent_outcomes",
+        "node:tests/test_project_ui_runtime.cjs::project close, complete, resume, and delete produce exact workspace outcomes"
+      ]
+    },
+    {
+      "key": "WS-077.2",
+      "sourceIds": [
+        "WS-077"
+      ],
+      "observation": "画像データは保持する",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_project_completion_and_deletion_have_exact_persistent_outcomes"
+      ]
+    },
+    {
+      "key": "WS-078.1",
+      "sourceIds": [
+        "WS-078"
+      ],
+      "observation": "閲覧・移動・範囲ダウンロードは有効、描画・検出・保存・Undoは無効",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_workspace_contract_browser.cjs::completed projects keep browsing and exports enabled while every mutation stays disabled"
+      ]
+    },
+    {
+      "key": "WS-079.1",
+      "sourceIds": [
+        "WS-079"
+      ],
+      "observation": "作業中になり、候補と描画の操作を再有効化する",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_workspace_contract_browser.cjs::completed projects keep browsing and exports enabled while every mutation stays disabled",
+        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_project_switch_close_restart_and_rename_restore_rich_state_without_cross_project_leakage"
+      ]
+    },
+    {
+      "key": "WS-080.1",
+      "sourceIds": [
+        "WS-080"
+      ],
+      "observation": "対象名と履歴・モザイク・除外削除、元画像保持、取消不能を明記する",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_project_ui_runtime.cjs::project deletion warning names its target and every destructive consequence"
+      ]
+    },
+    {
+      "key": "WS-081.1",
+      "sourceIds": [
+        "WS-081"
+      ],
+      "observation": "対象PJを保持する",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_project_ui_runtime.cjs::project completion and deletion cancellation preserve the exact project and image list"
+      ]
+    },
+    {
+      "key": "WS-082.1",
+      "sourceIds": [
+        "WS-082"
+      ],
+      "observation": "そのPJだけ消え、現在のPJと編集は保持する",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_project_completion_and_deletion_have_exact_persistent_outcomes"
+      ]
+    },
+    {
+      "key": "WS-083.1",
+      "sourceIds": [
+        "WS-083"
+      ],
+      "observation": "現在PJと関連データが消え、空の作業画面へ戻る",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_project_completion_and_deletion_have_exact_persistent_outcomes"
+      ]
+    },
+    {
+      "key": "WS-084.1",
+      "sourceIds": [
+        "WS-084"
+      ],
+      "observation": "既存PJを示す警告と、既存PJを開く・別に作成の選択肢を表示する",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_project_ui_runtime.cjs::same-source warning offers open separate and cancel without changing work until chosen"
+      ]
+    },
+    {
+      "key": "WS-085.1",
+      "sourceIds": [
+        "WS-085"
+      ],
+      "observation": "選択PJを開き、新規PJを増やさない",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_project_ui_runtime.cjs::same-source warning offers open separate and cancel without changing work until chosen"
+      ]
+    },
+    {
+      "key": "WS-086.1",
+      "sourceIds": [
+        "WS-086"
+      ],
+      "observation": "既存PJを変更せず、別PJとして作業できる",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_project_ui_runtime.cjs::same-source warning offers open separate and cancel without changing work until chosen"
+      ]
+    },
+    {
+      "key": "WS-087.1",
+      "sourceIds": [
+        "WS-087"
+      ],
+      "observation": "読み込み先PJと画像一覧を変えない",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_project_ui_runtime.cjs::same-source warning offers open separate and cancel without changing work until chosen"
+      ]
+    },
+    {
+      "key": "WS-088.1",
+      "sourceIds": [
+        "WS-088"
+      ],
+      "observation": "変更したファイルだけを警告一覧へ表示する",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_multi_source_reopen_reconciles_before_one_replace_and_keeps_dimension_lock"
+      ]
+    },
+    {
+      "key": "WS-089.1",
+      "sourceIds": [
+        "WS-089"
+      ],
+      "observation": "対象の編集を保持し、確認済みの更新時刻へ更新する",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_source_mismatch_keep_resize_and_clear_have_exact_scoped_results"
+      ]
+    },
+    {
+      "key": "WS-090.1",
+      "sourceIds": [
+        "WS-090"
+      ],
+      "observation": "変更対象のモザイク・除外を削除し、他画像は保持する",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_source_mismatch_keep_resize_and_clear_have_exact_scoped_results"
+      ]
+    },
+    {
+      "key": "WS-091.1",
+      "sourceIds": [
+        "WS-091"
+      ],
+      "observation": "新寸法に合わせて編集を保持し、対象画像の古いUndo履歴をリセットする",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_source_mismatch_keep_resize_and_clear_have_exact_scoped_results"
+      ]
+    },
+    {
+      "key": "WS-092.1",
+      "sourceIds": [
+        "WS-092"
+      ],
+      "observation": "対象画像の範囲と履歴を削除する",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_source_mismatch_keep_resize_and_clear_have_exact_scoped_results"
+      ]
+    },
+    {
+      "key": "WS-093.1",
+      "sourceIds": [
+        "WS-093"
+      ],
+      "observation": "利用可能画像は表示し、不足したnative-folderだけの再指定を案内する。",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_project_open_refetches_usable_images_sources_and_only_missing_native_folders"
+      ]
+    },
+    {
+      "key": "WS-093.2",
+      "sourceIds": [
+        "WS-093"
+      ],
+      "observation": "再取得後もPJ・画像・source一覧と不足表示が一致する",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_project_open_refetches_usable_images_sources_and_only_missing_native_folders"
+      ]
+    },
+    {
+      "key": "WS-094.1",
+      "sourceIds": [
+        "WS-094"
+      ],
+      "observation": "失敗時は関連付け前の元フォルダー・変換状態・画面を保持し、再試行だけ新しいパスへ切り替える。",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_project_native_relink_http.ProjectNativeRelinkHttpTests.test_source_status_and_native_reload_relink_keep_other_source_state",
+        "python:tests.test_project_native_relink_http.ProjectNativeRelinkHttpTests.test_relink_publish_failure_restores_durable_source_and_retries",
+        "python:tests.test_project_native_relink_http.ProjectNativeRelinkHttpTests.test_relink_rejections_leave_source_and_live_catalog_unchanged"
+      ]
+    },
+    {
+      "key": "WS-094.2",
+      "sourceIds": [
+        "WS-094"
+      ],
+      "observation": "成功時は指定した元フォルダーだけ関連付け直し、browser画像の候補・手描き・反転・確認状態と残りの不足を保持する。",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_project_native_relink_http.ProjectNativeRelinkHttpTests.test_source_status_and_native_reload_relink_keep_other_source_state",
+        "python:tests.test_project_native_relink_http.ProjectNativeRelinkHttpTests.test_relink_publish_failure_restores_durable_source_and_retries",
+        "python:tests.test_project_native_relink_http.ProjectNativeRelinkHttpTests.test_relink_rejections_leave_source_and_live_catalog_unchanged"
+      ]
+    },
+    {
+      "key": "WS-094.3",
+      "sourceIds": [
+        "WS-094"
+      ],
+      "observation": "OSのフォルダー選択は使わない",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_project_ui_runtime.cjs::project creation, cancellation, duplicate rejection, table columns, and relink payload preserve workspace state"
+      ]
+    },
+    {
+      "key": "WS-094.4",
+      "sourceIds": [
+        "WS-094"
+      ],
+      "observation": "不足native sourceを実フォルダーへ再指定し、アクセス拒否後の再試行を確認する。",
+      "status": "retired",
+      "retirementReason": "Windows上のアクセス不能な実フォルダーでの観測は対象外とする。ACL・別プロセスによるアクセス拒否とOSファイルキャッシュの実挙動は一時fixtureだけでは再現できない。"
+    },
+    {
+      "key": "WS-096.1",
+      "sourceIds": [
+        "WS-096"
+      ],
+      "observation": "元フォルダーにファイルがあっても削除済みのPJ画像を復活させない",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_removed_project_image_does_not_revive_when_source_still_exists"
+      ]
+    },
+    {
+      "key": "WS-097.1",
+      "sourceIds": [
+        "WS-097"
+      ],
+      "observation": "一覧とPJデータを保持する",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_workspace_contract_browser.cjs::catalog clear cancel preserves rich project workspace data"
+      ]
+    },
+    {
+      "key": "WS-098.1",
+      "sourceIds": [
+        "WS-098"
+      ],
+      "observation": "画像データを消してPJを閉じる。",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_clear_project_images_closes_live_project_but_keeps_empty_project_and_sources"
+      ]
+    },
+    {
+      "key": "WS-098.2",
+      "sourceIds": [
+        "WS-098"
+      ],
+      "observation": "PJ自体は空で残り、元ファイルは残る",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_clear_project_images_closes_live_project_but_keeps_empty_project_and_sources"
+      ]
+    },
+    {
+      "key": "WS-099.1",
+      "sourceIds": [
+        "WS-099"
+      ],
+      "observation": "操作中のPJ操作は重複開始できない。",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_project_ui_runtime.cjs::project operations issue one request per start and the last completed start owns the catalog"
+      ]
+    },
+    {
+      "key": "WS-099.2",
+      "sourceIds": [
+        "WS-099"
+      ],
+      "observation": "完了PJの再開と開くは1要求で完了し、失敗時に完了状態だけが作業中へ残らない。",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_project_ui_runtime.cjs::completed-project resume is single request and failed open rolls back to completed or unnamed work"
+      ]
+    },
+    {
+      "key": "WS-099.3",
+      "sourceIds": [
+        "WS-099"
+      ],
+      "observation": "最後に表示したPJまたは無名作業だけが一覧と編集対象に残る",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_unnamed_workspace_switch_publishes_atomically_and_rolls_back_failed_replacement"
+      ]
+    },
+    {
+      "key": "WS-100.1",
+      "sourceIds": [
+        "WS-100"
+      ],
+      "observation": "読込中は確認済み・非表示・反転・手描きだけ保存できる。",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage",
+        "python:tests.test_server.MozarieTests.test_catalog_reload_is_rejected_while_worker_is_alive_and_stale_worker_cannot_commit"
+      ]
+    },
+    {
+      "key": "WS-100.2",
+      "sourceIds": [
+        "WS-100"
+      ],
+      "observation": "構造変更と新しい境界操作は開始できず、作成済みの境界ドラフトは残る。",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage",
+        "python:tests.test_server.MozarieTests.test_catalog_reload_is_rejected_while_worker_is_alive_and_stale_worker_cannot_commit"
+      ]
+    },
+    {
+      "key": "WS-100.3",
+      "sourceIds": [
+        "WS-100"
+      ],
+      "observation": "2件目の遷移も開始しない。",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage",
+        "python:tests.test_server.MozarieTests.test_catalog_reload_is_rejected_while_worker_is_alive_and_stale_worker_cannot_commit"
+      ]
+    },
+    {
+      "key": "WS-100.4",
+      "sourceIds": [
+        "WS-100"
+      ],
+      "observation": "最初の読込だけ完了し、元PJを開き直すと許可した編集を復元する。",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage",
+        "python:tests.test_server.MozarieTests.test_catalog_reload_is_rejected_while_worker_is_alive_and_stale_worker_cannot_commit"
+      ]
+    },
+    {
+      "key": "WS-100.5",
+      "sourceIds": [
+        "WS-100"
+      ],
+      "observation": "`/api/images` の catalogGeneration が変化した復帰時は権威スナップショットへ安全に置換し、PJ・件数・画像がサーバーと一致する",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage",
+        "python:tests.test_server.MozarieTests.test_catalog_reload_is_rejected_while_worker_is_alive_and_stale_worker_cannot_commit"
+      ]
+    },
+    {
+      "key": "WS-101.1",
+      "sourceIds": [
+        "WS-101"
+      ],
+      "observation": "許可済みのfile sourceとdirectory sourceは自動で復元する。",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_folder_permissions_e2e.cjs::browser directory restore keeps canonical source paths separate",
+        "node:tests/test_project_ui_runtime.cjs::project dialogs, A-B-A switching, failed-open recovery, and duplicate transition guards"
+      ]
+    },
+    {
+      "key": "WS-101.2",
+      "sourceIds": [
+        "WS-101"
+      ],
+      "observation": "権威一覧への置換後も現PJの画像だけへ保存済みhandleとサイズ・更新時刻を対応付ける。",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_folder_permissions_e2e.cjs::browser directory restore keeps canonical source paths separate",
+        "node:tests/test_project_ui_runtime.cjs::project dialogs, A-B-A switching, failed-open recovery, and duplicate transition guards"
+      ]
+    },
+    {
+      "key": "WS-101.3",
+      "sourceIds": [
+        "WS-101"
+      ],
+      "observation": "最後に開始した復元だけが現PJのaccessと不足source表示を公開する。",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_project_ui_runtime.cjs::overlapping browser-source restores publish only the last-started access and missing-source result"
+      ]
+    },
+    {
+      "key": "WS-101.4",
+      "sourceIds": [
+        "WS-101"
+      ],
+      "observation": "未許可・拒否・列挙失敗したsourceだけをPJ画面に列挙し、各「復元」操作から許可を求める。",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_folder_permissions_e2e.cjs::browser directory restore keeps canonical source paths separate",
+        "node:tests/test_project_ui_runtime.cjs::project dialogs, A-B-A switching, failed-open recovery, and duplicate transition guards"
+      ]
+    },
+    {
+      "key": "WS-101.5",
+      "sourceIds": [
+        "WS-101"
+      ],
+      "observation": "別PJのhandle・候補を混ぜない",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_folder_permissions_e2e.cjs::browser directory restore keeps canonical source paths separate",
+        "node:tests/test_project_ui_runtime.cjs::project dialogs, A-B-A switching, failed-open recovery, and duplicate transition guards"
+      ]
+    },
+    {
+      "key": "WS-101.6",
+      "sourceIds": [
+        "WS-101"
+      ],
+      "observation": "file sourceとdirectory sourceの許可済み自動復元、拒否、明示復元を実ブラウザーで確認する。",
+      "status": "retired",
+      "retirementReason": "Chromiumの永続プロファイルとFile System Access許可UIでの観測は対象外とする。ブラウザー再起動をまたぐhandle許可状態とユーザー許可UIはheadless fixtureで制御できない。"
+    },
+    {
+      "key": "WS-102.1",
+      "sourceIds": [
+        "WS-102"
+      ],
+      "observation": "削除を拒否し、PJ・画像・候補・履歴を保持する。",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_delete_project_handles_current_read_only_noncurrent_and_thumbnail_failure",
+        "node:tests/test_project_ui_runtime.cjs::project dialogs, A-B-A switching, failed-open recovery, and duplicate transition guards"
+      ]
+    },
+    {
+      "key": "WS-102.2",
+      "sourceIds": [
+        "WS-102"
+      ],
+      "observation": "処理完了後に削除すると対象PJだけを削除できる",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_delete_project_handles_current_read_only_noncurrent_and_thumbnail_failure",
+        "node:tests/test_project_ui_runtime.cjs::project dialogs, A-B-A switching, failed-open recovery, and duplicate transition guards"
+      ]
+    },
+    {
+      "key": "WS-103.1",
+      "sourceIds": [
+        "WS-103"
+      ],
+      "observation": "完了したPJは必ず閲覧専用となり、検出開始と編集可能状態が残らない",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_workspace_contract_browser.cjs::completed projects keep browsing and exports enabled while every mutation stays disabled",
+        "node:tests/test_project_ui_runtime.cjs::project dialogs, A-B-A switching, failed-open recovery, and duplicate transition guards"
+      ]
+    },
+    {
+      "key": "WS-104.1",
+      "sourceIds": [
+        "WS-104"
+      ],
+      "observation": "開く失敗後もPJは完了のままで、直前に開いていたPJの一覧・候補・編集状態を保持する",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_project_ui_runtime.cjs::project dialogs, A-B-A switching, failed-open recovery, and duplicate transition guards"
+      ]
+    },
+    {
+      "key": "WS-105.1",
+      "sourceIds": [
+        "WS-105"
+      ],
+      "observation": "元フォルダーを1つとして扱い、同じ画像を重複表示・重複保存しない",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_project_native_relink_http.ProjectNativeRelinkHttpTests.test_source_status_and_native_reload_relink_keep_other_source_state"
+      ]
+    },
+    {
+      "key": "WS-106.1",
+      "sourceIds": [
+        "WS-106"
+      ],
+      "observation": "開く操作は失敗し、直前のPJの一覧・候補・編集状態を保持する。",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_project_native_relink_http.ProjectNativeRelinkHttpTests.test_relink_rejections_leave_source_and_live_catalog_unchanged",
+        "python:tests.test_server.MozarieTests.test_workspace_restore_rejects_corrupt_candidate_without_partial_display"
+      ]
+    },
+    {
+      "key": "WS-106.2",
+      "sourceIds": [
+        "WS-106"
+      ],
+      "observation": "開こうとしたPJの元フォルダー記録、画像の確認済み状態、反転状態、PJ状態は変更しない",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_project_native_relink_http.ProjectNativeRelinkHttpTests.test_relink_rejections_leave_source_and_live_catalog_unchanged",
+        "python:tests.test_server.MozarieTests.test_workspace_restore_rejects_corrupt_candidate_without_partial_display"
+      ]
+    },
+    {
+      "key": "WS-107.1",
+      "sourceIds": [
+        "WS-107"
+      ],
+      "observation": "読込・再指定の失敗でも現在の一覧・候補・catalogGenerationを保持し、途中まで読んだPJや無名一覧を表示せず、再指定先のnative path・変換状態を保存しない",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_project_native_relink_http.ProjectNativeRelinkHttpTests.test_relink_rejections_leave_source_and_live_catalog_unchanged",
+        "python:tests.test_server.MozarieTests.test_workspace_restore_rejects_corrupt_candidate_without_partial_display"
+      ]
+    },
+    {
+      "key": "WS-108.1",
+      "sourceIds": [
+        "WS-108"
+      ],
+      "observation": "再起動時に権威PJ状態で削除済みと分かれば、その画像だけの保存済みハンドルを削除する。",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_source_delete_e2e.cjs::Delete shortcut keeps a durable source-delete intent through claim and acknowledges the committed receipt"
+      ]
+    },
+    {
+      "key": "WS-108.2",
+      "sourceIds": [
+        "WS-108"
+      ],
+      "observation": "存在中・削除が拒否・未確定なら記録とハンドルを残し、明確な拒否を受けた削除要求だけ記録を消す",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_source_delete_e2e.cjs::unknown browser-source deletion remains recoverable instead of silently committing or cancelling"
+      ]
+    },
+    {
+      "key": "WS-108.3",
+      "sourceIds": [
+        "WS-108"
+      ],
+      "observation": "実フォルダーのbrowser画像を削除・コピー後削除し、再起動後のhandle整理を確認する。",
+      "status": "retired",
+      "retirementReason": "Chromium File System Accessと実フォルダーでの観測は対象外とする。OSが管理するhandleの削除権限とブラウザー再起動後の許可状態はCIの擬似handleでは再現できない。"
+    },
+    {
+      "key": "WS-109.1",
+      "sourceIds": [
+        "WS-109"
+      ],
+      "observation": "チェック項目は複数選べ、ボタンに選択数を表示する。",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_workspace_contract_browser.cjs::filter popovers close accessibly and retain search, folder, and checkbox state across views"
+      ]
+    },
+    {
+      "key": "WS-109.2",
+      "sourceIds": [
+        "WS-109"
+      ],
+      "observation": "確認済みにして次へは左一覧で選んだ対象順のまま移動する",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_filters_and_fluid_e2e.cjs::OR filters move from an outside current image to the first match, through the middle, and keep a one-item tail selected"
+      ]
+    },
+    {
+      "key": "WS-110.1",
+      "sourceIds": [
+        "WS-110"
+      ],
+      "observation": "完了PJでも絞り込みボタンとチェック項目は使える。",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_workspace_contract_browser.cjs::completed projects keep browsing and exports enabled while every mutation stays disabled"
+      ]
+    },
+    {
+      "key": "WS-110.2",
+      "sourceIds": [
+        "WS-110"
+      ],
+      "observation": "処理の開始時は開いていたメニューが閉じ、ボタンと項目が無効になる。",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_workspace_contract_browser.cjs::batch detection cancel and processing locks preserve selection, catalog, and project state"
+      ]
+    },
+    {
+      "key": "WS-110.3",
+      "sourceIds": [
+        "WS-110"
+      ],
+      "observation": "処理完了後は再び開いて選択を変えられる",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_workspace_contract_browser.cjs::batch detection cancel and processing locks preserve selection, catalog, and project state"
+      ]
+    },
+    {
+      "key": "WS-111.1",
+      "sourceIds": [
+        "WS-111"
+      ],
+      "observation": "対応画像がないことを案内し、直前の一覧・選択・PJ画像・カタログ世代を保持する。",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_http_import_regression.FolderLoadLoggingContractTests.test_empty_and_unreadable_folders_keep_the_previous_catalog"
+      ]
+    },
+    {
+      "key": "WS-111.2",
+      "sourceIds": [
+        "WS-111"
+      ],
+      "observation": "CMDにはフォルダー走査の開始・完了、候補0件・読込0件・スキップなしを表示する",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_http_import_regression.FolderLoadLoggingContractTests.test_empty_and_unreadable_folders_keep_the_previous_catalog"
+      ]
+    },
+    {
+      "key": "WS-112.1",
+      "sourceIds": [
+        "WS-112"
+      ],
+      "observation": "正常画像だけを一覧とサムネイルへ読み込み、壊れた画像だけをスキップする。",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_http_import_regression.FolderLoadLoggingContractTests.test_folder_scan_keeps_valid_images_and_enumerates_every_failed_file"
+      ]
+    },
+    {
+      "key": "WS-112.2",
+      "sourceIds": [
+        "WS-112"
+      ],
+      "observation": "CMDの走査完了は候補数・読込数・理由別スキップ数・代表相対名・所要時間をまとめて表示し、1ファイルごとの大量ログを出さない",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_http_import_regression.FolderLoadLoggingContractTests.test_folder_scan_keeps_valid_images_and_enumerates_every_failed_file"
+      ]
+    },
+    {
+      "key": "WS-113.1",
+      "sourceIds": [
+        "WS-113"
+      ],
+      "observation": "正常PNGは画像本体と一覧へ読み込み、不要な文字列メタデータを展開しない。",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_http_import_regression.FolderLoadLoggingContractTests.test_folder_scan_keeps_large_ztxt_itxt_pngs_when_a_corrupt_png_is_present",
+        "python:tests.test_image_validation.InputImageValidationTests.test_png_with_large_text_metadata_is_inspected_from_pixels"
+      ]
+    },
+    {
+      "key": "WS-113.2",
+      "sourceIds": [
+        "WS-113"
+      ],
+      "observation": "CRC不一致と切れたPNGだけを安全にスキップし、他の画像を読み込む",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_http_import_regression.FolderLoadLoggingContractTests.test_folder_scan_keeps_large_ztxt_itxt_pngs_when_a_corrupt_png_is_present",
+        "python:tests.test_image_validation.InputImageValidationTests.test_png_with_large_text_metadata_is_inspected_from_pixels"
+      ]
+    },
+    {
+      "key": "WS-114.1",
+      "sourceIds": [
+        "WS-114"
+      ],
+      "observation": "削除・上書き保存に必要な書き込み権限を要求し、配下の対応画像を追加する。",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage",
+        "node:tests/test_folder_permissions_e2e.cjs::project folder restore retains each nested file's direct parent"
+      ]
+    },
+    {
+      "key": "WS-114.2",
+      "sourceIds": [
+        "WS-114"
+      ],
+      "observation": "完了・失敗・取消のいずれでも読み込み状態が残らず、次のパス入力または画像追加を開始できる",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
+      ]
+    },
+    {
+      "key": "WS-114.3",
+      "sourceIds": [
+        "WS-114"
+      ],
+      "observation": "実ブラウザーでフォルダー選択時に書き込み権限が要求されることを確認する。",
+      "status": "retired",
+      "retirementReason": "ChromiumのFile System Access許可UIでの観測は対象外とする。showDirectoryPickerの実許可プロンプトは自動化APIから操作・観測できない。"
+    },
+    {
+      "key": "WS-115.1",
+      "sourceIds": [
+        "WS-115"
+      ],
+      "observation": "取消または選択失敗の状態を画面に表示し、一覧・選択・読み込み状態を変えない。",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
+      ]
+    },
+    {
+      "key": "WS-115.2",
+      "sourceIds": [
+        "WS-115"
+      ],
+      "observation": "例外種別だけで権限拒否を無反応にしない",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
+      ]
+    },
+    {
+      "key": "WS-115.3",
+      "sourceIds": [
+        "WS-115"
+      ],
+      "observation": "実ブラウザーで選択取消と権限拒否を行い、案内と一覧保持を確認する。",
+      "status": "retired",
+      "retirementReason": "ChromiumのFile System Access許可UIでの観測は対象外とする。OS・ブラウザー所有の拒否表示と許可状態はheadless fixtureで再現できない。"
+    },
+    {
+      "key": "WS-116.1",
+      "sourceIds": [
+        "WS-116"
+      ],
+      "observation": "新しい読込を開始せず、「画像の読み込みまたは処理が完了してから」再実行する状態を表示する。",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_server.MozarieTests.test_same_root_reload_rejects_while_import_is_preparing",
+        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
+      ]
+    },
+    {
+      "key": "WS-116.2",
+      "sourceIds": [
+        "WS-116"
+      ],
+      "observation": "先行読込・一覧・PJ状態を保持する",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_server.MozarieTests.test_same_root_reload_rejects_while_import_is_preparing",
+        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
+      ]
+    },
+    {
+      "key": "WS-117.1",
+      "sourceIds": [
+        "WS-117"
+      ],
+      "observation": "各高位操作で日本語の操作名・IDを含まないAPIルート・開始/完了または失敗・status・error_code・所要時間を表示する。",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_http_import_regression.FolderLoadLoggingContractTests.test_handler_logs_normalized_routes_without_request_secrets"
+      ]
+    },
+    {
+      "key": "WS-117.2",
+      "sourceIds": [
+        "WS-117"
+      ],
+      "observation": "対象数と元フォルダーパスがある操作は表示し、本文・トークン・ヘッダー・画像IDは表示しない",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_http_import_regression.FolderLoadLoggingContractTests.test_handler_logs_normalized_routes_without_request_secrets"
+      ]
+    },
+    {
+      "key": "WS-118.1",
+      "sourceIds": [
+        "WS-118"
+      ],
+      "observation": "CMDに処理名・対象数、pause/resume/cancel受付、完了数・所要時間、失敗時のerror_codeを表示する。",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_server.MozarieTests.test_apply_pause_resume_and_cancel_state_transitions"
+      ]
+    },
+    {
+      "key": "WS-118.2",
+      "sourceIds": [
+        "WS-118"
+      ],
+      "observation": "画像追加はセッション開始・完了、保存は一括操作の開始・完了だけをINFOに集約し、個別の`/api/import/file`、reserve/render/commit/ack成功、ジョブ取得、サムネイル、候補ON/OFF、手描き自動保存はINFOログを大量に出さない。",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_http_import_regression.FolderLoadLoggingContractTests.test_per_image_success_logs_are_suppressed_but_failures_are_safe_warnings"
+      ]
+    },
+    {
+      "key": "WS-118.3",
+      "sourceIds": [
+        "WS-118"
+      ],
+      "observation": "個別失敗はID・本文・token・headerを出さずに警告できる",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_http_import_regression.FolderLoadLoggingContractTests.test_per_image_success_logs_are_suppressed_but_failures_are_safe_warnings"
+      ]
+    },
+    {
+      "key": "WS-119.1",
+      "sourceIds": [
+        "WS-119"
+      ],
+      "observation": "読み込めないことを案内し、直前の一覧・選択・PJ画像・カタログ世代を保持する。",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_http_import_regression.FolderLoadLoggingContractTests.test_empty_and_unreadable_folders_keep_the_previous_catalog"
+      ]
+    },
+    {
+      "key": "WS-119.2",
+      "sourceIds": [
+        "WS-119"
+      ],
+      "observation": "CMDの走査完了に候補数・読込0件・理由別スキップ数を表示する",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_http_import_regression.FolderLoadLoggingContractTests.test_empty_and_unreadable_folders_keep_the_previous_catalog"
+      ]
+    },
+    {
+      "key": "WS-120.1",
+      "sourceIds": [
+        "WS-120"
+      ],
+      "observation": "すべてが1操作ずつの永続履歴で戻り、やり直せる。",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_every_unnamed_workspace_edit_undoes_and_redoes_one_step_without_touching_other_images",
+        "python:tests.test_project_history_live_browser.LiveProjectHistoryBrowserTests.test_browser_undo_redo_round_trips_localized_durable_manual_layers"
+      ]
+    },
+    {
+      "key": "WS-120.2",
+      "sourceIds": [
+        "WS-120"
+      ],
+      "observation": "対象外画像の状態は変わらない",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_every_unnamed_workspace_edit_undoes_and_redoes_one_step_without_touching_other_images"
+      ]
+    },
+    {
+      "key": "WS-121.1",
+      "sourceIds": [
+        "WS-121"
+      ],
+      "observation": "同じ画像ID、候補、手描き、確認済み・非表示、反転、Undo/Redo位置を復元する。",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_unnamed_restart_and_promotion_preserve_full_identity_state_and_history"
+      ]
+    },
+    {
+      "key": "WS-121.2",
+      "sourceIds": [
+        "WS-121"
+      ],
+      "observation": "PJ一覧には無名作業を表示しない",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_unnamed_restart_and_promotion_preserve_full_identity_state_and_history"
+      ]
+    },
+    {
+      "key": "WS-122.1",
+      "sourceIds": [
+        "WS-122"
+      ],
+      "observation": "画面を置き換えず、同じ画像IDと履歴のまま名前付きPJになる。",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_unnamed_restart_and_promotion_preserve_full_identity_state_and_history"
+      ]
+    },
+    {
+      "key": "WS-122.2",
+      "sourceIds": [
+        "WS-122"
+      ],
+      "observation": "名前保存前のUndo/Redoも続けて使える",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_unnamed_restart_and_promotion_preserve_full_identity_state_and_history"
+      ]
+    },
+    {
+      "key": "WS-123.1",
+      "sourceIds": [
+        "WS-123"
+      ],
+      "observation": "Bが完全に読めた時だけBの無名作業へ切り替え、Aの内部作業を破棄する。",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_unnamed_folder_reload.UnnamedFolderReloadTests.test_same_folder_reload_keeps_history_manual_edits_and_allows_switch"
+      ]
+    },
+    {
+      "key": "WS-123.2",
+      "sourceIds": [
+        "WS-123"
+      ],
+      "observation": "Bの読込失敗時はAの画像・候補・履歴・選択を保持する",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_unnamed_workspace_switch_publishes_atomically_and_rolls_back_failed_replacement"
+      ]
+    },
+    {
+      "key": "WS-124.1",
+      "sourceIds": [
+        "WS-124"
+      ],
+      "observation": "成功時だけ対象全件の候補と履歴を1回のSQLiteトランザクション・1グループとして公開する。",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_server.MozarieTests.test_detection_staging_reports_every_success_before_atomic_publication"
+      ]
+    },
+    {
+      "key": "WS-124.2",
+      "sourceIds": [
+        "WS-124"
+      ],
+      "observation": "取消・失敗・再読込では対象全件の候補、確認済み、画像ID、履歴を開始前のまま保持する",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_server.MozarieTests.test_detector_prepare_rolls_back_when_catalog_reloads_before_publish",
+        "python:tests.test_server.MozarieTests.test_detection_staging_reports_processed_without_publishing_on_failure",
+        "python:tests.test_server.MozarieTests.test_parallel_detection_cancellation_discards_all_inflight_candidates"
+      ]
+    },
+    {
+      "key": "WS-125.1",
+      "sourceIds": [
+        "WS-125"
+      ],
+      "observation": "成功時だけ作業用workspace、source、画像とactive情報を公開する。",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_unnamed_workspace_switch_publishes_atomically_and_rolls_back_failed_replacement"
+      ]
+    },
+    {
+      "key": "WS-125.2",
+      "sourceIds": [
+        "WS-125"
+      ],
+      "observation": "失敗・取消で内部workspaceを残さず、名前保存では同じworkspace IDへブラウザーhandleを保持する。",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_folder_permissions_e2e.cjs::unnamed browser workspace promotion keeps its actual directory and browser-file handles under the same workspace id",
+        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_unnamed_workspace_switch_publishes_atomically_and_rolls_back_failed_replacement"
+      ]
+    },
+    {
+      "key": "WS-125.3",
+      "sourceIds": [
+        "WS-125"
+      ],
+      "observation": "無名作業を閉じるか別PJへ切り替えた後は再起動しても復活しない",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage",
+        "python:tests.test_http_live_endpoints.LiveHttpEndpointTests.test_named_project_open_discards_active_projectless_catalog_across_restart",
+        "python:tests.test_server.MozarieTests.test_projectless_browser_workspace_detaches_without_leaving_an_active_record",
+        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_unnamed_workspace_switch_publishes_atomically_and_rolls_back_failed_replacement"
+      ]
+    },
+    {
+      "key": "WS-126.1",
+      "sourceIds": [
+        "WS-126"
+      ],
+      "observation": "Bの作業を公開できた時だけactive情報、一覧、候補、履歴をBへ切り替え、Aの内部workspaceを破棄する。",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_unnamed_workspace_switch_publishes_atomically_and_rolls_back_failed_replacement"
+      ]
+    },
+    {
+      "key": "WS-126.2",
+      "sourceIds": [
+        "WS-126"
+      ],
+      "observation": "公開に失敗した場合はAの一覧・候補・履歴とactive情報を保持し、Bの内部workspaceを残さない",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_unnamed_workspace_switch_publishes_atomically_and_rolls_back_failed_replacement"
+      ]
+    },
+    {
+      "key": "WS-129.1",
+      "sourceIds": [
+        "WS-129"
+      ],
+      "observation": "3形式とも一覧へ入り、巨大JPEGの記録寸法・サムネイル・編集座標が回転後の向きで一致する。",
+      "status": "retired",
+      "retirementReason": "十分なRAMを持つWindows実機と巨大PNG/JPEG/WebP・回転JPEGでの観測は対象外とする。3形式の既定ピクセル数超過画像を同時に一覧・編集表示した座標とサムネイルの一致はCIの小fixtureでは実メモリ・デコード経路を再現できない。"
+    },
+    {
+      "key": "WS-129.2",
+      "sourceIds": [
+        "WS-129"
+      ],
+      "observation": "同時表示中もPillowの画素数制限警告を出さず、完了後は別画像を選択・表示できる",
+      "status": "retired",
+      "retirementReason": "十分なRAMを持つWindows実機と巨大PNG/JPEG/WebPでの観測は対象外とする。Pillow既定上限超過を警告なしで表示し続けながら別画像へ切り替える応答性はCI runnerの実メモリ量に依存する。"
+    },
+    {
+      "key": "WS-129.3",
+      "sourceIds": [
+        "WS-129"
+      ],
+      "observation": "既定ピクセル数超過の3形式と回転JPEGを同時表示し、応答性を確認する。",
+      "status": "retired",
+      "retirementReason": "十分なRAMを持つWindows実機と巨大PNG/JPEG/WebPでの観測は対象外とする。Pillow既定上限超過画像を複数同時表示した実メモリ圧と描画応答はCI資源量に依存する。"
+    },
+    {
+      "key": "WS-130.1",
+      "sourceIds": [
+        "WS-130"
+      ],
+      "observation": "読み込み時はその画像だけをCMDの理由別スキップへ記録し、通常画像を一覧へ残す",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_http_import_regression.FolderLoadLoggingContractTests.test_folder_scan_keeps_valid_images_and_enumerates_every_failed_file",
+        "python:tests.test_server.MozarieTests.test_explicit_memory_error_has_a_stable_memory_code"
+      ]
+    },
+    {
+      "key": "WS-130.2",
+      "sourceIds": [
+        "WS-130"
+      ],
+      "observation": "読込走査中の実メモリ不足で対象だけがスキップされることを確認する。",
+      "status": "retired",
+      "retirementReason": "Windows 11実機。利用可能RAMを意図的に圧迫し、数千画像を含む実フォルダーを読み込む この実環境での観測は対象外とする。OS全体の実メモリ枯渇とプロセス強制回収はCIで安全かつ決定的に再現できないため。"
+    },
+    {
+      "key": "WS-131.1",
+      "sourceIds": [
+        "WS-131"
+      ],
+      "observation": "対象画像の読み込み失敗を画面に示し、サーバーを停止させない。",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_http_full_coverage.HttpBoundaryCoverageTests.test_thumbnail_normalizes_pillow_decode_errors",
+        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
+      ]
+    },
+    {
+      "key": "WS-131.2",
+      "sourceIds": [
+        "WS-131"
+      ],
+      "observation": "通常画像の表示を続けられる",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_http_full_coverage.HttpBoundaryCoverageTests.test_thumbnail_normalizes_pillow_decode_errors",
+        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
+      ]
+    },
+    {
+      "key": "WS-131.3",
+      "sourceIds": [
+        "WS-131"
+      ],
+      "observation": "表示時の実メモリ不足後も通常画像を操作できることを確認する。",
+      "status": "retired",
+      "retirementReason": "Windows 11実機。画像表示中に実メモリ不足を発生させ、解放後に別の通常画像を開く この実環境での観測は対象外とする。画像デコーダーとOSの実メモリ割当失敗はCIで安全かつ決定的に再現できないため。"
+    },
+    {
+      "key": "WS-132.1",
+      "sourceIds": [
+        "WS-132"
+      ],
+      "observation": "対象画像の読み込み失敗を画面に示し、サーバーを停止させない。",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_server.MozarieTests.test_detection_maps_worker_gpu_memory_errors",
+        "python:tests.test_protocol_retry_contracts.StatefulRetryContracts.test_detection_gpu_memory_failure_releases_job_and_same_state_retry_publishes_mask"
+      ]
+    },
+    {
+      "key": "WS-132.2",
+      "sourceIds": [
+        "WS-132"
+      ],
+      "observation": "失敗後も新しい検出を開始できる",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_server.MozarieTests.test_detection_maps_worker_gpu_memory_errors",
+        "python:tests.test_protocol_retry_contracts.StatefulRetryContracts.test_detection_gpu_memory_failure_releases_job_and_same_state_retry_publishes_mask"
+      ]
+    },
+    {
+      "key": "WS-132.3",
+      "sourceIds": [
+        "WS-132"
+      ],
+      "observation": "自動検出中の実メモリ不足後も次の検出を開始できることを確認する。",
+      "status": "retired",
+      "retirementReason": "Windows 11実機。GPUまたはCPU検出中に実メモリ不足を発生させ、解放後に次の検出を開始する この実環境での観測は対象外とする。推論ランタイムを含む実メモリ枯渇はCIで安全かつ決定的に再現できないため。"
+    },
+    {
+      "key": "WS-133.1",
+      "sourceIds": [
+        "WS-133"
+      ],
+      "observation": "`internal_error`ではなく画像またはマスクの読み込み失敗を画面に示し、サーバーを停止させない。",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_jobs_saving_coverage.JobsSavingCoverageTests.test_saving_input_and_render_boundary_failures",
+        "python:tests.test_protocol_retry_contracts.StatefulRetryContracts.test_browser_mask_read_failure_keeps_token_retryable_and_same_state_retry_overwrites_source"
+      ]
+    },
+    {
+      "key": "WS-133.2",
+      "sourceIds": [
+        "WS-133"
+      ],
+      "observation": "失敗後も通常画像を保存できる",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_jobs_saving_coverage.JobsSavingCoverageTests.test_saving_input_and_render_boundary_failures",
+        "python:tests.test_protocol_retry_contracts.StatefulRetryContracts.test_browser_mask_read_failure_keeps_token_retryable_and_same_state_retry_overwrites_source"
+      ]
+    },
+    {
+      "key": "WS-133.3",
+      "sourceIds": [
+        "WS-133"
+      ],
+      "observation": "手描きまたは候補マスク付きブラウザー保存の実メモリ不足後に再保存できることを確認する。",
+      "status": "retired",
+      "retirementReason": "Windows 11実機。手描きまたは候補マスク付き画像をブラウザー保存中に実メモリ不足にし、解放後に再保存する この実環境での観測は対象外とする。ブラウザーとOSを跨ぐ実メモリ枯渇はCIで安全かつ決定的に再現できないため。"
+    },
+    {
+      "key": "WS-134.1",
+      "sourceIds": [
+        "WS-134"
+      ],
+      "observation": "対象画像の読み込み失敗を画面に示し、サーバーを停止させない。",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_jobs_saving_coverage.JobsSavingCoverageTests.test_saving_input_and_render_boundary_failures",
+        "python:tests.test_protocol_retry_contracts.StatefulRetryContracts.test_apply_render_read_failure_releases_job_and_same_state_retry_writes_output"
+      ]
+    },
+    {
+      "key": "WS-134.2",
+      "sourceIds": [
+        "WS-134"
+      ],
+      "observation": "失敗後も新しい保存を開始できる",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_jobs_saving_coverage.JobsSavingCoverageTests.test_saving_input_and_render_boundary_failures",
+        "python:tests.test_protocol_retry_contracts.StatefulRetryContracts.test_apply_render_read_failure_releases_job_and_same_state_retry_writes_output"
+      ]
+    },
+    {
+      "key": "WS-134.3",
+      "sourceIds": [
+        "WS-134"
+      ],
+      "observation": "コピーまたはバックグラウンド保存の実メモリ不足後に再保存できることを確認する。",
+      "status": "retired",
+      "retirementReason": "Windows 11実機。コピー保存またはバックグラウンド保存中に実メモリ不足にし、解放後に再保存する この実環境での観測は対象外とする。ファイルI/OとOS実メモリ枯渇の組合せはCIで安全かつ決定的に再現できないため。"
+    },
+    {
+      "key": "WS-135.1",
+      "sourceIds": [
+        "WS-135"
+      ],
+      "observation": "実効並列数は対象数までで、11は10へ丸められず利用者設定より小さい固定上限を追加しない。",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_server.MozarieTests.test_import_session_records_requested_and_effective_parallelism_without_a_fixed_cap",
+        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
+      ]
+    },
+    {
+      "key": "WS-135.2",
+      "sourceIds": [
+        "WS-135"
+      ],
+      "observation": "同じsessionの同時転送数は11を超えず、全要求が終了後に転送状態を残さない",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_server.MozarieTests.test_import_session_records_requested_and_effective_parallelism_without_a_fixed_cap",
+        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
+      ]
+    },
+    {
+      "key": "WS-136.1",
+      "sourceIds": [
+        "WS-136"
+      ],
+      "observation": "表示範囲の異なる画像は固定の全体worker枠で待たず、同じ画像・版だけは画像I/Oロックで1回だけ生成する。",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_server.MozarieTests.test_thumbnail_requests_singleflight_the_same_image",
+        "python:tests.test_server.MozarieTests.test_thumbnail_generation_serves_five_distinct_images_without_fixed_limit"
+      ]
+    },
+    {
+      "key": "WS-136.2",
+      "sourceIds": [
+        "WS-136"
+      ],
+      "observation": "完了後に待機ロックが画像数に比例して残らない",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_server.MozarieTests.test_thumbnail_requests_singleflight_the_same_image",
+        "python:tests.test_server.MozarieTests.test_thumbnail_generation_serves_five_distinct_images_without_fixed_limit"
+      ]
+    },
+    {
+      "key": "WS-137.1",
+      "sourceIds": [
+        "WS-137"
+      ],
+      "observation": "通常のブラウザー追加は利用者設定の実効並列数で送信し、サーバーは固定の転送枠を追加しない。",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_server.MozarieTests.test_import_session_records_requested_and_effective_parallelism_without_a_fixed_cap",
+        "python:tests.test_server.MozarieTests.test_rejected_import_transfer_closes_the_unread_request_connection"
+      ]
+    },
+    {
+      "key": "WS-137.2",
+      "sourceIds": [
+        "WS-137"
+      ],
+      "observation": "session・origin・認証の検証は維持し、失敗・中断した転送も終了処理で一覧とPJ状態を壊さず転送状態を残さない",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_server.MozarieTests.test_import_session_records_requested_and_effective_parallelism_without_a_fixed_cap",
+        "python:tests.test_server.MozarieTests.test_rejected_import_transfer_closes_the_unread_request_connection",
+        "python:tests.test_settings_import_regressions.SettingsImportRegressionTests.test_binary_batch_builds_catalog_summary_once_and_retains_every_image"
+      ]
+    },
+    {
+      "key": "WS-138.1",
+      "sourceIds": [
+        "WS-138"
+      ],
+      "observation": "CIで設定値の相対形式を拒否する。",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_server.MozarieTests.test_import_rejects_unsafe_relative_paths",
+        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
+      ]
+    },
+    {
+      "key": "WS-138.2",
+      "sourceIds": [
+        "WS-138"
+      ],
+      "observation": "サーバーが返した正規化済み絶対形式を入力欄へ反映し、directory handleの表示名やImageRecordの相対名を絶対パス扱いしない。",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
+      ]
+    },
+    {
+      "key": "WS-138.3",
+      "sourceIds": [
+        "WS-138"
+      ],
+      "observation": "実在絶対パスとbrowser directory sourceを併用し、入力欄と表示名を確認する。",
+      "status": "retired",
+      "retirementReason": "Windowsの実在絶対パスとChromium directory handleでの観測は対象外とする。OSが返す正規化済みドライブパス表示とdirectory handle表示名の区別は非Windows/headless CIでは同じ形で観測できない。"
+    },
+    {
+      "key": "WS-139.1",
+      "sourceIds": [
+        "WS-139"
+      ],
+      "observation": "正常画像は全件を相対名順で一覧へ公開し、壊れた画像だけを理由付きで案内する。",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_server.MozarieTests.test_folder_scan_publishes_five_thousand_valid_images_sorted_and_reports_the_broken_file"
+      ]
+    },
+    {
+      "key": "WS-139.2",
+      "sourceIds": [
+        "WS-139"
+      ],
+      "observation": "走査中の既存PJ操作は待たずに確定する。",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_server.MozarieTests.test_folder_scan_does_not_hold_the_import_lock_during_image_io"
+      ]
+    },
+    {
+      "key": "WS-139.3",
+      "sourceIds": [
+        "WS-139"
+      ],
+      "observation": "終了時は途中の新規一覧を公開せず、次回起動後に新しい走査workerを残さない。",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_server.MozarieTests.test_folder_scan_stops_enumerating_when_shutdown_begins"
+      ]
+    },
+    {
+      "key": "WS-139.4",
+      "sourceIds": [
+        "WS-139"
+      ],
+      "observation": "5,000件以上の実フォルダー走査中に編集と終了を行い、応答と再起動後を確認する。",
+      "status": "retired",
+      "retirementReason": "Windowsで5,000件以上の実画像とファイル共有での観測は対象外とする。大規模実ディスクI/O、別プロセスの共有ロック、アプリ終了の組合せは隔離CIの小fixtureで実負荷を再現できない。"
+    },
+    {
+      "key": "WS-036.2",
+      "sourceIds": [
+        "WS-036"
+      ],
+      "observation": "一覧から削除は元画像を保持し、絞り込みの次・末尾では前へ移動する。別画像の削除では現在の画像を保持し、PJ再開でも一覧に戻さない。",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_review_list_removal_e2e.cjs::review choices survive editing and list-only removal preserves source access boundaries > orange footer removes from the filtered list and navigates next then previous",
+        "node:tests/test_review_list_removal_e2e.cjs::review choices survive editing and list-only removal preserves source access boundaries > gallery context and overview multiselection remove only their targets",
+        "python:tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_review_choice_survives_edits_history_restart_and_list_removal"
+      ]
+    },
+    {
+      "key": "WS-036.3",
+      "sourceIds": [
+        "WS-036"
+      ],
+      "observation": "一覧から削除は右クリックと複数選択に対応し、失敗・読み取り専用・処理中では一覧と編集画面を保持する。",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_review_list_removal_e2e.cjs::review choices survive editing and list-only removal preserves source access boundaries > failed read-only and busy list removal leave the catalogue and editor intact",
+        "node:tests/test_review_list_removal_e2e.cjs::review choices survive editing and list-only removal preserves source access boundaries > footer and context list removal accept unavailable and dimension-changed sources"
+      ]
+    },
+    {
+      "key": "WS-129.4",
+      "sourceIds": [
+        "WS-129"
+      ],
+      "observation": "Pillowの画素数上限を超えるPNG・JPEG・WebPを警告なしで一覧と画像APIへ公開し、回転JPEGの記録寸法・サムネイル・編集画像を同じ向きにする。",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_http_live_endpoints.LiveHttpEndpointTests.test_unlimited_png_jpeg_webp_catalog_and_assets_preserve_dimensions",
+        "python:tests.test_http_live_endpoints.LiveHttpEndpointTests.test_exif_rotated_thumbnail_and_editor_asset_have_identical_visual_orientation"
+      ]
+    }
+  ]
+}

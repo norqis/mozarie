@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+import hashlib
 import importlib.util
 import json
 import os
@@ -161,6 +162,67 @@ class UpdaterTests(unittest.TestCase):
                 updater.download_archive("https://example.test/release.zip", destination, "0" * 64, len(body), lambda *_args, **_kwargs: Response(body))
             with self.assertRaises(updater.UpdateError):
                 updater.download_archive("https://example.test/release.zip", destination, digest, len(body) + 1, lambda *_args, **_kwargs: Response(body))
+
+    def test_download_capacity_failure_preserves_existing_archive_and_retry_replaces_it(self):
+        with tempfile.TemporaryDirectory() as directory:
+            destination = Path(directory) / "release.zip"
+            destination.write_bytes(b"existing")
+            body = b"verified archive"
+            digest = hashlib.sha256(body).hexdigest()
+            with patch("updater._require_free_space", side_effect=updater.UpdateError(updater.tr("archive_disk_space"))):
+                with self.assertRaisesRegex(updater.UpdateError, re.escape(updater.tr("archive_disk_space"))):
+                    updater.download_archive("https://example.test/release.zip", destination, digest, len(body), lambda *_args, **_kwargs: Response(body))
+            self.assertEqual(destination.read_bytes(), b"existing")
+            self.assertFalse((destination.parent / ".release.zip.download").exists())
+            updater.download_archive("https://example.test/release.zip", destination, digest, len(body), lambda *_args, **_kwargs: Response(body))
+            self.assertEqual(destination.read_bytes(), body)
+
+    def test_update_storage_aggregates_same_volume_extract_rollback_and_incoming_copy_and_retries_without_mutation(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            app = make_install(root / "install")
+            temporary_root = root / "temporary"; temporary_root.mkdir()
+            expected_managed = sum(
+                path.stat().st_size
+                for relative in updater.MANAGED_FILES
+                if (path := app / relative).is_file()
+            ) + sum(
+                path.stat().st_size
+                for relative in updater.MANAGED_DIRECTORIES
+                if (directory_path := app / relative).is_dir()
+                for path in directory_path.rglob("*")
+                if path.is_file()
+            )
+            self.assertEqual(updater._managed_size(app), expected_managed, "managed size counts only files copied into the rollback backup")
+            self.assertEqual(updater._storage_key(temporary_root), updater._storage_key(app.parent), "same-volume paths share one capacity bucket")
+            extracted_size = 12_345
+            snapshot = {path.relative_to(app): path.read_bytes() for path in app.rglob("*") if path.is_file()}
+
+            with patch("updater._require_free_space", side_effect=updater.UpdateError(updater.tr("archive_disk_space"))) as require:
+                with self.assertRaisesRegex(updater.UpdateError, re.escape(updater.tr("archive_disk_space"))):
+                    updater._require_update_storage(temporary_root, extracted_size, app)
+            require.assert_called_once_with(temporary_root, expected_managed + 2 * extracted_size)
+            self.assertEqual({path.relative_to(app): path.read_bytes() for path in app.rglob("*") if path.is_file()}, snapshot, "a failed capacity check does not mutate the installation")
+            self.assertEqual(list(temporary_root.iterdir()), [], "a failed capacity check does not stage extraction files")
+
+            with patch("updater._require_free_space") as retry:
+                updater._require_update_storage(temporary_root, extracted_size, app)
+            retry.assert_called_once_with(temporary_root, expected_managed + 2 * extracted_size)
+            self.assertEqual({path.relative_to(app): path.read_bytes() for path in app.rglob("*") if path.is_file()}, snapshot, "retrying the capacity check remains non-mutating")
+
+    def test_download_publish_failure_preserves_existing_archive_and_retry_replaces_it(self):
+        with tempfile.TemporaryDirectory() as directory:
+            destination = Path(directory) / "release.zip"
+            destination.write_bytes(b"existing")
+            body = b"verified archive"
+            digest = hashlib.sha256(body).hexdigest()
+            with patch.object(Path, "replace", side_effect=PermissionError("locked")):
+                with self.assertRaisesRegex(updater.UpdateError, re.escape(updater.tr("archive_download"))):
+                    updater.download_archive("https://example.test/release.zip", destination, digest, len(body), lambda *_args, **_kwargs: Response(body))
+            self.assertEqual(destination.read_bytes(), b"existing")
+            self.assertFalse((destination.parent / ".release.zip.download").exists())
+            updater.download_archive("https://example.test/release.zip", destination, digest, len(body), lambda *_args, **_kwargs: Response(body))
+            self.assertEqual(destination.read_bytes(), body)
 
     def test_requirements_install_uses_the_app_venv_not_the_updater_runtime(self):
         with tempfile.TemporaryDirectory() as directory:

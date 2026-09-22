@@ -1,4 +1,7 @@
 {
+  "review.hidden": "Hidden",
+  "catalog.removeFromList": "Remove from list",
+  "status.removedFromList": "Removed {count} images from the list. Source images were kept.",
   "app.title": "Mozarie",
   "apply.cancelled": "Save cancelled after {completed} image(s).",
   "apply.changeOutputDirectory": "Change save location",
@@ -467,6 +470,7 @@
   "modelHelp.samTable.vitH.vram": "High",
   "modelHelp.samTable.vitH.use": "More detail, high VRAM",
   "processing.detect": "Automatic detection",
+  "processing.preparingModels": "Preparing models",
   "processing.import": "Loading images",
   "gallery.tabUnmasked": "No mosaic",
   "gallery.tabHidden": "Hidden",
@@ -797,5 +801,7 @@
   "sourceDelete.singlePending": "{complete} {output} Original deletion is pending. It will retry after reconnecting.",
   "sourceDelete.batchPending": "{complete} Original deletion is pending: {names}. It will retry after reconnecting.",
   "sourceDelete.notAvailable": "{complete} {output} The copy was saved, but the original could not be deleted safely.",
-  "sourceDelete.batchNotAvailable": "{complete} Copies were saved, but these originals could not be deleted safely: {names}."
+  "sourceDelete.batchNotAvailable": "{complete} Copies were saved, but these originals could not be deleted safely: {names}.",
+  "settings.shortcut.cycleMosaicTool": "Cycle mosaic tools",
+  "settings.shortcut.cycleExclusionTool": "Cycle exclusion tools"
 }

@@ -350,6 +350,15 @@ def _validate_targets(value: Any) -> list[str]:
 
 
 _DEFAULT_SHORTCUTS = {"previous": "ArrowLeft", "next": "ArrowRight", "previousVisible": "ArrowUp", "nextVisible": "ArrowDown", "first": "Home", "last": "End", "reviewAndNext": "Enter", "removeImage": "Delete", "toggleOverview": "G", "undo": "Ctrl+Z", "redo": "Ctrl+Shift+Z", "renameImage": "F2"}
+_TOOLBAR_SHORTCUTS = {
+    "cycleMosaicTool": "Q", "cycleExclusionTool": "W",
+    "mosaicBrush": "B", "mosaicFill": "K", "mosaicEraser": "E",
+    "boundaryMenu": "T", "boundaryRectangle": "R", "boundaryPolygon": "P", "boundaryBrush": "C",
+    "exclusionBrush": "Shift+B", "exclusionFill": "Shift+K", "exclusionEraser": "Shift+E",
+    "singleView": "1", "compareView": "2", "fitView": "F",
+    "flipHorizontal": "H", "flipVertical": "V", "mosaicPreview": "M",
+}
+_DEFAULT_SHORTCUTS.update(_TOOLBAR_SHORTCUTS)
 _SHORTCUT_ACTIONS = set(_DEFAULT_SHORTCUTS)
 
 
@@ -364,30 +373,28 @@ def _migrate_legacy_shortcuts(settings: Any) -> Any:
     actions = shortcuts.get("actions")
     if not isinstance(bindings, dict) or ("actions" in shortcuts and not isinstance(actions, dict)):
         return settings
-    used_bindings = {str(binding).strip() for binding in bindings.values()}
+    used_bindings = {str(binding).strip() for action, binding in bindings.items() if action in _SHORTCUT_ACTIONS}
     additions: dict[str, str] = {}
     disabled: set[str] = set()
-    for action, preferred, fallbacks in (
-        ("removeImage", "Delete", ("Ctrl+Delete", "Shift+Delete", "Alt+Delete", "Ctrl+Shift+Delete", "Ctrl+Alt+Delete", "Shift+Alt+Delete", "Ctrl+Shift+Alt+Delete")),
-        ("renameImage", "F2", ("Ctrl+F2", "Shift+F2", "Alt+F2", "Ctrl+Shift+F2", "Ctrl+Alt+F2", "Shift+Alt+F2", "Ctrl+Shift+Alt+F2")),
-    ):
+    additions_defaults = {"removeImage": "Delete", "renameImage": "F2", **_TOOLBAR_SHORTCUTS}
+    # Reserve the defaults of other new actions before choosing fallbacks.
+    # A migrated shortcut must never displace a custom or another default key.
+    reserved = set(additions_defaults.values())
+    for action, preferred in additions_defaults.items():
         if action in bindings:
             continue
         if preferred not in used_bindings:
             additions[action] = preferred
             used_bindings.add(preferred)
             continue
-        fallback = next((binding for binding in fallbacks if binding not in used_bindings), None)
+        key = preferred.split("+")[-1]
+        fallbacks = [f"{modifiers}{key}" for modifiers in ("Ctrl+", "Shift+", "Alt+", "Ctrl+Shift+", "Ctrl+Alt+", "Shift+Alt+", "Ctrl+Shift+Alt+")]
+        fallbacks.extend(f"Ctrl+Shift+Alt+F{number}" for number in range(1, 25))
+        fallback = next(binding for binding in fallbacks if binding not in used_bindings and binding not in reserved)
         # A pre-existing action already owns the preferred key.  Keep that
         # choice authoritative and show the newly introduced action disabled
         # until the user explicitly enables its fallback in Settings.
         disabled.add(action)
-        if fallback is None:
-            fallback = f"{preferred} (legacy disabled)"
-            suffix = 2
-            while fallback in used_bindings:
-                fallback = f"{preferred} (legacy disabled {suffix})"
-                suffix += 1
         additions[action] = fallback
         used_bindings.add(fallback)
     if not additions:

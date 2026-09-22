@@ -111,7 +111,23 @@ async function main() {
     // user's choices even when the native dialog is dismissed or a save fails.
     await page.locator("#saveButton").click();
     await page.locator("#singleSaveDialog").evaluate((dialog) => dialog.open || Promise.reject(new Error("single save did not open")));
+    assert.match(await page.locator("#singleSaveTarget").textContent(), /sample\.png/, "single save shows the current image name");
+    assert.equal(await page.locator("#singleSaveDialog [data-apply-image-filter]").count(), 0, "single save has no batch target filters");
     assert.deepEqual(await page.evaluate(() => ({ mode: document.querySelector('input[name="singleSaveMode"]:checked').value, format: $("#singleSaveOutputFormat").value, metadata: $("#singleSaveKeepMetadata").checked, remove: $("#singleSaveRemoveSaved").checked })), { mode: "copy", format: "original", metadata: true, remove: false });
+    const saveRequestsBeforeEmptyClose = fixture.saveRequests.length;
+    await page.locator("#singleSaveSuffix").fill("");
+    await page.locator("#singleSaveSuffix").press("Tab");
+    assert.equal(await page.locator("#singleSaveSuffix").inputValue(), "", "empty single suffix survives blur");
+    assert.equal(await page.locator("#singleSaveSuffix").evaluate((input) => input.validationMessage), "", "empty single suffix is valid");
+    assert.equal(await page.locator("#singleSaveStartButton").isDisabled(), false, "empty single suffix does not disable saving");
+    await page.locator("#singleSaveCloseButton").click();
+    assert.equal(fixture.saveRequests.length, saveRequestsBeforeEmptyClose, "closing single save emits no save request");
+    await page.locator("#saveAllButton").click();
+    await page.waitForFunction(() => $("#applyDialog").open);
+    assert.equal(await page.locator("#applySuffix").inputValue(), "_censored", "an empty single suffix never replaces the batch default");
+    await page.locator("#applyCloseButton").click();
+    await page.locator("#saveButton").click();
+    await page.waitForFunction(() => $("#singleSaveDialog").open);
     await page.locator("#singleSaveSuffix").fill("_remember");
     await page.locator("#singleSaveOutputFormat").selectOption("png");
     await page.locator("#singleSaveKeepMetadata").uncheck();

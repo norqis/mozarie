@@ -53,10 +53,11 @@ async function testDetectionFinalizesPendingStateBeforeShowingProcessing() {
   assert.equal(events.join("|"), "draft|/api/settings?status=0", "settings are saved only after pending edits settle");
   settings.resolve({ settings: state.settings });
   for (let index = 0; index < 12 && !events.includes("/api/detect"); index += 1) await new Promise((resolve) => setImmediate(resolve));
-  assert.equal(events.join("|"), "draft|/api/settings?status=0|modal:0/1:|/api/detect", "processing starts only with images matching the finalized state");
-  assert.deepEqual({ imageIds: [...state.job.imageIds], completedImageIds: [...state.job.completedImageIds], completed: state.job.completed, total: state.job.total }, { imageIds: ["one"], completedImageIds: [], completed: 0, total: 1 });
+  assert.equal(events.join("|"), "draft|/api/settings?status=0|/api/detect", "the finalized target request is sent before publishing processing state");
+  assert.equal(state.job, null, "the processing state remains unpublished while the start response is pending");
   detect.resolve({ ok: true }); await pending;
-  assert.equal(events.filter((event) => event.startsWith("modal:")).length, 1, "the modal is shown once while the start request is pending");
+  assert.deepEqual({ imageIds: [...state.job.imageIds], completedImageIds: [...state.job.completedImageIds], completed: state.job.completed, total: state.job.total }, { imageIds: ["one"], completedImageIds: [], completed: 0, total: 1 });
+  assert.equal(events.filter((event) => event.startsWith("modal:")).length, 1, "the modal is shown once after the start request succeeds");
 }
 
 async function testDetectionStartFailureClosesProcessing() {
@@ -70,8 +71,8 @@ async function testDetectionStartFailureClosesProcessing() {
   vm.runInNewContext(fs.readFileSync(path.join(root, "detection.js"), "utf8"), context, { filename: path.join(root, "detection.js") });
   vm.runInNewContext("globalThis.runDetectionForTest=runDetection;", context, { filename: "test-detection-failure-exports.js" });
   await context.runDetectionForTest(["image"], .5, 1, ["penis"]);
-  assert.deepEqual(events, ["show", "running", "close", "idle", "error"], "a start failure closes the optimistic modal and returns the job to idle");
-  assert.deepEqual([...state.detectionTargetIds], [], "a start failure removes the optimistic target set");
+  assert.deepEqual(events, ["error"], "a start failure reports the error without publishing or closing an optimistic modal");
+  assert.deepEqual([...state.detectionTargetIds], [], "a start failure retains the prior target set");
   assert.equal(state.detectionStarting, false, "a start failure releases the starting state");
 }
 

@@ -25,8 +25,19 @@ class Element {
   setAttribute(name, value) { this[name] = value; }
   contains(node) { return node === this || this.children.includes(node); }
   closest() { return null; }
-  querySelector() { return this.submitControl || (this.submitControl = new Element("submit")); }
-  querySelectorAll() { return []; }
+  querySelector(selector) {
+    if (selector?.includes("[data-project-")) return this.querySelectorAll(selector)[0] || null;
+    return this.submitControl || (this.submitControl = new Element("submit"));
+  }
+  querySelectorAll(selector) {
+    const descendants = [];
+    const visit = (node) => { for (const child of node.children || []) { descendants.push(child); visit(child); } };
+    visit(this);
+    const actions = [...String(selector || "").matchAll(/\[data-project-action="([^"]+)"\]/g)].map((match) => match[1]);
+    if (actions.length) return descendants.filter((node) => actions.includes(node.dataset?.projectAction));
+    if (selector === "tr[data-project-id]") return descendants.filter((node) => node.id === "tr" && node.dataset?.projectId);
+    return [];
+  }
   getBoundingClientRect() { return { left: 0, top: 0, right: 100, bottom: 100, width: 100, height: 100 }; }
 }
 
@@ -38,17 +49,23 @@ const document = {
   body: new Element("body"), activeElement: null, visibilityState: "hidden",
   querySelector(selector) { return element(selector); },
   querySelectorAll(selector) { return selector === "dialog" ? dialogIds.map(element) : []; },
-  createElement() { return new Element("created"); }, createDocumentFragment() { const fragment = new Element("fragment"); fragment.isFragment = true; return fragment; }, addEventListener() {},
+  createElement(tag) { return new Element(tag || "created"); }, createDocumentFragment() { const fragment = new Element("fragment"); fragment.isFragment = true; return fragment; }, addEventListener() {},
 };
 
 const calls = [];
-let projects = [
+const initialProjects = [
   { id: "working", name: "Alpha", status: "working", imageCount: 2, sourceRoot: "C:/alpha", updatedAt: 2_000_000 },
   { id: "completed", name: "Beta", status: "completed", imageCount: 1, sourceRoot: "C:/beta", updatedAt: 1_000_000 },
   { id: "separate", name: "Gamma", status: "working", imageCount: 1, sourceRoot: "C:/alpha", updatedAt: 500_000 },
 ];
+let projects;
 let openPayload = null;
-const state = { project: null, projectReadOnly: false, projectOperationPending: false, catalogTransition: null, missingNativeSources: [], images: [], selectedImageIds: new Set(), candidateUpdateChains: new Map(), workspaceDraftChains: new Map(), workspaceDraftTimers: new Map(), workspaceMutationErrors: new Map(), candidateBatchPending: new Set(), settings: { general: { language: "ja" } }, importing: false };
+function resetProjectFixture() {
+  projects = initialProjects.map((project) => ({ ...project }));
+  openPayload = null;
+}
+resetProjectFixture();
+const state = { project: null, projectReadOnly: false, projectOperationPending: false, catalogTransition: null, missingNativeSources: [], images: [], selectedImageIds: new Set(), projectlessDirectorySources: new Map(), candidateUpdateChains: new Map(), workspaceDraftChains: new Map(), workspaceDraftTimers: new Map(), workspaceMutationErrors: new Map(), candidateBatchPending: new Set(), settings: { general: { language: "ja" } }, importing: false };
 const context = {
   console, Promise, Map, Set, WeakMap, Array, Object, Number, String, Boolean, Math, JSON, Error, Intl, AbortController,
   document, state, window: { addEventListener() {}, showDirectoryPicker: async () => ({ kind: "directory" }) }, URL: { createObjectURL: () => "blob:test", revokeObjectURL: () => {} },
@@ -60,6 +77,7 @@ const context = {
   resetCatalog(images) { state.images = images; state.currentId = null; state.selectedImageIds.clear(); calls.push(["reset", images.length]); }, applyProjectSnapshot(snapshot) { state.project = snapshot.project || state.project; state.projectReadOnly = snapshot.readOnly === true || state.project?.status === "completed"; calls.push(["snapshot"]); }, renderCatalogViews() { calls.push(["render"]); },
   updateActionButtons() { calls.push(["actions"]); }, rememberProjectSource: async () => "source", rememberProjectSourceCleanup: async () => "cleanup", forgetProjectSources: async (id) => calls.push(["forget", id]), loadFolder: async () => calls.push(["loadFolder"]),
   rememberedProjectSources: async () => ({ files: [], directories: [] }), matchingProjectDirectorySources: async () => [], ensureProjectSourcePermission: async () => true, requestProjectSourcePermission: async () => true,
+  rememberProjectlessPromotionSources: async () => calls.push(["remember-promotion"]),
   importProjectDirectoryHandle: async (_handle, _project, sourceId) => calls.push(["directory", sourceId]), importProjectFileHandles: async (sources) => { calls.push(["files", sources.length]); return []; },
   confirmAction: async () => true, fetch: async (url) => { calls.push(["fetch", url]); return { ok: true, blob: async () => new Blob(["mask"]) }; }, responseError: () => new Error("download failed"),
   api: async (url, options = {}) => {
@@ -92,10 +110,72 @@ const corePath = path.join(__dirname, "..", "static", "js", "core.js");
 const imageDisplayPathSource = fs.readFileSync(corePath, "utf8").match(/function imageDisplayPath\(image\) \{[\s\S]*?\n\}/)?.[0];
 vm.runInNewContext(imageDisplayPathSource, context, { filename: corePath });
 vm.runInNewContext(fs.readFileSync(appPath, "utf8"), context, { filename: appPath });
-vm.runInNewContext("globalThis.projectTest={projectTitle,projectDate,projectSource,renderProjectCurrent,renderNativeRelinkDialog,showSameSourceDialog,openProjectNameDialog,showProjectList,showSourceMismatches,openProject,downloadProjectArtifact,resumeCurrentProject,openSameSourceDialog,openProjectDeleteDialog,deleteProject,bindEvents,setPendingBrowserProjectSources:(sources)=>{ pendingBrowserProjectSources=sources; },pendingBrowserProjectSources:()=>pendingBrowserProjectSources};", context, { filename: "project-ui-exports.js" });
+vm.runInNewContext("globalThis.projectTest={projectTitle,projectDate,projectSource,renderProjectCurrent,renderNativeRelinkDialog,showSameSourceDialog,openProjectNameDialog,showProjectList,showSourceMismatches,openProject,downloadProjectArtifact,downloadProjectMasks,renderProjectTableControls,resumeCurrentProject,openSameSourceDialog,openProjectDeleteDialog,deleteProject,bindEvents,restoreBrowserProjectSourcesForCurrentCatalog,setPendingBrowserProjectSources:(sources)=>{ pendingBrowserProjectSources=sources; },pendingBrowserProjectSources:()=>pendingBrowserProjectSources};", context, { filename: "project-ui-exports.js" });
 const test = context.projectTest;
 
-nodeTest("project dialogs, source recovery, and project switching", async () => {
+nodeTest("project deletion warning names its target and every destructive consequence", async () => {
+  resetProjectFixture();
+  const warningKeys = ["project.deleteData", "project.deleteSource", "project.deleteIrreversible"];
+  for (const key of warningKeys) {
+    assert.equal(typeof japanese[key], "string", `Japanese includes ${key}`);
+    assert.equal(typeof english[key], "string", `English includes ${key}`);
+    assert.match(indexHtml, new RegExp(`data-i18n="${key.replace(".", "\\.")}"`), `${key} is rendered in the deletion dialog`);
+  }
+  assert.match(japanese["project.deleteData"], /履歴|モザイク|除外/, "the Japanese warning names history and both mask kinds");
+  assert.match(japanese["project.deleteSource"], /元画像/, "the Japanese warning states what happens to source images");
+  assert.match(japanese["project.deleteIrreversible"], /元に戻|取り消/, "the Japanese warning states that deletion cannot be undone");
+  await test.showProjectList({ keepClosed: true }); test.openProjectDeleteDialog("working");
+  assert.match(element("#projectDeleteTarget").textContent, /Alpha/, "the warning names the exact target project");
+  element("#projectDeleteDialog").close();
+});
+
+nodeTest("native source relink uses a typed path without an OS folder picker", () => {
+  resetProjectFixture();
+  const dialog = indexHtml.match(/<dialog id="nativeRelinkDialog"[\s\S]*?<\/dialog>/)?.[0] || "";
+  assert.match(dialog, /<input[^>]+id="nativeRelinkPath"/, "native relink provides an editable path field");
+  assert.match(dialog, /<button[^>]+id="nativeRelinkConfirm"/, "native relink submits the typed path explicitly");
+  assert.doesNotMatch(dialog, /showDirectoryPicker|type="file"|pickFolder/, "native relink does not expose an OS folder picker control");
+});
+
+nodeTest("project entry controls open and close their intended dialogs", async (t) => {
+  resetProjectFixture();
+  const originalApi = context.api;
+  t.after(() => { context.api = originalApi; });
+  test.bindEvents();
+  const fire = async (id) => {
+    const listener = element(`#${id}`).listeners.get("click");
+    assert.ok(listener, `${id} is bound to its shipped click handler`);
+    await listener({ preventDefault() {}, target: element(`#${id}`) });
+    await new Promise((resolve) => setImmediate(resolve));
+  };
+  context.api = async (url) => url.startsWith("/api/projects?") ? { projects } : {};
+  state.project = projects[0]; state.projectReadOnly = false; state.images = [{ id: "entry-image" }];
+
+  await fire("projectButton");
+  assert.equal(element("#projectDialog").open, true, "Project opens the current-project dialog");
+  assert.match(element("#projectCurrent").textContent, /Alpha/, "the opened dialog renders the active project");
+  await fire("projectClose");
+  assert.equal(element("#projectDialog").open, false, "Close dismisses the current-project dialog");
+
+  await fire("projectButton"); await fire("projectNew");
+  assert.equal(element("#projectNameDialog").open, true, "New opens the project-name dialog");
+  assert.equal(element("#projectNameInput").value, "", "New starts with an empty project name");
+  element("#projectNameDialog").close();
+
+  await fire("projectButton"); await fire("projectName");
+  assert.equal(element("#projectNameDialog").open, true, "Rename opens the project-name dialog");
+  assert.equal(element("#projectNameInput").value, "Alpha", "Rename starts with the active project name");
+  element("#projectNameDialog").close();
+
+  await fire("projectButton"); await fire("projectOpenList");
+  assert.equal(element("#projectListDialog").open, true, "Open list displays project management");
+  assert.equal(element("#projectListBody").children.length, initialProjects.length, "project management lists every fixture project");
+  await fire("projectListClose");
+  assert.equal(element("#projectListDialog").open, false, "Close list dismisses project management");
+});
+
+nodeTest("project dialogs, A-B-A switching, failed-open recovery, and duplicate transition guards", async (t) => {
+  resetProjectFixture();
   await new Promise((resolve) => setImmediate(resolve));
   for (const key of ["project.open", "project.new", "project.name", "project.openList", "project.complete", "project.close", "project.resume", "project.sourceChangedClear", "project.downloadMosaic", "project.downloadExclude", "project.downloadMosaicZip", "project.downloadExcludeZip", "project.delete", "project.deleteData", "project.deleteSource", "project.deleteIrreversible"]) {
     assert.equal(typeof japanese[key], "string", `Japanese includes ${key}`); assert.equal(typeof english[key], "string", `English includes ${key}`);
@@ -156,8 +236,8 @@ nodeTest("project dialogs, source recovery, and project switching", async () => 
   // An unsuccessful open keeps the current project and its browser source
   // recovery action visible.  The pending list belongs to the old catalog
   // until a new project-open response has actually been accepted.
-  state.project = projects[0]; state.images = [{ id: "old" }]; state.currentId = "old";
-  test.setPendingBrowserProjectSources([{ projectId: "working", key: "file:old", kind: "file", handle: { name: "old" } }]);
+  state.project = projects[1]; state.projectReadOnly = true; state.images = [{ id: "old", candidates: [{ id: "candidate" }], manual: { add: "mask" } }]; state.currentId = "old";
+  test.setPendingBrowserProjectSources([{ projectId: "completed", key: "file:old", kind: "file", handle: { name: "old" } }]);
   test.renderProjectCurrent();
   assert.equal(element("#projectBrowserRestore").hidden, false, "the current project exposes its pending browser-source recovery action");
   const oldProject = state.project; const oldImages = state.images;
@@ -168,7 +248,10 @@ nodeTest("project dialogs, source recovery, and project switching", async () => 
   };
   await test.openProject(projects[2]);
   assert.equal(state.project, oldProject, "a failed project open keeps the prior project");
+  assert.equal(state.project.status, "completed", "a failed open never leaves a completed project in working state");
+  assert.equal(state.projectReadOnly, true, "a failed open keeps completed-project read-only state");
   assert.equal(state.images, oldImages, "a failed project open keeps the prior catalog");
+  assert.deepEqual(state.images[0], { id: "old", candidates: [{ id: "candidate" }], manual: { add: "mask" } }, "a failed open keeps prior candidates and manual edits");
   assert.equal(test.pendingBrowserProjectSources().length, 1, "a failed project open keeps pending browser-source recovery state");
   test.renderProjectCurrent();
   assert.equal(element("#projectBrowserRestore").hidden, false, "a failed project open keeps its recovery UI visible");
@@ -204,8 +287,16 @@ nodeTest("project dialogs, source recovery, and project switching", async () => 
 
   test.bindEvents();
   assert.equal(element("#renameImageForm").listeners.get("submit"), submitRenameImage, "project fixture keeps the bound rename submit collaborator intact");
+  const renameActions = indexHtml.match(/<div class="dialog-actions rename-image-actions">([\s\S]*?)<\/div>/)?.[1] || "";
+  const renameControlOrder = ["renameImageRestoreOriginal", "renameImageCancel", "renameImageConfirm"]
+    .map((id) => renameActions.indexOf(`id="${id}"`));
+  assert.equal(renameControlOrder.every((index) => index >= 0), true, "the rename dialog renders restore, cancel, and OK controls");
+  assert.deepEqual([...renameControlOrder].sort((left, right) => left - right), renameControlOrder, "the rename dialog keeps Restore at left and Cancel immediately before OK at right");
   const fire = async (id, type = "click") => { const listener = element(id).listeners.get(type); assert.ok(listener, `${id} is interactive`); await listener({ preventDefault() {} }); await new Promise((resolve) => setImmediate(resolve)); };
-  await fire("#projectButton"); await fire("#projectClose"); await fire("#projectNew"); await fire("#projectName"); await fire("#projectOpenList"); await fire("#projectListClose");
+  state.images = [{ id: "rename-target", relativePath: "nested/original.png" }]; state.renameImage = { imageId: "rename-target" };
+  element("#renameImageFilename").value = "edited.png"; await fire("#renameImageRestoreOriginal");
+  assert.equal(element("#renameImageFilename").value, "original.png", "Restore original changes only the rename input to the source basename");
+  assert.equal(element("#renameImageFilename").focused, true, "Restore original returns focus to the rename input");
   state.project = projects[0]; state.projectReadOnly = false; await fire("#projectSourceAdd");
   assert.ok(calls.some(([kind]) => kind === "directory"), "the current project can select a native source folder");
   state.project = projects[1]; state.projectReadOnly = true; await fire("#projectResume"); assert.equal(state.projectReadOnly, false, "Resume work turns a completed project back into working state");
@@ -215,6 +306,7 @@ nodeTest("project dialogs, source recovery, and project switching", async () => 
   state.project = projects[0]; state.projectReadOnly = false; await fire("#projectComplete"); assert.equal(state.project, null, "completion closes only the live list after confirmation");
   state.project = projects[0]; state.images = [{ id: "pending" }]; state.workspaceDraftTimers.set("pending", 1); test.openProjectDeleteDialog("working");
   assert.equal(element("#projectDeleteDialog").open, true, "delete asks for explicit confirmation");
+  assert.match(element("#projectDeleteTarget").textContent, /Alpha/, "delete warning names the target project");
   await fire("#projectDeleteCancel"); assert.equal(element("#projectDeleteDialog").open, false, "cancel leaves the project untouched");
   const callsBeforeDelete = calls.length; test.openProjectDeleteDialog("working");
   await fire("#projectDeleteConfirm"); await new Promise((resolve) => setImmediate(resolve)); assert.equal(state.project, null, "deleting the current project closes its live workspace");
@@ -255,4 +347,338 @@ nodeTest("project dialogs, source recovery, and project switching", async () => 
   await fire("#sameSourceOpen");
   assert.equal(sameSourceOpenedProjectId, "separate", "a same-source list choice directs Open to its selected project");
   await fire("#sameSourceSeparate"); await fire("#sameSourceCancel");
+
+  await t.test("project mask exports preserve project state across empty read-only failure and retry cases", async () => {
+    const empty = { id: "empty", name: "Empty", status: "working", imageCount: 0, sourceRoot: "C:/empty", updatedAt: 3_000_000 };
+    const readonly = { id: "readonly", name: "Read only", status: "completed", imageCount: 2, sourceRoot: "C:/readonly", updatedAt: 4_000_000 };
+    projects = [empty, readonly];
+    context.api = async (url) => url.startsWith("/api/projects?") ? { projects } : {};
+    element("#projectOpenList").listeners.get("click")();
+    await new Promise((resolve) => setImmediate(resolve));
+    const rows = element("#projectListBody").children;
+    const emptyRow = rows.find((row) => row.dataset.projectId === empty.id);
+    assert.equal(emptyRow.querySelector('[data-project-action="mosaic"]').disabled, true, "an empty project disables mosaic ZIP only");
+    assert.equal(emptyRow.querySelector('[data-project-action="exclude"]').disabled, true, "an empty project disables exclusion ZIP only");
+    assert.equal(emptyRow.querySelector('[data-project-action="open"]').disabled, false, "an empty project can still be opened");
+    assert.equal(emptyRow.querySelector('[data-project-action="delete"]').disabled, false, "an empty project can still be deleted");
+
+    const working = { id: "working-export", name: "Working", status: "working", imageCount: 1 };
+    state.project = working; state.projectReadOnly = false; state.images = [{ id: "draft" }]; state.currentId = "draft";
+    const exportOrder = [];
+    context.flushAllImageMutations = async () => exportOrder.push("image-flush");
+    context.flushAllWorkspaceMutations = async () => exportOrder.push("workspace-flush");
+    context.fetch = async () => { exportOrder.push("fetch"); return { ok: true, blob: async () => new Blob(["zip"]) }; };
+    await test.downloadProjectMasks(working, "mosaic");
+    assert.deepEqual(exportOrder, ["image-flush", "workspace-flush", "fetch"], "the active project flushes candidate and workspace edits before ZIP export");
+
+    state.project = working; state.projectReadOnly = false; state.images = [{ id: "kept" }]; state.currentId = "kept";
+    const stateBefore = { project: state.project, images: state.images, currentId: state.currentId, readOnly: state.projectReadOnly };
+    let attempts = 0;
+    context.fetch = async (url) => {
+      calls.push(["project-export-fetch", url]); attempts += 1;
+      if (attempts === 1) throw new Error("offline");
+      return { ok: true, blob: async () => new Blob(["zip"]) };
+    };
+    const errorsBefore = calls.filter(([kind]) => kind === "error").length;
+    await test.downloadProjectMasks(readonly, "exclude");
+    assert.equal(calls.filter(([kind]) => kind === "error").length, errorsBefore + 1, "an offline export reports one error");
+    assert.deepEqual({ project: state.project, images: state.images, currentId: state.currentId, readOnly: state.projectReadOnly }, stateBefore, "a failed export of another read-only project preserves the current working project and editor state");
+    await test.downloadProjectMasks(readonly, "exclude");
+    assert.equal(attempts, 2, "the same project ZIP export can be retried after reconnecting");
+    assert.equal(calls.filter(([kind, url]) => kind === "project-export-fetch" && url.includes(readonly.id)).length, 2, "both attempts target the selected read-only row rather than the current project");
+    assert.deepEqual({ project: state.project, images: state.images, currentId: state.currentId, readOnly: state.projectReadOnly }, stateBefore, "a completed read-only export never switches the current working project");
+  });
+
+  await t.test("project network failures preserve list order editor state and selected project", async () => {
+    projects = [
+      { id: "first", name: "First", status: "working", imageCount: 1, updatedAt: 2 },
+      { id: "second", name: "Second", status: "working", imageCount: 1, updatedAt: 1 },
+    ];
+    context.api = async (url) => url.startsWith("/api/projects?") ? { projects } : {};
+    element("#projectSort").value = "updated_desc";
+    await test.showProjectList();
+    const priorRows = [...element("#projectListBody").children];
+    const priorErrors = calls.filter(([kind]) => kind === "error").length;
+    context.api = async () => { throw new Error("offline"); };
+    element("#projectOpenList").listeners.get("click")();
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.deepEqual(element("#projectListBody").children, priorRows, "a failed list refresh keeps the fetched row order");
+    assert.equal(element("#projectSort").value, "updated_desc", "a failed list refresh keeps its sort direction");
+
+    const project = projects[0];
+    const image = { id: "kept", relativePath: "kept.png" };
+    state.project = project; state.images = [image]; state.currentId = image.id;
+    state.candidates = [{ id: "candidate" }]; state.drafts = new Map([[image.id, { add: "manual" }]]);
+    state.reviewedImageIds = new Set([image.id]);
+    const editorBefore = { project: state.project, images: state.images, currentId: state.currentId, candidates: state.candidates, drafts: state.drafts, reviewed: state.reviewedImageIds };
+    await test.openProject(projects[1]);
+    assert.deepEqual({ project: state.project, images: state.images, currentId: state.currentId, candidates: state.candidates, drafts: state.drafts, reviewed: state.reviewedImageIds }, editorBefore, "a failed project open keeps the selected project and editor state");
+
+    element("#projectNameInput").value = "Changed";
+    element("#projectNameDialog").dataset.projectId = project.id;
+    element("#projectNameForm").listeners.get("submit")({ preventDefault() {} });
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(state.project, project, "a failed rename keeps the prior project object and name");
+    assert.equal(state.candidates, editorBefore.candidates, "a failed rename keeps candidates");
+    assert.equal(state.drafts, editorBefore.drafts, "a failed rename keeps manual edits");
+    assert.equal(state.reviewedImageIds, editorBefore.reviewed, "a failed rename keeps review state");
+
+    test.openProjectDeleteDialog(project.id);
+    element("#projectDeleteConfirm").listeners.get("click")();
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(state.project, project, "a failed delete keeps the selected project");
+    assert.deepEqual(element("#projectListBody").children, priorRows, "a failed delete does not report success by removing the existing rows");
+    assert.ok(calls.filter(([kind]) => kind === "error").length >= priorErrors + 4, "each failed project operation reports an error");
+  });
+});
+
+nodeTest("project creation, cancellation, duplicate rejection, table columns, and relink payload preserve workspace state", async () => {
+  resetProjectFixture();
+  for (let attempt = 0; attempt < 5; attempt += 1) await new Promise((resolve) => setImmediate(resolve));
+  const fire = async (id, type = "click") => { const listener = element(id).listeners.get(type); assert.ok(listener, `${id} is bound`); await listener({ preventDefault() {}, target: element(id) }); await new Promise((resolve) => setImmediate(resolve)); };
+  const baselineImages = [{ id: "draft", sourceId: "native-a", reviewed: true, hidden: true, candidates: [{ id: "candidate" }], manual: { add: "manual-mask", exclusion: "exclude-mask" }, history: [{ kind: "brush", points: [[1, 1]] }], historyIndex: 1 }];
+  state.project = null; state.projectReadOnly = false; state.projectOperationPending = false; state.catalogTransition = null; state.workspaceId = "draft-project"; state.images = baselineImages; state.selectedImageIds = new Set(["draft"]);
+  const submissions = [];
+  context.api = async (url, options = {}) => {
+    calls.push(["api", url, options.method]); submissions.push({ url, body: options.body ? JSON.parse(options.body) : null });
+    if (url === "/api/project/name") return { project: { id: "draft-project", name: "Saved draft", status: "working", imageCount: 1 } };
+    if (url.startsWith("/api/projects?")) return { projects };
+    return {};
+  };
+  test.openProjectNameDialog("name"); element("#projectNameInput").value = "Saved draft"; await fire("#projectNameForm", "submit");
+  for (let attempt = 0; attempt < 5 && !submissions.some((entry) => entry.url === "/api/project/name"); attempt += 1) await new Promise((resolve) => setImmediate(resolve));
+  const promotion = submissions.find((entry) => entry.url === "/api/project/name");
+  assert.ok(promotion, `projectless creation calls the name endpoint; observed=${JSON.stringify(submissions)}`);
+  assert.deepEqual(promotion, { url: "/api/project/name", body: { name: "Saved draft", projectId: "draft-project" } }, "projectless creation promotes the current workspace id");
+  assert.equal(state.images, baselineImages, "project creation retains the current image, review, hidden, candidate, and mask-bearing records");
+  assert.deepEqual(state.images[0].history, [{ kind: "brush", points: [[1, 1]] }], "project creation retains manual edit history");
+
+  context.api = async (url, options = {}) => {
+    if (url === "/api/project/name") return { project: { ...state.project, name: JSON.parse(options.body).name } };
+    return { projects };
+  };
+  test.openProjectNameDialog("name"); element("#projectNameInput").value = "Renamed project"; await fire("#projectNameForm", "submit");
+  for (let attempt = 0; attempt < 5 && state.project?.name !== "Renamed project"; attempt += 1) await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(state.project.name, "Renamed project", "renaming updates the current project name");
+  assert.equal(state.images, baselineImages, "renaming retains images and their history");
+
+  const retainedProject = state.project; const retainedImages = state.images;
+  context.api = async (url) => { if (url === "/api/project/name") { const error = new Error("duplicate"); error.code = "project_name_conflict"; error.status = 409; throw error; } return { projects }; };
+  test.openProjectNameDialog("name"); element("#projectNameInput").value = "Duplicate"; await fire("#projectNameForm", "submit");
+  assert.equal(state.project, retainedProject, "duplicate-name rejection retains the active project");
+  assert.equal(state.images, retainedImages, "duplicate-name rejection retains the active workspace data");
+  const requestsBeforeCancel = calls.filter(([kind]) => kind === "api").length; test.openProjectNameDialog("name"); await fire("#projectNameCancel");
+  assert.equal(calls.filter(([kind]) => kind === "api").length, requestsBeforeCancel, "project-name cancellation sends no request");
+
+  const listedProjects = projects.map((project, index) => ({ ...project, createdAt: 1_000_000 + index, updatedAt: 2_000_000 + index }));
+  context.api = async (url, options = {}) => {
+    if (url.startsWith("/api/projects?")) return { projects: listedProjects };
+    if (url === "/api/project/open") {
+      const projectId = JSON.parse(options.body).projectId; const project = listedProjects.find((item) => item.id === projectId);
+      return { project, images: [{ id: `${projectId}-image` }], needsSource: false };
+    }
+    return {};
+  };
+  await test.showProjectList();
+  const rows = element("#projectListBody").children;
+  assert.equal(rows.length, 3, "project management lists every project");
+  assert.equal(rows.every((row) => row.children.length === 7), true, "every row renders name, status, image count, source, created, updated, and actions columns");
+  rows.forEach((row, index) => {
+    const project = listedProjects[index];
+    assert.equal(row.children[0].children[0].textContent, project.name);
+    assert.equal(row.children[1].children[0].textContent, `project.${project.status}`);
+    assert.equal(row.children[2].children[0].textContent, `${project.imageCount}枚`);
+    assert.equal(row.children[3].children[0].textContent, project.sourceRoot);
+    assert.equal(row.children[4].children[0].textContent, test.projectDate(project.createdAt));
+    assert.equal(row.children[5].children[0].textContent, test.projectDate(project.updatedAt));
+    assert.equal(row.children[6].children[0].children.length, 3, "the actions column contains mosaic, exclusion, and delete controls");
+  });
+  const opensBeforeBackgroundClick = calls.filter(([kind, url]) => kind === "api" && url === "/api/project/open").length;
+  await element("#projectList").listeners.get("click")({ target: rows[0] });
+  assert.equal(calls.filter(([kind, url]) => kind === "api" && url === "/api/project/open").length, opensBeforeBackgroundClick, "clicking row background does not open a project");
+  const secondOpen = rows[1].children[0].children[0]; secondOpen.closest = () => secondOpen;
+  await element("#projectList").listeners.get("click")({ target: secondOpen });
+  for (let attempt = 0; attempt < 5 && state.project?.id !== listedProjects[1].id; attempt += 1) await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(state.project.id, listedProjects[1].id, "the row Open control opens that exact project");
+  assert.equal(state.images[0].id, `${listedProjects[1].id}-image`, "row Open replaces the catalog with the selected project images");
+
+  state.project = projects[0]; state.images = [{ id: "native-image", sourceId: "native-a" }]; state.missingNativeSources = [{ id: "native-a", displayName: "Old", nativePath: "C:/old", kind: "native-folder", exists: false }];
+  let relinkPayload = null; let pickerCalls = 0; context.window.showDirectoryPicker = async () => { pickerCalls += 1; return {}; };
+  context.api = async (url, options = {}) => {
+    if (url === "/api/project/source/relink") { relinkPayload = JSON.parse(options.body); return { project: projects[0], images: state.images, sources: [] }; }
+    if (url === "/api/project/mismatches") return { images: [] };
+    return {};
+  };
+  await fire("#projectSourceRelink"); element("#nativeRelinkPath").value = "D:/replacement"; await fire("#nativeRelinkForm", "submit");
+  assert.equal(pickerCalls, 0, "native relink confirmation never invokes the OS folder picker");
+  assert.deepEqual(relinkPayload, { projectId: "working", sourceId: "native-a", path: "D:/replacement" }, "native relink submits the typed absolute path and selected source");
+});
+
+nodeTest("project close, complete, resume, and delete produce exact workspace outcomes", async () => {
+  resetProjectFixture();
+  for (let attempt = 0; attempt < 5; attempt += 1) await new Promise((resolve) => setImmediate(resolve));
+  const fire = async (id) => { const listener = element(id).listeners.get("click"); assert.ok(listener); await listener({ preventDefault() {}, target: element(id) }); for (let attempt = 0; attempt < 5; attempt += 1) await new Promise((resolve) => setImmediate(resolve)); };
+  const richImages = [{ id: "rich", candidates: [{ id: "candidate" }], manual: { add: "mask" }, reviewed: true, hidden: true, history: [{ kind: "brush" }] }];
+  const requests = [];
+  context.api = async (url, options = {}) => {
+    requests.push([url, options.method]);
+    if (url === "/api/project/close") return { ok: true };
+    if (url === "/api/project/complete") return { project: { ...projects[0], status: "completed" } };
+    if (url === "/api/project/resume") return { project: { ...projects[1], status: "working" } };
+    if (url.startsWith("/api/projects?")) return { projects };
+    if (url.startsWith("/api/project/") && options.method === "DELETE") return { deleted: true };
+    return {};
+  };
+
+  state.projectOperationPending = false; state.catalogTransition = null; state.project = projects[0]; state.projectReadOnly = false; state.images = richImages; state.currentId = "rich";
+  await fire("#projectCloseWorkspace");
+  assert.equal(state.project, null, "closing the workspace clears the live project");
+  assert.equal(state.images.length, 0, "closing the workspace clears the live image list");
+  assert.equal(state.currentId, null, "closing the workspace clears the editor selection");
+  assert.ok(requests.some(([url]) => url === "/api/project/close"));
+
+  state.project = projects[0]; state.projectReadOnly = false; state.images = richImages; state.currentId = "rich"; state.projectOperationPending = false; state.catalogTransition = null;
+  await fire("#projectComplete");
+  assert.equal(state.project, null, "completing closes the live project after durable completion");
+  assert.equal(state.images.length, 0, "completing closes the live image list after durable completion");
+  assert.ok(requests.some(([url]) => url === "/api/project/complete"));
+
+  state.project = projects[1]; state.projectReadOnly = true; state.images = richImages; state.currentId = "rich"; state.projectOperationPending = false; state.catalogTransition = null;
+  await test.resumeCurrentProject();
+  assert.equal(state.project.status, "working", "resume returns the completed project to working state");
+  assert.equal(state.projectReadOnly, false, "resume re-enables project editing");
+  assert.equal(state.images, richImages, "resume retains candidates, manual masks, flags, and history");
+
+  await test.showProjectList({ keepClosed: true });
+  state.project = projects[0]; state.images = richImages; state.currentId = "rich"; state.projectOperationPending = false; state.catalogTransition = null;
+  await test.deleteProject("separate");
+  assert.equal(state.project.id, "working", "deleting a non-current project keeps the active project");
+  assert.equal(state.images, richImages, "deleting a non-current project keeps active edits");
+  state.projectOperationPending = false; state.catalogTransition = null;
+  await test.deleteProject("working");
+  assert.equal(state.project, null, "deleting the current project clears the live project");
+  assert.equal(state.images.length, 0, "deleting the current project returns to an empty workspace");
+});
+
+nodeTest("project completion and deletion cancellation preserve the exact project and image list", async () => {
+  resetProjectFixture();
+  test.bindEvents();
+  const richImages = [{ id: "cancel-rich", candidates: [{ id: "candidate" }], manual: { add: "mask" }, reviewed: true, hidden: true, history: [{ kind: "brush" }] }];
+  state.project = projects[0]; state.projectReadOnly = false; state.images = richImages; state.currentId = "cancel-rich"; state.projectOperationPending = false; state.catalogTransition = null;
+  const beforeRequests = calls.filter(([kind]) => kind === "api").length;
+  context.confirmAction = async () => false;
+  await element("#projectComplete").listeners.get("click")(); await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(state.project, projects[0]); assert.equal(state.images, richImages); assert.equal(state.currentId, "cancel-rich");
+  assert.equal(calls.filter(([kind]) => kind === "api").length, beforeRequests, "completion cancellation sends no request");
+  test.openProjectDeleteDialog("working");
+  await element("#projectDeleteCancel").listeners.get("click")();
+  assert.equal(element("#projectDeleteDialog").open, false); assert.equal(state.project, projects[0]); assert.equal(state.images, richImages);
+  assert.equal(calls.filter(([kind]) => kind === "api").length, beforeRequests, "deletion cancellation sends no DELETE request");
+  context.confirmAction = async () => true;
+});
+
+nodeTest("same-source warning offers open separate and cancel without changing work until chosen", async () => {
+  resetProjectFixture();
+  test.bindEvents();
+  const currentImages = [{ id: "current", candidates: [{ id: "keep" }], history: [{ kind: "brush" }] }];
+  state.project = projects[0]; state.images = currentImages; state.currentId = "current"; state.projectOperationPending = false; state.catalogTransition = null;
+  test.showSameSourceDialog([projects[2]], { path: "C:/alpha" });
+  assert.equal(element("#sameSourceDialog").open, true); assert.equal(element("#sameSourceList").children.length, 1); assert.match(element("#sameSourceList").children[0].children[0].textContent, /Gamma/);
+  assert.equal(element("#sameSourceOpen").hidden, false); assert.equal(element("#sameSourceSeparate").hidden, false); assert.equal(element("#sameSourceCancel").hidden, false);
+  await element("#sameSourceCancel").listeners.get("click")();
+  assert.equal(state.project, projects[0]); assert.equal(state.images, currentImages); assert.equal(state.currentId, "current");
+
+  const projectCount = projects.length;
+  context.api = async (url, options = {}) => {
+    if (url === "/api/project/open") return { project: projects[2], images: [{ id: "gamma-image" }], needsSource: false, sources: [] };
+    if (url === "/api/projects" && options.method === "POST") return { project: { id: "new-separate", name: null, status: "working", imageCount: 0 } };
+    return {};
+  };
+  state.projectOperationPending = false; state.catalogTransition = null; test.showSameSourceDialog([projects[2]], { path: "C:/alpha" });
+  await element("#sameSourceOpen").listeners.get("click")();
+  for (let attempt = 0; attempt < 5 && state.project?.id !== "separate"; attempt += 1) await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(state.project.id, "separate"); assert.equal(state.images[0].id, "gamma-image"); assert.equal(projects.length, projectCount, "Open selects the existing project without adding another project");
+
+  state.project = projects[0]; state.images = currentImages; state.currentId = "current"; state.projectOperationPending = false; state.catalogTransition = null;
+  test.showSameSourceDialog([projects[2]], { path: "C:/alpha" });
+  await element("#sameSourceSeparate").listeners.get("click")();
+  for (let attempt = 0; attempt < 5 && state.project?.id !== "new-separate"; attempt += 1) await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(state.project.id, "new-separate", "Separate creates and selects a different project");
+  assert.equal(projects[0].id, "working"); assert.equal(projects[0].name, "Alpha", "Separate does not alter the existing project record");
+});
+
+nodeTest("duplicate project guidance asks for another name while the current project remains intact", () => {
+  resetProjectFixture();
+  assert.match(japanese["errorDialog.project_name_duplicate.title"], /同じ名前/);
+  assert.match(japanese["errorDialog.project_name_duplicate.cause"], /すでに使われ/);
+  assert.match(japanese["errorDialog.project_name_duplicate.action"], /別の名前/);
+  assert.match(english["errorDialog.project_name_duplicate.action"], /different name/i);
+  const current = projects[0]; const images = [{ id: "duplicate-retained", history: [{ kind: "brush" }] }];
+  state.project = current; state.images = images;
+  context.showUserError(Object.assign(new Error("duplicate"), { code: "project_name_duplicate" }));
+  assert.equal(state.project, current); assert.equal(state.images, images);
+});
+
+nodeTest("project operations issue one request per start and the last completed start owns the catalog", async () => {
+  resetProjectFixture();
+  state.projectOperationPending = false; state.catalogTransition = null; state.project = projects[0]; state.images = [{ id: "original" }]; state.currentId = "original";
+  let releaseFirst; let openRequests = 0;
+  context.api = async (url, options = {}) => {
+    if (url !== "/api/project/open") return {};
+    openRequests += 1; const projectId = JSON.parse(options.body).projectId;
+    if (openRequests === 1) await new Promise((resolve) => { releaseFirst = resolve; });
+    const project = projects.find((item) => item.id === projectId);
+    return { project, images: [{ id: `${projectId}-image` }], needsSource: false, sources: [] };
+  };
+  const first = test.openProject(projects[1]);
+  await new Promise((resolve) => setImmediate(resolve));
+  const duplicate = test.openProject(projects[1]);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(openRequests, 1, "a duplicate start while the first project open is pending sends one request");
+  releaseFirst(); await Promise.all([first, duplicate]);
+  assert.equal(state.projectOperationPending, false); assert.equal(state.project.id, "completed"); assert.equal(state.images[0].id, "completed-image");
+  await test.openProject(projects[2]);
+  assert.equal(openRequests, 2, "a new start is accepted after the prior operation settles");
+  assert.equal(state.project.id, "separate"); assert.equal(state.images[0].id, "separate-image");
+});
+
+nodeTest("completed-project resume is single request and failed open rolls back to completed or unnamed work", async () => {
+  resetProjectFixture();
+  state.project = projects[1]; state.projectReadOnly = true; state.images = [{ id: "completed-kept", candidates: [{ id: "candidate" }], history: [{ kind: "brush" }] }]; state.currentId = "completed-kept"; state.projectOperationPending = false; state.catalogTransition = null;
+  let resumeRequests = 0;
+  context.api = async (url) => {
+    if (url === "/api/project/resume") { resumeRequests += 1; return { project: { ...projects[1], status: "working" } }; }
+    if (url === "/api/project/open") throw Object.assign(new Error("open failed"), { code: "internal_error" });
+    return {};
+  };
+  const resumed = test.resumeCurrentProject(); const duplicate = test.resumeCurrentProject(); await Promise.all([resumed, duplicate]);
+  assert.equal(resumeRequests, 1); assert.equal(state.project.status, "working"); assert.equal(state.projectReadOnly, false); assert.equal(state.images[0].id, "completed-kept");
+  state.project = projects[1]; state.projectReadOnly = true; state.projectOperationPending = false; state.catalogTransition = null;
+  const retainedImages = state.images; await test.openProject(projects[2]);
+  assert.equal(state.project, projects[1]); assert.equal(state.projectReadOnly, true); assert.equal(state.images, retainedImages, "failed open cannot leave a completed project half-resumed");
+
+  const unnamedImages = [{ id: "unnamed", candidates: [{ id: "unnamed-candidate" }], history: [{ kind: "brush" }] }];
+  state.project = null; state.projectReadOnly = false; state.workspaceId = "unnamed-workspace"; state.images = unnamedImages; state.currentId = "unnamed"; state.projectOperationPending = false; state.catalogTransition = null;
+  await test.openProject(projects[2]);
+  assert.equal(state.project, null); assert.equal(state.workspaceId, "unnamed-workspace"); assert.equal(state.images, unnamedImages, "failed competing open keeps the last displayed unnamed work authoritative");
+});
+
+nodeTest("overlapping browser-source restores publish only the last-started access and missing-source result", async () => {
+  resetProjectFixture();
+  state.project = projects[0]; state.catalogEpoch = 9; state.images = [{ id: "restore-image", sourceId: "file-source", relativePath: "image.png", sizeBytes: 3, mtimeNs: 1000000 }]; state.sourceAccess = new Map();
+  test.setPendingBrowserProjectSources([]);
+  let releaseFirst; let restoreCalls = 0;
+  context.rememberedProjectSources = async () => {
+    restoreCalls += 1; const call = restoreCalls;
+    if (call === 1) await new Promise((resolve) => { releaseFirst = resolve; });
+    const suffix = call === 1 ? "old" : "new";
+    return { directories: [], files: [{ sourceId: "file-source", imageId: "restore-image", relativePath: "image.png", clientKey: suffix, handle: { name: suffix } }] };
+  };
+  context.ensureProjectSourcePermission = async (handle) => handle.name === "new";
+  const sources = [{ id: "file-source", kind: "browser-files", identity: "browser:file-source" }];
+  const oldRestore = test.restoreBrowserProjectSourcesForCurrentCatalog(sources); await new Promise((resolve) => setImmediate(resolve));
+  const newRestore = test.restoreBrowserProjectSourcesForCurrentCatalog(sources); await newRestore;
+  releaseFirst(); await oldRestore;
+  assert.equal(state.sourceAccess.get("restore-image").clientKey, "new");
+  assert.equal(test.pendingBrowserProjectSources().length, 0, "the stale denied restore cannot overwrite the last-started granted access or publish a missing-source prompt");
 });

@@ -20,7 +20,7 @@ from .core import (
     BrowserSaveReceipt, BrowserSaveToken, Candidate, ClientError, ImageRecord,
     InferenceGate, Job, JobControl, torch_module,
 )
-from .config import SettingsError, SettingsStore, validate_output_directory_ready
+from .config import SettingsError, SettingsStore
 from .runtime_types import DetectionModels
 from .runtime import directml_devices, onnx_execution_status, runtime_backend
 from .catalog import CatalogMixin
@@ -280,16 +280,12 @@ class StudioState(CatalogMixin, SavingMixin, DetectionMixin, JobsMixin):
                 settings = self.settings_store.validate_update(update)
             except SettingsError as exc:
                 raise ClientError("設定の内容が正しくありません。", "invalid_settings") from exc
-            try:
-                validate_output_directory_ready(settings["saving"]["default_output_directory"])
-            except (SettingsError, OSError) as exc:
-                raise ClientError("保存先フォルダを使用できません。", "output_folder_unavailable") from exc
             # Selecting an output folder must remain available when a previously
             # configured GPU is temporarily unavailable. Model changes still
             # receive the same validation before they are persisted.
             if settings["models"] != previous_models:
                 self._require_supported_gpu(settings["models"])
-            settings = self.settings_store.save(settings)
+            settings = self.settings_store.save_validated(settings)
             self.settings = settings
             detection_keys = {
                 "target_segmentation", "ntd11", "ntd11_enabled", "sensitive", "sensitive_enabled",
@@ -357,10 +353,6 @@ class StudioState(CatalogMixin, SavingMixin, DetectionMixin, JobsMixin):
                 settings = self.settings_store.default_settings()
             except SettingsError as exc:
                 raise ClientError("設定の内容が正しくありません。", "invalid_settings") from exc
-            try:
-                validate_output_directory_ready(settings["saving"]["default_output_directory"])
-            except (SettingsError, OSError) as exc:
-                raise ClientError("保存先フォルダを使用できません。", "output_folder_unavailable") from exc
             self.settings = self.settings_store.reset(settings)
             self.models = None
             self.hand_model = None

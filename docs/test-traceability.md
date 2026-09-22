@@ -1,94 +1,76 @@
-# 自動テストと実機確認の対応
+# 自動テストの対応
 
-この表は、利用者向けの確認項目とCIで固定した規則の境界を示す。対応する製品変更、テスト、手動項目は同じコミットで更新する。
+`tests/verification-contracts.<domain>.json` を確認項目の唯一の参照元とします。手動チェックリストは廃止しました。各観測は次のいずれかへ分類します。
 
 | 状態 | 意味 |
 | --- | --- |
-| active | CIで代替できない実機確認。対応する自動テストはない、または別の規則だけを確認する。 |
-| split | 決定的な規則はCIで確認済み。表示、OS、実ブラウザー、実モデル、実ネットワークなどを手動で残す。 |
-| retired | CIが同じ利用者観測を完全に再現するため、手動行を削除した状態。 |
+| `automated` | 同じ利用者観測を決定的に再現する。収集・実行・成功を照合するテストIDを記録する。 |
+| `retired` | 自動化不能な実環境観測や検証方針から除外した観測。元IDと観測内容を保ち、個別の `retirementReason` を記録する。自動検証済みとは扱わない。 |
 
-## split
+## 現在の内訳
 
-| 手動ID | CIで確認する規則 | 実テスト | 手動で残す部分 |
-| --- | --- | --- | --- |
-| WS-143 | ブラウザーフォルダーsourceは初回選択時に書込み可能なhandleを取得し、一覧再取得後は保存済みrequest IDを同じbrowser-directory sourceのAPI正規IDへ対応付け、深い階層と同じ相対パスを持つ別sourceの画像を直接の親フォルダーへ対応付ける。明示した復元だけがフォルダーへ書込み許可を再要求し、取消は一覧と読込状態を保持する | `tests/test_folder_permissions_e2e.cjs` | 実ブラウザーの権限表示・許可結果、実フォルダーの削除 |
-| WS-142 | 同じ無名フォルダーの再読込が編集中のworkspaceを削除せず、ID・手描き・Undo履歴・再起動復元を保持する。別フォルダーへの切替後も編集できる | `tests.test_unnamed_folder_reload.UnnamedFolderReloadTests.test_same_folder_reload_keeps_history_manual_edits_and_allows_switch` | 実画面の再読込・再編集・再起動操作 |
-| SD-141 | 新規設定の相対モデル・保存先を拒否し、該当タブと入力欄を案内する | `tests.test_absolute_path_regression.AbsolutePathRegressionTests.test_relative_model_and_output_paths_are_rejected_for_new_settings`、`tests/test_settings_runtime.cjs` | 実在するモデル選択時の表示 |
-| CI-001 | Windows backendの全`unittest`を安定した二shardへ一度ずつ分配し、失敗・skip・manifestの欠損/重複を集計jobで失敗にしてcoverageを結合する | `tests/test_backend_shard_runner.cjs`、`tests/test_quiet_runner.cjs`、`.github/workflows/tests.yml` | GitHub Actionsの実runner負荷、cache命中率、実行時間 |
-| SD-142 | 旧設定の相対モデル・保存先を一度だけ絶対化して保存する | `tests.test_absolute_path_regression.AbsolutePathRegressionTests.test_legacy_relative_paths_are_migrated_to_absolute_paths_once` | 実際の起動、既存local.json、利用者の作業フォルダーでの表示 |
-| SD-144 | 保存先選択後も未保存の一般設定入力を保持し、Windows絶対パスだけを保存先として受け付ける。設定・単体・一括の入口は同じ Explorer 形式の保存先選択へ集約する | `tests/test_import_picker_e2e.cjs`、`tests/test_settings_runtime.cjs`、`tests.test_native_folder_picker.NativeFolderPickerTests.test_three_output_entry_points_share_the_one_native_picker_route` | Windows Explorer 形式の保存先ダイアログ、実UNCパス、選択取消時の表示 |
-| SD-145 | 実行中に選択GPUのONNX providerが存在しない場合、起動を停止し設定状態でGPU未準備を返す。テストは製品`.venv`を使わない | `tests.test_runtime_profile.RuntimeProfileTests.test_preflight_allows_empty_environment_and_rejects_unusable_runtime`、`tests.test_runtime_contract.RuntimeContractTests.test_onnx_status_does_not_treat_cuda_torch_as_a_cuda_execution_provider`、`tests.test_server.MozarieTests.test_settings_status_rejects_a_gpu_when_onnx_exports_only_cpu`、`tests/test_quiet_runner.cjs` | 実GPUと実CUDA/DirectML DLLでの起動・設定表示 |
-| SD-146 | 透過PNGの推論入力を可視画素だけへ合成し、全候補マスクをalpha内へ収める | `tests.test_detection_regressions.DetectionIntegrityRegressionTests.test_transparent_pixels_use_black_inference_background_and_clip_every_candidate`、`tests.test_detection_regressions.DetectionIntegrityRegressionTests.test_rgb_inference_pixels_are_unchanged` | 実モデル、最高精度、境界候補の画面表示と候補精度 |
-| SD-147 | 広い補助候補の合意先を1候補へ決定し、手候補の対象範囲を全マスクの積み上げなしに保つ | `tests.test_detection_regressions.DetectionIntegrityRegressionTests.test_broad_auxiliary_mask_confirms_only_the_best_matching_target`、`tests.test_detection_regressions.DetectionIntegrityRegressionTests.test_single_auxiliary_duplicate_keeps_existing_consensus`、`tests.test_detection_regressions.DetectionIntegrityRegressionTests.test_hand_box_envelope_matches_the_previous_union_without_stacking_masks` | 実モデルの複数候補、GPUメモリと処理時間 |
-| SV-073 | 保存応答が一つの版とtokenを返す | `tests.test_http_live_endpoints.LiveHttpEndpointTests.test_live_browser_save_render_streams_a_stable_image_response` | 遅延応答中の別タブ更新・削除、実ブラウザーのダウンロードと一時ファイル解放 |
-| SV-076 | 未作成の展開先で更新ZIPを展開できる | `tests.test_updater_extract_regression.UpdaterExtractRegressionTests.test_extract_archive_allows_a_missing_destination_directory` | 実リリースZIP、実ドライブの空き容量不足と更新前バックアップ |
-| SV-088 | 更新ZIPがv0.5.13 updaterの必須ファイルを含み、依存関係・本体・ランタイム確認の成功と途中失敗を同版で再試行できる | `tests.test_updater.UpdaterTests.test_next_release_archive_is_accepted_by_v0513_updater`、`tests.test_updater.UpdaterTests.test_dependency_update_success_marks_ready_and_clears_pending_update`、`tests.test_updater.UpdaterTests.test_update_with_unchanged_requirements_does_not_create_a_ready_marker`、`tests.test_updater.UpdaterTests.test_dependency_update_apply_failure_keeps_a_retryable_pending_update`、`tests.test_updater.UpdaterTests.test_gpu_smoke_failure_retries_the_same_version` | 実Release ZIP、実GPUと実setup.bat |
-| SV-077 | source snapshotを削除・上書き前に実体化し、失敗時はコピーを残して削除・確定を開始しない | `tests/test_save_source_snapshot_contract.cjs`、`tests/test_browser_save_runtime.cjs` | File System Access APIでの実ファイル、元名・形式の復元、画面の`source_restore_failed`案内 |
-| SV-086 | browser sourceの削除前読出し失敗では削除・確定を始めず、4xx拒否後は保存済みsnapshotから復元する | `tests/test_save_source_snapshot_contract.cjs` | 実File System Access APIの読出し拒否、削除後の4xx、元名・形式・バイト列の復元 |
-| ED-128 | 候補編集操作が候補ビューのロック中に無効になる | `tests/test_import_picker_e2e.cjs` | 読み込み中・保存中・処理中の実画面表示と、完了後の操作再開 |
-| DI-237 | receiptとcleanup状態を永続化し、再試行で回収する | `tests.test_save_recovery.SaveRecoveryTests.test_workspace_receipt_is_durable`、`tests.test_save_recovery.SaveRecoveryTests.test_startup_compacts_only_cancelled_rows`、`tests.test_server.MozarieTests.test_browser_render_retries_after_journal_stage_failure_without_publishing_pending_token` | 応答喪失、タブ終了、再起動後の画面復帰とCMD記録 |
-| DI-239 | ack失敗時もreceiptを保持し、再ackで回収する | `tests.test_save_recovery.SaveRecoveryTests.test_receipt_ack_retries_after_workspace_delete_failure`、`tests.test_save_recovery.SaveRecoveryTests.test_ack_keeps_receipt_when_commit_cleanup_is_pending`、`tests.test_save_recovery.SaveRecoveryTests.test_ack_keeps_receipt_when_journal_is_temporarily_unavailable` | 複数タブ、commit/ack応答喪失、再起動後のstatusと画面の再送 |
-| DI-253 | browser・背景overwriteのbackupをreceipt境界で安全に復旧する | `tests.test_save_recovery.SaveRecoveryTests.test_replacement_backup_restores_an_owned_overwrite_without_receipt`、`tests.test_save_recovery.SaveRecoveryTests.test_replacement_backup_discards_an_owned_backup_after_receipt`、`tests.test_save_recovery.SaveRecoveryTests.test_replacement_backup_preserves_an_externally_replaced_source`、`tests.test_server.MozarieTests.test_browser_save_reserve_failure_releases_the_output_name`、`tests.test_server.MozarieTests.test_browser_overwrite_keeps_the_committed_receipt_when_journal_finishing_is_unavailable`、`tests.test_server.MozarieTests.test_browser_copy_delete_stays_committed_when_journal_decision_fails`、`tests.test_server.MozarieTests.test_background_overwrite_database_failure_restores_the_journaled_source`、`tests.test_server.MozarieTests.test_background_overwrite_receipt_recovers_its_journaled_backup_at_startup`、`tests.test_server.MozarieTests.test_background_overwrite_reports_a_pending_journal_restore`、`tests.test_server.MozarieTests.test_background_overwrite_commit_decision_failure_keeps_the_live_record_current` | 実ブラウザー・単体・一括保存、強制終了、共有・権限・I/Oエラーと外部衝突の解消 |
-| DI-254 | マスクZIPをprocess cacheに作成し、非表示画像を除外して通常・起動時に回収する | `tests.test_project_http_coverage.ProjectHttpCoverageTests.test_project_mask_png_zip_and_cleanup`、`tests.test_project_http_coverage.ProjectHttpCoverageTests.test_startup_removes_a_stale_mask_zip_from_a_process_cache` | 実ダウンロード、強制終了後の再起動、OSのファイル共有 |
-| WS-111 | 0件フォルダーは走査集約を記録し、既存カタログを変えない | `tests.test_http_import_regression.FolderLoadLoggingContractTests.test_empty_and_unreadable_folders_keep_the_previous_catalog` | パス入力時の画面案内とCMD表示 |
-| WS-112 | 正常・破損・走査中変更の混在で、正常画像だけを公開し、失敗した全相対名と理由をCMD・フォルダー応答へ列挙する | `tests.test_http_import_regression.FolderLoadLoggingContractTests.test_folder_scan_keeps_valid_images_and_enumerates_every_failed_file` | 実フォルダーのサムネイル、長い相対名、CMD表示 |
-| WS-113 | 大きいPNG文字列メタデータを画像本体として検証し、破損画像が混在しても他の読込を継続できる | `tests.test_image_validation.InputImageValidationTests.test_png_with_large_text_metadata_is_inspected_from_pixels`、`tests.test_http_import_regression.FolderLoadLoggingContractTests.test_folder_scan_keeps_large_ztxt_itxt_pngs_when_a_corrupt_png_is_present` | zTXt・iTXt、CRC不一致、実ファイルでの表示 |
-| WS-114 | ブラウザーフォルダー選択の読込操作をfixtureで要求し、成功後にフォルダーAPIへ渡す | `tests/test_import_picker_e2e.cjs` | 実ブラウザーの権限要求、実フォルダー配下の読込 |
-| WS-115 | ブラウザーフォルダー選択の取消・拒否で一覧と読込状態を保持する | `tests/test_import_picker_e2e.cjs` | 実ブラウザーの拒否表示と権限状態 |
-| WS-116 | 読込・カタログ切替中の新規フォルダー読込を拒否し、先行状態を保持する | `tests.test_server.MozarieTests.test_same_root_reload_rejects_while_import_is_preparing` | 実ブラウザーでの同時操作の案内 |
-| WS-117 | 高位操作は正規化ルート、status/error_code、所要だけを記録し、ID・本文・token・headerを記録しない | `tests.test_http_import_regression.FolderLoadLoggingContractTests.test_handler_logs_normalized_routes_without_request_secrets` | 全高位操作をCMDで実行した際の表示 |
-| WS-118 | pause/resume/cancelを含む処理状態は操作面と対象数を保ち、画像単位の正常処理はINFOへ出さない | `tests/test_import_picker_e2e.cjs`、`tests.test_http_import_regression.FolderLoadLoggingContractTests.test_per_image_success_logs_are_suppressed_but_failures_are_safe_warnings` | 実モデルの開始・停止、CMDの進捗表示 |
-| WS-135 | ブラウザー追加は設定値と対象数だけで実効worker数を決め、全入力を完了する | `tests/test_import_picker_e2e.cjs` | 実ブラウザーのNetwork表示と実ファイルの読込 |
-| WS-139 | ネイティブフォルダー走査は列挙中から有界workerで検査し、終了時または列挙中の権限喪失では公開前に中止する | `tests.test_server.MozarieTests.test_folder_scan_uses_import_parallelism_and_sorts_deterministically`、`tests.test_server.MozarieTests.test_folder_scan_loads_every_normal_file_in_deterministic_order`、`tests.test_server.MozarieTests.test_folder_scan_starts_inspection_before_tree_enumeration_finishes`、`tests.test_server.MozarieTests.test_folder_scan_does_not_hold_the_import_lock_during_image_io`、`tests.test_server.MozarieTests.test_folder_scan_rejects_a_catalogue_change_after_releasing_the_import_lock`、`tests.test_server.MozarieTests.test_folder_scan_restores_the_callers_import_lock_after_worker_failure`、`tests.test_server.MozarieTests.test_folder_scan_stops_enumerating_when_shutdown_begins`、`tests.test_http_import_regression.FolderLoadLoggingContractTests.test_folder_scan_keeps_the_previous_catalog_when_rglob_loses_access` | 実5,000件以上、Windowsのファイル共有、終了操作と画面応答 |
-| WS-136 | ブラウザー追加のファイル単位の読込失敗は全件を一覧表示し、前後の正常ファイルを継続する | `tests/test_import_picker_e2e.cjs` | 実ブラウザーの破損画像、ドロップ、File System Accessの読込拒否 |
-| DI-009c | サムネイル失敗をカード単位で可視化し、再試行で回復できる | `tests/test_import_picker_e2e.cjs` | 実サーバーの500、ネットワーク遅延、原画像と隣接カードの同時操作 |
-| WS-119 | 動的候補・手描き削除・作業データ再作成も、ID・本文・tokenを出さない固定ルートで成功・失敗を記録する | `tests.test_http_import_regression.FolderLoadLoggingContractTests.test_dynamic_mutation_routes_log_normalized_success_and_failure_without_ids` | 実CMDで各操作を実行した際の表示 |
-| DI-255 | 候補の単体・一括変更を確定した直後の一覧は未確認を返し、永続化失敗では公開状態を変えない | `tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_candidate_history_batch_and_failure_guards`、`tests.test_project_catalog_coverage.ProjectCatalogCoverageTests.test_projectless_candidate_change_publishes_unreviewed_only_after_persistence` | PJ・無名作業での実画面、API遅延・SQLite I/O失敗時の案内 |
-| DI-256 | 候補削除はcache PNGの片付け失敗後も、単体・一括ともrevisionと履歴を一度だけ確定する | `tests.test_server.MozarieTests.test_candidate_delete_commits_one_revision_and_history_entry`、`tests.test_server.MozarieTests.test_candidate_delete_keeps_the_durable_revision_when_cache_unlink_fails`、`tests.test_server.MozarieTests.test_batch_candidate_delete_commits_one_revision_and_history_entry`、`tests.test_server.MozarieTests.test_batch_candidate_delete_keeps_one_durable_history_when_cache_unlink_fails` | Windowsの画像ビューアー共有、Undo/RedoとPJ再開 |
-| DI-257 | ブラウザーsource再読込後のhydrate失敗は外部変更によるtransform resetを戻す | `tests.test_server.MozarieTests.test_browser_reimport_commits_an_external_source_transform_reset`、`tests.test_server.MozarieTests.test_browser_reimport_rolls_back_a_source_transform_reset_when_hydration_fails` | 実directory handle、外部変更、中断・権限失敗とPJ再開 |
-| DI-258 | import時にverify通過後も画素展開まで完了し、表示時のPillow例外を同じ画像読込エラーへ正規化する | `tests.test_image_validation.InputImageValidationTests.test_verify_passes_but_pixel_decode_failure_is_rejected`、`tests.test_image_validation.InputImageValidationTests.test_canonical_image_normalizes_pillow_decode_errors`、`tests.test_http_full_coverage.HttpBoundaryCoverageTests.test_thumbnail_normalizes_pillow_decode_errors` | 同一フォルダー内の正常・破損画像の一覧表示、ファイル名と理由の案内 |
-| DI-259 | ブラウザー転送の一時名でも論理拡張子を使って大きいPNG文字列を画素検証から除外し、元バイト列を保持する | `tests.test_image_validation.InputImageValidationTests.test_browser_staged_png_uses_the_logical_suffix_for_large_text_metadata`、`tests.test_http_live_endpoints.LiveHttpEndpointTests.test_live_binary_import_accepts_large_png_text_from_browser_staging` | 実ブラウザーの画像・フォルダー選択、実ファイル一覧とメタ情報照合 |
-| DI-260 | 検出前に候補revisionを保存領域へ再同期し、遅い競合を`catalog_changed`へ変換する。検出から絶対パスへのコピー保存・確定・ackまで実HTTPで完走し、大きいPNGメタ情報と加工画素を照合する | `tests.test_server.MozarieTests.test_detection_resynchronizes_a_durable_candidate_revision_before_start`、`tests.test_server.MozarieTests.test_detection_reports_a_late_durable_revision_conflict_as_catalog_changed`、`tests.test_http_live_endpoints.LiveHttpEndpointTests.test_live_detect_edit_and_copy_save_preserves_png_metadata` | 実モデル・GPU、実ブラウザー、再起動後の画面とCMDログ |
-| DI-261 | A→B→AのPJ切替で候補・手描き・履歴・非表示/確認済みをPJごとに復元し、非表示のUndo/Redoで実際の処理可否も戻す | `tests.test_project_http_coverage.ProjectHttpCoverageTests.test_project_switch_restores_only_its_durable_candidate_manual_history_and_flags`、`tests.test_project_http_coverage.ProjectHttpCoverageTests.test_hidden_history_undo_redo_restores_processing_eligibility` | 実ブラウザーのフィルター・検索・選択と、実ダウンロード時の表示 |
-| DI-262 | 形式変換の上書きは同stemの変換先へ排他的に公開し、旧拡張子を置換後に耐久カタログを更新する。競合・DB失敗では元画像と外部ファイルを保持する。背景コピーの予約後競合とDB失敗時の外部置換も保持する。 | `tests.test_http_live_endpoints.LiveHttpEndpointTests.test_live_browser_overwrite_converts_png_to_jpg_and_persists_the_new_path`、`tests.test_http_live_endpoints.LiveHttpEndpointTests.test_live_background_overwrite_converts_jpg_to_png`、`tests.test_http_live_endpoints.LiveHttpEndpointTests.test_live_format_overwrite_rejects_a_same_stem_destination_without_touching_either_file`、`tests.test_http_live_endpoints.LiveHttpEndpointTests.test_live_format_overwrite_database_failure_restores_the_original_source_and_catalogue_path`、`tests.test_server.MozarieTests.test_background_copy_reassigns_when_an_external_file_appears_after_reservation`、`tests.test_server.MozarieTests.test_background_copy_database_failure_preserves_an_external_output_replacement`、`tests.test_server.MozarieTests.test_background_copy_receipt_recovers_the_private_stage_at_startup_without_removing_output`、`tests.test_save_recovery.SaveRecoveryTests.test_format_replacement_startup_rollback_restores_the_old_path_and_removes_the_new_path`、`tests.test_save_recovery.SaveRecoveryTests.test_format_replacement_startup_commit_keeps_new_path_and_durable_catalogue_path` | 実ブラウザー/FSAの単体・一括変換、同名競合、ネットワーク切断と共有フォルダー上の外部作成・置換 |
-| DI-101 | RGBA/LAの候補とRGBA手描きマスクを含むPJのモザイク・単体保存・モザイクZIP・除外ZIPは、透過白のRGB値ではなくalphaだけを範囲として出力する | `tests.test_project_export_mask_alpha.ProjectExportMaskAlphaTests.test_project_zip_export_uses_rgba_alpha_for_manual_mosaic_and_exclude_masks`、`tests.test_project_export_mask_alpha.ProjectExportMaskAlphaTests.test_rgba_and_la_candidates_use_alpha_for_preview_save_and_exports` | 実ダウンロードしたZIPの各PNGと4K候補・手描き範囲の視覚的な重なり |
-| SD-148 | 検出の段階完了数を候補公開済み件数から分離し、失敗時に候補IDを公開しない。全件の推論が済んだ公開待ち状態は一時停止にしない。候補を耐久化した後の古いマスク片付け中は取消を受け付けず、公開済み結果を完了として保持する | `tests.test_server.MozarieTests.test_detection_staging_reports_processed_without_publishing_on_failure`、`tests.test_server.MozarieTests.test_detection_rejects_cancel_after_publication_starts_and_completes`、`tests.test_server.MozarieTests.test_detection_start_rejects_a_catalog_switch_after_records_are_captured`、`tests.test_server.MozarieTests.test_detection_start_job_failure_removes_its_empty_history_group`、`tests.test_jobs_saving_coverage.JobsSavingCoverageTests.test_detection_pause_uses_staged_progress`、`tests/test_app_core_detection_coverage.cjs` | 実モデルでの進捗間隔、ETA、停止・失敗の表示 |
-| SD-149 | 保存先選択は既存の絶対パスだけを初期フォルダーに使い、取消・失敗後も再試行できる。保存先だけの更新は未変更GPUを検査しない。旧式フォルダー API を製品コードから排除し、Common Item Dialog の選択・所有者・取消・結果契約を維持する | `tests.test_server.MozarieTests.test_output_directory_picker_normalizes_existing_absolute_hint_and_releases_lock`、`tests.test_server.MozarieTests.test_output_directory_picker_cancellation_and_failure_release_lock`、`tests.test_server.MozarieTests.test_output_directory_only_update_does_not_probe_an_unchanged_gpu`、`tests.test_http_live_endpoints.LiveHttpEndpointTests.test_live_output_directory_picker_updates_settings_without_gpu_probe`、`tests.test_native_folder_picker.NativeFolderPickerTests` | Windows Explorer 形式の選択ダイアログ、実UNCパス、選択取消時の表示 |
-| ED-133・ED-134 | 同寸法の下書き復元で3手描き層を消去してから描画し、空の永続履歴キーでは通信・ロック・再選択を起こさない。実編集の直後は保存を先に確定してUndo/Redoし、透過PNGの局所maskと候補行の操作可能状態を復元する | `tests/test_editor_canvas_completion_runtime.cjs`、`tests/test_project_history_browser_e2e.cjs`、`tests.test_project_history_live_browser.LiveProjectHistoryBrowserTests.test_browser_undo_redo_round_trips_localized_durable_manual_layers`、`tests.test_project_workspace_coverage.ProjectWorkspaceCoverageTests.test_manual_history_preserves_three_alpha_layers_as_isolated_canonical_masks`、`tests.test_project_workspace_coverage.ProjectWorkspaceCoverageTests.test_manual_api_normalizes_legacy_grayscale_masks_without_database_migration` | 実ブラウザーの暗転・フォーカス、局所画素、一覧／編集表示と複数画像選択の保持 |
-| ED-129 | 画像外で始めた各編集操作を拒否し、画像内開始後の通常ブラシ移動を端へ丸める | `tests/test_app_core_detection_coverage.cjs` | 実ブラウザーの余白、拡大率、比較表示での全編集操作 |
-| ED-130 | 無名作業の履歴復元を直列に保存し、部分成功を含む失敗後は強制再選択で再同期する | `tests/test_editor_masks_behavior.cjs` | 実ブラウザーと実サーバー通信での表示・再同期順 |
-| ED-131 | 役割別の全削除で自動候補と対応する全手描き層を1履歴として削除し、Undo/Redoとボタン無効化を一致させる | `tests/test_editor_masks_behavior.cjs`、`tests/test_app_core_detection_coverage.cjs` | 実画面の候補行、点滅、保存遅延時の表示 |
-| ED-132 | ID付き静的操作とIDなし操作の値ごとの一覧をソースから抽出し、台帳との差集合を0にする | `tests/test_ui_control_manifest.cjs`、`tests/test_import_picker_e2e.cjs` | Windowsダイアログを開く操作、実モデル・実ファイルを使う操作 |
-| DI-161・DI-181 | ORフィルターで、絞り込み外から先頭一致へ進み、中間を経て末尾・1件では現在キャンバスを保持する | `tests/test_filters_and_fluid_e2e.cjs` の `OR filters move from an outside current image to the first match, through the middle, and keep a one-item tail selected`、`filtered review and hide keep their tail, while deletion selects the previous filtered image` | 実通信の遅延、409、切断とH表示時の画面操作 |
-| DI-170・DI-180・DI-203 | UIの非表示操作後、全画像検出・保存対象から除外し、直接APIで検出・保存・ブラウザー保存予約を拒否する | `tests/test_filters_and_fluid_e2e.cjs` の `hiding an image removes it from the visible all-image detection and save targets`、`tests.test_http_live_endpoints.LiveHttpEndpointTests.test_hidden_images_are_rejected_by_explicit_detect_apply_and_browser_save_requests`、`tests/test_browser_save_runtime.cjs` の `runSaveKeepsCatalogueAndEditorStateCase` | PJ ZIP、実モデル、実ブラウザー出力、全編集操作と実画面の案内 |
-| DI-263 | 「全画像を自動検出」の独立した画像フィルターで、モザイクあり・なし・確認済み・未確認をOR選択する。未選択は非表示を除く全件、非表示は常時対象外とし、件数0では開始不可にする。選択は保持するが現在画像・選択画像の個別検出には適用しない。保留変更の確定後に対象を再計算する。 | `tests/test_filters_and_fluid_e2e.cjs` の `all-image detection filters images with independent OR checkboxes and persists the selection`、`tests/test_detection_refresh_runtime.cjs`、`tests/test_config.py` の `test_detection_image_filters_default_round_trip_and_validate_tokens`、`tests/test_app_core_detection_coverage.cjs` | 実モデルを使った各フィルターの進捗、候補置換、実画面の操作感 |
-| DI-264 | 候補の枠pxは入力中に非永続の展開マスクを表示し、確定時だけ保存する。取消、外側クリック、画像切替、入力不正、古い応答では一時マスクを解放して元へ戻し、一括設定は対象roleだけを最大4並列で更新する。 | `tests/test_import_picker_e2e.cjs` の候補枠px実ブラウザー操作、`tests/test_editor_masks_behavior.cjs`、`tests/test_candidate_mask_endpoint.py`、`tests/test_resources.cjs` | 4K画像と多数候補での入力追従性、実画面のモザイク見た目、通信切断時の案内 |
-| DI-265 | 一括保存の独立した画像フィルターで、モザイクあり・なし・確認済み・未確認をOR選択する。未選択は非表示を除く全件、非表示は常時対象外とし、件数0では開始不可にする。選択は検出設定と別に保持し、開始時の対象を固定して単体保存には適用しない。開始前の設定失敗・確認取消では選択と再操作性を保つ。 | `tests/test_filters_and_fluid_e2e.cjs` の `batch save filters images with independent OR checkboxes and persists the selection` と `batch save keeps confirmation usable after committing a changed output directory`、`tests/test_gallery_save_coverage.cjs`、`tests/test_bulk_views_save_preferences_e2e.cjs`、`tests/test_import_picker_e2e.cjs`、`tests/test_config.py` の `test_image_filters_default_round_trip_and_validate_tokens` | 実File System Access権限、実ファイルへの複数保存、保存中の画面操作感 |
-| DI-217・DI-218 | 削除ボタンと一括削除は先頭・中間・末尾・全件で元画像削除プロトコルを完走し、成功した現在画像だけ次または前へ移動する。「次回から表示しない」は元画像削除だけに保存され、再読込後も省略と設定からの再有効化を反映する。取消直後の再開は先のcloseで新しい確認を解決しない | `tests/test_source_delete_e2e.cjs` の `visible delete control selects next for first and middle, previous for last, and clears every view after an all-image batch`、`batch source deletion keeps the current canvas when another selected image fails, then moves only after the current image commits`、`Delete shortcut keeps a durable source-delete intent through claim and acknowledges the committed receipt`、`source-delete confirmation can be skipped, restored in settings, and cancelled without changing the preference`、`native confirmation closes an earlier cancelled dialog without settling its immediate replacement`、`source delete can reopen immediately after cancel and commits only the current confirmation` | 実ファイル削除、確認文、SQLite、409、応答切断、再起動後の復旧 |
-| DI-234・DI-235 | 手描きの開始・バイナリレイヤー・確定は実HTTPでPNGを保存し、取消・確定失敗後も既存保存分を壊さず、保持済みdirtyレイヤーを次の操作で再送できる。再送失敗時は遷移を止め、成功時だけ未保存表示を消す | `tests.test_http_live_endpoints.LiveHttpEndpointTests.test_live_manual_layer_transfer_persists_and_recovers_after_cancel_or_commit_failure`、`tests/test_workspace_runtime.cjs`、`tests.test_branch_coverage.ImageIoBranchTests.test_mask_decoder_accepts_alpha_and_grayscale_and_rejects_bad_input` | 実ブラウザーでの4K描画、通信切断時の未保存表示、CMDログ |
-| WS-094 | 混在PJのnative source再読込・再指定で、他browser sourceの画像・候補・手描き・履歴・確認・反転を保持し、元画像・サムネイル・候補・候補マスク・手描き更新を実HTTPで続行する。衝突、対象なし、処理中、古い世代、完了PJとGPUキャッシュ更新失敗は関連付けも画面も変更しない。失敗後の再試行だけ新パスを公開する | `tests.test_project_native_relink_http.ProjectNativeRelinkHttpTests.test_source_status_and_native_reload_relink_keep_other_source_state`、`tests.test_project_native_relink_http.ProjectNativeRelinkHttpTests.test_relink_publish_failure_restores_durable_source_and_retries`、`tests.test_project_native_relink_http.ProjectNativeRelinkHttpTests.test_relink_rejections_leave_source_and_live_catalog_unchanged` | 実ブラウザーの不足source案内、入力操作、実ファイルアクセス権と画面表示 |
+| 分野 | 自動 | 手動 | 対象外 | 合計 |
+| --- | ---: | ---: | ---: | ---: |
+| 起動・読み込み・一覧・プロジェクト | 216 | 0 | 19 | 235 |
+| 描画・境界・候補・表示・履歴 | 172 | 0 | 2 | 174 |
+| 検出・モデル・設定・ショートカット | 203 | 0 | 18 | 221 |
+| 保存・書き出し・異常時・リリース | 122 | 0 | 16 | 138 |
+| 通信・対象の組合せ・プロジェクトデータ | 473 | 0 | 5 | 478 |
+| 画像反転・保存形式・メタ情報 | 150 | 0 | 3 | 153 |
+| **合計** | **1,336** | **0** | **63** | **1,399** |
 
-| SV-089 | 単体・一括の保存先を手入力し、Enterまたは保存で絶対パスを反映する。応答待ちは保存先・選択ダイアログ・開始だけを抑止し、形式や「保存後に一覧から削除」は変更できる。失敗後は入力を保持して再試行でき、全入口の選択は共通の Explorer 形式フォルダーピッカーへ進む | `tests/test_import_picker_e2e.cjs`、`tests/test_project_history_browser_e2e.cjs`、`tests/test_bulk_views_save_preferences_e2e.cjs`、`tests.test_http_live_endpoints.LiveHttpEndpointTests.test_live_output_directory_picker_updates_settings_without_gpu_probe`、`tests.test_native_folder_picker.NativeFolderPickerTests.test_three_output_entry_points_share_the_one_native_picker_route` | 実UNC接続、Windows Explorer 形式の選択ダイアログ |
-| SV-090 | 出力形式を変更しても上書き選択を維持する。拡張子変更後の保存・同名競合・DB失敗・再起動復旧で元画像と永続パスを一致させる | `tests/test_browser_save_runtime.cjs`、`tests.test_save_recovery.SaveRecoveryTests`、`tests.test_http_live_endpoints.LiveHttpEndpointTests` | 実ブラウザーの書込み権限、実ドライブの容量不足 |
-| SV-091 | 単体・一括保存モーダルは、同じページの間に形式・メタデータ・粒度・対象・一覧削除・コピー後元画像削除の選択を保つ。JPGの強制OFFは保持選択を変更せず、PNG・元形式へ戻すと元のON/OFFを復元する。再読込後は既定値へ戻し、明示した一括対象は毎回優先する。 | `tests/test_gallery_save_coverage.cjs`、`tests/test_bulk_views_save_preferences_e2e.cjs`、`tests/test_import_picker_e2e.cjs` | 実ブラウザーの再読込、画面幅、フォーカス |
-| SV-092 | 単体保存の「保存後に一覧から削除」は、確定したコピー（無加工応答を含む）だけを外し、実際に外れた現在画像では次または前を選ぶ。元画像は保持する。 | `tests/test_browser_save_runtime.cjs`、`tests/test_bulk_views_save_preferences_e2e.cjs`、`tests.test_server.MozarieTests.test_remove_saved_images_from_catalog_keeps_all_source_files`、`tests.test_server.MozarieTests.test_catalog_remove_succeeds_when_disposable_files_are_locked` | 実File System Access権限、先頭・末尾・絞り込み外の選択表示 |
-| SV-093 | 一括保存の「保存後に一覧から削除」は、開始済み処理の終端で成功したIDだけを一度に外す。失敗・取消・上書きの無加工応答は残し、DB失敗時も一覧と元画像を保持する。 | `tests/test_browser_save_runtime.cjs`、`tests/test_bulk_views_save_preferences_e2e.cjs`、`tests.test_server.MozarieTests.test_remove_saved_images_from_catalog_keeps_all_source_files`、`tests.test_server.MozarieTests.test_remove_image_keeps_live_and_durable_state_when_database_delete_fails` | 実ブラウザーの部分失敗、取消、ネットワーク切断と削除失敗表示 |
-| ED-111 | モザイク・除外の一括検出／適用範囲表示はON・OFF・mixedを正しく示し、通常表示と適用表示を相互排他的に切り替える。役割表示中に作成した手描き範囲は継承し、取消で画素が残らなければ表示IDも残さない。 | `tests/test_bulk_views_save_preferences_e2e.cjs`、`tests/test_editor_masks_behavior.cjs`、`tests/test_import_picker_e2e.cjs` | 実キャンバスの点滅色、描画取消、処理中の無効表示 |
-| ED-135 | 消去・保存・境界追加・塗りつぶし・反転・Undo/Redoの処理中は生成済みの候補/PJ操作もロックし、成功・失敗・取消後に意味上有効な操作を再実行できる | `tests/test_ui_operation_lifecycle_e2e.cjs`、`tests/test_project_history_browser_e2e.cjs` | 実ネットワーク切断時の案内とフォーカス |
-| WS-140 | 寸法変更で候補を逐次リサイズし、手描きなしでは展開マスクを生成しない。手描きありでは3つのunionへ逐次合成して既存編集を保持する | `tests.test_workspace.WorkspaceTests` | 実4K以上の画像でのメモリと画面応答 |
-| SD-150 | apply/detectのスレッド開始に失敗しても処理ロックと未確定履歴を解放し、設定・編集・読込・再実行を継続できる | `tests.test_server.MozarieTests.test_thread_start_failure_releases_every_job_gate_and_allows_retry` | OSの資源不足時の表示 |
-| SV-094・WS-141・SV-095 | コピー保存のフォルダー構成保持を設定へ保存し、平坦化時は編集名・形式・suffix後の同名を出力作成前に拒否する。名前変更は元画像とcanonical相対名を変更せず、保存名だけを永続化する。コピーと元画像への適用に編集名を使い、改名した元画像は保存確定後に旧名を削除する。失敗は元画像を保持する。 | `tests.test_recursive_save_rename.RecursiveSaveTests`、`tests.test_recursive_save_rename.StudioStateNativeRenameTests`、`tests.test_recursive_save_rename.WorkspaceRenameTests`、`tests.test_server.MozarieTests.test_browser_reimport_restores_the_edited_output_name_from_workspace`、`tests.test_http_live_endpoints.LiveHttpEndpointTests.test_live_edited_name_moves_native_source_only_after_overwrite_and_reopens_canonically`、`tests/test_browser_save_runtime.cjs`、`tests/test_interaction_coverage.cjs`、`tests/test_import_picker_e2e.cjs` | 実Windowsのファイルロック、元フォルダーの権限、名前変更モーダルの配置・フォーカス |
-| SV-096 | コピー後の元画像削除は親接続がなくても選択できる。保存クリックから元フォルダーの選択を開始し、取消・拒否・別エントリ・外部変更は出力前に停止する。編集名と削除選択を保持し、確定した新名のhandleを旧名清掃の失敗後も保持する。 | `tests/test_browser_save_runtime.cjs`、`tests/test_import_picker_e2e.cjs` | 実Windowsの選択・取消、ブラウザー権限とユーザー操作、再起動後の接続 |
+件数は契約JSONの `observations[].status` から集計した値です。変更時はこの表も同じコミットで更新します。
 
-## active
+ブラシの円外保持と候補枠プレビューの取消は `test_editor_brush_padding_e2e.cjs` で、合成画像・実ポインタードラッグ・実Worker出力・保存用PNG・Undoを画素単位で照合する。候補枠の長押しは押下中の複数回の輪郭更新、最新値の確定、失敗時の復元、操作中断時の停止を自動確認する。ブラシ径1〜300pxとShiftホイールの上下限は `test_editor_basic_tools_e2e.cjs` で表示・カーソル・値を確認する。
 
-| 手動ID | 実機で確認する理由 |
+`test_editor_gesture_live_browser.py` は実ブラウザーのクリック・ドラッグを実HTTP、SQLite履歴、PNG保存まで通し、候補枠取消、4種の手描き、Undo・Redo、PJ再開直後の再編集とUndo、元画像不変を画素単位で照合する。
+
+## 自動化と対象外の境界
+
+実GPU・配布モデル・OS所有のダイアログ・実UNCや物理ドライブ障害・実メモリ枯渇・主観的な操作感は、自動で同じ観測を保証できない残りだけを対象外としました。アプリが受け取る許可・拒否・読込失敗・容量不足などの決定的な処理は自動テストに残します。公開Releaseのタグ・ZIP・版・マージ後SHAは、リリース実施時に公開状態を照合します。
+
+今回残存項目を再点検し、次の決定的な境界を追加・補強しました。
+
+| 元ID | 自動テストで確認する観測 |
 | --- | --- |
-| WEB-001 | `scripts/test-site.cjs` は JavaScript 無効の実 Chromium でタイトル、説明、canonical、Google verification、主要リンク、ヒーロー、4つの製品場面、最終CTA、英語README、デモ3の静的初期表示、320/390/700/701/720/768/900/1440/1920pxの横幅、CSS、JS、PNG、XMLサイトマップを確認する。目次型の`feature-index`、01〜04番号、保持項目リスト、表示文言の`Undo`・`Redo`をDOMから除去し、元に戻す・やり直すの履歴と表示する。チャコール、アイボリー、ミントの面構成、ミント背景とチャコール文字のCTA、実際のキーボード移動時に明暗面で切り替わるfocus色、意味単位で折り返す見出し、大画面で孤立行を残さないヒーロー説明、製品画像を圧迫しない見出し上限、700/701pxで連続する文字サイズを検査する。ロゴPNGの読込と元画像とのバイト一致、枠・影・端末モックのないギャラリー、1920:959の非切抜き画像、最大1520pxの中央画像、モバイル20pxの中央画像余白とCTAの操作領域を確認する。実 Chromium でdemo3とdemo1だけの2枚カルーセル、両側の薄い見切れ画像、desktopの画像外44px矢印、900px以下の画像下44px矢印、6秒自動切替、手動切替、キーボードfocus・拡大表示中・background tab・reduced motion時の停止を確認する。中央画像と3つの機能画像はURLを変えず元画像の拡大モーダルを開き、閉じるボタン・背景・Esc・画像クリック・フォーカス復帰を確認する。外部送信を遮断したGoogle tag設定も確認する。本番送信とRealtime受信、GitHub Pagesの公開HTTP応答と主要リンク、色、余白、切抜き、矢印、拡大表示は実環境で確認する。 |
+| SD-012 | 設定を実ファイルへ保存し、StudioStateを終了・再生成して全設定値を復元する。 |
+| SD-019 | 各並列数で400件を2回保存し、reserve・render・commitが各対象に1回ずつ行われ、設定値を保持する。 |
+| WS-129.4 | 小さいPNG・JPEG・WebPでPillow上限超過経路を再現し、警告なしの一覧・画像・サムネイルと回転JPEGの向きを確認する。巨大画像の物理RAM負荷は対象外のまま区別する。 |
+| SV-073.2 | 実ChromiumがHTTP応答を読み取り始めた後に画像の版を変更し、応答全体のハッシュ・画像寸法・一時ファイル解放・古い版のエラー表示を確認する。 |
+| SV-077.2 | 実ChromiumとOPFSで元画像の読み取りを失敗させ、専用エラーの表示と元画像・コピー・候補・手描き・一覧の保持を確認する。 |
 
-Windowsダイアログ、実GPU、実モデルによる検出、視覚的な描画・フォーカス、OS権限、実UNC、実ブラウザーのユーザー操作、WS-138のフォルダー入力はactiveの実機確認として残す。個々の行は `docs/manual-verification.md` 配下にある。
+以前の統合で欠けていた設定・検出の13件とフォルダー走査1件のテスト、および2件の補助メソッドを元の実装から復元し、改名されたテストIDも実際の実行IDへ合わせています。
 
-## retired
+## 契約の検証
 
-現在はなし。retiredに移すときは、対応する手動行を削除し、同じ利用者観測を再現するCIテスト名と実行層をこの表へ残す。
+```powershell
+node --test tests/test_verification_contracts.cjs
+```
+
+この検証は、基準コミット `264f70d` の全確認IDと物理行数をGitから読み直し、契約の重複・欠落、理由のない対象外項目、残存する手動項目や確認文書を検出します。通常実行とCIでは、`automated` が参照するNode・Pythonテストが収集・実行され、失敗・skip・TODOではなく成功したことを実行結果のmanifestで照合します。現在の確認文書が削除済みでも、基準コミットの検証は省略しません。
+
+## 上部ツールのショートカット
+
+追加した操作と設定表示は隔離したChromiumで検証する。実機確認項目は追加しない。
+
+| 利用者が確認する挙動 | 自動テスト |
+| --- | --- |
+| 全描画ツールの個別キー、Q/Wの左右順・グループ移動・長押し抑止、塗りつぶしポップアップ後のフォーカス | `tests/test_toolbar_shortcuts_e2e.cjs` の `toolbar shortcuts select every drawing mode and cycle each group in visible order` |
+| 1/2枚表示・全体表示・反転・モザイク表示・Undo/Redo | 同ファイルの `toolbar view fit flip preview and history shortcuts perform their visible actions` |
+| 操作別と全体のOFF、入力中・ダイアログ・処理中・閲覧専用・無効ボタン・画像切替・描画中の抑止 | 同ファイルの `toolbar shortcuts obey per-action global focus modal busy and disabled controls` |
+| キー欄の右側のON/OFFスイッチ、右端揃え・下線・交互背景、Tab移動、変更と再読み込み | 同ファイルの `shortcut switches align after key inputs and preserve remapped disabled bindings after reload` |
+| 旧設定の独自キーと有効状態を保持し、新キーの衝突時は未使用キーをOFFで追加、重複保存拒否 | `tests.test_config.SettingsTests.test_toolbar_shortcuts_defaults_are_complete_unique_and_round_trip`、`test_toolbar_shortcuts_migrate_without_claiming_custom_keys` |
+
+## 設定・ブラウザー取り込みの回帰境界
+
+`tests/test_settings_import_regressions.py` と `tests/test_import_drop_contract.cjs` は、SD-011・013・018・149、WS-012・013・137へ対応する。消えた既定保存先と新しい未作成の絶対パスを保った設定保存、相対パス・NULの拒否、初期化、実保存時の拒否、File/handle両経路、端数ミリ秒、失敗後の再取り込みを検証する。実HTTP・SQLiteとChromiumを接続した試験で、設定保存・色許容範囲・全画像検出の要求・ファイル選択・ドロップ・パス入力を操作する。推論要求だけはGPU境界で応答を代替し、設定と取り込みのHTTPは代替しない。
+
+画像ごとの取り込み応答は一覧世代だけを読み、一覧全体は最後の要求で一度取得する。32枚のHTTP試験で全画像の識別情報・mtimeと世代を確認し、画像ごとに一覧全体を作成しないことを固定する。256枚の小PNG・逐次HTTP・通常のSQLite同期によるローカル計測では、旧処理を再現した比較が8.481秒・一覧作成257回、新処理が7.022秒・1回だった。これは当該fixtureの測定値であり、大画像や実ドライブ全般の所要を保証しない。
+個別の検出設定は、保存・取消し・保存失敗・再読込後の実行値と一括設定の保持を実ブラウザーで確認します。モデル準備の表示は実HTTP・ジョブ処理とCPUのモデル境界fixtureを通し、準備、一時停止、再開、推論、追加モデル準備、完了、失敗、取消しを確認します。表示契約に実GPUや利用者の画像は必要ありません。
+確認フラグの編集後保持と一覧専用削除は `test_review_list_removal_e2e.cjs` のブラウザー操作、`test_project_catalog_coverage.py` の元画像保持・再起動、`test_workspace.py` の旧履歴復元で確認する。WS-027・WS-029・WS-036 と DI-051〜053・DI-088〜097・DI-255 の契約を対応させ、実機確認項目は追加しない。
+
+元画像の変更検知・同寸法の受け入れ・範囲の拡縮・クリア・PJへの移行でも、確認済み／未確認の両方を維持する。WS-027 のPython契約で再起動と全履歴のUndo/Redoまで確認する。
+
+一般設定の検証・保存は、検出ダイアログの取消し後も保存済みの対象を使うことを確認します。
+
+設定保存・初期化では保存先の存在や書込み可否を検査しない。`test_settings_save_validates_once_without_probing_output_directory` は更新の検証が一度で、既存の原子的書込みだけが一時ファイルを作ることを確認する。`test_settings_reset_removes_override_without_probing_output_directory` は初期化時に保存先への試し書きを行わないことを確認する。実保存とフォルダー選択時の検証は維持する。

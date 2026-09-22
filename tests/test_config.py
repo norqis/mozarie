@@ -37,18 +37,27 @@ class SettingsTests(unittest.TestCase):
                 with self.subTest(saving=value), self.assertRaises(SettingsError):
                     store.validate_update({"saving": {"image_filters": value}})
 
-    def test_default_candidate_padding_round_trips_and_rejects_non_integer_values(self):
+    def test_sd_132_133_legacy_candidate_padding_migrates_and_distinct_values_round_trip(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory); config = root / "config"; config.mkdir()
             (config / "defaults.json").write_text(json.dumps(default_settings()), encoding="utf-8")
+            (config / "local.json").write_text(json.dumps({"detection": {"default_candidate_padding_px": 9}}), encoding="utf-8")
             store = SettingsStore(root)
-            self.assertEqual(store.load()["detection"]["default_candidate_padding_px"], 0)
-            saved = store.save({"detection": {"default_candidate_padding_px": 12}})
-            self.assertEqual(saved["detection"]["default_candidate_padding_px"], 12)
-            self.assertEqual(SettingsStore(root).load()["detection"]["default_candidate_padding_px"], 12)
+            migrated = store.load()
+            self.assertEqual(migrated["detection"]["default_candidate_padding_px"], 9)
+            self.assertEqual(migrated["detection"]["default_exclude_candidate_padding_px"], 9)
+            store.save(migrated)
+            persisted = json.loads((config / "local.json").read_text(encoding="utf-8"))
+            self.assertEqual(persisted["detection"]["default_candidate_padding_px"], 9)
+            self.assertEqual(persisted["detection"]["default_exclude_candidate_padding_px"], 9)
+            saved = store.save({"detection": {"default_candidate_padding_px": 3, "default_exclude_candidate_padding_px": 11}})
+            self.assertEqual((saved["detection"]["default_candidate_padding_px"], saved["detection"]["default_exclude_candidate_padding_px"]), (3, 11))
+            reloaded = SettingsStore(root).load()
+            self.assertEqual((reloaded["detection"]["default_candidate_padding_px"], reloaded["detection"]["default_exclude_candidate_padding_px"]), (3, 11))
             for value in (True, 1.5, "12", -1):
-                with self.subTest(value=value), self.assertRaises(SettingsError):
-                    store.validate_update({"detection": {"default_candidate_padding_px": value}})
+                for key in ("default_candidate_padding_px", "default_exclude_candidate_padding_px"):
+                    with self.subTest(key=key, value=value), self.assertRaises(SettingsError):
+                        store.validate_update({"detection": {key: value}})
             saved = store.validate_update({"detection": {"default_candidate_padding_px": 16385}})
             self.assertEqual(saved["detection"]["default_candidate_padding_px"], 16385)
 
@@ -163,6 +172,16 @@ class SettingsTests(unittest.TestCase):
 
             self.assertEqual(loaded["editing"]["fill_color_tolerance"], 20)
 
+    def test_fill_tolerance_survives_settings_store_reinitialization(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); config = root / "config"; config.mkdir()
+            (config / "defaults.json").write_text(json.dumps(default_settings()), encoding="utf-8")
+
+            SettingsStore(root).save({"editing": {"fill_color_tolerance": 37}})
+
+            restarted_store = SettingsStore(root)
+            self.assertEqual(restarted_store.load()["editing"]["fill_color_tolerance"], 37)
+
     def test_reset_removes_only_machine_override(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory); (root / "config").mkdir()
@@ -246,7 +265,31 @@ class SettingsTests(unittest.TestCase):
         settings = validate_settings(legacy)
         self.assertTrue(settings["shortcuts"]["actions"]["previousVisible"])
         self.assertEqual(settings["shortcuts"]["bindings"]["nextVisible"], "ArrowDown")
+        self.assertEqual(settings["shortcuts"]["bindings"]["removeImage"], "Delete")
+        self.assertTrue(settings["shortcuts"]["actions"]["removeImage"])
         self.assertTrue(settings["confirmations"]["candidateDelete"])
+
+    def test_legacy_delete_binding_migration_avoids_an_existing_delete_key(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); config = root / "config"; config.mkdir()
+            defaults = default_settings(); (config / "defaults.json").write_text(json.dumps(defaults), encoding="utf-8")
+            legacy = {"shortcuts": {"bindings": {
+                key: value for key, value in defaults["shortcuts"]["bindings"].items() if key != "removeImage"
+            }, "actions": {
+                key: value for key, value in defaults["shortcuts"]["actions"].items() if key != "removeImage"
+            }}}
+            legacy["shortcuts"]["bindings"]["previous"] = " Delete "
+            (config / "local.json").write_text(json.dumps(legacy), encoding="utf-8")
+            store = SettingsStore(root)
+            settings = store.load()
+            self.assertEqual(settings["shortcuts"]["bindings"]["previous"], "Delete")
+            self.assertEqual(settings["shortcuts"]["bindings"]["removeImage"], "Ctrl+Delete")
+            self.assertFalse(settings["shortcuts"]["actions"]["removeImage"])
+            store.save(settings)
+            reloaded = SettingsStore(root).load()
+            self.assertEqual(reloaded["shortcuts"]["bindings"]["previous"], "Delete")
+            self.assertEqual(reloaded["shortcuts"]["bindings"]["removeImage"], "Ctrl+Delete")
+            self.assertFalse(reloaded["shortcuts"]["actions"]["removeImage"])
 
     def test_failed_atomic_replace_keeps_the_previous_local_json(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -260,3 +303,57 @@ class SettingsTests(unittest.TestCase):
                     store.save({"general": {"language": "en"}})
             self.assertEqual(local.read_text(encoding="utf-8"), '{"keep": true}')
             self.assertEqual(list(config.glob(".local.json.*.tmp")), [])
+
+    def test_toolbar_shortcuts_defaults_are_complete_unique_and_round_trip(self):
+        defaults = default_settings()
+        expected = {
+            "cycleMosaicTool": "Q", "cycleExclusionTool": "W",
+            "mosaicBrush": "B", "mosaicFill": "K", "mosaicEraser": "E",
+            "boundaryMenu": "T", "boundaryRectangle": "R", "boundaryPolygon": "P", "boundaryBrush": "C",
+            "exclusionBrush": "Shift+B", "exclusionFill": "Shift+K", "exclusionEraser": "Shift+E",
+            "singleView": "1", "compareView": "2", "fitView": "F",
+            "flipHorizontal": "H", "flipVertical": "V", "mosaicPreview": "M",
+        }
+        for action, binding in expected.items():
+            self.assertEqual(defaults["shortcuts"]["bindings"][action], binding)
+            self.assertTrue(defaults["shortcuts"]["actions"][action])
+        self.assertEqual(len(set(defaults["shortcuts"]["bindings"].values())), 30)
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); config = root / "config"; config.mkdir()
+            (config / "defaults.json").write_text(json.dumps(defaults), encoding="utf-8")
+            store = SettingsStore(root)
+            saved = store.save({"shortcuts": {"bindings": {"cycleMosaicTool": "Shift+Q"}, "actions": {"flipVertical": False}}})
+            self.assertEqual(SettingsStore(root).load()["shortcuts"], saved["shortcuts"])
+            self.assertEqual(saved["shortcuts"]["bindings"]["cycleMosaicTool"], "Shift+Q")
+            self.assertFalse(saved["shortcuts"]["actions"]["flipVertical"])
+            with self.assertRaises(SettingsError):
+                store.save({"shortcuts": {"bindings": {"cycleExclusionTool": "Shift+Q"}}})
+            self.assertEqual(SettingsStore(root).load()["shortcuts"], saved["shortcuts"])
+
+    def test_toolbar_shortcuts_migrate_without_claiming_custom_keys(self):
+        legacy_actions = ["previous", "next", "previousVisible", "nextVisible", "first", "last", "reviewAndNext", "removeImage", "toggleOverview", "undo", "redo", "renameImage"]
+        defaults = default_settings()
+        legacy = {"shortcuts": {
+            "enabled": False,
+            "bindings": {action: defaults["shortcuts"]["bindings"][action] for action in legacy_actions},
+            "actions": {action: action != "next" for action in legacy_actions},
+        }}
+        legacy["shortcuts"]["bindings"].update({"previous": "Q", "next": "W", "first": "1", "last": "F", "reviewAndNext": "Shift+B"})
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); config = root / "config"; config.mkdir()
+            (config / "defaults.json").write_text(json.dumps(defaults), encoding="utf-8")
+            (config / "local.json").write_text(json.dumps(legacy), encoding="utf-8")
+            store = SettingsStore(root)
+            shortcuts = store.load()["shortcuts"]
+            self.assertFalse(shortcuts["enabled"])
+            for action in legacy_actions:
+                self.assertEqual(shortcuts["bindings"][action], legacy["shortcuts"]["bindings"][action])
+                self.assertEqual(shortcuts["actions"][action], legacy["shortcuts"]["actions"][action])
+            for action in ("cycleMosaicTool", "cycleExclusionTool", "singleView", "fitView", "exclusionBrush"):
+                self.assertFalse(shortcuts["actions"][action])
+                self.assertNotEqual(shortcuts["bindings"][action], defaults["shortcuts"]["bindings"][action])
+                self.assertNotIn("legacy disabled", shortcuts["bindings"][action])
+            self.assertEqual(shortcuts["bindings"]["mosaicBrush"], "B")
+            self.assertEqual(len(set(shortcuts["bindings"].values())), 30)
+            store.save({"shortcuts": shortcuts})
+            self.assertEqual(SettingsStore(root).load()["shortcuts"], shortcuts)

@@ -9,6 +9,7 @@ from unittest import mock
 import numpy as np
 from PIL import Image, PngImagePlugin
 
+import mozarie.image_io as image_io
 from mozarie.core import ClientError, ImageRecord
 from mozarie.image_io import canonical_image, inspect_import_image, open_image
 
@@ -33,6 +34,28 @@ class InputImageValidationTests(unittest.TestCase):
             path.write_bytes(output.getvalue()[:-2])
             with self.assertRaises(ClientError):
                 inspect_import_image(path, ".jpg")
+
+    def test_valid_jpeg_with_trailing_payload_is_accepted_without_rewriting_source(self):
+        output = io.BytesIO()
+        Image.new("RGB", (9, 5), "white").save(output, format="JPEG")
+        source = output.getvalue() + b"mozarie-trailing-payload"
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "trailing.jpg"
+            path.write_bytes(source)
+
+            self.assertEqual(inspect_import_image(path, ".jpg"), (9, 5))
+            self.assertEqual(path.read_bytes(), source)
+
+    def test_truncated_png_and_webp_are_rejected(self):
+        for suffix, image_format in ((".png", "PNG"), (".webp", "WEBP")):
+            with self.subTest(suffix=suffix), tempfile.TemporaryDirectory() as directory:
+                output = io.BytesIO()
+                Image.new("RGB", (16, 12), "white").save(output, format=image_format)
+                path = Path(directory) / f"truncated{suffix}"
+                path.write_bytes(output.getvalue()[:-10])
+                with self.assertRaises(ClientError) as raised:
+                    inspect_import_image(path, suffix)
+                self.assertEqual(raised.exception.error_code, "image_read_failed")
 
     def test_verify_passes_but_pixel_decode_failure_is_rejected(self):
         """PNG chunk checks alone do not prove that the compressed pixels decode."""
@@ -62,48 +85,47 @@ class InputImageValidationTests(unittest.TestCase):
                 inspect_import_image(path, ".png")
             self.assertEqual(raised.exception.error_code, "image_read_failed")
 
-    def test_pillow_pixel_guard_is_disabled_only_while_opening(self):
+    def test_import_uses_one_logical_image_wrapper_and_keeps_the_pixel_limit_disabled(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "small.png"
             Image.new("RGB", (2, 2), "white").save(path)
-            with mock.patch.object(Image, "MAX_IMAGE_PIXELS", 1):
+
+            self.assertIsNone(Image.MAX_IMAGE_PIXELS)
+            with mock.patch.object(
+                image_io,
+                "open_image_without_png_text",
+                wraps=image_io.open_image_without_png_text,
+            ) as open_wrapper:
                 self.assertEqual(inspect_import_image(path, ".png"), (2, 2))
-                self.assertEqual(Image.MAX_IMAGE_PIXELS, 1)
+            open_wrapper.assert_called_once_with(path, expected_suffix=".png")
+            self.assertIsNone(Image.MAX_IMAGE_PIXELS)
 
-    def test_pixel_guard_is_restored_after_concurrent_openers_finish(self):
+    def test_concurrent_actual_reads_keep_the_process_pixel_limit_disabled(self):
         with tempfile.TemporaryDirectory() as directory:
-            path = Path(directory) / "small.png"
-            Image.new("RGB", (2, 2), "white").save(path)
-            entered = threading.Barrier(3)
-            release = threading.Event()
+            paths = []
+            for suffix, image_format in ((".png", "PNG"), (".jpg", "JPEG"), (".webp", "WEBP")):
+                path = Path(directory) / f"small{suffix}"
+                Image.new("RGB", (20, 10), "white").save(path, format=image_format)
+                paths.append((path, suffix))
+            start = threading.Barrier(len(paths) + 1)
             failures: list[BaseException] = []
+            sizes: list[tuple[int, int]] = []
 
-            def worker() -> None:
+            def worker(path: Path, suffix: str) -> None:
                 try:
-                    with open_image(path):
-                        entered.wait(timeout=THREAD_TIMEOUT)
-                        if not release.wait(THREAD_TIMEOUT):
-                            raise RuntimeError("test did not release image openers")
+                    start.wait(timeout=THREAD_TIMEOUT)
+                    sizes.append(inspect_import_image(path, suffix))
                 except BaseException as exc:  # test thread failures must be reported by the parent.
                     failures.append(exc)
 
-            with mock.patch.object(Image, "MAX_IMAGE_PIXELS", 1):
-                threads = [threading.Thread(target=worker) for _index in range(2)]
-                gate_reached = False
-                try:
-                    for thread in threads:
-                        thread.start()
-                    entered.wait(timeout=THREAD_TIMEOUT)
-                    self.assertIsNone(Image.MAX_IMAGE_PIXELS)
-                    release.set()
-                    gate_reached = True
-                finally:
-                    release.set()
-                    if not gate_reached:
-                        entered.abort()
-                    join_threads(*threads)
-                self.assertEqual(failures, [])
-                self.assertEqual(Image.MAX_IMAGE_PIXELS, 1)
+            threads = [threading.Thread(target=worker, args=entry) for entry in paths]
+            for thread in threads:
+                thread.start()
+            start.wait(timeout=THREAD_TIMEOUT)
+            join_threads(*threads)
+            self.assertEqual(failures, [])
+            self.assertEqual(sorted(sizes), [(20, 10)] * len(paths))
+            self.assertIsNone(Image.MAX_IMAGE_PIXELS)
 
     def test_open_failures_are_reported_as_image_read_failed(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -124,6 +146,21 @@ class InputImageValidationTests(unittest.TestCase):
                     canonical_image(record)
             self.assertEqual(raised.exception.error_code, "image_read_failed")
 
+    def test_transparent_png_preserves_shape_and_alpha_pixels(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "transparent.png"
+            source = Image.new("RGBA", (3, 2), (10, 20, 30, 255))
+            source.putpixel((1, 0), (40, 50, 60, 0))
+            source.save(path)
+            stat = path.stat()
+            record = ImageRecord("transparent", path, path.name, 3, 2, stat.st_mtime_ns, stat.st_size)
+
+            loaded, _raw, _info = canonical_image(record)
+            with loaded:
+                self.assertEqual(loaded.size, (3, 2))
+                self.assertEqual(loaded.mode, "RGBA")
+                self.assertEqual(loaded.getpixel((1, 0)), (40, 50, 60, 0))
+
     def test_png_with_large_text_metadata_is_inspected_from_pixels(self):
         """A valid image must not disappear because optional PNG text is huge."""
         metadata = PngImagePlugin.PngInfo()
@@ -131,7 +168,9 @@ class InputImageValidationTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "metadata.png"
             Image.new("RGB", (11, 7), "white").save(path, pnginfo=metadata)
+            source = path.read_bytes()
             self.assertEqual(inspect_import_image(path, ".png"), (11, 7))
+            self.assertEqual(path.read_bytes(), source)
 
     def test_browser_staged_png_uses_the_logical_suffix_for_large_text_metadata(self):
         """A browser upload keeps its PNG format after staging under a .tmp name."""

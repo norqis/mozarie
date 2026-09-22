@@ -14,7 +14,6 @@ import io
 import json
 import base64
 import contextlib
-import shutil
 import tempfile
 import threading
 import time
@@ -24,11 +23,14 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
+import numpy as np
 from PIL import Image
+from tests import prepare_test_app_config
 
 import mozarie.http as http_module
 import mozarie.state as state_module
 from mozarie.core import Candidate
+from mozarie.domain import CandidateRole
 from mozarie.http import MosaicHandler
 from mozarie.state import StudioState
 
@@ -38,7 +40,7 @@ class ProjectHttpCoverageTests(unittest.TestCase):
         self._temporary_directory = tempfile.TemporaryDirectory()
         self.root = Path(self._temporary_directory.name)
         self.app_dir = self.root / "app"
-        shutil.copytree(Path(__file__).resolve().parents[1] / "config", self.app_dir / "config")
+        prepare_test_app_config(self.app_dir)
         self.source_dir = self.root / "images"
         self.source_dir.mkdir()
         Image.new("RGB", (12, 8), "white").save(self.source_dir / "source.png")
@@ -147,6 +149,10 @@ class ProjectHttpCoverageTests(unittest.TestCase):
         status, _headers, body = self.request("POST", f"/api/workspace/image/{hidden_id}", {"hidden": True}, authorized=True)
         self.assertEqual(status, 200, body.decode("utf-8"))
         for kind in ("mosaic", "exclude"):
+            status, _headers, body = self.request("GET", f"/api/project/mask/{hidden_id}/{kind}")
+            self.assertEqual(status, 400)
+            self.assertEqual(json.loads(body)["error_code"], "image_hidden")
+        for kind in ("mosaic", "exclude"):
             status, headers, body = self.request("GET", f"/api/project/mask/{image_id}/{kind}")
             self.assertEqual(status, 200)
             self.assertEqual(headers["Content-Type"], "image/png")
@@ -198,6 +204,75 @@ class ProjectHttpCoverageTests(unittest.TestCase):
         status, _headers, body = self.request("GET", "/api/project/mask/missing/mosaic")
         self.assertEqual(status, 400)
         self.assertEqual(json.loads(body)["error_code"], "image_not_found")
+
+    def test_single_mosaic_mask_export_is_original_size_l_png_with_exclusion_subtracted(self) -> None:
+        _project_id, image_id = self.create_and_load()
+        cache = self.state.cache_dir / image_id
+        cache.mkdir(parents=True, exist_ok=True)
+        apply = np.zeros((8, 12), dtype=np.uint8); apply[1:7, 2:10] = 255
+        exclude = np.zeros((8, 12), dtype=np.uint8); exclude[3:5, 5:7] = 255
+        apply_path, exclude_path = cache / "apply.png", cache / "exclude.png"
+        Image.fromarray(apply).save(apply_path); Image.fromarray(exclude).save(exclude_path)
+        self.state.candidates[image_id] = [
+            Candidate("apply", "penis", .9, apply_path),
+            Candidate("exclude", "hand", None, exclude_path, source="hand_exclusion", role=CandidateRole.EXCLUDE),
+        ]
+        with self.state.image_io_lock(image_id):
+            with self.state.lock:
+                self.state._commit_candidate_snapshot(image_id, self.state.candidates[image_id], replace=True)
+
+        status, headers, body = self.request("GET", f"/api/project/mask/{image_id}/mosaic")
+        self.assertEqual(status, 200, body.decode("utf-8") if status != 200 else "")
+        self.assertEqual(headers["Content-Type"], "image/png")
+        with Image.open(io.BytesIO(body)) as exported:
+            self.assertEqual((exported.format, exported.mode, exported.size), ("PNG", "L", (12, 8)))
+            actual = np.asarray(exported)
+        expected = apply.copy(); expected[exclude > 0] = 0
+        self.assertTrue(np.array_equal(actual, expected), "single mosaic export subtracts the exclusion mask pixel-for-pixel")
+
+    def test_project_mask_zip_keeps_same_named_images_from_distinct_sources_identifiable(self) -> None:
+        first = self.root / "first-source"
+        second = self.root / "second-source"
+        first.mkdir(); second.mkdir()
+        Image.new("RGB", (12, 8), "red").save(first / "same.png")
+        Image.new("RGB", (12, 8), "blue").save(second / "same.png")
+        project = self.state.create_project("same-name masks")
+        first_id = self.state.set_root(str(first))[0]["id"]
+        second_path = second / "same.png"
+        second_stat = second_path.stat()
+        second_source = self.state.workspace_store.ensure_project_source(
+            project["id"], kind="native-folder", display_name=second.name, identity=str(second.resolve()),
+        )
+        self.state.workspace_store.reconcile_images(project["id"], [SimpleNamespace(
+            relative_path="same.png", size_bytes=second_stat.st_size, mtime_ns=second_stat.st_mtime_ns,
+            width=12, height=8,
+        )], second_source)
+        self.state.open_project(project["id"])
+        ids = {self.state.image_for_id(item["id"]).path.parent.name: item["id"] for item in self.state.list_images()}
+        self.assertEqual(set(ids), {"first-source", "second-source"})
+        for source_name, pixel in (("first-source", (1, 1)), ("second-source", (9, 5))):
+            image_id = ids[source_name]
+            mask_path = self.state.cache_dir / image_id / "same-mask.png"
+            mask_path.parent.mkdir(parents=True, exist_ok=True)
+            mask = Image.new("L", (12, 8), 0); mask.putpixel(pixel, 255); mask.save(mask_path)
+            with self.state.image_io_lock(image_id):
+                with self.state.lock:
+                    self.state._commit_candidate_snapshot(image_id, [Candidate("same-mask", "penis", .9, mask_path)], replace=True)
+
+        status, _headers, body = self.request("GET", f"/api/project/masks/{project['id']}/mosaic")
+        self.assertEqual(status, 200)
+        with zipfile.ZipFile(io.BytesIO(body)) as archive:
+            names = archive.namelist()
+            self.assertEqual(len(names), 2)
+            self.assertEqual(len(set(names)), 2)
+            self.assertTrue(all(name.endswith("/same.png.mosaic.png") for name in names))
+            self.assertTrue(any(name.startswith("first-source-") for name in names))
+            self.assertTrue(any(name.startswith("second-source-") for name in names))
+            boxes = {}
+            for name in names:
+                with Image.open(io.BytesIO(archive.read(name))) as mask:
+                    boxes[name.split("-", 1)[0]] = mask.convert("L").getbbox()
+            self.assertEqual(boxes, {"first": (1, 1, 2, 2), "second": (9, 5, 10, 6)})
 
     def test_project_switch_restores_only_its_durable_candidate_manual_history_and_flags(self) -> None:
         project_a, image_a = self.create_and_load("A")
@@ -453,6 +528,7 @@ class ProjectHttpCoverageTests(unittest.TestCase):
         request._read_json_body = Mock(return_value={"imageIds": ["one", "two"], "enabled": False})
         request._json = Mock()
         state = Mock()
+        state.assert_catalog_expectation = Mock()
         state.catalog_request.return_value = contextlib.nullcontext()
         state.batch_update_candidates_many.return_value = {"one": 2, "two": 3}
         with patch.object(http_module, "STATE", state):

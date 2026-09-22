@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import shutil
 import sqlite3
 import tempfile
 import unittest
@@ -12,6 +11,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from PIL import Image
+from tests import prepare_test_app_config
 
 import mozarie.state as state_module
 from mozarie.state import StudioState
@@ -22,7 +22,7 @@ class ProjectOpenHydrationRegressionTests(unittest.TestCase):
         self._temporary = tempfile.TemporaryDirectory()
         self.root = Path(self._temporary.name)
         self.app_dir = self.root / "app"
-        shutil.copytree(Path(__file__).parents[1] / "config", self.app_dir / "config")
+        prepare_test_app_config(self.app_dir)
         self.states: list[StudioState] = []
 
     def tearDown(self) -> None:

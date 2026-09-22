@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-import shutil
 import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
 
 from PIL import Image
+from tests import prepare_test_app_config
 
 import mozarie.state as state_module
 from mozarie.domain import Candidate
@@ -20,7 +20,7 @@ class DetectionCleanupRegressionTests(unittest.TestCase):
         self._temporary = tempfile.TemporaryDirectory()
         self.root = Path(self._temporary.name)
         app_dir = self.root / "app"
-        shutil.copytree(Path(__file__).parents[1] / "config", app_dir / "config")
+        prepare_test_app_config(app_dir)
         self._app_dir = patch.object(state_module, "APP_DIR", app_dir)
         self._app_dir.start()
         self.state = StudioState(self.root / "cache", self.root / "sessions")

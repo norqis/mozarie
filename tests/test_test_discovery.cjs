@@ -2,7 +2,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
-const { frontendPerformanceTestFiles, frontendTestArguments, frontendTestFiles } = require("../scripts/test-discovery.cjs");
+const { browserCoverageTestFiles, frontendPerformanceTestFiles, frontendTestArguments, frontendTestFiles, selectedFrontendTestFiles } = require("../scripts/test-discovery.cjs");
 const frontend = require("../scripts/test-frontend.cjs");
 const coverage = require("../scripts/coverage-js.cjs");
 
@@ -26,7 +26,15 @@ assert.strictEqual(frontend.frontendTestFiles, frontendTestFiles, "the ordinary 
 assert.deepEqual(coverage.testFiles, frontend.frontendTestFiles(), "coverage runs exactly the frontend runner's deterministic test list");
 assert.deepEqual(frontendPerformanceTestFiles(), ["tests/test_gallery_performance_e2e.cjs"], "the 20k gallery test is discovered as the single non-coverage performance suite");
 assert.equal(frontendTestFiles().includes("tests/test_gallery_performance_e2e.cjs"), false, "coverage discovery excludes the uninstrumented performance suite");
+assert.ok(browserCoverageTestFiles.length > 0, "browser coverage has an explicit producer inventory");
+for (const file of browserCoverageTestFiles) {
+  assert.ok(frontendTestFiles().includes(file), `${file} is included in coverage discovery`);
+  assert.equal([0, 1].filter((index) => selectedFrontendTestFiles(frontendTestFiles(), index, 2).includes(file)).length, 1, `${file} is assigned to exactly one coverage shard`);
+}
 assert.deepEqual(frontendTestArguments(["tests/nested/test_fixture.cjs"]), ["--test", "--test-reporter=./scripts/strict-tap-reporter.cjs", "--test-concurrency=1", "tests/nested/test_fixture.cjs"], "ordinary and coverage execution share the strict reporter, stable browser concurrency, and nested paths");
+assert.deepEqual(selectedFrontendTestFiles(["a", "b", "c", "d", "e"], 0, 2), ["a", "c", "e"], "frontend shard zero receives alternating sorted files");
+assert.deepEqual(selectedFrontendTestFiles(["a", "b", "c", "d", "e"], 1, 2), ["b", "d"], "frontend shard one receives the complementary files");
+assert.throws(() => selectedFrontendTestFiles(["a"], 2, 2), /within shard total/, "an invalid frontend shard is rejected");
 for (const file of [...frontendTestFiles(), ...frontendPerformanceTestFiles()]) {
   const contents = fs.readFileSync(path.join(__dirname, "..", file), "utf8");
   assert.equal(/^\s*\(async\s*\(\)\s*=>/m.test(contents), false, `${file} must register asynchronous work with node:test instead of a top-level async IIFE`);

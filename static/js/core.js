@@ -173,6 +173,10 @@ async function loadTranslations(languageOverride = null) {
   if (sectionHeadings[1]) sectionHeadings[1].textContent = t("candidates.excludeRanges");
   renderModelStatus();
   renderLocalizedDynamicState();
+  const modelHelpDialog = $("#modelHelpDialog");
+  if (modelHelpDialog?.open && modelHelpDialog.dataset.modelHelpKey && typeof openModelHelp === "function") {
+    openModelHelp(modelHelpDialog.dataset.modelHelpKey);
+  }
   document.querySelectorAll(".target-chip input").forEach((input) => syncDetectionTargetSwitch(input));
   updateBoundaryActions();
   renderCatalogViews(); renderCandidates(); render();
@@ -295,6 +299,7 @@ function progressText(job) {
 
 function processingCurrentPath(job) {
   if (job?.kind !== "detect") return job?.current || "";
+  if (job.phase === "preparing_models" && ["running", "pausing", "paused"].includes(job.state)) return t("processing.preparingModels");
   const imageIds = job.imageIds || [];
   const completedIds = new Set(job.completedImageIds || []);
   const targetIds = new Set(imageIds);
@@ -384,11 +389,9 @@ function updateFilterMenuButtons() {
 function currentRecord() { return state.images.find((image) => image.id === state.currentId) || null; }
 function isCurrentGeneration(generation) { return state.imageGeneration === generation; }
 function normaliseDetectionConfidence(value) { return Math.max(0.10, Math.min(1.00, Number(value) || 0.50)); }
-function detectionConfidence() { return normaliseDetectionConfidence($("#confidence").value); }
+function detectionConfidence() { return normaliseDetectionConfidence(state.settings?.detection?.threshold); }
 function setDetectionConfidence(value) {
   const confidence = normaliseDetectionConfidence(value);
-  $("#confidence").value = confidence.toFixed(2);
-  $("#confidenceValue").textContent = confidence.toFixed(2);
   $("#detectConfidenceRange").value = confidence.toFixed(2);
   $("#detectConfidenceNumber").value = confidence.toFixed(2);
 }
@@ -431,13 +434,26 @@ function catalogResponse(snapshot) {
   if (isCompleteCatalogSnapshot(snapshot) && typeof applyProjectSnapshot === "function") applyProjectSnapshot(snapshot);
   return snapshot;
 }
+function replaceCatalogSnapshot(snapshot, expectedProjectId) {
+  const images = snapshot.images || [];
+  const preservesEditor = (snapshot?.project?.id || null) === (expectedProjectId || null)
+    && Boolean(state.currentId && state.currentImage && images.some((image) => image.id === state.currentId));
+  if (!preservesEditor) { resetCatalog(images, snapshot.root || ""); return; }
+  const availableIds = new Set(images.map((image) => image.id));
+  for (const image of state.images.filter((image) => !availableIds.has(image.id))) {
+    releaseImageCaches(image.id); state.sourceAccess.delete(image.id); state.drafts.delete(image.id); state.maskStatus.delete(image.id);
+    clearReviewForRemovedImage(image); state.selectedImageIds.delete(image.id);
+  }
+  state.images = images;
+  loadReviewedPaths(); pruneSourceAccess(); renderCatalogViews(); updateSelectionActionBar(); updateNavigationControls(); updateActionButtons();
+}
 function reconcileCatalogSnapshot(snapshot, expectedProjectId, expectedCatalogGeneration) {
   const projectId = snapshot?.project?.id || null;
   const replaced = isCompleteCatalogSnapshot(snapshot)
     && (projectId !== (expectedProjectId || null) || snapshot.catalogGeneration !== expectedCatalogGeneration);
   catalogResponse(snapshot);
   if (replaced) {
-    resetCatalog(snapshot.images || [], snapshot.root || "");
+    replaceCatalogSnapshot(snapshot, expectedProjectId);
     applyProjectSnapshot(snapshot);
     state.missingNativeSources = typeof missingNativeSources === "function" ? missingNativeSources(snapshot.sources) : [];
     if (typeof restoreBrowserProjectSourcesForCurrentCatalog === "function") void restoreBrowserProjectSourcesForCurrentCatalog(snapshot.sources).catch(() => {});
@@ -475,11 +491,12 @@ async function catalogApi(path, payload = {}, options = {}) {
   }
 }
 async function resyncCatalog(epoch = state.catalogEpoch, signal = undefined) {
+  const currentProjectId = state.project?.id || null;
   const snapshot = await api("/api/images", { signal, resyncOnStale: false });
   if (!isCurrentCatalogEpoch(epoch)) return null;
   catalogResponse(snapshot);
   if (typeof flushPendingBrowserSaveAcks === "function") void flushPendingBrowserSaveAcks();
-  resetCatalog(snapshot.images || [], snapshot.root || "");
+  replaceCatalogSnapshot(snapshot, currentProjectId);
   applyProjectSnapshot(snapshot);
   state.missingNativeSources = typeof missingNativeSources === "function" ? missingNativeSources(snapshot.sources) : [];
   if (typeof restoreBrowserProjectSourcesForCurrentCatalog === "function") void restoreBrowserProjectSourcesForCurrentCatalog(snapshot.sources).catch(() => {});
@@ -501,7 +518,7 @@ async function syncCatalogOnReturn() {
     catalogResponse(snapshot);
     if (typeof flushPendingBrowserSaveAcks === "function") void flushPendingBrowserSaveAcks();
     if (changed) {
-      resetCatalog(snapshot.images || [], snapshot.root || "");
+      replaceCatalogSnapshot(snapshot, knownProjectId);
       state.missingNativeSources = typeof missingNativeSources === "function" ? missingNativeSources(snapshot.sources) : [];
       if (typeof restoreBrowserProjectSourcesForCurrentCatalog === "function") void restoreBrowserProjectSourcesForCurrentCatalog(snapshot.sources).catch(() => {});
     }
@@ -714,22 +731,8 @@ function setReviewed(image, reviewed) {
     return saved;
   });
 }
-function markImagesUnreviewed(imageIds, renderAfter = true) {
-  let changed = false;
-  for (const imageId of imageIds) {
-    const image = state.images.find((item) => item.id === imageId);
-    if (!image || !isReviewed(image)) continue;
-    changed = true;
-    void setReviewed(image, false).then((saved) => { if (saved && renderAfter) refreshReviewViews(); });
-  }
-  return changed;
-}
-function markCurrentUnreviewed(renderAfter = true) { return markImagesUnreviewed([state.currentId], renderAfter); }
 function refreshCurrentReviewAndMask() {
-  const reviewChanged = markCurrentUnreviewed(false);
-  const maskChanged = refreshMaskStatus(true);
-  if (reviewChanged && !maskChanged) refreshReviewViews();
-  return reviewChanged || maskChanged;
+  return refreshMaskStatus(true);
 }
 function imageIndex(imageId = state.currentId) { return state.images.findIndex((image) => image.id === imageId); }
 function hasOpenDialog() { return [...document.querySelectorAll("dialog")].some((dialog) => dialog.open); }
@@ -756,6 +759,11 @@ function canRemoveCurrentImage() {
   const current = currentRecord();
   return Boolean(state.currentId && state.currentImage && current)
     && !isBusy() && !state.importing && !state.projectReadOnly && !current.sourceDimensionsChanged
+    && !state.projectOperationPending && !catalogStagingEditsActive() && !currentImageActionPending();
+}
+
+function canRemoveImagesFromList(images) {
+  return images.length > 0 && !isBusy() && !state.importing && !state.projectReadOnly
     && !state.projectOperationPending && !catalogStagingEditsActive() && !currentImageActionPending();
 }
 
@@ -800,12 +808,17 @@ function updateActionButtons() {
       control.disabled = false;
       delete control.dataset.disabledByLock;
     }
+    if (control.dataset.disabledByEmptyEditor === "true") {
+      control.disabled = false;
+      delete control.dataset.disabledByEmptyEditor;
+    }
   }
   $("#pickFolder").disabled = busyLocked || mutationLocked || catalogStaging;
   const detectAllButton = $("#detectAllButton");
   detectAllButton.textContent = t("gallery.detectAll");
   detectAllButton.disabled = busyLocked || mutationLocked || catalogStaging || allImageDetectionTargets().length === 0;
   $("#detectCurrentButton").disabled = busyLocked || mutationLocked || catalogStaging || switchingImages || !currentProcessable;
+  $("#detectionSettingsButton").disabled = busyLocked || mutationLocked || catalogStaging;
   $("#clearCurrentMasksButton").disabled = busyLocked || mutationLocked || catalogStaging || switchingImages || candidateLocked || !currentProcessable
     || !(current.candidateCount || state.manualMaskPresent || presence?.hasManualExclude || presence?.hasManualExclusionErase || imageHasMask(current));
   const visibilityButton = $("#removeCurrentImageButton");
@@ -821,6 +834,11 @@ function updateActionButtons() {
   $("#saveAllButton").disabled = busyLocked || mutationLocked || catalogStaging || mutatingCandidates || processableImages().length === 0;
   const currentSaveDisabled = busyLocked || mutationLocked || catalogStaging || switchingImages || mutatingCandidates || !currentProcessable;
   $("#saveButton").disabled = currentSaveDisabled;
+  const editorControlsLocked = busyLocked || mutationLocked || switchingImages || (Boolean(state.currentId) && !currentProcessable);
+  for (const control of document.querySelectorAll("[data-toolbar-item]:not(#singleViewButton):not(#compareViewButton):not(#fitButton):not(#mosaicPreviewButton), #rectangleTool, #polygonTool, #boundaryBrushTool, #brushSize, #bucketTolerance, #bucketToleranceDecrease, #bucketToleranceIncrease")) {
+    if (editorControlsLocked && !control.disabled) { control.dataset.disabledByLock = "true"; control.disabled = true; }
+    else if (!currentProcessable && !control.disabled) { control.dataset.disabledByEmptyEditor = "true"; control.disabled = true; }
+  }
   $("#applyStartButton").disabled = busyLocked || mutationLocked || catalogStaging || mutatingCandidates || state.applyTargetIds.length === 0
     || Boolean(applyRestrictionMessage()) || (selectedSaveMode() === "copy" && !state.settings?.saving?.default_output_directory);
   $("#overviewButton").disabled = busyLocked || state.images.length === 0;
@@ -830,6 +848,7 @@ function updateActionButtons() {
   $("#nextImageButton").disabled = busyLocked || switchingImages || visibleImages.length === 0 || visibleIndex === visibleImages.length - 1;
   $("#reviewAndNextButton").disabled = busyLocked || mutationLocked || switchingImages || !hasImage;
   $("#removeAndNextButton").disabled = !canRemoveCurrentImage();
+  $("#removeFromListButton").disabled = !canRemoveImagesFromList(current ? [current] : []);
   $("#hideAndNextButton").disabled = busyLocked || mutationLocked || switchingImages || !hasImage;
   $("#downloadCurrentMosaicMask").disabled = switchingImages || !currentProcessable || !state.project;
   $("#downloadCurrentExcludeMask").disabled = switchingImages || !currentProcessable || !state.project;
@@ -864,6 +883,10 @@ function updateActionButtons() {
     const availableInReadOnlyControls = new Set([
       ...document.querySelectorAll(".gallery-item, .overview-item, [data-gallery-filter], [data-overview-filter], .project-table [data-project-action], .project-sort-button, [data-candidate-display-toggle], [data-candidate-effective-toggle], [data-candidate-display-id], [data-candidate-effective-id]"),
     ]);
+    if (sourceIncompatible && !state.projectReadOnly && !state.projectOperationPending) {
+      availableInReadOnly.add("removeFromListButton"); availableInReadOnly.add("removeFromListMenuItem");
+      for (const control of document.querySelectorAll('[data-selection-action="removeFromList"]')) availableInReadOnlyControls.add(control);
+    }
     const availableInReadOnlyDialogs = ["#settingsDialog", "#modelHelpDialog", "#modelDownloadDialog", ...(projectNameMode === "new" ? ["#projectNameDialog"] : []), ...(sourceIncompatible ? ["#sourceMismatchDialog"] : [])].map($);
     for (const control of controls) {
       if (availableInReadOnly.has(control.id) || availableInReadOnlyControls.has(control)

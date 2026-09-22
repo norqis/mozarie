@@ -89,6 +89,7 @@ class HttpBoundaryCoverageTests(unittest.TestCase):
             failures.append((error, status))
 
         state = Mock()
+        state.assert_catalog_expectation = Mock()
         state.catalog_request.return_value = contextlib.nullcontext()
         state.recover_gpu_oom_for_request.return_value = ClientError("GPU", "gpu_oom")
         state.catalog_snapshot.side_effect = RuntimeError("GPU out of memory")
@@ -117,6 +118,9 @@ class HttpBoundaryCoverageTests(unittest.TestCase):
             delete_handler.do_DELETE()
 
         self.assertEqual([getattr(error, "error_code", None) for error, _status in failures], ["gpu_oom", None, None])
+        self.assertEqual([str(error) for error, _status in failures[1:]], ["disk fault", "database fault"])
+        state.add_boundary_candidate.assert_called_once_with("image", {"imageId": "image"})
+        state.remove_image_from_catalog.assert_called_once_with("image")
 
     def test_project_delete_uses_a_single_delete_api_route(self) -> None:
         state = Mock()
@@ -150,6 +154,7 @@ class HttpBoundaryCoverageTests(unittest.TestCase):
         request._client_error = lambda error, *_args, **_kwargs: emitted.append(error)
         request._catalog_expectation = lambda _payload=None: (None, 0)
         state = Mock()
+        state.assert_catalog_expectation = Mock()
         state.catalog_request.return_value = contextlib.nullcontext()
         state.settings = {"detection": {"threshold": 0.5, "parallelism": 1}}
         state.model_downloads.start.side_effect = ModelDownloadError("unavailable")
@@ -251,6 +256,7 @@ class HttpBoundaryCoverageTests(unittest.TestCase):
             request.do_GET()
 
         post_state = Mock()
+        post_state.assert_catalog_expectation = Mock()
         post_state.catalog_request.return_value = contextlib.nullcontext()
         post_state.add_boundary_candidate.side_effect = RuntimeError("GPU memory")
         post_state.recover_gpu_oom_for_request.return_value = ClientError("GPU", "gpu_oom")
@@ -259,6 +265,7 @@ class HttpBoundaryCoverageTests(unittest.TestCase):
             request.do_POST()
 
         delete_state = Mock()
+        delete_state.assert_catalog_expectation = Mock()
         delete_state.catalog_request.return_value = contextlib.nullcontext()
         delete_state.remove_image_from_catalog.side_effect = RuntimeError("GPU memory")
         delete_state.recover_gpu_oom_for_request.return_value = ClientError("GPU", "gpu_oom")
@@ -272,6 +279,10 @@ class HttpBoundaryCoverageTests(unittest.TestCase):
         with patch.object(http_module, "STATE", Mock()):
             request.do_DELETE()
         self.assertEqual([status for _error, status in emitted], [http_module.HTTPStatus.INTERNAL_SERVER_ERROR, http_module.HTTPStatus.BAD_REQUEST, http_module.HTTPStatus.BAD_REQUEST, http_module.HTTPStatus.FORBIDDEN, http_module.HTTPStatus.BAD_REQUEST])
+        self.assertEqual(str(emitted[1][0]), "GPU")
+        self.assertEqual(str(emitted[2][0]), "GPU")
+        post_state.add_boundary_candidate.assert_called_once_with("image", {"imageId": "image"})
+        delete_state.remove_image_from_catalog.assert_called_once_with("image")
 
     def test_upload_rejects_an_unknown_import_session_before_reading_the_binary_body(self) -> None:
         state = Mock()

@@ -111,21 +111,22 @@ function setCatalogNode(windowState, image, index, layout, rowNode) {
   // visible, so load its small mounted window immediately.
   if (scope === "overview") loadThumbnail(preview);
   const reviewed = isReviewed(image);
-  item.classList.toggle("reviewed", reviewed);
+  const statusLabel = t(isHidden(image) ? "review.hidden" : reviewed ? "review.reviewedBadge" : "review.unreviewedBadge");
+  item.classList.toggle("reviewed", reviewed && !isHidden(image));
   if (scope === "gallery") {
     item.querySelector(".gallery-name").textContent = displayPath.split("/").pop();
     item.querySelector(".gallery-meta").textContent = `${image.width} × ${image.height}`;
-    item.querySelector(".gallery-review-badge").textContent = reviewed ? t("review.reviewedBadge") : t("review.unreviewedBadge");
-    item.setAttribute("aria-label", [displayPath, reviewed ? t("review.reviewedBadge") : t("review.unreviewedBadge")].join(t("a11y.separator")));
+    item.querySelector(".gallery-review-badge").textContent = statusLabel;
+    item.setAttribute("aria-label", [displayPath, statusLabel].join(t("a11y.separator")));
     item.onclick = () => { windowState.focusId = image.id; selectCatalogImage(image.id); };
     item.onmouseenter = () => { state.hoverPrefetchId = image.id; schedulePrefetch(image); };
     item.onmouseleave = () => { if (state.hoverPrefetchId === image.id) { state.hoverPrefetchId = null; syncResourceOwnership(); } };
   } else {
     item.querySelector(".overview-item-name").textContent = displayPath.split(/[\\/]/).pop();
     item.querySelector(".overview-item-dimensions").textContent = `${image.width} × ${image.height}`;
-    item.querySelector(".overview-review-badge").textContent = reviewed ? t("review.reviewedBadge") : t("review.unreviewedBadge");
+    item.querySelector(".overview-review-badge").textContent = statusLabel;
     item.title = displayPath;
-    const states = [displayPath]; if (reviewed) states.push(t("overview.stateReviewed")); if (imageHasMask(image)) states.push(t("overview.stateMasked"));
+    const states = [displayPath, statusLabel]; if (imageHasMask(image)) states.push(t("overview.stateMasked"));
     item.setAttribute("aria-label", states.join(t("a11y.separator")));
     item.onclick = (event) => { windowState.focusId = image.id; selectOverviewImage(image.id, event); };
   }
@@ -403,6 +404,7 @@ async function reviewAndMoveNext() {
   const current = currentRecord();
   if (isGestureActive() || currentImageActionPending() || !current) return null;
   const currentId = current.id;
+  const reviewedBefore = isReviewed(current);
   const filteredImages = galleryFilteredImages();
   const target = nextVisibleImage(filteredImages, currentId);
   const reviewed = await queueImageMutation(currentId, async () => {
@@ -412,7 +414,7 @@ async function reviewAndMoveNext() {
     });
   }, { lockCandidateControls: true });
   if (!reviewed) return null;
-  if (!hasDurableHistory() && state.currentId === currentId && typeof recordHistoryOperation === "function") recordHistoryOperation({ kind: "workspaceFlag" });
+  if (!hasDurableHistory() && state.currentId === currentId && typeof recordHistoryOperation === "function") recordHistoryOperation({ kind: "workspaceFlag", reviewedBefore, reviewedAfter: isReviewed(current) });
   if (state.currentId !== currentId) return target;
   if (target && state.images.some((image) => image.id === target.id)) {
     await selectImage(target.id);
@@ -442,6 +444,6 @@ function updateNavigationControls() {
   const status = $("#reviewStatus");
   const record = currentRecord();
   const reviewed = record ? isReviewed(record) : false;
-  status.textContent = record ? t(reviewed ? "review.reviewed" : "review.unreviewed") : "-";
-  status.classList.toggle("reviewed", Boolean(record) && reviewed);
+  status.textContent = record ? t(isHidden(record) ? "review.hidden" : reviewed ? "review.reviewed" : "review.unreviewed") : "-";
+  status.classList.toggle("reviewed", Boolean(record) && reviewed && !isHidden(record));
 }

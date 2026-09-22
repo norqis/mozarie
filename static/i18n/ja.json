@@ -1,4 +1,7 @@
 {
+  "review.hidden": "非表示",
+  "catalog.removeFromList": "一覧から削除",
+  "status.removedFromList": "一覧から{count}件削除しました。元画像は保持されています。",
   "app.title": "Mozarie",
   "folder.label": "画像フォルダ",
   "folder.load": "読み込む",
@@ -463,6 +466,7 @@
   "settings.helpInfo": "この設定の説明",
   "error.directoryPermissionDenied": "このフォルダーへの保存権限が許可されませんでした。",
   "processing.detect": "自動検出",
+  "processing.preparingModels": "モデル準備中",
   "processing.import": "画像を読み込み中",
   "folder.browse": "画像を読み込む",
   "gallery.tabUnmasked": "モザイク無し",
@@ -797,5 +801,7 @@
   "sourceDelete.singlePending": "{complete} {output} 元画像の削除は保留です。再接続後に再試行します。",
   "sourceDelete.batchPending": "{complete} 元画像の削除は保留です: {names}。再接続後に再試行します。",
   "sourceDelete.notAvailable": "{complete} {output} コピーは保存しましたが、元画像を安全に削除できませんでした。",
-  "sourceDelete.batchNotAvailable": "{complete} コピーは保存しましたが、元画像を安全に削除できませんでした: {names}。"
+  "sourceDelete.batchNotAvailable": "{complete} コピーは保存しましたが、元画像を安全に削除できませんでした: {names}。",
+  "settings.shortcut.cycleMosaicTool": "モザイクツールを順に切替",
+  "settings.shortcut.cycleExclusionTool": "除外ツールを順に切替"
 }

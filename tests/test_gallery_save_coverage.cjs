@@ -99,7 +99,7 @@ function makeGalleryRuntime() {
     imageAssetVersion(image) { return image.assetVersion || ""; },
     isHidden(image) { return Boolean(image?.hidden); }, isReviewed(image) { return Boolean(image?.reviewed); }, imageHasMask(image) { return Boolean(image?.masked); }, currentImageActionPending() { return Boolean(state.pendingImageId); }, hasDurableHistory() { return false; },
     selectCatalogImage(id) { selected.push(id); }, schedulePrefetch(image) { prefetched.push(`schedule:${image.id}`); }, prefetchNeighbors(image) { prefetched.push(`neighbors:${image.id}`); },
-    openCatalogContextMenu(_event, id) { menus.push(id); }, updateActionButtons() { calls.push("actions"); }, updateSelectionActionBar() { calls.push("selection"); }, updateFilterMenuButtons() {}, syncResourceOwnership() {}, closeFilterPopovers() {},
+    openCatalogContextMenu(_event, id) { menus.push(id); }, updateActionButtons() { calls.push("actions"); }, updateSelectionActionBar() { calls.push("selection"); }, updateFilterMenuButtons() {}, syncResourceOwnership() { calls.push("sync-resources"); }, closeFilterPopovers() {},
     setViewMode(mode) { calls.push(`stub-view:${mode}`); }, closeBatchMoreMenus() { calls.push("close-menu"); }, clearBatchSelection() { state.selectedImageIds.clear(); calls.push("clear-selection"); },
     discardCatalogNodes(map, parent) { for (const node of map.values()) node.remove(); map.clear(); parent.discarded = true; }, resizeRenderCanvas() { calls.push("resize"); }, focusCanvas() { calls.push("focus-canvas"); }, focusElement(node) { node.focused = true; },
     requestAnimationFrame(callback) { frames.push(callback); }, isGestureActive() { return Boolean(context.gesture); }, currentRecord() { return state.images.find((image) => image.id === state.currentId) || null; },
@@ -110,7 +110,7 @@ function makeGalleryRuntime() {
   vm.runInNewContext(imageDisplayPathSource, context, { filename: path.join(jsRoot, "core.js") });
   const source = fs.readFileSync(path.join(jsRoot, "gallery.js"), "utf8");
   vm.runInNewContext(source, context, { filename: path.join(jsRoot, "gallery.js") });
-  vm.runInNewContext("globalThis.__galleryTest = { thumbnailObserver, thumbnailSource, loadThumbnail, retryThumbnail, observeThumbnail, forgetThumbnail, catalogWindow, focusCatalogIndex, renderGallery, imageMatchesGalleryFilter, updateGalleryCurrent, overviewFolderOptions, overviewImages, syncOverviewFolders, selectOverviewImage, renderOverview, renderCatalogViews, setViewMode, moveCurrentBy, reviewAndMoveNext, hideAndMoveNext, runNavigationAction, updateNavigationControls, thumbnailObservers, catalogWindows, catalogMoveIndex, resetCatalogWindows, scrollCatalogImage };", context, { filename: "test-gallery-exports.js" });
+  vm.runInNewContext("globalThis.__galleryTest = { thumbnailObserver, thumbnailSource, loadThumbnail, retryThumbnail, observeThumbnail, forgetThumbnail, catalogWindow, focusCatalogIndex, renderGallery, imageMatchesGalleryFilter, galleryFilteredImages, galleryNavigationNeighbors, updateGalleryCurrent, overviewFolderOptions, overviewImages, syncOverviewFolders, selectOverviewImage, renderOverview, renderCatalogViews, setViewMode, moveCurrentBy, reviewAndMoveNext, hideAndMoveNext, runNavigationAction, updateNavigationControls, thumbnailObservers, catalogWindows, catalogMoveIndex, resetCatalogWindows, scrollCatalogImage };", context, { filename: "test-gallery-exports.js" });
   return { ...context.__galleryTest, calls, context, document, frames, gallery, menus, nodes, observers, overviewGrid, prefetched, selected, state };
 }
 
@@ -243,10 +243,44 @@ async function galleryInteractions() {
   state.viewMode = "edit"; state.galleryNodes.set("one", galleryItem("gallery")); runtime.setViewMode("overview"); assert.equal(state.viewMode, "overview"); runtime.frames.shift()(); assert.equal(runtime.nodes.get("#overviewPane").focused, true);
   runtime.setViewMode("edit"); assert.equal(state.viewMode, "edit"); runtime.setViewMode("overview"); const stale = runtime.frames.pop(); state.viewMode = "edit"; stale();
   state.currentId = "one"; runtime.context.gesture = true; runtime.moveCurrentBy(1); runtime.context.gesture = false; runtime.moveCurrentBy(1); assert.deepEqual(runtime.selected.at(-1), "image:two");
+  const selectedBeforeStartBoundary = runtime.selected.length;
+  state.currentId = "one"; runtime.moveCurrentBy(-1);
+  assert.equal(runtime.selected.length, selectedBeforeStartBoundary, "previous navigation does not wrap before the first visible image");
+  const selectedBeforeEndBoundary = runtime.selected.length;
+  state.currentId = "three"; runtime.moveCurrentBy(1);
+  assert.equal(runtime.selected.length, selectedBeforeEndBoundary, "next navigation does not wrap after the last visible image");
   runtime.context.gesture = true; assert.equal(await runtime.reviewAndMoveNext(), null); runtime.context.gesture = false; state.currentId = "missing"; assert.equal(await runtime.reviewAndMoveNext(), null); state.currentId = "one"; runtime.context.reviewResult = false; assert.equal(await runtime.reviewAndMoveNext(), null); runtime.context.reviewResult = true; assert.equal((await runtime.reviewAndMoveNext()).id, "two"); state.currentId = "three"; assert.equal(await runtime.reviewAndMoveNext(), null);
   runtime.context.gesture = true; await runtime.hideAndMoveNext(); runtime.context.gesture = false; state.currentId = "missing"; await runtime.hideAndMoveNext(); state.currentId = "one"; runtime.context.hideResult = false; await runtime.hideAndMoveNext(); runtime.context.hideResult = true; await runtime.hideAndMoveNext(); state.currentId = "three"; await runtime.hideAndMoveNext();
   await runtime.runNavigationAction(async () => runtime.calls.push("navigate")); assert.ok(runtime.calls.includes("focus-canvas"));
   state.currentId = "one"; runtime.updateNavigationControls(); assert.match(runtime.nodes.get("#imagePosition").textContent, /1/); first.reviewed = false; runtime.updateNavigationControls(); state.currentId = null; runtime.updateNavigationControls(); assert.equal(runtime.nodes.get("#imagePosition").textContent, "- / 3", "navigation keeps the filtered-image count when no item is selected");
+}
+
+async function filteredNavigationUsesOnlyActualVisibleNeighbors() {
+  const runtime = makeGalleryRuntime();
+  const images = [
+    { id: "outside-before", relativePath: "outside-before.png", masked: false },
+    { id: "first", relativePath: "first.png", masked: true },
+    { id: "middle", relativePath: "middle.png", masked: true },
+    { id: "last", relativePath: "last.png", masked: true },
+    { id: "outside-after", relativePath: "outside-after.png", masked: false },
+  ];
+  runtime.state.images = images;
+  runtime.state.galleryFilter = new Set(["masked"]);
+  assert.deepEqual(runtime.galleryFilteredImages().map((image) => image.id), ["first", "middle", "last"]);
+  assert.deepEqual(Array.from(runtime.galleryNavigationNeighbors("middle"), (image) => image.id), ["first", "last"], "the selected filtered image owns only its real previous and next images");
+  assert.deepEqual(Array.from(runtime.galleryNavigationNeighbors("outside-before"), (image) => image.id), ["last", "first"], "a selection outside the filter owns only the wrap destinations");
+
+  runtime.state.currentId = "outside-before";
+  runtime.moveCurrentBy(1); runtime.moveCurrentBy(-1);
+  assert.deepEqual(runtime.selected.slice(-2), ["image:first", "image:last"], "outside-filter navigation wraps to the filtered first or last image");
+  runtime.state.currentId = "middle"; runtime.moveCurrentBy(1);
+  assert.equal(runtime.selected.at(-1), "image:last", "navigation inside the filter uses the next filtered image");
+
+  const syncsBefore = runtime.calls.filter((call) => call === "sync-resources").length;
+  runtime.renderGallery(true);
+  runtime.state.galleryFilter = new Set(["unmasked"]);
+  runtime.renderGallery(true);
+  assert.ok(runtime.calls.filter((call) => call === "sync-resources").length >= syncsBefore + 2, "each filter render resynchronizes decoded-image and request ownership");
 }
 
 function makeSaveRuntime() {
@@ -295,8 +329,76 @@ function makeSaveRuntime() {
   vm.runInNewContext(imageDisplayPathSource, context, { filename: path.join(jsRoot, "core.js") });
   const source = fs.readFileSync(path.join(jsRoot, "save.js"), "utf8");
   vm.runInNewContext(source, context, { filename: path.join(jsRoot, "save.js") });
-  vm.runInNewContext("globalThis.__saveTest = { setApplyResult, showApplyError, isTerminalApply, selectedSaveMode, applyImageFilters, setApplyImageFilters, persistApplyImageFilters, sourceAccessFor, sourceCanOverwrite, sourceCanDelete, applyTargetsSupport, applyRestrictionMessage, syncApplyMode, refreshApplyTargets, openApplyDialog, selectedSingleSaveMode, setSingleSaveResult, syncSingleSaveMode, openSingleSaveDialog, chooseSingleOutputDirectory, renderSingleSave, startSingleSave, draftPayload, renderOutputDirectory, commitOutputDirectory, saveDirectoryStructurePreference, setOutputDirectoryPickerBusy, pickOutputDirectory, reserveSaveRender, renderDefaultCopy, renderStreamedSave, chooseOutputDirectory, waitForBrowserSave, showBrowserSaveProgress, reconcileStoredMaskStatuses, reconcileBrowserSaveState, ensureHandlePermission, ensureSaveSources, writeSourceHandle, snapshotSourceHandle, restoreSourceHandle, runBrowserSave, commitBrowserSaveWithRetry, cancelBrowserSave, acknowledgePendingBrowserSave, isDefinitiveCommitRejection, startApplyFromDialog, finishSaveStart, controlApply, showRunningApply, finishApplyJob, isTerminalDetection, finishDetectionJob, pollJob, scheduleJobPoll };", context, { filename: "test-save-exports.js" });
+  vm.runInNewContext("globalThis.__saveTest = { setApplyResult, showApplyError, isTerminalApply, selectedSaveMode, applyImageFilters, setApplyImageFilters, persistApplyImageFilters, sourceAccessFor, sourceCanOverwrite, sourceCanDelete, applyTargetsSupport, applyRestrictionMessage, syncApplyMode, syncApplyOutputOptions, refreshApplyTargets, openApplyDialog, selectedSingleSaveMode, setSingleSaveResult, syncSingleSaveMode, syncSingleOutputOptions, openSingleSaveDialog, chooseSingleOutputDirectory, renderSingleSave, startSingleSave, draftPayload, renderOutputDirectory, commitOutputDirectory, saveDirectoryStructurePreference, setOutputDirectoryPickerBusy, pickOutputDirectory, reserveSaveRender, renderDefaultCopy, renderStreamedSave, chooseOutputDirectory, waitForBrowserSave, showBrowserSaveProgress, reconcileStoredMaskStatuses, reconcileBrowserSaveState, ensureHandlePermission, ensureSaveSources, writeSourceHandle, snapshotSourceHandle, restoreSourceHandle, runBrowserSave, commitBrowserSaveWithRetry, cancelBrowserSave, acknowledgePendingBrowserSave, isDefinitiveCommitRejection, startApplyFromDialog, finishSaveStart, controlApply, showRunningApply, finishApplyJob, isTerminalDetection, finishDetectionJob, pollJob, scheduleJobPoll };", context, { filename: "test-save-exports.js" });
   return { ...context.__saveTest, calls, context, errors, nodes, requests, saveMode, singleSaveMode, state, setHandler(fn) { handler = fn; } };
+}
+
+async function saveFormatMetadataPreferencesAreScopedAndEphemeral() {
+  const runtime = makeSaveRuntime();
+  runtime.state.currentId = "file"; runtime.state.currentImage = { width: 1, height: 1 };
+  await runtime.openSingleSaveDialog("file");
+  runtime.nodes.get("#singleSaveKeepMetadata").checked = true;
+  runtime.nodes.get("#singleSaveOutputFormat").value = "png";
+  runtime.syncSingleOutputOptions();
+  runtime.nodes.get("#singleSaveOutputFormat").value = "jpg";
+  runtime.syncSingleOutputOptions();
+  assert.equal(runtime.nodes.get("#singleSaveKeepMetadata").checked, false, "JPG forces metadata off without changing the remembered preference");
+  assert.equal(runtime.nodes.get("#singleSaveKeepMetadata").disabled, true, "JPG visibly disables metadata retention");
+  runtime.nodes.get("#singleSaveOutputFormat").value = "png";
+  runtime.syncSingleOutputOptions();
+  assert.equal(runtime.nodes.get("#singleSaveKeepMetadata").checked, true, "PNG restores the pre-JPG metadata choice on the same page");
+
+  runtime.nodes.get("#applyOutputFormat").value = "png";
+  runtime.nodes.get("#applyKeepMetadata").checked = false;
+  runtime.syncApplyOutputOptions();
+  runtime.nodes.get("#applyOutputFormat").value = "jpg";
+  runtime.syncApplyOutputOptions();
+  runtime.nodes.get("#applyOutputFormat").value = "png";
+  runtime.syncApplyOutputOptions();
+  assert.equal(runtime.nodes.get("#applyKeepMetadata").checked, false, "batch PNG to JPG to PNG restores its own prior metadata choice");
+
+  const reloaded = makeSaveRuntime();
+  reloaded.state.currentId = "file"; reloaded.state.currentImage = { width: 1, height: 1 };
+  await reloaded.openSingleSaveDialog("file");
+  assert.equal(reloaded.nodes.get("#singleSaveOutputFormat").value, "original", "reload starts from the documented single-save format default");
+  assert.equal(reloaded.nodes.get("#singleSaveKeepMetadata").checked, true, "reload starts from the documented metadata default");
+}
+
+async function batchSaveFiltersCountAndSelectTheExactVisibleSet() {
+  const runtime = makeSaveRuntime();
+  runtime.state.images = Array.from({ length: 400 }, (_, index) => ({
+    id: `reviewed-${index}`, relativePath: `${index}.png`, reviewed: true, hidden: false,
+    width: 32, height: 32, candidateCount: index % 2, enabledCandidateCount: index % 2,
+    masked: Boolean(index % 2), previouslySaved: true,
+  }));
+  runtime.state.images.push({ id: "hidden", relativePath: "hidden.png", reviewed: true, hidden: true, masked: true });
+  const savedSets = [];
+  runtime.context.runBrowserSave = async (imageIds) => { savedSets.push([...imageIds]); };
+  runtime.setHandler(async (url, options) => {
+    if (url === "/api/settings?status=0") return { settings: runtime.state.settings };
+    if (url === "/api/save/prepare") return { entries: JSON.parse(options.body).imageIds.map((imageId) => ({ imageId, candidateRevision: 1 })) };
+    return {};
+  });
+  runtime.nodes.get("#applyFilterReviewed").checked = true;
+  runtime.refreshApplyTargets();
+  assert.equal(runtime.state.applyTargetIds.length, 400, "reviewed includes saved visible images and excludes hidden images");
+  assert.equal(runtime.nodes.get("#applyTargetCount").textContent, "apply.target:400", "reviewed count equals the selected output set");
+  await runtime.startApplyFromDialog({ preventDefault() {} });
+  assert.deepEqual(savedSets.pop(), runtime.state.images.filter((image) => !image.hidden && image.reviewed).map((image) => image.id), "reviewed count and actual save use the identical visible reviewed set");
+  runtime.state.saving = false; runtime.state.applyRunning = false; runtime.state.saveStarting = false;
+  runtime.nodes.get("#applyFilterReviewed").checked = false;
+  runtime.nodes.get("#applyFilterMasked").checked = true;
+  runtime.refreshApplyTargets();
+  assert.equal(runtime.state.applyTargetIds.length, 200, "masked selects exactly the visible images with a mask");
+  assert.equal(runtime.nodes.get("#applyTargetCount").textContent, "apply.target:200", "masked count equals the selected output set");
+  await runtime.startApplyFromDialog({ preventDefault() {} });
+  assert.deepEqual(savedSets.pop(), runtime.state.images.filter((image) => !image.hidden && image.masked).map((image) => image.id), "masked count and actual save use the identical visible masked set");
+  runtime.state.saving = false; runtime.state.applyRunning = false; runtime.state.saveStarting = false;
+  runtime.nodes.get("#applyFilterMasked").checked = false;
+  runtime.refreshApplyTargets();
+  assert.equal(runtime.state.applyTargetIds.length, 400, "no filter selects every visible image and excludes hidden images");
+  await runtime.startApplyFromDialog({ preventDefault() {} });
+  assert.deepEqual(savedSets.pop(), runtime.state.images.filter((image) => !image.hidden).map((image) => image.id), "no-filter count and actual save use every visible image, including previously saved ones");
 }
 
 async function saveInteractions() {
@@ -312,6 +414,30 @@ async function saveInteractions() {
   assert.equal(runtime.nodes.get("#singleSaveKeepMetadata").checked, false, "single-save metadata preference is retained while this page stays open");
   assert.equal(runtime.nodes.get("#singleSaveRemoveSaved").checked, true, "single-save list removal preference is retained while this page stays open");
   runtime.nodes.get("#singleSaveRemoveSaved").checked = false;
+
+  state.images = Array.from({ length: 400 }, (_, index) => ({
+    id: `reviewed-${index}`, relativePath: `${index}.png`, reviewed: true, hidden: false,
+    width: 32, height: 32, candidateCount: index % 2, enabledCandidateCount: index % 2, masked: Boolean(index % 2),
+  }));
+  state.images.push({ id: "hidden", relativePath: "hidden.png", reviewed: true, hidden: true, width: 32, height: 32, candidateCount: 1, enabledCandidateCount: 1 });
+  runtime.nodes.get("#applyFilterReviewed").checked = true;
+  runtime.nodes.get("#applyFilterUnreviewed").checked = false;
+  runtime.nodes.get("#applyFilterMasked").checked = false;
+  runtime.nodes.get("#applyFilterUnmasked").checked = false;
+  runtime.refreshApplyTargets();
+  assert.equal(state.applyTargetIds.length, 400, "reviewed batch targeting includes all 400 visible reviewed images");
+  assert.equal(runtime.nodes.get("#applyTargetCount").textContent, "apply.target:400", "the batch count matches the exact reviewed target set");
+  runtime.nodes.get("#applyFilterReviewed").checked = false;
+  runtime.nodes.get("#applyFilterMasked").checked = true;
+  runtime.refreshApplyTargets();
+  assert.equal(state.applyTargetIds.length, 200, "masked batch targeting uses the same visible set shown in its count");
+  runtime.nodes.get("#applyFilterMasked").checked = false;
+  runtime.refreshApplyTargets();
+  assert.equal(state.applyTargetIds.length, 400, "all batch targeting excludes hidden images without excluding previously saved visible images");
+  state.images = [
+    { id: "file", sourceKind: "filesystem", relativePath: "file.png", reviewed: true, hidden: false, width: 32, height: 32, candidateCount: 1, enabledCandidateCount: 1 },
+    { id: "session", relativePath: "session.png", reviewed: false, hidden: false, width: 32, height: 32, candidateCount: 0, enabledCandidateCount: 0, sourceKind: "session" },
+  ];
   await runtime.openApplyDialog();
   runtime.nodes.get("#applyDivisor").value = "23"; runtime.nodes.get("#applyOutputFormat").value = "png"; runtime.nodes.get("#applyKeepMetadata").checked = false; runtime.nodes.get("#applyRemoveSaved").checked = true; runtime.nodes.get("#applyFilterReviewed").checked = true;
   runtime.refreshApplyTargets();
@@ -453,8 +579,11 @@ async function saveCoverageMatrix() {
   // They execute against the current HTTP lifecycle above; no File System Access output-directory path remains here.
 }
 
-nodeTest("gallery and save interactions", async () => {
-  await galleryInteractions();
-  await saveInteractions();
-  await saveCoverageMatrix();
+nodeTest("gallery and save interactions", async (t) => {
+  await t.test("gallery selection filters and navigation", galleryInteractions);
+  await t.test("filtered navigation owns only actual neighbors and wrap destinations", filteredNavigationUsesOnlyActualVisibleNeighbors);
+  await t.test("single and batch save modal preferences and controls", saveInteractions);
+  await t.test("batch save filters count and select the exact visible set", batchSaveFiltersCountAndSelectTheExactVisibleSet);
+  await t.test("PNG JPG PNG restores metadata preference and reload restores defaults", saveFormatMetadataPreferencesAreScopedAndEphemeral);
+  await t.test("save lifecycle orders prepare reserve render commit and ack", saveCoverageMatrix);
 });

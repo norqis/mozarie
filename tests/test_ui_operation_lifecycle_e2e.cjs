@@ -177,8 +177,12 @@ test("single and batch saves hold native controls, then complete or cancel throu
     await page.waitForFunction(() => document.querySelector("#singleSaveDialog").open && !document.querySelector("#singleSaveStartButton").disabled);
     await page.locator("#singleSaveStartButton").click();
     await page.waitForFunction(() => state.saving);
+    const singleSaveTransform = await page.evaluate(() => ({ flipH: currentRecord().flipH === true, flipV: currentRecord().flipV === true }));
     await rerenderCandidateUi(page);
     await assertNativeControlsLocked(page, "single save");
+    assert.equal(await page.locator("#flipHorizontalButton").isDisabled(), true, "saving disables horizontal flip before the render completes");
+    assert.equal(await page.locator("#flipVerticalButton").isDisabled(), true, "saving disables vertical flip before the render completes");
+    assert.deepEqual(await page.evaluate(() => ({ flipH: currentRecord().flipH === true, flipV: currentRecord().flipV === true })), singleSaveTransform, "a pending save cannot change the target image direction");
     const saveToken = (await renderGate.routeReady).postDataJSON().clientSaveToken;
     renderGate.release({ status: 200, contentType: "application/json", headers: { "X-Mozarie-Save-Token": saveToken }, body: JSON.stringify({ saveToken }) });
     await assertSettled(page, "single save", ["#saveButton", "#saveAllButton", "#detectCurrentButton"]);
@@ -202,10 +206,35 @@ test("single and batch saves hold native controls, then complete or cancel throu
     batchRenderGate.release({ status: 200, contentType: "application/json", headers: { "X-Mozarie-Save-Token": batchSaveToken }, body: JSON.stringify({ saveToken: batchSaveToken }) });
     await page.waitForFunction(() => !state.saving);
     await assertSettled(page, "batch save cancellation", ["#saveAllButton", "#detectCurrentButton"]);
+    const cancelledResult = await page.locator("#applyResult").textContent();
+    assert.ok(cancelledResult.trim(), "the cancelled batch reports its terminal result");
     await page.locator("#applyCloseButton").click();
     await page.waitForFunction(() => !document.querySelector("#applyDialog").open);
+
+    await page.unroute("**/api/save/render");
+    const restartedRequestStart = fixture.saveRequests.length;
+    const restartedRenderGate = await installResponseGate(page, "**/api/save/render");
     await page.locator("#saveAllButton").click();
-    await page.waitForFunction(() => document.querySelector("#applyDialog").open);
+    await page.waitForFunction(() => document.querySelector("#applyDialog").open && !document.querySelector("#applyStartButton").disabled);
+    assert.equal((await page.locator("#applyResult").textContent()).trim(), "", "reopening batch save does not retain the previous cancellation result");
+    await page.locator("#applyStartButton").click();
+    await page.waitForFunction(() => state.saving && state.browserSave);
+    assert.equal(await page.evaluate(() => state.browserSave.cancelled), false, "the restarted batch begins with a fresh cancellation state");
+    const restartedRenderRequest = await restartedRenderGate.routeReady;
+    const restartedSaveToken = restartedRenderRequest.postDataJSON().clientSaveToken;
+    assert.ok(restartedSaveToken, "the restarted batch reserves a render token");
+    assert.notEqual(restartedSaveToken, batchSaveToken, "the restarted batch never reuses the cancelled render token");
+    restartedRenderGate.release("continue");
+    await page.waitForFunction(() => !state.saving && !state.browserSave);
+    const restartedRequests = fixture.saveRequests.slice(restartedRequestStart);
+    assert.ok(restartedRequests.some((request) => request.path === "/api/save/render" && request.payload.clientSaveToken === restartedSaveToken), "the restarted batch reaches a new output render");
+    assert.ok(restartedRequests.some((request) => request.path === "/api/save/commit" && request.payload.saveToken === restartedSaveToken), "the restarted output is committed");
+    assert.ok(restartedRequests.some((request) => request.path === "/api/save/ack" && request.payload.saveToken === restartedSaveToken), "the restarted output is acknowledged");
+    assert.equal(restartedRequests.some((request) => request.path === "/api/save/cancel" && request.payload.saveToken === restartedSaveToken), false, "the previous cancellation does not cancel the restarted output");
+    const completedResult = await page.locator("#applyResult").textContent();
+    assert.ok(completedResult.trim() && completedResult !== cancelledResult, "the restarted batch replaces the cancellation result with its completed output count");
+    await assertSettled(page, "restarted batch save", ["#saveAllButton", "#detectCurrentButton"]);
+    await assertCandidateControlsEnabledAfterSettle(page, "restarted batch save");
     await page.locator("#applyCloseButton").click();
   });
 });
@@ -256,12 +285,14 @@ test("boundary, fill, transform, undo, and redo recover from pending work withou
     })), { filledAlpha: true, untouchedAlpha: 0, history: { tool: "bucket", spans: [0, 0, 2] } }, "the real fill completion paints only the returned span and records that span for undo");
 
     const transformGate = await installResponseGate(page, "**/api/images/sample/transform");
+    const transformBeforeFailure = await page.evaluate(() => ({ flipH: currentRecord().flipH === true, flipV: currentRecord().flipV === true }));
     await page.locator("#flipHorizontalButton").click();
     await page.waitForFunction(() => state.transformPending);
     await rerenderCandidateUi(page);
     await assertNativeControlsLocked(page, "transform failure");
     transformGate.release({ status: 500, contentType: "application/json", body: JSON.stringify({ error_code: "internal_error" }) });
     await assertSettled(page, "transform failure");
+    assert.deepEqual(await page.evaluate(() => ({ flipH: currentRecord().flipH === true, flipV: currentRecord().flipV === true })), transformBeforeFailure, "a failed transform leaves no browser-only flip behind");
     await page.locator("#errorDialogClose").click();
     await assertCandidateControlsEnabledAfterSettle(page, "transform failure");
 
@@ -279,5 +310,55 @@ test("boundary, fill, transform, undo, and redo recover from pending work withou
     await page.waitForFunction(() => !document.querySelector("#redoButton").disabled);
     await page.locator("#redoButton").click();
     await page.waitForFunction(() => !document.querySelector("#undoButton").disabled);
+  });
+});
+
+test("flip availability, toolbar keyboard order, and save metadata format states use the live UI", { timeout: 60000 }, async () => {
+  await withFixture(async ({ fixture, page }) => {
+    await page.goto(fixture.url, { waitUntil: "domcontentloaded" });
+    await page.waitForFunction(() => state.settings && state.images.length === 2);
+    assert.equal(await page.locator("#flipHorizontalButton").isDisabled(), true, "horizontal flip is unavailable before selecting an image");
+    assert.equal(await page.locator("#flipVerticalButton").isDisabled(), true, "vertical flip is unavailable before selecting an image");
+    await page.locator('.gallery-item[data-id="sample"]').click();
+    await page.waitForFunction(() => state.currentId === "sample" && state.currentImage);
+    assert.equal(await page.locator("#flipHorizontalButton").isDisabled(), false);
+    assert.equal(await page.locator("#flipVerticalButton").isDisabled(), false);
+    await page.locator("#flipHorizontalButton").click();
+    await page.waitForFunction(() => currentRecord()?.flipH === true && !state.transformPending);
+    assert.deepEqual(await page.evaluate(() => {
+      const operation = state.history.at(-1);
+      return { transform: operation && { kind: operation.kind, flipH: operation.flipH, flipV: operation.flipV }, binaryValues: Object.values(operation || {}).filter((value) => value instanceof Blob || value instanceof ImageData || value instanceof HTMLCanvasElement).length };
+    }), { transform: { kind: "transform", flipH: true, flipV: false }, binaryValues: 0 }, "flip history stores only the compact transform, never a full pixel copy");
+    await page.locator("#flipHorizontalButton").click();
+    await page.waitForFunction(() => currentRecord()?.flipH === false && !state.transformPending);
+
+    await page.locator("#redoButton").evaluate((button) => { button.disabled = false; });
+    await page.locator("#redoButton").focus();
+    for (const expected of ["flipHorizontalButton", "flipVerticalButton", "mosaicPreviewButton"]) {
+      await page.keyboard.press("ArrowRight");
+      assert.equal(await page.evaluate(() => document.activeElement?.id), expected, `ArrowRight reaches ${expected} in toolbar order`);
+    }
+
+    for (const [open, format, metadata, note] of [
+      ["#saveButton", "#singleSaveOutputFormat", "#singleSaveKeepMetadata", "#singleSaveFormatNote"],
+      ["#saveAllButton", "#applyOutputFormat", "#applyKeepMetadata", "#applyFormatNote"],
+    ]) {
+      await page.locator(open).click();
+      const modeName = open === "#saveButton" ? "singleSaveMode" : "batchSaveMode";
+      const selectedMode = await page.locator(`input[name="${modeName}"]:checked`).getAttribute("value");
+      await page.locator(format).selectOption("png");
+      await page.locator(metadata).check();
+      await page.locator(format).selectOption("jpg");
+      assert.equal(await page.locator(metadata).isDisabled(), true);
+      assert.equal(await page.locator(metadata).isChecked(), false);
+      assert.equal(await page.locator(note).textContent(), "JPG形式ではメタ情報を保持しません。");
+      assert.equal(await page.locator(`input[name="${modeName}"]:checked`).getAttribute("value"), selectedMode, "format changes preserve the selected save mode");
+      await page.locator(format).focus(); await page.keyboard.press("Tab");
+      assert.notEqual(await page.evaluate(() => document.activeElement?.id), metadata.slice(1), "keyboard focus skips the disabled metadata checkbox");
+      await page.locator(format).selectOption("png");
+      assert.equal(await page.locator(metadata).isDisabled(), false);
+      assert.equal(await page.locator(metadata).isChecked(), true);
+      await page.locator(open === "#saveButton" ? "#singleSaveCloseButton" : "#applyCloseButton").click();
+    }
   });
 });

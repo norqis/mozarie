@@ -62,14 +62,14 @@ const context = {
   calculatedBlockSize: () => 4, currentRecord: () => state.images[0], mosaicDivisor: () => 2, normaliseDivisor: (value) => Number(value),
   markMaskDirty() {}, markDraftDirty() {}, flushMaskComposition() {}, requestMosaicPreview() {}, scheduleManualWorkspaceSave() {}, setStatusKey() {},
   canvasHasPixels: () => true, setReviewed() {}, updateCandidateStatus() {}, refreshCurrentReviewAndMask() {}, renderCandidates() {},
-  refreshMaskStatus() {}, releaseCandidateBundles() {}, markImagesUnreviewed() {}, renderCatalogViews() {}, updateNavigationControls() {},
+  refreshMaskStatus() {}, releaseCandidateBundles() {}, renderCatalogViews() {}, updateNavigationControls() {},
   updateActionButtons() {}, closeProcessing() {}, beginCatalogEpoch: () => 1, isCurrentCatalogEpoch: () => true, clearStatus() {}, flushAllWorkspaceMutations: async () => {},
   clearStoredCatalogState() {}, resetCatalog() {}, releaseImageCaches() {}, clearEditor() {}, updateSelectionActionBar() {}, renderOverview() {},
   selectedImages: () => state.images, closeBatchMoreMenus() {}, setHidden: async () => {}, setReviewed: async () => {}, openDetectionDialog() {},
   clearMasks: async () => {}, removeImageFromCatalog: async () => {}, shortcutFromEvent: (event) => event.binding,
   isEditableTarget: () => false, isTextEditableTarget: () => false, hasOpenDialog: () => false, isGestureActive: () => false,
   moveCurrentBy(distance) { navigationActions.push(distance); }, selectImage() {}, reviewAndMoveNext() {}, setViewMode(mode) { state.viewMode = mode; },
-  isReviewed: () => false, isHidden: () => false,
+  isReviewed: () => false, isHidden: () => false, canRemoveImagesFromList: (images) => images.length > 0,
   api: async () => ({ settings: state.settings }), showModalFromInvoker() {}, showUserError(error) { userErrors.push(error); },
 };
 
@@ -158,7 +158,9 @@ assert.equal(state.currentId, "image"); assert.equal(state.pendingImageId, "imag
 assert.equal(test.navigationShortcutAction({ binding: "ArrowLeft" }), "previous");
 assert.equal(test.navigationShortcutAction({ binding: "Nope" }), null);
 let prevented = false; assert.equal(test.handleNavigationKeydown({ binding: "ArrowRight", preventDefault() { prevented = true; } }), true); assert.equal(prevented, true);
-test.updateBrushSize(999); assert.equal(element("#brushSize").value, 999, "brush size keeps the requested value without a hidden cap");
+test.updateBrushSize(999); assert.equal(element("#brushSize").value, 300, "brush size clamps to the displayed 300px maximum");
+test.updateBrushSize(-5); assert.equal(element("#brushSize").value, 1, "brush size clamps to one pixel");
+test.updateBrushSize("invalid"); assert.equal(element("#brushSize").value, 1, "invalid restored sizes use one pixel");
 test.updateBlockSizeDisplay(); assert.match(element("#blockSizeValue").textContent, /4/);
 test.setTool("bucket"); assert.equal(state.tool, "bucket"); assert.equal(context.canvas.style.cursor, "default", "ordinary tools retain the standard pointer");
 
@@ -172,6 +174,7 @@ async function interactionUserEventWorkflowTest() {
   assert.equal(contextMenuPrevented, true, "a mouse context-menu event must suppress the browser menu");
   assert.equal(element("#catalogContextMenu").popoverOpen, true, "a mouse context-menu event must open the catalog actions");
   assert.equal(element("#copyImagePathMenuItem").hidden, false, "a source-backed image exposes copy-path action");
+  assert.equal(element("#removeFromListMenuItem").disabled, false, "the list-removal action uses its available-record gate");
   test.closeCatalogContextMenu({ restoreFocus: false });
   assert.equal(element("#catalogContextMenu").popoverOpen, false, "closing the catalog actions hides the popover");
 
@@ -196,7 +199,7 @@ async function interactionUserEventWorkflowTest() {
   let dropPrevented = false;
   let dropStopped = false;
   await test.importDroppedFiles({
-    dataTransfer: { items: [] },
+    dataTransfer: { types: ["Files"], items: [] },
     preventDefault() { dropPrevented = true; },
     stopPropagation() { dropStopped = true; },
   });

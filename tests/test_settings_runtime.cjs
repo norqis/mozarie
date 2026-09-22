@@ -20,7 +20,7 @@ function element(id) {
   }
   return elements.get(id);
 }
-const tabs = ["general", "models", "display"].map((name, index) => {
+const tabs = ["general", "models", "display", "shortcuts", "confirm", "info"].map((name, index) => {
   const tab = element(`tab-${name}`); tab.dataset.settingsTab = name; tab.tabIndex = index === 0 ? 0 : -1;
   return tab;
 });
@@ -74,7 +74,7 @@ const context = {
   focusElement(item) { context.focused = item; },
   renderSamVariantStatuses() {}, renderSettingsStatus() {}, syncProviderSelection() {},
   setNavigationShortcutsEnabled() {}, setMosaicPreviewEnabled() {}, renderOutputDirectory() {}, applyToolPosition() {}, setDetectionConfidence() {}, setDetectionTargets() {}, syncDetectionActions() {}, loadTranslations: async () => {},
-  validateDetectionTargets: () => true, detectionTargets: () => ["penis"], detectionParallelism: () => 2, normaliseDetectionConfidence: Number, normaliseImportParallelism: Number, settingsPayload: () => ({ ok: true }),
+  validateDetectionTargets: () => true, detectionTargets: () => [], detectionConfidence: () => state.settings.detection.threshold, persistedDetectionTargets: () => state.settings?.detection?.targets || [], normaliseImportParallelism: Number, settingsPayload: () => ({ ok: true }),
   pickOutputDirectory: async () => "", api: async () => ({ settings: { general: { language: "ja", shortcuts_enabled: true }, display: { mosaic_preview: true } }, version: "v1" }), clearInterval() {}, setInterval() { return 1; },
   confirmAction: async () => true,
 };
@@ -139,18 +139,32 @@ nodeTest("settings, model pickers, and download state", async () => {
   await context.settingsTest.saveSettings({ preventDefault() {} });
   assert.equal(element("#settingsResult").classList.contains("error"), true, "saving with no detection target leaves a visible inline validation error");
 
-  state.settings = { general: {}, models: { gpu_device: 0 }, display: {} };
-  context.validateDetectionTargets = () => true;
+  state.settings = { general: {}, models: { gpu_device: 0 }, display: {}, detection: { threshold: 0.63, parallelism: 4, targets: ["penis"] }, editing: { fill_color_tolerance: 20 } };
+  context.validateDetectionTargets = (targets) => {
+    assert.deepEqual(targets, ["penis"], "general settings validate persisted targets even when the detection dialog draft is empty");
+    return true;
+  };
   element("#settingsDefaultOutputDirectory").value = "G:\\output";
   element("#settingsSamModel").value = "";
   shortcutBindings.push(
     { dataset: { shortcutAction: "previous" }, value: "Ctrl+P" },
     { dataset: { shortcutAction: "next" }, value: "Ctrl+P" },
   );
+  const errorsBeforeDuplicate = errors.length;
+  let duplicateSettingsPosts = 0;
+  context.api = async () => { duplicateSettingsPosts += 1; throw new Error("duplicate shortcuts must not reach the API"); };
   await context.settingsTest.saveSettings({ preventDefault() {} });
+  assert.equal(errors.length, errorsBeforeDuplicate + 1, "duplicate shortcuts produce a new validation error");
   assert.equal(errors.at(-1)[0].code, "input_invalid", "saving rejects duplicate shortcut bindings before sending settings");
+  assert.equal(duplicateSettingsPosts, 0, "duplicate shortcut validation sends no settings request");
 
   shortcutBindings.length = 0;
+  element("#detectConfidenceNumber").value = "0.99";
+  element("#detectParallelism").value = "9";
+  const savedDetectionPayload = context.settingsTest.settingsPayload().detection;
+  assert.equal(savedDetectionPayload.threshold, 0.63, "general settings use the persisted detection threshold instead of a dialog draft");
+  assert.equal(savedDetectionPayload.parallelism, 4, "general settings use persisted detection parallelism");
+  assert.deepEqual(savedDetectionPayload.targets, ["penis"], "general settings preserve the persisted detection target selection");
   element("#settingsDefaultOutputDirectory").value = "G:\\output";
   for (const id of ["#settingsNtd11Model", "#settingsSensitiveModel", "#settingsSamModel", "#settingsHandModel", "#settingsHandSegmentationModel"]) element(id).value = "";
   element("#settingsTargetModel").value = "models\\target.onnx";
@@ -280,14 +294,14 @@ nodeTest("settings, model pickers, and download state", async () => {
   context.settingsTest.renderSettingsStatus(null, 5);
   state.settingsStatus = null;
   context.settingsTest.renderSettingsStatus(null);
-  const defaultSettings = { general: { language: "ja", open_browser: false, port: 8766, shortcuts_enabled: true }, models: { provider: "gpu", gpu_device: 0, target_segmentation: "", ntd11: "", ntd11_enabled: false, sensitive: "", sensitive_enabled: false, hand_detection: "", hand_detection_enabled: false, hand_segmentation_enabled: false, sam_checkpoints: {}, sam_model_type: "vit_b" }, display: { apply_color: "", exclude_color: "", overlay_opacity: 0, mosaic_preview: false }, importing: {}, editing: { fill_color_tolerance: 20 }, saving: {}, detection: { mode: "standard", fluid_exclusion_enabled: false, exclude_forced_default: true, threshold: .5, targets: [] }, shortcuts: {}, confirmations: {} };
+  const defaultSettings = { general: { language: "ja", open_browser: false, port: 8766, shortcuts_enabled: true }, models: { provider: "gpu", gpu_device: 0, target_segmentation: "", ntd11: "", ntd11_enabled: false, sensitive: "", sensitive_enabled: false, hand_detection: "", hand_detection_enabled: false, hand_segmentation_enabled: false, sam_checkpoints: {}, sam_model_type: "vit_b" }, display: { apply_color: "", exclude_color: "", overlay_opacity: 0, mosaic_preview: false }, importing: {}, editing: { fill_color_tolerance: 20 }, saving: {}, detection: { mode: "standard", fluid_exclusion_enabled: false, exclude_forced_default: true, threshold: .5, parallelism: 2, targets: [] }, shortcuts: {}, confirmations: {} };
   context.settingsTest.setSettingsForm(defaultSettings, { models: {}, gpus: [] });
   assert.equal(element("#confirmRemoveImage").checked, true, "the source-delete confirmation defaults to enabled");
   defaultSettings.confirmations.removeImage = false; context.settingsTest.setSettingsForm(defaultSettings, { models: {}, gpus: [] });
   assert.equal(element("#confirmRemoveImage").checked, false, "a saved source-delete preference restores as disabled");
   assert.equal(context.settingsTest.settingsPayload().confirmations.removeImage, false, "saving settings preserves the explicit source-delete confirmation preference");
   assert.equal(element("#settingsImportParallelism").value, "3", "empty import settings use their public default");
-  assert.equal(element("#detectParallelism").value, "2", "empty detection settings use their public default");
+  assert.equal(element("#detectParallelism").value, "2", "saved detection parallelism is shown in its control");
   assert.equal(element("#bucketTolerance").value, "20", "the fill tolerance reflects the persisted editing setting");
   let tolerancePayload = null;
   context.api = async (_path, options) => { tolerancePayload = JSON.parse(options.body); return { settings: { ...state.settings, editing: { fill_color_tolerance: 37 } } }; };
@@ -314,10 +328,20 @@ nodeTest("settings, model pickers, and download state", async () => {
   assert.equal(checked, true, "starting without an available update refreshes the status instead");
 
   // Exercise the alternate settings controls as compact, table-driven runtime cases.
+  for (const selected of ["general", "models", "display", "shortcuts", "confirm", "info"]) {
+    context.settingsTest.selectSettingsTab(selected);
+    for (const tab of tabs) {
+      const active = tab.dataset.settingsTab === selected;
+      assert.equal(tab.classList.contains("active"), active, `${selected} selects only its settings tab`);
+      assert.equal(tab.getAttribute("aria-selected"), String(active), `${selected} exposes the selected tab`);
+      assert.equal(tab.tabIndex, active ? 0 : -1, `${selected} owns the tab stop`);
+    }
+    for (const panel of panels) assert.equal(panel.hidden, panel.dataset.settingsPanel !== selected, `${selected} shows only its panel`);
+  }
   for (const { key, expected } of [
     { key: "ArrowRight", expected: "models" },
     { key: "Home", expected: "general" },
-    { key: "End", expected: "display" },
+    { key: "End", expected: "info" },
   ]) {
     context.settingsTest.moveSettingsTab({ currentTarget: tabs[0], key, preventDefault() {} });
     assert.equal(tabs.find((tab) => tab.classList.contains("active")).dataset.settingsTab, expected);
@@ -350,7 +374,7 @@ nodeTest("settings, model pickers, and download state", async () => {
 
   let translations = 0;
   context.loadTranslations = async () => { translations += 1; };
-  state.settings = { general: { language: "ja" }, models: { gpu_device: 0 }, display: {} };
+  state.settings = { general: { language: "ja" }, models: { gpu_device: 0 }, display: {}, detection: { threshold: 0.5, parallelism: 2, targets: ["penis"] }, editing: { fill_color_tolerance: 20 } };
   context.validateDetectionTargets = () => true;
   element("#settingsDefaultOutputDirectory").value = "G:\\output";
   context.api = async (url) => {
@@ -418,4 +442,44 @@ nodeTest("settings, model pickers, and download state", async () => {
   context.api = async (url) => { updateStarted = url === "/api/update/start"; return {}; };
   await context.settingsTest.startUpdate();
   assert.equal(updateStarted, true, "confirmed updates start the update request");
+});
+
+nodeTest("SD-064 model preparation dialog preserves the selected model value", () => {
+  element("#settingsNtd11Model").value = "G:\\models\\ntd11.onnx";
+  context.settingsTest.showUnsupportedModelDownload("ntd11");
+  assert.equal(element("#settingsNtd11Model").value, "G:\\models\\ntd11.onnx");
+});
+
+nodeTest("SD-066 model download confirmation identifies its target and start action", () => {
+  element("#settingsSamType").value = "vit_b";
+  context.settingsTest.modelDownloadConfirmation("sam");
+  assert.equal(element("#modelDownloadStart").hidden, false);
+  assert.equal(element("#modelDownloadActions").hidden, false);
+});
+
+nodeTest("SD-067 completed model download publishes the acquired path", () => {
+  context.settingsTest.renderModelDownload({ state: "running", expected: 10, received: 4, completed: 0, total: 1, current: "hand_detection", phase: "download", paths: {} });
+  assert.equal(element("#modelDownloadProgress").hidden, false);
+  assert.equal(element("#modelDownloadProgress").value, 4);
+  assert.equal(element("#modelDownloadProgress").max, 10);
+  context.settingsTest.renderModelDownload({ state: "complete", expected: 1, received: 1, completed: 1, total: 1, paths: { hand_detection: "G:\\models\\hand.onnx" } });
+  assert.equal(element("#settingsHandModel").value, "G:\\models\\hand.onnx");
+  assert.equal(element("#modelDownloadCancel").hidden, true);
+});
+
+nodeTest("SD-068 cancelled model download never publishes an unfinished path", () => {
+  element("#settingsHandModel").value = "";
+  context.settingsTest.renderModelDownload({ state: "cancelled", expected: 10, received: 4, completed: 0, total: 1, paths: {} });
+  assert.equal(element("#settingsHandModel").value, "");
+  assert.equal(element("#modelDownloadCancel").hidden, true);
+  assert.notEqual(element("#modelDownloadStatus").textContent, "");
+});
+
+nodeTest("SD-069 model download polling failure is visible and leaves no acquired path", async () => {
+  element("#settingsHandModel").value = "";
+  const before = errors.length;
+  context.api = async () => { throw new Error("download status failed"); };
+  await context.settingsTest.refreshModelDownload();
+  assert.equal(errors.length, before + 1);
+  assert.equal(element("#settingsHandModel").value, "");
 });

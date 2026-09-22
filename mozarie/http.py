@@ -583,6 +583,7 @@ class MosaicHandler(BaseHTTPRequestHandler):
 
     def _catalog_mutation(self, expected_project_id: str | None, expected_catalog_generation: int, operation: Any) -> Any:
         """Keep one request's catalogue epoch available at its state commit."""
+        STATE.assert_catalog_expectation(expected_project_id, expected_catalog_generation)
         with STATE.catalog_request(expected_project_id, expected_catalog_generation):
             return operation()
 
@@ -812,8 +813,12 @@ class MosaicHandler(BaseHTTPRequestHandler):
                     finally:
                         if staged_path is not None:
                             staged_path.unlink(missing_ok=True)
-                    response = {"imported": imported, "catalogId": STATE.catalog_id,
-                                "catalogGeneration": STATE.catalog_snapshot()["catalogGeneration"]}
+                    # The final /api/images request publishes the full list.
+                    # Building that list for each individual upload makes a
+                    # batch do quadratic work just to return its generation.
+                    with STATE.lock:
+                        response = {"imported": imported, "catalogId": STATE.catalog_id,
+                                    "catalogGeneration": STATE.catalog_generation}
                     succeeded = True
                 finally:
                     STATE.end_import_transfer(import_session_id, succeeded=succeeded)
@@ -900,7 +905,7 @@ class MosaicHandler(BaseHTTPRequestHandler):
                                               expected_catalog_generation=expected_catalog_generation,
                                               resume=bool(payload.get("resume")))
                 )
-                self._json({**data, "catalogGeneration": snapshot["catalogGeneration"]})
+                self._json({**snapshot, **data})
             elif path == "/api/project/resume":
                 project, snapshot = self._catalog_transition_snapshot(
                     lambda: STATE.resume_project(str(payload.get("projectId", "")), expected_project_id=expected_project_id,

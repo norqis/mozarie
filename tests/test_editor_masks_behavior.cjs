@@ -137,8 +137,8 @@ const state = {
 let latestFillWorker = null;
 class FillWorker {
   constructor(url) { this.url = url; latestFillWorker = this; }
-  postMessage(payload, transfers) { this.payload = payload; this.transfers = transfers; }
-  terminate() { this.terminated = true; }
+  postMessage(payload, transfers) { this.payload = payload; this.transfers = transfers; this.ownedBuffers = transfers.length; }
+  terminate() { this.terminated = true; this.ownedBuffers = 0; }
 }
 
 const context = {
@@ -159,7 +159,7 @@ const context = {
     },
     createElement: () => element(`node-${elements.size}`),
   },
-  setInterval: (callback) => { blinkTick = callback; return 1; }, clearInterval() {}, setTimeout: (callback) => { callback(); return 1; }, clearTimeout() {}, AbortController, requestAnimationFrame: (callback) => { callback(); return 1; }, cancelAnimationFrame() {},
+  setInterval: (callback) => { blinkTick = callback; return 1; }, clearInterval() {}, setTimeout: (callback) => { callback(); return null; }, clearTimeout() {}, AbortController, requestAnimationFrame: (callback) => { callback(); return 1; }, cancelAnimationFrame() {},
   isBusy: () => false, isGestureActive: () => false, catalogStagingEditsActive: () => false, currentImageActionPending: () => Boolean(state.pendingImageId), candidateControlLocked: () => false, isProcessableImage: () => true, manualCanvasInputLocked: () => false, hasDurableHistory: () => false, isCurrentCatalogEpoch: (epoch) => epoch === state.catalogEpoch, isCurrentGeneration: (generation) => generation === state.imageGeneration,
   catalogRecordMatches: () => true, currentRecord: () => state.images.find((record) => record.id === state.currentId),
   imageAssetVersion: (record) => record?.assetVersion || "", imageHasMask: () => true, canvasHasPixels: (ctx) => ctx.pixels,
@@ -322,7 +322,7 @@ assert.equal(test.buildCombinedMask(), "data:image/png;base64,mask");
 test.enableManualLayerForTool("exclude_eraser");
 assert.equal(state.manualExclusionEraseEnabled, true);
 
-nodeTest("editor masks, fill, candidates, and history", async () => {
+nodeTest("editor masks, fill, candidates, and history", async (t) => {
   await test.addBoundaryCandidate();
   assert.equal(state.boundaryDrafts.length, 0, "successful boundary detection consumes the submitted draft");
   assert.equal(state.images[0].candidateRevision, 8);
@@ -417,8 +417,10 @@ nodeTest("editor masks, fill, candidates, and history", async () => {
   };
   let restoreResult = await runProjectlessRestore(null, true);
   assert.equal(state.historyIndex, 0, "history position commits only after all persistence has completed");
-  assert.deepEqual(restoreResult.order, ["queued", "flag:reviewed", "flag:hidden", "/api/images/image/transform", "/api/candidate/image/apply", "draft:0", "flush"], "projectless restore persists flags, transform, padding, draft, and flush in order");
-  for (const failedStep of ["reviewed", "hidden", "transform", "candidate", "draft"]) {
+  assert.deepEqual(restoreResult.order, ["queued", "flag:hidden", "/api/images/image/transform", "/api/candidate/image/apply", "draft:0", "flush"], "projectless restore persists flags, transform, padding, draft, and flush in order");
+  assert.equal(state.images[0].reviewed, false, "editing undo ignores stale reviewed snapshots");
+  assert.equal(restoreResult.serverRecord.reviewed, false, "editing undo never writes a review flag");
+  for (const failedStep of ["hidden", "transform", "candidate", "draft"]) {
     restoreResult = await runProjectlessRestore(failedStep);
     assert.equal(state.historyIndex, 1, `${failedStep} failure leaves the previous history position selected`);
     assert.ok(restoreResult.order.includes("/api/images"), `${failedStep} failure reloads the server snapshot`);
@@ -535,13 +537,18 @@ nodeTest("editor masks, fill, candidates, and history", async () => {
   test.openCandidatePadding("apply", previewButton);
   paddingInput.value = "2"; test.scheduleCandidatePaddingPreview();
   paddingInput.value = "3"; test.scheduleCandidatePaddingPreview();
-  assert.equal(previewRequests.length, 2, "a new padding value starts one replacement preview request");
-  assert.equal(previewRequests[0].signal.aborted, true, "a newer padding value aborts the older preview request");
+  paddingInput.value = "4"; test.scheduleCandidatePaddingPreview();
+  assert.equal(previewRequests.length, 1, "new padding values are coalesced while one preview is loading");
+  assert.equal(previewRequests[0].signal.aborted, false, "continued input allows the current preview to finish visibly");
   let staleClosed = 0; let currentClosed = 0;
   previewRequests[0].resolve({ close() { staleClosed += 1; } });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(previewRequests.length, 2, "only the latest pending value starts after the first preview completes");
+  assert.match(previewRequests[1].url, /:4$/, "intermediate pending values do not cause requests");
+  assert.equal(state.candidatePaddingPreviewImages.has("apply"), true, "a completed preview remains visible during continuous input");
   previewRequests[1].resolve({ close() { currentClosed += 1; } });
   await new Promise((resolve) => setImmediate(resolve));
-  assert.equal(staleClosed, 1, "a bitmap returned by an aborted preview is closed");
+  assert.equal(staleClosed, 1, "a replaced visible preview bitmap is closed");
   assert.equal(state.candidatePaddingPreviewImages.has("apply"), true, "only the latest padding preview becomes visible");
   test.closeCandidatePadding();
   assert.equal(currentClosed, 1, "cancelling padding closes the visible preview bitmap");
@@ -832,6 +839,8 @@ nodeTest("editor masks, fill, candidates, and history", async () => {
   assert.deepEqual(context.fillUiRefreshes, ["candidates", "actions"], "starting a fill immediately locks every candidate and action control");
   latestFillWorker.onmessage({ data: { spans: [2, 3, 7] } });
   assert.equal(state.fillPending, false, "worker completion clears the pending fill flag");
+  assert.equal(latestFillWorker.terminated, true, "completed fill terminates its worker");
+  assert.equal(latestFillWorker.ownedBuffers, 0, "completed fill retains no transferred pixel buffer");
   assert.equal(state.history.at(-1).tool, "bucket", "worker completion adds an undoable bucket operation");
   assert.deepEqual(context.fillUiRefreshes.slice(-2), ["candidates", "actions"], "fill completion immediately unlocks every candidate and action control");
   state.manualEnabled = false; state.manualExclusionEnabled = false; state.manualExclusionEraseEnabled = false;
@@ -1020,10 +1029,15 @@ nodeTest("editor masks, fill, candidates, and history", async () => {
   state.images = [{ id: "image", assetVersion: "a" }];
   state.manualEnabled = false; state.manualExclusionEnabled = false; state.manualExclusionEraseEnabled = false;
   const staleFillHistoryLength = state.history.length; context.fillUiRefreshes.length = 0;
+  const staleLayerPixels = [addCtx.pixels, exclusionCtx.pixels, exclusionEraseCtx.pixels];
   test.fillAt({ x: 4, y: 4 }, "exclude_bucket");
   const staleWorker = latestFillWorker; state.currentId = "other";
   staleWorker.onmessage({ data: { spans: [1, 1, 3] } });
   assert.equal(state.fillPending, false, "a fill result from another image is discarded");
+  assert.equal(staleWorker.terminated, true, "discarding an old-image fill terminates its worker");
+  assert.equal(staleWorker.ownedBuffers, 0, "discarding an old-image fill retains no transferred source pixel buffer");
+  assert.equal(state.fillWorker, null, "stale fill completion leaves no worker owner");
+  assert.deepEqual([addCtx.pixels, exclusionCtx.pixels, exclusionEraseCtx.pixels], staleLayerPixels, "stale fill completion leaves every pixel layer unchanged");
   assert.deepEqual([state.manualEnabled, state.manualExclusionEnabled, state.manualExclusionEraseEnabled], [false, false, false], "a stale fill result leaves every manual layer flag unchanged");
   assert.equal(state.history.length, staleFillHistoryLength, "a stale fill result does not create a history operation");
   assert.deepEqual(context.fillUiRefreshes, ["candidates", "actions", "candidates", "actions"], "a stale fill result only refreshes controls when its pending state clears");
@@ -1241,6 +1255,54 @@ nodeTest("editor masks, fill, candidates, and history", async () => {
   deferredHistory[1]({ canUndo: false, canRedo: true }); await newerHistory;
   deferredHistory[0]({ canUndo: true, canRedo: false }); await olderHistory;
   assert.deepEqual({ ...state.projectHistory.get("image") }, { canUndo: false, canRedo: true }, "a late history response cannot overwrite the newer undo and redo state");
+
+  await t.test("state-only editor history entries replay without requiring brush points", () => {
+    for (const kind of ["candidateState", "candidateBatch", "manualState", "workspaceFlag", "transform"]) {
+      assert.doesNotThrow(() => test.replayManualStroke({ kind }), `${kind} is restored through its editor snapshot without brush geometry`);
+    }
+  });
+
+  await t.test("ED-120 boundary read failure preserves state and a later normal image recovers", async () => {
+    const originalHooks = {
+      api: context.api,
+      boundaryRequests: context.boundaryRequests,
+      reconcileCurrentCandidates: context.reconcileCurrentCandidates,
+      showUserError: context.showUserError,
+      hasDurableHistory: context.hasDurableHistory,
+    };
+    state.currentId = "image"; state.currentImage = { width: 100, height: 80 }; state.imageGeneration = 2;
+    state.images = [{ id: "image", candidateRevision: 4, candidateCount: 0, enabledCandidateCount: 0 }];
+    state.project = null; state.projectReadOnly = false; state.importing = false; state.boundaryPending = false;
+    state.candidates = []; state.history = []; state.historyIndex = 0;
+    const draft = { id: "oom", type: "rectangle", roi: { left: 1, top: 1, right: 10, bottom: 10 } };
+    state.boundaryDrafts = [draft]; state.boundaryActiveId = draft.id;
+    context.boundaryRequests = () => [{ draft: state.boundaryDrafts[0], draftIds: ["oom"] }];
+    context.reconcileCurrentCandidates = async () => true;
+    context.hasDurableHistory = () => false;
+    const shownErrors = [];
+    context.showUserError = (error) => shownErrors.push(error?.code || error);
+    context.api = async () => {
+      const error = new Error("mask decode failed");
+      error.code = "image_read_failed";
+      throw error;
+    };
+
+    await test.addBoundaryCandidate();
+    assert.deepEqual(shownErrors, ["image_read_failed"], "a boundary input read failure keeps its specific user-facing error code");
+    assert.equal(state.boundaryDrafts.length, 1, "a failed boundary read keeps the draft available for retry");
+    assert.deepEqual(state.candidates, [], "a failed boundary read adds no candidate state");
+    assert.deepEqual(state.history, [], "a failed boundary read adds no history entry");
+    assert.equal(state.images[0].candidateRevision, 4, "a failed boundary read does not advance the candidate revision");
+    assert.equal(state.boundaryPending, false, "a failed boundary read releases the pending state");
+
+    context.api = async () => ({ candidates: [{ id: "recovered", role: "apply", enabled: true }], candidateRevision: 5 });
+    await test.addBoundaryCandidate();
+    assert.equal(state.boundaryDrafts.length, 0, "a later normal image request consumes the retained draft");
+    assert.equal(state.images[0].candidateRevision, 5, "a later normal image request advances candidate state");
+    assert.ok(state.history.some((entry) => entry.kind === "addCandidates" && entry.ids.includes("recovered")), "a later normal image request resumes ordinary boundary history");
+    assert.equal(state.boundaryPending, false, "the successful retry also releases the pending state");
+    Object.assign(context, originalHooks);
+  });
 
   state.project = null; state.projectHistory = new Map();
 });

@@ -88,7 +88,12 @@ const context = {
   imageDisplayPath: (image) => image?.editedFilename || image?.relativePath || "",
   ensureHandlePermission: async () => {}, flushWorkspaceDraft: async () => {},
   catalogApi: async () => ({}),
-  isBusy: () => busy, catalogStagingEditsActive: () => false, currentImageActionPending: () => Boolean(state.pendingImageId), canRemoveCurrentImage: () => true, isProcessableImage: () => true, processableImages: (records = state.images) => records, galleryFilteredImages: () => state.images, overviewImages: () => state.images, closeBoundaryModeMenu: undefined,
+  isBusy: () => busy, catalogStagingEditsActive: () => false, currentImageActionPending: () => Boolean(state.pendingImageId),
+  canRemoveImagesFromList: (images) => images.length > 0 && !busy && !state.importing && !state.projectReadOnly && !state.projectOperationPending && !state.pendingImageId,
+  canRemoveCurrentImage: () => Boolean(state.currentId && state.currentImage && images[0])
+    && !busy && !state.importing && !state.projectReadOnly && !images[0].sourceDimensionsChanged
+    && !state.projectOperationPending && !state.pendingImageId,
+  isProcessableImage: () => true, processableImages: (records = state.images) => records, galleryFilteredImages: () => state.images, overviewImages: () => state.images, closeBoundaryModeMenu: undefined,
   clearBoundaryInteraction: () => calls.push(["clearBoundaryInteraction"]), clearBoundaryConstruction: () => calls.push(["clearBoundaryConstruction"]),
   updateBoundaryActions: () => calls.push(["boundaryActions"]), updateBrushCursor: () => {}, render: () => calls.push(["render"]), flushRender: () => calls.push(["flushRender"]), flushMaskComposition: () => calls.push(["flushMaskComposition"]), clearCandidateBlink: () => calls.push(["clearCandidateBlink"]), focusCanvas: () => calls.push(["canvas"]), focusElement: (value) => { document.activeElement = value; },
   calculatedBlockSize: () => 7, currentRecord: () => images[0], mosaicDivisor: () => 3, normaliseDivisor: (value) => Number(value),
@@ -277,9 +282,9 @@ nodeTest("interaction and catalog mutation controls", async () => {
   context.window.showOpenFilePicker = async () => handles; await test.pickImageFiles();
   context.window.showOpenFilePicker = async () => { const error = new Error(); error.name = "AbortError"; throw error; }; await test.pickImageFiles();
   context.window.showDirectoryPicker = async () => directory; await test.pickImageDirectory();
-  await test.importDroppedFiles({ ...event(""), dataTransfer: { items: [] } });
+  await test.importDroppedFiles({ ...event(""), dataTransfer: { types: ["Files"], items: [] } });
   vm.runInNewContext("directFilesFromDrop = async () => [];", context);
-  await test.importDroppedFiles({ ...event(""), dataTransfer: { items: [] } }); test.setGalleryDropOverlay(true);
+  await test.importDroppedFiles({ ...event(""), dataTransfer: { types: ["Files"], items: [] } }); test.setGalleryDropOverlay(true);
 
   state.viewMode = "edit"; state.settings.shortcuts.bindings = { undo: "U", redo: "R", previous: "P", next: "N", previousVisible: "PV", nextVisible: "NV", first: "F", last: "L", reviewAndNext: "RN", toggleOverview: "G" };
   state.settings.shortcuts.actions = {};
@@ -292,7 +297,7 @@ nodeTest("interaction and catalog mutation controls", async () => {
   test.setTool("brush"); test.updateBrushSize(3); await test.clearMasks(["one"], "a", "b"); await test.clearCatalog();
   test.openCatalogContextMenu(event("", "contextmenu"), "one"); await test.removeImageFromCatalog("one"); await test.runSelectionAction("hide");
   assert.equal(test.beginImportSession(), null); await test.importFileHandles([], null); await test.importDirectoryHandle(directory, null);
-  await test.pickImageFiles(); await test.pickImageDirectory(); await test.importDroppedFiles({ ...event(""), dataTransfer: { items: [] } });
+  await test.pickImageFiles(); await test.pickImageDirectory(); await test.importDroppedFiles({ ...event(""), dataTransfer: { types: ["Files"], items: [] } });
   assert.equal(test.handleEditorKeydown(event("U")), false); assert.equal(test.navigationShortcutAction(event("P")), null);
   busy = false;
   state.currentImage = null; test.resetCurrentDraft();
@@ -332,7 +337,7 @@ nodeTest("interaction and catalog mutation controls", async () => {
   context.window.showOpenFilePicker = async () => { throw new Error("picker failed"); }; await test.pickImageFiles();
   context.window.showDirectoryPicker = async () => { throw new Error("directory failed"); }; await test.pickImageDirectory();
   vm.runInNewContext("directFilesFromDrop = async () => { throw new Error('drop failed'); };", context);
-  await test.importDroppedFiles({ ...event(""), dataTransfer: { items: [] } });
+  await test.importDroppedFiles({ ...event(""), dataTransfer: { types: ["Files"], items: [] } });
   editable = true; assert.equal(test.handleEditorKeydown(event("U")), false); editable = false; dialogOpen = true; assert.equal(test.navigationShortcutAction(event("P")), null); dialogOpen = false;
   gesture = true; assert.equal(test.navigationShortcutAction(event("P")), null); gesture = false;
   state.viewMode = "overview"; assert.equal(test.handleEditorKeydown(event("U")), false); assert.equal(test.navigationShortcutAction(event("P")), null); state.viewMode = "edit";
@@ -401,3 +406,157 @@ nodeTest("interaction and catalog mutation controls", async () => {
   state.importing = false; state.importSession = null; await test.importFiles([{ getFile: async () => file("failure.png"), relativePath: "failure.png" }]);
   context.fetch = originalFetch; context.api = apiForClear;
 });
+
+function resetShortcutContract() {
+  busy = false; editable = false; dialogOpen = false; gesture = false;
+  document.activeElement = null;
+  state.importing = false; state.navigationShortcutsEnabled = true; state.viewMode = "edit";
+  state.projectReadOnly = false; state.pendingImageId = null; state.currentId = "one";
+  state.projectOperationPending = false;
+  state.currentImage = { id: "one" }; state.images = [{ id: "one" }, { id: "two" }]; images = state.images;
+  state.settings = {
+    confirmations: {},
+    shortcuts: {
+      bindings: { previous: "P", next: "N", previousVisible: "V", nextVisible: "B", first: "F", last: "L", reviewAndNext: "E", removeImage: "Delete", toggleOverview: "G", undo: "U", redo: "R" },
+      actions: {},
+    },
+  };
+}
+
+nodeTest("SD-113 disabled remove-image action ignores Delete", () => {
+  resetShortcutContract(); state.settings.shortcuts.actions.removeImage = false;
+  assert.equal(test.navigationShortcutAction(event("Delete")), null);
+});
+
+nodeTest("SD-114 global shortcut disable ignores Delete", () => {
+  resetShortcutContract(); state.navigationShortcutsEnabled = false;
+  assert.equal(test.navigationShortcutAction(event("Delete")), null);
+});
+
+nodeTest("SD-115 remapped remove-image key replaces Delete", () => {
+  resetShortcutContract(); state.settings.shortcuts.bindings.removeImage = "Ctrl+D";
+  assert.equal(test.navigationShortcutAction(event("Delete")), null);
+  assert.equal(test.navigationShortcutAction(event("Ctrl+D")), "removeImage");
+});
+
+nodeTest("SD-116 duplicate shortcut binding resolves to one action", () => {
+  resetShortcutContract();
+  state.settings.shortcuts.bindings.removeImage = "P";
+  assert.equal(test.navigationShortcutAction(event("P")), "previous");
+});
+
+nodeTest("SD-117 editable controls and a noncurrent card do not start deletion", () => {
+  resetShortcutContract(); editable = true;
+  assert.equal(test.navigationShortcutAction(event("Delete")), null);
+  document.activeElement = {
+    dataset: { id: "two" },
+    matches(selector) { return selector.includes("gallery-item") && !selector.includes(".current"); },
+  };
+  assert.equal(test.navigationShortcutAction(event("Delete")), null);
+});
+
+nodeTest("SD-119 open dialogs suppress remove-image shortcuts", () => {
+  resetShortcutContract(); dialogOpen = true;
+  assert.equal(test.navigationShortcutAction(event("Delete")), null);
+});
+
+nodeTest("SD-120 overview mode suppresses remove-image shortcuts", () => {
+  resetShortcutContract(); state.viewMode = "overview";
+  assert.equal(test.navigationShortcutAction(event("Delete")), null);
+});
+
+nodeTest("SD-121 busy and import states suppress remove-image shortcuts", () => {
+  resetShortcutContract(); busy = true;
+  assert.equal(test.navigationShortcutAction(event("Delete")), null);
+  busy = false; state.importing = true;
+  assert.equal(test.navigationShortcutAction(event("Delete")), null);
+});
+
+nodeTest("SD-122 read-only pending and changed-source states suppress deletion", () => {
+  resetShortcutContract(); state.projectReadOnly = true;
+  assert.equal(test.navigationShortcutAction(event("Delete")), null);
+  state.projectReadOnly = false; state.pendingImageId = "one";
+  assert.equal(test.navigationShortcutAction(event("Delete")), null);
+  state.pendingImageId = null; images[0].sourceDimensionsChanged = true;
+  assert.equal(test.navigationShortcutAction(event("Delete")), null);
+});
+
+nodeTest("SD-123 held Delete reports one repeat guard instead of another deletion", () => {
+  resetShortcutContract(); const repeated = event("Delete"); repeated.repeat = true;
+  assert.equal(test.navigationShortcutAction(repeated), "removeImageRepeat");
+});
+
+nodeTest("SD-126 current card allows Delete while other focus and dialogs block it", () => {
+  resetShortcutContract(); editable = true;
+  document.activeElement = {
+    dataset: { id: "one" },
+    matches(selector) { return selector.includes("gallery-item") && (!selector.includes(".current") || selector.includes(".current")); },
+  };
+  assert.equal(test.navigationShortcutAction(event("Delete")), "removeImage");
+  document.activeElement = {
+    dataset: { id: "two" },
+    matches(selector) { return selector.includes("gallery-item") && !selector.includes(".current"); },
+  };
+  assert.equal(test.navigationShortcutAction(event("Delete")), null);
+  dialogOpen = true;
+  assert.equal(test.navigationShortcutAction(event("Delete")), null);
+});
+
+nodeTest("SD-075 disabled shortcuts leave history keys inert while button actions remain callable", () => {
+  resetShortcutContract(); state.navigationShortcutsEnabled = false;
+  assert.equal(test.handleEditorKeydown(event("U")), false);
+  assert.equal(test.navigationShortcutAction(event("U")), null);
+  assert.equal(typeof context.restoreSnapshot, "function");
+});
+
+function assertShortcutSwitch(action, binding) {
+    resetShortcutContract();
+    assert.equal(test.navigationShortcutAction(event(binding)), action);
+    state.settings.shortcuts.actions[action] = false;
+    assert.equal(test.navigationShortcutAction(event(binding)), null);
+}
+nodeTest("SD-076 registered shortcut invokes its action", () => assertShortcutSwitch("previous", "P"));
+nodeTest("SD-077 previous shortcut obeys its per-action switch", () => assertShortcutSwitch("previous", "P"));
+nodeTest("SD-078 next shortcut obeys its per-action switch", () => assertShortcutSwitch("next", "N"));
+nodeTest("SD-079 previous-visible shortcut obeys its per-action switch", () => assertShortcutSwitch("previousVisible", "V"));
+nodeTest("SD-080 next-visible shortcut obeys its per-action switch", () => assertShortcutSwitch("nextVisible", "B"));
+nodeTest("SD-081 first shortcut obeys its per-action switch", () => assertShortcutSwitch("first", "F"));
+nodeTest("SD-082 last shortcut obeys its per-action switch", () => assertShortcutSwitch("last", "L"));
+nodeTest("SD-083 review-and-next shortcut obeys its per-action switch", () => assertShortcutSwitch("reviewAndNext", "E"));
+nodeTest("SD-084 overview shortcut obeys its per-action switch", () => assertShortcutSwitch("toggleOverview", "G"));
+nodeTest("SD-085 undo shortcut obeys its per-action switch", () => assertShortcutSwitch("undo", "U"));
+nodeTest("SD-086 redo shortcut obeys its per-action switch", () => assertShortcutSwitch("redo", "R"));
+
+nodeTest("SD-088 editable controls consume text keys without invoking navigation", () => {
+  resetShortcutContract(); editable = true;
+  assert.equal(test.navigationShortcutAction(event("N")), null);
+  assert.equal(test.handleEditorKeydown(event("U")), false);
+});
+
+nodeTest("SD-103 global shortcut disable blocks redo keys but not the redo callable", () => {
+  resetShortcutContract(); state.navigationShortcutsEnabled = false;
+  assert.equal(test.handleEditorKeydown(event("R")), false);
+  assert.equal(typeof context.restoreSnapshot, "function");
+});
+
+nodeTest("SD-104 global shortcut disable blocks image arrow navigation but not button navigation", () => {
+  resetShortcutContract(); state.navigationShortcutsEnabled = false;
+  assert.equal(test.navigationShortcutAction(event("P")), null);
+  assert.equal(test.navigationShortcutAction(event("N")), null);
+  assert.equal(typeof context.moveCurrentBy, "function");
+});
+
+function assertConfirmationSwitch(key) {
+    resetShortcutContract(); state.settings.confirmations[key] = true;
+    assert.equal(test.confirmationRequired(key), true);
+    state.settings.confirmations[key] = false;
+    assert.equal(test.confirmationRequired(key), false);
+    assert.deepEqual(state.images.map((image) => image.id), ["one", "two"]);
+}
+nodeTest("SD-089 clear-masks confirmation changes only the prompt decision", () => assertConfirmationSwitch("clearMasks"));
+nodeTest("SD-090 clear-catalog confirmation changes only the prompt decision", () => assertConfirmationSwitch("clearCatalog"));
+nodeTest("SD-091 remove-image confirmation changes only the prompt decision", () => assertConfirmationSwitch("removeImage"));
+nodeTest("SD-092 candidate-delete confirmation changes only the prompt decision", () => assertConfirmationSwitch("candidateDelete"));
+nodeTest("SD-093 candidate-role confirmation changes only the prompt decision", () => assertConfirmationSwitch("candidateRoleDelete"));
+nodeTest("SD-094 overwrite confirmation changes only the prompt decision", () => assertConfirmationSwitch("overwriteSource"));
+nodeTest("SD-095 delete-after-copy confirmation changes only the prompt decision", () => assertConfirmationSwitch("deleteSourceAfterCopy"));

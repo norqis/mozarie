@@ -96,14 +96,14 @@
           <button id="mosaicPreviewButton" class="tool icon-button active" type="button" data-toolbar-item aria-pressed="true" aria-label="モザイク表示" title="モザイク表示" data-i18n-aria-label="editor.mosaicPreview" data-i18n-title="editor.mosaicPreview">▦</button>
         <span class="tool-separator" aria-hidden="true"></span>
         <div class="canvas-settings-bar" data-i18n-aria-label="editor.settings" aria-label="編集設定">
-          <label class="numeric-control" for="brushSize"><span data-i18n="editor.brushSize">ブラシ径</span><input id="brushSize" type="range" min="1" value="48" data-i18n-aria-label="editor.brushSize" aria-label="ブラシ径"><output id="brushSizeValue">48 px</output></label>
+          <label class="numeric-control" for="brushSize"><span data-i18n="editor.brushSize">ブラシ径</span><input id="brushSize" type="range" min="1" max="300" value="48" data-i18n-aria-label="editor.brushSize" aria-label="ブラシ径"><output id="brushSizeValue">48 px</output></label>
           <div class="numeric-control block-control"><span class="block-control-heading"><label for="divisor" data-i18n="editor.blockSize">モザイク粗さ</label><button id="mosaicHelpButton" class="help-button" type="button" data-i18n-aria-label="mosaicHelp.title" data-i18n-title="mosaicHelp.title" aria-label="モザイク粗さ" title="モザイク粗さ"></button></span><span class="ratio-prefix">1 /</span><input id="divisor" type="number" min="1" value="100"><output id="blockSizeValue"></output></div>
         </div>
         </div>
         <div class="canvas-navigation-bar" data-i18n-aria-label="navigation.aria" aria-label="画像移動">
           <output id="currentFileName" class="current-file-name" data-i18n-dynamic>画像未選択</output><output id="reviewStatus" class="review-status" data-i18n-dynamic>未確認</output>
           <button id="previousImageButton" class="icon-button" type="button" aria-label="前へ" title="前へ" data-i18n-aria-label="navigation.previous" data-i18n-title="navigation.previous">‹</button><output id="imagePosition" class="image-position">- / -</output><button id="nextImageButton" class="icon-button" type="button" aria-label="次へ" title="次へ" data-i18n-aria-label="navigation.next" data-i18n-title="navigation.next">›</button>
-          <button id="removeAndNextButton" class="danger" type="button" data-i18n="navigation.removeAndNext">削除</button><button id="hideAndNextButton" type="button" data-i18n="navigation.hideAndNext">非表示にして次へ</button><button id="reviewAndNextButton" class="primary" type="button" data-i18n="navigation.reviewAndNext">確認済にして次へ</button>
+          <button id="removeAndNextButton" class="danger" type="button" data-i18n="navigation.removeAndNext">削除</button><button id="removeFromListButton" class="warning" type="button" data-i18n="catalog.removeFromList">一覧から削除</button><button id="hideAndNextButton" type="button" data-i18n="navigation.hideAndNext">非表示にして次へ</button><button id="reviewAndNextButton" class="primary" type="button" data-i18n="navigation.reviewAndNext">確認済にして次へ</button>
         </div>
         <canvas id="editorCanvas" tabindex="0" data-i18n-aria-label="editor.canvas" aria-label="画像編集キャンバス"></canvas>
         <div id="compareSplitter" role="separator" tabindex="0" aria-controls="editorCanvas" aria-orientation="vertical" aria-valuemin="20" aria-valuemax="80" aria-valuenow="50" aria-label="比較表示の分割位置" data-i18n-aria-label="editor.compareSplitter"></div>
@@ -133,19 +133,7 @@
         <button id="removeCurrentImageButton" type="button" data-i18n="editor.hide">非表示</button>
       </div>
       <section class="detection-settings">
-        <h2 data-i18n="detection.title">検出設定</h2>
-        <div class="target-choices" role="group" data-i18n-aria-label="detection.targets" aria-label="対象">
-          <span class="target-choices-label" data-i18n="detection.targets">対象</span>
-          <label class="target-chip"><input id="detectTargetPenis" type="checkbox" checked><span>penis</span></label>
-          <label class="target-chip"><input id="detectTargetPussy" type="checkbox" checked><span>pussy</span></label>
-        </div>
-        <p id="detectionTargetValidation" class="target-validation" role="alert" hidden></p>
-        <label class="threshold-control" for="confidence">
-          <span data-i18n="detection.confidence">判定しきい値</span>
-          <output id="confidenceValue">0.50</output>
-        </label>
-        <input id="confidence" type="range" min="0.10" max="1.00" step="0.01" value="0.50">
-        <p class="muted" data-i18n="detection.help">高いほど誤検出は減りますが、見逃しは増えます。</p>
+        <button id="detectionSettingsButton" type="button" data-i18n="detection.title">検出設定</button>
       </section>
       <output id="candidateStatus" class="muted" hidden data-i18n-dynamic>画像を選択してください</output>
       <section class="candidate-section">
@@ -185,7 +173,7 @@
         <output id="selectionCount" aria-live="polite">0件を選択中</output>
         <button id="selectionActionsButton" type="button" popovertarget="selectionActionsMenu" aria-expanded="false" data-i18n="selection.actions">一括操作</button>
         <div id="selectionActionsMenu" class="batch-more-menu" popover>
-          <button data-selection-action="remove" class="danger" type="button" data-i18n="selection.remove">元画像を削除</button><button data-selection-action="hide" type="button" data-i18n="selection.hide">非表示</button><button data-selection-action="show" type="button" data-i18n="selection.show">再表示</button><button data-selection-action="clear" type="button" data-i18n="selection.clear">モザイククリア</button><button data-selection-action="detect" type="button" data-i18n="selection.detect">自動検出</button><button data-selection-action="reviewed" type="button" data-i18n="selection.reviewed">確認済</button><button data-selection-action="unreviewed" type="button" data-i18n="selection.unreviewed">未確認</button>
+          <button data-selection-action="remove" class="danger" type="button" data-i18n="selection.remove">元画像を削除</button><button data-selection-action="removeFromList" class="warning" type="button" data-i18n="catalog.removeFromList">一覧から削除</button><button data-selection-action="hide" type="button" data-i18n="selection.hide">非表示</button><button data-selection-action="show" type="button" data-i18n="selection.show">再表示</button><button data-selection-action="clear" type="button" data-i18n="selection.clear">モザイククリア</button><button data-selection-action="detect" type="button" data-i18n="selection.detect">自動検出</button><button data-selection-action="reviewed" type="button" data-i18n="selection.reviewed">確認済</button><button data-selection-action="unreviewed" type="button" data-i18n="selection.unreviewed">未確認</button>
         </div>
         <button id="selectionClearButton" type="button" data-i18n="selection.end">終了</button>
       </div>
@@ -223,6 +211,7 @@
     <button id="toggleReviewMenuItem" type="button" role="menuitem"></button>
     <button id="renameImageMenuItem" type="button" role="menuitem" data-i18n="context.rename">名前を変更</button>
     <button id="copyImagePathMenuItem" type="button" role="menuitem" hidden data-i18n="context.copyPath">パスをコピー</button>
+    <button id="removeFromListMenuItem" class="warning" type="button" role="menuitem" data-i18n="catalog.removeFromList">一覧から削除</button>
     <button id="removeImageMenuItem" type="button" role="menuitem" data-i18n="editor.hide">非表示</button>
   </div>
 
@@ -276,7 +265,7 @@
     <form id="detectForm" class="dialog-body">
       <h2 id="detectDialogTitle" data-i18n="detectDialog.title">自動検出の設定</h2>
       <p id="detectTargetCount" class="muted"></p>
-       <label class="form-row">
+       <label id="detectParallelismRow" class="form-row">
          <span data-i18n="detectDialog.parallelism">同時処理数</span>
          <input id="detectParallelism" type="number" min="1" step="1" value="2" data-i18n-aria-label="detectDialog.parallelism" aria-label="同時処理数">
        </label>
@@ -384,7 +373,7 @@
         <label class="choice-row"><input id="settingsExcludeForcedDefault" type="checkbox"><span data-i18n="settings.excludeForcedDefault">新しい除外候補を強制する</span></label>
       </section>
       <section id="settingsPanelShortcuts" class="settings-panel" role="tabpanel" aria-labelledby="settingsTabShortcuts" data-settings-panel="shortcuts" hidden>
-        <label class="choice-row"><input id="settingsShortcutsEnabled" type="checkbox"><span data-i18n="settings.shortcuts">キーボードショートカット</span></label>
+        <div class="shortcut-global-row"><span id="settingsShortcutsLabel" data-i18n="settings.shortcuts">キーボードショートカット</span><label class="model-switch shortcut-switch"><input id="settingsShortcutsEnabled" type="checkbox" role="switch" aria-labelledby="settingsShortcutsLabel"><span class="model-switch-track" aria-hidden="true"><span class="model-switch-knob"></span></span><span class="model-switch-state" data-switch-state>ON</span></label></div>
         <div id="shortcutBindings" class="shortcut-bindings"></div>
         <p class="fixed-note" data-i18n="settings.shortcutHint">キー欄を選択して、割り当てたいキーを押してください。</p>
       </section>

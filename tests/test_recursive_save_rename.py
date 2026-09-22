@@ -3,12 +3,12 @@ import threading
 import unittest
 import base64
 import io
-import shutil
 import sqlite3
 from pathlib import Path
 from unittest.mock import Mock, patch
 
 from PIL import Image
+from tests import prepare_test_app_config
 
 import mozarie.state as state_module
 from mozarie.core import BrowserSaveToken, ClientError, ImageRecord
@@ -31,11 +31,25 @@ class _SavingState(SavingMixin):
 
 
 class RecursiveSaveTests(unittest.TestCase):
+    def test_preserve_structure_keeps_the_source_relative_parent_in_the_reserved_output(self):
+        with tempfile.TemporaryDirectory() as raw:
+            output = Path(raw) / "output"
+            record = ImageRecord("one", Path("C:/source.png"), "chapter/scene/source.png", 1, 1, 1, 1)
+            state = _SavingState(record, output)
+            destination = state._reserve_output_destination(record, "_done", output, "jpg", True)
+            self.assertEqual(destination, output / "chapter" / "scene" / "source_done.jpg")
+
     def test_copy_uses_edited_basename_before_format_and_suffix(self):
         record = ImageRecord("one", Path("C:/source.png"), "nested/source.png", 1, 1, 1, 1, edited_filename="edited.png")
         self.assertEqual(
             _SavingState._copy_relative_path(record, "_done", "jpg", True).as_posix(),
             "nested/edited_done.jpg",
+        )
+        jpeg = ImageRecord("jpeg", Path("C:/source.jpeg"), "nested/source.jpeg", 1, 1, 1, 1)
+        self.assertEqual(
+            _SavingState._copy_relative_path(jpeg, "_copy", "jpg", True).as_posix(),
+            "nested/source_copy.jpg",
+            "a .jpeg source copied as explicit JPG uses the .jpg output extension",
         )
 
     def test_flatten_collision_stops_before_output_probe_or_job(self):
@@ -75,7 +89,7 @@ class RecursiveSaveTests(unittest.TestCase):
     def test_flatten_publish_race_never_reassigns_the_final_name(self):
         with tempfile.TemporaryDirectory() as raw:
             root = Path(raw); source = root / "source.png"; Image.new("RGB", (8, 8), "white").save(source)
-            app_dir = root / "app"; shutil.copytree(Path(__file__).resolve().parents[1] / "config", app_dir / "config")
+            app_dir = root / "app"; prepare_test_app_config(app_dir)
             with patch.object(state_module, "APP_DIR", app_dir):
                 state = StudioState(root / "cache", root / "sessions")
             try:
@@ -181,7 +195,7 @@ class RenameJournalTests(unittest.TestCase):
 class StudioStateNativeRenameTests(unittest.TestCase):
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory(); self.root = Path(self.temporary.name)
-        self.app_dir = self.root / "app"; shutil.copytree(Path(__file__).resolve().parents[1] / "config", self.app_dir / "config")
+        self.app_dir = self.root / "app"; prepare_test_app_config(self.app_dir)
         self.source_root = self.root / "sources"; self.source_root.mkdir()
         self.source = self.source_root / "nested" / "source.png"; self.source.parent.mkdir(); Image.new("RGB", (8, 8), "white").save(self.source)
         self.states: list[StudioState] = []
@@ -246,6 +260,13 @@ class StudioStateNativeRenameTests(unittest.TestCase):
         images = {image["relativePath"]: image["id"] for image in state.set_root(str(self.source_root))}
         jpeg_id = images["nested/original.jpeg"]
         state.rename_catalog_image(jpeg_id, "new.jpeg")
+        jpeg_output = self.root / "jpeg-output"; jpeg_output.mkdir(); state.settings["saving"]["default_output_directory"] = str(jpeg_output)
+        state.reserve_browser_save(jpeg_id, 0, "jpeg-copy-casing", copy_to_default=True, suffix="_copy", output_format="jpg", keep_metadata=False)
+        jpeg_copy = state.render_browser_save(jpeg_id, 0, 100, None, client_save_token="jpeg-copy-casing", copy_to_default=True, suffix="_copy", output_format="jpg", keep_metadata=False)
+        state.commit_browser_save(jpeg_id, 0, jpeg_copy.save_token, "keep")
+        with Image.open(jpeg_output / "nested" / "new_copy.jpg") as saved:
+            self.assertEqual(saved.format, "JPEG", "an explicit JPG copy from .jpeg uses a .jpg destination")
+        self.assertTrue(jpeg.exists(), "copy saving keeps the .jpeg source")
         state.reserve_browser_save(jpeg_id, 0, "jpeg-casing", copy_to_default=False, suffix="_censored", output_format="jpg", keep_metadata=False)
         rendered = state.render_browser_save(jpeg_id, 0, 100, None, client_save_token="jpeg-casing", output_format="jpg", keep_metadata=False)
         state.commit_browser_save(jpeg_id, 0, rendered.save_token, "overwrite")

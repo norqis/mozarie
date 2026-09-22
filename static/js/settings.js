@@ -243,13 +243,35 @@ function setSettingsForm(settings, status = null) {
 }
 
 const SHORTCUT_LABELS = { previous: "settings.shortcut.previous", next: "settings.shortcut.next", previousVisible: "settings.shortcut.previousVisible", nextVisible: "settings.shortcut.nextVisible", first: "settings.shortcut.first", last: "settings.shortcut.last", reviewAndNext: "settings.shortcut.reviewAndNext", removeImage: "settings.shortcut.removeImage", renameImage: "settings.shortcut.renameImage", toggleOverview: "settings.shortcut.toggleOverview", undo: "settings.shortcut.undo", redo: "settings.shortcut.redo" };
+Object.assign(SHORTCUT_LABELS, {
+  cycleMosaicTool: "settings.shortcut.cycleMosaicTool", cycleExclusionTool: "settings.shortcut.cycleExclusionTool",
+  mosaicBrush: "editor.brush", mosaicFill: "editor.mosaicFill", mosaicEraser: "editor.mosaicEraser",
+  boundaryMenu: "editor.boundary", boundaryRectangle: "boundary.rectangle", boundaryPolygon: "boundary.polygon", boundaryBrush: "boundary.brush",
+  exclusionBrush: "editor.eraser", exclusionFill: "editor.excludeFill", exclusionEraser: "editor.excludeEraser",
+  singleView: "editor.singleView", compareView: "editor.compareView", fitView: "editor.fit",
+  flipHorizontal: "editor.flipHorizontal", flipVertical: "editor.flipVertical", mosaicPreview: "editor.mosaicPreview",
+});
+function syncShortcutSwitch(input) {
+  const label = input.parentElement?.querySelector?.("[data-switch-state]");
+  if (label) label.textContent = t(input.checked ? "settings.on" : "settings.off");
+}
 function renderShortcutBindings(bindings, actions) {
   const root = $("#shortcutBindings"); root.textContent = "";
+  syncShortcutSwitch($("#settingsShortcutsEnabled"));
   for (const [action, labelKey] of Object.entries(SHORTCUT_LABELS)) {
-    const row = document.createElement("label"); row.className = "form-row"; const text = document.createElement("span"); text.textContent = t(labelKey);
-    const enabled = document.createElement("input"); enabled.type = "checkbox"; enabled.dataset.shortcutEnabled = action; enabled.checked = actions[action] !== false; enabled.setAttribute("aria-label", `${t(labelKey)} ${t("settings.on")}`);
+    const row = document.createElement("div"); row.className = "form-row"; const text = document.createElement("span"); text.textContent = t(labelKey);
+    const toggle = document.createElement("label"); toggle.className = "model-switch shortcut-switch";
+    const enabled = document.createElement("input"); enabled.type = "checkbox"; enabled.dataset.shortcutEnabled = action; enabled.checked = actions[action] !== false; enabled.setAttribute("role", "switch"); enabled.setAttribute("aria-label", `${t(labelKey)} ${t("settings.on")}`);
+    const track = document.createElement("span"); track.className = "model-switch-track"; track.setAttribute("aria-hidden", "true");
+    const knob = document.createElement("span"); knob.className = "model-switch-knob"; track.append(knob);
+    const switchState = document.createElement("span"); switchState.className = "model-switch-state"; switchState.dataset.switchState = ""; switchState.textContent = t(enabled.checked ? "settings.on" : "settings.off");
+    toggle.append(enabled, track, switchState); enabled.addEventListener("change", () => syncShortcutSwitch(enabled));
     const input = document.createElement("input"); input.type = "text"; input.dataset.shortcutAction = action; input.value = bindings[action] || ""; input.autocomplete = "off"; input.setAttribute("aria-label", t(labelKey));
-    input.addEventListener("keydown", (event) => { event.preventDefault(); input.value = shortcutFromEvent(event); }); row.append(text, enabled, input); root.append(row);
+    input.addEventListener("keydown", (event) => {
+      if (event.key === "Tab") return;
+      event.preventDefault();
+      if (!event.isComposing && !["Control", "Meta", "Shift", "Alt"].includes(event.key)) input.value = shortcutFromEvent(event);
+    }); row.append(text, input, toggle); root.append(row);
   }
 }
 function shortcutFromEvent(event) { return `${event.ctrlKey || event.metaKey ? "Ctrl+" : ""}${event.shiftKey ? "Shift+" : ""}${event.altKey ? "Alt+" : ""}${event.key.length === 1 ? event.key.toUpperCase() : event.key}`; }
@@ -315,11 +337,11 @@ function settingsPayload() {
     },
     importing: { parallelism: normaliseImportParallelism($("#settingsImportParallelism").value) },
     detection: {
-      threshold: normaliseDetectionConfidence($("#detectConfidenceNumber").value),
-      parallelism: detectionParallelism(),
+      threshold: detectionConfidence(),
+      parallelism: state.settings.detection.parallelism,
       mode: $("#settingsPrecisionToggle").checked ? "high_precision" : "standard",
       fluid_exclusion_enabled: $("#settingsFluidToggle").checked,
-      exclude_forced_default: $("#settingsExcludeForcedDefault").checked, targets: detectionTargets(),
+      exclude_forced_default: $("#settingsExcludeForcedDefault").checked, targets: persistedDetectionTargets(),
     },
     saving: {
       parallelism: Math.max(1, Math.round(Number($("#settingsSaveParallelism").value) || 2)),
@@ -421,7 +443,7 @@ async function saveSettings(event) {
   event.preventDefault();
   if (settingsMutationPending) return;
   const result = $("#settingsResult"); result.textContent = ""; result.classList.remove("error");
-  if (!validateDetectionTargets(detectionTargets())) {
+  if (!validateDetectionTargets(persistedDetectionTargets())) {
     result.textContent = t("error.detectionTargetsRequired"); result.classList.add("error"); return;
   }
   if (!validateAbsoluteSettingsPaths()) return;

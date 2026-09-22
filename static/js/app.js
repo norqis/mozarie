@@ -42,6 +42,7 @@ function modelHelpInfo(key) {
 
 function openModelHelp(key) {
   const info = modelHelpInfo(key);
+  $("#modelHelpDialog").dataset.modelHelpKey = key;
   $("#modelHelpTitle").textContent = t(`modelHelp.${key}.title`);
   $("#modelHelpText").hidden = false;
   $("#modelHelpText").textContent = t(`modelHelp.${key}.text`);
@@ -142,7 +143,7 @@ async function restoreBrowserProjectSourcesForCurrentCatalog(catalogSources = []
         if (child.kind === "file") {
           for (const sourceId of canonicalSourceIds) for (const image of imagesByDirectorySource.get(sourceId)?.get(relativePath) || []) {
             stagedAccess.set(image.id, {
-              fileHandle: child, parentHandle: handle, name: child.name, sourceId: image.sourceId, relativePath,
+              fileHandle: child, parentHandle: handle, rootHandle: source.handle, name: child.name, sourceId: image.sourceId, relativePath,
               sourceKind: "browser-directory", size: image.sizeBytes, lastModified: Math.round(Number(image.mtimeNs) / 1000000),
             });
           }
@@ -865,6 +866,7 @@ function bindEvents() {
   $("#modelHelpDialog").addEventListener("cancel", (event) => { event.preventDefault(); $("#modelHelpDialog").close(); });
   lightDismiss($("#modelHelpDialog"), () => $("#modelHelpDialog").close());
   toolRail.addEventListener("keydown", handleToolRailKeydown);
+  $("#settingsShortcutsEnabled").addEventListener("change", (event) => syncShortcutSwitch(event.target));
   toolRailItems().forEach((item) => item.addEventListener("focus", () => setToolRailTabStop(item)));
   setToolRailTabStop();
   document.querySelectorAll(".settings-tab").forEach((button) => {
@@ -888,7 +890,10 @@ function bindEvents() {
     if (event.dataTransfer?.types?.includes("Files")) event.preventDefault();
   });
   document.addEventListener("drop", (event) => {
-    if (event.dataTransfer?.files?.length) void importDroppedFiles(event);
+    if (event.dataTransfer?.types?.includes("Files") || event.dataTransfer?.files?.length) {
+      event.preventDefault();
+      void importDroppedFiles(event);
+    }
   });
   $("#folderPath").addEventListener("keydown", (event) => { if (event.key === "Enter") loadFolder(); });
   $("#loadFolderButton").addEventListener("click", loadFolder);
@@ -896,7 +901,8 @@ function bindEvents() {
     if (!activeDetection()) openDetectionDialog(allImageDetectionTargets().map((image) => image.id), { filterable: true });
   };
   $("#detectAllButton").addEventListener("click", detectAll);
-  $("#detectCurrentButton").addEventListener("click", () => { const image = currentRecord(); if (!currentImageActionPending() && isProcessableImage(image)) void runDetection([image.id], detectionConfidence(), 1, detectionTargets()); });
+  $("#detectCurrentButton").addEventListener("click", () => { const image = currentRecord(); if (!currentImageActionPending() && isProcessableImage(image)) void runDetection([image.id], detectionConfidence(), 1, persistedDetectionTargets(), persistedFluidColorFill()); });
+  $("#detectionSettingsButton").addEventListener("click", () => openDetectionDialog([], { settingsOnly: true }));
   $("#saveAllButton").addEventListener("click", saveAll); $("#saveButton").addEventListener("click", saveCurrent); $("#singleViewButton").addEventListener("click", () => setDisplayMode("single")); $("#compareViewButton").addEventListener("click", () => setDisplayMode("compare")); $("#fitButton").addEventListener("click", () => { if (!isBusy() && !state.importing) fitImage(); });
   $("#flipHorizontalButton").addEventListener("click", () => { void toggleImageFlip("horizontal"); });
   $("#flipVerticalButton").addEventListener("click", () => { void toggleImageFlip("vertical"); });
@@ -1013,6 +1019,7 @@ function bindEvents() {
   $("#nextImageButton").addEventListener("click", () => runNavigationAction(() => moveCurrentBy(1)));
   $("#reviewAndNextButton").addEventListener("click", () => { void runNavigationAction(reviewAndMoveNext); });
   $("#removeAndNextButton").addEventListener("click", () => { void removeImageFromCatalog(state.currentId); });
+  $("#removeFromListButton").addEventListener("click", () => { const image = currentRecord(); if (image) void removeImagesFromList([image]); });
   $("#hideAndNextButton").addEventListener("click", () => { void hideAndMoveNext(); });
   document.querySelectorAll("[data-selection-action]").forEach((button) => button.addEventListener("click", () => { void runSelectionAction(button.dataset.selectionAction); }));
   $("#selectionClearButton").addEventListener("click", () => { closeBatchMoreMenus(); state.batchMode = false; clearBatchSelection(); renderOverview(); updateSelectionActionBar(); });
@@ -1066,15 +1073,13 @@ function bindEvents() {
     requestMosaicPreview(); updateBlockSizeDisplay(); render();
   });
   $("#applyDivisor").addEventListener("input", () => { if (!isBusy() && !state.importing) updateBlockSizeDisplay(); });
-  $("#confidence").addEventListener("input", () => { if (!isBusy() && !state.importing) setDetectionConfidence($("#confidence").value); });
   $("#detectConfidenceRange").addEventListener("input", () => setDetectionConfidence($("#detectConfidenceRange").value));
   $("#detectConfidenceNumber").addEventListener("input", () => setDetectionConfidence($("#detectConfidenceNumber").value));
   $("#detectFluidColorFillEnabled").addEventListener("change", syncDetectionFluidColorFill);
   $("#detectFluidColorFillTolerance").addEventListener("input", validateDetectionFluidColorFill);
-  document.querySelectorAll("#detectTargetPenis, #detectTargetPussy, #dialogTargetPenis, #dialogTargetPussy").forEach((input) => input.addEventListener("change", () => {
+  document.querySelectorAll("#dialogTargetPenis, #dialogTargetPussy").forEach((input) => input.addEventListener("change", () => {
     syncDetectionTargetSwitch(input);
-    if (input.id.startsWith("dialog")) syncDetectionDialog();
-    else validateDetectionTargets(detectionTargets(), $("#detectionTargetValidation"));
+    syncDetectionDialog();
   }));
   document.querySelectorAll("[data-detection-image-filter]").forEach((input) => input.addEventListener("change", () => {
     syncDetectionTargetSwitch(input); syncDetectionDialog();
@@ -1083,7 +1088,7 @@ function bindEvents() {
   $("#detectCancelButton").addEventListener("click", () => { if (!state.detectionDialogSubmitting) { $("#detectDialog").close(); resetDetectionDialogState(); } });
   $("#detectDialog").addEventListener("cancel", (event) => { event.preventDefault(); if (!state.detectionDialogSubmitting) { $("#detectDialog").close(); resetDetectionDialogState(); } });
   lightDismiss($("#detectDialog"), () => { if (!state.detectionDialogSubmitting) { $("#detectDialog").close(); resetDetectionDialogState(); } });
-  $("#undoButton").addEventListener("click", () => { if (hasDurableHistory()) void restoreProjectHistory("undo"); else restoreSnapshot(state.historyIndex - 1); }); $("#redoButton").addEventListener("click", () => { if (hasDurableHistory()) void restoreProjectHistory("redo"); else restoreSnapshot(state.historyIndex + 1); });
+  $("#undoButton").addEventListener("click", () => { if (undoBoundaryDraft()) return; if (hasDurableHistory()) void restoreProjectHistory("undo"); else restoreSnapshot(state.historyIndex - 1); }); $("#redoButton").addEventListener("click", () => { if (hasDurableHistory()) void restoreProjectHistory("redo"); else restoreSnapshot(state.historyIndex + 1); });
   const grid = $(".studio-grid");
   const paneStorage = { gallery: "mozarie.galleryWidth", inspector: "mozarie.inspectorWidth" };
   const paneDefaultsForWidth = (width) => width >= 1600 ? { gallery: 260, inspector: 320 } : width >= 1280 ? { gallery: 216, inspector: 292 } : { gallery: 190, inspector: 270 };
@@ -1159,6 +1164,7 @@ function bindEvents() {
       else if (event.key === "End") updatePaneWidth(side, Number.MAX_SAFE_INTEGER);
       else return;
       event.preventDefault();
+      event.stopPropagation();
     });
   };
   bindPaneSplitter($("#gallerySplitter"), "gallery");
@@ -1262,10 +1268,11 @@ function bindEvents() {
     const image = state.images.find((item) => item.id === state.contextMenuImageId);
     if (image) {
       const scroll = state.contextMenuScroll;
+      const reviewedBefore = isReviewed(image);
       const changed = await queueImageMutation(image.id, () => saveWorkspaceFlagNow(image, "reviewed", !isReviewed(image), () => {
         if (state.images.some((item) => item.id === image.id)) refreshReviewViews(scroll);
       }), { lockCandidateControls: true });
-      if (changed && !state.project?.id && image.id === state.currentId) recordHistoryOperation({ kind: "workspaceFlag" });
+      if (changed && !hasDurableHistory() && image.id === state.currentId) recordHistoryOperation({ kind: "workspaceFlag", reviewedBefore, reviewedAfter: isReviewed(image) });
     }
   })();
     closeCatalogContextMenu();
@@ -1273,6 +1280,7 @@ function bindEvents() {
   $("#copyImagePathMenuItem").addEventListener("click", () => { void copyContextMenuImagePath(); });
   $("#renameImageMenuItem").addEventListener("click", () => { openRenameImageDialog(); });
   $("#removeImageMenuItem").addEventListener("click", () => { const image = state.images.find((item) => item.id === state.contextMenuImageId); if (image) void setHidden(image, !isHidden(image)); closeCatalogContextMenu(); });
+  $("#removeFromListMenuItem").addEventListener("click", () => { void removeContextImagesFromList(); });
   $("#renameImageForm").addEventListener("submit", submitRenameImage);
   $("#renameImageRestoreOriginal").addEventListener("click", () => {
     const image = state.images.find((entry) => entry.id === state.renameImage?.imageId);

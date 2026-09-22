@@ -1,0 +1,1699 @@
+{
+  "version": 1,
+  "domain": "flip-export",
+  "source": {
+    "path": "docs/manual-verification/flip-export.md",
+    "commit": "264f70d"
+  },
+  "baseline": {
+    "rows": 88,
+    "observations": 153
+  },
+  "observations": [
+    {
+      "key": "FE-001.1",
+      "sourceIds": [
+        "FE-001"
+      ],
+      "observation": "左右反転・上下反転が操作不可で",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_ui_operation_lifecycle_e2e.cjs::flip availability, toolbar keyboard order, and save metadata format states use the live UI"
+      ]
+    },
+    {
+      "key": "FE-001.2",
+      "sourceIds": [
+        "FE-001"
+      ],
+      "observation": "他のボタンや文字と重ならない",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_flip_export_ui_contracts_e2e.cjs::flip and save controls keep their text, hit targets, and current filename unobscured"
+      ]
+    },
+    {
+      "key": "FE-002.1",
+      "sourceIds": [
+        "FE-002"
+      ],
+      "observation": "画像の左端と右端が入れ替わり",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_all_flip_combinations_preserve_dimensions_and_exact_pixel_coordinates"
+      ]
+    },
+    {
+      "key": "FE-002.2",
+      "sourceIds": [
+        "FE-002"
+      ],
+      "observation": "上下の位置と寸法は変わらない",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_all_flip_combinations_preserve_dimensions_and_exact_pixel_coordinates"
+      ]
+    },
+    {
+      "key": "FE-003.1",
+      "sourceIds": [
+        "FE-003"
+      ],
+      "observation": "元の向きに戻る",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_flip_export_ui_contracts_e2e.cjs::flip actions are reversible, isolated per image, and store bounded non-pixel history"
+      ]
+    },
+    {
+      "key": "FE-004.1",
+      "sourceIds": [
+        "FE-004"
+      ],
+      "observation": "画像の上端と下端が入れ替わり",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_all_flip_combinations_preserve_dimensions_and_exact_pixel_coordinates"
+      ]
+    },
+    {
+      "key": "FE-004.2",
+      "sourceIds": [
+        "FE-004"
+      ],
+      "observation": "左右の位置と寸法は変わらない",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_all_flip_combinations_preserve_dimensions_and_exact_pixel_coordinates"
+      ]
+    },
+    {
+      "key": "FE-005.1",
+      "sourceIds": [
+        "FE-005"
+      ],
+      "observation": "元の向きに戻る",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_flip_export_ui_contracts_e2e.cjs::flip actions are reversible, isolated per image, and store bounded non-pixel history"
+      ]
+    },
+    {
+      "key": "FE-006.1",
+      "sourceIds": [
+        "FE-006"
+      ],
+      "observation": "元画像の左上が右下",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_all_flip_combinations_preserve_dimensions_and_exact_pixel_coordinates"
+      ]
+    },
+    {
+      "key": "FE-006.2",
+      "sourceIds": [
+        "FE-006"
+      ],
+      "observation": "右上が左下へ移る",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_all_flip_combinations_preserve_dimensions_and_exact_pixel_coordinates"
+      ]
+    },
+    {
+      "key": "FE-007.1",
+      "sourceIds": [
+        "FE-007"
+      ],
+      "observation": "元の加工対象と一緒にモザイクが左右反転する",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_mosaic_pixels_and_image_are_flipped_together"
+      ]
+    },
+    {
+      "key": "FE-008.1",
+      "sourceIds": [
+        "FE-008"
+      ],
+      "observation": "元の対象と一緒に除外が上下反転する",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_project_export_mask_alpha.ProjectExportMaskAlphaTests.test_project_zip_export_uses_rgba_alpha_for_manual_mosaic_and_exclude_masks"
+      ]
+    },
+    {
+      "key": "FE-009.1",
+      "sourceIds": [
+        "FE-009"
+      ],
+      "observation": "ポインターのある位置にモザイクを追加する",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_flip_export_ui_contracts_e2e.cjs::flipped editor coordinates keep manual masks, boundaries, compare panes, zoom, and pan aligned"
+      ]
+    },
+    {
+      "key": "FE-010.1",
+      "sourceIds": [
+        "FE-010"
+      ],
+      "observation": "ポインターのある位置に除外を追加し",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_flip_export_ui_contracts_e2e.cjs::flipped editor coordinates keep manual masks, boundaries, compare panes, zoom, and pan aligned"
+      ]
+    },
+    {
+      "key": "FE-010.2",
+      "sourceIds": [
+        "FE-010"
+      ],
+      "observation": "モザイク手描きは追加しない",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_flip_export_ui_contracts_e2e.cjs::flipped editor coordinates keep manual masks, boundaries, compare panes, zoom, and pan aligned"
+      ]
+    },
+    {
+      "key": "FE-011.1",
+      "sourceIds": [
+        "FE-011"
+      ],
+      "observation": "ポインター位置のモザイク手描きだけを消す",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_flip_export_ui_contracts_e2e.cjs::flipped editor coordinates keep manual masks, boundaries, compare panes, zoom, and pan aligned"
+      ]
+    },
+    {
+      "key": "FE-012.1",
+      "sourceIds": [
+        "FE-012"
+      ],
+      "observation": "ポインター位置の除外を消す",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_flip_export_ui_contracts_e2e.cjs::flipped editor coordinates keep manual masks, boundaries, compare panes, zoom, and pan aligned"
+      ]
+    },
+    {
+      "key": "FE-013.1",
+      "sourceIds": [
+        "FE-013"
+      ],
+      "observation": "押した位置の色を起点としてモザイク範囲を追加する",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_editor_masks_behavior.cjs::editor masks, fill, candidates, and history",
+        "node:tests/test_flip_export_ui_contracts_e2e.cjs::flipped editor coordinates keep manual masks, boundaries, compare panes, zoom, and pan aligned"
+      ]
+    },
+    {
+      "key": "FE-014.1",
+      "sourceIds": [
+        "FE-014"
+      ],
+      "observation": "押した位置の色を起点として除外範囲を追加する",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_editor_masks_behavior.cjs::editor masks, fill, candidates, and history",
+        "node:tests/test_flip_export_ui_contracts_e2e.cjs::flipped editor coordinates keep manual masks, boundaries, compare panes, zoom, and pan aligned"
+      ]
+    },
+    {
+      "key": "FE-015.1",
+      "sourceIds": [
+        "FE-015"
+      ],
+      "observation": "表示中の指定位置を対象とし",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_flip_export_ui_contracts_e2e.cjs::flipped editor coordinates keep manual masks, boundaries, compare panes, zoom, and pan aligned"
+      ]
+    },
+    {
+      "key": "FE-015.2",
+      "sourceIds": [
+        "FE-015"
+      ],
+      "observation": "左右反対の位置を処理しない",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_flip_export_ui_contracts_e2e.cjs::flipped editor coordinates keep manual masks, boundaries, compare panes, zoom, and pan aligned"
+      ]
+    },
+    {
+      "key": "FE-016.1",
+      "sourceIds": [
+        "FE-016"
+      ],
+      "observation": "左の画像と右の範囲を同じ向きに反転する",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_flip_export_ui_contracts_e2e.cjs::compare canvas draws the flipped image and range together through vertical flip zoom and pan"
+      ]
+    },
+    {
+      "key": "FE-017.1",
+      "sourceIds": [
+        "FE-017"
+      ],
+      "observation": "左の画像と右の範囲を同じ向きに反転する",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_flip_export_ui_contracts_e2e.cjs::compare canvas draws the flipped image and range together through vertical flip zoom and pan"
+      ]
+    },
+    {
+      "key": "FE-018.1",
+      "sourceIds": [
+        "FE-018"
+      ],
+      "observation": "画像と範囲が同じ座標を維持し",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_flip_export_ui_contracts_e2e.cjs::compare canvas draws the flipped image and range together through vertical flip zoom and pan"
+      ]
+    },
+    {
+      "key": "FE-018.2",
+      "sourceIds": [
+        "FE-018"
+      ],
+      "observation": "左右の画面が同期する",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_flip_export_ui_contracts_e2e.cjs::compare canvas draws the flipped image and range together through vertical flip zoom and pan"
+      ]
+    },
+    {
+      "key": "FE-019.1",
+      "sourceIds": [
+        "FE-019"
+      ],
+      "observation": "反転前の向きへ戻り",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_flip_export_ui_contracts_e2e.cjs::flip actions are reversible, isolated per image, and store bounded non-pixel history"
+      ]
+    },
+    {
+      "key": "FE-019.2",
+      "sourceIds": [
+        "FE-019"
+      ],
+      "observation": "範囲と画像の位置関係を保持する",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_flip_export_ui_contracts_e2e.cjs::flip actions are reversible, isolated per image, and store bounded non-pixel history"
+      ]
+    },
+    {
+      "key": "FE-020.1",
+      "sourceIds": [
+        "FE-020"
+      ],
+      "observation": "反転後の向きを再適用する",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_flip_export_ui_contracts_e2e.cjs::flip actions are reversible, isolated per image, and store bounded non-pixel history"
+      ]
+    },
+    {
+      "key": "FE-021.1",
+      "sourceIds": [
+        "FE-021"
+      ],
+      "observation": "Aの向きを保持し",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_flip_export_ui_contracts_e2e.cjs::flip actions are reversible, isolated per image, and store bounded non-pixel history"
+      ]
+    },
+    {
+      "key": "FE-021.2",
+      "sourceIds": [
+        "FE-021"
+      ],
+      "observation": "Bの向きは変わらない",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_flip_export_ui_contracts_e2e.cjs::flip actions are reversible, isolated per image, and store bounded non-pixel history"
+      ]
+    },
+    {
+      "key": "FE-022.1",
+      "sourceIds": [
+        "FE-022"
+      ],
+      "observation": "各画像の反転状態を復元する",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_projectless_flip_survives_project_naming_reopen_readonly_and_mask_clear"
+      ]
+    },
+    {
+      "key": "FE-023.1",
+      "sourceIds": [
+        "FE-023"
+      ],
+      "observation": "反転状態を表示するが",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_projectless_flip_survives_project_naming_reopen_readonly_and_mask_clear"
+      ]
+    },
+    {
+      "key": "FE-023.2",
+      "sourceIds": [
+        "FE-023"
+      ],
+      "observation": "反転操作はできない",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_projectless_flip_survives_project_naming_reopen_readonly_and_mask_clear"
+      ]
+    },
+    {
+      "key": "FE-024.1",
+      "sourceIds": [
+        "FE-024"
+      ],
+      "observation": "モザイク範囲がなくても保存操作が可能",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_flip_export_ui_contracts_e2e.cjs::flip actions are reversible, isolated per image, and store bounded non-pixel history"
+      ]
+    },
+    {
+      "key": "FE-025.1",
+      "sourceIds": [
+        "FE-025"
+      ],
+      "observation": "出力を反転した向きで保存し",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_flip_only_copy_save_writes_visible_direction_and_never_changes_source"
+      ]
+    },
+    {
+      "key": "FE-025.2",
+      "sourceIds": [
+        "FE-025"
+      ],
+      "observation": "元画像ファイルを変えない",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_flip_only_copy_save_writes_visible_direction_and_never_changes_source"
+      ]
+    },
+    {
+      "key": "FE-026.1",
+      "sourceIds": [
+        "FE-026"
+      ],
+      "observation": "出力と編集画面の向きが一致し",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_overwrite_records_native_flip_once_and_keeps_transform_undo_redo"
+      ]
+    },
+    {
+      "key": "FE-026.2",
+      "sourceIds": [
+        "FE-026"
+      ],
+      "observation": "反転を二重適用しない",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_overwrite_records_native_flip_once_and_keeps_transform_undo_redo"
+      ]
+    },
+    {
+      "key": "FE-027.1",
+      "sourceIds": [
+        "FE-027"
+      ],
+      "observation": "向きが再び逆にならない",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_overwrite_records_native_flip_once_and_keeps_transform_undo_redo"
+      ]
+    },
+    {
+      "key": "FE-028.1",
+      "sourceIds": [
+        "FE-028"
+      ],
+      "observation": "各画像の向きをそれぞれ出力へ反映する",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_mixed_format_batch_outputs_each_requested_container_with_its_own_geometry_transform_and_masks"
+      ]
+    },
+    {
+      "key": "FE-029.1",
+      "sourceIds": [
+        "FE-029"
+      ],
+      "observation": "保存画像と同じ向きで除外差引き後の範囲を出力する",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_project_export_mask_alpha.ProjectExportMaskAlphaTests.test_project_zip_export_uses_rgba_alpha_for_manual_mosaic_and_exclude_masks"
+      ]
+    },
+    {
+      "key": "FE-030.1",
+      "sourceIds": [
+        "FE-030"
+      ],
+      "observation": "保存画像と同じ向きで除外範囲を出力する",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_project_export_mask_alpha.ProjectExportMaskAlphaTests.test_project_zip_export_uses_rgba_alpha_for_manual_mosaic_and_exclude_masks"
+      ]
+    },
+    {
+      "key": "FE-031.1",
+      "sourceIds": [
+        "FE-031"
+      ],
+      "observation": "最後は元の向き",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_flip_export_ui_contracts_e2e.cjs::flip actions are reversible, isolated per image, and store bounded non-pixel history"
+      ]
+    },
+    {
+      "key": "FE-031.2",
+      "sourceIds": [
+        "FE-031"
+      ],
+      "observation": "反転ごとの全画素コピーを履歴へ蓄積せず",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_flip_export_ui_contracts_e2e.cjs::flip actions are reversible, isolated per image, and store bounded non-pixel history"
+      ]
+    },
+    {
+      "key": "FE-031.3",
+      "sourceIds": [
+        "FE-031"
+      ],
+      "observation": "操作回数に応じて待機時RAMが増え続けない",
+      "status": "retired",
+      "retirementReason": "4K画像を扱える実Windowsプロセスとタスクマネージャーでの観測は対象外とする。OSの常駐メモリとGC後の安定値は隔離CIの小fixtureでは再現できないため"
+    },
+    {
+      "key": "FE-032.1",
+      "sourceIds": [
+        "FE-032"
+      ],
+      "observation": "保存形式とメタ情報保持を表示し",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_ui_operation_lifecycle_e2e.cjs::flip availability, toolbar keyboard order, and save metadata format states use the live UI"
+      ]
+    },
+    {
+      "key": "FE-032.2",
+      "sourceIds": [
+        "FE-032"
+      ],
+      "observation": "現在画像名と各欄が重ならない",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_flip_export_ui_contracts_e2e.cjs::flip and save controls keep their text, hit targets, and current filename unobscured"
+      ]
+    },
+    {
+      "key": "FE-033.1",
+      "sourceIds": [
+        "FE-033"
+      ],
+      "observation": "対象選択とは別に保存形式とメタ情報保持を表示する",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_flip_export_ui_contracts_e2e.cjs::flip and save controls keep their text, hit targets, and current filename unobscured"
+      ]
+    },
+    {
+      "key": "FE-034.1",
+      "sourceIds": [
+        "FE-034"
+      ],
+      "observation": "保持チェックがOFF・操作不可となり",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_ui_operation_lifecycle_e2e.cjs::flip availability, toolbar keyboard order, and save metadata format states use the live UI"
+      ]
+    },
+    {
+      "key": "FE-034.2",
+      "sourceIds": [
+        "FE-034"
+      ],
+      "observation": "保持欄の文字も灰色で無効状態を示す",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_flip_export_ui_contracts_e2e.cjs::flip and save controls keep their text, hit targets, and current filename unobscured"
+      ]
+    },
+    {
+      "key": "FE-034.3",
+      "sourceIds": [
+        "FE-034"
+      ],
+      "observation": "赤字で「JPG形式ではメタ情報を保持しません",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_flip_export_ui_contracts_e2e.cjs::flip and save controls keep their text, hit targets, and current filename unobscured"
+      ]
+    },
+    {
+      "key": "FE-034.4",
+      "sourceIds": [
+        "FE-034"
+      ],
+      "observation": "」を表示する",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_ui_operation_lifecycle_e2e.cjs::flip availability, toolbar keyboard order, and save metadata format states use the live UI"
+      ]
+    },
+    {
+      "key": "FE-035.1",
+      "sourceIds": [
+        "FE-035"
+      ],
+      "observation": "保持チェックがOFF・操作不可となり",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_ui_operation_lifecycle_e2e.cjs::flip availability, toolbar keyboard order, and save metadata format states use the live UI"
+      ]
+    },
+    {
+      "key": "FE-035.2",
+      "sourceIds": [
+        "FE-035"
+      ],
+      "observation": "保持欄の文字も灰色で無効状態を示す",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_flip_export_ui_contracts_e2e.cjs::flip and save controls keep their text, hit targets, and current filename unobscured"
+      ]
+    },
+    {
+      "key": "FE-035.3",
+      "sourceIds": [
+        "FE-035"
+      ],
+      "observation": "同じ赤字警告を表示する",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_flip_export_ui_contracts_e2e.cjs::flip and save controls keep their text, hit targets, and current filename unobscured"
+      ]
+    },
+    {
+      "key": "FE-036.1",
+      "sourceIds": [
+        "FE-036"
+      ],
+      "observation": "保持チェックを再び操作でき",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_ui_operation_lifecycle_e2e.cjs::flip availability, toolbar keyboard order, and save metadata format states use the live UI"
+      ]
+    },
+    {
+      "key": "FE-036.2",
+      "sourceIds": [
+        "FE-036"
+      ],
+      "observation": "JPG選択前のON/OFFを復元し",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_flip_export_ui_contracts_e2e.cjs::flip and save controls keep their text, hit targets, and current filename unobscured"
+      ]
+    },
+    {
+      "key": "FE-036.3",
+      "sourceIds": [
+        "FE-036"
+      ],
+      "observation": "JPG警告が消える",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_flip_export_ui_contracts_e2e.cjs::flip and save controls keep their text, hit targets, and current filename unobscured"
+      ]
+    },
+    {
+      "key": "FE-037.1",
+      "sourceIds": [
+        "FE-037"
+      ],
+      "observation": "OFFのままでONにできない",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_flip_export_ui_contracts_e2e.cjs::flip and save controls keep their text, hit targets, and current filename unobscured"
+      ]
+    },
+    {
+      "key": "FE-038.1",
+      "sourceIds": [
+        "FE-038"
+      ],
+      "observation": "保持欄を有効化せず",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_flip_export_ui_contracts_e2e.cjs::flip and save controls keep their text, hit targets, and current filename unobscured"
+      ]
+    },
+    {
+      "key": "FE-038.2",
+      "sourceIds": [
+        "FE-038"
+      ],
+      "observation": "他の操作可能な欄へ移動する",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_flip_export_ui_contracts_e2e.cjs::flip and save controls keep their text, hit targets, and current filename unobscured"
+      ]
+    },
+    {
+      "key": "FE-039.1",
+      "sourceIds": [
+        "FE-039"
+      ],
+      "observation": "PNGとして開け",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_png_text_is_preserved_or_removed_according_to_the_export_choice"
+      ]
+    },
+    {
+      "key": "FE-039.2",
+      "sourceIds": [
+        "FE-039"
+      ],
+      "observation": "parameters・prompt・workflowの文字列を保持する",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_png_text_is_preserved_or_removed_according_to_the_export_choice"
+      ]
+    },
+    {
+      "key": "FE-040.1",
+      "sourceIds": [
+        "FE-040"
+      ],
+      "observation": "PNGとして開け",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_png_text_is_preserved_or_removed_according_to_the_export_choice"
+      ]
+    },
+    {
+      "key": "FE-040.2",
+      "sourceIds": [
+        "FE-040"
+      ],
+      "observation": "parameters・prompt・workflowが出力に残らない",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_png_text_is_preserved_or_removed_according_to_the_export_choice"
+      ]
+    },
+    {
+      "key": "FE-041.1",
+      "sourceIds": [
+        "FE-041"
+      ],
+      "observation": ".jpg拡張子のJPEGとして開け",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_png_text_is_preserved_or_removed_according_to_the_export_choice"
+      ]
+    },
+    {
+      "key": "FE-041.2",
+      "sourceIds": [
+        "FE-041"
+      ],
+      "observation": "元の文字情報が残らない",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_png_text_is_preserved_or_removed_according_to_the_export_choice"
+      ]
+    },
+    {
+      "key": "FE-042.1",
+      "sourceIds": [
+        "FE-042"
+      ],
+      "observation": "JPEGとして開け",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_explicit_jpg_export_drops_source_exif_comment_and_icc"
+      ]
+    },
+    {
+      "key": "FE-042.2",
+      "sourceIds": [
+        "FE-042"
+      ],
+      "observation": "元のEXIF・コメントを引き継がない",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_explicit_jpg_export_drops_source_exif_comment_and_icc"
+      ]
+    },
+    {
+      "key": "FE-043.1",
+      "sourceIds": [
+        "FE-043"
+      ],
+      "observation": "透過部分を白背景に合成し",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_transparency_is_kept_for_png_and_composited_over_white_for_jpeg"
+      ]
+    },
+    {
+      "key": "FE-043.2",
+      "sourceIds": [
+        "FE-043"
+      ],
+      "observation": "JPEGとして開ける",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_transparency_is_kept_for_png_and_composited_over_white_for_jpeg"
+      ]
+    },
+    {
+      "key": "FE-044.1",
+      "sourceIds": [
+        "FE-044"
+      ],
+      "observation": "元の透明度を保持する",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_transparency_is_kept_for_png_and_composited_over_white_for_jpeg"
+      ]
+    },
+    {
+      "key": "FE-045.1",
+      "sourceIds": [
+        "FE-045"
+      ],
+      "observation": ".png拡張子のPNGとして開け",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_cross_format_export_does_not_invent_png_text_and_respects_requested_container"
+      ]
+    },
+    {
+      "key": "FE-045.2",
+      "sourceIds": [
+        "FE-045"
+      ],
+      "observation": "画像寸法と表示の向きが元画像と一致する",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_cross_format_export_does_not_invent_png_text_and_respects_requested_container"
+      ]
+    },
+    {
+      "key": "FE-046.1",
+      "sourceIds": [
+        "FE-046"
+      ],
+      "observation": "元ファイルをそのまま返さず",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_png_text_is_preserved_or_removed_according_to_the_export_choice"
+      ]
+    },
+    {
+      "key": "FE-046.2",
+      "sourceIds": [
+        "FE-046"
+      ],
+      "observation": "選んだ形式で出力する",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_png_text_is_preserved_or_removed_according_to_the_export_choice"
+      ]
+    },
+    {
+      "key": "FE-047.1",
+      "sourceIds": [
+        "FE-047"
+      ],
+      "observation": "元ファイルをそのまま返さず",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_png_text_is_preserved_or_removed_according_to_the_export_choice"
+      ]
+    },
+    {
+      "key": "FE-047.2",
+      "sourceIds": [
+        "FE-047"
+      ],
+      "observation": "メタ情報を除いた画像を出力する",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_png_text_is_preserved_or_removed_according_to_the_export_choice"
+      ]
+    },
+    {
+      "key": "FE-048.1",
+      "sourceIds": [
+        "FE-048"
+      ],
+      "observation": "対象全件がPNGとなり",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_mixed_format_batch_outputs_each_requested_container_with_its_own_geometry_transform_and_masks"
+      ]
+    },
+    {
+      "key": "FE-048.2",
+      "sourceIds": [
+        "FE-048"
+      ],
+      "observation": "各寸法・反転・モザイク・除外を反映する",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_mixed_format_batch_outputs_each_requested_container_with_its_own_geometry_transform_and_masks"
+      ]
+    },
+    {
+      "key": "FE-049.1",
+      "sourceIds": [
+        "FE-049"
+      ],
+      "observation": "対象全件がJPEGとなり",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_mixed_format_batch_outputs_each_requested_container_with_its_own_geometry_transform_and_masks"
+      ]
+    },
+    {
+      "key": "FE-049.2",
+      "sourceIds": [
+        "FE-049"
+      ],
+      "observation": "元のメタ情報を引き継がない",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_mixed_format_batch_outputs_each_requested_container_with_its_own_geometry_transform_and_masks"
+      ]
+    },
+    {
+      "key": "FE-050.1",
+      "sourceIds": [
+        "FE-050"
+      ],
+      "observation": "出力名が衝突せず",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_flat_copy_of_same_stem_mixed_extensions_keeps_every_distinct_output"
+      ]
+    },
+    {
+      "key": "FE-050.2",
+      "sourceIds": [
+        "FE-050"
+      ],
+      "observation": "対象全件を個別ファイルで残す",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_flat_copy_of_same_stem_mixed_extensions_keeps_every_distinct_output"
+      ]
+    },
+    {
+      "key": "FE-051.1",
+      "sourceIds": [
+        "FE-051"
+      ],
+      "observation": "ファイルを出力せず",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_flip_export_ui_contracts_e2e.cjs::flip and save controls keep their text, hit targets, and current filename unobscured"
+      ]
+    },
+    {
+      "key": "FE-051.2",
+      "sourceIds": [
+        "FE-051"
+      ],
+      "observation": "元画像と編集内容を変えない",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_flip_export_ui_contracts_e2e.cjs::flip and save controls keep their text, hit targets, and current filename unobscured"
+      ]
+    },
+    {
+      "key": "FE-052.1",
+      "sourceIds": [
+        "FE-052"
+      ],
+      "observation": "未処理分を成功件数に含めず",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_server.MozarieTests.test_cancelled_or_failed_apply_reports_only_successfully_completed_images"
+      ]
+    },
+    {
+      "key": "FE-052.2",
+      "sourceIds": [
+        "FE-052"
+      ],
+      "observation": "保存済みファイルは選択した形式で開ける",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_cancelled_jpg_batch_counts_only_completed_files_and_keeps_their_selected_format"
+      ]
+    },
+    {
+      "key": "FE-053.1",
+      "sourceIds": [
+        "FE-053"
+      ],
+      "observation": "完了後に全出力分のデコード画像・バッファを保持しない",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_render_releases_every_source_decoder_and_temporary_output_between_repeated_conversions"
+      ]
+    },
+    {
+      "key": "FE-053.2",
+      "sourceIds": [
+        "FE-053"
+      ],
+      "observation": "回数に応じたRAM増加が続かない",
+      "status": "retired",
+      "retirementReason": "4K画像を繰り返し変換できる実Windowsプロセスとタスクマネージャーでの観測は対象外とする。OS codecとGCを含むデコードバッファ解放後の常駐メモリは隔離CIの小fixtureでは再現できないため"
+    },
+    {
+      "key": "FE-054.1",
+      "sourceIds": [
+        "FE-054"
+      ],
+      "observation": "上書きのまま `同名.jpg` を対象にし",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_http_live_endpoints.LiveHttpEndpointTests.test_live_browser_overwrite_converts_png_to_jpg_and_persists_the_new_path"
+      ]
+    },
+    {
+      "key": "FE-054.2",
+      "sourceIds": [
+        "FE-054"
+      ],
+      "observation": "保存後は旧`.png`がなく",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_http_live_endpoints.LiveHttpEndpointTests.test_live_browser_overwrite_converts_png_to_jpg_and_persists_the_new_path"
+      ]
+    },
+    {
+      "key": "FE-054.3",
+      "sourceIds": [
+        "FE-054"
+      ],
+      "observation": "JPEGとして開ける",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_http_live_endpoints.LiveHttpEndpointTests.test_live_browser_overwrite_converts_png_to_jpg_and_persists_the_new_path"
+      ]
+    },
+    {
+      "key": "FE-055.1",
+      "sourceIds": [
+        "FE-055"
+      ],
+      "observation": "各画像を同stemの`.png`へ変換して旧拡張子をなくし",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_mixed_png_jpeg_overwrite_replaces_old_extensions_and_opens_every_result_as_png"
+      ]
+    },
+    {
+      "key": "FE-055.2",
+      "sourceIds": [
+        "FE-055"
+      ],
+      "observation": "全件がPNGとして開ける",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_mixed_png_jpeg_overwrite_replaces_old_extensions_and_opens_every_result_as_png"
+      ]
+    },
+    {
+      "key": "FE-056.1",
+      "sourceIds": [
+        "FE-056"
+      ],
+      "observation": "上書き可能で",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_recursive_save_rename.StudioStateNativeRenameTests.test_edited_name_keeps_jpeg_and_png_casing_for_copy_and_original_overwrite"
+      ]
+    },
+    {
+      "key": "FE-056.2",
+      "sourceIds": [
+        "FE-056"
+      ],
+      "observation": "元の.jpeg名を維持したJPEGを保存する",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_recursive_save_rename.StudioStateNativeRenameTests.test_edited_name_keeps_jpeg_and_png_casing_for_copy_and_original_overwrite"
+      ]
+    },
+    {
+      "key": "FE-057.1",
+      "sourceIds": [
+        "FE-057"
+      ],
+      "observation": "コピーの拡張子を.jpgにする",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_recursive_save_rename.StudioStateNativeRenameTests.test_edited_name_keeps_jpeg_and_png_casing_for_copy_and_original_overwrite"
+      ]
+    },
+    {
+      "key": "FE-058.1",
+      "sourceIds": [
+        "FE-058"
+      ],
+      "observation": "メタ情報保持を操作でき",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_flip_export_ui_contracts_e2e.cjs::flip and save controls keep their text, hit targets, and current filename unobscured"
+      ]
+    },
+    {
+      "key": "FE-058.2",
+      "sourceIds": [
+        "FE-058"
+      ],
+      "observation": "明示的なJPG選択時だけ強制OFFとなる",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_flip_export_ui_contracts_e2e.cjs::flip and save controls keep their text, hit targets, and current filename unobscured"
+      ]
+    },
+    {
+      "key": "FE-059.1",
+      "sourceIds": [
+        "FE-059"
+      ],
+      "observation": "元のEXIF情報を保持し",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_server.MozarieTests.test_jpeg_metadata_is_preserved_after_save",
+        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_original_jpeg_preserves_exif_and_icc_but_normalizes_orientation"
+      ]
+    },
+    {
+      "key": "FE-059.2",
+      "sourceIds": [
+        "FE-059"
+      ],
+      "observation": "画素へ適用済みのOrientationは1にする",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_original_jpeg_preserves_exif_and_icc_but_normalizes_orientation"
+      ]
+    },
+    {
+      "key": "FE-060.1",
+      "sourceIds": [
+        "FE-060"
+      ],
+      "observation": "PNGへEXIFとICCを引き継ぎ",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_cross_format_export_does_not_invent_png_text_and_respects_requested_container"
+      ]
+    },
+    {
+      "key": "FE-060.2",
+      "sourceIds": [
+        "FE-060"
+      ],
+      "observation": "元にないprompt・workflowを追加しない",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_cross_format_export_does_not_invent_png_text_and_respects_requested_container"
+      ]
+    },
+    {
+      "key": "FE-061.1",
+      "sourceIds": [
+        "FE-061"
+      ],
+      "observation": "保存で履歴が失われず",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_overwrite_records_native_flip_once_and_keeps_transform_undo_redo"
+      ]
+    },
+    {
+      "key": "FE-061.2",
+      "sourceIds": [
+        "FE-061"
+      ],
+      "observation": "画面は反転操作前の向きに戻る",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_overwrite_records_native_flip_once_and_keeps_transform_undo_redo"
+      ]
+    },
+    {
+      "key": "FE-062.1",
+      "sourceIds": [
+        "FE-062"
+      ],
+      "observation": "画像と範囲が同じ向きで戻り",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_overwrite_records_native_flip_once_and_keeps_transform_undo_redo"
+      ]
+    },
+    {
+      "key": "FE-062.2",
+      "sourceIds": [
+        "FE-062"
+      ],
+      "observation": "再び保存済みの向きへ進む",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_overwrite_records_native_flip_once_and_keeps_transform_undo_redo"
+      ]
+    },
+    {
+      "key": "FE-063.1",
+      "sourceIds": [
+        "FE-063"
+      ],
+      "observation": "モザイクと除外だけが消え",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_projectless_flip_survives_project_naming_reopen_readonly_and_mask_clear"
+      ]
+    },
+    {
+      "key": "FE-063.2",
+      "sourceIds": [
+        "FE-063"
+      ],
+      "observation": "画像の反転状態を保持する",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_projectless_flip_survives_project_naming_reopen_readonly_and_mask_clear"
+      ]
+    },
+    {
+      "key": "FE-064.1",
+      "sourceIds": [
+        "FE-064"
+      ],
+      "observation": "各PNGを保存画像と同じ向きにし",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_project_export_mask_alpha.ProjectExportMaskAlphaTests.test_project_zip_export_uses_rgba_alpha_for_manual_mosaic_and_exclude_masks"
+      ]
+    },
+    {
+      "key": "FE-064.2",
+      "sourceIds": [
+        "FE-064"
+      ],
+      "observation": "反転していない画像は向きを変えない",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_project_export_mask_alpha.ProjectExportMaskAlphaTests.test_project_zip_export_uses_rgba_alpha_for_manual_mosaic_and_exclude_masks"
+      ]
+    },
+    {
+      "key": "FE-065.1",
+      "sourceIds": [
+        "FE-065"
+      ],
+      "observation": "各PNGの除外範囲が保存画像の同じ位置に重なる",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_project_export_mask_alpha.ProjectExportMaskAlphaTests.test_project_zip_export_uses_rgba_alpha_for_manual_mosaic_and_exclude_masks"
+      ]
+    },
+    {
+      "key": "FE-066.1",
+      "sourceIds": [
+        "FE-066"
+      ],
+      "observation": "操作不可となり",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_ui_operation_lifecycle_e2e.cjs::single and batch saves hold native controls, then complete or cancel through their real HTTP lifecycle"
+      ]
+    },
+    {
+      "key": "FE-066.2",
+      "sourceIds": [
+        "FE-066"
+      ],
+      "observation": "保存開始後に対象画像の反転状態を変えない",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_ui_operation_lifecycle_e2e.cjs::single and batch saves hold native controls, then complete or cancel through their real HTTP lifecycle"
+      ]
+    },
+    {
+      "key": "FE-067.1",
+      "sourceIds": [
+        "FE-067"
+      ],
+      "observation": "PJ作成前でも各操作が画像の向きに反映される",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_flip_export_ui_contracts_e2e.cjs::flip actions are reversible, isolated per image, and store bounded non-pixel history"
+      ]
+    },
+    {
+      "key": "FE-068.1",
+      "sourceIds": [
+        "FE-068"
+      ],
+      "observation": "PJ作成前の反転状態を保持する",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_projectless_flip_survives_project_naming_reopen_readonly_and_mask_clear"
+      ]
+    },
+    {
+      "key": "FE-069.1",
+      "sourceIds": [
+        "FE-069"
+      ],
+      "observation": "メタ情報保持が操作可能になり",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_ui_operation_lifecycle_e2e.cjs::flip availability, toolbar keyboard order, and save metadata format states use the live UI"
+      ]
+    },
+    {
+      "key": "FE-069.2",
+      "sourceIds": [
+        "FE-069"
+      ],
+      "observation": "JPG選択前のON/OFFを復元する",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_flip_export_ui_contracts_e2e.cjs::flip and save controls keep their text, hit targets, and current filename unobscured"
+      ]
+    },
+    {
+      "key": "FE-070.1",
+      "sourceIds": [
+        "FE-070"
+      ],
+      "observation": "parameters・prompt・workflowの値を保持する",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_png_text_is_preserved_or_removed_according_to_the_export_choice"
+      ]
+    },
+    {
+      "key": "FE-071.1",
+      "sourceIds": [
+        "FE-071"
+      ],
+      "observation": "parameters・prompt・workflowを出力へ引き継がない",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_png_text_is_preserved_or_removed_according_to_the_export_choice"
+      ]
+    },
+    {
+      "key": "FE-072.1",
+      "sourceIds": [
+        "FE-072"
+      ],
+      "observation": "元のEXIF・ICC・XMPを保持する",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_webp_metadata_is_preserved_for_original_and_removed_when_disabled"
+      ]
+    },
+    {
+      "key": "FE-073.1",
+      "sourceIds": [
+        "FE-073"
+      ],
+      "observation": "元のEXIF・ICC・XMPを出力へ引き継がない",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_webp_metadata_is_preserved_for_original_and_removed_when_disabled"
+      ]
+    },
+    {
+      "key": "FE-074.1",
+      "sourceIds": [
+        "FE-074"
+      ],
+      "observation": "変換先の画像を出力した後にだけ元画像を削除する",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_browser_save_runtime.cjs::copy-delete requests source deletion only after the rendered copy succeeds",
+        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
+      ]
+    },
+    {
+      "key": "FE-075.1",
+      "sourceIds": [
+        "FE-075"
+      ],
+      "observation": "コピー失敗を表示し",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_flip_export_ui_contracts_e2e.cjs::failed copy is shown and leaves the source image in the catalog",
+        "node:tests/test_browser_save_runtime.cjs::failed copy reports failure and never deletes its original source"
+      ]
+    },
+    {
+      "key": "FE-075.2",
+      "sourceIds": [
+        "FE-075"
+      ],
+      "observation": "元画像を削除しない",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_flip_export_ui_contracts_e2e.cjs::failed copy is shown and leaves the source image in the catalog",
+        "node:tests/test_browser_save_runtime.cjs::failed copy reports failure and never deletes its original source"
+      ]
+    },
+    {
+      "key": "FE-076.1",
+      "sourceIds": [
+        "FE-076"
+      ],
+      "observation": "表示中に指定した位置へ候補を作り",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_flip_export_ui_contracts_e2e.cjs::flipped editor coordinates keep manual masks, boundaries, compare panes, zoom, and pan aligned"
+      ]
+    },
+    {
+      "key": "FE-076.2",
+      "sourceIds": [
+        "FE-076"
+      ],
+      "observation": "画像と候補がずれない",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_flip_export_ui_contracts_e2e.cjs::flipped editor coordinates keep manual masks, boundaries, compare panes, zoom, and pan aligned"
+      ]
+    },
+    {
+      "key": "FE-077.1",
+      "sourceIds": [
+        "FE-077"
+      ],
+      "observation": "元座標へ戻して処理する",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_overwritten_flip_is_unwound_for_detection_and_reapplied_to_the_candidate_display"
+      ]
+    },
+    {
+      "key": "FE-077.2",
+      "sourceIds": [
+        "FE-077"
+      ],
+      "observation": "得られた候補を表示中の向きで重ねる",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_overwritten_flip_is_unwound_for_detection_and_reapplied_to_the_candidate_display"
+      ]
+    },
+    {
+      "key": "FE-077.3",
+      "sourceIds": [
+        "FE-077"
+      ],
+      "observation": "検出精度の良否は判定しない",
+      "status": "retired",
+      "retirementReason": "検出精度の主観的な評価は製品の決定的な回帰契約に含めない。"
+    },
+    {
+      "key": "FE-078.1",
+      "sourceIds": [
+        "FE-078"
+      ],
+      "observation": "保存した向きと範囲を維持し",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_overwrite_flip_and_range_reopen_in_saved_direction_without_double_transform"
+      ]
+    },
+    {
+      "key": "FE-078.2",
+      "sourceIds": [
+        "FE-078"
+      ],
+      "observation": "画像を二重反転しない",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_overwrite_flip_and_range_reopen_in_saved_direction_without_double_transform"
+      ]
+    },
+    {
+      "key": "FE-079.1",
+      "sourceIds": [
+        "FE-079"
+      ],
+      "observation": "一覧サムネイルと中央画像が同じ向きになる",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_flip_export_ui_contracts_e2e.cjs::overwrite then Undo keeps the thumbnail and center image in the same direction"
+      ]
+    },
+    {
+      "key": "FE-080.1",
+      "sourceIds": [
+        "FE-080"
+      ],
+      "observation": "EXIF由来の回転と左右反転が各1回だけ適用される",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_original_jpeg_orientation_and_each_user_flip_are_applied_exactly_once"
+      ]
+    },
+    {
+      "key": "FE-081.1",
+      "sourceIds": [
+        "FE-081"
+      ],
+      "observation": "EXIF由来の回転と上下反転が各1回だけ適用される",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_original_jpeg_orientation_and_each_user_flip_are_applied_exactly_once"
+      ]
+    },
+    {
+      "key": "FE-082.1",
+      "sourceIds": [
+        "FE-082"
+      ],
+      "observation": "失敗を表示し",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_ui_operation_lifecycle_e2e.cjs::boundary, fill, transform, undo, and redo recover from pending work without stale locks"
+      ]
+    },
+    {
+      "key": "FE-082.2",
+      "sourceIds": [
+        "FE-082"
+      ],
+      "observation": "画面だけ反転した状態を残さない",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_ui_operation_lifecycle_e2e.cjs::boundary, fill, transform, undo, and redo recover from pending work without stale locks"
+      ]
+    },
+    {
+      "key": "FE-082.3",
+      "sourceIds": [
+        "FE-082"
+      ],
+      "observation": "再度反転できる",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_ui_operation_lifecycle_e2e.cjs::boundary, fill, transform, undo, and redo recover from pending work without stale locks"
+      ]
+    },
+    {
+      "key": "FE-083.1",
+      "sourceIds": [
+        "FE-083"
+      ],
+      "observation": "透明な部分と不透明な部分を維持し",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_palette_rgb_and_grayscale_colorkey_transparency_survives_metadata_drop"
+      ]
+    },
+    {
+      "key": "FE-083.2",
+      "sourceIds": [
+        "FE-083"
+      ],
+      "observation": "元の文字情報を引き継がない",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_palette_rgb_and_grayscale_colorkey_transparency_survives_metadata_drop"
+      ]
+    },
+    {
+      "key": "FE-084.1",
+      "sourceIds": [
+        "FE-084"
+      ],
+      "observation": "指定色の透明度を維持し",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_palette_rgb_and_grayscale_colorkey_transparency_survives_metadata_drop"
+      ]
+    },
+    {
+      "key": "FE-084.2",
+      "sourceIds": [
+        "FE-084"
+      ],
+      "observation": "元の文字情報を引き継がない",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_palette_rgb_and_grayscale_colorkey_transparency_survives_metadata_drop"
+      ]
+    },
+    {
+      "key": "FE-085.1",
+      "sourceIds": [
+        "FE-085"
+      ],
+      "observation": "やり直す・左右反転・上下反転・モザイク表示の順にフォーカスが移る",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_ui_operation_lifecycle_e2e.cjs::flip availability, toolbar keyboard order, and save metadata format states use the live UI"
+      ]
+    },
+    {
+      "key": "FE-085.2",
+      "sourceIds": [
+        "FE-085"
+      ],
+      "observation": "操作不可のボタンは飛ばす",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_flip_export_ui_contracts_e2e.cjs::editor toolbar arrow navigation skips a disabled flip control"
+      ]
+    },
+    {
+      "key": "FE-086.1",
+      "sourceIds": [
+        "FE-086"
+      ],
+      "observation": "メタ情報を保持しない警告と無効な保持欄を表示し",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_flip_export_ui_contracts_e2e.cjs::flip and save controls keep their text, hit targets, and current filename unobscured"
+      ]
+    },
+    {
+      "key": "FE-086.2",
+      "sourceIds": [
+        "FE-086"
+      ],
+      "observation": "文字が切れない",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_flip_export_ui_contracts_e2e.cjs::flip and save controls keep their text, hit targets, and current filename unobscured"
+      ]
+    },
+    {
+      "key": "FE-086.3",
+      "sourceIds": [
+        "FE-086"
+      ],
+      "observation": "元画像への適用またはコピー保存の選択は維持する",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_flip_export_ui_contracts_e2e.cjs::flip and save controls keep their text, hit targets, and current filename unobscured"
+      ]
+    },
+    {
+      "key": "FE-087.1",
+      "sourceIds": [
+        "FE-087"
+      ],
+      "observation": "一覧・編集画面の回転後座標と同じ位置にモザイクを出力し",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_unlimited_oriented_jpeg_flip_keeps_mask_in_normalized_visible_coordinates"
+      ]
+    },
+    {
+      "key": "FE-087.2",
+      "sourceIds": [
+        "FE-087"
+      ],
+      "observation": "出力寸法は回転後の向き",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_server.MozarieTests.test_exif_rotated_jpeg_uses_normalized_mask_coordinates",
+        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_unlimited_oriented_jpeg_flip_keeps_mask_in_normalized_visible_coordinates"
+      ]
+    },
+    {
+      "key": "FE-087.3",
+      "sourceIds": [
+        "FE-087"
+      ],
+      "observation": "EXIF Orientationは1になる",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_server.MozarieTests.test_exif_rotated_jpeg_uses_normalized_mask_coordinates",
+        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_unlimited_oriented_jpeg_flip_keeps_mask_in_normalized_visible_coordinates"
+      ]
+    },
+    {
+      "key": "FE-088.1",
+      "sourceIds": [
+        "FE-088"
+      ],
+      "observation": "保存を拒否し",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_http_live_endpoints.LiveHttpEndpointTests.test_live_format_overwrite_rejects_a_same_stem_destination_without_touching_either_file"
+      ]
+    },
+    {
+      "key": "FE-088.2",
+      "sourceIds": [
+        "FE-088"
+      ],
+      "observation": "元`.png`と外部`.jpg`を両方保持する",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_http_live_endpoints.LiveHttpEndpointTests.test_live_format_overwrite_rejects_a_same_stem_destination_without_touching_either_file"
+      ]
+    }
+  ]
+}

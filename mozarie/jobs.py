@@ -281,6 +281,7 @@ class JobsMixin:
                 total=len(records),
                 started_at=time.time(),
                 image_ids=tuple(record.image_id for record in records),
+                preparing_models=1 if kind == "detect" else 0,
             )
             self._publish_job_snapshot_unchecked()
             self._job_output_slots: dict[int, str] = {}
@@ -599,6 +600,7 @@ class JobsMixin:
             kind = self.job.kind
             self._resume_job_clock()
             self.job.state = "error"
+            self.job.preparing_models = 0
             self.job.cancel_requested = False
             self.job.publication_started = False
             self.job.ended_at = time.time()
