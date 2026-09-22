@@ -293,6 +293,7 @@ class FolderLoadLoggingContractTests(unittest.TestCase):
         secret_header = "header-secret"
         payload = {"imageIds": [secret_id], "note": secret_body}
         state = Mock()
+        state.assert_catalog_expectation = Mock()
         state.catalog_request.return_value = contextlib.nullcontext()
         state.set_image_flags.return_value = {"hidden": True}
         state.recover_gpu_oom_for_request.return_value = None

@@ -528,6 +528,7 @@ class ProjectHttpCoverageTests(unittest.TestCase):
         request._read_json_body = Mock(return_value={"imageIds": ["one", "two"], "enabled": False})
         request._json = Mock()
         state = Mock()
+        state.assert_catalog_expectation = Mock()
         state.catalog_request.return_value = contextlib.nullcontext()
         state.batch_update_candidates_many.return_value = {"one": 2, "two": 3}
         with patch.object(http_module, "STATE", state):

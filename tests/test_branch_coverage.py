@@ -386,6 +386,7 @@ class HttpBranchTests(unittest.TestCase):
         handler._binary = lambda *_args, **_kwargs: None
         handler._client_error = lambda error, *_args, **_kwargs: (_ for _ in ()).throw(error)
         state = MagicMock()
+        state.assert_catalog_expectation = Mock()
         state.request_pause.return_value = SimpleNamespace(as_dict=lambda: {})
         state.resume_job.return_value = SimpleNamespace(as_dict=lambda: {})
         state.request_cancel.return_value = SimpleNamespace(as_dict=lambda: {})
@@ -436,6 +437,7 @@ class HttpBranchTests(unittest.TestCase):
         handler._json = lambda *_args, **_kwargs: None
         handler._client_error = lambda error, *_args, **_kwargs: (_ for _ in ()).throw(error)
         state = MagicMock()
+        state.assert_catalog_expectation = Mock()
         state.settings = {"detection": {"threshold": 0.5, "parallelism": 1, "fluid_color_fill_enabled": False, "fluid_color_fill_tolerance": 26}}
         state.update_settings.return_value = {}
         state.reset_settings.return_value = {}
@@ -466,6 +468,7 @@ class HttpBranchTests(unittest.TestCase):
         handler._send_candidate_mask = lambda *args, **kwargs: None
         handler._client_error = lambda error, *_args, **_kwargs: (_ for _ in ()).throw(error)
         state = Mock()
+        state.assert_catalog_expectation = Mock()
         state.settings = {"models": {"provider": "cpu"}}
         state.settings_status.return_value = {"gpuDeviceValid": True, "models": {}, "gpus": []}
         state.job.as_dict.return_value = {}

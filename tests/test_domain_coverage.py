@@ -440,6 +440,7 @@ class HttpCoverageTests(unittest.TestCase):
 
     def test_http_routes_dispatch_json_operations_without_a_live_server(self) -> None:
         state = MagicMock()
+        state.assert_catalog_expectation = Mock()
         state.settings = {"detection": {"threshold": .5, "parallelism": 1}}
         state.set_root.return_value = [{"id": "x"}]
         state.start_apply.return_value = True
@@ -474,6 +475,7 @@ class HttpCoverageTests(unittest.TestCase):
 
     def test_http_delete_routes_dispatch_and_unknown_route_is_not_found(self) -> None:
         state = MagicMock()
+        state.assert_catalog_expectation = Mock()
         state.delete_candidate.return_value = True
         state._candidate_revision.return_value = 3
         state.catalog_request.return_value = nullcontext()
@@ -511,6 +513,7 @@ class HttpCoverageTests(unittest.TestCase):
 
     def test_http_post_routes_cover_settings_models_saves_and_jobs(self) -> None:
         state = MagicMock()
+        state.assert_catalog_expectation = Mock()
         state.settings = {"detection": {"threshold": .5, "parallelism": 1}}
         state.settings["detection"].update(fluid_color_fill_enabled=False, fluid_color_fill_tolerance=26)
         state.model_downloads.cancel.return_value = {"state": "cancelled"}
