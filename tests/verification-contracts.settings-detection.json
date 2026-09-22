@@ -871,7 +871,7 @@
       "sourceIds": [
         "SD-054"
       ],
-      "observation": "個別・一括の設定取消しは保存値を変更せず検出を実行しない。設定保存失敗ではダイアログを開いたまま保存値を保持する一般設定の検証と保存は保存済みの検出対象を使う。",
+      "observation": "個別・一括の設定取消しは保存値を変更せず検出を実行しない。設定保存失敗ではダイアログを開いたまま保存値を保持する。一般設定の検証と保存は保存済みの検出対象を使う。",
       "status": "automated",
       "testIds": [
         "node:tests/test_detection_dialog_contracts.cjs::SD-054 cancelling the all-image dialog starts no detection",
