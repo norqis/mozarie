@@ -12,6 +12,18 @@ function bitmap(id) {
   return { id, closed: false, close() { assert.equal(this.closed, false, `${id} closes once`); this.closed = true; } };
 }
 
+async function closeSettingsAfterRestore(page) {
+  await page.waitForFunction(() => document.querySelector("#settingsDialog").open);
+  const priorShortcut = await page.locator("#shortcutBindings input").first().elementHandle();
+  try {
+    await page.locator("#settingsCloseButton").click();
+    // Closing restores translations asynchronously, then replaces shortcut
+    // controls. Include that work before taking the next listener baseline.
+    await page.waitForFunction((previous) => !document.querySelector("#settingsDialog").open
+      && !previous.isConnected && document.querySelector("#shortcutBindings input")?.isConnected, priorShortcut);
+  } finally { await priorShortcut.dispose(); }
+}
+
 test("candidate and project resource ownership releases every obsolete bitmap while retaining the complete current bundle", () => {
   const state = {
     images: [], currentId: null, pendingImageId: null, pendingImageKey: null, pendingCandidateKey: null, hoverPrefetchId: null,
@@ -127,7 +139,7 @@ test("repeated settings, project rows, and candidate padding lifecycles retain o
       if (galleryPlateau === null) galleryPlateau = sample;
       else assert.deepEqual(sample, galleryPlateau, "every repeated 400-image filter/overview cycle returns to the first stable connected-node and map counts");
     }
-    await page.locator("#settingsButton").click(); await page.locator("#settingsCloseButton").click();
+    await page.locator("#settingsButton").click(); await closeSettingsAfterRestore(page);
     await page.evaluate(() => showProjectList());
     await page.waitForFunction(() => document.querySelector("#projectListDialog").open && document.querySelectorAll("#projectListBody tr").length > 0);
     await page.locator("#projectListClose").click();
@@ -137,7 +149,7 @@ test("repeated settings, project rows, and candidate padding lifecycles retain o
     for (let index = 0; index < 15; index += 1) {
       await page.locator("#settingsButton").click();
       await page.waitForFunction(() => document.querySelector("#settingsDialog").open);
-      await page.locator("#settingsCloseButton").click();
+      await closeSettingsAfterRestore(page);
     }
     assert.equal(await page.locator("#settingsDialog").count(), 1, "settings always reuses its single connected dialog root");
     assert.equal(await page.locator("#settingsDialog").evaluate((node) => node.isConnected), true, "settings leaves no detached replacement root");
