@@ -587,6 +587,18 @@ class DataIntegrityHttpContracts(unittest.TestCase):
 
     def test_unavailable_workspace_delete_closes_and_only_a_new_connection_recreates(self) -> None:
         self.state.shutdown()
+        previous_module_state = state_module.STATE
+        previous_startup_error = state_module.STATE_STARTUP_ERROR
+
+        def restore_module_state() -> None:
+            recovered = state_module.STATE
+            if recovered is not None and recovered is not previous_module_state and recovered is not self.state:
+                recovered.shutdown()
+            state_module.STATE = previous_module_state
+            state_module.STATE_STARTUP_ERROR = previous_startup_error
+
+        self.addCleanup(restore_module_state)
+        state_module.STATE = None
         http_module.STATE = None
         response = self.raw_exchange(
             self.raw_request_bytes("DELETE", "/api/catalog/image/missing", [])
