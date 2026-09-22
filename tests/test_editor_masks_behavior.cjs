@@ -159,7 +159,7 @@ const context = {
     },
     createElement: () => element(`node-${elements.size}`),
   },
-  setInterval: (callback) => { blinkTick = callback; return 1; }, clearInterval() {}, setTimeout: (callback) => { callback(); return 1; }, clearTimeout() {}, AbortController, requestAnimationFrame: (callback) => { callback(); return 1; }, cancelAnimationFrame() {},
+  setInterval: (callback) => { blinkTick = callback; return 1; }, clearInterval() {}, setTimeout: (callback) => { callback(); return null; }, clearTimeout() {}, AbortController, requestAnimationFrame: (callback) => { callback(); return 1; }, cancelAnimationFrame() {},
   isBusy: () => false, isGestureActive: () => false, catalogStagingEditsActive: () => false, currentImageActionPending: () => Boolean(state.pendingImageId), candidateControlLocked: () => false, isProcessableImage: () => true, manualCanvasInputLocked: () => false, hasDurableHistory: () => false, isCurrentCatalogEpoch: (epoch) => epoch === state.catalogEpoch, isCurrentGeneration: (generation) => generation === state.imageGeneration,
   catalogRecordMatches: () => true, currentRecord: () => state.images.find((record) => record.id === state.currentId),
   imageAssetVersion: (record) => record?.assetVersion || "", imageHasMask: () => true, canvasHasPixels: (ctx) => ctx.pixels,
@@ -535,13 +535,18 @@ nodeTest("editor masks, fill, candidates, and history", async (t) => {
   test.openCandidatePadding("apply", previewButton);
   paddingInput.value = "2"; test.scheduleCandidatePaddingPreview();
   paddingInput.value = "3"; test.scheduleCandidatePaddingPreview();
-  assert.equal(previewRequests.length, 2, "a new padding value starts one replacement preview request");
-  assert.equal(previewRequests[0].signal.aborted, true, "a newer padding value aborts the older preview request");
+  paddingInput.value = "4"; test.scheduleCandidatePaddingPreview();
+  assert.equal(previewRequests.length, 1, "new padding values are coalesced while one preview is loading");
+  assert.equal(previewRequests[0].signal.aborted, false, "continued input allows the current preview to finish visibly");
   let staleClosed = 0; let currentClosed = 0;
   previewRequests[0].resolve({ close() { staleClosed += 1; } });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(previewRequests.length, 2, "only the latest pending value starts after the first preview completes");
+  assert.match(previewRequests[1].url, /:4$/, "intermediate pending values do not cause requests");
+  assert.equal(state.candidatePaddingPreviewImages.has("apply"), true, "a completed preview remains visible during continuous input");
   previewRequests[1].resolve({ close() { currentClosed += 1; } });
   await new Promise((resolve) => setImmediate(resolve));
-  assert.equal(staleClosed, 1, "a bitmap returned by an aborted preview is closed");
+  assert.equal(staleClosed, 1, "a replaced visible preview bitmap is closed");
   assert.equal(state.candidatePaddingPreviewImages.has("apply"), true, "only the latest padding preview becomes visible");
   test.closeCandidatePadding();
   assert.equal(currentClosed, 1, "cancelling padding closes the visible preview bitmap");

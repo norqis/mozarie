@@ -18,7 +18,8 @@
       "observation": "モザイク筆で左ドラッグ → 通過した円形ブラシ範囲に描画中からモザイクを追加する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_editor_basic_tools_e2e.cjs::basic editor tools keep their pixel-layer contracts > ED-001 drag adds mosaic only along the circular brush sweep"
+        "node:tests/test_editor_basic_tools_e2e.cjs::basic editor tools keep their pixel-layer contracts > ED-001 drag adds mosaic only along the circular brush sweep",
+        "node:tests/test_editor_brush_padding_e2e.cjs::brush boundaries survive candidate padding preview transitions > brush cancels padding without retaining the expanded contour outside its circle"
       ]
     },
     {
@@ -29,7 +30,8 @@
       "observation": "モザイク筆で左ドラッグ → 除外を追加しない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_editor_basic_tools_e2e.cjs::basic editor tools keep their pixel-layer contracts > ED-001 drag adds mosaic only along the circular brush sweep"
+        "node:tests/test_editor_basic_tools_e2e.cjs::basic editor tools keep their pixel-layer contracts > ED-001 drag adds mosaic only along the circular brush sweep",
+        "node:tests/test_editor_brush_padding_e2e.cjs::brush boundaries survive candidate padding preview transitions > brush cancels padding without retaining the expanded contour outside its circle"
       ]
     },
     {
@@ -51,7 +53,8 @@
       "observation": "モザイク消しゴムで既存モザイクを左ドラッグ → 通過範囲のモザイクを消し、離れた範囲と除外を保持する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_editor_basic_tools_e2e.cjs::basic editor tools keep their pixel-layer contracts > ED-003 mosaic eraser removes only its swept mosaic pixels"
+        "node:tests/test_editor_basic_tools_e2e.cjs::basic editor tools keep their pixel-layer contracts > ED-003 mosaic eraser removes only its swept mosaic pixels",
+        "node:tests/test_editor_brush_padding_e2e.cjs::brush boundaries survive candidate padding preview transitions > mosaic_eraser cancels padding without retaining the expanded contour outside its circle"
       ]
     },
     {
@@ -84,7 +87,8 @@
       "observation": "除外ブラシでモザイクに重ねて左ドラッグ → 通過範囲を除外し、モザイクを外す",
       "status": "automated",
       "testIds": [
-        "node:tests/test_editor_basic_tools_e2e.cjs::basic editor tools keep their pixel-layer contracts > ED-005 exclusion drag subtracts mosaic without adding to the mosaic layer"
+        "node:tests/test_editor_basic_tools_e2e.cjs::basic editor tools keep their pixel-layer contracts > ED-005 exclusion drag subtracts mosaic without adding to the mosaic layer",
+        "node:tests/test_editor_brush_padding_e2e.cjs::brush boundaries survive candidate padding preview transitions > eraser cancels padding without retaining the expanded contour outside its circle"
       ]
     },
     {
@@ -95,7 +99,8 @@
       "observation": "除外ブラシでモザイクに重ねて左ドラッグ → モザイク候補へ手書き行を追加しない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_editor_basic_tools_e2e.cjs::basic editor tools keep their pixel-layer contracts > ED-005 exclusion drag subtracts mosaic without adding to the mosaic layer"
+        "node:tests/test_editor_basic_tools_e2e.cjs::basic editor tools keep their pixel-layer contracts > ED-005 exclusion drag subtracts mosaic without adding to the mosaic layer",
+        "node:tests/test_editor_brush_padding_e2e.cjs::brush boundaries survive candidate padding preview transitions > eraser cancels padding without retaining the expanded contour outside its circle"
       ]
     },
     {
@@ -117,7 +122,8 @@
       "observation": "除外消しゴムで既存除外を左ドラッグ → 通過範囲の除外を消す",
       "status": "automated",
       "testIds": [
-        "node:tests/test_editor_basic_tools_e2e.cjs::basic editor tools keep their pixel-layer contracts > ED-007 exclusion eraser restores underlying mosaic and preserves distant exclusions"
+        "node:tests/test_editor_basic_tools_e2e.cjs::basic editor tools keep their pixel-layer contracts > ED-007 exclusion eraser restores underlying mosaic and preserves distant exclusions",
+        "node:tests/test_editor_brush_padding_e2e.cjs::brush boundaries survive candidate padding preview transitions > exclude_eraser cancels padding without retaining the expanded contour outside its circle"
       ]
     },
     {
@@ -128,7 +134,8 @@
       "observation": "除外消しゴムで既存除外を左ドラッグ → 下にモザイクがあれば再表示する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_editor_basic_tools_e2e.cjs::basic editor tools keep their pixel-layer contracts > ED-007 exclusion eraser restores underlying mosaic and preserves distant exclusions"
+        "node:tests/test_editor_basic_tools_e2e.cjs::basic editor tools keep their pixel-layer contracts > ED-007 exclusion eraser restores underlying mosaic and preserves distant exclusions",
+        "node:tests/test_editor_brush_padding_e2e.cjs::brush boundaries survive candidate padding preview transitions > exclude_eraser cancels padding without retaining the expanded contour outside its circle"
       ]
     },
     {
@@ -928,7 +935,9 @@
       "status": "automated",
       "testIds": [
         "node:tests/test_editor_masks_behavior.cjs::editor masks, fill, candidates, and history",
-        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
+        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage",
+        "node:tests/test_editor_brush_padding_e2e.cjs::brush boundaries survive candidate padding preview transitions > holding padding steps renders multiple visible contours before release and cancels cleanly",
+        "node:tests/test_editor_brush_padding_e2e.cjs::brush boundaries survive candidate padding preview transitions > padding confirmation persists the newest queued value and failure restores original pixels"
       ]
     },
     {
@@ -976,7 +985,8 @@
       "status": "automated",
       "testIds": [
         "node:tests/test_editor_masks_behavior.cjs::editor masks, fill, candidates, and history",
-        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
+        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage",
+        "node:tests/test_editor_brush_padding_e2e.cjs::brush boundaries survive candidate padding preview transitions > padding repeat stops on cancel capture loss blur visibility and popover close"
       ]
     },
     {

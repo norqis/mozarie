@@ -158,7 +158,9 @@ assert.equal(state.currentId, "image"); assert.equal(state.pendingImageId, "imag
 assert.equal(test.navigationShortcutAction({ binding: "ArrowLeft" }), "previous");
 assert.equal(test.navigationShortcutAction({ binding: "Nope" }), null);
 let prevented = false; assert.equal(test.handleNavigationKeydown({ binding: "ArrowRight", preventDefault() { prevented = true; } }), true); assert.equal(prevented, true);
-test.updateBrushSize(999); assert.equal(element("#brushSize").value, 999, "brush size keeps the requested value without a hidden cap");
+test.updateBrushSize(999); assert.equal(element("#brushSize").value, 300, "brush size clamps to the displayed 300px maximum");
+test.updateBrushSize(-5); assert.equal(element("#brushSize").value, 1, "brush size clamps to one pixel");
+test.updateBrushSize("invalid"); assert.equal(element("#brushSize").value, 1, "invalid restored sizes use one pixel");
 test.updateBlockSizeDisplay(); assert.match(element("#blockSizeValue").textContent, /4/);
 test.setTool("bucket"); assert.equal(state.tool, "bucket"); assert.equal(context.canvas.style.cursor, "default", "ordinary tools retain the standard pointer");
 

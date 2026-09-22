@@ -175,7 +175,7 @@ nodeTest("basic editor tools keep their pixel-layer contracts", { timeout: 45000
     await t.test("ED-015 brush size display and cursor diameter follow every requested value without drawing", async () => {
       const history = await page.evaluate(() => state.history.length);
       await page.locator("#brushTool").click(); const hover = await imagePoint(page, 10, 10); await page.mouse.move(hover.x, hover.y);
-      for (const value of [1, 48, 100]) {
+      for (const value of [1, 48, 300]) {
         await page.locator("#brushSize").fill(String(value)); await page.locator("#brushSize").dispatchEvent("input"); assert.match(await page.locator("#brushSizeValue").textContent(), new RegExp(String(value)));
         const cursor = await page.locator("#brushCursor").boundingBox(); const scale = await page.evaluate(() => state.view.scale); assert.ok(Math.abs(cursor.width - value * scale) <= 2, `cursor diameter follows ${value}px at the active image scale`);
       }
@@ -186,6 +186,14 @@ nodeTest("basic editor tools keep their pixel-layer contracts", { timeout: 45000
       await page.locator("#brushTool").click(); await page.locator("#brushSize").fill("48"); await page.locator("#brushSize").dispatchEvent("input");
       const before = await page.evaluate(() => ({ view: { ...state.view }, scroll: document.querySelector("#gallery").scrollTop })); const point = await imagePoint(page, 1, 1); await page.mouse.move(point.x, point.y); await page.keyboard.down("Shift"); await page.mouse.wheel(0, -100); await page.keyboard.up("Shift");
       assert.ok(Number(await page.locator("#brushSize").inputValue()) > 48); assert.deepEqual(await page.evaluate(() => ({ view: { ...state.view }, scroll: document.querySelector("#gallery").scrollTop })), before);
+      await page.evaluate(() => updateBrushSize(999));
+      assert.equal(await page.locator("#brushSize").inputValue(), "300");
+      assert.equal(await page.locator("#brushSize").getAttribute("max"), "300");
+      await page.locator("#editorCanvas").dispatchEvent("wheel", { shiftKey: true, deltaY: -100 });
+      assert.equal(await page.locator("#brushSize").inputValue(), "300", "Shift wheel respects the 300px upper bound");
+      await page.evaluate(() => updateBrushSize(-99));
+      await page.locator("#editorCanvas").dispatchEvent("wheel", { shiftKey: true, deltaY: 100 });
+      assert.equal(await page.locator("#brushSize").inputValue(), "1", "Shift wheel respects the 1px lower bound");
     });
 
     await t.test("ED-017 mosaic divisor updates calculated pixels without changing masks", async () => {

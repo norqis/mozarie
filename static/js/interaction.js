@@ -76,7 +76,7 @@ function closeBoundaryModeMenu({ restoreFocus = false } = {}) {
 }
 function updateBrushSize(value) {
   if (isBusy() || state.importing) return;
-  const input = $("#brushSize"); input.value = Math.max(1, Math.round(value));
+  const input = $("#brushSize"); input.value = Math.min(300, Math.max(1, Math.round(Number(value)) || 1));
   $("#brushSizeValue").textContent = t("editor.pixels", { value: input.value }); render(); updateBrushCursor();
 }
 function updateBlockSizeDisplay() {

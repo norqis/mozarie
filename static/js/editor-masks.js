@@ -26,6 +26,7 @@ function refreshManualLayerPresence(...layers) {
 }
 
 let candidatePaddingSession = null;
+let candidatePaddingRepeat = null;
 const CANDIDATE_PADDING_PREVIEW_DELAY_MS = 80;
 const CANDIDATE_PADDING_PREVIEW_CONCURRENCY = 4;
 
@@ -59,6 +60,7 @@ function refreshCandidatePaddingPreview() {
 
 function clearCandidatePaddingPreview(session = candidatePaddingSession) {
   if (!session) return;
+  session.sequence += 1; session.pendingPreviewValue = null;
   clearTimeout(session.previewTimer); session.previewTimer = null;
   session.previewController?.abort(); session.previewController = null;
   if (state.candidatePaddingPreviewImages === session.previewImages) state.candidatePaddingPreviewImages = new Map();
@@ -68,6 +70,7 @@ function clearCandidatePaddingPreview(session = candidatePaddingSession) {
 }
 
 function closeCandidatePadding({ restoreFocus = false, commit = false } = {}) {
+  stopCandidatePaddingRepeat();
   const session = candidatePaddingSession;
   candidatePaddingSession = null;
   if (session) {
@@ -182,12 +185,39 @@ async function commitBatchCandidatePadding(session, value) {
   }
 }
 
-function changeCandidatePaddingDraft(delta) {
+function changeCandidatePaddingDraft(delta, focus = true) {
   const input = $("#candidatePaddingInput");
   const value = candidatePaddingValue(input);
   const base = value === null ? candidatePaddingSession?.original || 0 : value;
   input.value = String(Math.max(0, Math.min(Number.MAX_SAFE_INTEGER, base + delta)));
-  validateCandidatePadding(); scheduleCandidatePaddingPreview(); input.focus(); input.select();
+  validateCandidatePadding(); scheduleCandidatePaddingPreview();
+  if (focus) { input.focus(); input.select(); }
+}
+
+function stopCandidatePaddingRepeat() {
+  const repeat = candidatePaddingRepeat;
+  candidatePaddingRepeat = null;
+  if (!repeat) return;
+  clearTimeout(repeat.timer);
+  if (repeat.button.hasPointerCapture(repeat.pointerId)) repeat.button.releasePointerCapture(repeat.pointerId);
+}
+
+function bindCandidatePaddingStep(button, delta) {
+  button.addEventListener("pointerdown", (event) => {
+    if (event.button !== 0 || button.disabled || !candidatePaddingSession) return;
+    event.preventDefault(); stopCandidatePaddingRepeat();
+    button.setPointerCapture(event.pointerId);
+    const repeat = candidatePaddingRepeat = { button, pointerId: event.pointerId, timer: null };
+    changeCandidatePaddingDraft(delta, false);
+    const step = () => {
+      if (candidatePaddingRepeat !== repeat) return;
+      changeCandidatePaddingDraft(delta, false);
+      repeat.timer = setTimeout(step, 60);
+    };
+    repeat.timer = setTimeout(step, 350);
+  });
+  for (const type of ["pointerup", "pointercancel", "lostpointercapture"]) button.addEventListener(type, stopCandidatePaddingRepeat);
+  button.addEventListener("click", (event) => { if (event.detail === 0) changeCandidatePaddingDraft(delta); });
 }
 
 function candidatePaddingPreviewTargets(session) {
@@ -199,7 +229,7 @@ async function loadCandidatePaddingPreviewImages(session, value, sequence, contr
   const targets = candidatePaddingPreviewTargets(session);
   const images = new Map(); let next = 0;
   const worker = async () => {
-    while (next < targets.length) {
+    while (!controller.signal.aborted && next < targets.length) {
       const candidate = targets[next++];
       const bitmap = await fetchBitmap(candidatePaddingPreviewUrl(session.imageId, candidate.id, session.revision, value), controller.signal);
       if (controller.signal.aborted || candidatePaddingSession !== session || session.sequence !== sequence) { closeBitmap(bitmap); continue; }
@@ -221,8 +251,20 @@ async function loadCandidatePaddingPreviewImages(session, value, sequence, contr
     if (error?.name === "AbortError" || candidatePaddingSession !== session || session.sequence !== sequence) return;
     clearCandidatePaddingPreview(session); showUserError(error);
   } finally {
-    if (session.previewController === controller) session.previewController = null;
+    if (session.previewController === controller) {
+      session.previewController = null;
+      if (candidatePaddingSession === session && session.pendingPreviewValue != null) {
+        session.previewTimer = setTimeout(() => { session.previewTimer = null; startCandidatePaddingPreview(session); }, CANDIDATE_PADDING_PREVIEW_DELAY_MS);
+      }
+    }
   }
+}
+
+function startCandidatePaddingPreview(session) {
+  if (candidatePaddingSession !== session || session.committing || session.previewController || session.pendingPreviewValue == null) return;
+  const value = session.pendingPreviewValue; session.pendingPreviewValue = null;
+  const controller = new AbortController(); session.previewController = controller;
+  void loadCandidatePaddingPreviewImages(session, value, session.sequence, controller);
 }
 
 function scheduleCandidatePaddingPreview() {
@@ -230,14 +272,8 @@ function scheduleCandidatePaddingPreview() {
   if (!session || session.committing) return;
   const value = validateCandidatePadding();
   if (value === null) { clearCandidatePaddingPreview(session); return; }
-  const appliedValue = Math.min(value, candidatePaddingLimit());
-  clearTimeout(session.previewTimer); session.previewController?.abort();
-  const sequence = ++session.sequence;
-  session.previewTimer = setTimeout(() => {
-    session.previewTimer = null;
-    const controller = new AbortController(); session.previewController = controller;
-    void loadCandidatePaddingPreviewImages(session, appliedValue, sequence, controller);
-  }, CANDIDATE_PADDING_PREVIEW_DELAY_MS);
+  session.pendingPreviewValue = Math.min(value, candidatePaddingLimit());
+  if (!session.previewController && !session.previewTimer) startCandidatePaddingPreview(session);
 }
 
 function handleCandidatePaddingKeydown(event) {
@@ -257,8 +293,10 @@ function initCandidatePaddingPopover() {
   $("#candidatePaddingInput").addEventListener("input", scheduleCandidatePaddingPreview);
   $("#candidatePaddingInput").addEventListener("keydown", handleCandidatePaddingKeydown);
   $("#candidatePaddingForm").addEventListener("submit", (event) => { event.preventDefault(); void commitCandidatePadding(); });
-  $("#candidatePaddingDecrease").addEventListener("click", () => changeCandidatePaddingDraft(-1));
-  $("#candidatePaddingIncrease").addEventListener("click", () => changeCandidatePaddingDraft(1));
+  bindCandidatePaddingStep($("#candidatePaddingDecrease"), -1);
+  bindCandidatePaddingStep($("#candidatePaddingIncrease"), 1);
+  window.addEventListener("blur", stopCandidatePaddingRepeat);
+  document.addEventListener("visibilitychange", () => { if (document.hidden) stopCandidatePaddingRepeat(); });
   $("#candidatePaddingReset").addEventListener("click", () => { $("#candidatePaddingInput").value = "0"; validateCandidatePadding(); scheduleCandidatePaddingPreview(); $("#candidatePaddingInput").focus(); });
   $("#candidatePaddingPopover").addEventListener("keydown", (event) => {
     if (event.key === "Escape") { event.preventDefault(); closeCandidatePadding({ restoreFocus: true }); }
@@ -989,7 +1027,6 @@ function strokeDirtyRoi(points, tool, size) {
 }
 
 function refreshManualStrokeRoi(roi) {
-  if (!roi) return;
   composeCurrentMask(roi);
   requestMosaicPreview(roi);
 }
@@ -1028,13 +1065,16 @@ function paintStroke(from, to, tool, size) {
 
 function markStrokeDirty(tool, points = null, size = Number($("#brushSize").value)) {
   const roi = points?.length ? strokeDirtyRoi(points, tool, size) : null;
+  // A cancelled or replaced candidate preview invalidates the whole image.
+  // A subsequent local stroke must not clear that pending global invalidation.
+  const compositionRoi = state.maskDirty ? null : roi;
   if (roi && state.activeStroke) state.activeStroke.dirtyRoi = mergeMosaicPreviewRoi(state.activeStroke.dirtyRoi, roi);
   markMaskDirty();
   if (tool === "brush" || tool === "mosaic_eraser") markDraftDirtyRoi("add", roi);
   if (tool === "brush" && !state.manualExclusionForced) markDraftDirtyRoi("exclusion", roi);
   if (tool === "eraser") { markDraftDirtyRoi("exclusion", roi); markDraftDirtyRoi("exclusionErase", roi); }
   if (tool === "exclude_eraser") markDraftDirtyRoi("exclusionErase", roi);
-  if (state.activeStroke) refreshManualStrokeRoi(roi);
+  if (state.activeStroke) refreshManualStrokeRoi(compositionRoi);
 }
 
 function paintStrokePath(points, tool, size, startIndex = 0) {
