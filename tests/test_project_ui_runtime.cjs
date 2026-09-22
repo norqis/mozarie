@@ -137,6 +137,43 @@ nodeTest("native source relink uses a typed path without an OS folder picker", (
   assert.doesNotMatch(dialog, /showDirectoryPicker|type="file"|pickFolder/, "native relink does not expose an OS folder picker control");
 });
 
+nodeTest("project entry controls open and close their intended dialogs", async (t) => {
+  resetProjectFixture();
+  const originalApi = context.api;
+  t.after(() => { context.api = originalApi; });
+  test.bindEvents();
+  const fire = async (id) => {
+    const listener = element(`#${id}`).listeners.get("click");
+    assert.ok(listener, `${id} is bound to its shipped click handler`);
+    await listener({ preventDefault() {}, target: element(`#${id}`) });
+    await new Promise((resolve) => setImmediate(resolve));
+  };
+  context.api = async (url) => url.startsWith("/api/projects?") ? { projects } : {};
+  state.project = projects[0]; state.projectReadOnly = false; state.images = [{ id: "entry-image" }];
+
+  await fire("projectButton");
+  assert.equal(element("#projectDialog").open, true, "Project opens the current-project dialog");
+  assert.match(element("#projectCurrent").textContent, /Alpha/, "the opened dialog renders the active project");
+  await fire("projectClose");
+  assert.equal(element("#projectDialog").open, false, "Close dismisses the current-project dialog");
+
+  await fire("projectButton"); await fire("projectNew");
+  assert.equal(element("#projectNameDialog").open, true, "New opens the project-name dialog");
+  assert.equal(element("#projectNameInput").value, "", "New starts with an empty project name");
+  element("#projectNameDialog").close();
+
+  await fire("projectButton"); await fire("projectName");
+  assert.equal(element("#projectNameDialog").open, true, "Rename opens the project-name dialog");
+  assert.equal(element("#projectNameInput").value, "Alpha", "Rename starts with the active project name");
+  element("#projectNameDialog").close();
+
+  await fire("projectButton"); await fire("projectOpenList");
+  assert.equal(element("#projectListDialog").open, true, "Open list displays project management");
+  assert.equal(element("#projectListBody").children.length, initialProjects.length, "project management lists every fixture project");
+  await fire("projectListClose");
+  assert.equal(element("#projectListDialog").open, false, "Close list dismisses project management");
+});
+
 nodeTest("project dialogs, A-B-A switching, failed-open recovery, and duplicate transition guards", async (t) => {
   resetProjectFixture();
   await new Promise((resolve) => setImmediate(resolve));
@@ -260,7 +297,6 @@ nodeTest("project dialogs, A-B-A switching, failed-open recovery, and duplicate 
   element("#renameImageFilename").value = "edited.png"; await fire("#renameImageRestoreOriginal");
   assert.equal(element("#renameImageFilename").value, "original.png", "Restore original changes only the rename input to the source basename");
   assert.equal(element("#renameImageFilename").focused, true, "Restore original returns focus to the rename input");
-  await fire("#projectButton"); await fire("#projectClose"); await fire("#projectNew"); await fire("#projectName"); await fire("#projectOpenList"); await fire("#projectListClose");
   state.project = projects[0]; state.projectReadOnly = false; await fire("#projectSourceAdd");
   assert.ok(calls.some(([kind]) => kind === "directory"), "the current project can select a native source folder");
   state.project = projects[1]; state.projectReadOnly = true; await fire("#projectResume"); assert.equal(state.projectReadOnly, false, "Resume work turns a completed project back into working state");

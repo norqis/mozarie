@@ -1970,8 +1970,9 @@
       "observation": "画面にある全ボタン、チェックボックス、入力、選択肢を、候補・フィルター・モデル・PJ・ショートカットの各値ごとに操作する → OSダイアログを開く操作を除き、各操作が対応する画面状態、API、キャンバス、履歴のいずれかを変える",
       "status": "automated",
       "testIds": [
-        "node:tests/test_editor_masks_behavior.cjs::editor masks, fill, candidates, and history",
-        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
+        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage",
+        "node:tests/test_project_ui_runtime.cjs::project entry controls open and close their intended dialogs",
+        "node:tests/test_ui_control_manifest.cjs::<file>"
       ]
     },
     {
@@ -1982,8 +1983,8 @@
       "observation": "画面にある全ボタン、チェックボックス、入力、選択肢を、候補・フィルター・モデル・PJ・ショートカットの各値ごとに操作する → 広いセレクターの先頭要素だけで他の値を代用しない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_editor_masks_behavior.cjs::editor masks, fill, candidates, and history",
-        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
+        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage",
+        "node:tests/test_ui_control_manifest.cjs::<file>"
       ]
     },
     {

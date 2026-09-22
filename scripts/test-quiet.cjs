@@ -5,6 +5,7 @@ const path = require("node:path");
 const { assertNoSkippedUnittestTests } = require("./test-result-policy.cjs");
 const { frontendPerformanceTestFiles, frontendTestArguments, frontendTestFiles, selectedFrontendTestFiles } = require("./test-discovery.cjs");
 const { loadContracts, readManifest, validateAutomatedExecution } = require("./verification-contracts.cjs");
+const { controlEvidenceContract } = require("../tests/ui-control-manifest.cjs");
 
 const root = path.resolve(__dirname, "..");
 const DEFAULT_COMMAND_TIMEOUT_MS = 5 * 60 * 1000;
@@ -522,7 +523,7 @@ function performanceEnvironment(source = process.env) {
 
 async function runFrontend(temporaryRoot, artifacts, dependencies = {}) {
   const run = dependencies.requiredCommand || requiredCommand;
-  const verifyContracts = dependencies.verifyContracts || ((manifestPaths) => validateAutomatedExecution(loadContracts(), { languages: ["node"], nodeManifests: manifestPaths.map(readManifest) }));
+  const verifyContracts = dependencies.verifyContracts || ((manifestPaths) => validateAutomatedExecution([...loadContracts(), controlEvidenceContract()], { languages: ["node"], nodeManifests: manifestPaths.map(readManifest) }));
   const directory = artifactDirectory(temporaryRoot, artifacts, "frontend");
   const coverageManifest = path.join(directory, "frontend-node-manifest.json");
   const performanceManifest = path.join(directory, "frontend-performance-manifest.json");

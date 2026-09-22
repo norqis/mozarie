@@ -38,46 +38,48 @@ const fixtureForScenario = {
   candidate: "editor",
   workspace: "workspace",
 };
-const exemptReasons = {
-  settingsSamType: "hidden selected-SAM value; input[name=settingsSamVariant] is the operable control",
+const IMPORTER_TEST = "node:tests/test_import_picker_e2e.cjs::import picker browser coverage";
+const PROJECT_ENTRY_TEST = "node:tests/test_project_ui_runtime.cjs::project entry controls open and close their intended dialogs";
+const PROJECT_RUNTIME_TEST = "node:tests/test_project_ui_runtime.cjs::project dialogs, A-B-A switching, failed-open recovery, and duplicate transition guards";
+const PROJECT_CREATION_TEST = "node:tests/test_project_ui_runtime.cjs::project creation, cancellation, duplicate rejection, table columns, and relink payload preserve workspace state";
+const PROJECT_LIFECYCLE_TEST = "node:tests/test_project_ui_runtime.cjs::project close, complete, resume, and delete produce exact workspace outcomes";
+const PROJECT_CANCEL_TEST = "node:tests/test_project_ui_runtime.cjs::project completion and deletion cancellation preserve the exact project and image list";
+const SAME_SOURCE_TEST = "node:tests/test_project_ui_runtime.cjs::same-source warning offers open separate and cancel without changing work until chosen";
+const exemptions = {
+  settingsSamType: { reason: "hidden selected-SAM value; input[name=settingsSamVariant] is the operable control", testIds: [IMPORTER_TEST] },
   // Project lifecycle needs both native directory handles and browser file
   // handles.  A compact VM browser-runtime suite exercises every branch,
   // including readonly/resume, all sorts, mismatch choices and deletion,
   // without making the canvas performance E2E reopen OS pickers.
-  projectButton: "covered by the dedicated project UI runtime suite",
-  projectClose: "covered by the dedicated project UI runtime suite",
-  projectNew: "covered by the dedicated project UI runtime suite",
-  projectName: "covered by the dedicated project UI runtime suite",
-  projectOpenList: "covered by the dedicated project UI runtime suite",
-  projectSourceSelect: "covered by the dedicated project UI runtime suite",
-  projectResume: "covered by the dedicated project UI runtime suite",
-  projectComplete: "covered by the dedicated project UI runtime suite",
-  projectMosaicZip: "covered by the dedicated project UI runtime suite",
-  projectExcludeZip: "covered by the dedicated project UI runtime suite",
-  projectDelete: "covered by the dedicated project UI runtime suite",
-  projectCloseWorkspace: "covered by the dedicated project UI runtime suite",
-  projectListClose: "covered by the dedicated project UI runtime suite",
-  projectSort: "covered by the dedicated project UI runtime suite",
-  projectNameInput: "covered by the dedicated project UI runtime suite",
-  projectNameCancel: "covered by the dedicated project UI runtime suite",
-  projectNameConfirm: "covered by the dedicated project UI runtime suite",
-  sourceMismatchClear: "covered by the dedicated project UI runtime suite",
-  sourceMismatchCancel: "covered by the dedicated project UI runtime suite",
-  sourceMismatchConfirm: "covered by the dedicated project UI runtime suite",
-  sameSourceOpen: "covered by the dedicated project UI runtime suite",
-  sameSourceSeparate: "covered by the dedicated project UI runtime suite",
-  sameSourceCancel: "covered by the dedicated project UI runtime suite",
-  projectDeleteCancel: "covered by the dedicated project UI runtime suite",
-  projectDeleteConfirm: "covered by the dedicated project UI runtime suite",
-  downloadCurrentMosaicMask: "covered by the dedicated project UI runtime suite",
-  downloadCurrentExcludeMask: "covered by the dedicated project UI runtime suite",
-  candidatePaddingDecrease: "covered by the real-browser candidate padding scenario",
-  candidatePaddingInput: "covered by the real-browser candidate padding scenario",
-  candidatePaddingIncrease: "covered by the real-browser candidate padding scenario",
-  candidatePaddingReset: "covered by the real-browser candidate padding scenario",
-  candidatePaddingConfirm: "covered by the real-browser candidate padding scenario",
-  bucketToleranceClose: "covered by the dedicated real-browser fill-tolerance scenario",
-  confirmCancel: "covered by confirmation cancellation scenarios in the browser interaction suite",
+  projectButton: { reason: "covered by the dedicated project entry-control suite", testIds: [PROJECT_ENTRY_TEST] },
+  projectClose: { reason: "covered by the dedicated project entry-control suite", testIds: [PROJECT_ENTRY_TEST] },
+  projectNew: { reason: "covered by the dedicated project entry-control suite", testIds: [PROJECT_ENTRY_TEST] },
+  projectName: { reason: "covered by the dedicated project entry-control suite", testIds: [PROJECT_ENTRY_TEST] },
+  projectOpenList: { reason: "covered by the dedicated project entry-control suite", testIds: [PROJECT_ENTRY_TEST] },
+  projectResume: { reason: "covered by the project lifecycle suite", testIds: [PROJECT_LIFECYCLE_TEST] },
+  projectComplete: { reason: "covered by the project lifecycle suite", testIds: [PROJECT_LIFECYCLE_TEST] },
+  projectCloseWorkspace: { reason: "covered by the project lifecycle suite", testIds: [PROJECT_LIFECYCLE_TEST] },
+  projectListClose: { reason: "covered by the dedicated project entry-control suite", testIds: [PROJECT_ENTRY_TEST] },
+  projectNameInput: { reason: "covered by the project creation and rename suite", testIds: [PROJECT_CREATION_TEST] },
+  projectNameCancel: { reason: "covered by the project creation and rename suite", testIds: [PROJECT_CREATION_TEST] },
+  projectNameConfirm: { reason: "covered by the project creation and rename suite", testIds: [PROJECT_CREATION_TEST] },
+  sourceMismatchClear: { reason: "covered by the project transition suite", testIds: [PROJECT_RUNTIME_TEST] },
+  sourceMismatchCancel: { reason: "covered by the project transition suite", testIds: [PROJECT_RUNTIME_TEST] },
+  sourceMismatchConfirm: { reason: "covered by the project transition suite", testIds: [PROJECT_RUNTIME_TEST] },
+  sameSourceOpen: { reason: "covered by the same-source choice suite", testIds: [SAME_SOURCE_TEST] },
+  sameSourceSeparate: { reason: "covered by the same-source choice suite", testIds: [SAME_SOURCE_TEST] },
+  sameSourceCancel: { reason: "covered by the same-source choice suite", testIds: [SAME_SOURCE_TEST] },
+  projectDeleteCancel: { reason: "covered by the project cancellation suite", testIds: [PROJECT_CANCEL_TEST] },
+  projectDeleteConfirm: { reason: "covered by the project lifecycle suite", testIds: [PROJECT_LIFECYCLE_TEST] },
+  downloadCurrentMosaicMask: { reason: "covered by the project export runtime suite", testIds: [PROJECT_RUNTIME_TEST] },
+  downloadCurrentExcludeMask: { reason: "covered by the project export runtime suite", testIds: [PROJECT_RUNTIME_TEST] },
+  candidatePaddingDecrease: { reason: "covered by the real-browser candidate padding scenario", testIds: [IMPORTER_TEST] },
+  candidatePaddingInput: { reason: "covered by the real-browser candidate padding scenario", testIds: [IMPORTER_TEST] },
+  candidatePaddingIncrease: { reason: "covered by the real-browser candidate padding scenario", testIds: [IMPORTER_TEST] },
+  candidatePaddingReset: { reason: "covered by the real-browser candidate padding scenario", testIds: [IMPORTER_TEST] },
+  candidatePaddingConfirm: { reason: "covered by the real-browser candidate padding scenario", testIds: [IMPORTER_TEST] },
+  bucketToleranceClose: { reason: "covered by the real-browser fill-tolerance scenario", testIds: [IMPORTER_TEST] },
+  confirmCancel: { reason: "covered by browser confirmation cancellation scenarios", testIds: [IMPORTER_TEST] },
 };
 
 function interactionFor(id) {
@@ -117,7 +119,8 @@ function interactionFor(id) {
   // ledger.  The ledger is allowed to use a fresh page for the same fixture,
   // but it may not silently treat a merely-present control as covered.
   const assertionId = `${scenario}:${id}`;
-  return { action, resultKind, scenario, fixture: fixtureForScenario[scenario], assertionId, predicateId: assertionId, exemptReason: exemptReasons[id], expected };
+  const exemption = exemptions[id];
+  return { action, resultKind, scenario, fixture: fixtureForScenario[scenario], assertionId, predicateId: assertionId, exemptReason: exemption?.reason, testIds: exemption?.testIds, expected };
 }
 
 const controls = ids.map((id) => ({ id, ...interactionFor(id) }));
@@ -130,7 +133,10 @@ const dynamicControls = [
     ["[data-overview-filter]", "change", "navigation", "overview", "overview", "overview:data-overview-filter", "filters the overview fixture"],
     ["[data-selection-action]", "click", "api", "overview", "overview", "overview:data-selection-action", "applies an isolated selection action"],
     ["[data-project-sort]", "click", "navigation", "workspace", "workspace", "workspace:data-project-sort", "sorts the project table"],
-    ["[data-project-action]", "click", "api", "workspace", "workspace", "workspace:data-project-action", "opens, exports, or deletes the selected project"],
+    ['[data-project-action="open"]', "click", "api", "workspace", "workspace", "workspace:data-project-action:open", "opens the exact selected project and replaces the catalog"],
+    ['[data-project-action="mosaic"]', "click", "download", "workspace", "workspace", "workspace:data-project-action:mosaic", "downloads the selected project's mosaic masks"],
+    ['[data-project-action="exclude"]', "click", "download", "workspace", "workspace", "workspace:data-project-action:exclude", "downloads the selected project's exclusion masks"],
+    ['[data-project-action="delete"]', "click", "dialog", "workspace", "workspace", "workspace:data-project-action:delete", "opens deletion confirmation for the exact selected project"],
     ["#projectBrowserRestoreList button", "click", "api", "workspace", "workspace", "workspace:projectBrowserRestoreList", "restores one browser project source"],
     ["#nativeRelinkSources button", "click", "dom", "workspace", "workspace", "workspace:nativeRelinkSources", "selects one native source to relink"],
     ["#sameSourceList button", "click", "dom", "workspace", "workspace", "workspace:sameSourceList", "selects one matching-source project"],
@@ -178,7 +184,7 @@ const anonymousStaticControls = [
 // creates it, so a removed operation fails this compact contract check.
 const dynamicSurfaceContracts = [
   { selector: "[data-project-sort]", source: "static/index.html", markers: ['data-project-sort="name"', 'data-project-sort="created"', 'data-project-sort="updated"'] },
-  { selector: "[data-project-action]", source: "static/js/app.js", markers: ["button.dataset.projectAction = action", 'projectActionButton(project, "open"', 'projectActionButton(project, "mosaic"', 'projectActionButton(project, "exclude"', 'projectActionButton(project, "delete"'] },
+  ...["open", "mosaic", "exclude", "delete"].map((action) => ({ selector: `[data-project-action="${action}"]`, source: "static/js/app.js", markers: ["button.dataset.projectAction = action", `projectActionButton(project, "${action}"`] })),
   { selector: "#projectBrowserRestoreList button", source: "static/js/app.js", markers: ['const list = $("#projectBrowserRestoreList")', "restoreBrowserProjectSource(source)"] },
   { selector: "#nativeRelinkSources button", source: "static/js/app.js", markers: ['const list = $("#nativeRelinkSources")', "nativeRelinkSourceId = item.id"] },
   { selector: "#sameSourceList button", source: "static/js/app.js", markers: ['const list = $("#sameSourceList")', "sameSourceSelectedProjectId = project.id"] },
@@ -200,10 +206,22 @@ const scenarioContracts = Object.fromEntries([...new Set([...controls, ...dynami
   }];
 }));
 
+function controlEvidenceContract() {
+  return {
+    domain: "ui-control-evidence",
+    observations: controls.filter((control) => control.exemptReason).map((control) => ({
+      key: `CONTROL-${control.id}`,
+      status: "automated",
+      testIds: [...control.testIds],
+    })),
+  };
+}
+
 module.exports = {
   controls,
   anonymousStaticControls,
   dynamicControls,
   dynamicSurfaceContracts,
   scenarioContracts,
+  controlEvidenceContract,
 };

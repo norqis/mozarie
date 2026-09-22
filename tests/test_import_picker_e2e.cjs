@@ -292,6 +292,11 @@ function startFixtureServer(options = {}) {
       response.end(JSON.stringify({ projects: [] }));
       return;
     }
+    if (/^\/api\/project\/masks\/[^/]+\/(mosaic|exclude)$/.test(requestPath) && request.method === "GET") {
+      response.writeHead(200, { "Content-Type": "application/zip", "Content-Disposition": "attachment; filename=fixture.zip" });
+      response.end(Buffer.from("fixture-zip"));
+      return;
+    }
     if (requestPath === "/api/folder" && request.method === "POST") {
       let body = ""; for await (const chunk of request) body += chunk;
       folderRequests.push(JSON.parse(body));
@@ -1303,10 +1308,14 @@ async function runDynamicProjectAndShortcutScenario(browser, fixtureUrl, setting
     });
     await page.route("**/api/project/open", async (route) => {
       const request = route.request();
-      sameSourceOpenRequests.push(JSON.parse(request.postData() || "{}"));
+      const payload = JSON.parse(request.postData() || "{}");
+      sameSourceOpenRequests.push(payload);
+      const ledgerProject = payload.projectId === "ledger-project";
       await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({
-        project: { id: "same-source-second", name: "Second source", status: "working", imageCount: 0, sourceRoot: "G:\\same-source" },
-        images: [], root: "G:\\same-source", sources: [], needsSource: false, readOnly: false,
+        project: ledgerProject
+          ? { id: "ledger-project", name: "Ledger project", status: "working", imageCount: 1, sourceRoot: "G:\\ledger-source" }
+          : { id: "same-source-second", name: "Second source", status: "working", imageCount: 0, sourceRoot: "G:\\same-source" },
+        images: [], root: ledgerProject ? "G:\\ledger-source" : "G:\\same-source", sources: [], needsSource: false, readOnly: false,
       }) });
     });
     await page.goto(fixtureUrl, { waitUntil: "domcontentloaded" });
@@ -1324,10 +1333,29 @@ async function runDynamicProjectAndShortcutScenario(browser, fixtureUrl, setting
     }
     recordDynamicControl("[data-project-sort]");
 
+    await page.locator('[data-project-action="open"]').click();
+    await page.waitForFunction(() => document.querySelector("#projectListDialog")?.open === false && state.project?.id === "ledger-project");
+    assert.equal(sameSourceOpenRequests.at(-1).projectId, "ledger-project", "Open submits the exact selected row project");
+    assert.equal(sameSourceOpenRequests.at(-1).resume, false, "Open does not silently resume the working project");
+    assert.equal(Number.isInteger(sameSourceOpenRequests.at(-1).expectedCatalogGeneration), true, "Open carries the visible catalog generation");
+    recordDynamicControl('[data-project-action="open"]');
+
+    await page.locator("#projectButton").click(); await page.locator("#projectOpenList").click();
+    await page.locator('[data-project-action="mosaic"]').waitFor();
+    const [mosaicDownload] = await Promise.all([page.waitForEvent("download"), page.locator('[data-project-action="mosaic"]').click()]);
+    assert.equal(mosaicDownload.suggestedFilename(), "Ledger project-mosaic-masks.zip", "Mosaic ZIP exports the exact selected project with its visible name");
+    recordDynamicControl('[data-project-action="mosaic"]');
+
+    await page.waitForFunction(() => document.querySelector('[data-project-action="exclude"]')?.disabled === false);
+    const [excludeDownload] = await Promise.all([page.waitForEvent("download"), page.locator('[data-project-action="exclude"]').click()]);
+    assert.equal(excludeDownload.suggestedFilename(), "Ledger project-exclude-masks.zip", "Exclusion ZIP exports the exact selected project with its visible name");
+    recordDynamicControl('[data-project-action="exclude"]');
+
     await page.locator('[data-project-action="delete"]').click();
     await page.waitForFunction(() => document.querySelector("#projectDeleteDialog")?.open === true);
     assert.equal(await page.locator("#projectDeleteConfirm").isDisabled(), false, "project delete action opens an actionable confirmation for the selected row");
-    recordDynamicControl("[data-project-action]");
+    assert.match(await page.locator("#projectDeleteTarget").textContent(), /Ledger project/, "Delete names the exact selected project before mutation");
+    recordDynamicControl('[data-project-action="delete"]');
     await page.locator("#projectDeleteCancel").click();
     await page.locator("#projectListClose").click();
 
