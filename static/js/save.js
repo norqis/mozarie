@@ -1069,6 +1069,59 @@ async function restoreCopiedBrowserSourcesAfterRejectedDelete(pending) {
   }
 }
 
+async function ensureDistinctBrowserSaveSources(inputs) {
+  if (inputs.mode !== "overwrite" && !inputs.deleteOriginal) return;
+  const sourcesByName = new Map();
+  const pathsByName = new Map();
+  const sameHandle = async (left, right) => left === right || Boolean(left?.isSameEntry && await left.isSameEntry(right));
+  const addPath = (name, parentHandle, imageId, renamed) => {
+    if (!name || !parentHandle) return;
+    const key = name.toLowerCase();
+    const bucket = pathsByName.get(key) || [];
+    bucket.push({ parentHandle, imageId, renamed });
+    pathsByName.set(key, bucket);
+  };
+  for (const [imageId, { image, access }] of inputs.sources) {
+    if (!access?.fileHandle) continue;
+    const name = access.fileHandle.name || access.name || "";
+    const key = name.toLowerCase();
+    const bucket = sourcesByName.get(key) || [];
+    for (const other of bucket) {
+      if (await sameHandle(access.fileHandle, other)) throw codedError("save_write_failed");
+    }
+    bucket.push(access.fileHandle);
+    sourcesByName.set(key, bucket);
+    if (inputs.mode === "overwrite") {
+      addPath(name, access.parentHandle, imageId, false);
+      addPath(renamedSourceFileName(image, access, inputs.format), access.parentHandle, imageId, true);
+    }
+  }
+  for (const bucket of pathsByName.values()) {
+    for (let index = 0; index < bucket.length; index += 1) {
+      const left = bucket[index];
+      if (!left.renamed) continue;
+      for (let next = 0; next < bucket.length; next += 1) {
+        const right = bucket[next];
+        if (left.imageId === right.imageId || !await sameHandle(left.parentHandle, right.parentHandle)) continue;
+        throw codedError("save_write_failed");
+      }
+    }
+  }
+  if (inputs.mode === "overwrite") {
+    for (const { image, access } of inputs.sources.values()) {
+      const targetName = access?.fileHandle && renamedSourceFileName(image, access, inputs.format);
+      if (!targetName) continue;
+      if (!access.parentHandle) throw codedError("source_action_unavailable");
+      try {
+        await access.parentHandle.getFileHandle(targetName);
+        throw codedError("save_write_failed");
+      } catch (error) {
+        if (typeof error?.code === "string" || error?.name !== "NotFoundError") throw error;
+      }
+    }
+  }
+}
+
 async function runBrowserSave(imageIds, suffix, deleteOriginal, mode = "copy", removeSaved = false, prepared = null) {
   const inputs = {
     imageIds: [...imageIds],
@@ -1087,6 +1140,7 @@ async function runBrowserSave(imageIds, suffix, deleteOriginal, mode = "copy", r
       access: sourceAccessFor(imageId) ? { ...sourceAccessFor(imageId) } : null,
     }])),
   };
+  await ensureDistinctBrowserSaveSources(inputs);
   const result = prepared || await api("/api/save/prepare", {
     method: "POST",
     body: JSON.stringify({ imageIds: inputs.imageIds, divisor: inputs.divisor, suffix: inputs.suffix, deleteOriginal: false, copyToDefault: mode === "copy", format: inputs.format, keepMetadata: inputs.keepMetadata }),
@@ -1109,12 +1163,6 @@ async function runBrowserSave(imageIds, suffix, deleteOriginal, mode = "copy", r
   updateActionButtons();
   try {
     {
-      const serializeBrowserHandleMutation = (work) => {
-        const previous = save.browserHandleMutationChain || Promise.resolve();
-        const next = previous.catch(() => {}).then(work);
-        save.browserHandleMutationChain = next;
-        return next;
-      };
       const saveEntry = async (entry) => {
         showBrowserSaveProgress(save, entry);
         const draft = inputs.drafts.get(entry.imageId) || null;
@@ -1167,9 +1215,7 @@ async function runBrowserSave(imageIds, suffix, deleteOriginal, mode = "copy", r
             }
           };
           sourceAction = inputs.deleteOriginal && !access?.fileHandle ? "deleted" : "keep";
-          const copyResult = inputs.deleteOriginal && access?.fileHandle
-            ? await serializeBrowserHandleMutation(commitCopy)
-            : await commitCopy();
+          const copyResult = await commitCopy();
           return finishBrowserSaveEntry(copyResult.committed, entry, save, copyResult.sourceAction);
         } else if (access?.fileHandle) {
           let binary;
@@ -1181,45 +1227,43 @@ async function runBrowserSave(imageIds, suffix, deleteOriginal, mode = "copy", r
           } finally { inputs.drafts.delete(entry.imageId); }
           const saveToken = binary.headers?.get("X-Mozarie-Save-Token") || "";
           const noEffect = binary.headers?.get("X-Mozarie-No-Effect") === "1";
-          return serializeBrowserHandleMutation(async () => {
-            let sourceSnapshot = null; let sourceRename = null;
-            let commitStarted = false;
-            try {
-              if (!noEffect) {
-                await ensureHandlePermission(access, true);
-                if (renamedSourceFileName(sourceImage, access, inputs.format)) sourceRename = await writeFormattedSourceHandle(access, sourceImage, inputs.format, binary);
-                else {
-                  sourceSnapshot = await snapshotSourceHandle(access);
-                  if (!(sourceSnapshot instanceof Blob)) throw codedError("source_restore_failed");
-                  await writeSourceHandle(access, binary);
-                }
-                sourceAction = "overwrite";
-              } else {
-                await ensureHandlePermission(access, false);
-                sourceAction = "keep";
+          let sourceSnapshot = null; let sourceRename = null;
+          let commitStarted = false;
+          try {
+            if (!noEffect) {
+              await ensureHandlePermission(access, true);
+              if (renamedSourceFileName(sourceImage, access, inputs.format)) sourceRename = await writeFormattedSourceHandle(access, sourceImage, inputs.format, binary);
+              else {
+                sourceSnapshot = await snapshotSourceHandle(access);
+                if (!(sourceSnapshot instanceof Blob)) throw codedError("source_restore_failed");
+                await writeSourceHandle(access, binary);
               }
-              commitStarted = true;
-              const committed = await commitBrowserSaveWithRetry({ imageId: entry.imageId, candidateRevision: entry.candidateRevision, deleteOriginal: inputs.deleteOriginal, sourceAction, saveToken, ...sourceCommitMetadata(sourceRename?.replacement || access) });
-              if (sourceAction === "overwrite") {
-                save.needsCatalogReconcile = true;
-                if (state.currentId === entry.imageId) save.reloadCurrent = true;
-              }
-              // The server has committed the new relative path. Keep the live
-              // directory handle aligned even if retiring the old name fails.
-              const liveAccess = sourceAccessFor(entry.imageId);
-              if (sourceRename) Object.assign(access, sourceRename.replacement);
-              if (liveAccess) Object.assign(liveAccess, access);
-              if (sourceRename && liveAccess) await persistBrowserSourceAccess(entry.imageId, liveAccess, committed.images?.find((item) => item.id === entry.imageId));
-              await finishFormattedSourceRename(access, sourceRename);
-              return finishBrowserSaveEntry(committed, entry, save, sourceAction, noEffect);
-            } catch (error) {
-              const reconcile = !commitStarted || isDefinitiveCommitRejection(error) || error.saveState === "pending";
-              if (reconcile) await cancelBrowserSave(entry, saveToken);
-              if (sourceRename && reconcile) await discardFormattedSourceRename(access, sourceRename);
-              else if (sourceSnapshot !== null && reconcile) try { await restoreSourceHandle(access, sourceSnapshot, false); } catch { throw codedError("source_restore_failed"); }
-              throw error;
-            } finally { sourceSnapshot = null; sourceRename = null; }
-          });
+              sourceAction = "overwrite";
+            } else {
+              await ensureHandlePermission(access, false);
+              sourceAction = "keep";
+            }
+            commitStarted = true;
+            const committed = await commitBrowserSaveWithRetry({ imageId: entry.imageId, candidateRevision: entry.candidateRevision, deleteOriginal: inputs.deleteOriginal, sourceAction, saveToken, ...sourceCommitMetadata(sourceRename?.replacement || access) });
+            if (sourceAction === "overwrite") {
+              save.needsCatalogReconcile = true;
+              if (state.currentId === entry.imageId) save.reloadCurrent = true;
+            }
+            // The server has committed the new relative path. Keep the live
+            // directory handle aligned even if retiring the old name fails.
+            const liveAccess = sourceAccessFor(entry.imageId);
+            if (sourceRename) Object.assign(access, sourceRename.replacement);
+            if (liveAccess) Object.assign(liveAccess, access);
+            if (sourceRename && liveAccess) await persistBrowserSourceAccess(entry.imageId, liveAccess, committed.images?.find((item) => item.id === entry.imageId));
+            await finishFormattedSourceRename(access, sourceRename);
+            return finishBrowserSaveEntry(committed, entry, save, sourceAction, noEffect);
+          } catch (error) {
+            const reconcile = !commitStarted || isDefinitiveCommitRejection(error) || error.saveState === "pending";
+            if (reconcile) await cancelBrowserSave(entry, saveToken);
+            if (sourceRename && reconcile) await discardFormattedSourceRename(access, sourceRename);
+            else if (sourceSnapshot !== null && reconcile) try { await restoreSourceHandle(access, sourceSnapshot, false); } catch { throw codedError("source_restore_failed"); }
+            throw error;
+          } finally { sourceSnapshot = null; sourceRename = null; }
         } else if (sourceImage?.sourceKind === "filesystem") {
           let binary;
           try {
