@@ -21,7 +21,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [0, 1]
+        shard: [0, 1, 2, 3]
     env:
       PYTHONUTF8: "1"
     steps:
@@ -42,7 +42,7 @@ jobs:
       - run: npx playwright install chromium --only-shell
       - run: python -m venv .venv-test
       - run: .\.venv-test\Scripts\python.exe -m pip install -r requirements-test.txt
-      - run: node scripts/test-quiet.cjs backend --shard-index ${{ matrix.shard }} --shard-total 2 --artifacts "${{ runner.temp }}/mozarie-coverage"
+      - run: node scripts/test-quiet.cjs backend --shard-index ${{ matrix.shard }} --shard-total ${{ strategy.job-total }} --artifacts "${{ runner.temp }}/mozarie-coverage"
       - if: always()
         uses: actions/upload-artifact@v6
         with:

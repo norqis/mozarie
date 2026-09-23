@@ -1173,7 +1173,9 @@
       "status": "automated",
       "testIds": [
         "node:tests/test_resources.cjs::resource ownership contracts > current pending filtered neighbors and hover are the only retained images",
-        "node:tests/test_resources.cjs::resource ownership contracts > filter and hover changes close stale bitmaps and abort stale requests"
+        "node:tests/test_resources.cjs::resource ownership contracts > filter and hover changes close stale bitmaps and abort stale requests",
+        "node:tests/test_resources.cjs::resource ownership contracts > clearing selection releases edge images while hover retains only its own bitmap",
+        "node:tests/resources/test_browser_resource_lifecycle.cjs::selection removal releases decoded images through clear, save, and stale asset paths"
       ]
     },
     {
@@ -1241,7 +1243,8 @@
       "observation": "ホバーと画面切替で画像保持と要求を解放する。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_resources.cjs::resource ownership contracts > filter and hover changes close stale bitmaps and abort stale requests"
+        "node:tests/test_resources.cjs::resource ownership contracts > filter and hover changes close stale bitmaps and abort stale requests",
+        "node:tests/resources/test_browser_resource_lifecycle.cjs::selection removal releases decoded images through clear, save, and stale asset paths"
       ]
     },
     {

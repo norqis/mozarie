@@ -173,8 +173,7 @@ function invalidateStaleAssets(imageIds) {
   for (const bitmap of bitmaps) closeBitmap(bitmap);
   if (!ids.has(state.currentId)) return;
   closeBoundaryModeMenu({ restoreFocus: true });
-  state.currentId = null; state.currentImage = null; state.candidates = []; state.candidateImages = new Map();
-  clearEditor(); updateGalleryCurrent();
+  clearCurrentImageSelection();
 }
 
 function invalidateStaleAsset(imageId) { invalidateStaleAssets([imageId]); }

@@ -364,7 +364,7 @@ function validateBackendShardManifests(manifests, expectedTotal = null) {
   return { discovered, manifests: [...byIndex.entries()].sort(([left], [right]) => left - right).map(([, manifest]) => manifest) };
 }
 
-async function aggregateBackendShards(temporaryRoot, artifacts, shardArtifacts, expectedTotal = 2) {
+async function aggregateBackendShards(temporaryRoot, artifacts, shardArtifacts, expectedTotal = null) {
   const directory = artifactDirectory(temporaryRoot, artifacts, "backend");
   const manifestPaths = recursiveFiles(shardArtifacts, "backend-manifest.json");
   const entries = manifestPaths.map((manifestPath) => ({ path: manifestPath, manifest: JSON.parse(fs.readFileSync(manifestPath, "utf8")) }));

@@ -1122,7 +1122,8 @@
       "observation": "未選択画像のデコード済みデータが総画像数分蓄積せず、現在画像と制限付きキャッシュで保持する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_data_integrity_catalog_contracts_e2e.cjs::four-hundred-image traversal loads thumbnails lazily and does not review unseen images"
+        "node:tests/test_data_integrity_catalog_contracts_e2e.cjs::four-hundred-image traversal loads thumbnails lazily and does not review unseen images",
+        "node:tests/resources/test_browser_resource_lifecycle.cjs::selection removal releases decoded images through clear, save, and stale asset paths"
       ]
     },
     {
@@ -1133,7 +1134,8 @@
       "observation": "旧画像の候補Bitmapが積み重ならず、現在画像の候補は全件表示する",
       "status": "automated",
       "testIds": [
-        "node:tests/resources/test_browser_resource_lifecycle.cjs::candidate and project resource ownership releases every obsolete bitmap while retaining the complete current bundle"
+        "node:tests/resources/test_browser_resource_lifecycle.cjs::candidate and project resource ownership releases every obsolete bitmap while retaining the complete current bundle",
+        "node:tests/resources/test_browser_resource_lifecycle.cjs::selection removal releases decoded images through clear, save, and stale asset paths"
       ]
     },
     {

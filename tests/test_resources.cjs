@@ -72,6 +72,27 @@ nodeTest("resource ownership contracts", async (t) => {
     assert.equal(released.length, 400, "each decoded image is released exactly once rather than accumulating with selection count");
   });
 
+  await t.test("clearing selection releases edge images while hover retains only its own bitmap", () => {
+    const images = [
+      { id: "first", assetVersion: "a" },
+      { id: "middle", assetVersion: "b" },
+      { id: "last", assetVersion: "c" },
+    ];
+    const { state, test, released, imageCacheKey } = createResourceRuntime(images);
+    state.currentId = "middle";
+    test.syncResourceOwnership();
+    for (const image of images) state.imageCache.set(imageCacheKey(image), { close() { released.push(image.id); } });
+    state.currentId = null;
+    test.syncResourceOwnership();
+    assert.equal(state.imageCache.items.size, 0, "a visible catalogue without selection or hover owns no decoded images");
+    assert.deepEqual(released.sort(), ["first", "last", "middle"], "selection release closes the current image and both neighboring bitmaps");
+
+    state.hoverPrefetchId = "middle";
+    test.syncResourceOwnership();
+    for (const image of images) state.imageCache.set(imageCacheKey(image), { close() { released.push(`hover-${image.id}`); } });
+    assert.deepEqual([...state.imageCache.items.keys()], ["middle:b"], "hover ownership retains only the hovered bitmap without a selected image");
+  });
+
   await t.test("filter and hover changes close stale bitmaps and abort stale requests", async () => {
     const images = [
       { id: "old", assetVersion: "a" }, { id: "current", assetVersion: "b" },
