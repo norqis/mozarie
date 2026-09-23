@@ -64,7 +64,7 @@ CIのfrontend通常テストは、再帰探索したファイル一覧を辞書�
 
 高回数のbrowser File System Access保存量試験は、操作回数と実ファイル・実SQLの境界を保つ。OS同期だけは、その試験の専用SaveJournal接続で省略できる。SaveJournalの障害、再起動回復、耐久性の契約は通常の同期設定で別に実行する。
 
-Windows backendは、`unittest` が発見したテストIDを辞書順で二つのshardへ交互に割り当てる。各shardは専用の一時app・bytecode・coverageを使い、停止を早めず両方の失敗artifactを残す。集計する`backend` jobは全shardのmanifestから選択集合の重複・欠損・skipを検査してcoverageを結合するため、新しいテストも手動の一覧変更なしで一度だけ実行される。shardが失敗した場合も`backend` jobを失敗にする。既存の必須checkは集計jobの`backend`を使う。
+Windows backendは、`unittest` が発見したテストIDを辞書順で四つのshardへ交互に割り当てる。各shardは専用の一時app・bytecode・coverageを使い、停止を早めず全shardの失敗artifactを残す。集計する`backend` jobは全shardのmanifestから選択集合の重複・欠損・skipを検査してcoverageを結合するため、新しいテストも手動の一覧変更なしで一度だけ実行される。shardが失敗した場合も`backend` jobを失敗にする。既存の必須checkは集計jobの`backend`を使う。
 
 frontendの通常実行は、実ブラウザーfixtureのCPU競合を避けるため一並列にする。各ブラウザー試験は、`domcontentloaded`後に対象のAPI結果・状態・画面を待って開始する。`networkidle`や固定時間待機を準備条件に使わない。
 
