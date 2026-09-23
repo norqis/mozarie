@@ -28,7 +28,9 @@ function desiredImageResourceKeys(extra = []) {
     const image = state.images.find((item) => item.id === imageId);
     if (image) keys.add(imageCacheKey(image));
   }
-  for (const image of galleryNavigationNeighbors(state.pendingImageId || state.currentId)) keys.add(imageCacheKey(image));
+  if (state.pendingImageId || state.currentId) {
+    for (const image of galleryNavigationNeighbors(state.pendingImageId || state.currentId)) keys.add(imageCacheKey(image));
+  }
   if (state.pendingImageKey) keys.add(state.pendingImageKey);
   const hovered = galleryFilteredImages().find((image) => image.id === state.hoverPrefetchId);
   if (hovered) keys.add(imageCacheKey(hovered));

@@ -71,6 +71,70 @@ test("candidate and project resource ownership releases every obsolete bitmap wh
   assert.ok([...currentMasks.values()].every((image) => !image.closed), "current candidate bitmaps are not released");
 });
 
+test("selection removal releases decoded images through clear, save, and stale asset paths", { timeout: 60000 }, async () => {
+  const fixture = await startFixtureServer();
+  const browser = await chromium.launch({ headless: true });
+  let context;
+  try {
+    context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+    for (const pathName of ["clear", "reconcile", "apply", "stale"]) {
+      const page = await context.newPage();
+      try {
+        await page.goto(fixture.url, { waitUntil: "domcontentloaded" });
+        await page.waitForFunction(() => state.settings && state.images.length === 2);
+        const result = await page.evaluate(async (path) => {
+          const first = state.images[0]; const neighbor = state.images[1];
+          const source = document.createElement("canvas"); source.width = 8; source.height = 6;
+          const [current, adjacent, candidate] = await Promise.all(Array.from({ length: 3 }, () => createImageBitmap(source)));
+          const currentId = path === "reconcile" || path === "apply" ? "removed-image" : first.id;
+          const currentRecord = currentId === first.id ? first : { id: currentId, assetVersion: "removed", candidateRevision: 0 };
+          state.currentId = currentId; state.currentImage = current;
+          state.candidates = [{ id: "candidate" }]; state.candidateImages = new Map([["candidate", candidate]]);
+          syncResourceOwnership();
+          state.imageCache.set(imageCacheKey(currentRecord), current);
+          state.imageCache.set(imageCacheKey(neighbor), adjacent);
+          state.candidateBundleCache.set(candidateCacheKey(currentId, Number(currentRecord.candidateRevision || 0)), { candidates: state.candidates, candidateImages: state.candidateImages });
+          if (path === "clear") clearCurrentImageSelection();
+          if (path === "reconcile") reconcileBrowserSaveState();
+          if (path === "apply") await finishApplyJob({ state: "complete", completed: 0, imageIds: [], completedImageIds: [], startedAt: 1 });
+          if (path === "stale") invalidateStaleAssets([currentId]);
+          const cleared = {
+            currentId: state.currentId, imageCache: state.imageCache.items.size, candidateCache: state.candidateBundleCache.items.size,
+            current: [current.width, current.height], adjacent: [adjacent.width, adjacent.height], candidate: [candidate.width, candidate.height],
+          };
+          let hovered = null;
+          if (path === "clear") {
+            state.hoverPrefetchId = neighbor.id; syncResourceOwnership();
+            const hoverBitmap = await createImageBitmap(source);
+            state.imageCache.set(imageCacheKey(neighbor), hoverBitmap);
+            hovered = { imageCache: state.imageCache.items.size, bitmap: [hoverBitmap.width, hoverBitmap.height] };
+            state.hoverPrefetchId = null; syncResourceOwnership();
+            hovered.afterExit = [state.imageCache.items.size, hoverBitmap.width, hoverBitmap.height];
+          }
+          if (path === "stale") {
+            await selectImage(first.id, true, { saveCurrentDraft: false });
+            cleared.reselected = { id: state.currentId, width: state.currentImage?.width || 0, canvasWidth: originalCanvas.width, editorVisible: document.querySelector("#emptyState").hidden };
+          }
+          return { cleared, hovered };
+        }, pathName);
+        assert.deepEqual(result.cleared.currentId, null, `${pathName} removes the current selection`);
+        assert.equal(result.cleared.imageCache, 0, `${pathName} releases every full-image bitmap without hover`);
+        assert.equal(result.cleared.candidateCache, 0, `${pathName} releases the old candidate bundle`);
+        assert.deepEqual(result.cleared.current, [0, 0], `${pathName} closes the old current ImageBitmap`);
+        assert.deepEqual(result.cleared.adjacent, [0, 0], `${pathName} closes the old neighboring ImageBitmap`);
+        assert.deepEqual(result.cleared.candidate, [0, 0], `${pathName} closes the old candidate ImageBitmap`);
+        if (pathName === "clear") {
+          assert.deepEqual(result.hovered, { imageCache: 1, bitmap: [8, 6], afterExit: [0, 0, 0] }, "hover retains exactly its bitmap and releases it on exit");
+        }
+        if (pathName === "stale") {
+          assert.equal(result.cleared.reselected.id, await page.evaluate(() => state.images[0].id), "a stale selection can be chosen again");
+          assert.ok(result.cleared.reselected.width > 0 && result.cleared.reselected.canvasWidth === result.cleared.reselected.width && result.cleared.reselected.editorVisible, "reselection decodes, draws, and reopens the editor normally");
+        }
+      } finally { await page.close(); }
+    }
+  } finally { await context?.close(); await browser.close(); fixture.server.closeAllConnections(); await closeServer(fixture.server); }
+});
+
 test("repeated settings, project rows, and candidate padding lifecycles retain one owner and send one commit", { timeout: 60000 }, async () => {
   const fixture = await startFixtureServer();
   fixture.setCatalog(Array.from({ length: 400 }, (_, index) => ({

@@ -736,11 +736,8 @@ function reconcileBrowserSaveState() {
   reconcileStoredMaskStatuses();
   if (state.currentId && !state.images.some((image) => image.id === state.currentId)) {
     const removedCurrentId = state.currentId;
-    state.currentId = null;
-    state.currentImage = null;
     releaseCandidateBundles(removedCurrentId);
-    state.candidates = [];
-    clearEditor();
+    clearCurrentImageSelection();
   } else if (state.currentId) {
     refreshMaskStatus();
     renderCandidates();
@@ -1496,7 +1493,7 @@ async function finishApplyJob(job) {
       renderCandidates();
       render();
     }
-    else { state.currentId = null; state.currentImage = null; clearEditor(); }
+    else clearCurrentImageSelection();
     renderCatalogViews();
     state.saving = false;
     state.applyRunning = false;
