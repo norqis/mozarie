@@ -181,3 +181,28 @@ test("shortcut switches align after key inputs and preserve remapped disabled bi
   await page.keyboard.press("Q"); assert.equal(await page.evaluate(() => state.tool), "brush");
   await page.keyboard.press("Shift+Q"); await page.waitForFunction(() => state.tool === "bucket");
 });
+
+test("saved global shortcut switch disables and restores real tool keys after reload", { timeout: 60000 }, async () => {
+  await page.locator("#settingsButton").click();
+  await page.locator("#settingsTabShortcuts").click();
+  await page.locator("#settingsShortcutsEnabled").uncheck();
+  await page.locator("#settingsSaveButton").click();
+  await page.waitForFunction(() => state.settings.shortcuts.enabled === false && state.navigationShortcutsEnabled === false);
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await page.waitForFunction(() => state.settings && state.images.length === 2);
+  await page.locator('.gallery-item[data-id="sample"]').click();
+  await page.waitForFunction(() => state.currentId === "sample" && state.currentImage && !currentImageActionPending());
+  await page.locator("#editorCanvas").focus();
+  await page.keyboard.press("Q");
+  assert.equal(await page.evaluate(() => state.tool), "brush", "saved global OFF blocks the bound Q action");
+
+  await page.locator("#settingsButton").click();
+  await page.locator("#settingsTabShortcuts").click();
+  assert.equal(await page.locator("#settingsShortcutsEnabled").isChecked(), false, "global OFF survives reload");
+  await page.locator("#settingsShortcutsEnabled").check();
+  await page.locator("#settingsSaveButton").click();
+  await page.waitForFunction(() => state.settings.shortcuts.enabled === true && state.navigationShortcutsEnabled === true);
+  await closeSettings();
+  await page.keyboard.press("Q");
+  await page.waitForFunction(() => state.tool === "bucket");
+});
