@@ -153,7 +153,9 @@ function applyRestrictionMessage() {
 }
 
 function syncApplyMode() {
-  const canOverwrite = applyTargetsSupport("overwrite", selectedApplyOutputFormat());
+  const imagesById = new Map(state.images.map((image) => [image.id, image]));
+  const unavailable = state.applyTargetIds.filter((imageId) => !sourceCanOverwrite(imagesById.get(imageId), selectedApplyOutputFormat())).length;
+  const canOverwrite = unavailable === 0;
   const copying = selectedSaveMode() === "copy";
   $("#applySuffixRow").hidden = !copying;
   $("#deleteOriginalRow").hidden = !copying;
@@ -171,9 +173,8 @@ function syncApplyMode() {
   $("#deleteOriginal").disabled = !copying || state.applyRunning || state.saveStarting;
   $("#applyOverwriteMode").disabled = !canOverwrite || state.applyRunning;
   $("#applyOverwriteRow").classList.toggle("muted", !canOverwrite);
-  const restriction = applyRestrictionMessage();
-  const capabilityNote = !canOverwrite
-    ? t("apply.overwriteUnavailable", { count: state.applyTargetIds.filter((imageId) => !sourceCanOverwrite(state.images.find((image) => image.id === imageId), selectedApplyOutputFormat())).length }) : "";
+  const restriction = !copying && unavailable ? t("apply.overwriteUnavailable", { count: unavailable }) : "";
+  const capabilityNote = !canOverwrite ? t("apply.overwriteUnavailable", { count: unavailable }) : "";
   $("#applyTemporarySourceNote").textContent = restriction || capabilityNote || t("apply.handleSource");
   $("#applyTemporarySourceNote").hidden = !restriction && !capabilityNote;
   $("#applyStartButton").disabled = Boolean(restriction) || outputDirectoryPending || state.applyRunning || state.saveStarting || state.applyTargetIds.length === 0 || (copying && !state.settings?.saving?.default_output_directory);
@@ -660,7 +661,7 @@ async function waitForBrowserSave(save) {
 }
 
 function showBrowserSaveProgress(save, entry) {
-  const displayName = imageDisplayPath(state.images.find((image) => image.id === entry?.imageId)) || entry?.relativePath || "";
+  const displayName = imageDisplayPath(save.imagesById?.get(entry?.imageId)) || entry?.relativePath || "";
   $("#applyPauseButton").disabled = false;
   state.job = { kind: "apply", state: save.paused ? "paused" : "running", total: save.entries.length, completed: save.completed, current: displayName };
   $("#applyProgress").max = Math.max(1, save.entries.length);
@@ -795,19 +796,20 @@ function sourceNeedsParent(image, access, mode, deleteOriginal, format) {
 
 function beginSaveSourcePreparation(imageIds, mode, deleteOriginal, format = "original") {
   const prepared = new Map();
+  const imagesById = new Map(state.images.map((image) => [image.id, image]));
   const settle = (request) => {
     try { return Promise.resolve(request()).then((value) => ({ value }), (error) => ({ error })); }
     catch (error) { return Promise.resolve({ error }); }
   };
   const needsPicker = imageIds.some((imageId) => {
-    const image = state.images.find((entry) => entry.id === imageId); const access = sourceAccessFor(imageId);
+    const image = imagesById.get(imageId); const access = sourceAccessFor(imageId);
     return sourceNeedsParent(image, access, mode, deleteOriginal, format) && !access?.parentHandle;
   });
   const sharedPicker = needsPicker && typeof window.showDirectoryPicker === "function"
     ? settle(() => window.showDirectoryPicker({ mode: "readwrite", id: "mozarie-source-parent" })) : null;
   const permissions = new Map();
   for (const imageId of imageIds) {
-    const image = state.images.find((entry) => entry.id === imageId);
+    const image = imagesById.get(imageId);
     const access = sourceAccessFor(imageId);
     if (!access?.fileHandle) continue;
     const write = mode === "overwrite" || deleteOriginal;
@@ -885,8 +887,9 @@ async function reconnectSaveSourceParent(image, access, pickedParent) {
 }
 
 async function ensureSaveSources(imageIds, mode, deleteOriginal, format = "original", preparation = null) {
+  const imagesById = new Map(state.images.map((image) => [image.id, image]));
   for (const imageId of imageIds) {
-    const image = state.images.find((entry) => entry.id === imageId);
+    const image = imagesById.get(imageId);
     const access = sourceAccessFor(imageId);
     const item = preparation?.get(imageId);
     if (mode === "overwrite" && !sourceCanOverwrite(image, format)) throw codedError("source_action_unavailable");
@@ -1074,37 +1077,68 @@ async function ensureDistinctBrowserSaveSources(inputs) {
   const sourcesByName = new Map();
   const pathsByName = new Map();
   const sameHandle = async (left, right) => left === right || Boolean(left?.isSameEntry && await left.isSameEntry(right));
-  const addPath = (name, parentHandle, imageId, renamed) => {
-    if (!name || !parentHandle) return;
+  const directoryPath = (access) => access?.sourceKind === "browser-directory" && access.sourceId && access.relativePath && access.rootHandle
+    ? String(access.relativePath).replaceAll("\\", "/").toLowerCase() : null;
+  const compareSource = async (left, right) => {
+    if (await sameHandle(left, right)) throw codedError("save_write_failed");
+  };
+  const addPath = async (name, access, imageId, renamed) => {
+    if (!name || !access.parentHandle) return;
     const key = name.toLowerCase();
-    const bucket = pathsByName.get(key) || [];
-    bucket.push({ parentHandle, imageId, renamed });
+    const bucket = pathsByName.get(key) || { bySource: new Map(), other: [] };
+    const path = directoryPath(access);
+    const current = { parentHandle: access.parentHandle, imageId, renamed };
+    const check = async (other) => {
+      if (current.imageId !== other.imageId && (current.renamed || other.renamed)
+        && await sameHandle(current.parentHandle, other.parentHandle)) throw codedError("save_write_failed");
+    };
+    if (path) {
+      const dirname = path.slice(0, path.lastIndexOf("/") + 1);
+      const paths = bucket.bySource.get(access.sourceId) || new Map();
+      for (const other of paths.get(dirname) || []) {
+        if (current.imageId !== other.imageId && (current.renamed || other.renamed)) throw codedError("save_write_failed");
+      }
+      for (const [sourceId, group] of bucket.bySource) {
+        if (sourceId === access.sourceId) continue;
+        for (const entries of group.values()) for (const other of entries) await check(other);
+      }
+      for (const other of bucket.other) await check(other);
+      const siblings = paths.get(dirname) || [];
+      siblings.push(current);
+      paths.set(dirname, siblings);
+      bucket.bySource.set(access.sourceId, paths);
+    } else {
+      for (const group of bucket.bySource.values()) for (const entries of group.values()) for (const other of entries) await check(other);
+      for (const other of bucket.other) await check(other);
+      bucket.other.push(current);
+    }
     pathsByName.set(key, bucket);
   };
   for (const [imageId, { image, access }] of inputs.sources) {
     if (!access?.fileHandle) continue;
     const name = access.fileHandle.name || access.name || "";
     const key = name.toLowerCase();
-    const bucket = sourcesByName.get(key) || [];
-    for (const other of bucket) {
-      if (await sameHandle(access.fileHandle, other)) throw codedError("save_write_failed");
+    const bucket = sourcesByName.get(key) || { bySource: new Map(), other: [] };
+    const path = directoryPath(access);
+    if (path) {
+      const paths = bucket.bySource.get(access.sourceId) || new Map();
+      if (paths.has(path)) throw codedError("save_write_failed");
+      for (const [sourceId, group] of bucket.bySource) {
+        if (sourceId === access.sourceId) continue;
+        for (const other of group.values()) await compareSource(access.fileHandle, other);
+      }
+      for (const other of bucket.other) await compareSource(access.fileHandle, other);
+      paths.set(path, access.fileHandle);
+      bucket.bySource.set(access.sourceId, paths);
+    } else {
+      for (const group of bucket.bySource.values()) for (const other of group.values()) await compareSource(access.fileHandle, other);
+      for (const other of bucket.other) await compareSource(access.fileHandle, other);
+      bucket.other.push(access.fileHandle);
     }
-    bucket.push(access.fileHandle);
     sourcesByName.set(key, bucket);
     if (inputs.mode === "overwrite") {
-      addPath(name, access.parentHandle, imageId, false);
-      addPath(renamedSourceFileName(image, access, inputs.format), access.parentHandle, imageId, true);
-    }
-  }
-  for (const bucket of pathsByName.values()) {
-    for (let index = 0; index < bucket.length; index += 1) {
-      const left = bucket[index];
-      if (!left.renamed) continue;
-      for (let next = 0; next < bucket.length; next += 1) {
-        const right = bucket[next];
-        if (left.imageId === right.imageId || !await sameHandle(left.parentHandle, right.parentHandle)) continue;
-        throw codedError("save_write_failed");
-      }
+      await addPath(name, access, imageId, false);
+      await addPath(renamedSourceFileName(image, access, inputs.format), access, imageId, true);
     }
   }
   if (inputs.mode === "overwrite") {
@@ -1123,6 +1157,7 @@ async function ensureDistinctBrowserSaveSources(inputs) {
 }
 
 async function runBrowserSave(imageIds, suffix, deleteOriginal, mode = "copy", removeSaved = false, prepared = null) {
+  const imagesById = new Map(state.images.map((image) => [image.id, image]));
   const inputs = {
     imageIds: [...imageIds],
     divisor: Number($("#applyDivisor").value),
@@ -1136,7 +1171,7 @@ async function runBrowserSave(imageIds, suffix, deleteOriginal, mode = "copy", r
     parallelism: Math.max(1, Math.round(Number(state.settings?.saving?.parallelism) || 2)),
     drafts: new Map(Object.entries(draftPayload(imageIds))),
     sources: new Map(imageIds.map((imageId) => [imageId, {
-      image: state.images.find((image) => image.id === imageId),
+      image: imagesById.get(imageId),
       access: sourceAccessFor(imageId) ? { ...sourceAccessFor(imageId) } : null,
     }])),
   };
@@ -1147,6 +1182,7 @@ async function runBrowserSave(imageIds, suffix, deleteOriginal, mode = "copy", r
   });
   const save = {
     entries: result.entries, completed: 0, stale: 0, paused: false, cancelled: false, failed: false,
+    imagesById,
     sourceDeleteFailures: [], catalogEpoch: state.catalogEpoch, cleanupIntents: new Map(), savedImageIds: new Set(),
     removalSelection: removeSaved ? deletionSelectionSnapshot(new Set(imageIds), galleryFilteredImages()) : null,
   };
@@ -1333,7 +1369,8 @@ async function runBrowserSave(imageIds, suffix, deleteOriginal, mode = "copy", r
             state.images = latest.images; loadReviewedPaths();
             if (inputs.projectId) {
               const previousImageIds = state.applyCatalogSnapshot?.order || [];
-              const removed = previousImageIds.filter((imageId) => !state.images.some((item) => item.id === imageId));
+              const currentImageIds = new Set(state.images.map((image) => image.id));
+              const removed = previousImageIds.filter((imageId) => !currentImageIds.has(imageId));
               if (removed.length && await forgetProjectImageSources(inputs.projectId, removed)) {
                 await clearProjectSourceCleanup({ intentIds: removed.map((imageId) => save.cleanupIntents.get(imageId)).filter(Boolean) });
                 removed.forEach((imageId) => save.cleanupIntents.delete(imageId));
