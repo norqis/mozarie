@@ -146,6 +146,13 @@ function applyTargetsSupport(capability, format = "original") {
     return capability === "overwrite" ? sourceCanOverwrite(image, format) : sourceCanDelete(image);
   });
 }
+function applyRestrictionMessage() {
+  if (selectedSaveMode() !== "overwrite") return "";
+  const imagesById = new Map(state.images.map((image) => [image.id, image]));
+  const format = selectedApplyOutputFormat();
+  const unavailable = state.applyTargetIds.filter((imageId) => !sourceCanOverwrite(imagesById.get(imageId), format)).length;
+  return unavailable ? t("apply.overwriteUnavailable", { count: unavailable }) : "";
+}
 function syncApplyMode() {
   const imagesById = new Map(state.images.map((image) => [image.id, image]));
   const unavailable = state.applyTargetIds.filter((imageId) => !sourceCanOverwrite(imagesById.get(imageId), selectedApplyOutputFormat())).length;
