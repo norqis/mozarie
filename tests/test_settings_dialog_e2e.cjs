@@ -37,6 +37,31 @@ test("SD-001 settings dialog exposes its tabs and footer actions", { timeout: 60
   });
 });
 
+test("exclusion force default persists and controls untouched images", { timeout: 60000 }, async () => {
+  await withSettingsPage(async (page) => {
+    await page.locator("#settingsTabDisplay").click();
+    await page.locator("#settingsExcludeForcedDefault").uncheck();
+    await page.locator("#settingsSaveButton").click();
+    await page.waitForFunction(() => state.settings.detection.exclude_forced_default === false);
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await page.waitForFunction(() => state.settings && state.images.length === 2);
+    await page.locator('.gallery-item[data-id="sample-two"]').click();
+    await page.waitForFunction(() => state.currentId === "sample-two" && state.currentImage);
+    assert.equal(await page.evaluate(() => state.manualExclusionForced), false, "the saved OFF value initializes an untouched image");
+
+    await page.locator("#settingsButton").click();
+    await page.locator("#settingsTabDisplay").click();
+    assert.equal(await page.locator("#settingsExcludeForcedDefault").isChecked(), false, "the OFF value survives reload");
+    await page.locator("#settingsExcludeForcedDefault").check();
+    await page.locator("#settingsSaveButton").click();
+    await page.waitForFunction(() => state.settings.detection.exclude_forced_default === true);
+    await page.locator("#settingsCloseButton").click();
+    await page.locator('.gallery-item[data-id="sample"]').click();
+    await page.waitForFunction(() => state.currentId === "sample" && state.currentImage);
+    assert.equal(await page.evaluate(() => state.manualExclusionForced), true, "the saved ON value initializes a second untouched image");
+  });
+});
+
 function assertExclusiveSettingsPanel(tab, panel) {
   return async () => {
     await withSettingsPage(async (page) => {

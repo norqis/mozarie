@@ -40,7 +40,7 @@ SV-072.1、DI-071.1、DI-072.1 の画像所有は `test_resources.cjs` と `reso
 | 元ID | 自動テストで確認する観測 |
 | --- | --- |
 | SD-012 | 設定を実ファイルへ保存し、StudioStateを終了・再生成して全設定値を復元する。 |
-| SD-019 | 各並列数で400件を2回コピー保存し、reserve・render・commitが各対象に1回ずつ行われ、設定値を保持する。ブラウザー元画像への上書きは設定した並列数まで異なるファイルのsnapshotと書き込みを重ね、コピー後削除も全件共通の待ち行列に入れない。同じ元ファイルの別handle、同じ親フォルダーの改名先重複、別画像の元ファイル名との衝突は出力前に拒否し、異なる親フォルダーの同名出力は許可する。失敗時は対象ファイルだけ復元する。 |
+| SD-019 | 各並列数で400件を2回コピー保存し、reserve・render・commitが各対象に1回ずつ行われ、設定値を保持する。ブラウザー元画像への上書きは設定した並列数まで異なるファイルのsnapshotと書き込みを重ね、コピー後削除も全件共通の待ち行列に入れない。同じ取込元の別フォルダーに同名画像が400件あってもhandle同一性の総当たりを行わず全件の書込・commitを完了する。異なる取込元や取込情報不足ではhandle同一性を照会し、同じ元ファイルの別handle、同じ親フォルダーの改名先重複、別画像の元ファイル名との衝突は出力前に拒否する。異なる親フォルダーの同名出力は許可し、失敗時は対象ファイルだけ復元する。 |
 | WS-129.4 | 小さいPNG・JPEG・WebPでPillow上限超過経路を再現し、警告なしの一覧・画像・サムネイルと回転JPEGの向きを確認する。巨大画像の物理RAM負荷は対象外のまま区別する。 |
 | SV-073.2 | 実ChromiumがHTTP応答を読み取り始めた後に画像の版を変更し、応答全体のハッシュ・画像寸法・一時ファイル解放・古い版のエラー表示を確認する。 |
 | SV-077.2 | 実ChromiumとOPFSで元画像の読み取りを失敗させ、専用エラーの表示と元画像・コピー・候補・手描き・一覧の保持を確認する。 |
@@ -64,6 +64,7 @@ node --test tests/test_verification_contracts.cjs
 | 全描画ツールの個別キー、Q/Wの左右順・グループ移動・長押し抑止、塗りつぶしポップアップ後のフォーカス | `tests/test_toolbar_shortcuts_e2e.cjs` の `toolbar shortcuts select every drawing mode and cycle each group in visible order` |
 | 1/2枚表示・全体表示・反転・モザイク表示・Undo/Redo | 同ファイルの `toolbar view fit flip preview and history shortcuts perform their visible actions` |
 | 操作別と全体のOFF、入力中・ダイアログ・処理中・閲覧専用・無効ボタン・画像切替・描画中の抑止 | 同ファイルの `toolbar shortcuts obey per-action global focus modal busy and disabled controls` |
+| 全体スイッチのOFFを保存・再読込するとQがツールを切り替えず、ONで再保存すると切り替わる | 同ファイルの `saved global shortcut switch disables and restores real tool keys after reload` |
 | キー欄の右側のON/OFFスイッチ、右端揃え・下線・交互背景、Tab移動、変更と再読み込み | 同ファイルの `shortcut switches align after key inputs and preserve remapped disabled bindings after reload` |
 | 旧設定の独自キーと有効状態を保持し、新キーの衝突時は未使用キーをOFFで追加、重複保存拒否 | `tests.test_config.SettingsTests.test_toolbar_shortcuts_defaults_are_complete_unique_and_round_trip`、`test_toolbar_shortcuts_migrate_without_claiming_custom_keys` |
 
@@ -78,5 +79,6 @@ node --test tests/test_verification_contracts.cjs
 元画像の変更検知・同寸法の受け入れ・範囲の拡縮・クリア・PJへの移行でも、確認済み／未確認の両方を維持する。WS-027 のPython契約で再起動と全履歴のUndo/Redoまで確認する。
 
 一般設定の検証・保存は、検出ダイアログの取消し後も保存済みの対象を使うことを確認します。
+除外の強制適用の既定値は、`tests/test_settings_dialog_e2e.cjs` の `exclusion force default persists and controls untouched images` で、OFF保存・再読込後とON再保存後に、それぞれ未編集の画像へ反映されることを確認する。
 
 設定保存・初期化では保存先の存在や書込み可否を検査しない。`test_settings_save_validates_once_without_probing_output_directory` は更新の検証が一度で、既存の原子的書込みだけが一時ファイルを作ることを確認する。`test_settings_reset_removes_override_without_probing_output_directory` は初期化時に保存先への試し書きを行わないことを確認する。実保存とフォルダー選択時の検証は維持する。

@@ -763,6 +763,102 @@ async function runBrowserSourceCollisionCases() {
   assert.equal(occupied.requests.length, 0, "an already-existing destination aborts the entire batch before render or write");
 }
 
+async function runNestedSameNameBrowserOverwriteAtScaleCase() {
+  const entries = Array.from({ length: 400 }, (_, index) => ({
+    imageId: `nested-${index}`, relativePath: `chapter-${index}/page.png`, candidateRevision: 1,
+  }));
+  const images = entries.map(({ imageId, relativePath }) => ({
+    id: imageId, sourceKind: "session", relativePath, width: 32, height: 32,
+  }));
+  let identityChecks = 0;
+  let commits = 0;
+  let writes = 0;
+  const rootHandle = { async queryPermission() { return "granted"; } };
+  const runtime = createRuntime({
+    entries, initialImages: images,
+    commit: () => { commits += 1; return jsonResponse({ cleared: false, stale: false }); },
+  });
+  runtime.state.settings.saving.parallelism = 8;
+  for (const entry of entries) {
+    const fileHandle = {
+      name: "page.png",
+      async isSameEntry() { identityChecks += 1; return false; },
+      async getFile() { return sourceBlob("page.png", 1, 1); },
+      async createWritable() { return { async write() { writes += 1; }, async close() {}, async abort() {} }; },
+    };
+    const parentHandle = { async isSameEntry() { identityChecks += 1; return false; } };
+    runtime.state.sourceAccess.set(entry.imageId, {
+      fileHandle, parentHandle, rootHandle, sourceKind: "browser-directory", sourceId: "one-root",
+      relativePath: entry.relativePath, name: "page.png", size: 1, lastModified: 1,
+    });
+  }
+  await runtime.runBrowserSave(entries.map(({ imageId }) => imageId), "_censored", false, "overwrite");
+  assert.equal(identityChecks, 0, "distinct canonical paths under one directory source need no pairwise handle checks");
+  assert.equal(writes, 400, "every nested same-name source is overwritten once");
+  assert.equal(commits, 400, "every nested same-name source reaches a completed server commit");
+  assert.equal(runtime.state.browserSave, null, "the 400-entry save settles its UI state");
+}
+
+async function runCanonicalBrowserSourceCollisionCases() {
+  const entries = ["one", "two"].map((imageId) => ({ imageId, relativePath: `${imageId}/page.png`, candidateRevision: 1 }));
+  const images = entries.map(({ imageId, relativePath }) => ({ id: imageId, sourceKind: "session", relativePath, width: 32, height: 32 }));
+  const rootsBySource = new Map();
+  const rootFor = (sourceId) => {
+    if (!rootsBySource.has(sourceId)) rootsBySource.set(sourceId, {});
+    return rootsBySource.get(sourceId);
+  };
+  const makeAccess = (imageId, sourceId, physicalFile, physicalParent, editedPath = `${imageId}/page.png`) => ({
+    fileHandle: {
+      name: "page.png", physicalFile,
+      async isSameEntry(other) { return this.physicalFile === other.physicalFile; },
+    },
+    parentHandle: {
+      physicalParent,
+      async isSameEntry(other) { return this.physicalParent === other.physicalParent; },
+    },
+    rootHandle: rootFor(sourceId),
+    sourceKind: "browser-directory", sourceId, relativePath: editedPath, name: "page.png",
+  });
+  const alias = createRuntime({ entries, initialImages: images, commit: () => jsonResponse({}) });
+  alias.state.sourceAccess.set("one", makeAccess("one", "root-a", "same-file", "same-parent"));
+  alias.state.sourceAccess.set("two", makeAccess("two", "root-b", "same-file", "same-parent"));
+  await assert.rejects(alias.runBrowserSave(["one", "two"], "", false, "overwrite"), { code: "save_write_failed" });
+  assert.equal(alias.requests.length, 0, "cross-source file aliases still fail before output");
+
+  const incomplete = createRuntime({ entries, initialImages: images, commit: () => jsonResponse({}) });
+  incomplete.state.sourceAccess.set("one", makeAccess("one", "one-root", "same-file", "same-parent"));
+  const missingRoot = makeAccess("two", "one-root", "same-file", "same-parent");
+  delete missingRoot.rootHandle;
+  incomplete.state.sourceAccess.set("two", missingRoot);
+  await assert.rejects(incomplete.runBrowserSave(["one", "two"], "", false, "overwrite"), { code: "save_write_failed" });
+  assert.equal(incomplete.requests.length, 0, "incomplete directory metadata retains file handle identity checks");
+
+  const duplicatePath = createRuntime({ entries, initialImages: images, commit: () => jsonResponse({}) });
+  duplicatePath.state.sourceAccess.set("one", makeAccess("one", "one-root", "file-a", "parent-a", "folder/page.png"));
+  duplicatePath.state.sourceAccess.set("two", makeAccess("two", "one-root", "file-b", "parent-b", "folder/page.png"));
+  await assert.rejects(duplicatePath.runBrowserSave(["one", "two"], "", false, "overwrite"), { code: "save_write_failed" });
+  assert.equal(duplicatePath.requests.length, 0, "same-source duplicate canonical paths are rejected without writing either file");
+
+  const renameImages = images.map((image, index) => index ? image : { ...image, editedFilename: "target.png" });
+  const renamed = createRuntime({ entries, initialImages: renameImages, commit: () => jsonResponse({}) });
+  renamed.state.sourceAccess.set("one", makeAccess("one", "root-a", "file-a", "same-parent"));
+  renamed.state.sourceAccess.set("two", {
+    ...makeAccess("two", "root-b", "file-b", "same-parent"),
+    fileHandle: { name: "target.png", async isSameEntry() { return false; } },
+  });
+  await assert.rejects(renamed.runBrowserSave(["one", "two"], "", false, "overwrite"), { code: "save_write_failed" });
+  assert.equal(renamed.requests.length, 0, "cross-source parent aliases retain rename collision checks");
+
+  const sameRoot = createRuntime({ entries, initialImages: renameImages, commit: () => jsonResponse({}) });
+  sameRoot.state.sourceAccess.set("one", makeAccess("one", "one-root", "file-a", "parent-a", "folder/page.png"));
+  sameRoot.state.sourceAccess.set("two", {
+    ...makeAccess("two", "one-root", "file-b", "parent-b", "folder/target.png"),
+    fileHandle: { name: "target.png", async isSameEntry() { return false; } },
+  });
+  await assert.rejects(sameRoot.runBrowserSave(["one", "two"], "", false, "overwrite"), { code: "save_write_failed" });
+  assert.equal(sameRoot.requests.length, 0, "same-source canonical parent paths reject a rename into another selected file");
+}
+
 async function runBrowserHandleOverwritePoolAtScaleCase() {
   const entries = Array.from({ length: 100 }, (_, index) => ({ imageId: `overwrite-${index}`, relativePath: `overwrite-${index}.png`, candidateRevision: 1 }));
   const images = entries.map((entry) => ({ id: entry.imageId, sourceKind: "session", relativePath: entry.relativePath, width: 32, height: 32, candidateCount: 1, enabledCandidateCount: 1 }));
@@ -2012,5 +2108,7 @@ nodeTest("browser save runtime contracts", async (t) => {
   await t.test("distinct browser source snapshots and writes overlap", runBrowserHandleConcurrentWriteCase);
   await t.test("copy-delete entries follow configured parallelism", runConcurrentCopyDeleteCase);
   await t.test("browser source aliases and rename collisions are rejected before output", runBrowserSourceCollisionCases);
+  await t.test("400 nested same-name browser sources overwrite without pairwise identity checks", runNestedSameNameBrowserOverwriteAtScaleCase);
+  await t.test("canonical browser sources retain cross-source alias and rename collision checks", runCanonicalBrowserSourceCollisionCases);
   await t.test("normalized output directory is displayed", async () => { runOutputDirectoryDisplayCase(); });
 });
