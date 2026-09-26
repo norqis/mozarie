@@ -306,6 +306,7 @@ function makeSaveRuntime() {
     return {};
   };
   const invoke = async (url, options) => {
+    if (url === "/api/output-directory/status") return { path: state.settings.saving.default_output_directory, state: "ready" };
     const result = await handler(url, options);
     if (url === "/api/save/reserve" && !result?.state) return { state: "rendering" };
     if (url === "/api/save/ack" && result && Object.keys(result).length === 0) return { acknowledged: true };
