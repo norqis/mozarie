@@ -146,6 +146,9 @@ function createRuntime({ commit, copy = null, deleteOriginal = false, renderBina
         return jsonResponse({ images: catalogImages });
       }
       requests.push({ path: requestPath, options });
+      if (requestPath === "/api/output-directory/status") {
+        return jsonResponse({ path: context.__browserSaveRuntime.state.settings.saving.default_output_directory, state: "ready" });
+      }
       if (requestPath === "/api/save/prepare") {
         return jsonResponse({ entries: preparedEntries });
       }
@@ -184,10 +187,10 @@ function createRuntime({ commit, copy = null, deleteOriginal = false, renderBina
     new vm.Script(fs.readFileSync(appPath, "utf8"), { filename: appPath }).runInContext(runtimeContext);
   }
   new vm.Script(
-    "globalThis.__browserSaveRuntime = { state, beginSaveSourcePreparation, ensureSaveSources, finishApplyJob, runBrowserSave, saveTargets, processableImages, isBusy, catalogStagingEditsActive, selectedSaveMode, chooseOutputDirectory, startApplyFromDialog, startSingleSave, writeSourceHandle, restoreSourceHandle, renderOutputDirectory, pickOutputDirectory, reserveSaveRender, renderDefaultCopy, renderStreamedSave, commitBrowserSaveWithRetry, acknowledgePendingBrowserSave, nextVisibleImage, translate: t };",
+    "globalThis.__browserSaveRuntime = { state, beginSaveSourcePreparation, ensureSaveSources, finishApplyJob, runBrowserSave, saveTargets, processableImages, isBusy, catalogStagingEditsActive, selectedSaveMode, chooseOutputDirectory, startApplyFromDialog, startSingleSave, refreshOutputDirectoryStatus, writeSourceHandle, restoreSourceHandle, renderOutputDirectory, pickOutputDirectory, reserveSaveRender, renderDefaultCopy, renderStreamedSave, commitBrowserSaveWithRetry, acknowledgePendingBrowserSave, nextVisibleImage, translate: t };",
     { filename: "test-browser-save-exports.js" },
   ).runInContext(runtimeContext);
-  const { state, beginSaveSourcePreparation, ensureSaveSources, finishApplyJob, runBrowserSave, saveTargets, processableImages, isBusy, catalogStagingEditsActive, selectedSaveMode, chooseOutputDirectory, startApplyFromDialog, startSingleSave, writeSourceHandle, restoreSourceHandle, renderOutputDirectory, pickOutputDirectory: pickOutputDirectoryApi, reserveSaveRender, renderDefaultCopy, renderStreamedSave, commitBrowserSaveWithRetry, acknowledgePendingBrowserSave, nextVisibleImage, translate } = context.__browserSaveRuntime;
+  const { state, beginSaveSourcePreparation, ensureSaveSources, finishApplyJob, runBrowserSave, saveTargets, processableImages, isBusy, catalogStagingEditsActive, selectedSaveMode, chooseOutputDirectory, startApplyFromDialog, startSingleSave, refreshOutputDirectoryStatus, writeSourceHandle, restoreSourceHandle, renderOutputDirectory, pickOutputDirectory: pickOutputDirectoryApi, reserveSaveRender, renderDefaultCopy, renderStreamedSave, commitBrowserSaveWithRetry, acknowledgePendingBrowserSave, nextVisibleImage, translate } = context.__browserSaveRuntime;
   state.images = initialImages || [{ id: "image-1", relativePath: "nested/source.png", width: 32, height: 32, candidateCount: 1, enabledCandidateCount: 1 }];
   state.settings = { saving: { parallelism: 1, default_output_directory: "G:/output", preserve_directory_structure: true }, confirmations: { overwriteSource: false, deleteSourceAfterCopy: false } };
   getElement("#applyPreserveDirectoryStructure").checked = true;
@@ -202,7 +205,7 @@ function createRuntime({ commit, copy = null, deleteOriginal = false, renderBina
     "gallery.detectAll": "detect all",
     "apply.outputDirectoryUnset": "Save location: not selected",
   };
-  return { element: getElement, elements, beginSaveSourcePreparation, ensureSaveSources, finishApplyJob, imageFetches: () => imageFetches, lockRequests, navigator: browserNavigator, requests, runBrowserSave, saveTargets, processableImages, isBusy, catalogStagingEditsActive, selectedSaveMode, chooseOutputDirectory, startApplyFromDialog, startSingleSave, writeSourceHandle, restoreSourceHandle, renderOutputDirectory, pickOutputDirectory: pickOutputDirectoryApi, reserveSaveRender, renderDefaultCopy, renderStreamedSave, commitBrowserSaveWithRetry, acknowledgePendingBrowserSave, nextVisibleImage, state, translate, window: browserWindow };
+  return { element: getElement, elements, beginSaveSourcePreparation, ensureSaveSources, finishApplyJob, imageFetches: () => imageFetches, lockRequests, navigator: browserNavigator, requests, runBrowserSave, saveTargets, processableImages, isBusy, catalogStagingEditsActive, selectedSaveMode, chooseOutputDirectory, startApplyFromDialog, startSingleSave, refreshOutputDirectoryStatus, writeSourceHandle, restoreSourceHandle, renderOutputDirectory, pickOutputDirectory: pickOutputDirectoryApi, reserveSaveRender, renderDefaultCopy, renderStreamedSave, commitBrowserSaveWithRetry, acknowledgePendingBrowserSave, nextVisibleImage, state, translate, window: browserWindow };
 }
 
 async function runOutputDirectoryPermissionCases() {
@@ -500,6 +503,8 @@ async function runOutputPermissionSubmissionLockCases() {
   single.element('input[name="singleSaveMode"]:checked').value = "copy";
   single.element("#singleSaveSuffix").value = "_locked";
   single.element("#singleSaveOutputDirectoryStatus").value = single.state.settings.saving.default_output_directory;
+  await single.refreshOutputDirectoryStatus();
+  assert.equal(single.element("#singleSaveStartButton").disabled, false, "ready destination completes modal preflight before Save is clickable");
   const firstSingle = single.startSingleSave(event);
   const secondSingle = single.startSingleSave(event);
   assert.equal(single.state.saveStarting, true, "single save locks synchronously before server reservation awaits");
