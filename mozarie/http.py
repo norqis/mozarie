@@ -92,6 +92,8 @@ _POST_OPERATION_LABELS = {
     "/api/settings/reset": "設定初期化",
     "/api/model-file/pick": "モデルファイル選択",
     "/api/output-directory/pick": "保存先フォルダー選択",
+    "/api/output-directory/status": "保存先フォルダー確認",
+    "/api/output-directory/create": "保存先フォルダー作成",
     "/api/model-download/start": "モデルダウンロード開始",
     "/api/model-download/cancel": "モデルダウンロード取消",
     "/api/update/start": "更新開始",
@@ -1052,6 +1054,10 @@ class MosaicHandler(BaseHTTPRequestHandler):
                 else:
                     settings = STATE.update_settings({"saving": {"default_output_directory": selected}})
                     self._json({"settings": settings, "path": settings["saving"]["default_output_directory"]})
+            elif path == "/api/output-directory/status":
+                self._json(STATE.output_directory_status())
+            elif path == "/api/output-directory/create":
+                self._json(STATE.create_output_directory(payload.get("expectedPath")))
             elif path == "/api/model-download/start":
                 try:
                     self._json(STATE.model_downloads.start(str(payload.get("modelKey", "")), str(payload.get("samType", ""))))

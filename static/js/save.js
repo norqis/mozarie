@@ -36,6 +36,53 @@ function isTerminalApply(job) {
 function selectedSaveMode() { return document.querySelector('input[name="batchSaveMode"]:checked').value; }
 function selectedApplyOutputFormat() { return $("#applyOutputFormat").value; }
 function selectedSingleOutputFormat() { return $("#singleSaveOutputFormat").value; }
+let outputDirectoryStatus = null;
+let outputDirectoryStatusRequest = null;
+function configuredOutputDirectory() { return state.settings?.saving?.default_output_directory || ""; }
+function currentOutputDirectoryStatus() {
+  return outputDirectoryStatus?.path === configuredOutputDirectory() ? outputDirectoryStatus.state : null;
+}
+function invalidateOutputDirectoryStatus() {
+  outputDirectoryStatus = null;
+  syncApplyMode(); if (state.singleSave) syncSingleSaveMode();
+}
+async function refreshOutputDirectoryStatus(force = false) {
+  const path = configuredOutputDirectory();
+  if (!path) return invalidateOutputDirectoryStatus();
+  if (force) invalidateOutputDirectoryStatus();
+  if (outputDirectoryStatus?.path === path) return outputDirectoryStatus;
+  if (outputDirectoryStatusRequest?.path === path) return outputDirectoryStatusRequest.promise;
+  invalidateOutputDirectoryStatus();
+  const promise = api("/api/output-directory/status", { method: "POST", body: "{}" }).then((result) => {
+    if (configuredOutputDirectory() !== result.path) throw codedError("save_state_changed");
+    outputDirectoryStatus = result;
+    return result;
+  }).catch((error) => {
+    if (configuredOutputDirectory() === path) outputDirectoryStatus = { path, state: "unusable" };
+    throw error;
+  }).finally(() => {
+    if (outputDirectoryStatusRequest?.promise === promise) outputDirectoryStatusRequest = null;
+    syncApplyMode(); if (state.singleSave) syncSingleSaveMode();
+  });
+  outputDirectoryStatusRequest = { path, promise };
+  return promise;
+}
+async function prepareCopyOutputDirectory(onConfirm) {
+  const status = currentOutputDirectoryStatus();
+  if (status === "ready") { onConfirm(); return true; }
+  if (status === "unusable") throw codedError("output_folder_unavailable");
+  if (status !== "missing") return false;
+  const path = configuredOutputDirectory();
+  const accepted = await confirmAction(
+    t("confirm.createOutputDirectory.title"), t("confirm.createOutputDirectory.message", { path }), null,
+    onConfirm, { acceptLabel: t("confirm.createOutputDirectory.accept"), neutral: true, hideNeverShow: true },
+  );
+  if (!accepted) return false;
+  const result = await api("/api/output-directory/create", { method: "POST", body: JSON.stringify({ expectedPath: path }) });
+  if (configuredOutputDirectory() !== result.path) throw codedError("save_state_changed");
+  outputDirectoryStatus = result;
+  return true;
+}
 let applyKeepMetadataPreference = true;
 let applyKeepMetadataForcedOff = false;
 let singleKeepMetadataPreference = true;
@@ -178,7 +225,7 @@ function syncApplyMode() {
   const capabilityNote = !canOverwrite ? t("apply.overwriteUnavailable", { count: unavailable }) : "";
   $("#applyTemporarySourceNote").textContent = restriction || capabilityNote || t("apply.handleSource");
   $("#applyTemporarySourceNote").hidden = !restriction && !capabilityNote;
-  $("#applyStartButton").disabled = Boolean(restriction) || outputDirectoryPending || state.applyRunning || state.saveStarting || state.applyTargetIds.length === 0 || (copying && !state.settings?.saving?.default_output_directory);
+  $("#applyStartButton").disabled = Boolean(restriction) || outputDirectoryPending || state.applyRunning || state.saveStarting || state.applyTargetIds.length === 0 || (copying && (!configuredOutputDirectory() || !currentOutputDirectoryStatus()));
   syncApplyOutputOptions();
 }
 
@@ -217,6 +264,7 @@ async function openApplyDialog() {
   setApplyResult(""); renderOutputDirectory(); renderDirectoryStructurePreference(); syncApplyMode();
   showModalFromInvoker($("#applyDialog"), invoker);
   state.applyDialogInitialized = true;
+  void refreshOutputDirectoryStatus(true).catch((error) => showApplyError(error));
 }
 
 function selectedSingleSaveMode() { return document.querySelector('input[name="singleSaveMode"]:checked').value; }
@@ -240,7 +288,7 @@ function syncSingleSaveMode() {
   $("#singleSaveOutputDirectoryStatus").disabled = outputDirectoryPending || state.saving || state.saveStarting;
   $("#singleSaveRemoveSaved").disabled = state.outputDirectoryPicking || state.saving || state.saveStarting;
   $("#singleSavePreserveDirectoryStructure").disabled = state.outputDirectoryPicking || state.saving || state.saveStarting;
-  $("#singleSaveStartButton").disabled = outputDirectoryPending || state.saving || state.saveStarting || !isProcessableImage(image) || (copying && !state.settings?.saving?.default_output_directory) || (!copying && !canOverwrite);
+  $("#singleSaveStartButton").disabled = outputDirectoryPending || state.saving || state.saveStarting || !isProcessableImage(image) || (copying && (!configuredOutputDirectory() || !currentOutputDirectoryStatus())) || (!copying && !canOverwrite);
   $("#singleSaveSettings").disabled = state.outputDirectoryPicking || state.saving || state.saveStarting;
   syncSingleOutputOptions();
 }
@@ -270,6 +318,7 @@ async function openSingleSaveDialog(imageId = state.currentId) {
   syncSingleSaveMode();
   showModalFromInvoker($("#singleSaveDialog"), invoker);
   state.singleSaveDialogInitialized = true;
+  void refreshOutputDirectoryStatus(true).catch((error) => showUserError(error, $("#singleSaveStartButton")));
 }
 
 async function chooseSingleOutputDirectory() {
@@ -422,9 +471,16 @@ async function startSingleSave(event) {
   const mode = selectedSingleSaveMode(); const copying = mode === "copy";
   const deleteOriginal = copying && $("#singleSaveDeleteOriginal").checked;
   const format = selectedSingleOutputFormat(); const keepMetadata = $("#singleSaveKeepMetadata").checked;
-  const sourcePreparation = beginSaveSourcePreparation([save.imageId], mode, deleteOriginal, format);
+  let sourcePreparation = null;
+  const beginPreparation = () => { sourcePreparation = beginSaveSourcePreparation([save.imageId], mode, deleteOriginal, format); };
+  if (!copying) beginPreparation();
   const outputDirectory = $("#singleSaveOutputDirectoryStatus");
-  if (copying && outputDirectory.value.trim() !== (state.settings?.saving?.default_output_directory || "") && !await commitOutputDirectory(outputDirectory)) return;
+  const outputPathChanged = copying && outputDirectory.value.trim() !== configuredOutputDirectory();
+  if (outputPathChanged && !await commitOutputDirectory(outputDirectory)) return;
+  if (copying && !currentOutputDirectoryStatus()) await refreshOutputDirectoryStatus();
+  if (outputPathChanged && currentOutputDirectoryStatus() === "ready" && deleteOriginal && sourceAccessFor(save.imageId)?.fileHandle) {
+    setSingleSaveResult(t("apply.outputDirectoryReadyRetry")); return;
+  }
   if (state.saving || state.saveStarting || isBusy()) return;
   const removeSaved = $("#singleSaveRemoveSaved").checked;
   const removalSelection = removeSaved ? deletionSelectionSnapshot(new Set([save.imageId]), galleryFilteredImages()) : null;
@@ -434,6 +490,7 @@ async function startSingleSave(event) {
   state.saveStarting = true;
   syncSingleSaveMode();
   try {
+    if (copying && !await prepareCopyOutputDirectory(beginPreparation)) return;
     if (copying) await ensureSaveSources([save.imageId], "copy", deleteOriginal, format, sourcePreparation);
     if (copying && !await ensureDirectoryStructurePreference($("#singleSavePreserveDirectoryStructure"))) return;
     if (!copying && !await confirmAction(t("confirm.overwriteSource.title"), t("confirm.overwriteSource.message"), "overwriteSource")) return;
@@ -583,6 +640,7 @@ function renderOutputDirectory() {
   $("#singleSaveOutputDirectoryStatus").value = configuredDirectory;
   $("#applyOutputDirectoryStatus").placeholder = t("apply.outputDirectoryUnset");
   $("#singleSaveOutputDirectoryStatus").placeholder = t("apply.outputDirectoryUnset");
+  if (outputDirectoryStatus?.path !== configuredDirectory) invalidateOutputDirectoryStatus();
 }
 
 async function commitOutputDirectory(input, { duringSaveStart = false } = {}) {
@@ -595,6 +653,7 @@ async function commitOutputDirectory(input, { duringSaveStart = false } = {}) {
     const data = await api("/api/settings?status=0", { method: "POST", body: JSON.stringify({ saving: { default_output_directory: directory } }) });
     mergeSavingSettings(data, ["default_output_directory"]);
     renderOutputDirectory();
+    void refreshOutputDirectoryStatus().catch((error) => showUserError(error, input));
     return true;
   } catch (error) {
     input.value = directory;
@@ -638,6 +697,7 @@ async function pickOutputDirectory() {
         // The picker persists only the output directory.  Re-rendering the
         // whole settings form here would discard edits the user has not saved.
         renderOutputDirectory();
+        void refreshOutputDirectoryStatus().catch((error) => showUserError(error));
         return data.path;
       })
       .finally(() => {
@@ -1461,16 +1521,24 @@ async function startApplyFromDialog(event) {
   if (!capturedImageIds.length) return;
   const mode = selectedSaveMode();
   const copy = mode === "copy";
-  const initialSourcePreparation = beginSaveSourcePreparation(capturedImageIds, mode, copy && $("#deleteOriginal").checked, selectedApplyOutputFormat());
+  let sourcePreparation = null;
+  const beginPreparation = () => { sourcePreparation = beginSaveSourcePreparation(capturedImageIds, mode, copy && $("#deleteOriginal").checked, selectedApplyOutputFormat()); };
+  if (!copy) beginPreparation();
   const removeSaved = $("#applyRemoveSaved").checked;
   const outputDirectory = $("#applyOutputDirectoryStatus");
+  const outputPathChanged = copy && outputDirectory.value.trim() !== configuredOutputDirectory();
   const suffix = $("#applySuffix").value;
   const format = selectedApplyOutputFormat();
-  const sourcePreparation = initialSourcePreparation;
   state.saveStarting = true;
   syncApplyMode();
   try {
-    if (copy && outputDirectory.value.trim() !== (state.settings?.saving?.default_output_directory || "") && !await commitOutputDirectory(outputDirectory, { duringSaveStart: true })) return;
+    if (outputPathChanged && !await commitOutputDirectory(outputDirectory, { duringSaveStart: true })) return;
+    if (copy && !currentOutputDirectoryStatus()) await refreshOutputDirectoryStatus();
+    if (outputPathChanged && currentOutputDirectoryStatus() === "ready" && $("#deleteOriginal").checked
+      && capturedImageIds.some((imageId) => sourceAccessFor(imageId)?.fileHandle)) {
+      setApplyResult(t("apply.outputDirectoryReadyRetry")); return;
+    }
+    if (copy && !await prepareCopyOutputDirectory(beginPreparation)) return;
     await persistApplyImageFilters(filters);
     const processableIds = new Set(processableImages().map((image) => image.id));
     const imageIds = capturedImageIds.filter((imageId) => processableIds.has(imageId));

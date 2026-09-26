@@ -150,6 +150,7 @@ function startFixtureServer(options = {}) {
   let forceSourceDeletePrepareEmpty = false;
   const pendingSourceDeleteClaims = [];
   const saveRequests = [];
+  let outputDirectoryState = options.outputDirectoryState || "ready";
   const renameRequests = [];
   let holdSaveRender = false;
   const pendingSaveRenders = [];
@@ -184,7 +185,7 @@ function startFixtureServer(options = {}) {
     general: { language: "ja", open_browser: false, port: 8766, shortcuts_enabled: true },
     models: { target_segmentation: "", ntd11: "", ntd11_enabled: false, sensitive: "", sensitive_enabled: false, hand_detection: "", hand_detection_enabled: false, sam_checkpoints: { vit_b: "", vit_l: "", vit_h: "" }, sam_model_type: "vit_b", provider: "gpu", gpu_device: 0 },
     display: { apply_color: "#ff3d4d", exclude_color: "#28d3ff", overlay_opacity: 0.78, mosaic_preview: true, tool_position: "left" },
-    importing: { parallelism: 3 }, editing: { fill_color_tolerance: 20 }, saving: { parallelism: 2, default_output_directory: "G:\\fixture-output" },
+    importing: { parallelism: 3 }, editing: { fill_color_tolerance: 20 }, saving: { parallelism: 2, default_output_directory: options.outputDirectory || "G:\\fixture-output" },
     detection: { mode: "standard", fluid_exclusion_enabled: true, exclude_forced_default: true, threshold: 0.5, parallelism: 2, default_candidate_padding_px: 3, default_exclude_candidate_padding_px: 11, targets: ["penis", "pussy"] },
     shortcuts: {
       enabled: true,
@@ -332,6 +333,25 @@ function startFixtureServer(options = {}) {
       settings.saving.default_output_directory = "G:\\fixture-output";
       response.writeHead(200, { "Content-Type": "application/json" });
       response.end(JSON.stringify({ path: "G:\\fixture-output", settings }));
+      return;
+    }
+    if (requestPath === "/api/output-directory/status" && request.method === "POST") {
+      for await (const _chunk of request) { /* consume request */ }
+      response.writeHead(200, { "Content-Type": "application/json" });
+      response.end(JSON.stringify({ path: settings.saving.default_output_directory, state: outputDirectoryState }));
+      return;
+    }
+    if (requestPath === "/api/output-directory/create" && request.method === "POST") {
+      let body = ""; for await (const chunk of request) body += chunk;
+      const { expectedPath } = JSON.parse(body);
+      if (expectedPath !== settings.saving.default_output_directory) {
+        response.writeHead(409, { "Content-Type": "application/json" });
+        response.end(JSON.stringify({ error_code: "save_state_changed" }));
+      } else {
+        outputDirectoryState = "ready";
+        response.writeHead(200, { "Content-Type": "application/json" });
+        response.end(JSON.stringify({ path: expectedPath, state: "ready" }));
+      }
       return;
     }
     if (requestPath === "/api/catalog/delete-source/prepare" && request.method === "POST") {

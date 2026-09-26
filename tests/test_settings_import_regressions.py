@@ -132,6 +132,33 @@ class SettingsImportRegressionTests(unittest.TestCase):
         self.assertFalse(self.output.exists())
         self.assertEqual(self.state.job.state, "idle")
 
+    def test_missing_output_requires_explicit_create_and_uses_current_configured_path(self) -> None:
+        self.output = self.root / "missing-parent" / "nested-output"
+        self.state.update_settings({"saving": {"default_output_directory": str(self.output)}})
+        status, payload = self.request("/api/output-directory/status", {})
+        self.assertEqual((status, payload), (200, {"path": str(self.output), "state": "missing"}))
+        self.assertFalse(self.output.exists())
+        self.assertFalse(self.output.parent.exists())
+        stale = self.root / "stale-output"
+        status, payload = self.request("/api/output-directory/create", {"expectedPath": str(stale)})
+        self.assertEqual(status, 400, payload)
+        self.assertEqual(payload["error_code"], "save_state_changed")
+        self.assertFalse(stale.exists())
+        status, payload = self.request("/api/output-directory/create", {"expectedPath": str(self.output)})
+        self.assertEqual((status, payload), (200, {"path": str(self.output), "state": "ready"}))
+        self.assertTrue(self.output.is_dir())
+        status, payload = self.request("/api/output-directory/status", {})
+        self.assertEqual((status, payload), (200, {"path": str(self.output), "state": "ready"}))
+
+    def test_unusable_output_is_not_reported_as_missing_or_overwritten(self) -> None:
+        self.output.write_text("not a directory", encoding="utf-8")
+        status, payload = self.request("/api/output-directory/status", {})
+        self.assertEqual((status, payload), (200, {"path": str(self.output), "state": "unusable"}))
+        status, payload = self.request("/api/output-directory/create", {"expectedPath": str(self.output)})
+        self.assertEqual(status, 400, payload)
+        self.assertEqual(payload["error_code"], "output_folder_unavailable")
+        self.assertEqual(self.output.read_text(encoding="utf-8"), "not a directory")
+
     def test_http_complete_settings_persists_with_missing_unchanged_output(self) -> None:
         full = copy.deepcopy(self.state.settings)
         full["importing"]["parallelism"] = 19
