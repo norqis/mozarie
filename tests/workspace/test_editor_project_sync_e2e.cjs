@@ -874,6 +874,7 @@ test("DI-125 definitive image-delete commit 4xx removes only its own durable cle
       saveRequests.push("cancel"); await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ state: "cancelled" }) });
     });
     await page.locator('.gallery-item[data-id="sample"]').click(); await page.waitForFunction(() => state.currentId === "sample" && state.currentImage);
+    fixture.setDefaultOutputDirectory("G:\\output");
     await page.evaluate(async () => {
       state.project = { id: "delete-project", name: "Delete", status: "active" };
       state.settings.saving.default_output_directory = "G:\\output"; state.settings.confirmations.deleteSourceAfterCopy = false;

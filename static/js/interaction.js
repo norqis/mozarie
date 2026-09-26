@@ -87,7 +87,7 @@ function updateBlockSizeDisplay() {
 }
 
 let pendingConfirmationFinish = null;
-function confirmAction(title, message, key = null, onConfirm = null) {
+function confirmAction(title, message, key = null, onConfirm = null, options = null) {
   const newConfirmation = new Set(["candidateDelete", "candidateRoleDelete", "overwriteSource", "deleteSourceAfterCopy"]);
   const dialog = $("#confirmDialog");
   if (!dialog.open) pendingConfirmationFinish?.();
@@ -97,6 +97,11 @@ function confirmAction(title, message, key = null, onConfirm = null) {
   }
   $("#confirmTitle").textContent = title;
   $("#confirmMessage").textContent = message;
+  const acceptButton = $("#confirmAccept");
+  const neverShow = $("#confirmNeverShow").parentElement;
+  acceptButton.textContent = options?.acceptLabel || t("dialog.confirm");
+  acceptButton.classList.toggle("danger", !options?.neutral);
+  if (neverShow) neverShow.hidden = Boolean(options?.hideNeverShow);
   return new Promise((resolve) => {
     const finish = () => {
       if (dialog.open || pendingConfirmationFinish !== finish) return;
@@ -111,6 +116,9 @@ function confirmAction(title, message, key = null, onConfirm = null) {
         }).catch(() => {});
       }
       $("#confirmNeverShow").checked = false; resolve(wasAccepted);
+      acceptButton.textContent = t("dialog.confirm");
+      acceptButton.classList.add("danger");
+      if (neverShow) neverShow.hidden = false;
     };
     pendingConfirmationFinish = finish;
     $("#confirmAccept").addEventListener("click", accept, { once: true });

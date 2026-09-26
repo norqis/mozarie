@@ -235,6 +235,9 @@ test("manual output-directory commits lock every save entry point until the sett
       const nativeFetch = window.fetch;
       window.fetch = async (input, init = {}) => {
         const url = String(input?.url || input);
+        if (url === "/api/output-directory/status" && init.method === "POST") {
+          return new Response(JSON.stringify({ path: state.settings.saving.default_output_directory, state: "ready" }), { headers: { "Content-Type": "application/json" } });
+        }
         if (url === "/api/settings?status=0" && init.method === "POST") {
           if (window.__failManualOutputDirectoryCommit) return new Response(JSON.stringify({ error_code: "invalid_settings" }), { status: 400, headers: { "Content-Type": "application/json" } });
           const requestedDirectory = JSON.parse(init.body).saving.default_output_directory;

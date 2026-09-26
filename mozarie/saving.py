@@ -28,6 +28,36 @@ from .image_io import (
 from .masks import compose_masks, expand_mask, union_mask
 
 class SavingMixin:
+    def output_directory_status(self) -> dict[str, str]:
+        with self.lock:
+            path = Path(self.settings["saving"]["default_output_directory"])
+        try:
+            path.stat()
+        except FileNotFoundError:
+            return {"path": str(path), "state": "missing"}
+        except OSError:
+            return {"path": str(path), "state": "unusable"}
+        try:
+            validate_output_directory_ready(path)
+        except (SettingsError, OSError):
+            return {"path": str(path), "state": "unusable"}
+        return {"path": str(path), "state": "ready"}
+
+    def create_output_directory(self, expected_path: str) -> dict[str, str]:
+        with self.lock:
+            path = Path(self.settings["saving"]["default_output_directory"])
+            if expected_path != str(path):
+                raise ClientError("保存先が変更されました。保存をやり直してください。", "save_state_changed")
+        try:
+            path.mkdir(parents=True, exist_ok=True)
+            validate_output_directory_ready(path)
+        except (SettingsError, OSError) as exc:
+            raise ClientError("保存先フォルダを使用できません。設定で変更してください。", "output_folder_unavailable") from exc
+        with self.lock:
+            if expected_path != self.settings["saving"]["default_output_directory"]:
+                raise ClientError("保存先が変更されました。保存をやり直してください。", "save_state_changed")
+        return {"path": str(path), "state": "ready"}
+
     @staticmethod
     def _overwrite_destination(record: ImageRecord, output_format: str) -> Path:
         relative = output_relative_path(record)
