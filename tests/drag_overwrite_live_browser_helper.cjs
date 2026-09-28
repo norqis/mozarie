@@ -79,6 +79,8 @@ async function assertSaveButtonHitTarget(page, startId, pickerId) {
     assert.deepEqual(preSave, { relativePath: "drag-source.png", editedFilename: null, handleName: "drag-source.png",
       accessName: "drag-source.png", format: "original", mode: "overwrite" });
     await assertSaveButtonHitTarget(page, "singleSaveStartButton", "singleSaveChooseOutputDirectoryButton");
+    await page.setViewportSize({ width: 800, height: 600 });
+    await assertSaveButtonHitTarget(page, "singleSaveStartButton", "singleSaveChooseOutputDirectoryButton");
     await page.locator("#singleSaveStartButton").click();
     if (await page.locator("#confirmDialog").evaluate((dialog) => dialog.open)) await page.locator("#confirmAccept").click();
     await page.waitForFunction(() => !state.saving && !state.saveStarting && !document.querySelector("#confirmDialog").open);
@@ -94,6 +96,18 @@ async function assertSaveButtonHitTarget(page, startId, pickerId) {
     assert.equal(after.errorOpen, false);
     assert.notDeepEqual(after.bytes, before.bytes, "overwrite writes real source bytes");
     await page.locator("#singleSaveCloseButton").click();
+    await page.locator("#saveButton").click();
+    await page.waitForFunction(() => document.querySelector("#singleSaveDialog").open && !document.querySelector("#singleSaveStartButton").disabled);
+    await page.locator("#singleSaveOverwriteMode").check();
+    await page.locator("#singleSaveOutputFormat").selectOption("original");
+    await assertSaveButtonHitTarget(page, "singleSaveStartButton", "singleSaveChooseOutputDirectoryButton");
+    await page.locator("#singleSaveStartButton").focus();
+    await page.keyboard.press("Enter");
+    if (await page.locator("#confirmDialog").evaluate((dialog) => dialog.open)) await page.locator("#confirmAccept").click();
+    await page.waitForFunction(() => !state.saving && !state.saveStarting && !document.querySelector("#confirmDialog").open);
+    assert.equal(await page.evaluate(() => window.__pickerCalls), 0, "single Save activation by Enter needs no parent picker");
+    assert.equal(outputPickerRequests.length, 0, "single Save activation by Enter needs no Windows output folder picker");
+    await page.locator("#singleSaveCloseButton").click();
     await page.locator("#flipVerticalButton").click();
     await page.waitForFunction(() => state.images.find((image) => image.relativePath === "drag-source.png")?.flipV === true && !state.transformPending);
     await page.locator("#saveAllButton").click();
@@ -107,6 +121,18 @@ async function assertSaveButtonHitTarget(page, startId, pickerId) {
     assert.equal(await page.evaluate(() => window.__pickerCalls), 0, "batch overwrite with original format also needs no parent picker");
     assert.equal(outputPickerRequests.length, 0, "batch source overwrite never opens the Windows output folder picker");
     assert.equal(await page.locator("#errorDialog").evaluate((dialog) => dialog.open), false);
+    await page.locator("#applyCloseButton").click();
+    await page.locator("#saveAllButton").click();
+    await page.waitForFunction(() => document.querySelector("#applyDialog").open);
+    await page.locator("#applyOverwriteMode").check();
+    await page.locator("#applyOutputFormat").selectOption("original");
+    await assertSaveButtonHitTarget(page, "applyStartButton", "chooseOutputDirectoryButton");
+    await page.locator("#applyStartButton").focus();
+    await page.keyboard.press("Enter");
+    if (await page.locator("#confirmDialog").evaluate((dialog) => dialog.open)) await page.locator("#confirmAccept").click();
+    await page.waitForFunction(() => !state.saving && !state.saveStarting && !document.querySelector("#confirmDialog").open);
+    assert.equal(await page.evaluate(() => window.__pickerCalls), 0, "batch Save activation by Enter needs no parent picker");
+    assert.equal(outputPickerRequests.length, 0, "batch Save activation by Enter needs no Windows output folder picker");
     await page.locator("#applyCloseButton").click();
     await page.locator("#projectButton").click();
     await page.locator("#projectName").click();

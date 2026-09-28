@@ -70,7 +70,7 @@ node --test tests/test_verification_contracts.cjs
 
 ## 設定・ブラウザー取り込みの回帰境界
 
-`test_live_drag_handle_overwrites_original_without_parent_picker` は、実HTTP・Chromiumと隔離OPFS上のドラッグ元ファイルで、名前変更なし・元形式の単一／一括上書きを確認する。保存前の名前と形式、親フォルダー選択0回、Windows保存先フォルダー選択API要求0回、保存ボタンと保存先変更ボタンの非重複、書込権限要求1回、元ファイルの実バイト更新を照合する。明示的な名前変更をプロジェクトに保存して再読込した場合は、変更名が残り、親フォルダー選択が1回必要になることも確認する。
+`test_live_drag_handle_overwrites_original_without_parent_picker` は、実HTTP・Chromiumと隔離OPFS上のドラッグ元ファイルで、名前変更なし・元形式の単一／一括上書きを確認する。保存前の名前と形式、親フォルダー選択0回、Windows保存先フォルダー選択API要求0回、通常と800×600表示での保存ボタンと保存先変更ボタンの非重複、クリックとEnterキーでの保存、書込権限要求1回、元ファイルの実バイト更新を照合する。明示的な名前変更をプロジェクトに保存して再読込した場合は、変更名が残り、親フォルダー選択が1回必要になることも確認する。
 
 `tests/test_settings_import_regressions.py` と `tests/test_import_drop_contract.cjs` は、SD-011・013・018・149、WS-012・013・137へ対応する。消えた既定保存先と新しい未作成の絶対パスを保った設定保存、相対パス・NULの拒否、初期化、実保存時の拒否、File/handle両経路、端数ミリ秒、失敗後の再取り込みを検証する。実HTTP・SQLiteとChromiumを接続した試験で、設定保存・色許容範囲・全画像検出の要求・ファイル選択・ドロップ・パス入力を操作する。推論要求だけはGPU境界で応答を代替し、設定と取り込みのHTTPは代替しない。
 
