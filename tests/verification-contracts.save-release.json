@@ -122,7 +122,8 @@
       "observation": "実行ボタンが操作でき、指定画像だけを保存内容で置き換える。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > browser overwrite replaces only the selected source"
+        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > browser overwrite replaces only the selected source",
+        "python:tests.test_settings_import_regressions.SettingsImportRegressionTests.test_live_drag_handle_overwrites_original_without_parent_picker"
       ]
     },
     {
