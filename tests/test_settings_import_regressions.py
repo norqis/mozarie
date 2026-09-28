@@ -212,6 +212,16 @@ class SettingsImportRegressionTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, f"browser regression failed\n{result.stdout}\n{result.stderr}")
         print(result.stdout.strip())
 
+    def test_live_drag_handle_overwrites_original_without_parent_picker(self) -> None:
+        self.state.set_root(str(self.source))
+        result = subprocess.run(
+            ["node", str(Path(__file__).with_name("drag_overwrite_live_browser_helper.cjs")), self.origin],
+            cwd=Path(__file__).resolve().parents[1], env={**os.environ, "PYTHONUTF8": "1"},
+            text=True, encoding="utf-8", errors="replace", capture_output=True, timeout=120, check=False,
+        )
+        self.assertEqual(result.returncode, 0, f"browser drag overwrite failed\n{result.stdout}\n{result.stderr}")
+        print(result.stdout.strip())
+
 
 if __name__ == "__main__":
     unittest.main()
