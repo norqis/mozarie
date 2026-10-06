@@ -348,11 +348,12 @@
       "sourceIds": [
         "DI-016"
       ],
-      "observation": "非表示のE～Hは含めない",
+      "observation": "非表示のE～Hは含めない。一括保存ボタンは日本語で「全画像を一括保存」、英語で「Save all images」と表示し、日本語HTML初期表示も一致する",
       "status": "automated",
       "testIds": [
         "node:tests/gallery/test_gallery_save_filters_e2e.cjs::eight-image gallery and save filters preserve the complete truth table and target snapshot",
-        "node:tests/test_filters_and_fluid_e2e.cjs::batch save filters images with independent OR checkboxes and persists the selection"
+        "node:tests/test_filters_and_fluid_e2e.cjs::batch save filters images with independent OR checkboxes and persists the selection",
+        "python:tests.test_i18n_contract.TranslationContractTests.test_batch_save_label_covers_all_images_in_both_languages_and_html_fallback"
       ]
     },
     {

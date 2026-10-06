@@ -60,7 +60,7 @@
   "filters.selected": "絞り込み ({count})",
   "gallery.tabAll": "すべて",
   "gallery.tabMasked": "モザイクあり",
-  "gallery.saveAll": "モザイク画像を一括保存",
+  "gallery.saveAll": "全画像を一括保存",
   "gallery.candidates": "候補 {count}",
   "editor.aria": "モザイク編集",
   "editor.tools": "編集ツール",

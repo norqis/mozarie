@@ -1228,12 +1228,13 @@ class MozarieTests(unittest.TestCase):
             with patch.dict(http_module.os.environ, {"SystemRoot": str(root)}, clear=False), \
                  patch.object(http_module.subprocess, "Popen", return_value=process) as popen:
                 self.assertEqual(http_module._pick_output_directory(state, str(selected)), str(selected.resolve()))
+            popen.assert_called_once()
             picker_kwargs = popen.call_args.kwargs
             command = popen.call_args.args[0]
             script = base64.b64decode(command[-1]).decode("utf-16le")
             self.assertIn("NativeFolderPicker", script)
             self.assertIn("FOS_PICKFOLDERS", script)
-            self.assertIn("PickFolder($owner.Handle, $initial)", script)
+            self.assertIn("PickFolder([IntPtr]::Zero, $initial)", script)
             self.assertFalse(picker_kwargs["shell"])
             self.assertEqual(picker_kwargs["env"]["MOZARIE_OUTPUT_INITIAL_DIRECTORY"], str(selected.resolve()))
             self.assertTrue(state.native_picker_lock.acquire(blocking=False)); state.native_picker_lock.release()
@@ -1253,6 +1254,7 @@ class MozarieTests(unittest.TestCase):
                 self.assertIsNone(http_module._pick_output_directory(state, "relative-output"))
                 with self.assertRaises(ClientError) as raised:
                     http_module._pick_output_directory(state, str(root / "missing"))
+            self.assertEqual(popen.call_count, 2)
             self.assertNotIn("MOZARIE_OUTPUT_INITIAL_DIRECTORY", popen.call_args_list[0].kwargs["env"])
             self.assertNotIn("MOZARIE_OUTPUT_INITIAL_DIRECTORY", popen.call_args_list[1].kwargs["env"])
             self.assertEqual(raised.exception.error_code, "output_folder_unavailable")
