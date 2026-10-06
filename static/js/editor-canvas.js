@@ -54,11 +54,12 @@ function clearEditor() {
 async function selectImage(imageId, force = false, { saveCurrentDraft = true, preserveView = false } = {}) {
   if (state.projectOperationPending || isGestureActive()) return;
   if ((isBusy() || state.importing || state.candidateBatchPending.size) && !force) return;
-  if (state.currentId === imageId && !force && state.pendingImageId !== imageId) return;
+  if (state.currentId === imageId && !force && !state.pendingImageId) return;
   if (typeof closeCandidatePadding === "function") closeCandidatePadding();
-  if (saveCurrentDraft) void saveDraft();
   state.hover = null; updateBrushCursor();
   const generation = ++state.imageGeneration;
+  const catalogEpoch = state.catalogEpoch;
+  const outgoingId = state.currentId;
   state.pendingImageId = imageId;
   updateActionButtons();
   const record = state.images.find((image) => image.id === imageId);
@@ -74,11 +75,13 @@ async function selectImage(imageId, force = false, { saveCurrentDraft = true, pr
   const candidatesCached = state.candidateBundleCache.has(candidateCacheKey(imageId, Number(record.candidateRevision || 0)));
   if (!imageCached || !candidatesCached) { clearTimeout(state.loadingDelay); state.loadingDelay = null; }
   try {
+    if (saveCurrentDraft && outgoingId) await flushDraftSaves([outgoingId]);
+    if (!isCurrentGeneration(generation) || !isCurrentCatalogEpoch(catalogEpoch)) return;
     const [image, candidateBundle] = await Promise.all([
       cachedImage(record),
       loadCandidateBundle(imageId, generation),
     ]);
-    if (!isCurrentGeneration(generation)) {
+    if (!isCurrentGeneration(generation) || !isCurrentCatalogEpoch(catalogEpoch)) {
       if (!state.imageCache.has(imageCacheKey(record))) closeBitmap(image);
       if (!state.candidateBundleCache.has(candidateCacheKey(imageId, candidateBundle.candidateRevision))) releaseCandidateBitmapBundle(candidateBundle);
       return;
@@ -90,7 +93,7 @@ async function selectImage(imageId, force = false, { saveCurrentDraft = true, pr
     const draft = hasDraft ? state.drafts.get(imageId) : await loadWorkspaceDraft(imageId);
     const draftImages = await decodeDraftImages(draft);
     try {
-      if (!isCurrentGeneration(generation)) {
+      if (!isCurrentGeneration(generation) || !isCurrentCatalogEpoch(catalogEpoch)) {
         if (!state.imageCache.has(imageCacheKey(record))) closeBitmap(image);
         if (!state.candidateBundleCache.has(candidateCacheKey(imageId, candidateBundle.candidateRevision))) releaseCandidateBitmapBundle(candidateBundle);
         return;
@@ -133,7 +136,7 @@ async function selectImage(imageId, force = false, { saveCurrentDraft = true, pr
       releaseDraftImages(draftImages);
     }
   } catch (error) {
-    if (isCurrentGeneration(generation)) {
+    if (isCurrentGeneration(generation) && isCurrentCatalogEpoch(catalogEpoch)) {
       clearTimeout(state.loadingDelay); state.loadingDelay = null;
       state.pendingImageId = null; state.pendingImageKey = null; state.pendingCandidateKey = null;
       if (error.code === "stale_asset") invalidateStaleAsset(imageId);
@@ -473,6 +476,7 @@ async function decodeDraftImages(draft) {
 async function saveDraft(historyIndexOverride = null) {
   if (!state.currentId || !state.currentImage || !state.draftDirty) return;
   const imageId = state.currentId;
+  const catalogEpoch = state.catalogEpoch;
   const dirtyLayers = new Set(state.draftLayerDirty);
   const dirtyRois = Object.fromEntries([...(state.draftDirtyRois || [])]);
   const keepLocalHistory = !hasDurableHistory();
@@ -511,9 +515,13 @@ async function saveDraft(historyIndexOverride = null) {
       snapshots.push(Promise.resolve(canvasHasPixels(context, target) ? canvasToDataUrl(target) : "").then((value) => { encodedHistoryBase[layer] = value; }));
     }
   }
+  // Start observing encoder failures immediately, even while an earlier save
+  // owns this image's write chain.
+  const encodedLayers = Promise.all(snapshots);
+  encodedLayers.catch(() => {});
   const previousSave = state.draftSaveChains.get(imageId) || Promise.resolve();
   const save = previousSave.catch(() => {}).then(async () => {
-    await Promise.all(snapshots);
+    await encodedLayers;
     const previous = state.drafts.get(imageId) || {};
     const retained = { ...previous };
     if (!keepLocalHistory) { delete retained.history; delete retained.historyIndex; delete retained.historyBase; }
@@ -561,6 +569,13 @@ async function saveDraft(historyIndexOverride = null) {
       dirtyLayers: [...pendingLayers], dirtyRois: pendingRois,
     });
     void queueWorkspaceDraft(imageId);
+  }).catch((error) => {
+    if (state.currentId === imageId && isCurrentCatalogEpoch(catalogEpoch)) {
+      markDraftDirty(...dirtyLayers);
+      for (const [layer, roi] of Object.entries(dirtyRois)) markDraftDirtyRoi(layer, roi);
+      state.historyBaseDirty ||= historyBaseDirty;
+    }
+    throw error;
   });
   state.draftSaveChains.set(imageId, save);
   save.finally(() => { if (state.draftSaveChains.get(imageId) === save) state.draftSaveChains.delete(imageId); }).catch(() => {});

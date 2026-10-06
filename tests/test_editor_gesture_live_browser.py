@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import base64
+import io
 import os
 from pathlib import Path
 import shutil
@@ -106,6 +108,35 @@ class LiveEditorGestureBrowserTests(unittest.TestCase):
             self.assertEqual(output.getpixel((41, 30)), source.getpixel((41, 30)), "forced exclusion removes mosaic at its untouched point")
             self.assertNotEqual(output.getpixel((47, 30)), source.getpixel((47, 30)), "exclusion erase restores the underlying brush mosaic")
             self.assertNotEqual(output.getpixel((54, 30)), source.getpixel((54, 30)), "the real drag remains in the saved mosaic mask")
+
+    def _check_compact_draft_reload(self, named: bool) -> None:
+        shutil.copy2(self.source_path, self.source_dir / "other.png")
+        if not named:
+            self.state.close_project()
+        self.state.set_root(str(self.source_dir))
+        image_id = next(iter(self.state.images))
+        payload = {"candidateRevision": 0, "hasEffectiveMask": True}
+        for layer, x in (("add", 5), ("exclusion", 15), ("exclusionErase", 25)):
+            with Image.new("RGBA", (64, 48), (0, 0, 0, 0)) as mask, io.BytesIO() as output:
+                mask.paste((255, 255, 255, 255), (x - 1, 4, x + 2, 7))
+                mask.save(output, format="PNG")
+                payload[layer] = "data:image/png;base64," + base64.b64encode(output.getvalue()).decode("ascii")
+        self.state.save_manual_workspace(image_id, payload)
+        helper = Path(__file__).with_name("editor") / "draft_recovery_live_browser_helper.cjs"
+        result = subprocess.run(
+            ["node", str(helper), self.origin, "named" if named else "anonymous"],
+            cwd=Path(__file__).resolve().parents[1],
+            env={**os.environ, "PYTHONUTF8": "1"}, text=True, encoding="utf-8", errors="replace",
+            capture_output=True, timeout=60, check=False,
+        )
+        self.assertEqual(result.returncode, 0, f"draft recovery browser failed\n{result.stdout}\n{result.stderr}")
+        self.assertEqual(self.source_path.read_bytes(), self.source_bytes)
+
+    def test_anonymous_compact_draft_keeps_layers_through_edit_undo_redo_and_reload(self) -> None:
+        self._check_compact_draft_reload(named=False)
+
+    def test_named_compact_draft_keeps_layers_through_edit_undo_redo_and_reload(self) -> None:
+        self._check_compact_draft_reload(named=True)
 
 
 if __name__ == "__main__":
