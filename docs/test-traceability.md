@@ -138,3 +138,7 @@ ED-132.1・ED-132.2 の操作対象は、`test_ui_control_manifest.cjs` でHTML�
 | editorCanvas：実描画操作による各レイヤーの画素変化 | `test_editor_basic_tools_e2e.cjs::basic editor tools keep their pixel-layer contracts` |
 
 4要素は既存の専用試験への対応を`ui-control-manifest.cjs`へ記録し、通常実行とCIで各test IDの収集・実行・成功を照合する。manifest本体の検証IDは `static UI controls have complete executable interaction contracts` とし、ED-132の参照も同時に更新する。
+
+## ブラウザーcoverageの集約
+
+`test_test_discovery.cjs` は、実際に `startJSCoverage()` を呼ぶテストとCIのproducer一覧が完全に一致することを確認する。`test_coverage_js.cjs` は専用の一時ファイルで、初回作成、複数producerの追記による先行結果の保持、不正JSON・配列でない既存結果の拒否を確認する。下書き遷移とimport pickerの両writerは同じ追記処理を使い、coverage収集の失敗時もブラウザーとサーバーを閉じる。

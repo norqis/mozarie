@@ -27,6 +27,8 @@ assert.deepEqual(coverage.testFiles, frontend.frontendTestFiles(), "coverage run
 assert.deepEqual(frontendPerformanceTestFiles(), ["tests/test_gallery_performance_e2e.cjs", "tests/test_mosaic_drag_performance_e2e.cjs"], "gallery and 4K drag performance run together without coverage instrumentation");
 for (const file of frontendPerformanceTestFiles()) assert.equal(frontendTestFiles().includes(file), false, `${file} is excluded from coverage discovery`);
 assert.ok(browserCoverageTestFiles.length > 0, "browser coverage has an explicit producer inventory");
+const actualBrowserCoverageTestFiles = frontendTestFiles().filter((file) => /\.coverage\.startJSCoverage\s*\(/.test(fs.readFileSync(path.join(__dirname, "..", file), "utf8")));
+assert.deepEqual(browserCoverageTestFiles, actualBrowserCoverageTestFiles, "the producer inventory includes exactly every test that starts browser coverage");
 for (const file of browserCoverageTestFiles) {
   assert.ok(frontendTestFiles().includes(file), `${file} is included in coverage discovery`);
   assert.equal([0, 1].filter((index) => selectedFrontendTestFiles(frontendTestFiles(), index, 2).includes(file)).length, 1, `${file} is assigned to exactly one coverage shard`);

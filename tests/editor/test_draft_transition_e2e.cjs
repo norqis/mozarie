@@ -1,10 +1,9 @@
 "use strict";
 
 const assert = require("node:assert/strict");
-const fs = require("node:fs/promises");
 const test = require("node:test");
 const { chromium } = require("playwright");
-const { closeServer, startFixtureServer } = require("../test_import_picker_e2e.cjs");
+const { appendBrowserCoverage, closeServer, startFixtureServer } = require("../test_import_picker_e2e.cjs");
 
 async function withEditor(run, { seedAllLayers = false } = {}) {
   const fixture = await startFixtureServer();
@@ -41,10 +40,7 @@ async function withEditor(run, { seedAllLayers = false } = {}) {
     try {
       if (coverageStarted && process.env.MOZARIE_BROWSER_COVERAGE_FILE) {
         const entries = await page.coverage.stopJSCoverage();
-        let previous = [];
-        try { previous = JSON.parse(await fs.readFile(process.env.MOZARIE_BROWSER_COVERAGE_FILE, "utf8")); }
-        catch (error) { if (error.code !== "ENOENT") throw error; }
-        await fs.writeFile(process.env.MOZARIE_BROWSER_COVERAGE_FILE, JSON.stringify([...previous, ...entries]));
+        await appendBrowserCoverage(process.env.MOZARIE_BROWSER_COVERAGE_FILE, entries);
       }
     } finally {
       try { await context?.close(); }

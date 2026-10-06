@@ -68,7 +68,15 @@ async function stopCoveredPage(page, close = false) {
 async function writeBrowserCoverage() {
   if (!browserCoverage || !process.env.MOZARIE_BROWSER_COVERAGE_FILE) return;
   await Promise.all(browserCoverage.map(({ page }) => stopCoveredPage(page)));
-  await fs.writeFile(process.env.MOZARIE_BROWSER_COVERAGE_FILE, JSON.stringify(browserCoverage.flatMap(({ entries }) => entries || [])));
+  await appendBrowserCoverage(process.env.MOZARIE_BROWSER_COVERAGE_FILE, browserCoverage.flatMap(({ entries }) => entries || []));
+}
+
+async function appendBrowserCoverage(file, entries) {
+  let previous = [];
+  try { previous = JSON.parse(await fs.readFile(file, "utf8")); }
+  catch (error) { if (error.code !== "ENOENT") throw error; }
+  if (!Array.isArray(previous)) throw new Error("browser coverage output must be an array");
+  await fs.writeFile(file, JSON.stringify([...previous, ...entries]));
 }
 
 // Kept outside the browser fixture so the negative case is a real unit test:
@@ -5391,9 +5399,8 @@ async function main() {
     assert.deepEqual(pageErrors, [], `unexpected page errors: ${pageErrors.join("; ")}`);
     assert.deepEqual(consoleErrors.sort(), ["Failed to load resource: the server responded with a status of 400 (Bad Request)", "Failed to load resource: the server responded with a status of 500 (Internal Server Error)", "Failed to load resource: the server responded with a status of 500 (Internal Server Error)", "Failed to load resource: the server responded with a status of 503 (Service Unavailable)"].sort(), `unexpected console errors: ${consoleErrors.join("; ")}`);
   } finally {
-    await writeBrowserCoverage();
-    await browser?.close();
-    if (server) await closeServer(server);
+    try { await writeBrowserCoverage(); }
+    finally { await Promise.all([browser?.close(), server ? closeServer(server) : undefined]); }
   }
 }
 
@@ -5401,4 +5408,4 @@ if (require.main === module) {
   nodeTest("import picker browser coverage", { timeout: 150000 }, main);
 }
 
-module.exports = { closeServer, runCandidateBlinkScenario, runDynamicProjectAndShortcutScenario, startFixtureServer };
+module.exports = { appendBrowserCoverage, closeServer, runCandidateBlinkScenario, runDynamicProjectAndShortcutScenario, startFixtureServer };
