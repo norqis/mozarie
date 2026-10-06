@@ -231,7 +231,7 @@ def health_device(provider: str, gpu_device: int, gpus: list[dict[str, object]],
 
 
 def _run_native_picker(script: str, environment: dict[str, str], *, failed_message: str, busy_message: str, state: StudioState) -> str | None:
-    """Run one Windows picker, owned by an invisible topmost native window."""
+    """Run one Windows picker at a time and decode its selected path."""
     if not state.native_picker_lock.acquire(blocking=False):
         raise ClientError(busy_message, "model_picker_busy")
     try:
@@ -335,8 +335,6 @@ def _pick_output_directory(state: StudioState = STATE, current_path: str = "") -
             raise ClientError("処理中は保存先を変更できません。", "job_running")
     script = """
 $ErrorActionPreference = 'Stop'
-Add-Type -AssemblyName System.Windows.Forms
-Add-Type -AssemblyName System.Drawing
 Add-Type -TypeDefinition @"
 using System;
 using System.Runtime.InteropServices;
@@ -438,15 +436,10 @@ namespace Mozarie {
   }
 }
 "@
-$owner = New-Object System.Windows.Forms.Form
 try {
-  $owner.ShowInTaskbar = $false; $owner.Opacity = 0; $owner.TopMost = $true
-  $owner.StartPosition = [System.Windows.Forms.FormStartPosition]::CenterScreen
-  $owner.Size = New-Object System.Drawing.Size(1, 1)
-  $owner.Show(); $owner.Activate(); $owner.BringToFront()
   $initial = $env:MOZARIE_OUTPUT_INITIAL_DIRECTORY
   if (-not ($initial -and [System.IO.Directory]::Exists($initial))) { $initial = $null }
-  $selected = [Mozarie.NativeFolderPicker]::PickFolder($owner.Handle, $initial)
+  $selected = [Mozarie.NativeFolderPicker]::PickFolder([IntPtr]::Zero, $initial)
   if ($null -ne $selected) {
     $bytes = [System.Text.Encoding]::UTF8.GetBytes($selected)
     [Console]::Out.Write([Convert]::ToBase64String($bytes))
@@ -454,7 +447,7 @@ try {
 } catch {
   [Console]::Error.WriteLine($_.Exception.Message)
   exit 1
-} finally { $owner.Close(); $owner.Dispose() }
+}
 """
     environment = os.environ.copy()
     candidate = _picker_hint_path(current_path) if isinstance(current_path, str) else None

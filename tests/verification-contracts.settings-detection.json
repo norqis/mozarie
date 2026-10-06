@@ -2396,10 +2396,12 @@
       "sourceIds": [
         "SD-149"
       ],
-      "observation": "取消・失敗後も選択ボタンを再度使える",
+      "observation": "取消・失敗後も選択ボタンを再度使える。選択待ちにジョブ取得・ボタン更新・重複呼出しが重なっても要求は1回で設定欄の無効状態を保ち、各要求はプロセスを1回起動して成功・取消し・失敗後にロックを解放する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_settings_dialog_e2e.cjs::SD-149 output picker sends the absolute current path and remains reusable after cancel and failure"
+        "node:tests/test_settings_dialog_e2e.cjs::SD-149 output picker sends the absolute current path and remains reusable after cancel and failure",
+        "python:tests.test_server.MozarieTests.test_output_directory_picker_normalizes_existing_absolute_hint_and_releases_lock",
+        "python:tests.test_server.MozarieTests.test_output_directory_picker_cancellation_and_failure_release_lock"
       ]
     },
     {

@@ -90,6 +90,10 @@ node --test tests/test_verification_contracts.cjs
 
 ## 設定・ブラウザー取り込みの回帰境界
 
+保存先のWindowsフォルダー選択は `tests/test_native_folder_picker.py` で、透明な最前面の補助ウィンドウを作らず、所有ウィンドウなしのExplorer形式を1回呼ぶこと、フォルダー選択オプション、初期パス、取消し、結果取得の契約を確認する。製品のC#を実際にコンパイルし、COMの生成・オプション保持・初期フォルダー設定をダイアログ非表示で検証する。`tests.test_server.MozarieTests.test_output_directory_picker_normalizes_existing_absolute_hint_and_releases_lock` と `test_output_directory_picker_cancellation_and_failure_release_lock` は要求ごとのプロセス1回起動と成功・取消し・失敗後のロック解放を確認する。SD-149.2 のブラウザー試験はAPI応答を保留し、ジョブ取得・ボタン更新・重複呼出しでも要求が1回で設定欄の無効状態が続き、取消し後に再試行できることを確認する。OS所有ダイアログの点滅や前面表示は検証対象外であり、点滅の解消を自動検証済みとは扱わない。
+
+一括保存ボタンは `tests/gallery/test_gallery_save_filters_e2e.cjs` の8画像試験で、日本語の「全画像を一括保存」と英語の「Save all images」の実表示、モザイクの有無に関係なく非表示以外の全画像を初期対象とすること、保存側の絞り込みを確認する。`tests.test_i18n_contract.TranslationContractTests.test_batch_save_label_covers_all_images_in_both_languages_and_html_fallback` は日英辞書と日本語HTML初期表示の一致を確認する。
+
 `test_live_drag_handle_overwrites_original_without_parent_picker` は、実HTTP・Chromiumと隔離OPFS上のドラッグ元ファイルで、名前変更なし・元形式の単一／一括上書きを確認する。保存前の名前と形式、親フォルダー選択0回、Windows保存先フォルダー選択API要求0回、通常と800×600表示での保存ボタンと保存先変更ボタンの非重複、クリックとEnterキーでの保存、書込権限要求1回、元ファイルの実バイト更新を照合する。明示的な名前変更をプロジェクトに保存して再読込した場合は、変更名が残り、親フォルダー選択が1回必要になることも確認する。
 
 `tests/test_settings_import_regressions.py` と `tests/test_import_drop_contract.cjs` は、SD-011・013・018・149、WS-012・013・137へ対応する。消えた既定保存先と新しい未作成の絶対パスを保った設定保存、相対パス・NULの拒否、初期化、実保存時の拒否、File/handle両経路、端数ミリ秒、失敗後の再取り込みを検証する。実HTTP・SQLiteとChromiumを接続した試験で、設定保存・色許容範囲・全画像検出の要求・ファイル選択・ドロップ・パス入力を操作する。推論要求だけはGPU境界で応答を代替し、設定と取り込みのHTTPは代替しない。

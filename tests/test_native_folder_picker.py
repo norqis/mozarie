@@ -86,13 +86,15 @@ class NativeFolderPickerTests(unittest.TestCase):
         self.assertIn("ERROR_CANCELLED", script)
         self.assertIn("dialog.GetResult(out selected)", script)
         self.assertIn("selected.GetDisplayName(SIGDN_FILESYSPATH, out path)", script)
-        self.assertIn("[Mozarie.NativeFolderPicker]::PickFolder($owner.Handle, $initial)", script)
+        self.assertEqual(script.count("[Mozarie.NativeFolderPicker]::PickFolder([IntPtr]::Zero, $initial)"), 1)
+        for owner_api in ("System.Windows.Forms", "System.Drawing", "$owner", "Opacity", "TopMost", ".Activate()", ".BringToFront()"):
+            self.assertNotIn(owner_api, script)
         self.assertIn("exit 1", script)
 
     def test_compiled_product_interop_sets_folder_options_without_showing_a_dialog(self) -> None:
         script = output_picker_script()
         csharp_start = script.index('Add-Type -TypeDefinition @"') + len('Add-Type -TypeDefinition @"')
-        csharp_end = script.index('\n"@\n$owner', csharp_start)
+        csharp_end = script.index('\n"@', csharp_start)
         csharp = script[csharp_start:csharp_end]
         probe = f'''$ErrorActionPreference = 'Stop'
 Add-Type -TypeDefinition @"

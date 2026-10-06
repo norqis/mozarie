@@ -70,6 +70,17 @@ def placeholders(value: str) -> set[str]:
 
 
 class TranslationContractTests(unittest.TestCase):
+    def test_batch_save_label_covers_all_images_in_both_languages_and_html_fallback(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        expected = {"ja": "全画像を一括保存", "en": "Save all images"}
+        for language, label in expected.items():
+            dictionary = json.loads((root / "static" / "i18n" / f"{language}.json").read_text(encoding="utf-8"))
+            self.assertEqual(dictionary["gallery.saveAll"], label)
+        index = (root / "static" / "index.html").read_text(encoding="utf-8")
+        button = re.search(r'<button\b[^>]*\bid="saveAllButton"[^>]*>([^<]*)</button>', index)
+        self.assertIsNotNone(button)
+        self.assertEqual(button.group(1), expected["ja"])
+
     def test_candidate_tokens_and_locales_are_a_bidirectional_contract(self) -> None:
         root = Path(__file__).resolve().parents[1]
         expected = {

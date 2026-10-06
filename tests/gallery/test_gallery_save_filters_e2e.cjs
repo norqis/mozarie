@@ -45,6 +45,11 @@ test("eight-image gallery and save filters preserve the complete truth table and
     const page = await context.newPage();
     await page.goto(fixture.url, { waitUntil: "domcontentloaded" });
     await page.waitForFunction(() => state.images.length === 8 && document.querySelectorAll(".gallery-item").length === 8);
+    for (const [language, label] of [["en", "Save all images"], ["ja", "全画像を一括保存"]]) {
+      await page.evaluate((locale) => loadTranslations(locale), language);
+      assert.equal(await page.locator("#saveAllButton").innerText(), label);
+      assert.equal(await page.getByRole("button", { name: label, exact: true }).isVisible(), true);
+    }
 
     const galleryIds = () => page.evaluate(() => galleryFilteredImages().map((image) => image.id));
     assert.deepEqual(await galleryIds(), ["A", "B", "C", "D", "E", "F", "G", "H"], "no gallery filters displays all eight project images");

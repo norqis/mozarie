@@ -738,16 +738,39 @@ test("SD-149 output picker sends the absolute current path and remains reusable 
   await withSettingsPage(async (page) => {
     const requests = [];
     let attempt = 0;
+    let cancelFirstPicker;
+    const firstPickerPending = new Promise((resolve) => { cancelFirstPicker = resolve; });
     await page.route("**/api/output-directory/pick", async (route) => {
       requests.push(JSON.parse(route.request().postData()));
       attempt += 1;
-      if (attempt === 1) return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ cancelled: true }) });
+      if (attempt === 1) {
+        await firstPickerPending;
+        return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ cancelled: true }) });
+      }
       if (attempt === 2) return route.fulfill({ status: 500, contentType: "application/json", body: JSON.stringify({ error_code: "internal_error" }) });
       return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ path: "G:\\chosen-output", settings: { saving: { default_output_directory: "G:\\chosen-output" } } }) });
     });
     const initial = await page.locator("#settingsDefaultOutputDirectory").inputValue();
     assert.match(initial, /^(?:[A-Za-z]:\\|\\\\)/);
-    await page.locator("#settingsChooseOutputDirectory").click();
+    try {
+      const firstRequest = page.waitForRequest("**/api/output-directory/pick");
+      await page.locator("#settingsChooseOutputDirectory").click();
+      await firstRequest;
+      await page.evaluate(async () => {
+        window.pendingOutputPickerCalls = Promise.all([chooseSettingsOutputDirectory(), pickOutputDirectory()]);
+        await pollJob();
+        updateActionButtons();
+        await pollJob();
+        updateActionButtons();
+      });
+      assert.equal(requests.length, 1, "polling and concurrent callers keep one native picker request");
+      assert.equal(await page.evaluate(() => state.outputDirectoryPicking && document.querySelector("#settingsDialog").open), true);
+      assert.equal(await page.locator("#settingsForm button, #settingsForm input, #settingsForm select").evaluateAll((controls) => controls.every((control) => control.disabled)), true,
+        "settings remain locked for the entire native picker request");
+    } finally {
+      cancelFirstPicker();
+    }
+    await page.evaluate(async () => { await window.pendingOutputPickerCalls; delete window.pendingOutputPickerCalls; });
     await page.waitForFunction(() => !state.outputDirectoryPicking);
     assert.equal(await page.locator("#settingsChooseOutputDirectory").isEnabled(), true);
     await page.locator("#settingsChooseOutputDirectory").click();
