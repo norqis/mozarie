@@ -168,7 +168,8 @@
       "status": "automated",
       "testIds": [
         "node:tests/gallery/test_gallery_and_save_runtime.cjs::gallery and save interactions > single and batch save modal preferences and controls",
-        "node:tests/test_bulk_views_save_preferences_e2e.cjs::bulk displays and save preferences in Chromium"
+        "node:tests/test_bulk_views_save_preferences_e2e.cjs::bulk displays and save preferences in Chromium",
+        "node:tests/saving/test_bulk_save_capabilities.cjs::20k bulk save dialog and action locks keep capability lookup linear"
       ]
     },
     {
