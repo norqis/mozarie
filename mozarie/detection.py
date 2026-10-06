@@ -26,7 +26,7 @@ from .core import (
     torch_module, _read_detection_parallelism, _read_target_classes,
 )
 from .fluid import expand_white_fluid_mask, white_fluid_mask
-from .image_io import canonical_image
+from .image_io import canonical_image, read_scene_png_metadata
 from .runtime import runtime_backend
 from .runtime_types import DetectionModels
 
@@ -859,25 +859,27 @@ class DetectionMixin:
         # Decode is a short per-image phase. Do not hold the image
         # lock while detector/SAM inference runs.
         if default_padding is None:
-            default_padding = min(
-                int(self._active_detection_default_padding),
-                int(np.ceil(np.hypot(record.width - 1, record.height - 1))),
-            )
+            default_padding = int(self._active_detection_default_padding)
+        default_padding = min(
+            default_padding,
+            int(np.ceil(np.hypot(record.width - 1, record.height - 1))),
+        )
         if default_exclude_padding is None:
             default_exclude_padding = int(self._active_detection_default_exclude_padding)
         default_exclude_padding = min(
             default_exclude_padding,
             int(np.ceil(np.hypot(record.width - 1, record.height - 1))),
         )
-        with self.image_io_lock(record.image_id):
-            self._assert_record_stat_matches(record)
-            image, _source, info = canonical_image(record)
-            scene_fluid_tags = _scene_fluid_tags(info)
-            rgb, alpha = _inference_pixels(image)
         if fluid_exclusion_enabled is None:
             fluid_exclusion_enabled = bool(self.settings["detection"]["fluid_exclusion_enabled"])
-        if not fluid_exclusion_enabled:
-            scene_fluid_tags = frozenset()
+        with self.image_io_lock(record.image_id):
+            self._assert_record_stat_matches(record)
+            image, source, info = canonical_image(record)
+            scene_fluid_tags = (
+                _scene_fluid_tags({**info, **read_scene_png_metadata(source)})
+                if fluid_exclusion_enabled else frozenset()
+            )
+            rgb, alpha = _inference_pixels(image)
         segments = self._detect_arbitrated_segments(models, rgb, confidence, target_classes or TARGET_CLASSES, scene_fluid_tags)
         _clip_detection_masks_to_alpha(segments, alpha)
         detected, hand_mask, _ = self._hand_refinement_context(models, record, rgb, segments)
@@ -903,76 +905,89 @@ class DetectionMixin:
         candidates: list[Candidate] = []
         destination = self.cache_dir / record.image_id
         destination.mkdir(parents=True, exist_ok=True)
-        for segment in segments:
-            for exclusion_kind, exclusion_mask in dict(segment.get("image_exclusions", {})).items():
-                if not np.any(exclusion_mask):
+        temporary_paths: list[Path] = []
+        try:
+            for segment in segments:
+                for exclusion_kind, exclusion_mask in dict(segment.get("image_exclusions", {})).items():
+                    if not np.any(exclusion_mask):
+                        continue
+                    exclusion_id = uuid.uuid4().hex
+                    exclusion_path = destination / f".mozarie-pending-{exclusion_id}.tmp"
+                    temporary_paths.append(exclusion_path)
+                    _save_binary_mask(exclusion_mask, exclusion_path)
+                    candidates.append(Candidate(
+                        candidate_id=exclusion_id,
+                        label_token=exclusion_kind,
+                        confidence=None,
+                        mask_path=exclusion_path,
+                        color="#4ac3df",
+                        source=f"{exclusion_kind}_exclusion",
+                        origin="auto",
+                        role=CandidateRole.EXCLUDE,
+                        forced=self.settings["detection"].get("exclude_forced_default", True),
+                        expand_px=default_exclude_padding,
+                    ))
+                for exclusion_kind, exclusion_mask in dict(segment.get("metadata_exclusions", {})).items():
+                    exclusion_id = uuid.uuid4().hex
+                    exclusion_path = destination / f".mozarie-pending-{exclusion_id}.tmp"
+                    temporary_paths.append(exclusion_path)
+                    _save_binary_mask(exclusion_mask, exclusion_path)
+                    candidates.append(Candidate(
+                        candidate_id=exclusion_id, label_token=exclusion_kind, confidence=None,
+                        mask_path=exclusion_path, color="#4ac3df", source=f"{exclusion_kind}_exclusion",
+                        origin="auto", role=CandidateRole.EXCLUDE, enabled=True, forced=False,
+                        expand_px=default_exclude_padding,
+                    ))
+                if segment["class_name"] not in DETECTED_TARGET_CLASSES:
                     continue
-                exclusion_id = uuid.uuid4().hex
-                exclusion_path = destination / f".mozarie-pending-{exclusion_id}.tmp"
-                _save_binary_mask(exclusion_mask, exclusion_path)
-                candidates.append(Candidate(
-                    candidate_id=exclusion_id,
-                    label_token=exclusion_kind,
-                    confidence=None,
-                    mask_path=exclusion_path,
-                    color="#4ac3df",
-                    source=f"{exclusion_kind}_exclusion",
-                    origin="auto",
-                    role=CandidateRole.EXCLUDE,
-                    forced=self.settings["detection"].get("exclude_forced_default", True),
-                    expand_px=default_exclude_padding,
-                ))
-            for exclusion_kind, exclusion_mask in dict(segment.get("metadata_exclusions", {})).items():
-                exclusion_id = uuid.uuid4().hex
-                exclusion_path = destination / f".mozarie-pending-{exclusion_id}.tmp"
-                _save_binary_mask(exclusion_mask, exclusion_path)
-                candidates.append(Candidate(
-                    candidate_id=exclusion_id, label_token=exclusion_kind, confidence=None,
-                    mask_path=exclusion_path, color="#4ac3df", source=f"{exclusion_kind}_exclusion",
-                    origin="auto", role=CandidateRole.EXCLUDE, enabled=True, forced=False,
-                    expand_px=default_exclude_padding,
-                ))
-            if segment["class_name"] not in DETECTED_TARGET_CLASSES:
-                continue
-            apply_mask = np.asarray(segment["mask"]).copy()
-            # Keep the detector/SAM mask intact.  Hands and fluid are separate
-            # exclusion candidates, so their checkbox can genuinely restore the
-            # underlying target mask when turned off.
-            candidate_id = uuid.uuid4().hex
-            mask_path = destination / f".mozarie-pending-{candidate_id}.tmp"
-            _save_binary_mask(apply_mask, mask_path)
-            candidates.append(
-                Candidate(
-                    candidate_id=candidate_id,
-                    label_token=segment["class_name"],
-                    confidence=segment["confidence"],
-                    mask_path=mask_path,
-                    color=DEFAULT_COLORS.get(segment["class_name"], "#5bb6d5"),
-                    source=segment["source"],
-                    refinement=segment.get("refinement"),
-                    expand_px=default_padding,
+                apply_mask = np.asarray(segment["mask"]).copy()
+                # Keep the detector/SAM mask intact.  Hands and fluid are separate
+                # exclusion candidates, so their checkbox can genuinely restore the
+                # underlying target mask when turned off.
+                candidate_id = uuid.uuid4().hex
+                mask_path = destination / f".mozarie-pending-{candidate_id}.tmp"
+                temporary_paths.append(mask_path)
+                _save_binary_mask(apply_mask, mask_path)
+                candidates.append(
+                    Candidate(
+                        candidate_id=candidate_id,
+                        label_token=segment["class_name"],
+                        confidence=segment["confidence"],
+                        mask_path=mask_path,
+                        color=DEFAULT_COLORS.get(segment["class_name"], "#5bb6d5"),
+                        source=segment["source"],
+                        refinement=segment.get("refinement"),
+                        expand_px=default_padding,
+                    )
                 )
-            )
-            for exclusion_kind, exclusion_mask in dict(segment.get("exclusions", {})).items():
-                if not np.any(exclusion_mask):
-                    continue
-                exclusion_source = f"{exclusion_kind}_exclusion"
-                exclusion_id = uuid.uuid4().hex
-                exclusion_path = destination / f".mozarie-pending-{exclusion_id}.tmp"
-                _save_binary_mask(exclusion_mask, exclusion_path)
-                candidates.append(Candidate(
-                    candidate_id=exclusion_id,
-                    label_token=exclusion_kind,
-                    confidence=None,
-                    mask_path=exclusion_path,
-                    color="#4ac3df",
-                    source=exclusion_source,
-                    origin="auto",
-                    role=CandidateRole.EXCLUDE,
-                    enabled=True,
-                    forced=self.settings["detection"].get("exclude_forced_default", True),
-                    expand_px=default_exclude_padding,
-                ))
+                for exclusion_kind, exclusion_mask in dict(segment.get("exclusions", {})).items():
+                    if not np.any(exclusion_mask):
+                        continue
+                    exclusion_source = f"{exclusion_kind}_exclusion"
+                    exclusion_id = uuid.uuid4().hex
+                    exclusion_path = destination / f".mozarie-pending-{exclusion_id}.tmp"
+                    temporary_paths.append(exclusion_path)
+                    _save_binary_mask(exclusion_mask, exclusion_path)
+                    candidates.append(Candidate(
+                        candidate_id=exclusion_id,
+                        label_token=exclusion_kind,
+                        confidence=None,
+                        mask_path=exclusion_path,
+                        color="#4ac3df",
+                        source=exclusion_source,
+                        origin="auto",
+                        role=CandidateRole.EXCLUDE,
+                        enabled=True,
+                        forced=self.settings["detection"].get("exclude_forced_default", True),
+                        expand_px=default_exclude_padding,
+                    ))
+        except Exception:
+            for path in temporary_paths:
+                try:
+                    path.unlink(missing_ok=True)
+                except OSError as cleanup_exc:
+                    LOGGER.warning("Could not remove failed detection mask %s: %s", path, cleanup_exc)
+            raise
         return candidates
 
     def add_boundary_candidate(self, image_id: str, payload: dict[str, Any], *, _gate_held: bool = False) -> dict[str, Any]:
@@ -1120,8 +1135,8 @@ class DetectionMixin:
                 for item, candidate_mask in zip(created, masks):
                     temporary = item.mask_path.with_name(f".mozarie-pending-{item.candidate_id}.tmp")
                     item.mask_path.parent.mkdir(parents=True, exist_ok=True)
-                    _save_binary_mask(candidate_mask, temporary)
                     temporary_paths.append(temporary)
+                    _save_binary_mask(candidate_mask, temporary)
                 with self.image_io_lock(image_id):
                     self._assert_record_stat_matches(record)
                     with self.lock:

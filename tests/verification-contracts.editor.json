@@ -1677,7 +1677,13 @@
       "observation": "無名作業で手描き、塗りつぶし、候補ON/OFF・強制・枠・削除、役割別一括操作、境界候補、反転を各1回実行し、ボタンとCtrl+Z/Ctrl+Shift+Zで戻す → 別画像へ混ざらず、再読み込み後も履歴基底と候補状態を復元する",
       "status": "automated",
       "testIds": [
-        "python:tests.test_workspace.WorkspaceTests.test_anonymous_editor_state_reopens_without_mixing_other_image"
+        "python:tests.test_workspace.WorkspaceTests.test_anonymous_editor_state_reopens_without_mixing_other_image",
+        "node:tests/editor/test_draft_transition_e2e.cjs::image transition waits for an already encoding draft and restores pixels and history",
+        "node:tests/editor/test_draft_transition_e2e.cjs::returning to the current image supersedes a pending image selection",
+        "node:tests/editor/test_draft_transition_e2e.cjs::failed draft encoding retains every dirty layer ROI and history base for retry",
+        "node:tests/editor/test_draft_transition_e2e.cjs::failed outgoing encoding cancels the latest transition without clearing its canvas",
+        "node:tests/editor/test_draft_transition_e2e.cjs::compact server layers become the base of local undo instead of an empty history",
+        "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_anonymous_compact_draft_keeps_layers_through_edit_undo_redo_and_reload"
       ]
     },
     {
@@ -1690,6 +1696,7 @@
       "testIds": [
         "python:tests.test_workspace.WorkspaceTests.test_candidate_history_references_existing_png_and_restores_metadata",
         "python:tests.test_workspace.WorkspaceTests.test_named_project_manual_layers_restore_only_the_latest_local_pixels_after_reopen",
+        "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_named_compact_draft_keeps_layers_through_edit_undo_redo_and_reload",
         "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_real_gestures_persist_history_reopen_and_render_only_the_effective_mask"
       ]
     },
@@ -1973,7 +1980,7 @@
       "testIds": [
         "node:tests/test_import_picker_e2e.cjs::import picker browser coverage",
         "node:tests/test_project_ui_runtime.cjs::project entry controls open and close their intended dialogs",
-        "node:tests/test_ui_control_manifest.cjs::<file>"
+        "node:tests/test_ui_control_manifest.cjs::static UI controls have complete executable interaction contracts"
       ]
     },
     {
@@ -1985,7 +1992,7 @@
       "status": "automated",
       "testIds": [
         "node:tests/test_import_picker_e2e.cjs::import picker browser coverage",
-        "node:tests/test_ui_control_manifest.cjs::<file>"
+        "node:tests/test_ui_control_manifest.cjs::static UI controls have complete executable interaction contracts"
       ]
     },
     {

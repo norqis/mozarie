@@ -1230,6 +1230,11 @@ class UpdaterTests(unittest.TestCase):
         self.assertIn("onnx>=1.12,<2", cpu)
         self.assertIn("ultralytics==8.4.75", cpu)
 
+        for profile in ("requirements.txt", "requirements-test.txt", "mozarie/requirements-cpu.txt", "mozarie/requirements-directml.txt"):
+            with self.subTest(profile=profile):
+                lines = (Path(__file__).parents[1] / profile).read_text(encoding="utf-8").splitlines()
+                self.assertEqual([line for line in lines if line.lower().startswith("pillow")], ["Pillow>=12.3,<13"])
+
     def test_setup_and_run_select_only_supported_64_bit_launchers(self):
         expected_loop = "for %%V in (3.14-64 3.13-64 3.12-64 3.11-64) do ("
         setup = (Path(__file__).parents[1] / "setup.bat").read_text(encoding="utf-8")

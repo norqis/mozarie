@@ -495,14 +495,15 @@ function draftSaveEntries(imageIds = null) {
 
 async function flushDraftSaves(imageIds = null) {
   const wanted = imageIds == null ? null : new Set(imageIds);
-  if (state.currentId && state.draftDirty && (!wanted || wanted.has(state.currentId))) await saveDraft();
   while (true) {
+    if (state.currentId && state.draftDirty && (!wanted || wanted.has(state.currentId))) await saveDraft();
     const chains = draftSaveEntries(imageIds);
     const results = await Promise.allSettled(chains.map(([, chain]) => chain));
     const failed = results.find((result) => result.status === "rejected");
     if (failed) throw failed.reason;
     const current = draftSaveEntries(imageIds);
-    if (current.length === chains.length && current.every(([imageId, chain]) => chains.some(([knownId, known]) => knownId === imageId && known === chain))) return;
+    if (current.length === chains.length && current.every(([imageId, chain]) => chains.some(([knownId, known]) => knownId === imageId && known === chain))
+      && !(state.currentId && state.draftDirty && (!wanted || wanted.has(state.currentId)))) return;
   }
 }
 
@@ -563,11 +564,9 @@ async function flushAllWorkspaceMutations() {
 
 async function loadWorkspaceDraft(imageId) {
   const data = await api(`/api/workspace/manual/${encodeURIComponent(imageId)}`);
-  const draft = data.draft;
-  if (!draft) return null;
-  // Project undo is restored by the durable history endpoint. Keeping a
-  // second operation log inside every draft duplicates PNG payloads.
-  return { ...draft, history: [], historyIndex: 0, historyBase: {} };
+  // A compact server draft has no local operation log. Restore its PNGs as
+  // the history base; fabricating an empty log would rebuild empty layers.
+  return data.draft || null;
 }
 
 function scheduleManualWorkspaceSave() {
@@ -575,7 +574,7 @@ function scheduleManualWorkspaceSave() {
   if (!imageId) return Promise.resolve();
   const previous = state.draftSaveChains.get(imageId) || Promise.resolve();
   const next = previous.then(() => new Promise((resolve, reject) => setTimeout(() => {
-    try { saveDraft(); resolve(); } catch (error) { reject(error); }
+    try { void saveDraft().catch(showUserError); resolve(); } catch (error) { reject(error); }
   }, 0)));
   state.draftSaveChains.set(imageId, next);
   next.finally(() => { if (state.draftSaveChains.get(imageId) === next) state.draftSaveChains.delete(imageId); }).catch(() => {});

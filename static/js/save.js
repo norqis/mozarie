@@ -188,8 +188,9 @@ function sourceCanDelete(image) {
   return Boolean(access?.fileHandle);
 }
 function applyTargetsSupport(capability, format = "original") {
+  const imagesById = new Map(state.images.map((image) => [image.id, image]));
   return state.applyTargetIds.every((imageId) => {
-    const image = state.images.find((entry) => entry.id === imageId);
+    const image = imagesById.get(imageId);
     return capability === "overwrite" ? sourceCanOverwrite(image, format) : sourceCanDelete(image);
   });
 }

@@ -168,7 +168,8 @@
       "status": "automated",
       "testIds": [
         "node:tests/gallery/test_gallery_and_save_runtime.cjs::gallery and save interactions > single and batch save modal preferences and controls",
-        "node:tests/test_bulk_views_save_preferences_e2e.cjs::bulk displays and save preferences in Chromium"
+        "node:tests/test_bulk_views_save_preferences_e2e.cjs::bulk displays and save preferences in Chromium",
+        "node:tests/saving/test_bulk_save_capabilities.cjs::20k bulk save dialog and action locks keep capability lookup linear"
       ]
     },
     {
@@ -1258,7 +1259,11 @@
       "testIds": [
         "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > partial streamed output is aborted and removed",
         "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > browser copy render failure cancels its reservation",
-        "python:tests.test_server.MozarieTests.test_browser_copy_render_keeps_source_and_candidates_when_output_sync_fails"
+        "python:tests.test_server.MozarieTests.test_browser_copy_render_keeps_source_and_candidates_when_output_sync_fails",
+        "python:tests.saving.test_apply_staging_failures.ApplyStagingFailureTests.test_fsync_failure_releases_stage_and_allows_retry",
+        "python:tests.saving.test_apply_staging_failures.ApplyStagingFailureTests.test_stage_directory_failure_releases_reservation_and_allows_retry",
+        "python:tests.saving.test_apply_staging_failures.ApplyStagingFailureTests.test_output_directory_failure_releases_reservation_and_allows_retry",
+        "python:tests.saving.test_apply_staging_failures.ApplyStagingFailureTests.test_stage_creation_failure_releases_reservation_and_allows_retry"
       ]
     },
     {
@@ -1515,7 +1520,9 @@
       "status": "automated",
       "testIds": [
         "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > reserve journal failure is visible and starts no output",
-        "python:tests.test_server.MozarieTests.test_browser_save_reserve_failure_releases_the_output_name"
+        "python:tests.test_server.MozarieTests.test_browser_save_reserve_failure_releases_the_output_name",
+        "python:tests.saving.test_apply_staging_failures.ApplyStagingFailureTests.test_journal_reserve_failure_releases_stage_and_allows_retry",
+        "python:tests.saving.test_apply_staging_failures.ApplyStagingFailureTests.test_journal_stage_failure_cleans_registered_stage_and_allows_retry"
       ]
     },
     {

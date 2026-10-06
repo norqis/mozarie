@@ -121,7 +121,7 @@ class DataIntegrity051070Tests(unittest.TestCase):
                 return None
             with Image.open(io.BytesIO(base64.b64decode(value))) as image:
                 alpha = image.getchannel("A") if image.mode in {"RGBA", "LA"} else image.convert("L")
-                return alpha.size, tuple(index for index, pixel in enumerate(alpha.getdata()) if pixel)
+                return alpha.size, tuple(index for index, pixel in enumerate(alpha.get_flattened_data()) if pixel)
 
         candidates = tuple(sorted(
             (

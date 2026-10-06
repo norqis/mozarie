@@ -42,6 +42,7 @@ nodeTest("workspace runtime contracts", async () => {
   const originalApiForRestore = context.api;
   context.api = async () => ({ draft: { add: "data:image/png;base64,durable", hasEffectiveMask: true } });
   assert.equal((await context.workspaceTest.loadWorkspaceDraft("one")).add, "data:image/png;base64,durable", "revisiting an evicted project draft reloads its durable payload");
+  assert.deepEqual(Object.keys(await context.workspaceTest.loadWorkspaceDraft("one")).sort(), ["add", "hasEffectiveMask"], "a compact server draft does not fabricate an empty local history or history base");
   context.api = originalApiForRestore;
   state.project = null;
   state.drafts.set("one", durableDraft); state.maskStatus.set("one", true);
@@ -178,7 +179,7 @@ nodeTest("workspace runtime contracts", async () => {
   assert.equal(await context.workspaceTest.scheduleManualWorkspaceSave(), undefined, "no current image has no scheduled encoder");
   state.currentId = "one";
   let saved = 0;
-  context.saveDraft = () => { saved += 1; };
+  context.saveDraft = async () => { saved += 1; };
   await context.workspaceTest.scheduleManualWorkspaceSave();
   assert.equal(saved, 1, "the current manual edit is encoded on the next task");
   context.saveDraft = () => { throw new Error("encode synchronously failed"); };

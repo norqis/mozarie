@@ -1,5 +1,5 @@
 numpy>=1.26,<3
-Pillow>=11.3,<12
+Pillow>=12.3,<13
 opencv-python>=4.8,<5
 onnx>=1.12,<2
 onnxruntime-gpu==1.27.0

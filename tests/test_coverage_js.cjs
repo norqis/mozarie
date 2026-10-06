@@ -4,6 +4,7 @@ const os = require("node:os");
 const path = require("node:path");
 const nodeTest = require("node:test");
 const { browserCoverageMap, mergeFrontendShardCoverage } = require("../scripts/coverage-js.cjs");
+const { appendBrowserCoverage } = require("./test_import_picker_e2e.cjs");
 
 const appPath = path.join(__dirname, "..", "static", "js", "app.js");
 const source = fs.readFileSync(appPath, "utf8");
@@ -22,6 +23,35 @@ function fileCoverage(file, hits) {
     },
   };
 }
+
+nodeTest("browser coverage writers retain entries from sequential producers", async () => {
+  const temporaryRoot = fs.mkdtempSync(path.join(os.tmpdir(), "mozarie-coverage-append-"));
+  try {
+    const file = path.join(temporaryRoot, "browser-v8.json");
+    const firstEntry = { url: "http://127.0.0.1:8188/js/draft.js", source: "", functions: [] };
+    await appendBrowserCoverage(file, [firstEntry]);
+    assert.deepEqual(JSON.parse(fs.readFileSync(file, "utf8")), [firstEntry], "the first producer creates its report");
+    const secondEntry = { ...firstEntry, url: "http://127.0.0.1:8288/js/import.js" };
+    await appendBrowserCoverage(file, [secondEntry]);
+    assert.deepEqual(JSON.parse(fs.readFileSync(file, "utf8")), [firstEntry, secondEntry], "the next producer retains the first producer's V8 entries");
+  } finally {
+    fs.rmSync(temporaryRoot, { recursive: true, force: true });
+  }
+});
+
+nodeTest("browser coverage writers reject corrupt and non-array reports without replacing them", async () => {
+  const temporaryRoot = fs.mkdtempSync(path.join(os.tmpdir(), "mozarie-coverage-corrupt-"));
+  try {
+    const file = path.join(temporaryRoot, "browser-v8.json");
+    for (const contents of ["{", "{}", "null", "42", '"report"']) {
+      fs.writeFileSync(file, contents);
+      await assert.rejects(appendBrowserCoverage(file, [validEntry]), (error) => error instanceof SyntaxError || /must be an array/.test(error.message));
+      assert.equal(fs.readFileSync(file, "utf8"), contents, "invalid earlier output is preserved for diagnosis");
+    }
+  } finally {
+    fs.rmSync(temporaryRoot, { recursive: true, force: true });
+  }
+});
 
 nodeTest("browser coverage map contracts", async () => {
   await Promise.all([

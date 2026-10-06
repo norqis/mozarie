@@ -284,7 +284,7 @@ test("direct editor boundary and gesture observations", { timeout: 150000 }, asy
           const mask = document.createElement("canvas"); mask.width = mask.height = 240; mask.getContext("2d").fillRect(180, 180, 4, 4);
           state.candidateImages = new Map(state.candidates.map((candidate) => [candidate.id, mask])); state.removedCandidateIds = new Set(); resetHistoryToCurrentManualMask();
           state.settings.shortcuts.bindings.undo = "Ctrl+Z"; state.settings.shortcuts.bindings.redo = "Ctrl+Shift+Z";
-          queueImageMutation = async (_imageId, send) => send(); saveDraft = async () => {}; flushWorkspaceDraft = async () => {};
+          queueImageMutation = async (_imageId, send) => send(); flushWorkspaceDraft = async () => {};
           syncProjectlessCandidateHistory = async () => true;
           refreshCandidateBitmap = async () => true;
           api = async (path) => path.endsWith("/transform") ? { image: { ...currentRecord() } } : { candidateRevision: Number(currentRecord().candidateRevision || 0) + 1 };
@@ -339,7 +339,7 @@ test("direct editor boundary and gesture observations", { timeout: 150000 }, asy
           state.candidateImages = new Map([["apply", mask], ["exclude", mask]]); state.removedCandidateIds = new Set(); resetHistoryToCurrentManualMask();
           state.settings.shortcuts.bindings.undo = "Ctrl+Z"; state.settings.shortcuts.bindings.redo = "Ctrl+Shift+Z";
           api = async () => ({ candidateRevision: Number(currentRecord().candidateRevision || 0) + 1 }); refreshCandidateBitmap = async () => true;
-          saveDraft = async () => {}; flushWorkspaceDraft = async () => {}; renderCandidates(); render();
+          flushWorkspaceDraft = async () => {}; renderCandidates(); render();
         });
         if (scenario === "toggle") await page.locator('[data-candidate-blink-id="apply"] .candidate-toggle').click();
         if (scenario === "forced") await page.locator('[data-candidate-blink-id="exclude"] .candidate-forced').click();
@@ -488,7 +488,6 @@ test("direct editor boundary and gesture observations", { timeout: 150000 }, asy
         };
         refreshCandidateBitmap = async () => true;
         queueImageMutation = async (_imageId, send) => send();
-        saveDraft = async () => {};
         flushWorkspaceDraft = async () => {};
       });
       for (const [index, region] of [[0, [100, 100, 300, 300]], [1, [800, 800, 1000, 1000]], [2, [1500, 1500, 1700, 1700]]]) {

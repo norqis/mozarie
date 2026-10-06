@@ -85,6 +85,49 @@ def _png_chunk(chunk_type: bytes, payload: bytes) -> bytes:
     return len(payload).to_bytes(4, "big") + body + (zlib.crc32(body) & 0xFFFFFFFF).to_bytes(4, "big")
 
 
+def read_scene_png_metadata(raw: bytes) -> dict[str, str]:
+    """Read only Scene text from decoded source bytes, leaving other chunks untouched."""
+    metadata: dict[str, str] = {}
+    if not raw.startswith(PNG_SIGNATURE):
+        return metadata
+    position = len(PNG_SIGNATURE)
+    while position + 12 <= len(raw):
+        length = int.from_bytes(raw[position:position + 4], "big")
+        chunk_type = raw[position + 4:position + 8]
+        start = position + 8
+        end = start + length
+        position = end + 4
+        if position > len(raw):
+            break
+        if chunk_type not in {b"tEXt", b"zTXt", b"iTXt"}:
+            continue
+        separator = raw.find(b"\0", start, end)
+        if separator < 0:
+            continue
+        key = raw[start:separator]
+        if key not in {b"scene_positive", b"scene_info"}:
+            continue
+        text = raw[separator + 1:end]
+        try:
+            if chunk_type == b"zTXt":
+                if not text or text[0] != 0:
+                    continue
+                text = zlib.decompress(text[1:])
+            elif chunk_type == b"iTXt":
+                flag, method = text[:2]
+                if flag not in {0, 1} or method != 0:
+                    continue
+                _language, _translated_key, text = text[2:].split(b"\0", 2)
+                if flag:
+                    text = zlib.decompress(text)
+            value = text.decode("utf-8" if chunk_type == b"iTXt" else "latin-1")
+        except (ValueError, zlib.error):
+            # Optional malformed text must not erase an earlier valid value.
+            continue
+        metadata[key.decode("ascii")] = value
+    return metadata
+
+
 def _normalized_exif_bytes(source: bytes) -> bytes:
     suffix = ".png" if source.startswith(PNG_SIGNATURE) else ".jpg"
     try:

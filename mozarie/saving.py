@@ -1123,26 +1123,24 @@ class SavingMixin:
                             record, suffix, output_directory, output_format, preserve_directory_structure,
                         ) if copy_to_default else record.path
                     )
-                    if copy_to_default:
-                        output_path.parent.mkdir(parents=True, exist_ok=True)
-                    rendered_dir = (output_path.parent / ".mozarie-staging") if copy_to_default else (self.cache_dir / "apply-render")
-                    rendered_dir.mkdir(parents=True, exist_ok=True)
                     stage_path: Path | None = None
+                    journal_reserved = False
+                    workspace_committed = False
                     try:
+                        if copy_to_default:
+                            output_path.parent.mkdir(parents=True, exist_ok=True)
+                        rendered_dir = (output_path.parent / ".mozarie-staging") if copy_to_default else (self.cache_dir / "apply-render")
+                        rendered_dir.mkdir(parents=True, exist_ok=True)
                         with tempfile.NamedTemporaryFile(dir=rendered_dir, suffix=output_suffix, delete=False) as handle:
                             stage_path = Path(handle.name); handle.write(output); handle.flush(); os.fsync(handle.fileno())
-                    except OSError:
-                        if stage_path is not None:
-                            stage_path.unlink(missing_ok=True)
-                            SaveJournal._cleanup_staging_parent(stage_path)
-                        raise
-                    assert stage_path is not None
-                    save_token = f"apply-{uuid.uuid4().hex}"
-                    stage_stat = stage_path.stat()
-                    self.save_journal.reserve(save_token, record.image_id, record.asset_revision, output_path if copy_to_default else None, stage_path)
-                    self.save_journal.update_stage(save_token, stage_path, (stage_stat.st_mtime_ns, stage_stat.st_size))
-                    if copy_to_default:
-                        try:
+                        assert stage_path is not None
+                        save_token = f"apply-{uuid.uuid4().hex}"
+                        stage_stat = stage_path.stat()
+                        self.save_journal.reserve(save_token, record.image_id, record.asset_revision, output_path if copy_to_default else None, stage_path)
+                        # After registration, the journal owns stage cleanup.
+                        journal_reserved = True
+                        self.save_journal.update_stage(save_token, stage_path, (stage_stat.st_mtime_ns, stage_stat.st_size))
+                        if copy_to_default:
                             publication = self._publish_staged_copy(save_token, stage_path, output_path, (stage_stat.st_mtime_ns, stage_stat.st_size))
                             if publication is None:
                                 if preserve_directory_structure:
@@ -1155,16 +1153,9 @@ class SavingMixin:
                             if identity is None or self._file_identity(output_path, output_path.stat()) != identity:
                                 raise ClientError("保存先の出力が変更されました。保存をやり直してください。", "save_state_changed")
                             self.save_journal.published(save_token, destination_fingerprint, identity)
-                        except Exception:
-                            rollback_apply_source()
-                            self._release_output_destination(output_path)
-                            raise
-                        finally:
-                            stage_path.unlink(missing_ok=True)
-                    else:
-                        if not no_effect:
-                            source_before = replace(record)
-                            try:
+                        else:
+                            if not no_effect:
+                                source_before = replace(record)
                                 destination = self._overwrite_destination(record, output_format)
                                 destination_changed = os.path.normcase(str(destination)) != os.path.normcase(str(record.path))
                                 if not destination_changed and output_format_matches_source(record, output_format):
@@ -1194,18 +1185,9 @@ class SavingMixin:
                                     )
                                     format_replaced = True
                                     output_path = record.path
-                            except Exception:
-                                rollback_apply_source()
-                                raise
-                            finally:
-                                stage_path.unlink(missing_ok=True)
-                            output_stat = record.path.stat()
-                        else:
-                            stage_path.unlink(missing_ok=True)
-                    # Files are fully written before the state mutation. Saving
-                    # never clears candidates or manual workspace.
-                    workspace_committed = False
-                    try:
+                                output_stat = record.path.stat()
+                        # Files are fully written before the state mutation. Saving
+                        # never clears candidates or manual workspace.
                         if no_effect:
                             _assert_source_stat_matches(record, source_fingerprint)
                         with self.lock:
@@ -1268,25 +1250,28 @@ class SavingMixin:
                                 except (OSError, sqlite3.Error) as exc:
                                     LOGGER.warning("保存ジャーナルの確定記録を保留しました: %s", exc)
                             self._record_job_success(index, record.image_id, str(output_path), job_generation, catalog_generation)
+                        if save_token is not None and durable_apply_receipt is not None:
+                            try:
+                                if self.save_journal.recover_token(save_token, lambda _token: durable_apply_receipt) and self.save_journal.acknowledge(save_token):
+                                    self.workspace_store.acknowledge_browser_save_receipt(save_token)
+                            except (OSError, sqlite3.Error) as exc:
+                                LOGGER.warning("保存ジャーナルの後処理を保留しました: %s", exc)
+                            for thumbnail_path in (self.cache_dir / "thumbnails").glob(f"{record.image_id}-*.jpg"):
+                                thumbnail_path.unlink(missing_ok=True)
+                        if not no_effect:
+                            self.invalidate_sam_image(record.image_id)
+                        self._set_job_current(record.relative_path, job_generation, catalog_generation)
                     except Exception:
-                        if save_token is not None and not workspace_committed:
+                        # A committed workspace receipt keeps the output final.
+                        if journal_reserved and not workspace_committed:
                             rollback_apply_source()
+                        elif not journal_reserved and stage_path is not None:
+                            stage_path.unlink(missing_ok=True)
+                            self.save_journal._cleanup_staging_parent(stage_path)
+                        raise
+                    finally:
                         if copy_to_default:
                             self._release_output_destination(output_path)
-                        raise
-                    if save_token is not None and durable_apply_receipt is not None:
-                        try:
-                            if self.save_journal.recover_token(save_token, lambda _token: durable_apply_receipt) and self.save_journal.acknowledge(save_token):
-                                self.workspace_store.acknowledge_browser_save_receipt(save_token)
-                        except (OSError, sqlite3.Error) as exc:
-                            LOGGER.warning("保存ジャーナルの後処理を保留しました: %s", exc)
-                        for thumbnail_path in (self.cache_dir / "thumbnails").glob(f"{record.image_id}-*.jpg"):
-                            thumbnail_path.unlink(missing_ok=True)
-                    if copy_to_default:
-                        self._release_output_destination(output_path)
-                    if not no_effect:
-                        self.invalidate_sam_image(record.image_id)
-                    self._set_job_current(record.relative_path, job_generation, catalog_generation)
 
             requested_parallelism = max(1, int(saving_parallelism))
             worker_count = min(requested_parallelism, len(records))

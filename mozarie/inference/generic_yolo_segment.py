@@ -71,8 +71,8 @@ class GenericYoloSegmenter(BaseOnnxModel):
         low_res = sigmoid(logits).reshape(prototype.shape[1:])
         full = cv2.resize(low_res, (letterbox.input_width, letterbox.input_height), interpolation=cv2.INTER_LINEAR)
         cropped = full[
-            letterbox.pad_y:letterbox.pad_y + round(letterbox.source_height * letterbox.scale),
-            letterbox.pad_x:letterbox.pad_x + round(letterbox.source_width * letterbox.scale),
+            letterbox.pad_y:letterbox.pad_y + max(1, round(letterbox.source_height * letterbox.scale)),
+            letterbox.pad_x:letterbox.pad_x + max(1, round(letterbox.source_width * letterbox.scale)),
         ]
         restored = cv2.resize(cropped, (letterbox.source_width, letterbox.source_height), interpolation=cv2.INTER_LINEAR)
         left, top, right, bottom = box
