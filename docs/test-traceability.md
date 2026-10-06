@@ -108,3 +108,13 @@ node --test tests/test_verification_contracts.cjs
 SV-015.1 の保存対象表示は、`tests/saving/test_bulk_save_capabilities.cjs` の `20k bulk save dialog and action locks keep capability lookup linear` でも確認する。実Chromiumで2万件の一覧から全保存画面を開き、対象件数、保存開始中の操作ロック、ローカル画像とブラウザー画像が混在する場合のhandle取得・喪失後の上書き可否を照合する。IDの参照回数を件数に比例する境界で検証し、固定時間待機や実行速度の閾値を使わない。
 
 同ファイルの `bulk save capabilities preserve filesystem browser handle missing and empty targets` は、元形式・PNG・JPEG・WebPの上書き／削除可否、空対象、欠損ID、親フォルダーだけのアクセス情報、一覧の置換を検証する。可否表示ではブラウザー権限を問い合わせず、file handleの存在で従来どおり判定する。OSの権限画面自体は検証対象に含めない。
+
+## 細長い画像の検出マスク
+
+`tests/inference/test_segmentation_geometry.py` は、実際の検出入口から前処理・座標復元・重複候補除去・マスク生成を通し、外部推論セッションの出力だけを代替する。実GPUや配布モデルの精度は検証対象に含めない。
+
+| 利用者が確認する挙動 | 自動テスト |
+| --- | --- |
+| 1×4096・4096×1画像を主検出モデルで処理しても空画像エラーにならず、元画像寸法の候補マスクを返し、検出枠の内側だけに画素を持つ。元RGBを保持する。 | `SegmentationGeometryTests.test_target_detect_preserves_one_pixel_edges_and_constrains_the_mask` |
+| 同じ縦横の画像を補助YOLOモデルで処理しても、候補・元寸法・枠内画素・枠外ゼロ・元RGBを保持する。 | `SegmentationGeometryTests.test_generic_detect_preserves_one_pixel_edges_and_constrains_the_mask` |
+| 通常比率と256／257ピクセルの非対称余白で、両モデルのマスク位置と検出枠による制限を維持する。 | `SegmentationGeometryTests.test_normal_aspect_and_odd_padding_preserve_mask_position` |
