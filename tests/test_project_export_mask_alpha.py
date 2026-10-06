@@ -117,7 +117,7 @@ class ProjectExportMaskAlphaTests(unittest.TestCase):
                 mask = image.convert("L")
                 self.assertEqual(mask.size, (4, 4))
                 self.assertEqual(mask.getbbox(), (pixel[0], pixel[1], pixel[0] + 1, pixel[1] + 1))
-                self.assertEqual(sum(value > 0 for value in mask.getdata()), 1)
+                self.assertEqual(sum(value > 0 for value in mask.get_flattened_data()), 1)
         with Image.open(io.BytesIO(mosaics[static_id])) as unflipped:
             self.assertEqual(unflipped.convert("L").getbbox(), (0, 1, 1, 2), "an unflipped project image retains its original mask direction")
         with Image.open(io.BytesIO(exclusions[vertical_id])) as vertical:

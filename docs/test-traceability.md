@@ -123,6 +123,8 @@ SV-015.1 の保存対象表示は、`tests/saving/test_bulk_save_capabilities.cj
 
 Pillowの依存関係は `tests.test_updater.UpdaterTests.test_requirements_dry_run_contract_covers_every_supported_python_launcher` で確認する。CUDA・CPU・DirectML・テスト用の4プロファイルすべてで `Pillow>=12.3,<13` を指定し、修正済みの最低版と次のメジャー版の境界をそろえる。
 
+Pillow 12.3の画素列は `get_flattened_data()` で読み取り、`tests/data_integrity/test_persistence_and_authority_transactions.py`、`tests/data_integrity/test_source_state_and_project_restart.py`、`tests/test_project_export_mask_alpha.py`、`tests/workspace/test_project_workspace_persistence.py` を警告がエラーになる条件で実行する。画素値、透過マスク、履歴、プロジェクト再読込の既存の期待値を維持し、警告の除外は追加しない。
+
 ## キーボード操作面の契約収集
 
 ED-132.1・ED-132.2 の操作対象は、`test_ui_control_manifest.cjs` でHTML開始タグから収集する。標準のbutton・input・select・textareaに加え、0以上のtabindex、またはseparatorロールを持つ要素を含め、tabindex=-1だけのフォーカス移動先は除外する。小さいHTML fixtureでこの区別と、未登録のキャンバス・分割バーが契約不足として失敗することを確認する。

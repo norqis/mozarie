@@ -319,15 +319,15 @@ class ProjectWorkspaceCoverageTests(unittest.TestCase):
             if point is None:
                 if raw is None: return
                 with Image.open(io.BytesIO(raw)) as image:
-                    self.assertEqual(sum(pixel[3] > 0 for pixel in image.convert("RGBA").getdata()), 0)
+                    self.assertEqual(sum(pixel[3] > 0 for pixel in image.convert("RGBA").get_flattened_data()), 0)
                 return
             self.assertIsNotNone(raw)
             with Image.open(io.BytesIO(raw)) as image:
                 self.assertEqual(image.mode, "RGBA")
                 self.assertEqual(image.size, size)
-                self.assertTrue(all(pixel[:3] == (255, 255, 255) for pixel in image.getdata()))
+                self.assertTrue(all(pixel[:3] == (255, 255, 255) for pixel in image.get_flattened_data()))
                 self.assertEqual(image.getpixel(point), (255, 255, 255, 255))
-                self.assertEqual(sum(pixel[3] > 0 for pixel in image.getdata()), 1)
+                self.assertEqual(sum(pixel[3] > 0 for pixel in image.get_flattened_data()), 1)
 
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory); store, _, image_id = self.store_image(root)
@@ -374,8 +374,8 @@ class ProjectWorkspaceCoverageTests(unittest.TestCase):
             with Image.open(io.BytesIO(encoded)) as image:
                 self.assertEqual(image.mode, "RGBA")
                 self.assertEqual(image.getpixel((2, 1)), (255, 255, 255, 255))
-                self.assertTrue(all(pixel[:3] == (255, 255, 255) for pixel in image.getdata()))
-                self.assertEqual(sum(pixel[3] > 0 for pixel in image.getdata()), 1)
+                self.assertTrue(all(pixel[:3] == (255, 255, 255) for pixel in image.get_flattened_data()))
+                self.assertEqual(sum(pixel[3] > 0 for pixel in image.get_flattened_data()), 1)
             db = sqlite3.connect(store.path)
             try:
                 self.assertEqual(db.execute("SELECT add_png FROM manual_edits WHERE image_id=?", (image_id,)).fetchone()[0], raw)

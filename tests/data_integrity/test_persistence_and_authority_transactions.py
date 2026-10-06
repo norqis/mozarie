@@ -228,7 +228,7 @@ class RemainingDataIntegrityContracts(unittest.TestCase):
         self.assertEqual(rendered.candidate_revision, before["candidates"]["candidateRevision"])
         self.assertTrue(candidate.mask_path.exists())
         with Image.open(rendered.response_path) as output:
-            colors = set(output.convert("RGB").getdata())
+            colors = set(output.convert("RGB").get_flattened_data())
         self.assertNotIn((255, 0, 0), colors, "the hidden red image is never mixed into the rendered blue image")
 
         committed = state.commit_browser_save(
