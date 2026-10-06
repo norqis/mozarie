@@ -120,3 +120,5 @@ SV-015.1 の保存対象表示は、`tests/saving/test_bulk_save_capabilities.cj
 | 1×4096・4096×1画像を主検出モデルで処理しても空画像エラーにならず、元画像寸法の候補マスクを返し、検出枠の内側だけに画素を持つ。元RGBを保持する。 | `SegmentationGeometryTests.test_target_detect_preserves_one_pixel_edges_and_constrains_the_mask` |
 | 同じ縦横の画像を補助YOLOモデルで処理しても、候補・元寸法・枠内画素・枠外ゼロ・元RGBを保持する。 | `SegmentationGeometryTests.test_generic_detect_preserves_one_pixel_edges_and_constrains_the_mask` |
 | 通常比率と256／257ピクセルの非対称余白で、両モデルのマスク位置と検出枠による制限を維持する。 | `SegmentationGeometryTests.test_normal_aspect_and_odd_padding_preserve_mask_position` |
+
+Pillowの依存関係は `tests.test_updater.UpdaterTests.test_requirements_dry_run_contract_covers_every_supported_python_launcher` で確認する。CUDA・CPU・DirectML・テスト用の4プロファイルすべてで `Pillow>=12.3,<13` を指定し、修正済みの最低版と次のメジャー版の境界をそろえる。
