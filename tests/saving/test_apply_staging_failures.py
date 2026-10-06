@@ -25,7 +25,7 @@ class ApplyStagingFailureTests(unittest.TestCase):
     @contextmanager
     def fixture(self, copy_to_default: bool, preserve_structure: bool):
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
+            root = Path(directory).resolve()
             app = root / "app"
             (app / "config").mkdir(parents=True)
             shutil.copyfile(Path(__file__).resolve().parents[2] / "config" / "defaults.json", app / "config" / "defaults.json")
