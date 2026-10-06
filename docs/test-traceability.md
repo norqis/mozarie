@@ -122,3 +122,15 @@ SV-015.1 の保存対象表示は、`tests/saving/test_bulk_save_capabilities.cj
 | 通常比率と256／257ピクセルの非対称余白で、両モデルのマスク位置と検出枠による制限を維持する。 | `SegmentationGeometryTests.test_normal_aspect_and_odd_padding_preserve_mask_position` |
 
 Pillowの依存関係は `tests.test_updater.UpdaterTests.test_requirements_dry_run_contract_covers_every_supported_python_launcher` で確認する。CUDA・CPU・DirectML・テスト用の4プロファイルすべてで `Pillow>=12.3,<13` を指定し、修正済みの最低版と次のメジャー版の境界をそろえる。
+
+## キーボード操作面の契約収集
+
+ED-132.1・ED-132.2 の操作対象は、`test_ui_control_manifest.cjs` でHTML開始タグから収集する。標準のbutton・input・select・textareaに加え、0以上のtabindex、またはseparatorロールを持つ要素を含め、tabindex=-1だけのフォーカス移動先は除外する。小さいHTML fixtureでこの区別と、未登録のキャンバス・分割バーが契約不足として失敗することを確認する。
+
+| 操作面 | 実行結果を照合する既存テスト |
+| --- | --- |
+| gallerySplitter・candidateSplitter：ポインターと矢印キーによる幅変更、画像・選択・候補の保持 | `test_workspace_splitters_e2e.cjs::workspace pane splitters preserve content and use gesture deltas` |
+| compareSplitter：ポインターとキーによる比率変更、上下限、再読込後の保持 | `test_padding_splitter_e2e.cjs::<file>` |
+| editorCanvas：実描画操作による各レイヤーの画素変化 | `test_editor_basic_tools_e2e.cjs::basic editor tools keep their pixel-layer contracts` |
+
+4要素は既存の専用試験への対応を`ui-control-manifest.cjs`へ記録し、通常実行とCIで各test IDの収集・実行・成功を照合する。manifest本体の検証IDは `static UI controls have complete executable interaction contracts` とし、ED-132の参照も同時に更新する。

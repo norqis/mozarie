@@ -11,7 +11,7 @@ sourceDeleteResume
 detectParallelism dialogTargetPenis dialogTargetPussy detectFilterMasked detectFilterUnmasked detectFilterReviewed detectFilterUnreviewed detectConfidenceRange detectConfidenceNumber detectCandidatePadding detectExcludeCandidatePadding detectFluidColorFillEnabled detectFluidColorFillTolerance detectCancelButton detectStartButton
 settingsCloseButton settingsTabGeneral settingsTabModels settingsTabDisplay settingsTabShortcuts settingsTabConfirm settingsTabInfo settingsLanguage settingsPort settingsDefaultOutputDirectory settingsChooseOutputDirectory settingsImportParallelism settingsSaveParallelism settingsOpenBrowser settingsProvider settingsGpuDevice settingsTargetModel settingsNtd11Toggle settingsNtd11Model settingsSensitiveToggle settingsSensitiveModel settingsPrecisionToggle settingsSamType settingsSamModel settingsHandToggle settingsHandModel settingsHandSegmentationToggle settingsHandSegmentationModel settingsFluidToggle settingsApplyColor settingsExcludeColor settingsOpacity settingsMosaicPreview settingsExcludeForcedDefault settingsShortcutsEnabled confirmClearMasks confirmClearCatalog confirmRemoveImage confirmCandidateDelete confirmCandidateRoleDelete confirmOverwriteSource confirmDeleteSourceAfterCopy checkUpdateButton settingsResetButton settingsSaveButton
 modelDownloadClose modelDownloadCopy modelDownloadStart modelDownloadCancel applyFilterMasked applyFilterUnmasked applyFilterReviewed applyFilterUnreviewed applyCopyMode applyOverwriteMode applySuffix deleteOriginal applyPreserveDirectoryStructure applyOutputDirectoryStatus chooseOutputDirectoryButton applyDivisor applyOutputFormat applyKeepMetadata applyRemoveSaved applyCloseButton applyPauseButton applyCancelButton applyStartButton singleSaveCopyMode singleSaveOverwriteMode singleSaveSuffix singleSaveDeleteOriginal singleSavePreserveDirectoryStructure singleSaveOutputDirectoryStatus singleSaveChooseOutputDirectoryButton singleSaveOutputFormat singleSaveKeepMetadata singleSaveRemoveSaved singleSaveCloseButton singleSaveStartButton renameImageFilename renameImageRestoreOriginal renameImageCancel renameImageConfirm mosaicHelpCloseButton processingPauseButton processingCancelButton modelHelpCloseButton modelHelpCopy
-importFailuresClose
+importFailuresClose gallerySplitter editorCanvas compareSplitter candidateSplitter
 `.trim().split(/\s+/);
 
 // Text-entry controls are exercised with a real keyboard event.  Selects,
@@ -19,7 +19,7 @@ importFailuresClose
 // id is a button-style activation.  The separate list keeps a new control from
 // silently bypassing the interaction sweep.
 const keyboardIds = new Set(`
-projectNameInput nativeRelinkPath folderPath overviewQuery candidatePaddingInput settingsDefaultOutputDirectory settingsTargetModel settingsNtd11Model settingsSensitiveModel settingsSamModel settingsHandModel settingsHandSegmentationModel applySuffix applyOutputDirectoryStatus singleSaveSuffix singleSaveOutputDirectoryStatus renameImageFilename
+projectNameInput nativeRelinkPath folderPath overviewQuery candidatePaddingInput settingsDefaultOutputDirectory settingsTargetModel settingsNtd11Model settingsSensitiveModel settingsSamModel settingsHandModel settingsHandSegmentationModel applySuffix applyOutputDirectoryStatus singleSaveSuffix singleSaveOutputDirectoryStatus renameImageFilename gallerySplitter compareSplitter candidateSplitter
 `.trim().split(/\s+/));
 const changeIds = new Set(`
   sourceMismatchClear brushSize divisor bucketTolerance detectParallelism dialogTargetPenis dialogTargetPussy detectFilterMasked detectFilterUnmasked detectFilterReviewed detectFilterUnreviewed applyFilterMasked applyFilterUnmasked applyFilterReviewed applyFilterUnreviewed detectConfidenceRange detectConfidenceNumber detectCandidatePadding detectExcludeCandidatePadding detectFluidColorFillEnabled detectFluidColorFillTolerance overviewFolder confirmNeverShow settingsLanguage settingsPort settingsImportParallelism settingsSaveParallelism settingsOpenBrowser settingsProvider settingsGpuDevice settingsNtd11Toggle settingsSensitiveToggle settingsPrecisionToggle settingsSamType settingsHandToggle settingsHandSegmentationToggle settingsFluidToggle settingsApplyColor settingsExcludeColor settingsOpacity settingsMosaicPreview settingsExcludeForcedDefault settingsShortcutsEnabled confirmClearMasks confirmClearCatalog confirmRemoveImage confirmCandidateDelete confirmCandidateRoleDelete confirmOverwriteSource confirmDeleteSourceAfterCopy applyCopyMode applyOverwriteMode deleteOriginal applyPreserveDirectoryStructure applyDivisor applyOutputFormat applyKeepMetadata applyRemoveSaved singleSaveCopyMode singleSaveOverwriteMode singleSaveDeleteOriginal singleSavePreserveDirectoryStructure singleSaveOutputFormat singleSaveKeepMetadata singleSaveRemoveSaved
@@ -45,7 +45,12 @@ const PROJECT_CREATION_TEST = "node:tests/test_project_ui_runtime.cjs::project c
 const PROJECT_LIFECYCLE_TEST = "node:tests/test_project_ui_runtime.cjs::project close, complete, resume, and delete produce exact workspace outcomes";
 const PROJECT_CANCEL_TEST = "node:tests/test_project_ui_runtime.cjs::project completion and deletion cancellation preserve the exact project and image list";
 const SAME_SOURCE_TEST = "node:tests/test_project_ui_runtime.cjs::same-source warning offers open separate and cancel without changing work until chosen";
+const WORKSPACE_SPLITTER_TEST = "node:tests/test_workspace_splitters_e2e.cjs::workspace pane splitters preserve content and use gesture deltas";
 const exemptions = {
+  gallerySplitter: { reason: "covered by real pointer and keyboard resizing with content preservation", testIds: [WORKSPACE_SPLITTER_TEST] },
+  candidateSplitter: { reason: "covered by real pointer and keyboard resizing with content preservation", testIds: [WORKSPACE_SPLITTER_TEST] },
+  compareSplitter: { reason: "covered by real pointer and keyboard split changes, bounds and persistence", testIds: ["node:tests/test_padding_splitter_e2e.cjs::<file>"] },
+  editorCanvas: { reason: "covered by real drawing gestures and pixel-layer assertions", testIds: ["node:tests/test_editor_basic_tools_e2e.cjs::basic editor tools keep their pixel-layer contracts"] },
   settingsSamType: { reason: "hidden selected-SAM value; input[name=settingsSamVariant] is the operable control", testIds: [IMPORTER_TEST] },
   // Project lifecycle needs both native directory handles and browser file
   // handles.  A compact VM browser-runtime suite exercises every branch,
@@ -94,7 +99,7 @@ function interactionFor(id) {
     resultKind = "dialog"; scenario = "import";
   } else if (/^(detect|confidence|boundaryDetectButton|boundaryCancelButton)/.test(id)) {
     resultKind = "api"; scenario = "detection";
-  } else if (/^candidatePadding/.test(id)) {
+  } else if (/^(candidatePadding|candidateSplitter$)/.test(id)) {
     resultKind = "dom"; scenario = "candidate";
   } else if (/^(save|apply|deleteOriginal|chooseOutputDirectoryButton|singleSave)/.test(id)) {
     resultKind = "api"; scenario = "save";
@@ -103,7 +108,9 @@ function interactionFor(id) {
   } else if (/^(settings|modelDownload|modelHelp)/.test(id)) {
     resultKind = /^settings(?:Language|Port|DefaultOutputDirectory|ImportParallelism|SaveParallelism|OpenBrowser|Provider|GpuDevice|TargetModel|Ntd11|Sensitive|Precision|Sam|Hand|Fluid|ApplyColor|ExcludeColor|Opacity|MosaicPreview|ExcludeForcedDefault|ShortcutsEnabled)/.test(id) ? "value" : "dialog";
     scenario = "settings";
-  } else if (/^(brush|mosaicEraser|eraser|excludeEraser|boundaryTool|rectangleTool|polygonTool|boundaryBrushTool|bucketTool|excludeBucketTool|singleViewButton|compareViewButton|fitButton|undoButton|redoButton|mosaicPreviewButton|brushSize|divisor|bucketTolerance)/.test(id)) {
+  } else if (id === "compareSplitter") {
+    resultKind = "dom"; scenario = "editor";
+  } else if (/^(editorCanvas|brush|mosaicEraser|eraser|excludeEraser|boundaryTool|rectangleTool|polygonTool|boundaryBrushTool|bucketTool|excludeBucketTool|singleViewButton|compareViewButton|fitButton|undoButton|redoButton|mosaicPreviewButton|brushSize|divisor|bucketTolerance)/.test(id)) {
     resultKind = "canvas"; scenario = "editor";
   } else if (/^(overview|closeOverview|batchMode|overviewQuery|overviewFolder|selection)/.test(id)) {
     resultKind = "navigation"; scenario = "overview";
@@ -111,7 +118,7 @@ function interactionFor(id) {
     resultKind = "dialog"; scenario = "confirmation";
   } else if (/^(processing)/.test(id)) {
     resultKind = "api"; scenario = "processing";
-  } else if (/^(previousImage|nextImage|removeAndNext|hideAndNext|reviewAndNext|clearAllMasks|clearCatalog|galleryFilter|batchMore|collapseGallery|sourceDeleteResume)/.test(id)) {
+  } else if (/^(previousImage|nextImage|removeAndNext|hideAndNext|reviewAndNext|clearAllMasks|clearCatalog|galleryFilter|gallerySplitter|batchMore|collapseGallery|sourceDeleteResume)/.test(id)) {
     resultKind = "dom"; scenario = "gallery";
   }
   const expected = `${resultKind} result is asserted by the ${scenario} fixture scenario`;

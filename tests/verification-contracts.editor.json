@@ -1980,7 +1980,7 @@
       "testIds": [
         "node:tests/test_import_picker_e2e.cjs::import picker browser coverage",
         "node:tests/test_project_ui_runtime.cjs::project entry controls open and close their intended dialogs",
-        "node:tests/test_ui_control_manifest.cjs::<file>"
+        "node:tests/test_ui_control_manifest.cjs::static UI controls have complete executable interaction contracts"
       ]
     },
     {
@@ -1992,7 +1992,7 @@
       "status": "automated",
       "testIds": [
         "node:tests/test_import_picker_e2e.cjs::import picker browser coverage",
-        "node:tests/test_ui_control_manifest.cjs::<file>"
+        "node:tests/test_ui_control_manifest.cjs::static UI controls have complete executable interaction contracts"
       ]
     },
     {
