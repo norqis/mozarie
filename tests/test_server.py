@@ -4993,7 +4993,7 @@ class MozarieTests(unittest.TestCase):
                     patch.object(state, "_hand_refinement_context", return_value=([], np.zeros_like(mask), [])), \
                     patch.object(state, "_finalize_exclusions", return_value=[{"class_name": "__fluid_exclusion__", "metadata_exclusions": {"fluid": mask}}]):
                 candidates = state._detect_image(Mock(), record, .5)
-            self.assertEqual(detect.call_args.args[-1], frozenset())
+            self.assertEqual(detect.call_args.args[-1], frozenset({"cum_on_breasts"}))
             self.assertEqual(len(candidates), 1)
             self.assertEqual((candidates[0].label_token, candidates[0].role, candidates[0].forced), ("fluid", CandidateRole.EXCLUDE, False))
 

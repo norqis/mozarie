@@ -61,6 +61,8 @@ SV-072.1、DI-071.1、DI-072.1 の画像所有は `test_resources.cjs` と `reso
 | 境界検出の2個目の名前変更に失敗すると、名前変更済みと未変更の今回分を除去し、既存候補と履歴を保持する。 | `CandidatePublicationTests.test_second_boundary_rename_discards_published_and_pending_masks_preserving_history` |
 | 自動検出失敗後の一時ファイル削除が拒否されても、他の今回分を除去し、元の書込みエラーと削除失敗を記録する。既存候補と履歴を保持する。 | `CandidatePublicationTests.test_detection_cleanup_failure_logs_without_replacing_original_write_failure` |
 
+PNGのSceneタグ連携は `tests/detection/test_scene_png_metadata.py` で確認する。実PNGの `scene_positive`・`scene_info` をtEXt/zTXtのLatin-1とiTXtのUTF-8（圧縮・非圧縮）から読み、実ジョブの推論要求へ対象を追加する。壊れた任意テキスト・未知の圧縮方式・不正UTF-8はそのチャンクだけ無視し、後続の無効値で直前の有効値や他方のキーを消さない。大文字違い・部分一致・workflowなどの無関係キーは展開せず、精液除外OFFでも展開・連携しない。元PNG、一般画像情報、保存後のテキストチャンクは保持する。推論モデルだけはCPUの外部境界fixtureで代替する。
+
 ## 契約の検証
 
 ```powershell

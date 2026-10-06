@@ -26,7 +26,7 @@ from .core import (
     torch_module, _read_detection_parallelism, _read_target_classes,
 )
 from .fluid import expand_white_fluid_mask, white_fluid_mask
-from .image_io import canonical_image
+from .image_io import canonical_image, read_scene_png_metadata
 from .runtime import runtime_backend
 from .runtime_types import DetectionModels
 
@@ -870,15 +870,16 @@ class DetectionMixin:
             default_exclude_padding,
             int(np.ceil(np.hypot(record.width - 1, record.height - 1))),
         )
-        with self.image_io_lock(record.image_id):
-            self._assert_record_stat_matches(record)
-            image, _source, info = canonical_image(record)
-            scene_fluid_tags = _scene_fluid_tags(info)
-            rgb, alpha = _inference_pixels(image)
         if fluid_exclusion_enabled is None:
             fluid_exclusion_enabled = bool(self.settings["detection"]["fluid_exclusion_enabled"])
-        if not fluid_exclusion_enabled:
-            scene_fluid_tags = frozenset()
+        with self.image_io_lock(record.image_id):
+            self._assert_record_stat_matches(record)
+            image, source, info = canonical_image(record)
+            scene_fluid_tags = (
+                _scene_fluid_tags({**info, **read_scene_png_metadata(source)})
+                if fluid_exclusion_enabled else frozenset()
+            )
+            rgb, alpha = _inference_pixels(image)
         segments = self._detect_arbitrated_segments(models, rgb, confidence, target_classes or TARGET_CLASSES, scene_fluid_tags)
         _clip_detection_masks_to_alpha(segments, alpha)
         detected, hand_mask, _ = self._hand_refinement_context(models, record, rgb, segments)
