@@ -47,6 +47,17 @@ SV-072.1、DI-071.1、DI-072.1 の画像所有は `test_resources.cjs` と `reso
 
 以前の統合で欠けていた設定・検出の13件とフォルダー走査1件のテスト、および2件の補助メソッドを元の実装から復元し、改名されたテストIDも実際の実行IDへ合わせています。
 
+## 検出候補公開の回帰境界
+
+検出候補の公開前の保存処理は `tests/detection/test_candidate_publication.py` の専用一時画像・PNG・SQLite・実ジョブで検証する。モデルの推論結果とファイル書込み・名前変更の故障だけを外部境界で代替し、実GPU・配布モデルの精度は検証対象としない。
+
+| 利用者が確認する挙動 | 自動テスト |
+| --- | --- |
+| SD-134.2：8×8画像で100pxを指定しても検出を完了し、画像対角の10pxを候補へ反映する。0px・2pxは維持し、設定値・元画像・PNGの元マスクを変えず、SQLiteとUndo/Redoに反映する。 | `CandidatePublicationTests.test_started_detection_clamps_large_padding_and_preserves_saved_setting` |
+| 自動検出・境界検出の2個目のPNG書込み途中に失敗すると、完成済みと部分書込みの今回分を除去し、既存候補の実ファイル・SQLite・Redo履歴を保持する。 | `CandidatePublicationTests.test_second_detection_write_discards_complete_and_partial_masks_preserving_history`、`test_second_boundary_write_discards_complete_and_partial_masks_preserving_history` |
+| 境界検出の2個目の名前変更に失敗すると、名前変更済みと未変更の今回分を除去し、既存候補と履歴を保持する。 | `CandidatePublicationTests.test_second_boundary_rename_discards_published_and_pending_masks_preserving_history` |
+| 自動検出失敗後の一時ファイル削除が拒否されても、他の今回分を除去し、元の書込みエラーと削除失敗を記録する。既存候補と履歴を保持する。 | `CandidatePublicationTests.test_detection_cleanup_failure_logs_without_replacing_original_write_failure` |
+
 ## 契約の検証
 
 ```powershell
