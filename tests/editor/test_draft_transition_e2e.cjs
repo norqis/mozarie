@@ -8,15 +8,17 @@ const { closeServer, startFixtureServer } = require("../test_import_picker_e2e.c
 
 async function withEditor(run, { seedAllLayers = false } = {}) {
   const fixture = await startFixtureServer();
-  const browser = await chromium.launch();
-  const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
-  const page = await context.newPage();
+  let browser, context, page;
   const pageErrors = [];
-  page.on("pageerror", (error) => pageErrors.push(error.message));
-  page.setDefaultTimeout(10000);
   const covered = process.env.MOZARIE_JS_COVERAGE === "1";
+  let coverageStarted = false;
   try {
-    if (covered) await page.coverage.startJSCoverage({ resetOnNavigation: false });
+    browser = await chromium.launch();
+    context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+    page = await context.newPage();
+    page.on("pageerror", (error) => pageErrors.push(error.message));
+    page.setDefaultTimeout(10000);
+    if (covered) { await page.coverage.startJSCoverage({ resetOnNavigation: false }); coverageStarted = true; }
     const assets = await page.evaluate(() => {
       const source = document.createElement("canvas"); source.width = 100; source.height = 80;
       const context = source.getContext("2d");
@@ -36,16 +38,18 @@ async function withEditor(run, { seedAllLayers = false } = {}) {
     await page.locator("#brushSize").dispatchEvent("input");
     await run(page, pageErrors);
   } finally {
-    if (covered && process.env.MOZARIE_BROWSER_COVERAGE_FILE) {
-      const entries = await page.coverage.stopJSCoverage();
-      let previous = [];
-      try { previous = JSON.parse(await fs.readFile(process.env.MOZARIE_BROWSER_COVERAGE_FILE, "utf8")); }
-      catch (error) { if (error.code !== "ENOENT") throw error; }
-      await fs.writeFile(process.env.MOZARIE_BROWSER_COVERAGE_FILE, JSON.stringify([...previous, ...entries]));
+    try {
+      if (coverageStarted && process.env.MOZARIE_BROWSER_COVERAGE_FILE) {
+        const entries = await page.coverage.stopJSCoverage();
+        let previous = [];
+        try { previous = JSON.parse(await fs.readFile(process.env.MOZARIE_BROWSER_COVERAGE_FILE, "utf8")); }
+        catch (error) { if (error.code !== "ENOENT") throw error; }
+        await fs.writeFile(process.env.MOZARIE_BROWSER_COVERAGE_FILE, JSON.stringify([...previous, ...entries]));
+      }
+    } finally {
+      try { await context?.close(); }
+      finally { await Promise.all([browser?.close(), closeServer(fixture.server)]); }
     }
-    await context.close();
-    await browser.close();
-    await closeServer(fixture.server);
   }
 }
 

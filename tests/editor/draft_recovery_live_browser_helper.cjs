@@ -5,9 +5,10 @@ const { chromium } = require("playwright");
 
 async function main() {
   const [origin, kind] = process.argv.slice(2);
-  const browser = await chromium.launch();
-  const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  let browser, context;
   try {
+    browser = await chromium.launch();
+    context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
     const page = await context.newPage();
     page.setDefaultTimeout(10000);
     const pageErrors = [];
@@ -76,8 +77,8 @@ async function main() {
     assert.deepEqual(await pixels(), { ...base, edited: 255 }, "a full page reload recovers the committed layers from the real server");
     assert.deepEqual(pageErrors, []);
   } finally {
-    await context.close();
-    await browser.close();
+    try { await context?.close(); }
+    finally { await browser?.close(); }
   }
 }
 
