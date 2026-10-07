@@ -775,8 +775,9 @@ class SavingMixin:
                         # owns deletion for filesystem catalogue records.
                         if record_snapshot.source_kind != "session" or record_snapshot.path.exists():
                             quarantine_path = record_snapshot.path.with_name(f".{record_snapshot.path.name}.mozarie-delete-{save_token}")
-                            self.save_journal.phase(save_token, "source_quarantined", quarantine_path)
-                            if not self.save_journal.quarantine_source(save_token, record_snapshot.path, quarantine_path):
+                            if not self.save_journal.quarantine_source(
+                                save_token, record_snapshot.path, quarantine_path, token_details.source_fingerprint,
+                            ):
                                 # The copy has already published.  Keep it and
                                 # retain the original when this filesystem
                                 # cannot prove an atomic recoverable deletion.

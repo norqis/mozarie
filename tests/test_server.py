@@ -8547,6 +8547,46 @@ class MozarieTests(unittest.TestCase):
             self.assertFalse(committed["deleted"])
             self.assertNotIn(save_token, state.browser_save_tokens)
 
+    def test_browser_copy_delete_keeps_source_changed_after_final_preflight(self):
+        root = self.app_dir / "sources"
+        root.mkdir()
+        source = root / "source.png"
+        with Image.new("RGB", (16, 16), "white") as image:
+            image.save(source)
+        original = source.read_bytes()
+        source_stat = source.stat()
+        output = self.app_dir / "output"
+        output.mkdir()
+        state = self.new_state()
+        state.settings["saving"]["default_output_directory"] = str(output)
+        image_id = state.set_root(str(root))[0]["id"]
+        rendered = state.render_browser_save(image_id, 0, 100, None, copy_to_default=True)
+        quarantine_source = state.save_journal.quarantine_source
+        external_bytes = []
+
+        def external_save_before_quarantine(*args):
+            with Image.new("RGB", (16, 16), "black") as image:
+                image.save(source)
+            os.utime(source, ns=(source_stat.st_atime_ns, source_stat.st_mtime_ns + 1_000_000_000))
+            external_bytes.append(source.read_bytes())
+            return quarantine_source(*args)
+
+        with patch.object(state.save_journal, "quarantine_source", side_effect=external_save_before_quarantine):
+            committed = state.commit_browser_save(image_id, 0, rendered.save_token, "deleted")
+
+        self.assertEqual(len(external_bytes), 1)
+        self.assertNotEqual(external_bytes[0], original)
+        self.assertFalse(committed["deleted"])
+        self.assertTrue(committed["sourceDeletePending"])
+        self.assertEqual(source.read_bytes(), external_bytes[0])
+        self.assertEqual(Path(committed["outputPath"]).read_bytes(), original)
+        self.assertIn(image_id, state.images)
+        self.assertTrue(state.workspace_store.has_image(image_id))
+        receipt = state.workspace_store.browser_save_receipt(rendered.save_token)
+        self.assertFalse(receipt["deleted"])
+        self.assertTrue(receipt["sourceDeletePending"])
+        self.assertEqual(list(root.glob(".source.png.mozarie-delete-*")), [])
+
     def test_browser_copy_delete_removes_the_durable_workspace_row(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

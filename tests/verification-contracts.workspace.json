@@ -141,7 +141,8 @@
       "observation": "既存環境の確認が完了し、二重起動と誤認しない",
       "status": "automated",
       "testIds": [
-        "python:tests.test_updater.UpdaterTests.test_setup_batch_reports_venv_and_running_states_without_marking_ready"
+        "python:tests.test_updater.UpdaterTests.test_setup_batch_reports_venv_and_running_states_without_marking_ready",
+        "python:tests.test_runtime_profile_subprocess.RuntimeProfileSubprocessTests.test_setup_marker_preserves_profiles_in_paths_with_punctuation"
       ]
     },
     {

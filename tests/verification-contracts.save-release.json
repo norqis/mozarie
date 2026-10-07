@@ -494,7 +494,9 @@
         "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > denied revoked and inactive save grants preserve source and output",
         "node:tests/test_folder_permissions_e2e.cjs::project folder restore retains each nested file's direct parent",
         "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > copy then source delete follows durable commit",
-        "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_browser_copy_delete_recovery_keeps_edits_made_after_the_copy"
+        "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_browser_copy_delete_recovery_keeps_edits_made_after_the_copy",
+        "python:tests.test_server.MozarieTests.test_browser_copy_delete_keeps_source_changed_after_final_preflight",
+        "python:tests.test_save_recovery.SaveRecoveryTests.test_quarantine_source_excludes_writers_until_rename"
       ]
     },
     {
