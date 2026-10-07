@@ -308,6 +308,74 @@ test("same-generation return reloads changed pixels and masks while pending edit
   }
 });
 
+test("return synchronization retains usable editor resources after stale-image and mask-load failures", { timeout: 60000 }, async () => {
+  const fixture = await startFixtureServer(); fixture.setCatalog(catalogue.map((image) => ({ ...image, assetVersion: "revision-0", candidateRevision: 0 })));
+  const browser = await chromium.launch({ headless: true });
+  let context; let page;
+  try {
+    ({ context, page } = await openPage(browser, fixture));
+    let revision = 0; let failure = ""; let failedRequest; let releaseFailure;
+    const pixels = Buffer.from((await page.evaluate(() => {
+      const source = document.createElement("canvas"); source.width = 100; source.height = 80;
+      const paint = source.getContext("2d"); paint.fillStyle = "red"; paint.fillRect(0, 0, 50, 80);
+      paint.fillStyle = "blue"; paint.fillRect(50, 0, 50, 80); return source.toDataURL();
+    })).split(",")[1], "base64");
+    await page.route("**/api/candidates/A", (route) => route.fulfill({ json: { candidateRevision: revision, candidates: [
+      { id: "point", role: "apply", enabled: true, forced: false, labelToken: "boundary", source: "boundary", refinement: null, confidence: 1, color: "#ff3d4d" },
+    ] } }));
+    await page.route(/\/api\/image\/A(?:\?|$)/, async (route) => {
+      if (failure === "single-image") return route.fulfill({ status: 500, json: { error_code: "internal_error" } });
+      if (failure !== "image" && failure !== "superseded") return route.fulfill({ contentType: "image/png", body: pixels });
+      failedRequest();
+      await new Promise((resolve) => { releaseFailure = resolve; });
+      if (failure === "image") await route.fulfill({ status: 409, json: { error_code: "stale_asset" } });
+      else await route.fulfill({ contentType: "image/png", body: pixels });
+    });
+    await page.route("**/api/mask/A/point?*", (route) => failure === "mask"
+      ? route.fulfill({ status: 503, json: { error_code: "internal_error" } }) : route.continue());
+    await page.evaluate(() => { state.mosaicPreviewEnabled = false; });
+    await selectImage(page, "A");
+    await page.evaluate(() => { state.displayMode = "single"; state.mosaicPreviewEnabled = false; state.view = { x: 10, y: 10, scale: 1 }; flushRender(); });
+    for (const target of ["single-image", "image", "mask", "superseded"]) {
+      await page.waitForFunction(() => !state.renderFrame && !state.mosaicWorkerBusy && !state.mosaicPreviewRequested);
+      const previous = await page.evaluate(() => {
+        window.returnBefore = { image: state.currentImage, mask: state.candidateImages.get("point"), draft: state.drafts.get("A") };
+        return { version: imageAssetVersion(currentRecord()), revision: currentRecord().candidateRevision };
+      });
+      revision += 1; failure = target;
+      fixture.setCatalog(catalogue.map((image) => image.id === "A" ? { ...image, assetVersion: `revision-${revision}`, candidateRevision: revision, reviewed: true, flipH: target === "single-image" } : image));
+      const requestStarted = new Promise((resolve) => { failedRequest = resolve; });
+      const refresh = page.evaluate(() => syncCatalogOnReturn());
+      if (target === "image" || target === "superseded") {
+        await requestStarted;
+        await page.waitForFunction((value) => state.candidateBundleCache.has(candidateCacheKey("A", value)), revision);
+        fixture.setCatalog(catalogue.map((image) => image.id === "A" ? { ...image, assetVersion: `revision-${revision}`, candidateRevision: revision, reviewed: true, flipH: true } : image));
+        await page.evaluate(() => syncCatalogOnReturn());
+        releaseFailure();
+      }
+      await refresh;
+      assert.deepEqual(await page.evaluate(() => ({
+        version: imageAssetVersion(currentRecord()), revision: currentRecord().candidateRevision, reviewed: currentRecord().reviewed,
+        flipH: Boolean(currentRecord().flipH),
+        image: state.currentImage === window.returnBefore.image && state.currentImage.width > 0,
+        mask: state.candidateImages.get("point") === window.returnBefore.mask && window.returnBefore.mask.width > 0,
+        draft: state.drafts.get("A") === window.returnBefore.draft, pending: state.pendingImageId,
+      })), { ...previous, reviewed: true, flipH: target !== "mask", image: true, mask: true, draft: true, pending: null });
+      await expect.poll(() => page.evaluate(() => [...ctx.getImageData(Math.round(35 * devicePixelRatio), Math.round(35 * devicePixelRatio), 1, 1).data]))
+        .toEqual(target !== "mask" ? [0, 0, 255, 255] : [255, 0, 0, 255]);
+      failure = "";
+      if (target === "superseded") await expect(page.locator("#errorDialog")).not.toBeVisible();
+      else await page.locator("#errorDialogClose").click();
+      await page.evaluate(() => syncCatalogOnReturn());
+      assert.deepEqual(await page.evaluate(() => ({ version: imageAssetVersion(currentRecord()), revision: currentRecord().candidateRevision,
+        image: state.currentImage.width > 0, mask: state.candidateImages.get("point")?.width > 0 })),
+      { version: `revision-${revision}`, revision, image: true, mask: true });
+    }
+  } finally {
+    await context?.close(); await browser.close(); await closeServer(fixture.server);
+  }
+});
+
 test("DI-161 DI-164 DI-168 DI-181 DI-183 and DI-185 use the captured visible order for every successor boundary", { timeout: 90000 }, async () => {
   const fixture = await startFixtureServer();
   fixture.setCatalog(catalogue);

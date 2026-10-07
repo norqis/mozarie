@@ -207,8 +207,10 @@ nodeTest("project dialogs, A-B-A switching, failed-open recovery, and duplicate 
   await test.openProject(projects[0]);
   assert.deepEqual({ project: state.project.id, image: state.images[0].id, currentId: state.currentId, selected: [...state.selectedImageIds] }, { project: "working", image: "alpha-return", currentId: null, selected: [] }, "A to B to A restores only project A's returned catalog without B selection leakage");
 
-  openPayload = { project: projects[0], images: [], needsSource: true };
-  context.rememberedProjectSources = async () => ({ directories: [{ sourceId: "dir", handle: { kind: "directory" } }], files: [{ sourceId: "files", handle: { kind: "file" } }] });
+  openPayload = { project: projects[0], images: [], needsSource: true,
+    sources: [{ id: "dir", kind: "browser-directory" }, { id: "files", kind: "browser-files" }],
+    sourceImages: [{ id: "file-image", sourceId: "files", relativePath: "image.png" }] };
+  context.rememberedProjectSources = async () => ({ directories: [{ sourceId: "dir", handle: { kind: "directory" } }], files: [{ sourceId: "files", imageId: "file-image", relativePath: "image.png", handle: { kind: "file" } }] });
   let granted = [true, false]; context.ensureProjectSourcePermission = async () => granted.shift();
   await test.openProject(projects[0]);
   assert.ok(calls.some(([kind, value]) => kind === "directory" && value === "dir"), "granted folder handles relink a project");

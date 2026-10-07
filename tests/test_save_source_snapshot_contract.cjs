@@ -6,21 +6,21 @@ const nodeTest = require("node:test");
 const source = fs.readFileSync(path.join(__dirname, "..", "static", "js", "save.js"), "utf8");
 const interaction = fs.readFileSync(path.join(__dirname, "..", "static", "js", "interaction.js"), "utf8");
 
-function functionSource(name) {
-  const start = source.indexOf(`async function ${name}(`);
+function functionSource(name, text = source) {
+  const start = text.indexOf(`${text.includes(`async function ${name}(`) ? "async " : ""}function ${name}(`);
   assert.notEqual(start, -1, `${name} must exist`);
-  const body = source.indexOf("{", start);
+  const body = text.indexOf("{", start);
   let depth = 0;
-  for (let index = body; index < source.length; index += 1) {
-    if (source[index] === "{") depth += 1;
-    if (source[index] === "}" && --depth === 0) return source.slice(start, index + 1);
+  for (let index = body; index < text.length; index += 1) {
+    if (text[index] === "{") depth += 1;
+    if (text[index] === "}" && --depth === 0) return text.slice(start, index + 1);
   }
   throw new Error(`${name} body is incomplete`);
 }
 
 function compiled(name, dependencies) {
   const names = Object.keys(dependencies);
-  return new Function(...names, `${functionSource(name)}; return ${name};`)(...names.map((key) => dependencies[key]));
+  return new Function(...names, `${functionSource("withSourceDeleteLock", interaction)}; ${functionSource(name)}; return ${name};`)(...names.map((key) => dependencies[key]));
 }
 
 const codedError = (code) => Object.assign(new Error(code), { code });

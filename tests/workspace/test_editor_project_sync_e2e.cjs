@@ -187,12 +187,12 @@ test("DI-081 deleted project loses every browser source handle while another pro
     });
     assert.deepEqual(cleared, { project: null, ids: [], current: null, candidates: 0, drafts: 0, history: 0, candidateImages: 0 },
       "deleting the current project releases its browser image, candidate, draft, and history references");
-    await page.reload({ waitUntil: "domcontentloaded" }); await page.waitForFunction(() => state.settings && state.images.length === 2);
+    await page.reload({ waitUntil: "domcontentloaded" }); await page.waitForFunction(() => state.settings && state.images.length === 2 && state.status?.key === "status.imagesLoaded");
     const restoredOther = await page.evaluate(async () => {
       state.project = { id: "ledger-project", name: "Other", status: "active" };
       state.images = [{ id: "image-b", relativePath: "B.png", sourceId: "other-file", sourceKind: "session", sizeBytes: 3, mtimeNs: 456000000,
         width: 2, height: 2, reviewed: false, hidden: false }];
-      await restoreBrowserProjectSourcesForCurrentCatalog([]);
+      await restoreBrowserProjectSourcesForCurrentCatalog([{ id: "other-file", kind: "browser-files" }, { id: "other-directory", kind: "browser-directory" }]);
       const access = state.sourceAccess.get("image-b");
       return { ids: [...state.sourceAccess.keys()], sourceId: access?.sourceId, relativePath: access?.relativePath, size: access?.size, lastModified: access?.lastModified };
     });

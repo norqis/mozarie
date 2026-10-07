@@ -223,7 +223,7 @@ function openCatalogContextMenu(event, imageId) {
   event.preventDefault();
   state.contextMenuImageId = imageId;
   const keyboardEvent = event.type === "keydown";
-  state.contextMenuOrigin = event.currentTarget || document.activeElement;
+  state.contextMenuOrigin = keyboardEvent ? event.currentTarget || document.activeElement : document.activeElement;
   state.contextMenuScroll = { gallery: $("#gallery").scrollTop, overview: $("#overviewGrid").scrollTop };
   $("#toggleReviewMenuItem").textContent = t(isReviewed(image) ? "context.unreview" : "context.review");
   const rename = $("#renameImageMenuItem"); const renameAvailable = canRenameCatalogImage(image);
@@ -234,7 +234,7 @@ function openCatalogContextMenu(event, imageId) {
   $("#removeImageMenuItem").textContent = t(isHidden(image) ? "editor.show" : "editor.hide");
   $("#removeFromListMenuItem").disabled = !canRemoveImagesFromList([image]);
   const menu = $("#catalogContextMenu");
-  const cardRect = state.contextMenuOrigin?.getBoundingClientRect?.();
+  const cardRect = (event.currentTarget || state.contextMenuOrigin)?.getBoundingClientRect?.();
   const clientX = !keyboardEvent && Number.isFinite(event.clientX) ? event.clientX : (cardRect ? cardRect.left + Math.min(24, cardRect.width / 2) : 8);
   const clientY = !keyboardEvent && Number.isFinite(event.clientY) ? event.clientY : (cardRect ? cardRect.top + Math.min(24, cardRect.height / 2) : 8);
   menu.style.left = `${clientX}px`;

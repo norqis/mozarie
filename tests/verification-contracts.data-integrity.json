@@ -3215,7 +3215,8 @@
         "node:tests/gallery/test_filtered_action_authority_e2e.cjs::DI-166 DI-167 DI-171 and DI-184 batch delete cancellation conflict and disconnect preserve authority",
         "node:tests/gallery/test_filtered_action_authority_e2e.cjs::DI-181.6 delayed conflicted and disconnected review or hide never move or erase the current editor early",
         "node:tests/gallery/test_filtered_action_authority_e2e.cjs::DI-184 same-project return synchronization preserves a still-authoritative editor draft",
-        "node:tests/gallery/test_filtered_action_authority_e2e.cjs::same-generation return reloads changed pixels and masks while pending edits keep their old revision"
+        "node:tests/gallery/test_filtered_action_authority_e2e.cjs::same-generation return reloads changed pixels and masks while pending edits keep their old revision",
+        "node:tests/gallery/test_filtered_action_authority_e2e.cjs::return synchronization retains usable editor resources after stale-image and mask-load failures"
       ]
     },
     {

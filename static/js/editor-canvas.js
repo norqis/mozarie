@@ -51,10 +51,10 @@ function clearEditor() {
   renderCandidates(); updateHistoryButtons(); updateNavigationControls(); updateActionButtons(); render(); updateBrushCursor();
 }
 
-async function selectImage(imageId, force = false, { saveCurrentDraft = true, preserveView = false } = {}) {
-  if (state.projectOperationPending || isGestureActive()) return;
-  if ((isBusy() || state.importing || state.candidateBatchPending.size) && !force) return;
-  if (state.currentId === imageId && !force && !state.pendingImageId) return;
+async function selectImage(imageId, force = false, { saveCurrentDraft = true, preserveView = false, preserveOnFailure = false } = {}) {
+  if (state.projectOperationPending || isGestureActive()) return false;
+  if ((isBusy() || state.importing || state.candidateBatchPending.size) && !force) return false;
+  if (state.currentId === imageId && !force && !state.pendingImageId) return false;
   if (typeof closeCandidatePadding === "function") closeCandidatePadding();
   state.hover = null; updateBrushCursor();
   const generation = ++state.imageGeneration;
@@ -66,7 +66,7 @@ async function selectImage(imageId, force = false, { saveCurrentDraft = true, pr
   if (!record) {
     state.pendingImageId = null; state.pendingImageKey = null; state.pendingCandidateKey = null;
     updateActionButtons();
-    return;
+    return false;
   }
   state.pendingImageKey = imageCacheKey(record);
   state.pendingCandidateKey = candidateCacheKey(imageId, Number(record.candidateRevision || 0));
@@ -76,7 +76,7 @@ async function selectImage(imageId, force = false, { saveCurrentDraft = true, pr
   if (!imageCached || !candidatesCached) { clearTimeout(state.loadingDelay); state.loadingDelay = null; }
   try {
     if (saveCurrentDraft && outgoingId) await flushDraftSaves([outgoingId]);
-    if (!isCurrentGeneration(generation) || !isCurrentCatalogEpoch(catalogEpoch)) return;
+    if (!isCurrentGeneration(generation) || !isCurrentCatalogEpoch(catalogEpoch)) return false;
     const [image, candidateBundle] = await Promise.all([
       cachedImage(record),
       loadCandidateBundle(imageId, generation),
@@ -84,7 +84,7 @@ async function selectImage(imageId, force = false, { saveCurrentDraft = true, pr
     if (!isCurrentGeneration(generation) || !isCurrentCatalogEpoch(catalogEpoch)) {
       if (!state.imageCache.has(imageCacheKey(record))) closeBitmap(image);
       if (!state.candidateBundleCache.has(candidateCacheKey(imageId, candidateBundle.candidateRevision))) releaseCandidateBitmapBundle(candidateBundle);
-      return;
+      return false;
     }
     // A tab-local draft is newer than the compact server copy. Otherwise the
     // workspace request and all draft image decodes must finish before the
@@ -96,7 +96,7 @@ async function selectImage(imageId, force = false, { saveCurrentDraft = true, pr
       if (!isCurrentGeneration(generation) || !isCurrentCatalogEpoch(catalogEpoch)) {
         if (!state.imageCache.has(imageCacheKey(record))) closeBitmap(image);
         if (!state.candidateBundleCache.has(candidateCacheKey(imageId, candidateBundle.candidateRevision))) releaseCandidateBitmapBundle(candidateBundle);
-        return;
+        return false;
       }
       if (!hasDraft) {
         if (draft) state.drafts.set(imageId, draft); else state.drafts.delete(imageId);
@@ -133,6 +133,7 @@ async function selectImage(imageId, force = false, { saveCurrentDraft = true, pr
       if (outgoingId && outgoingId !== imageId) releaseInactiveWorkspaceDraft(outgoingId);
       if (hasDurableHistory()) void refreshProjectHistory(imageId);
       prefetchNeighbors(record);
+      return true;
     } finally {
       releaseDraftImages(draftImages);
     }
@@ -140,10 +141,11 @@ async function selectImage(imageId, force = false, { saveCurrentDraft = true, pr
     if (isCurrentGeneration(generation) && isCurrentCatalogEpoch(catalogEpoch)) {
       clearTimeout(state.loadingDelay); state.loadingDelay = null;
       state.pendingImageId = null; state.pendingImageKey = null; state.pendingCandidateKey = null;
-      if (error.code === "stale_asset") invalidateStaleAsset(imageId);
-      showUserError(error);
+      if (error.code === "stale_asset" && !preserveOnFailure) invalidateStaleAsset(imageId);
+      if (error.name !== "AbortError") showUserError(error);
       updateActionButtons();
     }
+    return false;
   }
 }
 

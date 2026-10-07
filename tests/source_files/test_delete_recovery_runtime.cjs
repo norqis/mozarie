@@ -114,7 +114,8 @@ test("source-delete lost commit response retries the same token without duplicat
 });
 
 test("source-delete refuses file I/O when the durable local intent cannot be written", async () => {
-  const operationSource = range("async function permanentlyDeleteImages", "async function removeImageFromCatalog");
+  const operationSource = range("function withSourceDeleteLock", "async function resumePendingSourceDeletes")
+    + range("async function permanentlyDeleteImages", "async function removeImageFromCatalog");
   let removeCalls = 0;
   let shownError = null;
   const image = { id: "one", sourceKind: "session" };
@@ -143,7 +144,7 @@ test("source-delete refuses file I/O when the durable local intent cannot be wri
 });
 
 test("source-delete startup recovery reconciles a lost prepare, an already-missing entry, and an empty receipt", async () => {
-  const resumeSource = range("async function resumePendingSourceDeletes", "async function resumePendingSourceDeletesFromUser");
+  const resumeSource = range("function withSourceDeleteLock", "async function resumePendingSourceDeletesFromUser");
   const calls = [];
   const remembered = [];
   const forgotten = [];

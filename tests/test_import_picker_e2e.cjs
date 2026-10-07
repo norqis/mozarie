@@ -4454,6 +4454,7 @@ async function main() {
     assert.equal(overviewPointerBefore.pointerPrevented, true, "secondary overview pointerdown prevents focus movement");
     assert.deepEqual(overviewPointerBefore.after, overviewPointerBefore.before, "right-clicking an overview card leaves logical focus, selection, tab stop, current image, and scroll unchanged");
     assert.equal(overviewPointerBefore.target, "pointer-1", "the overview menu targets the right-clicked card");
+    assert.equal(await page.evaluate(() => state.contextMenuOrigin?.dataset.id), "pointer-0", "Escape must restore the pre-click focus rather than the menu's action target");
     await page.keyboard.press("Escape");
     await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(resolve)));
     const overviewPointerAfter = await page.evaluate(() => ({ scrollTop: document.querySelector("#overviewGrid").scrollTop, currentId: state.currentId, selected: [...state.selectedImageIds].sort(), focused: document.activeElement?.dataset.id, tabStops: [...document.querySelectorAll('.overview-item[tabindex="0"]')].map((item) => item.dataset.id) }));

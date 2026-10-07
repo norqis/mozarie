@@ -520,19 +520,30 @@ async function syncCatalogOnReturn() {
     const deferReload = resourcesChanged && (hasPendingWorkspaceDraft(previous.id) || isBusy() || isGestureActive()
       || state.activeStroke || currentImageActionPending() || state.candidateUpdateChains.has(previous.id)
       || state.imageMutationChains.has(previous.id));
-    if (deferReload) {
+    const retainCurrentResources = (record = current) => {
       // Keep old pixels paired with their old revision while an edit is pending.
-      const { hidden, reviewed, flipH, flipV, transformRevision } = current;
-      Object.assign(current, previous, { hidden, reviewed, flipH, flipV, transformRevision });
-    }
+      const { hidden, reviewed, flipH, flipV, transformRevision } = record;
+      Object.assign(record, previous, { hidden, reviewed, flipH, flipV, transformRevision });
+    };
+    if (deferReload) retainCurrentResources();
     catalogResponse(snapshot);
     if (typeof flushPendingBrowserSaveAcks === "function") void flushPendingBrowserSaveAcks();
     replaceCatalogSnapshot(snapshot, knownProjectId);
     state.missingNativeSources = typeof missingNativeSources === "function" ? missingNativeSources(snapshot.sources) : [];
     if (typeof restoreBrowserProjectSourcesForCurrentCatalog === "function") void restoreBrowserProjectSourcesForCurrentCatalog(snapshot.sources).catch(() => {});
     if (resourcesChanged && !deferReload) {
-      state.drafts.delete(previous.id); state.maskStatus.delete(previous.id); releaseImageCaches(previous.id);
-      await selectImage(previous.id, true, { preserveView: true, saveCurrentDraft: false });
+      const previousDraft = state.drafts.get(previous.id);
+      const previousMaskStatus = state.maskStatus.get(previous.id);
+      state.drafts.delete(previous.id); state.maskStatus.delete(previous.id);
+      const loading = selectImage(previous.id, true, { preserveView: true, saveCurrentDraft: false, preserveOnFailure: true });
+      const generation = state.imageGeneration;
+      if (!await loading && isCurrentGeneration(generation) && isCurrentCatalogEpoch(epoch) && state.currentId === previous.id) {
+        retainCurrentResources(currentRecord());
+        if (previousDraft) state.drafts.set(previous.id, previousDraft);
+        if (previousMaskStatus !== undefined) state.maskStatus.set(previous.id, previousMaskStatus);
+        syncResourceOwnership();
+        syncFlipControls(); render();
+      }
     } else if (current && state.currentImage) {
       syncFlipControls(); render();
     }

@@ -197,10 +197,11 @@ nodeTest("interaction and catalog mutation controls", async () => {
   test.positionCatalogContextMenu(element("#catalogContextMenu"), -1, 999);
   const pointerOrigin = element("#pointer-origin"); const pointerTarget = element("#pointer-target"); document.activeElement = pointerOrigin;
   test.openCatalogContextMenu({ ...event("", "contextmenu"), currentTarget: pointerTarget }, "two");
-  assert.equal(state.contextMenuOrigin, pointerTarget, "a pointer context menu keeps the actual right-clicked catalog card as its rename target");
+  assert.equal(state.contextMenuImageId, "two", "a pointer context menu acts on the right-clicked image");
+  assert.equal(state.contextMenuOrigin, pointerOrigin, "a pointer context menu preserves its prior focus separately from its target");
   assert.equal(element("#renameImageMenuItem").textContent, "context.rename", "the right-click menu keeps the Rename action visible");
   assert.equal(element("#catalogContextMenu").style.left, "30px", "the context menu is positioned at the pointer x coordinate");
-  test.closeCatalogContextMenu(); assert.equal(document.activeElement, pointerTarget, "closing a pointer context menu restores focus to its actual target card");
+  test.closeCatalogContextMenu(); assert.equal(document.activeElement, pointerOrigin, "closing a pointer context menu restores the pre-click focus");
   const keyboardTarget = element("#keyboard-target");
   test.openCatalogContextMenu({ ...event("", "keydown"), currentTarget: keyboardTarget }, "one");
   assert.equal(state.contextMenuOrigin, keyboardTarget, "a keyboard context menu restores its invoking card");
@@ -311,7 +312,7 @@ nodeTest("interaction and catalog mutation controls", async () => {
   state.contextMenuImageId = "missing"; await test.copyContextMenuImagePath();
   await test.removeImageFromCatalog(); await test.removeImageFromCatalog("missing");
   state.selectedImageIds.clear(); await test.runSelectionAction("hide");
-  test.rememberImportedSource({ clientKey: "none", entry: {}, data: {} });
+  await test.rememberImportedSource({ clientKey: "none", entry: {}, data: {} }, {});
   await test.importFiles([], {});
   await test.importFiles([{ name: "name-only.png" }]);
   const originalApi = context.api;
