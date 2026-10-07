@@ -1013,9 +1013,17 @@ async function writeFormattedSourceHandle(access, image, format, response) {
   const targetHandle = await access.parentHandle.getFileHandle(targetName, { create: true });
   const relativePath = access.relativePath ? `${access.relativePath.split("/").slice(0, -1).concat(targetName).filter(Boolean).join("/")}` : targetName;
   const replacement = { ...access, fileHandle: targetHandle, name: targetName, relativePath };
-  try { await writeSourceHandle(replacement, response); }
+  const pendingProjectId = access.sourceKind === "browser-files" ? state.project?.id : null;
+  try {
+    await writeSourceHandle(replacement, response);
+    if (pendingProjectId) {
+      replacement.clientKey ||= newClientKey();
+      // Retain both handles until the server decides which relative path won.
+      await rememberProjectSource(pendingProjectId, targetHandle, null, replacement.sourceId, replacement.clientKey, relativePath, replacement.parentHandle);
+    }
+  }
   catch (error) { try { await access.parentHandle.removeEntry(targetName); } catch {} throw error; }
-  return { previousName: access.fileHandle.name || access.name, replacement };
+  return { previousName: access.fileHandle.name || access.name, replacement, pendingProjectId };
 }
 
 async function finishFormattedSourceRename(access, rename) {
@@ -1028,6 +1036,7 @@ async function finishFormattedSourceRename(access, rename) {
 async function discardFormattedSourceRename(access, rename) {
   if (!rename) return;
   try { await access.parentHandle.removeEntry(rename.replacement.fileHandle.name || rename.replacement.name); } catch {}
+  if (rename.pendingProjectId) await forgetPendingProjectSource(rename.pendingProjectId, rename.replacement.sourceId, rename.replacement.clientKey);
 }
 
 function sourceCommitMetadata(access) {

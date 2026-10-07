@@ -99,6 +99,13 @@ async function restoreBrowserProjectSourcesForCurrentCatalog(catalogSources = []
   const stagedAccess = new Map();
   const pending = [];
   const imagesById = new Map(state.images.map((image) => [image.id, image]));
+  const imagesBySourcePath = new Map(state.images.map((image) => [`${image.sourceId}\0${image.relativePath}`, image]));
+  const fileSourceAliases = new Map();
+  for (const source of catalogSources) {
+    if (source.kind !== "browser-files") continue;
+    for (const alias of [source.id, source.identity, source.identity?.replace(/^browser:/, "")]) if (alias) fileSourceAliases.set(alias, source.id);
+  }
+  const promotedSources = [];
   const directorySourceAliases = new Map();
   const directorySourceIds = new Set();
   const imagesByDirectorySource = new Map();
@@ -123,12 +130,15 @@ async function restoreBrowserProjectSourcesForCurrentCatalog(catalogSources = []
     images.push(image); imagesByPath.set(relativePath, images); imagesByDirectorySource.set(image.sourceId, imagesByPath);
   }
   for (const source of files) {
-    const image = imagesById.get(source.imageId);
+    const image = source.imageId ? imagesById.get(source.imageId)
+      : imagesBySourcePath.get(`${fileSourceAliases.get(source.sourceId) || source.sourceId}\0${source.relativePath}`);
+    if (!image || image.relativePath !== source.relativePath) continue;
     if (await ensureProjectSourcePermission(source.handle)) {
-      if (image) stagedAccess.set(source.imageId, {
+      stagedAccess.set(image.id, {
         fileHandle: source.handle, parentHandle: source.parentHandle || null, sourceId: source.sourceId, clientKey: source.clientKey, relativePath: source.relativePath,
         sourceKind: "browser-files", size: image.sizeBytes, lastModified: Math.round(Number(image.mtimeNs) / 1000000),
       });
+      if (!source.imageId) promotedSources.push({ ...source, imageId: image.id });
       continue;
     }
     pending.push({ ...source, projectId, kind: "file", key: `file:${source.sourceId}:${source.clientKey || source.relativePath}` });
@@ -154,6 +164,8 @@ async function restoreBrowserProjectSourcesForCurrentCatalog(catalogSources = []
     catch { pending.push({ ...source, projectId, kind: "directory", key: `directory:${source.sourceId}` }); }
   }
   if (restoreGeneration === browserSourceRestoreGeneration && isCurrentCatalogEpoch(epoch) && state.project?.id === projectId) {
+    if (promotedSources.length) await rememberProjectSources(projectId, promotedSources);
+    if (restoreGeneration !== browserSourceRestoreGeneration || !isCurrentCatalogEpoch(epoch) || state.project?.id !== projectId) return;
     state.sourceAccess = stagedAccess;
     pendingBrowserProjectSources = pending; renderProjectCurrent();
   }

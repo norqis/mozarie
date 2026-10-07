@@ -132,7 +132,7 @@ async function rememberProjectSources(projectId, sources) {
     });
     return prepared.map((source) => source.stableId);
   } catch (error) {
-    if (error?.code) throw error;
+    if (typeof error?.code === "string") throw error;
     throw codedError("project_source_unavailable");
   } finally { db.close(); }
 }

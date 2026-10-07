@@ -828,7 +828,7 @@ async function importFiles(files) {
         if (!isSupportedImageFile(file)) continue;
         const entry = { ...descriptor, file, relativePath: descriptor.relativePath || file.name };
         showProcessing({ kind: "import", state: "running", total: session.total, completed: session.completed, current: entry.relativePath });
-        const stagedSource = Boolean(session.catalogId && session.sourceKind === "browser-files" && entry.fileHandle);
+        const stagedSource = Boolean(session.catalogId && session.sourceKind === "browser-files" && entry.fileHandle && session.importIntent !== "restore");
         if (stagedSource) await rememberProjectSource(session.catalogId, entry.fileHandle, null, session.sourceId, clientKey, entry.relativePath);
         let data;
         try { data = await importSingleFile(entry, clientKey, session.catalogId, session.sourceId, session.sourceKind, session.importIntent, session); }
@@ -1008,7 +1008,7 @@ async function importFileHandles(handles, session = beginImportSession()) {
   session.sourceKind = "browser-files";
   return importHandleEntries(handles.map((item) => {
     const handle = item?.handle || item;
-    return { handle, clientKey: item?.clientKey || null, relativePath: item?.relativePath || handle.name, parentHandle: null };
+    return { handle, clientKey: item?.clientKey || null, relativePath: item?.relativePath || handle.name, parentHandle: item?.parentHandle || null };
   }), session);
 }
 
@@ -1073,7 +1073,7 @@ async function importProjectFileHandles(sources, projectId) {
     if (!handle) continue;
     const sourceId = source?.sourceId || crypto.randomUUID();
     const handles = groups.get(sourceId) || [];
-    handles.push({ handle, clientKey: source?.clientKey || null, relativePath: source?.relativePath || handle.name }); groups.set(sourceId, handles);
+    handles.push({ handle, clientKey: source?.clientKey || null, relativePath: source?.relativePath || handle.name, parentHandle: source?.parentHandle || null }); groups.set(sourceId, handles);
   }
   const failures = [];
   for (const [sourceId, handles] of groups) {

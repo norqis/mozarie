@@ -454,6 +454,12 @@
       "status": "automated",
       "testIds": [
         "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > formatted overwrite replaces source after success",
+        "node:tests/saving/test_renamed_source_recovery_e2e.cjs::single renamed overwrite survives closing the tab after server commit",
+        "node:tests/saving/test_renamed_source_recovery_e2e.cjs::batch renamed overwrite survives closing the tab after server commit",
+        "node:tests/saving/test_renamed_source_recovery_e2e.cjs::single renamed overwrite survives closing the tab after server commit using JPG",
+        "node:tests/saving/test_renamed_source_recovery_e2e.cjs::batch renamed overwrite survives closing the tab after server commit using JPG",
+        "node:tests/saving/test_renamed_source_recovery_e2e.cjs::rejected renamed overwrite removes pending access and preserves the original handle",
+        "node:tests/saving/test_renamed_source_recovery_e2e.cjs::renamed overwrite does not commit when storing the replacement handle fails",
         "python:tests.test_recursive_save_rename.WorkspaceRenameTests.test_original_save_retargets_native_aliases_and_keeps_alias_edit"
       ]
     },
