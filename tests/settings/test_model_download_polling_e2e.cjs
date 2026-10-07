@@ -147,8 +147,8 @@ test("a pending download start keeps close and Escape from losing progress", { t
   });
 });
 
-for (const failure of ["start", "reconnect"]) {
-  test(`a failed download ${failure} restores close and allows retry`, { timeout: 30000 }, async () => {
+function failedDownload(failure) {
+  return async () => {
     await withDownloadPage(async (page) => {
       const failedReply = (route) => route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error_code: "internal_error" }) });
       await page.route("**/api/model-download/start", failure === "start" ? failedReply : (route) => route.fulfill({
@@ -170,8 +170,10 @@ for (const failure of ["start", "reconnect"]) {
       await page.waitForFunction(() => document.querySelector("#modelDownloadStatus").textContent === t("modelDownload.complete"));
       await terminal(page, "complete");
     });
-  });
+  };
 }
+test("a failed download start restores close and allows retry", { timeout: 30000 }, failedDownload("start"));
+test("a failed download reconnect restores close and allows retry", { timeout: 30000 }, failedDownload("reconnect"));
 
 test("a current progress error restores close and stops polling", { timeout: 30000 }, async () => {
   await withDownloadPage(async (page) => {
