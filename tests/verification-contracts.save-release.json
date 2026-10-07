@@ -1284,6 +1284,7 @@
       "testIds": [
         "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > partial streamed output is aborted and removed",
         "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > browser copy render failure cancels its reservation",
+        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > failed copy and overwrite render retries cancel their reservation",
         "python:tests.test_server.MozarieTests.test_browser_copy_render_keeps_source_and_candidates_when_output_sync_fails",
         "python:tests.saving.test_apply_staging_failures.ApplyStagingFailureTests.test_fsync_failure_releases_stage_and_allows_retry",
         "python:tests.saving.test_apply_staging_failures.ApplyStagingFailureTests.test_stage_directory_failure_releases_reservation_and_allows_retry",

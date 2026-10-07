@@ -449,8 +449,10 @@ async function renderDefaultCopy(entry, payload) {
     }) }).catch(() => ({ state: "unknown" }));
     if (status.state === "pending") return { saveToken: clientSaveToken, outputPath: status.outputPath || "", noEffect: status.noEffect === true };
     if (status.state === "rendering") {
-      const response = await renderSingleSave({ ...payload, clientSaveToken });
-      return { saveToken: clientSaveToken, outputPath: outputPathFromResponse(response), noEffect: response.headers.get("X-Mozarie-No-Effect") === "1" };
+      try {
+        const response = await renderSingleSave({ ...payload, clientSaveToken });
+        return { saveToken: clientSaveToken, outputPath: outputPathFromResponse(response), noEffect: response.headers.get("X-Mozarie-No-Effect") === "1" };
+      } catch (retryError) { error = retryError; }
     }
     await cancelBrowserSave(entry, clientSaveToken);
     throw error;
@@ -460,15 +462,16 @@ async function renderDefaultCopy(entry, payload) {
 async function renderStreamedSave(entry, payload) {
   const clientSaveToken = newClientSaveToken();
   try {
-    const reserved = await reserveSaveRender(entry, payload, clientSaveToken);
-    if (reserved.state === "pending") return await renderSingleSave({ ...payload, clientSaveToken });
+    await reserveSaveRender(entry, payload, clientSaveToken);
     return await renderSingleSave({ ...payload, clientSaveToken });
   } catch (error) {
     const status = await api("/api/save/status", { method: "POST", body: JSON.stringify({
       imageId: entry.imageId, candidateRevision: entry.candidateRevision, saveToken: clientSaveToken, sourceAction: "overwrite",
     }) }).catch(() => ({ state: "unknown" }));
-    if (status.state === "pending") await cancelBrowserSave(entry, clientSaveToken);
-    if (status.state === "rendering") return await renderSingleSave({ ...payload, clientSaveToken });
+    if (status.state === "rendering") {
+      try { return await renderSingleSave({ ...payload, clientSaveToken }); }
+      catch (retryError) { error = retryError; }
+    }
     await cancelBrowserSave(entry, clientSaveToken);
     error.saveState = status.state || "unknown";
     throw error;
@@ -1104,6 +1107,7 @@ async function deleteCopiedBrowserSource(image, saveToken) {
   // Persist the handle before prepare: a server receipt must never outlive
   // the browser capability needed to complete its claimed deletion.
   let pending = { deleteToken, saveToken, retryOnResume: true, imageIds: [image.id], browserDeletedImageIds: [], browserEntries: [browserEntry], state: "preparing" };
+  return withSourceDeleteLock(deleteToken, async () => {
   try {
     await rememberPendingSourceDelete(pending);
     const prepared = await catalogApi("/api/catalog/delete-source/prepare", { imageIds: [image.id], deleteToken }, { method: "POST" });
@@ -1136,6 +1140,7 @@ async function deleteCopiedBrowserSource(image, saveToken) {
     console.warn("コピー後のブラウザー元画像削除は保留です: %s", error?.code || error?.code || error);
     return { deleted: false, error };
   }
+  });
 }
 
 async function restoreCopiedBrowserSourcesAfterRejectedDelete(pending) {

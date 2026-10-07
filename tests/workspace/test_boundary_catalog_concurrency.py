@@ -15,7 +15,7 @@ class BoundaryCatalogConcurrencyTests(unittest.TestCase):
     def test_clear_replace_and_delete_project_finish_during_boundary_preparation(self):
         for operation in ("clear", "replace", "delete_project"):
             with self.subTest(operation=operation), tempfile.TemporaryDirectory() as directory:
-                root = Path(directory)
+                root = Path(directory).resolve()
                 app = root / "app"
                 prepare_test_app_config(app)
                 with patch.object(state_module, "APP_DIR", app):

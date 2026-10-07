@@ -83,12 +83,13 @@ test("DI-126 through DI-157 render the complete M U R N H truth table in catalog
       const result = await page.evaluate((selected) => {
         state.galleryFilter = new Set(selected);
         state.overviewFilter = new Set(selected);
-        renderGallery(true);
-        renderOverview(true);
+        setViewMode("edit");
+        const galleryDom = [...document.querySelectorAll(".gallery-item")].map((item) => item.dataset.id);
+        setViewMode("overview");
         return {
           galleryModel: galleryFilteredImages().map((image) => image.id),
           overviewModel: overviewImages().map((image) => image.id),
-          galleryDom: [...document.querySelectorAll(".gallery-item")].map((item) => item.dataset.id),
+          galleryDom,
           overviewDom: [...document.querySelectorAll(".overview-item")].map((item) => item.dataset.id),
         };
       }, filters);
@@ -226,7 +227,7 @@ test("DI-185 repeated filter and folder changes restore visual and DOM catalogue
       state.galleryFilter = new Set(); renderGallery(true);
       const galleryRestored = domIds(".gallery-item");
       const galleryVisual = visualIds(".gallery-item");
-      state.viewMode = "overview";
+      setViewMode("overview");
       state.overviewFilter = new Set(["hidden"]); state.overviewQuery = ""; state.overviewFolder = "two"; renderOverview(true);
       const narrowed = domIds(".overview-item");
       const narrowedVisual = visualIds(".overview-item");

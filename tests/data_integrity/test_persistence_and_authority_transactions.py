@@ -701,6 +701,50 @@ class RemainingDataIntegrityContracts(unittest.TestCase):
         self.assertTrue(any("元画像を完全削除: 開始" in line for line in captured.output))
         self.assertTrue(any("元画像を完全削除: 完了" in line for line in captured.output))
 
+    def source_delete_progress_failure(self, *, restart: bool) -> None:
+        state, project_id, image_id, source = self.project_with_image()
+        self.add_candidate(state, image_id, "retained")
+        original = source.read_bytes()
+        token = "00000000-0000-4000-8000-000000233202"
+        payload = {"imageIds": [image_id], "deleteToken": token}
+        state.prepare_source_delete(payload)
+        state.claim_source_delete(token)
+        with state.workspace_store._connect() as db:
+            db.executescript("""
+                CREATE TRIGGER fail_rename_progress BEFORE UPDATE ON source_delete_operations
+                WHEN (NEW.state='renaming' AND json_array_length(NEW.result_json, '$.renamedImageIds') > 0)
+                    OR NEW.state='prepared'
+                BEGIN SELECT RAISE(ABORT, 'progress unavailable'); END;
+            """)
+        with self.assertRaises(sqlite3.IntegrityError):
+            state.delete_images_with_sources(payload)
+        self.assertTrue(source.exists(), "journal failure after rename restores the original path immediately")
+        self.assertEqual(source.read_bytes(), original)
+        self.assertIn(image_id, state.images)
+        self.assertEqual([candidate.candidate_id for candidate in state.candidates[image_id]], ["retained"])
+        self.assertEqual(list(source.parent.glob("*.mozarie-delete-*")), [])
+        self.assertEqual(state.source_delete_status(token)["state"], "renaming", "failed rollback journaling retains the old recovery plan")
+        with state.workspace_store._connect() as db:
+            db.execute("DROP TRIGGER fail_rename_progress")
+        if restart:
+            state.shutdown(); self.states.remove(state)
+            state = self.state()
+            self.assertEqual(state.source_delete_status(token)["state"], "prepared")
+            state.open_project(project_id)
+            state.claim_source_delete(token)
+        result = state.delete_images_with_sources(payload)
+        self.assertEqual(result["removedImageIds"], [image_id])
+        self.assertEqual(state.source_delete_status(token)["state"], "committed")
+        self.assertFalse(source.exists())
+        self.assertEqual(list(source.parent.glob("*.mozarie-delete-*")), [])
+        self.assertEqual(state.workspace_store.pending_source_delete_renames(), [])
+
+    def test_source_delete_progress_failure_restores_source_and_same_token_retries(self) -> None:
+        self.source_delete_progress_failure(restart=False)
+
+    def test_source_delete_progress_failure_restores_source_and_restarts(self) -> None:
+        self.source_delete_progress_failure(restart=True)
+
     def test_source_delete_cleanup_distinguishes_missing_quarantine_from_temporary_oserror_and_retries(self) -> None:
         """DI-233.2/.3: only actual absence completes; transient I/O stays retryable."""
         state, project_id, image_id, _source = self.project_with_image()

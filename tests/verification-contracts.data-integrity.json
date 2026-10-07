@@ -4268,11 +4268,13 @@
       "sourceIds": [
         "DI-224"
       ],
-      "observation": "永続化した削除トークンの状態を再照会する",
+      "observation": "永続化した削除トークンの状態を再照会する。実行中の同タブ・別タブの操作は復旧対象にせず、所有タブ終了後に復旧できる。",
       "status": "automated",
       "testIds": [
         "node:tests/source_files/test_delete_recovery_runtime.cjs::source-delete startup recovery reconciles a lost prepare, an already-missing entry, and an empty receipt",
-        "node:tests/test_source_delete_e2e.cjs::unknown browser-source deletion remains recoverable instead of silently committing or cancelling"
+        "node:tests/test_source_delete_e2e.cjs::unknown browser-source deletion remains recoverable instead of silently committing or cancelling",
+        "node:tests/saving/test_active_source_delete_recovery_e2e.cjs::active source deletion survives recovery in the same tab and another tab",
+        "node:tests/saving/test_active_source_delete_recovery_e2e.cjs::closing the source deletion tab releases its intent for recovery"
       ]
     },
     {
@@ -4384,7 +4386,9 @@
       "status": "automated",
       "testIds": [
         "python:tests.test_save_recovery.SaveRecoveryTests.test_owned_quarantine_restores_to_the_recorded_source_path",
-        "python:tests.test_save_recovery.SaveRecoveryTests.test_committed_quarantine_conflict_is_not_deleted"
+        "python:tests.test_save_recovery.SaveRecoveryTests.test_committed_quarantine_conflict_is_not_deleted",
+        "python:tests.data_integrity.test_persistence_and_authority_transactions.RemainingDataIntegrityContracts.test_source_delete_progress_failure_restores_source_and_same_token_retries",
+        "python:tests.data_integrity.test_persistence_and_authority_transactions.RemainingDataIntegrityContracts.test_source_delete_progress_failure_restores_source_and_restarts"
       ]
     },
     {
@@ -4847,6 +4851,8 @@
       "testIds": [
         "python:tests.test_workspace.WorkspaceTests.test_bulk_workspace_queries_accept_more_than_sqlite_variable_limit",
         "python:tests.workspace.test_import_lookup_cost.ImportLookupCostTests.test_single_image_reconciliation_cost_is_independent_of_source_size",
+        "python:tests.workspace.test_import_lookup_cost.ImportLookupCostTests.test_single_image_import_does_not_copy_or_sort_the_existing_catalog",
+        "python:tests.workspace.test_import_lookup_cost.ImportLookupCostTests.test_import_preserves_stable_order_for_equal_case_insensitive_paths",
         "python:tests.test_workspace.WorkspaceTests.test_reconcile_images_loads_transforms_without_per_image_queries"
       ]
     },

@@ -2,6 +2,7 @@
 const assert = require("node:assert/strict");
 const test = require("node:test");
 const { chromium } = require("playwright");
+const { expect } = require("playwright/test");
 const { startFixtureServer, closeServer } = require("../test_import_picker_e2e.cjs");
 
 async function withPendingSaves(run) {
@@ -84,7 +85,7 @@ test("closing the saving tab releases ownership so another tab can cancel its ab
     const second = await open(); await second.evaluate(() => reconcilePendingBrowserSaves());
     assert.deepEqual(cancellations, []);
     await first.close();
-    await second.waitForFunction(async () => !(await navigator.locks.query()).held.some((lock) => lock.name === "mozarie-browser-save-ownership"));
+    await expect.poll(() => second.evaluate(async () => (await navigator.locks.query()).held.some((lock) => lock.name === "mozarie-browser-save-ownership"))).toBe(false);
     assert.equal(await second.evaluate(() => Object.keys(pendingSaveTokens()).length), 1, "the abandoned token remains in shared storage");
     await second.evaluate(() => reconcilePendingBrowserSaves());
     assert.deepEqual(cancellations, ["first"]);

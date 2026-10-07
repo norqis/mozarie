@@ -305,6 +305,7 @@ test("DI-161 DI-164 DI-168 DI-181 DI-183 and DI-185 use the captured visible ord
     assert.deepEqual(matrix.hidden, { visible: ["D"], processable: false, next: null }, "an already-hidden H image remains viewable but is never a processing target or wrapped successor");
 
     const domOrder = await page.evaluate(() => {
+      setViewMode("overview");
       state.overviewFilter = new Set(["reviewed"]); state.overviewFolder = "two"; state.overviewQuery = ""; renderOverview(true);
       state.overviewFilter.clear(); state.overviewFolder = ""; renderOverview(true);
       const cards = [...document.querySelectorAll(".overview-item")];

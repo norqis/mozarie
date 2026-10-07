@@ -1481,7 +1481,8 @@
       "observation": "一覧サムネイルと中央画像が同じ向きになる",
       "status": "automated",
       "testIds": [
-        "node:tests/test_flip_export_ui_contracts_e2e.cjs::overwrite then Undo keeps the thumbnail and center image in the same direction"
+        "node:tests/test_flip_export_ui_contracts_e2e.cjs::overwrite then Undo keeps the thumbnail and center image in the same direction",
+        "python:tests.test_http_live_endpoints.LiveHttpEndpointTests.test_thumbnail_pixels_remain_in_source_orientation_before_and_after_flip"
       ]
     },
     {

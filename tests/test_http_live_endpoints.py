@@ -441,6 +441,34 @@ class LiveHttpEndpointTests(unittest.TestCase):
             self.assertGreater(editor.crop((0, 0, 20, 20)).resize((1, 1)).getpixel((0, 0))[0], 200)
             self.assertGreater(thumbnail.crop((0, 0, 20, 20)).resize((1, 1)).getpixel((0, 0))[0], 200)
 
+    def test_thumbnail_pixels_remain_in_source_orientation_before_and_after_flip(self) -> None:
+        pixels = np.zeros((40, 40, 3), dtype=np.uint8)
+        pixels[:20, :20] = (255, 0, 0)
+        pixels[:20, 20:] = (0, 255, 0)
+        pixels[20:, :20] = (0, 0, 255)
+        pixels[20:, 20:] = (255, 255, 0)
+        source = self.source_dir / "quadrants.png"
+        with Image.fromarray(pixels) as image:
+            image.save(source)
+        status, _headers, _body = self.request("POST", "/api/folder", {"path": str(self.source_dir)}, authorized=True)
+        self.assertEqual(status, 200)
+        record = next(record for record in self.state.images.values() if record.path == source)
+        version = self.state.asset_version(record)
+        for horizontal, vertical in [(True, False), (False, True), (True, True), (False, False)]:
+            with self.subTest(horizontal=horizontal, vertical=vertical):
+                status, _headers, _body = self.request("POST", f"/api/images/{record.image_id}/transform",
+                    {"flipH": horizontal, "flipV": vertical}, authorized=True)
+                self.assertEqual(status, 200)
+                thumbnail_path = self.state.cache_dir / "thumbnails" / f"{record.image_id}-{version}.jpg"
+                thumbnail_path.unlink(missing_ok=True)
+                for cache in ["cold", "warm"]:
+                    status, _headers, body = self.request("GET", f"/api/thumbnail/{record.image_id}?v={version}")
+                    self.assertEqual(status, 200, cache)
+                    with Image.open(io.BytesIO(body)) as thumbnail:
+                        for x, y in [(5, 5), (35, 5), (5, 35), (35, 35)]:
+                            np.testing.assert_allclose(thumbnail.getpixel((x, y)), pixels[y, x], atol=3,
+                                err_msg="CSS applies the view flip once, so thumbnail bytes must retain source orientation")
+
     def test_live_manual_layer_transfer_persists_and_recovers_after_cancel_or_commit_failure(self) -> None:
         """Run the browser's begin/layer/commit protocol through a real server."""
         status, _headers, body = self.request("POST", "/api/projects", {"name": "Manual transfer"}, authorized=True)

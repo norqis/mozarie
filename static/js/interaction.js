@@ -454,12 +454,22 @@ async function recoverPendingBrowserDeletes(pending) {
   return { deleted: pending.browserDeletedImageIds, unresolved };
 }
 
+function withSourceDeleteLock(token, callback, ifAvailable = false) {
+  return globalThis.navigator?.locks?.request
+    ? navigator.locks.request(`mozarie-source-delete:${token}`, { ifAvailable }, (lock) => lock ? callback() : undefined)
+    : callback();
+}
+
 async function resumePendingSourceDeletes(requestPermission = false) {
+  if (state.catalogMutation || state.saving) return;
   const pendingDeletes = await pendingSourceDeletes();
   if (!pendingDeletes.length) return;
   const pendingImageIds = new Set(pendingDeletes.flatMap((pending) => pending.imageIds || []));
   const recoverySelection = deletionSelectionSnapshot(pendingImageIds, galleryFilteredImages());
+  let recovered = false;
   for (const pending of pendingDeletes) {
+    await withSourceDeleteLock(pending.deleteToken, async () => {
+    recovered = true;
     try {
       let status;
       try {
@@ -478,7 +488,7 @@ async function resumePendingSourceDeletes(requestPermission = false) {
         status = await api("/api/catalog/delete-source/status", { method: "POST", body: JSON.stringify({ deleteToken: pending.deleteToken }), resyncOnStale: false });
       }
       const recovery = ["prepared", "claimed"].includes(status.state) ? await recoverPendingBrowserDeletes(pending) : { deleted: pending.browserDeletedImageIds || [], unresolved: false };
-      if (["prepared", "claimed"].includes(status.state) && recovery.unresolved) continue;
+      if (["prepared", "claimed"].includes(status.state) && recovery.unresolved) return;
       // A copy's output has already committed before it requests source
       // deletion.  Its durable intent explicitly retries the browser phase;
       // do not silently cancel that request and strand the user's deletion.
@@ -498,7 +508,7 @@ async function resumePendingSourceDeletes(requestPermission = false) {
           for (const entry of pending.browserEntries || []) known.set(entry.imageId, entry);
           state.pendingSourceDeleteEntries = [...known.values()];
           $("#sourceDeleteResume").hidden = false;
-          continue;
+          return;
         }
       }
       if (status.state === "claimed" && !recovery.deleted.length) {
@@ -513,7 +523,7 @@ async function resumePendingSourceDeletes(requestPermission = false) {
         // confirmation visible for an explicit retry instead of silently
         // cancelling it after a restart.
         setStatus(t("sourceDelete.confirmPending"), "warning");
-        continue;
+        return;
       } else if (status.state === "prepared") {
         await api("/api/catalog/delete-source/cancel", { method: "POST", body: JSON.stringify({ deleteToken: pending.deleteToken }), resyncOnStale: false });
       }
@@ -521,11 +531,13 @@ async function resumePendingSourceDeletes(requestPermission = false) {
       if (["committed", "cancelled"].includes(settled.state)) await acknowledgeSourceDelete(pending.deleteToken);
     } catch (error) {
       if (pending.retryOnResume && isDefinitiveCommitRejection(error)
-        && await restoreCopiedBrowserSourcesAfterRejectedDelete(pending)) continue;
+        && await restoreCopiedBrowserSourcesAfterRejectedDelete(pending)) return;
       if (error?.code === "source_delete_not_prepared" && pending.state !== "preparing") await forgetPendingSourceDelete(pending.deleteToken);
       // Keep prepared and cleanup-pending operations until a terminal receipt is acknowledged.
     }
+    }, true);
   }
+  if (!recovered) return;
   const snapshot = await resyncCatalog().catch(() => null);
   if (snapshot) {
     await restoreDeletionSelection(recoverySelection, pendingImageIds);
@@ -558,6 +570,7 @@ async function permanentlyDeleteImages(images, visibleImages) {
   const token = crypto.randomUUID();
   state.catalogMutation = true; invalidatePendingImage(); updateActionButtons();
   try {
+    await withSourceDeleteLock(token, async () => {
     // Claim the token locally before prepare. A close or lost prepare response
     // can now be reconciled on the next launch instead of leaving a server
     // receipt without an owner.
@@ -621,6 +634,7 @@ async function permanentlyDeleteImages(images, visibleImages) {
     setStatus(`元画像を${removed.size}件削除しました。${failed.length ? `失敗${failed.length}件: ${failureDetails}` : ""}${cleanupNotice}`, failed.length ? "warning" : "success");
     if (failed.length) showUserError(codedError(failed[0].reason));
     if (data.state === "committed") await acknowledgeSourceDelete(token);
+    });
   } catch (error) {
     await restoreDeletionSelection(selection, imageIds);
     showUserError(error);

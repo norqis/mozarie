@@ -13,6 +13,8 @@ import threading
 import time
 import uuid
 from contextlib import ExitStack
+from bisect import insort_right
+from heapq import merge
 from dataclasses import replace
 from pathlib import Path
 from queue import Empty, Full, Queue
@@ -1450,7 +1452,8 @@ class CatalogMixin:
                 prepared_ids = {str(item["imageId"]) for item in operation.get("items", [])}
                 records = {image_id: self.images.get(image_id) for image_id in requested_ids if image_id in prepared_ids}
 
-            locks = [(record.image_id, self.image_io_lock(record.image_id)) for record in records.values() if record is not None]
+            lock_ids = prepared_ids if operation.get("state") == "renaming" else records.keys()
+            locks = [(image_id, self.image_io_lock(image_id)) for image_id in lock_ids]
             with ExitStack() as stack:
                 for _image_id, image_lock in sorted(locks):
                     stack.enter_context(image_lock)
@@ -1507,6 +1510,13 @@ class CatalogMixin:
         removable: list[ImageRecord] = []
         durable_only_ids: list[str] = []
         operation = self.workspace_store.source_delete_operation(delete_token) or {}
+        if operation.get("state") == "renaming":
+            self._restore_source_delete_rename(delete_token)
+            operation = self.workspace_store.source_delete_operation(delete_token) or {}
+            if operation.get("state") != "prepared":
+                return self.source_delete_status(delete_token)
+            self.claim_source_delete(delete_token)
+            operation = self.workspace_store.source_delete_operation(delete_token) or {}
         failures: list[dict[str, str]] = [dict(failure) for failure in (operation.get("result") or {}).get("prepareFailures", []) if isinstance(failure, dict)]
         items = {str(item["imageId"]): item for item in operation.get("items", [])}
         for image_id in requested_ids:
@@ -1544,66 +1554,46 @@ class CatalogMixin:
                         "prepareFailures": (operation.get("result") or {}).get("prepareFailures", [])}
             self.workspace_store.update_source_delete_operation(delete_token, "renaming", renaming, expected_states={"claimed"})
         plan_paths = {str(plan["imageId"]): Path(str(plan["quarantinePath"])) for plan in plans}
-        for record in removable:
-            if record.source_kind != "filesystem": confirmed.append(record); continue
-            quarantine = plan_paths[record.image_id]
-            if not SaveJournal.rename_windows_verified(record.path, quarantine, str(plan_by_image[record.image_id]["fileIdentity"]), (int(plan_by_image[record.image_id]["mtimeNs"]), int(plan_by_image[record.image_id]["sizeBytes"]))):
-                failures.append({"imageId": record.image_id, "reason": "source_delete_failed"}); continue
-            renamed.append((record, quarantine)); confirmed.append(record)
-            progress = {"plannedQuarantines": plans, "renamedImageIds": [current.image_id for current, _path in renamed], "failed": failures,
-                        "prepareFailures": (operation.get("result") or {}).get("prepareFailures", [])}
-            self.workspace_store.update_source_delete_operation(delete_token, "renaming", progress, expected_states={"renaming"})
-        # A direct retry may include an ID already rejected by prepare. Keep
-        # the original prepare reason and return one result per image.
-        unique_failures: dict[str, dict[str, str]] = {}
-        for failure in failures:
-            image_id = str(failure.get("imageId", ""))
-            if image_id not in unique_failures:
-                unique_failures[image_id] = failure
-        failures = list(unique_failures.values())
-        if confirmed or durable_only_ids:
-            try:
+        try:
+            for record in removable:
+                if record.source_kind != "filesystem": confirmed.append(record); continue
+                quarantine = plan_paths[record.image_id]
+                if not SaveJournal.rename_windows_verified(record.path, quarantine, str(plan_by_image[record.image_id]["fileIdentity"]), (int(plan_by_image[record.image_id]["mtimeNs"]), int(plan_by_image[record.image_id]["sizeBytes"]))):
+                    failures.append({"imageId": record.image_id, "reason": "source_delete_failed"}); continue
+                renamed.append((record, quarantine)); confirmed.append(record)
+                progress = {"plannedQuarantines": plans, "renamedImageIds": [current.image_id for current, _path in renamed], "failed": failures,
+                            "prepareFailures": (operation.get("result") or {}).get("prepareFailures", [])}
+                self.workspace_store.update_source_delete_operation(delete_token, "renaming", progress, expected_states={"renaming"})
+            # A direct retry may include an ID already rejected by prepare. Keep
+            # the original prepare reason and return one result per image.
+            unique_failures: dict[str, dict[str, str]] = {}
+            for failure in failures:
+                image_id = str(failure.get("imageId", ""))
+                if image_id not in unique_failures:
+                    unique_failures[image_id] = failure
+            failures = list(unique_failures.values())
+            if confirmed or durable_only_ids:
                 durable_result = {"removedImageIds": [record.image_id for record in confirmed] + durable_only_ids, "failed": failures,
                                   "state": "workspace_committed", "quarantinePaths": [str(path) for _record, path in renamed],
                                   "quarantinePlans": [plan_by_image[record.image_id] for record, _path in renamed],
                                   "quarantineRelativePaths": {str(path): record.relative_path for record, path in renamed}}
                 removed = self.remove_images_from_catalog([record.image_id for record in confirmed], source_delete_token=delete_token,
                                                           source_delete_result=durable_result, source_delete_extra_ids=durable_only_ids)
-            except Exception:
-                committed_operation = self.workspace_store.source_delete_operation(delete_token)
-                if committed_operation is not None and committed_operation.get("state") in {"workspace_committed", "cleanup_pending", "committed"}:
-                    # SQLite is already authoritative. Never put the source
-                    # back because a disposable cache cleanup failed after it.
-                    LOGGER.exception("元画像削除後の画面キャッシュ整理に失敗: token=%s", delete_token)
-                    with self.lock:
-                        removed = {"images": self.list_images(), "removedImageIds": durable_result["removedImageIds"],
-                                   "catalogGeneration": self.catalog_generation}
-                else:
-                    restore_conflicts: list[dict[str, str]] = []
-                    for record, _quarantine in reversed(renamed):
-                        source, quarantine, reason = self._valid_source_delete_quarantine(plan_by_image[record.image_id])
-                        if reason is not None or source is None or quarantine is None:
-                            restore_conflicts.append({"imageId": record.image_id, "relativePath": record.relative_path,
-                                                      "reason": reason or "quarantine_path_invalid"}); continue
-                        if source.exists():
-                            restore_conflicts.append({"imageId": record.image_id, "relativePath": record.relative_path,
-                                                      "reason": "source_restore_conflict"}); continue
-                        if not SaveJournal.rename_windows_verified(quarantine, source, str(plan_by_image[record.image_id]["fileIdentity"]), (int(plan_by_image[record.image_id]["mtimeNs"]), int(plan_by_image[record.image_id]["sizeBytes"]))):
-                            restore_conflicts.append({"imageId": record.image_id, "relativePath": record.relative_path,
-                                                      "reason": "source_restore_failed"})
-                            LOGGER.warning("元画像の削除復元に失敗: 対象=%s", record.relative_path)
-                    if restore_conflicts:
-                        collision = {"removedImageIds": [], "failed": restore_conflicts, "state": "restore_conflict",
-                                     "recoveryConflicts": restore_conflicts, "plannedQuarantines": plans, "quarantinePaths": [], "cleanupPendingCount": len(restore_conflicts)}
-                        self.workspace_store.update_source_delete_operation(delete_token, "restore_conflict", collision, expected_states={"renaming"})
-                        LOGGER.warning("元画像削除の復元を保留: 衝突=%d", len(restore_conflicts))
-                    elif plans:
-                        prepared_result = {"failed": (operation.get("result") or {}).get("prepareFailures", []),
-                                           "prepareFailures": (operation.get("result") or {}).get("prepareFailures", [])}
-                        self.workspace_store.update_source_delete_operation(delete_token, "prepared", prepared_result, expected_states={"renaming"})
-                    raise
-        else:
-            removed = {"images": self.list_images(), "removedImageIds": [], "catalogGeneration": self.catalog_generation}
+            else:
+                removed = {"images": self.list_images(), "removedImageIds": [], "catalogGeneration": self.catalog_generation}
+        except Exception:
+            committed_operation = self.workspace_store.source_delete_operation(delete_token)
+            if committed_operation is not None and committed_operation.get("state") in {"workspace_committed", "cleanup_pending", "committed"}:
+                # SQLite is already authoritative. Never put the source
+                # back because a disposable cache cleanup failed after it.
+                LOGGER.exception("元画像削除後の画面キャッシュ整理に失敗: token=%s", delete_token)
+                with self.lock:
+                    removed = {"images": self.list_images(), "removedImageIds": durable_result["removedImageIds"],
+                               "catalogGeneration": self.catalog_generation}
+            else:
+                if plans:
+                    self._restore_source_delete_rename(delete_token)
+                raise
         removed_ids = set(removed["removedImageIds"]); cleanup_paths: list[str] = []
         cleanup_conflicts: list[dict[str, str]] = []
         for record, quarantine in renamed:
@@ -1690,39 +1680,45 @@ class CatalogMixin:
             self.source_delete_receipts.pop(token, None)
         return {"acknowledged": True, "deleteToken": token}
 
+    def _restore_source_delete_rename(self, token: str) -> None:
+        operation = self.workspace_store.source_delete_operation(token) or {}
+        if operation.get("state") not in {"renaming", "restore_conflict"}:
+            return
+        plans = (operation.get("result") or {}).get("plannedQuarantines", [])
+        conflicts: list[dict[str, str]] = []
+        for plan in plans:
+            source, quarantine, reason = self._valid_source_delete_quarantine(plan)
+            relative_path = str(plan.get("relativePath", plan.get("imageId", "")))
+            if not self._source_delete_plan_matches_item(plan, operation.get("items", [])):
+                conflicts.append({"imageId": str(plan.get("imageId", "")), "relativePath": relative_path,
+                                  "reason": "quarantine_item_mismatch"}); continue
+            if reason == "quarantine_missing" and source is not None and source.exists():
+                continue
+            if reason is not None or source is None or quarantine is None:
+                conflicts.append({"imageId": str(plan.get("imageId", "")), "relativePath": relative_path,
+                                  "reason": reason or "quarantine_path_invalid"}); continue
+            if source.exists():
+                conflicts.append({"imageId": str(plan.get("imageId", "")), "relativePath": relative_path,
+                                  "reason": "source_restore_conflict"}); continue
+            if not SaveJournal.rename_windows_verified(quarantine, source, str(plan.get("fileIdentity", "")), (int(plan.get("mtimeNs", -1)), int(plan.get("sizeBytes", -1)))):
+                conflicts.append({"imageId": str(plan.get("imageId", "")), "relativePath": relative_path,
+                                  "reason": "source_restore_failed"})
+                LOGGER.warning("元画像削除の名前変更を復元できません: 対象=%s", relative_path)
+        if conflicts:
+            result = {"removedImageIds": [], "failed": conflicts, "state": "restore_conflict", "recoveryConflicts": conflicts,
+                      "plannedQuarantines": plans, "quarantinePaths": [], "cleanupPendingCount": len(conflicts)}
+            self.workspace_store.update_source_delete_operation(token, "restore_conflict", result, expected_states={"renaming", "restore_conflict"})
+            LOGGER.warning("元画像削除の名前変更を保留: 衝突=%d", len(conflicts))
+        else:
+            prepared_result = {"failed": (operation.get("result") or {}).get("prepareFailures", []),
+                               "prepareFailures": (operation.get("result") or {}).get("prepareFailures", [])}
+            self.workspace_store.update_source_delete_operation(token, "prepared", prepared_result, expected_states={"renaming", "restore_conflict"})
+            LOGGER.info("元画像削除の名前変更を復元: token=%s", token)
+
     def retry_source_delete_cleanups(self) -> None:
         """Finish source unlinks left after a committed workspace deletion."""
-        for token, plans in self.workspace_store.pending_source_delete_renames():
-            operation = self.workspace_store.source_delete_operation(token) or {}
-            conflicts: list[dict[str, str]] = []
-            for plan in plans:
-                source, quarantine, reason = self._valid_source_delete_quarantine(plan)
-                relative_path = str(plan.get("relativePath", plan.get("imageId", "")))
-                if not self._source_delete_plan_matches_item(plan, operation.get("items", [])):
-                    conflicts.append({"imageId": str(plan.get("imageId", "")), "relativePath": relative_path,
-                                      "reason": "quarantine_item_mismatch"}); continue
-                if reason == "quarantine_missing" and source is not None and source.exists():
-                    continue
-                if reason is not None or source is None or quarantine is None:
-                    conflicts.append({"imageId": str(plan.get("imageId", "")), "relativePath": relative_path,
-                                      "reason": reason or "quarantine_path_invalid"}); continue
-                if source.exists():
-                    conflicts.append({"imageId": str(plan.get("imageId", "")), "relativePath": relative_path,
-                                      "reason": "source_restore_conflict"}); continue
-                if not SaveJournal.rename_windows_verified(quarantine, source, str(plan.get("fileIdentity", "")), (int(plan.get("mtimeNs", -1)), int(plan.get("sizeBytes", -1)))):
-                    conflicts.append({"imageId": str(plan.get("imageId", "")), "relativePath": relative_path,
-                                      "reason": "source_restore_failed"})
-                    LOGGER.warning("元画像削除の名前変更を復元できません: 対象=%s", relative_path)
-            if conflicts:
-                result = {"removedImageIds": [], "failed": conflicts, "state": "restore_conflict", "recoveryConflicts": conflicts,
-                          "plannedQuarantines": plans, "quarantinePaths": [], "cleanupPendingCount": len(conflicts)}
-                self.workspace_store.update_source_delete_operation(token, "restore_conflict", result, expected_states={"renaming", "restore_conflict"})
-                LOGGER.warning("元画像削除の名前変更を保留: 衝突=%d", len(conflicts))
-            else:
-                prepared_result = {"failed": (operation.get("result") or {}).get("prepareFailures", []),
-                                   "prepareFailures": (operation.get("result") or {}).get("prepareFailures", [])}
-                self.workspace_store.update_source_delete_operation(token, "prepared", prepared_result, expected_states={"renaming", "restore_conflict"})
-                LOGGER.info("元画像削除の名前変更を復元: token=%s", token)
+        for token, _plans in self.workspace_store.pending_source_delete_renames():
+            self._restore_source_delete_rename(token)
         for token, raw_paths in self.workspace_store.pending_source_delete_cleanups():
             remaining: list[str] = []
             operation = self.workspace_store.source_delete_operation(token)
@@ -2206,12 +2202,9 @@ class CatalogMixin:
                     for destination in final_paths:
                         destination.unlink(missing_ok=True)
                     raise
-                live_images = dict(self.images)
-                live_order = list(self.order)
-                live_candidates = {image_id: list(candidates) for image_id, candidates in self.candidates.items()}
-                live_revisions = dict(self.candidate_revisions)
-                live_mismatches = dict(self.source_mismatches)
-                live_sources = [dict(source) for source in self.catalog_sources]
+                live_entries: dict[str, tuple[Any, ...]] = {}
+                new_ids: list[str] = []
+                live_sources = self.catalog_sources
                 durable_source_id: str | None = None
                 durable_source_created = False
                 durable_created_ids: list[str] = []
@@ -2268,6 +2261,11 @@ class CatalogMixin:
                             record.source_flip_horizontal = bool(stored.get("source_flip_horizontal", False)); record.source_flip_vertical = bool(stored.get("source_flip_vertical", False))
                             record.transform_revision = int(stored.get("transform_revision", 0))
                             record.source_id = durable_source_id
+                        live_entries.setdefault(record.image_id, (
+                            self.images.get(record.image_id), self.candidates.get(record.image_id),
+                            self.candidate_revisions.get(record.image_id), self.source_mismatches.get(record.image_id),
+                        ))
+                        if self.workspace_id:
                             if stored.get("changed"):
                                 self.source_mismatches[record.image_id] = bool(stored.get("dimensions_changed"))
                             _revision, restored = self.workspace_store.hydrate_candidates(record.image_id, self.cache_dir / record.image_id, self._candidate_from_workspace)
@@ -2288,8 +2286,13 @@ class CatalogMixin:
                         published_imported.append(imported[index])
                         self.images[record.image_id] = record
                         if previous is None:
-                            self.order.append(record.image_id)
-                    self.order.sort(key=lambda image_id: self.images[image_id].relative_path.lower())
+                            new_ids.append(record.image_id)
+                    order_key = lambda image_id: self.images[image_id].relative_path.lower()
+                    if len(new_ids) == 1:
+                        insort_right(self.order, new_ids[0], key=order_key)
+                    elif new_ids:
+                        new_ids.sort(key=order_key)
+                        self.order = list(merge(self.order, new_ids, key=order_key))
                     if published_imported:
                         self.catalog_sources = self.workspace_store.project_sources(self.workspace_id) if self.workspace_id else []
                         # Browser imports are committed one request at a time.
@@ -2318,11 +2321,15 @@ class CatalogMixin:
                     finally:
                         for destination in final_paths:
                             destination.unlink(missing_ok=True)
-                        self.images = live_images
-                        self.order = live_order
-                        self.candidates = live_candidates
-                        self.candidate_revisions = live_revisions
-                        self.source_mismatches = live_mismatches
+                        for image_id, previous_values in live_entries.items():
+                            for mapping, previous in zip((self.images, self.candidates, self.candidate_revisions, self.source_mismatches), previous_values):
+                                if previous is None:
+                                    mapping.pop(image_id, None)
+                                else:
+                                    mapping[image_id] = previous
+                        if new_ids:
+                            new_id_set = set(new_ids)
+                            self.order = [image_id for image_id in self.order if image_id not in new_id_set]
                         self.catalog_sources = live_sources
                         if created_projectless_id:
                             self.workspace_store.delete_project(created_projectless_id)

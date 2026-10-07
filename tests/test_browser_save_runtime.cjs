@@ -647,6 +647,27 @@ async function runBrowserCopyRenderFailureCancelsReservationCase() {
   assert.equal(runtime.requests.filter((request) => request.path === "/api/save/commit").length, 399, "only successful browser copies are committed");
 }
 
+async function runRenderRetryFailureCancelsReservationCase() {
+  for (const copying of [true, false]) {
+    const storage = new Map();
+    const fail = () => jsonResponse({ error_code: "save_render_failed" }, 500);
+    const runtime = createRuntime({
+      commit: () => { throw new Error("failed rendering must not commit"); },
+      copy: fail, renderBinary: fail,
+      saveStatus: () => jsonResponse({ state: "rendering" }),
+      sharedStorage: { get length() { return storage.size; }, key: (index) => [...storage.keys()][index],
+        getItem: (key) => storage.get(key) || null, setItem: (key, value) => storage.set(key, value), removeItem: (key) => storage.delete(key) },
+    });
+    const entry = { imageId: "image-1", candidateRevision: 7 };
+    const render = copying ? runtime.renderDefaultCopy : runtime.renderStreamedSave;
+    await assert.rejects(render(entry, { ...entry, copyToDefault: copying }), (error) => error.code === "save_render_failed");
+    const requests = runtime.requests.filter((request) => request.path.startsWith("/api/save/"));
+    assert.deepEqual(requests.map((request) => request.path), ["reserve", "render", "status", "render", "cancel"].map((name) => `/api/save/${name}`));
+    assert.equal(JSON.parse(requests[4].options.body).saveToken, JSON.parse(requests[0].options.body).clientSaveToken);
+    assert.equal([...storage.keys()].some((key) => key.startsWith("mozarie.pending-save-token.")), false, "a failed retry leaves no pending save reservation");
+  }
+}
+
 async function runBrowserHandleConcurrentWriteCase() {
   const entries = ["one", "two"].map((id) => ({ imageId: id, relativePath: `${id}.png`, candidateRevision: 7 }));
   const images = entries.map((entry) => ({ id: entry.imageId, sourceKind: "session", relativePath: entry.relativePath, width: 32, height: 32, candidateCount: 1, enabledCandidateCount: 1 }));
@@ -2123,6 +2144,7 @@ nodeTest("browser save runtime contracts", async (t) => {
   await t.test("concurrent output lock serializes colliding names", runConcurrentOutputLockCases);
   await t.test("partial streamed output is aborted and removed", runPartialOutputCleanupCases);
   await t.test("browser copy render failure cancels its reservation", runBrowserCopyRenderFailureCancelsReservationCase);
+  await t.test("failed copy and overwrite render retries cancel their reservation", runRenderRetryFailureCancelsReservationCase);
   await t.test("browser copy pool obeys configured parallelism", runBrowserCopyPoolAndWriteOverlapCases);
   await t.test("400 browser copies stay bounded by configured parallelism", runBrowserCopyPoolAtScaleCases);
   await t.test("browser overwrite pool obeys configured parallelism", runBrowserHandleOverwritePoolAtScaleCase);

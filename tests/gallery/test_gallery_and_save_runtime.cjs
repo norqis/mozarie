@@ -23,7 +23,7 @@ function element(children = {}) {
   const attributes = new Map();
   const node = {
     attributes, children: [], classList: classList(), dataset: {}, disabled: false, hidden: false,
-    textContent: "", title: "", value: "", style: {}, tabIndex: -1, scrollTop: 0,
+    textContent: "", title: "", value: "", style: {}, tabIndex: -1, scrollTop: 0, clientHeight: 900, clientWidth: 100,
     append(child) { this.children.push(child); child.parentNode = this; },
     insertBefore(child, before) { if (child.parentNode) child.parentNode.children.splice(child.parentNode.children.indexOf(child), 1); const index = before ? this.children.indexOf(before) : -1; if (index >= 0) this.children.splice(index, 0, child); else this.children.push(child); child.parentNode = this; },
     remove() { this.parentNode?.children.splice(this.parentNode.children.indexOf(this), 1); this.removed = true; },

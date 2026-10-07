@@ -332,10 +332,9 @@ test("unknown browser-source deletion remains recoverable instead of silently co
     }, token);
     assert.deepEqual(await page.evaluate(async () => (await pendingSourceDeletes()).map((entry) => ({ token: entry.deleteToken, state: entry.browserEntries[0]?.state }))), [{ token, state: "unknown" }], "an indeterminate browser deletion remains durable for a later recovery attempt");
     assert.equal(fixture.sourceDeleteOperations()[0]?.[1]?.state, "claimed", "the server receipt stays claimed while the browser source outcome is unknown");
-    assert.deepEqual(fixture.sourceDeleteRequests.map((request) => request.path), [
+    assert.deepEqual([...new Set(fixture.sourceDeleteRequests.map((request) => request.path))], [
       "/api/catalog/delete-source/status",
-      "/api/catalog/delete-source/status",
-    ], "unknown browser deletion performs status reconciliation without commit, cancel, or acknowledgement");
+    ], "startup and explicit recovery only read status, without commit, cancel, or acknowledgement");
   } finally {
     await context?.close();
     await browser.close();

@@ -4443,7 +4443,7 @@ async function main() {
     assert.deepEqual({ scrollTop: pointerContextAfter.scrollTop, currentId: pointerContextAfter.currentId, selected: pointerContextAfter.selected }, { scrollTop: pointerContextBefore.before.scrollTop, currentId: pointerContextBefore.before.currentId, selected: pointerContextBefore.before.selected }, "the gallery action applies only to its menu target and does not change its scroll, current image, or selection after rendering");
     assert.deepEqual(pointerContextAfter.hidden, ["pointer-1"], "the gallery action changes only the right-clicked target");
     const overviewPointerBefore = await page.evaluate(async () => {
-      state.viewMode = "overview"; state.batchMode = true; state.overviewFilter = new Set(); state.selectedImageIds = new Set(["pointer-0", "pointer-2"]); state.selectionAnchorId = "pointer-0";
+      setViewMode("overview"); state.batchMode = true; state.overviewFilter = new Set(); state.selectedImageIds = new Set(["pointer-0", "pointer-2"]); state.selectionAnchorId = "pointer-0";
       renderOverview(true); const grid = document.querySelector("#overviewGrid"); grid.scrollTop = 100; await new Promise((resolve) => requestAnimationFrame(resolve)); renderOverview(true);
       const current = document.querySelector('.overview-item[data-id="pointer-0"]'); const target = document.querySelector('.overview-item[data-id="pointer-1"]'); current.focus();
       const snapshot = () => ({ scrollTop: grid.scrollTop, currentId: state.currentId, selected: [...state.selectedImageIds].sort(), focused: document.activeElement?.dataset.id, tabStops: [...document.querySelectorAll('.overview-item[tabindex="0"]')].map((item) => item.dataset.id) });

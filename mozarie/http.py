@@ -1379,10 +1379,6 @@ class MosaicHandler(BaseHTTPRequestHandler):
                 try:
                     with open_image_without_png_text(record.path) as image:
                         image = ImageOps.exif_transpose(image)
-                        if record.flip_horizontal != record.source_flip_horizontal:
-                            image = ImageOps.mirror(image)
-                        if record.flip_vertical != record.source_flip_vertical:
-                            image = ImageOps.flip(image)
                         image.thumbnail((280, 280), Image.Resampling.LANCZOS)
                         output = io.BytesIO()
                         image.convert("RGB").save(output, format="JPEG", quality=82)
