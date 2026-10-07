@@ -24,7 +24,7 @@ import numpy as np
 
 from .image_io import open_image
 from .core import ClientError, safe_import_relative_path
-from .masks import compose_masks, expand_mask, union_mask
+from .masks import compose_masks, expand_mask, mask_bounds, union_mask
 
 
 def _chunks(db: sqlite3.Connection, values: list[str], *, reserved_binds: int = 0) -> Iterator[list[str]]:
@@ -2348,7 +2348,8 @@ class WorkspaceStore:
         try:
             source = cls._decode_png_mask(before if before is not None else after)
             assert source is not None
-            width, height = source.size
+            with source:
+                width, height = source.size
             if roi is None:
                 left, top, right, bottom = 0, 0, width, height
             else:
@@ -2359,17 +2360,20 @@ class WorkspaceStore:
                 if raw is None: return np.zeros((bottom - top, right - left), dtype=np.uint8)
                 image = cls._decode_png_mask(raw)
                 assert image is not None
-                if image.size != (width, height):
-                    raise ValueError("workspace manual mask dimensions are invalid")
-                return np.asarray(image.crop((left, top, right, bottom)), dtype=np.uint8) > 0
+                with image:
+                    if image.size != (width, height):
+                        raise ValueError("workspace manual mask dimensions are invalid")
+                    with image.crop((left, top, right, bottom)) as cropped:
+                        return np.asarray(cropped, dtype=np.uint8) > 0
             changed = np.logical_xor(pixels(before), pixels(after))
-            ys, xs = np.where(changed)
-            if not len(xs): return {"existsBefore": before is not None, "existsAfter": after is not None, "box": None}
-            changed_left, changed_right = left + int(xs.min()), left + int(xs.max()) + 1
-            changed_top, changed_bottom = top + int(ys.min()), top + int(ys.max()) + 1
-            output = io.BytesIO(); Image.fromarray(changed[ys.min():ys.max() + 1, xs.min():xs.max() + 1].astype(np.uint8) * 255).save(output, format="PNG")
+            bounds = mask_bounds(changed)
+            if bounds is None: return {"existsBefore": before is not None, "existsAfter": after is not None, "box": None}
+            x1, y1, x2, y2 = bounds
+            with io.BytesIO() as output, Image.fromarray(changed[y1:y2, x1:x2].astype(np.uint8) * 255) as image:
+                image.save(output, format="PNG")
+                encoded = base64.b64encode(output.getvalue()).decode("ascii")
             return {"existsBefore": before is not None, "existsAfter": after is not None,
-                    "box": [changed_left, changed_top, changed_right - changed_left, changed_bottom - changed_top], "png": base64.b64encode(output.getvalue()).decode("ascii"), "size": [width, height]}
+                    "box": [left + x1, top + y1, x2 - x1, y2 - y1], "png": encoded, "size": [width, height]}
         except (MemoryError, OSError, UnidentifiedImageError) as exc:
             raise ValueError("workspace manual mask cannot be decoded") from exc
 

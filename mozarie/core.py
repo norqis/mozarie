@@ -292,14 +292,31 @@ class Job:
     ended_at: float | None = None
     paused_at: float | None = None
     paused_seconds: float = 0.0
-    outputs: list[str] = field(default_factory=list)
     image_ids: tuple[str, ...] = ()
-    completed_image_ids: tuple[str, ...] = ()
+    _completion_events: list[tuple[int, str, str | None]] = field(default_factory=list, init=False, repr=False)
+    _completed_ids: set[str] = field(default_factory=set, init=False, repr=False)
     active_count: int = 0
     parallelism: int = 0
     preparing_models: int = 0
 
-    def as_dict(self) -> dict[str, Any]:
+    def record_success(self, index: int, image_id: str, output: str | None) -> bool:
+        if image_id in self._completed_ids:
+            return False
+        self._completed_ids.add(image_id)
+        self._completion_events.append((index, image_id, output))
+        self.completed = len(self._completion_events)
+        return True
+
+    @property
+    def outputs(self) -> list[str]:
+        return [output for _, _, output in sorted(self._completion_events) if output is not None]
+
+    @property
+    def completed_image_ids(self) -> tuple[str, ...]:
+        return tuple(image_id for _, image_id, _ in sorted(self._completion_events))
+
+    def progress_snapshot(self) -> dict[str, Any]:
+        """Capture scalar progress without copying the job's growing results."""
         active_elapsed = 0.0
         preparing_models = self.preparing_models > 0 and self.state in {"running", "pausing", "paused"}
         if self.started_at is not None:
@@ -315,14 +332,31 @@ class Job:
             "params": public_error_params(self.error_code, self.params),
             "startedAt": self.started_at,
             "activeElapsed": active_elapsed,
-            "outputs": self.outputs,
-            "imageIds": list(self.image_ids),
-            "completedImageIds": list(self.completed_image_ids),
+            "imageIds": self.image_ids,
+            # Events are append-only immutable tuples. The fixed count keeps
+            # this publication coherent even while later workers append.
+            "_completionEvents": self._completion_events,
+            "_completionCount": len(self._completion_events),
             "activeCount": self.active_count,
             "parallelism": self.parallelism,
             "phase": "preparing_models" if preparing_models else "",
             "cancelRequested": self.cancel_requested,
         }
+
+    @staticmethod
+    def copy_progress_snapshot(snapshot: dict[str, Any]) -> dict[str, Any]:
+        result = dict(snapshot)
+        count = result.pop("_completionCount")
+        events = result.pop("_completionEvents")[:count]
+        events.sort()
+        result["params"] = dict(result["params"])
+        result["imageIds"] = list(result["imageIds"])
+        result["outputs"] = [output for _, _, output in events if output is not None]
+        result["completedImageIds"] = [image_id for _, image_id, _ in events]
+        return result
+
+    def as_dict(self) -> dict[str, Any]:
+        return self.copy_progress_snapshot(self.progress_snapshot())
 
 
 @dataclass

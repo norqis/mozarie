@@ -5,6 +5,19 @@ state.workspaceDraftTimers = new Map();
 state.workspaceDraftPending = new Map();
 state.workspaceMutationErrors = new Map();
 state.workspaceFlagPending = new Map();
+// Metadata-only edits have no dirty PNG layers. Object provenance distinguishes
+// those unsaved snapshots from server copies without retaining another payload.
+const persistedWorkspaceDrafts = new WeakSet();
+
+function releaseInactiveWorkspaceDraft(imageId) {
+  const draft = state.drafts.get(imageId);
+  if (!hasDurableHistory() || state.currentId === imageId || state.pendingImageId === imageId
+    || (draft && (!persistedWorkspaceDrafts.has(draft) || draft.dirtyLayers?.length))
+    || state.workspaceDraftTimers.has(imageId) || state.draftSaveChains.has(imageId)
+    || state.workspaceDraftChains.has(imageId) || state.workspaceMutationErrors.has(imageId)) return;
+  state.drafts.delete(imageId);
+  state.maskStatus.delete(imageId);
+}
 
 function queueWorkspaceMutation(imageId, send, rememberFailure = true) {
   const previous = state.workspaceDraftChains.get(imageId) || Promise.resolve();
@@ -442,26 +455,14 @@ function queueWorkspaceDraft(imageId, immediate = false) {
       if (draft && state.drafts.get(imageId) === draft) {
         draft.dirtyLayers = [];
         draft.dirtyRois = {};
+        persistedWorkspaceDrafts.add(draft);
       }
       if (state.drafts.get(imageId) === draft) {
         const image = state.images.find((entry) => entry.id === imageId);
         if (image) image.hasEffectiveMask = draft?.hasEffectiveMask === true;
       }
       if (hasDurableHistory() && state.currentId === imageId) void refreshProjectHistory(imageId);
-      // A project has a durable copy and can reload an inactive draft on
-      // demand.  Projectless sessions have no equivalent recovery path, so
-      // they deliberately keep the in-memory bitmap.
-      if (
-        hasDurableHistory() && state.currentId !== imageId
-        && state.drafts.get(imageId) === draft
-        && !state.workspaceDraftTimers.has(imageId)
-        && !state.draftSaveChains.has(imageId)
-        && !state.workspaceMutationErrors.has(imageId)
-        && (!state.workspaceDraftChains.has(imageId) || state.workspaceDraftChains.get(imageId) === persisted)
-      ) {
-        state.drafts.delete(imageId);
-        state.maskStatus.delete(imageId);
-      }
+      if (state.drafts.get(imageId) === draft) releaseInactiveWorkspaceDraft(imageId);
       return result;
     });
     const pending = state.workspaceDraftPending.get(imageId);
@@ -566,7 +567,9 @@ async function loadWorkspaceDraft(imageId) {
   const data = await api(`/api/workspace/manual/${encodeURIComponent(imageId)}`);
   // A compact server draft has no local operation log. Restore its PNGs as
   // the history base; fabricating an empty log would rebuild empty layers.
-  return data.draft || null;
+  const draft = data.draft || null;
+  if (draft) persistedWorkspaceDrafts.add(draft);
+  return draft;
 }
 
 function scheduleManualWorkspaceSave() {

@@ -507,7 +507,7 @@ async function startSingleSave(event) {
     if (!copying) await ensureSaveSources([save.imageId], "overwrite", false, format, sourcePreparation);
     const rendered = copying
       ? await renderDefaultCopy(entry, { imageId: save.imageId, candidateRevision: entry.candidateRevision, divisor: save.divisor, draft: save.draft, copyToDefault: true, suffix, format, keepMetadata })
-      : { response: await renderStreamedSave(entry, { imageId: save.imageId, candidateRevision: entry.candidateRevision, divisor: save.divisor, draft: save.draft, suffix, format, keepMetadata }) };
+      : { response: await renderStreamedSave(entry, { imageId: save.imageId, candidateRevision: entry.candidateRevision, divisor: save.divisor, draft: save.draft, suffix, format, keepMetadata, streamImage: image.sourceKind !== "filesystem" || Boolean(access?.fileHandle) }) };
     const response = rendered.response;
     saveToken = rendered.saveToken || response?.headers.get("X-Mozarie-Save-Token") || "";
     if (!saveToken) throw Object.assign(new Error("save_state_changed"), { code: "save_state_changed" });
@@ -1367,7 +1367,7 @@ async function runBrowserSave(imageIds, suffix, deleteOriginal, mode = "copy", r
           try {
             binary = await renderStreamedSave(entry, {
               imageId: entry.imageId, candidateRevision: entry.candidateRevision, divisor: inputs.divisor, draft,
-              format: inputs.format, keepMetadata: inputs.keepMetadata,
+              format: inputs.format, keepMetadata: inputs.keepMetadata, streamImage: false,
             });
           } finally { inputs.drafts.delete(entry.imageId); }
           const saveToken = binary.headers?.get("X-Mozarie-Save-Token") || "";

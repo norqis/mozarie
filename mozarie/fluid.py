@@ -7,6 +7,8 @@ import math
 import cv2
 import numpy as np
 
+from .masks import mask_bounds
+
 
 __all__ = ["expand_white_fluid_mask", "white_fluid_mask"]
 
@@ -90,9 +92,9 @@ def white_fluid_mask(rgb: np.ndarray, penis_mask: np.ndarray) -> np.ndarray:
     if penis_area == 0:
         return empty
 
-    rows, columns = np.nonzero(penis)
-    top, bottom = int(rows.min()), int(rows.max()) + 1
-    left, right = int(columns.min()), int(columns.max()) + 1
+    bounds = mask_bounds(penis != 0)
+    assert bounds is not None
+    left, top, right, bottom = bounds
     crop_penis = penis[top:bottom, left:right]
     pixels = np.asarray(rgb)[top:bottom, left:right]
     hsv = cv2.cvtColor(pixels, cv2.COLOR_RGB2HSV)

@@ -809,6 +809,7 @@ async function importFiles(files) {
         let file;
         try { file = descriptor.file || await descriptor.getFile(); }
         catch (error) {
+          if (!isCurrentCatalogEpoch(session.epoch) || state.importSession !== session) return;
           if (session.catalogId && descriptor.fileHandle && error?.name === "NotFoundError") {
             session.missingFileHandles = true;
             session.completed += 1;
@@ -835,6 +836,7 @@ async function importFiles(files) {
           if (stagedSource && Number.isInteger(error?.status) && error.status >= 400 && error.status < 500) {
             await forgetPendingProjectSource(session.catalogId, session.sourceId, clientKey);
           }
+          if (!isCurrentCatalogEpoch(session.epoch) || state.importSession !== session) return;
           if (isFileLocalImportFailure(error)) {
             session.failures.push(importFailure(entry, error));
             session.completed += 1;
@@ -843,6 +845,7 @@ async function importFiles(files) {
           }
           throw error;
         }
+        if (!isCurrentCatalogEpoch(session.epoch) || state.importSession !== session) return;
         if (!session.catalogId && data.catalogId) session.catalogId = data.catalogId;
         const result = { entry, clientKey, data, sourceId: session.sourceId };
         // Keep source access for each committed upload, including a later
@@ -864,26 +867,30 @@ async function importFiles(files) {
       throw error;
     }
     if (!isCurrentCatalogEpoch(session.epoch) || state.importSession !== session) return false;
-    if (session.cancelled) { setStatusKey("status.importCancelled", { completed: session.completed }); return false; }
     const capturedProjectId = state.project?.id || null;
     const capturedCatalogGeneration = state.serverCatalogGeneration;
     const latest = await api("/api/images");
+    if (!isCurrentCatalogEpoch(session.epoch) || state.importSession !== session) return false;
     reconcileCatalogSnapshot(latest, capturedProjectId, capturedCatalogGeneration);
     state.images = latest.images;
     loadReviewedPaths();
+    pruneSourceAccess(); renderCatalogViews();
+    if (session.cancelled) { setStatusKey("status.importCancelled", { completed: session.completed }); return false; }
     if (session.missingFileHandles) showUserError({ code: "project_source_unavailable" });
-    pruneSourceAccess(); renderCatalogViews(); setStatusKey("gallery.imported", { count: session.successes });
+    setStatusKey("gallery.imported", { count: session.successes });
     showImportFailures(session.failures, session.successes);
     session.failed = session.failures.length > 0;
     return !session.missingFileHandles;
   } catch (error) {
     session.failed = true;
+    if (!isCurrentCatalogEpoch(session.epoch) || state.importSession !== session) return false;
     try {
       const capturedProjectId = state.project?.id || null;
       const capturedCatalogGeneration = state.serverCatalogGeneration;
       const latest = await api("/api/images");
+      if (!isCurrentCatalogEpoch(session.epoch) || state.importSession !== session) return false;
       reconcileCatalogSnapshot(latest, capturedProjectId, capturedCatalogGeneration);
-      if (isCurrentCatalogEpoch(session.epoch) && state.importSession === session) { state.images = latest.images; loadReviewedPaths(); renderCatalogViews(); }
+      state.images = latest.images; loadReviewedPaths(); renderCatalogViews();
     } catch { /* Keep the import failure visible. */ }
     if (isCurrentCatalogEpoch(session.epoch) && state.importSession === session) showUserError(error);
     return false;
@@ -916,12 +923,13 @@ async function importSingleFile(entry, clientKey, catalogId = null, sourceId = n
     body: entry.file,
   });
   const data = await response.json().catch(() => ({}));
+  const currentSession = !session || (isCurrentCatalogEpoch(session.epoch) && state.importSession === session);
   if (!response.ok) {
     const error = responseError(response, data);
-    await resyncAfterStaleCatalog(error);
+    if (currentSession) await resyncAfterStaleCatalog(error);
     throw error;
   }
-  applyCatalogGeneration(data);
+  if (currentSession) applyCatalogGeneration(data);
   return data;
 }
 

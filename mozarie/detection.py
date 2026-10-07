@@ -27,6 +27,7 @@ from .core import (
 )
 from .fluid import expand_white_fluid_mask, white_fluid_mask
 from .image_io import canonical_image, read_scene_png_metadata
+from .masks import mask_bounds
 from .runtime import runtime_backend
 from .runtime_types import DetectionModels
 
@@ -58,10 +59,7 @@ def _scene_fluid_tags(info: dict[str, Any]) -> frozenset[str]:
 
 
 def _mask_bounds(mask: np.ndarray) -> tuple[int, int, int, int] | None:
-    rows, columns = np.nonzero(np.asarray(mask) > 0)
-    if not rows.size:
-        return None
-    return int(columns.min()), int(rows.min()), int(columns.max()) + 1, int(rows.max()) + 1
+    return mask_bounds(np.asarray(mask) > 0)
 
 
 def _fill_metadata_fluid_roi(search: np.ndarray, left: float, top: float, right: float, bottom: float) -> None:
@@ -556,10 +554,10 @@ class DetectionMixin:
         combined = np.zeros_like(np.asarray(masks[0]), dtype=bool)
         for mask in masks:
             np.logical_or(combined, np.asarray(mask) > 0, out=combined)
-        coordinates = np.argwhere(combined)
-        if not len(coordinates):
+        bounds = mask_bounds(combined)
+        if bounds is None:
             return []
-        top, left = coordinates.min(axis=0); bottom, right = coordinates.max(axis=0) + 1
+        left, top, right, bottom = bounds
         clipped: list[tuple[int, int, int, int]] = []
         for box_left, box_top, box_right, box_bottom in boxes:
             overlap = (max(box_left, int(left)), max(box_top, int(top)), min(box_right, int(right)), min(box_bottom, int(bottom)))
@@ -769,13 +767,12 @@ class DetectionMixin:
                 continue
             source_mask = (np.asarray(segment.get("_detector_mask", segment["mask"])) > 0).astype(np.uint8)
             hand_mask = np.asarray(segment.get("_confirmed_hand", np.zeros_like(source_mask)) > 0, dtype=np.uint8)
-            coordinates = np.argwhere(source_mask > 0)
-            if not len(coordinates):
+            bounds = mask_bounds(source_mask > 0)
+            if bounds is None:
                 # No detector pixels means there is no APPLY evidence to
                 # preserve or refine. Do not publish an empty PNG candidate.
                 continue
-            top, left = coordinates.min(axis=0)
-            bottom, right = coordinates.max(axis=0) + 1
+            left, top, right, bottom = bounds
             height, width = source_mask.shape
             padding = max(2, int(max(bottom - top, right - left) * 0.05))
             roi = (max(0, int(left - padding)), max(0, int(top - padding)),

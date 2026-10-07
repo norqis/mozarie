@@ -144,6 +144,10 @@ async function testBoundApplicationEvents() {
   context.saveWorkspaceFlagNow = async () => true;
   context.recordHistoryOperation = note("recordHistoryOperation");
   context.toolRailItems = () => [element("toolRailItem")]; context.modelDownloadPoll = null;
+  const coreSource = fs.readFileSync(path.join(jsRoot, "core.js"), "utf8");
+  const keyboardTargetHelpers = coreSource.match(/function hasOpenDialog\(\)[\s\S]*?(?=function isTextEditableTarget\()/)?.[0];
+  assert.ok(keyboardTargetHelpers, "the event fixture loads the product dialog and editable-target helpers");
+  vm.runInNewContext(keyboardTargetHelpers, context, { filename: path.join(jsRoot, "core.js") });
   const source = fs.readFileSync(path.join(jsRoot, "app.js"), "utf8");
   vm.runInNewContext(source, context, { filename: path.join(jsRoot, "app.js") });
   vm.runInNewContext("globalThis.appEvents={ bindEvents };", context, { filename: "test-app-events-exports.js" });

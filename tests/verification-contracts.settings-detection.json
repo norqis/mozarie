@@ -1039,7 +1039,9 @@
       "status": "automated",
       "testIds": [
         "python:tests.test_server.MozarieTests.test_detect_image_persists_the_refined_apply_mask",
-        "python:tests.test_server.MozarieTests.test_high_precision_refinement_keeps_detector_mask_when_sam_is_incompatible"
+        "python:tests.test_server.MozarieTests.test_high_precision_refinement_keeps_detector_mask_when_sam_is_incompatible",
+        "python:tests.core.test_mask_bounds_memory.MaskBoundsMemoryTests.test_sam_roi_preserves_padding_clipping_detector_mask_and_empty_behavior",
+        "python:tests.core.test_mask_bounds_memory.MaskBoundsMemoryTests.test_dense_sam_refinement_memory_preserves_detector_fallback"
       ]
     },
     {
@@ -1175,7 +1177,9 @@
       "observation": "多数候補時も手領域の対象範囲を処理し、全マスク配列の積み上げにより処理を停止しない",
       "status": "automated",
       "testIds": [
-        "python:tests.test_detection_regressions.DetectionIntegrityRegressionTests.test_hand_box_envelope_matches_the_previous_union_without_stacking_masks"
+        "python:tests.test_detection_regressions.DetectionIntegrityRegressionTests.test_hand_box_envelope_matches_the_previous_union_without_stacking_masks",
+        "python:tests.core.test_mask_bounds_memory.MaskBoundsMemoryTests.test_hand_envelope_clips_intersections_and_ignores_empty_or_negative_masks",
+        "python:tests.core.test_mask_bounds_memory.MaskBoundsMemoryTests.test_dense_hand_envelope_memory_stays_near_input_size"
       ]
     },
     {
@@ -2204,7 +2208,12 @@
       "testIds": [
         "python:tests.test_server.MozarieTests.test_detection_start_snapshots_fluid_settings_for_every_image",
         "python:tests.test_server.MozarieTests.test_finalization_skips_fluid_search_for_empty_apply_masks_and_when_disabled",
-        "python:tests.test_server.MozarieTests.test_finalization_applies_fluid_to_every_nonempty_target_once"
+        "python:tests.test_server.MozarieTests.test_finalization_applies_fluid_to_every_nonempty_target_once",
+        "python:tests.core.test_mask_bounds_memory.MaskBoundsMemoryTests.test_detection_bounds_preserve_empty_sparse_dense_strided_thin_and_signed_masks",
+        "python:tests.core.test_mask_bounds_memory.MaskBoundsMemoryTests.test_detection_dense_bounds_memory_stays_near_input_size",
+        "python:tests.core.test_mask_bounds_memory.MaskBoundsMemoryTests.test_shared_dense_bounds_allocation_is_bounded_by_axis_lengths",
+        "python:tests.core.test_mask_bounds_memory.MaskBoundsMemoryTests.test_fluid_dense_bounds_memory_does_not_allocate_per_pixel_coordinates",
+        "python:tests.core.test_mask_bounds_memory.MaskBoundsMemoryTests.test_fluid_bounds_ignore_negative_target_pixels_and_preserve_selected_region"
       ]
     },
     {

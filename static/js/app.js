@@ -1438,11 +1438,13 @@ function bindEvents() {
     state.view.x = mouseX - sourceX * state.view.scale; state.view.y = mouseY - sourceY * state.view.scale; render(); updateBrushCursor();
   }, { passive: false });
   window.addEventListener("keydown", (event) => {
-    if (event.key === "Escape" && state.fillWorker) { event.preventDefault(); cancelFillWork(); return; }
+    if (event.defaultPrevented || hasOpenDialog()) return;
+    const editable = isEditableTarget(event.target);
+    if (!editable && event.key === "Escape" && state.fillWorker) { event.preventDefault(); cancelFillWork(); return; }
     if (event.key === "Escape" && !$("#boundaryModeMenu").hidden) {
       event.preventDefault(); closeBoundaryModeMenu(); focusElement($("#boundaryTool")); return;
     }
-    if (hasBoundaryDraft()) {
+    if (!editable && hasBoundaryDraft()) {
       if (event.key === "Escape") { event.preventDefault(); cancelBoundary(); return; }
       if (event.key === "Enter") {
         event.preventDefault();

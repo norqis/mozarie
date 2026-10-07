@@ -408,12 +408,14 @@ class SavingMixin:
         *,
         copy_to_default: bool = False,
         copy_to_browser: bool = False,
+        stream_image: bool = True,
         client_save_token: str | None = None,
         suffix: str = "_censored",
         output_format: str = "original",
         keep_metadata: bool = True,
     ) -> BrowserSaveRender:
         self._assert_image_editable(image_id)
+        stream_image = stream_image or copy_to_browser
         record = self.image_snapshot(image_id)
         if draft is None:
             draft = self.workspace_store.manual(image_id, self._encode_workspace_mask)
@@ -536,10 +538,10 @@ class SavingMixin:
                     # soon as the response finishes streaming.
                     assert output is not None
                     rendered_path = self._stage_browser_response_output(output, output_suffix)
-                    response_path = rendered_path
+                    response_path = rendered_path if stream_image else None
                     response_path_is_temporary = copy_to_browser
                     output = None
-                elif not copy_to_default:
+                elif stream_image:
                     # A no-effect response must still be a stable snapshot:
                     # the image lock ends before the HTTP handler streams it.
                     # Copy it in chunks, never through a response-sized bytes
@@ -603,7 +605,6 @@ class SavingMixin:
         cleanup_paths: list[tuple[Path, tuple[int, int] | None]] = []
         mask_paths: list[Path] = []
         candidate_dirs: list[Path] = []
-        thumbnail_paths: list[Path] = []
         quarantine_path: Path | None = None
         published_output: tuple[Path, tuple[int, int], str | None] | None = None
         source_delete_pending = False
@@ -908,16 +909,21 @@ class SavingMixin:
                     rendered_path = token_details.rendered_path
                     if deleted:
                         self._discard_browser_save_tokens_for_image_unchecked(image_id)
-                if source_action == "overwrite" or deleted:
-                    thumbnail_paths = list((self.cache_dir / "thumbnails").glob(f"{image_id}-*.jpg"))
                 if mask_paths:
                     self._delete_mask_files(mask_paths, candidate_dirs)
                 if deleted:
                     self.cleanup_expired_browser_save_tokens()
-                for thumbnail_path in thumbnail_paths:
-                    thumbnail_path.unlink(missing_ok=True)
+                if source_action == "overwrite" or deleted:
+                    try:
+                        for thumbnail_path in (self.cache_dir / "thumbnails").glob(f"{image_id}-*.jpg"):
+                            thumbnail_path.unlink(missing_ok=True)
+                    except OSError as exc:
+                        LOGGER.warning("保存後のサムネイル削除を保留しました: %s", exc)
                 if rendered_path is not None:
-                    rendered_path.unlink(missing_ok=True)
+                    try:
+                        rendered_path.unlink(missing_ok=True)
+                    except OSError as exc:
+                        LOGGER.warning("保存後の一時画像削除を保留しました: %s", exc)
                 try:
                     self.save_journal.finish(save_token, cleared, not cleared, deleted, response_generation)
                 except (OSError, sqlite3.Error) as exc:
@@ -1064,6 +1070,10 @@ class SavingMixin:
                     no_effect = (mask is None or not np.any(mask)) and record.edited_filename is None and output_format_matches_source(record, output_format) and keep_metadata and \
                         record.flip_horizontal == record.source_flip_horizontal and record.flip_vertical == record.source_flip_vertical
                     source_fingerprint = record.asset_fingerprint()
+                    if no_effect and not copy_to_default:
+                        _assert_source_stat_matches(record, source_fingerprint)
+                        self._record_job_success(index, record.image_id, str(record.path), job_generation, catalog_generation)
+                        return
                     save_token: str | None = None
                     durable_apply_receipt: dict[str, Any] | None = None
                     source_before: ImageRecord | None = None
@@ -1256,8 +1266,11 @@ class SavingMixin:
                                     self.workspace_store.acknowledge_browser_save_receipt(save_token)
                             except (OSError, sqlite3.Error) as exc:
                                 LOGGER.warning("保存ジャーナルの後処理を保留しました: %s", exc)
-                            for thumbnail_path in (self.cache_dir / "thumbnails").glob(f"{record.image_id}-*.jpg"):
-                                thumbnail_path.unlink(missing_ok=True)
+                            try:
+                                for thumbnail_path in (self.cache_dir / "thumbnails").glob(f"{record.image_id}-*.jpg"):
+                                    thumbnail_path.unlink(missing_ok=True)
+                            except OSError as exc:
+                                LOGGER.warning("保存後のサムネイル削除を保留しました: %s", exc)
                         if not no_effect:
                             self.invalidate_sam_image(record.image_id)
                         self._set_job_current(record.relative_path, job_generation, catalog_generation)

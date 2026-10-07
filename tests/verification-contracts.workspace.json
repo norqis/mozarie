@@ -97,7 +97,8 @@
       "observation": "復元は入力だけを戻し、OKで保存名を確定する。",
       "status": "automated",
       "testIds": [
-        "node:tests/editor/test_browser_interaction_runtime.cjs::interaction and catalog mutation controls"
+        "node:tests/editor/test_browser_interaction_runtime.cjs::interaction and catalog mutation controls",
+        "node:tests/editor/test_dialog_keyboard_e2e.cjs::rename Enter submits only the dialog and Escape preserves the pending boundary"
       ]
     },
     {
@@ -419,7 +420,8 @@
       "observation": "進行中の処理が落ち着いた後に新しい画像の読み込みが増えない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
+        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage",
+        "node:tests/import/test_import_cancellation_e2e.cjs::cancelled parallel import shows committed images, retains source handles and stops unstarted files"
       ]
     },
     {
@@ -1970,7 +1972,9 @@
       "observation": "完了・失敗・取消のいずれでも読み込み状態が残らず、次のパス入力または画像追加を開始できる",
       "status": "automated",
       "testIds": [
-        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
+        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage",
+        "node:tests/import/test_import_cancellation_e2e.cjs::cancelled parallel import shows committed images, retains source handles and stops unstarted files",
+        "node:tests/import/test_import_cancellation_e2e.cjs::cancelling before any upload commits refreshes the catalog and releases import controls"
       ]
     },
     {
@@ -2034,7 +2038,14 @@
       "status": "automated",
       "testIds": [
         "python:tests.test_server.MozarieTests.test_same_root_reload_rejects_while_import_is_preparing",
-        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
+        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage",
+        "node:tests/import/test_import_cancellation_e2e.cjs::completed import ignores a catalog response after epoch change",
+        "node:tests/import/test_import_cancellation_e2e.cjs::failed import ignores a catalog response after session replacement",
+        "node:tests/import/test_import_cancellation_e2e.cjs::successful upload from a replaced session cannot attach its source to the new project",
+        "node:tests/import/test_import_cancellation_e2e.cjs::internal_error upload from a replaced session does not request or apply a catalog resync",
+        "node:tests/import/test_import_cancellation_e2e.cjs::stale_catalog upload from a replaced session does not request or apply a catalog resync",
+        "node:tests/import/test_import_cancellation_e2e.cjs::image_read_failed upload from a replaced session does not request or apply a catalog resync",
+        "node:tests/import/test_import_cancellation_e2e.cjs::source read failure from a replaced session leaves progress closed and the new catalog intact"
       ]
     },
     {
@@ -2123,7 +2134,9 @@
       "status": "automated",
       "testIds": [
         "python:tests.workspace.test_project_catalog_lifecycle.ProjectCatalogCoverageTests.test_every_unnamed_workspace_edit_undoes_and_redoes_one_step_without_touching_other_images",
-        "python:tests.test_project_history_live_browser.LiveProjectHistoryBrowserTests.test_browser_undo_redo_round_trips_localized_durable_manual_layers"
+        "python:tests.test_project_history_live_browser.LiveProjectHistoryBrowserTests.test_browser_undo_redo_round_trips_localized_durable_manual_layers",
+        "python:tests.core.test_mask_bounds_memory.MaskBoundsMemoryTests.test_dense_manual_history_memory_and_exact_undo_redo",
+        "python:tests.core.test_mask_bounds_memory.MaskBoundsMemoryTests.test_manual_history_crops_exact_changed_rectangle_and_reverses_both_directions"
       ]
     },
     {
@@ -2623,7 +2636,9 @@
       "testIds": [
         "node:tests/test_review_list_removal_e2e.cjs::review choices survive editing and list-only removal preserves source access boundaries > orange footer removes from the filtered list and navigates next then previous",
         "node:tests/test_review_list_removal_e2e.cjs::review choices survive editing and list-only removal preserves source access boundaries > gallery context and overview multiselection remove only their targets",
-        "python:tests.workspace.test_project_catalog_lifecycle.ProjectCatalogCoverageTests.test_review_choice_survives_edits_history_restart_and_list_removal"
+        "python:tests.workspace.test_project_catalog_lifecycle.ProjectCatalogCoverageTests.test_review_choice_survives_edits_history_restart_and_list_removal",
+        "python:tests.workspace.test_project_catalog_lifecycle.ProjectCatalogCoverageTests.test_native_catalog_remove_finishes_when_thumbnail_listing_fails",
+        "python:tests.workspace.test_project_catalog_lifecycle.ProjectCatalogCoverageTests.test_session_catalog_remove_finishes_when_thumbnail_listing_fails"
       ]
     },
     {
