@@ -696,14 +696,17 @@ async function beginModelDownload() {
   }
 }
 
-async function cancelModelDownload() {
-  const generation = modelDownloadGeneration;
-  try {
-    const job = await api("/api/model-download/cancel", { method: "POST", body: JSON.stringify({}) });
-    if (generation !== modelDownloadGeneration) return;
-    modelDownloadGeneration += 1;
-    renderModelDownload(job);
-  } catch (error) { if (generation === modelDownloadGeneration) showUserError(error, $("#modelDownloadCancel")); }
+function cancelModelDownload() {
+  const generation = ++modelDownloadGeneration;
+  const pending = (async () => {
+    try {
+      const job = await api("/api/model-download/cancel", { method: "POST", body: JSON.stringify({}) });
+      if (generation === modelDownloadGeneration) renderModelDownload(job);
+    } catch (error) { if (generation === modelDownloadGeneration) showUserError(error, $("#modelDownloadCancel")); }
+  })();
+  const completed = pending.finally(() => { if (modelDownloadRefresh === completed) modelDownloadRefresh = null; });
+  modelDownloadRefresh = completed;
+  return completed;
 }
 
 let settingsStatusGeneration = 0;

@@ -1319,7 +1319,8 @@
       "testIds": [
         "node:tests/test_settings_runtime.cjs::SD-068 cancelled model download never publishes an unfinished path",
         "node:tests/settings/test_model_download_polling_e2e.cjs::cancelled download ignores an older running status response",
-        "node:tests/settings/test_model_download_polling_e2e.cjs::cancelled download ignores an older failure status response"
+        "node:tests/settings/test_model_download_polling_e2e.cjs::cancelled download ignores an older failure status response",
+        "node:tests/settings/test_model_download_polling_e2e.cjs::progress waits for a pending cancelling cancellation before checking completion"
       ]
     },
     {
@@ -1332,7 +1333,8 @@
       "testIds": [
         "node:tests/test_settings_runtime.cjs::SD-069 model download polling failure is visible and leaves no acquired path",
         "python:tests.test_model_downloads.ModelDownloadTests.test_worker_start_failure_restores_idle_and_allows_retry",
-        "node:tests/settings/test_model_download_polling_e2e.cjs::a current progress error restores close and stops polling"
+        "node:tests/settings/test_model_download_polling_e2e.cjs::a current progress error restores close and stops polling",
+        "node:tests/settings/test_model_download_polling_e2e.cjs::progress waits for a pending failure cancellation before checking completion"
       ]
     },
     {

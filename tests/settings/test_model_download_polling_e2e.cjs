@@ -160,3 +160,40 @@ test("a current progress error restores close and stops polling", { timeout: 300
     } finally { held.release(); }
   });
 });
+
+for (const outcome of ["cancelling", "failure"]) {
+  test(`progress waits for a pending ${outcome} cancellation before checking completion`, { timeout: 30000 }, async () => {
+    await withDownloadPage(async (page) => {
+      let releaseStatus; let statusReached; let releaseCancel; let cancelReached;
+      const statusGate = new Promise((resolve) => { releaseStatus = resolve; });
+      const statusStarted = new Promise((resolve) => { statusReached = resolve; });
+      const cancelGate = new Promise((resolve) => { releaseCancel = resolve; });
+      const cancelStarted = new Promise((resolve) => { cancelReached = resolve; });
+      let requests = 0;
+      await page.route("**/api/model-download", async (route) => { requests++; statusReached(); await statusGate; await reply(route, "cancelled"); });
+      await page.route("**/api/model-download/cancel", async (route) => {
+        cancelReached(); await cancelGate;
+        if (outcome === "failure") return route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ code: "internal_error", error: "temporary failure" }) });
+        await reply(route, "cancelling");
+      });
+      try {
+        await begin(page);
+        await page.evaluate(() => { window.earlierPoll = refreshModelDownload(); });
+        await statusStarted;
+        await page.locator("#modelDownloadCancel").click(); await cancelStarted;
+        releaseStatus(); await page.evaluate(() => window.earlierPoll);
+        assert.equal(await page.evaluate(() => window.modelPollCount()), 1, "an older terminal GET cannot stop polling before cancellation settles");
+        await page.evaluate(() => { window.duringCancel = refreshModelDownload(); window.tickModelPoll(); });
+        releaseCancel(); await page.evaluate(() => window.duringCancel);
+        assert.equal(requests, 1, "progress requests wait for the cancellation result");
+        if (outcome === "failure") {
+          await page.locator("#errorDialog").waitFor({ state: "visible" });
+          await page.locator("#errorDialog button").last().click();
+        }
+        await page.evaluate(() => { window.tickModelPoll(); });
+        await page.waitForFunction(() => document.querySelector("#modelDownloadStatus").textContent === t("modelDownload.cancelled"));
+        await terminal(page, "cancelled");
+      } finally { releaseStatus(); releaseCancel(); }
+    });
+  });
+}
