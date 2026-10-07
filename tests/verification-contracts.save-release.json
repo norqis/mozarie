@@ -912,7 +912,7 @@
       "sourceIds": [
         "SV-058"
       ],
-      "observation": "DOMとメモリが繰り返しで増え続けず、全件の画像本体を再取得し続けない。",
+      "observation": "DOMとメモリが繰り返しで増え続けず、全件の画像本体を再取得し続けない。ウィンドウサイズ変更や確認状態の再描画でも非表示一覧を全件生成しない。",
       "status": "automated",
       "testIds": [
         "node:tests/test_gallery_performance_e2e.cjs::20k gallery DOM decoded cache and full-image requests stay bounded",

@@ -314,7 +314,6 @@ class CatalogMixin:
             with self.lock:
                 if publish_catalog_id is None:
                     self._assert_catalog_mutable()
-                self._invalidate_sam_cache()
                 live_state = {
                     "catalog_id": self.catalog_id,
                     "workspace_id": self.workspace_id,
@@ -383,6 +382,9 @@ class CatalogMixin:
                     for record in records
                 )
                 session = (None, None) if keep_session else self._detach_session_unchecked()
+            # Model preparation publishes progress through self.lock. Never
+            # wait for its SAM lock while holding that state lock.
+            self._invalidate_sam_cache()
             self._clear_cache()
             if prehydrated is None:
                 # Cache cleanup intentionally happens before masks are materialised.
@@ -953,6 +955,7 @@ class CatalogMixin:
                         except ValueError as exc:
                             raise ClientError("プロジェクトが見つかりません。", "project_not_found") from exc
                         _detached_catalog, session = self._detach_catalog_state_unchecked()
+                    self._invalidate_sam_cache()
                     self._clear_cache()
                     self._release_detached_session(session)
             else:
@@ -1274,7 +1277,6 @@ class CatalogMixin:
         self.candidate_revisions = {}
         self.projectless_manual_drafts.clear()
         self._clear_browser_save_tokens_unchecked()
-        self._invalidate_sam_cache()
         self.catalog_id = None
         self.workspace_id = None
         self.project_read_only = False
@@ -1322,6 +1324,7 @@ class CatalogMixin:
                         self.workspace_id = publish_catalog_id
                         self.project_read_only = publish_read_only
                         self.catalog_sources = [dict(source) for source in publish_sources or []]
+                self._invalidate_sam_cache()
                 self._clear_cache()
                 self._release_detached_session(session)
         self.cleanup_browser_save_files()

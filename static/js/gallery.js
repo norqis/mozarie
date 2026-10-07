@@ -167,11 +167,12 @@ function focusCatalogIndex(windowState, index, event = null) {
 
 function renderCatalogWindow(windowState) {
   const { container, nodes, spacer, options } = windowState;
+  const viewport = Number(container.clientHeight);
+  if (!viewport) return null;
   const layout = catalogLayout(windowState); spacer.style.height = `${layout.totalHeight}px`;
   container.setAttribute?.("aria-rowcount", String(Math.ceil(windowState.images.length / layout.columns)));
   container.setAttribute?.("aria-colcount", String(layout.columns));
   if (!windowState.images.some((image) => image.id === windowState.focusId)) windowState.focusId = windowState.images.find((image) => image.id === state.currentId)?.id || windowState.images[0]?.id || null;
-  const viewport = Number(container.clientHeight) || Number.MAX_SAFE_INTEGER;
   const scrollTop = Number(container.scrollTop) || 0;
   const firstRow = Math.max(0, Math.floor(scrollTop / layout.rowHeight) - options.overscan);
   const lastRow = Math.min(Math.ceil(windowState.images.length / layout.columns), Math.ceil((scrollTop + viewport) / layout.rowHeight) + options.overscan);
