@@ -26,14 +26,32 @@ const { expect } = require("playwright/test");
       return [...new Uint8Array(await blob.arrayBuffer())];
     });
     await page.waitForFunction(() => state.images.length === 1 && !state.importing);
-    await page.locator(".gallery-item").first().click();
-    await page.waitForFunction(() => state.currentImage && !state.pendingImageId);
-    await page.evaluate(() => openProjectNameDialog("name"));
-    await page.locator("#projectNameInput").fill("Copy delete rollback");
-    await page.locator("#projectNameConfirm").click();
-    await page.waitForFunction(() => state.project?.id && !state.projectOperationPending);
+    if (!["rollback-unselected", "workspace-switch"].includes(mode)) {
+      await page.locator(".gallery-item").first().click();
+      await page.waitForFunction(() => state.currentImage && !state.pendingImageId);
+      await page.evaluate(() => openProjectNameDialog("name"));
+      await page.locator("#projectNameInput").fill("Copy delete rollback");
+      await page.locator("#projectNameConfirm").click();
+      await page.waitForFunction(() => state.project?.id && !state.projectOperationPending);
+    }
     const imageId = await page.evaluate(() => state.images[0].id);
     const peer = await open(); await peer.waitForFunction(() => state.images.length === 1);
+    if (mode === "workspace-switch") {
+      const before = await page.evaluate(() => ({ workspaceId: state.workspaceId, access: state.sourceAccess.size, currentId: state.currentId }));
+      assert.equal(before.access, 1); assert.equal(before.currentId, null);
+      await peer.evaluate(async () => {
+        await catalogApi("/api/project/close", {}, { method: "POST" });
+        const parent = await navigator.storage.getDirectory();
+        await importFileHandles([{ handle: await parent.getFileHandle("source.png"), parentHandle: parent }]);
+      });
+      await page.evaluate(() => syncCatalogOnReturn());
+      const after = await page.evaluate(() => ({ workspaceId: state.workspaceId, access: state.sourceAccess.size,
+        images: state.images.map((image) => image.id), currentId: state.currentId }));
+      assert.notEqual(after.workspaceId, before.workspaceId); assert.equal(after.access, 0);
+      assert.equal(after.currentId, null); assert.equal(after.images.length, 1); assert.notEqual(after.images[0], imageId);
+      console.log("unselected workspace switch discarded the previous workspace's source access");
+      return;
+    }
     let foreign; const deleting = !mode.startsWith("flip");
     let interceptions = 0;
     await page.route(deleting ? "**/api/catalog/delete-source" : "**/api/catalog/delete-source/prepare", async (route) => {
@@ -105,6 +123,11 @@ const { expect } = require("playwright/test");
       ]), { timeout: 15000 }).toEqual([0, 1, 1, true, false]);
       assert.equal(await page.evaluate(() => window.recoveryWrites), 0);
     }
+    if (mode === "rollback-unselected") assert.deepEqual(await page.evaluate(() => ({
+      currentId: state.currentId, project: state.project, access: state.sourceAccess.size,
+      canOverwrite: sourceCanOverwrite(state.images[0], "original"), canDelete: sourceCanDelete(state.images[0]),
+      manualRevision: state.images[0].manualRevision,
+    })), { currentId: null, project: null, access: 1, canOverwrite: true, canDelete: true, manualRevision: 1 });
     const result = await page.evaluate(async (imageId) => {
       const file = await (await (await navigator.storage.getDirectory()).getFileHandle("source.png")).getFile();
       const access = state.sourceAccess.get(imageId);

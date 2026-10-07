@@ -1483,7 +1483,8 @@
         "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_rejected_single_copy_delete_restores_metadata_and_allows_another_save",
         "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_copy_delete_restoration_survives_a_lost_cancel_response_and_reload",
         "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_copy_delete_restoration_survives_a_lost_ack_response_and_reload",
-        "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_copy_delete_restoration_retries_project_handle_persistence_after_reload"
+        "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_copy_delete_restoration_retries_project_handle_persistence_after_reload",
+        "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_unselected_unnamed_copy_delete_rollback_keeps_source_access_and_allows_another_save"
       ]
     },
     {

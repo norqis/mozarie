@@ -3217,7 +3217,9 @@
         "node:tests/gallery/test_filtered_action_authority_e2e.cjs::DI-184 same-project return synchronization preserves a still-authoritative editor draft",
         "node:tests/gallery/test_filtered_action_authority_e2e.cjs::same-generation return reloads changed pixels and masks while pending edits keep their old revision",
         "node:tests/gallery/test_filtered_action_authority_e2e.cjs::return synchronization retains usable editor resources after stale-image and mask-load failures",
-        "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_return_sync_refreshes_pixels_after_metadata_already_updated_the_catalog"
+        "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_return_sync_refreshes_pixels_after_metadata_already_updated_the_catalog",
+        "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_unselected_unnamed_copy_delete_rollback_keeps_source_access_and_allows_another_save",
+        "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_unselected_workspace_switch_discards_previous_source_access"
       ]
     },
     {

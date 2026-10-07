@@ -291,6 +291,7 @@ class LiveEditorGestureBrowserTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, f"copy delete rollback failed\n{result.stdout}\n{result.stderr}")
         self.assertEqual(self.source_path.read_bytes(), self.source_bytes)
         self.assertEqual(len(self.state.list_images()), 1)
+        if mode == "workspace-switch": return
         with Image.open(self.output_dir / "source_copy.png") as image:
             self.assertEqual(image.getpixel((0, 0))[:3], (255, 0, 0))
         if mode not in {"foreign", "checkpoint-failure"}: self.assertTrue((self.output_dir / "source_retry.png").is_file())
@@ -307,6 +308,12 @@ class LiveEditorGestureBrowserTests(unittest.TestCase):
 
     def test_rejected_copy_delete_restores_metadata_and_allows_another_save(self) -> None:
         self._check_copy_delete_rollback("rollback")
+
+    def test_unselected_unnamed_copy_delete_rollback_keeps_source_access_and_allows_another_save(self) -> None:
+        self._check_copy_delete_rollback("rollback-unselected")
+
+    def test_unselected_workspace_switch_discards_previous_source_access(self) -> None:
+        self._check_copy_delete_rollback("workspace-switch")
 
     def test_rejected_single_copy_delete_restores_metadata_and_allows_another_save(self) -> None:
         self._check_copy_delete_rollback("rollback-single")

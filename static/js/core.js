@@ -445,11 +445,12 @@ function catalogResponse(snapshot) {
   if (isCompleteCatalogSnapshot(snapshot) && typeof applyProjectSnapshot === "function") applyProjectSnapshot(snapshot);
   return snapshot;
 }
-function replaceCatalogSnapshot(snapshot, expectedProjectId) {
+function replaceCatalogSnapshot(snapshot, expectedProjectId, expectedWorkspaceId) {
   const images = snapshot.images || [];
-  const preservesEditor = (snapshot?.project?.id || null) === (expectedProjectId || null)
-    && Boolean(state.currentId && state.currentImage && images.some((image) => image.id === state.currentId));
-  if (!preservesEditor) { resetCatalog(images, snapshot.root || ""); return; }
+  const preservesCatalog = (snapshot?.project?.id || null) === (expectedProjectId || null)
+    && (Boolean(state.currentId && state.currentImage && images.some((image) => image.id === state.currentId))
+      || (!state.currentId && expectedWorkspaceId && snapshot.workspaceId === expectedWorkspaceId));
+  if (!preservesCatalog) { resetCatalog(images, snapshot.root || ""); return; }
   const previousImages = new Map(state.images.map((image) => [image.id, image]));
   for (const image of images) {
     const previous = previousImages.get(image.id);
@@ -474,12 +475,13 @@ function replaceCatalogSnapshot(snapshot, expectedProjectId) {
   loadReviewedPaths(); pruneSourceAccess(); renderCatalogViews(); updateSelectionActionBar(); updateNavigationControls(); updateActionButtons();
 }
 function reconcileCatalogSnapshot(snapshot, expectedProjectId, expectedCatalogGeneration) {
+  const expectedWorkspaceId = state.workspaceId;
   const projectId = snapshot?.project?.id || null;
   const replaced = isCompleteCatalogSnapshot(snapshot)
     && (projectId !== (expectedProjectId || null) || snapshot.catalogGeneration !== expectedCatalogGeneration);
   catalogResponse(snapshot);
   if (replaced) {
-    replaceCatalogSnapshot(snapshot, expectedProjectId);
+    replaceCatalogSnapshot(snapshot, expectedProjectId, expectedWorkspaceId);
     applyProjectSnapshot(snapshot);
     state.missingNativeSources = typeof missingNativeSources === "function" ? missingNativeSources(snapshot.sources) : [];
     if (typeof restoreBrowserProjectSourcesForCurrentCatalog === "function") void restoreBrowserProjectSourcesForCurrentCatalog(snapshot.sources).catch(() => {});
@@ -518,11 +520,12 @@ async function catalogApi(path, payload = {}, options = {}) {
 }
 async function resyncCatalog(epoch = state.catalogEpoch, signal = undefined) {
   const currentProjectId = state.project?.id || null;
+  const currentWorkspaceId = state.workspaceId;
   const snapshot = await api("/api/images", { signal, resyncOnStale: false });
   if (!isCurrentCatalogEpoch(epoch)) return null;
   catalogResponse(snapshot);
   if (typeof flushPendingBrowserSaveAcks === "function") void flushPendingBrowserSaveAcks();
-  replaceCatalogSnapshot(snapshot, currentProjectId);
+  replaceCatalogSnapshot(snapshot, currentProjectId, currentWorkspaceId);
   applyProjectSnapshot(snapshot);
   state.missingNativeSources = typeof missingNativeSources === "function" ? missingNativeSources(snapshot.sources) : [];
   if (typeof restoreBrowserProjectSourcesForCurrentCatalog === "function") void restoreBrowserProjectSourcesForCurrentCatalog(snapshot.sources).catch(() => {});
@@ -535,6 +538,7 @@ async function syncCatalogOnReturn() {
   state.catalogRefreshController = controller;
   const epoch = state.catalogEpoch;
   const knownProjectId = state.project?.id || null;
+  const knownWorkspaceId = state.workspaceId;
   try {
     const snapshot = await api("/api/images", { signal: controller.signal });
     if (controller.signal.aborted || !isCurrentCatalogEpoch(epoch)) return;
@@ -555,7 +559,7 @@ async function syncCatalogOnReturn() {
     if (deferReload) retainCurrentResources();
     catalogResponse(snapshot);
     if (typeof flushPendingBrowserSaveAcks === "function") void flushPendingBrowserSaveAcks();
-    replaceCatalogSnapshot(snapshot, knownProjectId);
+    replaceCatalogSnapshot(snapshot, knownProjectId, knownWorkspaceId);
     state.missingNativeSources = typeof missingNativeSources === "function" ? missingNativeSources(snapshot.sources) : [];
     if (typeof restoreBrowserProjectSourcesForCurrentCatalog === "function") void restoreBrowserProjectSourcesForCurrentCatalog(snapshot.sources).catch(() => {});
     if (resourcesChanged && !deferReload) {
