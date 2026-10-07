@@ -137,7 +137,7 @@ test("4K drag renders a preview before pointerup with one bounded worker", { tim
     assert.equal(await page.evaluate(() => state.candidates.filter((candidate) => candidate.role === "exclude" && candidate.enabled).length), 8, "the drag stays within the 8-exclusion workload");
     const pointerUpAt = await page.evaluate(() => { window.__dragRoiMetrics.watchFinal = true; return performance.now(); });
     await page.mouse.up();
-    await page.waitForFunction(() => !state.activeStroke && !state.mosaicWorkerBusy && !state.mosaicPending);
+    await page.waitForFunction(() => !state.activeStroke && !state.mosaicWorkerBusy && !state.mosaicPending && !state.mosaicPreviewRequested);
     const metrics = await page.evaluate((started) => ({
       completionMs: performance.now() - started,
       workerMax: window.__mosaicWorkerMetrics.maxActive,
