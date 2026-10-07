@@ -558,6 +558,13 @@ async function resumePendingSourceDeletesFromUser() {
 
 window.addEventListener("online", () => { void resumePendingSourceDeletes(false).catch(() => {}); });
 
+function setSourceDeleteStatus(count, failures, cleanup = 0) {
+  const key = failures.length ? "sourceDelete.resultFailed" : "sourceDelete.result";
+  setStatusKey(cleanup ? `${key}Cleanup` : key, {
+    count, cleanup, failures: failures.map((failure) => ({ name: failure.relativePath || failure.imageId || "", reason: failure.reason })),
+  }, failures.length ? "warning" : "success");
+}
+
 async function permanentlyDeleteImages(images, visibleImages) {
   if (!images.length || isBusy() || state.importing) return;
   const ids = images.map((image) => image.id);
@@ -583,8 +590,8 @@ async function permanentlyDeleteImages(images, visibleImages) {
       await forgetPendingSourceDelete(token);
       const details = local.failed.map((failure) => `${failure.imageId}: ${failure.reason}`).join("、");
       console.warn("元画像を完全削除: 開始 対象=%d 成功=0 失敗=%d 詳細=%s", images.length, local.failed.length, details);
-      setStatus(`元画像を0件削除しました。失敗${local.failed.length}件: ${details}`, "warning");
-      showUserError(codedError(local.failed[0]?.reason || "source_action_unavailable"));
+      setSourceDeleteStatus(0, local.failed);
+      showUserError(codedError(sourceDeleteErrorCode(local.failed[0]?.reason || "source_action_unavailable")));
       return;
     }
     const prepared = await catalogApi("/api/catalog/delete-source/prepare", { imageIds: local.ready.map((image) => image.id), deleteToken: token }, { method: "POST" });
@@ -630,10 +637,9 @@ async function permanentlyDeleteImages(images, visibleImages) {
     const failed = [...new Map([...local.failed, ...(prepared.failed || []), ...browser.failed, ...(data.failed || [])]
       .map((failure) => [`${failure.imageId || failure.relativePath || ""}:${failure.reason || ""}`, failure])).values()];
     const failureDetails = failed.map((failure) => `${failure.relativePath || failure.imageId}: ${failure.reason}`).join("、");
-    const cleanupNotice = data.cleanupPendingCount ? ` 元画像ファイルの後処理${data.cleanupPendingCount}件を再試行します。` : "";
     if (failed.length) console.warn("元画像を完全削除: 対象=%d 成功=%d 失敗=%d 詳細=%s", images.length, removed.size, failed.length, failureDetails);
-    setStatus(`元画像を${removed.size}件削除しました。${failed.length ? `失敗${failed.length}件: ${failureDetails}` : ""}${cleanupNotice}`, failed.length ? "warning" : "success");
-    if (failed.length) showUserError(codedError(failed[0].reason));
+    setSourceDeleteStatus(removed.size, failed, data.cleanupPendingCount);
+    if (failed.length) showUserError(codedError(sourceDeleteErrorCode(failed[0].reason)));
     if (data.state === "committed") await acknowledgeSourceDelete(token);
     });
   } catch (error) {

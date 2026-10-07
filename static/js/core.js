@@ -85,7 +85,7 @@ const USER_ERROR_CODES = {
   api_not_found: "response_invalid", connection_lost: "connection_lost", output_folder_unavailable: "output_folder_unavailable", output_permission_denied: "output_permission_denied", request_failed: "internal_error",
   image_not_found: "image_not_found", image_hidden: "image_hidden", image_read_failed: "image_read_failed", image_format_unsupported: "image_format_unsupported",
   save_write_failed: "save_write_failed", save_state_changed: "save_state_changed", save_recovery_pending: "save_recovery_pending", folder_not_found: "folder_not_found",
-  source_restore_failed: "project_source_unavailable", source_unavailable: "project_source_unavailable", source_changed: "image_changed", source_delete_failed: "source_action_unavailable", source_delete_recovery_unavailable: "source_delete_recovery_unavailable", source_delete_cleanup_pending: "source_delete_cleanup_pending", browser_source_not_deleted: "source_action_unavailable", source_delete_not_prepared: "catalog_changed", project_source_unavailable: "project_source_unavailable", project_source_conflict: "project_source_conflict", project_source_no_match: "project_source_no_match", project_name_invalid: "project_name_invalid", project_name_duplicate: "project_name_duplicate", project_read_only: "project_read_only",
+  source_restore_failed: "project_source_unavailable", source_unavailable: "project_source_unavailable", source_changed: "image_changed", source_delete_failed: "source_delete_failed", source_delete_recovery_unavailable: "source_delete_recovery_unavailable", source_delete_cleanup_pending: "source_delete_cleanup_pending", browser_source_not_deleted: "source_delete_failed", source_delete_not_prepared: "catalog_changed", project_source_unavailable: "project_source_unavailable", project_source_conflict: "project_source_conflict", project_source_no_match: "project_source_no_match", project_name_invalid: "project_name_invalid", project_name_duplicate: "project_name_duplicate", project_read_only: "project_read_only",
   project_not_found: "folder_not_found", workspace_recreate_required: "workspace_corrupt", source_mismatch: "image_changed",
   source_permission_denied: "source_permission_denied", source_action_unavailable: "source_action_unavailable",
   source_busy: "source_busy", source_write_unsupported: "source_write_unsupported", output_write_unsupported: "output_write_unsupported", output_cleanup_failed: "output_cleanup_failed",
@@ -123,6 +123,10 @@ function codedError(code, params = {}) {
 function userErrorCode(error) {
   const code = typeof error === "string" ? error : error?.code;
   return USER_ERROR_CODES[code] || "internal_error";
+}
+
+function sourceDeleteErrorCode(reason) {
+  return reason === "source_action_unavailable" ? "source_delete_failed" : reason;
 }
 
 function showUserError(error, invoker = document.activeElement) {
@@ -345,7 +349,13 @@ function closeProcessing() {
 
 function renderStatus() {
   const status = state.status;
-  const message = status ? (status.key ? t(status.key, status.params) : status.message) : "";
+  let params = status?.params;
+  if (status?.key?.startsWith("sourceDelete.result")) {
+    const { count, cleanup, failures } = params;
+    params = { count, cleanup, failed: failures.length,
+      details: failures.map(({ name, reason }) => `${name}: ${t(`errorDialog.${userErrorCode(sourceDeleteErrorCode(reason))}.cause`)}`).join(", ") };
+  }
+  const message = status ? (status.key ? t(status.key, params) : status.message) : "";
   const headerStatus = $("#connectionStatus");
   headerStatus.textContent = message;
   headerStatus.className = `appbar-status ${status?.kind || ""}`;

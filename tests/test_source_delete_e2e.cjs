@@ -17,6 +17,82 @@ async function freshPage(browser, fixture) {
   return { context, page };
 }
 
+test("source deletion translates every result and failure cause across language changes", { timeout: 120000 }, async () => {
+  const fixture = await startFixtureServer();
+  const browser = await chromium.launch({ headless: true });
+  let context;
+  const changedCause = { en: "The source image was changed or deleted after loading.", ja: "読み込み後に元画像が変更または削除されました。" };
+  const deletionCause = { en: "The selected original image could not be deleted.", ja: "選択した元画像を削除できませんでした。" };
+  try {
+    for (const scenario of [
+      { name: "success" },
+      { name: "cleanup", cleanup: 2 },
+      { name: "failure", reason: "source_changed", cause: changedCause },
+      { name: "failure and cleanup", reason: "source_changed", cause: changedCause, cleanup: 2 },
+      { name: "preflight", preflight: true, reason: "source_action_unavailable", cause: deletionCause },
+      { name: "delete failure", reason: "source_delete_failed", cause: deletionCause },
+      { name: "browser delete failure", reason: "browser_source_not_deleted", cause: deletionCause },
+    ]) {
+      fixture.resetScenario();
+      fixture.setCatalog(["first", "second"].map((id) => ({ id, relativePath: `${id}.png`, sourceKind: scenario.preflight ? "browser-file" : "filesystem", sourcePath: `G:\\fixture\\${id}.png`, width: 100, height: 80, reviewed: false, hidden: false, candidateCount: 0, enabledCandidateCount: 0 })));
+      fixture.setSourceDeleteCommitFailureIds(scenario.reason && !scenario.preflight ? ["second"] : []);
+      fixture.setSourceDeleteCleanupPendingCount(scenario.cleanup || 0);
+      const fresh = await freshPage(browser, fixture); context = fresh.context; const page = fresh.page;
+      await page.waitForFunction(() => state.settings && state.images.length === 2);
+      const warnings = [];
+      page.on("console", (message) => { if (message.type() === "warning") warnings.push(message.text()); });
+      if (scenario.reason && !scenario.preflight) await page.route("**/api/catalog/delete-source", async (route) => {
+        const response = await route.fetch(); const body = await response.json();
+        for (const failure of body.failed) failure.reason = scenario.reason;
+        await route.fulfill({ response, json: body });
+      });
+      const language = async (value) => {
+        await page.locator("#settingsButton").click();
+        await page.locator("#settingsLanguage").selectOption(value);
+        await page.locator("#settingsSaveButton").click();
+        await page.waitForFunction((expected) => state.settings.general.language === expected && state.translations["settings.title"] === (expected === "en" ? "Settings" : "設定"), value);
+        await page.locator("#settingsCloseButton").click();
+      };
+      await language("en");
+      await page.locator('.gallery-item[data-id="first"]').click();
+      await page.waitForFunction(() => state.currentId === "first" && state.currentImage);
+      if (scenario.reason && !scenario.preflight) {
+        await page.locator("#overviewButton").click(); await page.locator("#batchModeButton").click();
+        for (const id of ["first", "second"]) await page.locator(`.overview-item[data-id="${id}"]`).click();
+        await page.locator("#selectionActionsButton").click(); await page.locator('[data-selection-action="remove"]').click();
+      } else await page.locator("#removeAndNextButton").click();
+      await page.locator("#confirmAccept").click();
+      await page.waitForFunction(() => !state.catalogMutation && document.querySelector("#connectionStatus").textContent.length > 0);
+      if (scenario.reason) {
+        await page.locator("#errorDialog").waitFor({ state: "visible" });
+        assert.equal(await page.locator("#errorDialogCause").textContent(), scenario.cause.en, scenario.name);
+        await page.locator("#errorDialogClose").click();
+        assert.equal(warnings.some((text) => text.includes(scenario.reason)), true, "diagnostic logs retain the original reason code");
+      }
+      for (const value of ["en", "ja", "en"]) {
+        if (await page.locator("html").getAttribute("lang") !== value) await language(value);
+        const count = scenario.preflight ? 0 : 1;
+        const name = scenario.preflight ? "first" : "second";
+        const text = value === "en"
+          ? `Source images deleted: ${count}.${scenario.reason ? ` Failed: 1 — ${name}: ${scenario.cause.en}` : ""}${scenario.cleanup ? " Cleanup will be retried for 2 source files." : ""}`
+          : `元画像を${count}件削除しました。${scenario.reason ? `失敗1件: ${name}: ${scenario.cause.ja}` : ""}${scenario.cleanup ? " 元画像ファイルの後処理2件を再試行します。" : ""}`;
+        await expect(page.locator("#connectionStatus"), scenario.name).toHaveText(text);
+        assert.equal(await page.locator("#connectionStatus").getAttribute("role"), "status");
+        assert.equal(await page.locator("#connectionStatus").getAttribute("class"), `appbar-status ${scenario.reason ? "warning" : "success"}`);
+      }
+      if (scenario.preflight) {
+        assert.equal(fixture.sourceDeleteRequests.length, 0, "preflight failure never reaches deletion I/O");
+        await language("ja");
+        await page.locator("#removeAndNextButton").click(); await page.locator("#confirmAccept").click();
+        await expect(page.locator("#errorDialogCause")).toHaveText(deletionCause.ja);
+      }
+      await context.close(); context = null;
+    }
+  } finally {
+    await context?.close(); await browser.close(); await closeServer(fixture.server);
+  }
+});
+
 test("Delete shortcut keeps a durable source-delete intent through claim and acknowledges the committed receipt", { timeout: 60000 }, async () => {
   const fixture = await startFixtureServer({ activeProject: { id: "delete-project", name: "Delete project", status: "working", imageCount: 2 } });
   const browser = await chromium.launch({ headless: true });
@@ -422,7 +498,7 @@ test("batch source deletion keeps the current canvas when another selected image
     assert.deepEqual(await page.evaluate(() => ({ currentId: state.currentId, hasCanvas: Boolean(state.currentImage), ids: state.images.map((image) => image.id) })), {
       currentId: "current", hasCanvas: true, ids: ["first", "current"],
     }, "a failed current source deletion keeps the selected image and canvas while another selected image is removed");
-    assert.equal(await page.evaluate(() => state.status.message), "元画像を1件削除しました。失敗1件: current: source_changed 元画像ファイルの後処理2件を再試行します。", "the visible result reports exact removed/failed counts, first reason, and a separate cleanup-pending count");
+    assert.equal(await page.locator("#connectionStatus").textContent(), "元画像を1件削除しました。失敗1件: current: 読み込み後に元画像が変更または削除されました。 元画像ファイルの後処理2件を再試行します。", "the visible result reports exact removed/failed counts, translated reason, and a separate cleanup-pending count");
     await context.close(); context = null;
 
     fixture.setCatalog(catalogue);

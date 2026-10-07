@@ -811,5 +811,12 @@
   "sourceDelete.notAvailable": "{complete} {output} The copy was saved, but the original could not be deleted safely.",
   "sourceDelete.batchNotAvailable": "{complete} Copies were saved, but these originals could not be deleted safely: {names}.",
   "settings.shortcut.cycleMosaicTool": "Cycle mosaic tools",
-  "settings.shortcut.cycleExclusionTool": "Cycle exclusion tools"
+  "settings.shortcut.cycleExclusionTool": "Cycle exclusion tools",
+  "sourceDelete.result": "Source images deleted: {count}.",
+  "sourceDelete.resultFailed": "Source images deleted: {count}. Failed: {failed} — {details}",
+  "sourceDelete.resultCleanup": "Source images deleted: {count}. Cleanup will be retried for {cleanup} source files.",
+  "sourceDelete.resultFailedCleanup": "Source images deleted: {count}. Failed: {failed} — {details} Cleanup will be retried for {cleanup} source files.",
+  "errorDialog.source_delete_failed.title": "Cannot delete the source image",
+  "errorDialog.source_delete_failed.cause": "The selected original image could not be deleted.",
+  "errorDialog.source_delete_failed.action": "Select the image folder again, check its access permissions, then retry deletion."
 }

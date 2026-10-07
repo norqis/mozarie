@@ -106,7 +106,8 @@
       "observation": "開いている画面と候補・ダイアログの表示が英語へ切り替わる",
       "status": "automated",
       "testIds": [
-        "node:tests/test_settings_dialog_e2e.cjs::SD-009 changing Japanese to English retranslates the open interface"
+        "node:tests/test_settings_dialog_e2e.cjs::SD-009 changing Japanese to English retranslates the open interface",
+        "node:tests/test_source_delete_e2e.cjs::source deletion translates every result and failure cause across language changes"
       ]
     },
     {
@@ -117,7 +118,8 @@
       "observation": "画面が日本語へ切り替わり、翻訳キーを表示しない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_settings_dialog_e2e.cjs::SD-010 changing English to Japanese leaves no translation key visible"
+        "node:tests/test_settings_dialog_e2e.cjs::SD-010 changing English to Japanese leaves no translation key visible",
+        "node:tests/test_source_delete_e2e.cjs::source deletion translates every result and failure cause across language changes"
       ]
     },
     {

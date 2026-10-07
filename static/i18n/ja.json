@@ -811,5 +811,12 @@
   "sourceDelete.notAvailable": "{complete} {output} コピーは保存しましたが、元画像を安全に削除できませんでした。",
   "sourceDelete.batchNotAvailable": "{complete} コピーは保存しましたが、元画像を安全に削除できませんでした: {names}。",
   "settings.shortcut.cycleMosaicTool": "モザイクツールを順に切替",
-  "settings.shortcut.cycleExclusionTool": "除外ツールを順に切替"
+  "settings.shortcut.cycleExclusionTool": "除外ツールを順に切替",
+  "sourceDelete.result": "元画像を{count}件削除しました。",
+  "sourceDelete.resultFailed": "元画像を{count}件削除しました。失敗{failed}件: {details}",
+  "sourceDelete.resultCleanup": "元画像を{count}件削除しました。 元画像ファイルの後処理{cleanup}件を再試行します。",
+  "sourceDelete.resultFailedCleanup": "元画像を{count}件削除しました。失敗{failed}件: {details} 元画像ファイルの後処理{cleanup}件を再試行します。",
+  "errorDialog.source_delete_failed.title": "元画像を削除できません",
+  "errorDialog.source_delete_failed.cause": "選択した元画像を削除できませんでした。",
+  "errorDialog.source_delete_failed.action": "画像フォルダーを選び直し、アクセス権限を確認してから、もう一度削除してください。"
 }
