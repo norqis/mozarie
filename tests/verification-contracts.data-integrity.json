@@ -7,7 +7,7 @@
   },
   "baseline": {
     "rows": 267,
-    "observations": 478
+    "observations": 479
   },
   "observations": [
     {
@@ -619,6 +619,17 @@
       ]
     },
     {
+      "key": "DI-036.2",
+      "sourceIds": [
+        "DI-036"
+      ],
+      "observation": "単体マスクは日本語・空白・記号・絵文字を含む元のファイル名でダウンロードでき、PNGの寸法・画素、同一HTTP接続とPJ状態を保持する。",
+      "status": "automated",
+      "testIds": [
+        "python:tests.http.test_project_http_endpoints.ProjectHttpCoverageTests.test_mask_download_encodes_unicode_filename_and_keeps_connection_reusable"
+      ]
+    },
+    {
       "key": "DI-037.1",
       "sourceIds": [
         "DI-037"
@@ -1124,7 +1135,9 @@
       "status": "automated",
       "testIds": [
         "node:tests/test_data_integrity_catalog_contracts_e2e.cjs::four-hundred-image traversal loads thumbnails lazily and does not review unseen images",
-        "node:tests/resources/test_browser_resource_lifecycle.cjs::selection removal releases decoded images through clear, save, and stale asset paths"
+        "node:tests/resources/test_browser_resource_lifecycle.cjs::selection removal releases decoded images through clear, save, and stale asset paths",
+        "node:tests/editor/test_draft_residency_e2e.cjs::cold durable draft visits release inactive PNGs and reload identical pixels",
+        "node:tests/editor/test_draft_residency_e2e.cjs::a draft saved while active is released on departure and retains saved metadata"
       ]
     },
     {
@@ -3963,7 +3976,9 @@
       "observation": "取得は待機せず、最後に公開した同一時点の進捗を返す",
       "status": "automated",
       "testIds": [
-        "python:tests.data_integrity.test_persistence_and_authority_transactions.RemainingDataIntegrityContracts.test_job_snapshot_never_waits_for_writer_and_is_an_immutable_consistent_copy"
+        "python:tests.data_integrity.test_persistence_and_authority_transactions.RemainingDataIntegrityContracts.test_job_snapshot_never_waits_for_writer_and_is_an_immutable_consistent_copy",
+        "python:tests.jobs.test_progress_publication.JobProgressPublicationTests.test_polling_a_busy_writer_returns_one_complete_publication",
+        "python:tests.jobs.test_progress_publication.JobProgressPublicationTests.test_old_publication_keeps_its_prefix_after_more_results_and_a_new_job"
       ]
     },
     {
@@ -3975,7 +3990,8 @@
       "status": "automated",
       "testIds": [
         "python:tests.test_server.MozarieTests.test_parallel_detection_progress_never_moves_backward",
-        "python:tests.test_server.MozarieTests.test_detection_staging_reports_every_success_before_atomic_publication"
+        "python:tests.test_server.MozarieTests.test_detection_staging_reports_every_success_before_atomic_publication",
+        "python:tests.jobs.test_progress_publication.JobProgressPublicationTests.test_recording_progress_does_not_rescan_the_catalogue_per_image"
       ]
     },
     {

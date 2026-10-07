@@ -330,6 +330,71 @@ class ProjectCatalogCoverageTests(unittest.TestCase):
         self.assertFalse(reopened.workspace_store.has_image(target))
         self.assertFalse(reopened.workspace_store.history_status(other)["canUndo"])
 
+    def check_catalog_remove_with_unreadable_thumbnails(self, source_kind: str) -> None:
+        state = self.state()
+        state.create_project("thumbnail cleanup")
+        originals = [self.image(self.root / "originals", name) for name in ("first.png", "second.png")]
+        original_bytes = [path.read_bytes() for path in originals]
+        if source_kind == "filesystem":
+            state.set_root(str(originals[0].parent))
+        else:
+            for original in originals:
+                staged = self.root / "import.upload"
+                shutil.copyfile(original, staged)
+                state.import_image_file_for_api(staged, name=original.name, relative_path=original.name,
+                                                client_key=original.name, intent="add")
+        target, remaining = state.order
+        imported_path = state.images[target].path
+        candidate = self.candidate(state, target, "candidate")
+        revision = self.commit_candidates(state, target, [candidate])
+        history = state.project_history_status(remaining)
+        generation = state.catalog_generation
+        token = "remove-cleanup"
+        state.reserve_browser_save(target, revision, token, copy_to_default=False,
+                                   suffix="_censored", output_format="original", keep_metadata=True)
+        state.render_browser_save(target, revision, 4, None, client_save_token=token)
+        rendered_path = state.browser_save_tokens[token].rendered_path
+        self.assertIsNotNone(rendered_path)
+        self.assertTrue(rendered_path.exists())
+        thumbnail_dir = state.cache_dir / "thumbnails"
+        thumbnail_dir.mkdir(parents=True, exist_ok=True)
+        state.sam_image_id = target
+        state.hand_segmentation_image_id = target
+        glob = Path.glob
+
+        def unreadable_thumbnails(path, *args, **kwargs):
+            if path == thumbnail_dir:
+                raise PermissionError("thumbnail directory unreadable")
+            return glob(path, *args, **kwargs)
+
+        with self.assertLogs("mozarie", level="WARNING"), patch.object(Path, "glob", new=unreadable_thumbnails):
+            result = state.remove_images_from_catalog([target])
+        self.assertEqual(result["removedImageIds"], [target])
+        self.assertEqual([image["id"] for image in result["images"]], [remaining])
+        self.assertEqual(result["catalogGeneration"], generation + 1)
+        self.assertEqual(state.order, [remaining])
+        self.assertFalse(state.workspace_store.has_image(target))
+        self.assertTrue(state.workspace_store.has_image(remaining))
+        self.assertEqual(state.project_history_status(remaining), history)
+        self.assertFalse(candidate.mask_path.exists())
+        self.assertFalse((state.cache_dir / target).exists())
+        self.assertEqual(state.browser_save_tokens, {})
+        self.assertFalse(rendered_path.exists())
+        self.assertIsNone(state.sam_image_id)
+        self.assertIsNone(state.hand_segmentation_image_id)
+        if source_kind == "session":
+            self.assertFalse(imported_path.exists())
+        self.assertEqual([path.read_bytes() for path in originals], original_bytes)
+        state.rename_catalog_image(remaining, "next.png")
+        self.assertEqual(state.images[remaining].edited_filename, "next.png")
+        self.assertEqual(state.remove_images_from_catalog([remaining])["images"], [])
+
+    def test_native_catalog_remove_finishes_when_thumbnail_listing_fails(self) -> None:
+        self.check_catalog_remove_with_unreadable_thumbnails("filesystem")
+
+    def test_session_catalog_remove_finishes_when_thumbnail_listing_fails(self) -> None:
+        self.check_catalog_remove_with_unreadable_thumbnails("session")
+
     def test_catalog_input_validation_provisional_and_removed_sources(self) -> None:
         state = self.state()
         with self.assertRaises(ClientError): state.set_root("")

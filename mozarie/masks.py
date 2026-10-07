@@ -6,6 +6,15 @@ import numpy as np
 import cv2
 
 
+def mask_bounds(foreground: np.ndarray) -> tuple[int, int, int, int] | None:
+    """Return half-open bounds of a boolean mask without per-pixel coordinates."""
+    rows = np.flatnonzero(np.any(foreground, axis=1))
+    if not rows.size:
+        return None
+    columns = np.flatnonzero(np.any(foreground, axis=0))
+    return int(columns[0]), int(rows[0]), int(columns[-1]) + 1, int(rows[-1]) + 1
+
+
 def union_mask(target: np.ndarray | None, mask: np.ndarray) -> np.ndarray:
     """Add non-zero mask pixels to an existing or newly allocated uint8 union."""
     if target is None:

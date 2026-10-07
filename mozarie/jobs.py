@@ -284,7 +284,6 @@ class JobsMixin:
                 preparing_models=1 if kind == "detect" else 0,
             )
             self._publish_job_snapshot_unchecked()
-            self._job_output_slots: dict[int, str] = {}
             self.job_control = control
         LOGGER.info("バックグラウンド処理を開始: %s 対象=%d件", JOB_LABELS.get(kind, kind), len(records))
         def run_worker() -> None:
@@ -411,7 +410,6 @@ class JobsMixin:
         with self.lock:
             if self._job_is_current(job_generation, catalog_generation):
                 self.job.current = current
-                self.job.completed = len(self.job.completed_image_ids)
                 self._publish_job_snapshot_unchecked()
 
     def _mark_job_processed(
@@ -437,19 +435,6 @@ class JobsMixin:
                 self.job.preparing_models = max(0, self.job.preparing_models + (1 if active else -1))
                 self._publish_job_snapshot_unchecked()
 
-    def _mark_image_completed(
-        self,
-        image_id: str,
-        job_generation: int | None = None,
-        catalog_generation: int | None = None,
-    ) -> None:
-        with self.lock:
-            if self._job_is_current(job_generation, catalog_generation) and image_id not in self.job.completed_image_ids:
-                completed = {*self.job.completed_image_ids, image_id}
-                self.job.completed_image_ids = tuple(item for item in self.job.image_ids if item in completed)
-                self.job.completed = len(self.job.completed_image_ids)
-                self._publish_job_snapshot_unchecked()
-
     def _record_job_success(
         self,
         index: int,
@@ -462,13 +447,8 @@ class JobsMixin:
         with self.lock:
             if not self._job_is_current(job_generation, catalog_generation):
                 return
-            if output is not None:
-                slots = getattr(self, "_job_output_slots", {})
-                slots[index] = output
-                self._job_output_slots = slots
-                self.job.outputs = [slots[position] for position in range(len(self.job.image_ids)) if position in slots]
+            if self.job.record_success(index, image_id, output):
                 self._publish_job_snapshot_unchecked()
-        self._mark_image_completed(image_id, job_generation, catalog_generation)
 
     def _finish_claimed_task(
         self,

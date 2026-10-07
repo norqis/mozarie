@@ -170,7 +170,7 @@ class StudioState(CatalogMixin, SavingMixin, DetectionMixin, JobsMixin):
         self.reserved_output_paths: set[Path] = set()
         self.session_token = secrets.token_urlsafe(32)
         self.job = Job()
-        self._job_snapshot = self._copy_job_snapshot(self.job.as_dict())
+        self._job_snapshot = self.job.progress_snapshot()
         self.catalog_generation = 0
         self.job_generation = 0
         self.worker_thread: threading.Thread | None = None
@@ -246,16 +246,10 @@ class StudioState(CatalogMixin, SavingMixin, DetectionMixin, JobsMixin):
 
     @staticmethod
     def _copy_job_snapshot(snapshot: dict[str, Any]) -> dict[str, Any]:
-        return {
-            **snapshot,
-            "params": dict(snapshot.get("params", {})),
-            "outputs": list(snapshot.get("outputs", [])),
-            "imageIds": list(snapshot.get("imageIds", [])),
-            "completedImageIds": list(snapshot.get("completedImageIds", [])),
-        }
+        return Job.copy_progress_snapshot(snapshot)
 
     def _publish_job_snapshot_unchecked(self) -> dict[str, Any]:
-        self._job_snapshot = self._copy_job_snapshot(self.job.as_dict())
+        self._job_snapshot = self.job.progress_snapshot()
         return self._job_snapshot
 
     def job_snapshot(self) -> dict[str, Any]:

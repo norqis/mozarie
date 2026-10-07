@@ -5,7 +5,13 @@ const path = require("node:path");
 
 const root = path.resolve(__dirname, "..");
 const testDirectory = path.join(root, "tests");
-const browserCoverageTestFiles = ["tests/editor/test_draft_transition_e2e.cjs", "tests/test_import_picker_e2e.cjs"];
+const browserCoverageTestFiles = [
+  "tests/editor/test_dialog_keyboard_e2e.cjs",
+  "tests/editor/test_draft_residency_e2e.cjs",
+  "tests/editor/test_draft_transition_e2e.cjs",
+  "tests/import/test_import_cancellation_e2e.cjs",
+  "tests/test_import_picker_e2e.cjs",
+];
 const performanceTestFiles = ["tests/test_gallery_performance_e2e.cjs", "tests/test_mosaic_drag_performance_e2e.cjs"];
 
 function frontendTestFiles(directory = testDirectory, prefix = "tests") {

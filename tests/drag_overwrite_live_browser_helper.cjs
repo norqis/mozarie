@@ -22,6 +22,12 @@ async function assertSaveButtonHitTarget(page, startId, pickerId) {
   try {
     const page = await context.newPage();
     const outputPickerRequests = [];
+    const saveRenderResponses = [];
+    page.on("response", (response) => {
+      if (new URL(response.url()).pathname === "/api/save/render") {
+        saveRenderResponses.push({ payload: response.request().postDataJSON(), length: Number(response.headers()["content-length"]) });
+      }
+    });
     page.on("request", (request) => {
       if (new URL(request.url()).pathname === "/api/output-directory/pick") outputPickerRequests.push(request.url());
     });
@@ -95,6 +101,9 @@ async function assertSaveButtonHitTarget(page, startId, pickerId) {
     assert.equal(after.writePermissionRequests, 1, "the save gesture requests source write permission once");
     assert.equal(after.errorOpen, false);
     assert.notDeepEqual(after.bytes, before.bytes, "overwrite writes real source bytes");
+    assert.equal(saveRenderResponses.length, 1);
+    assert.equal(saveRenderResponses[0].payload.streamImage, true, "single browser-handle saves request the image stream");
+    assert.ok(saveRenderResponses[0].length > 0, "browser-handle saves receive the bytes used to overwrite the real file");
     await page.locator("#singleSaveCloseButton").click();
     await page.locator("#saveButton").click();
     await page.waitForFunction(() => document.querySelector("#singleSaveDialog").open && !document.querySelector("#singleSaveStartButton").disabled);
@@ -121,6 +130,8 @@ async function assertSaveButtonHitTarget(page, startId, pickerId) {
     assert.equal(await page.evaluate(() => window.__pickerCalls), 0, "batch overwrite with original format also needs no parent picker");
     assert.equal(outputPickerRequests.length, 0, "batch source overwrite never opens the Windows output folder picker");
     assert.equal(await page.locator("#errorDialog").evaluate((dialog) => dialog.open), false);
+    const batchBytes = await page.evaluate(async () => [...new Uint8Array(await (await window.__dragSource.getFile()).arrayBuffer())]);
+    assert.notDeepEqual(batchBytes, after.bytes, "batch browser-handle overwrite writes the changed image bytes");
     await page.locator("#applyCloseButton").click();
     await page.locator("#saveAllButton").click();
     await page.waitForFunction(() => document.querySelector("#applyDialog").open);
@@ -132,6 +143,12 @@ async function assertSaveButtonHitTarget(page, startId, pickerId) {
     if (await page.locator("#confirmDialog").evaluate((dialog) => dialog.open)) await page.locator("#confirmAccept").click();
     await page.waitForFunction(() => !state.saving && !state.saveStarting && !document.querySelector("#confirmDialog").open);
     assert.equal(await page.evaluate(() => window.__pickerCalls), 0, "batch Save activation by Enter needs no parent picker");
+    const browserBatchResponses = saveRenderResponses.slice(2).filter((response) => response.payload.imageId === saveRenderResponses[0].payload.imageId);
+    assert.equal(browserBatchResponses.length, 2);
+    for (const response of browserBatchResponses) {
+      assert.notEqual(response.payload.streamImage, false, "batch browser-handle saves retain streaming by default");
+      assert.ok(response.length > 0, "batch browser-handle saves receive a full image stream");
+    }
     assert.equal(outputPickerRequests.length, 0, "batch Save activation by Enter needs no Windows output folder picker");
     await page.locator("#applyCloseButton").click();
     await page.locator("#projectButton").click();

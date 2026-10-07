@@ -15,7 +15,7 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any, BinaryIO
-from urllib.parse import parse_qs, unquote, urlparse
+from urllib.parse import parse_qs, quote, unquote, urlparse
 
 from PIL import Image, ImageOps
 
@@ -674,7 +674,8 @@ class MosaicHandler(BaseHTTPRequestHandler):
                 if image is None:
                     raise ClientError("画像が見つかりません。", "image_not_found")
                 filename = Path(str(image["relativePath"])).name + f".{kind}.png"
-                self._binary(STATE.export_mask_png(image_id, kind), "image/png", headers={"Content-Disposition": f'attachment; filename="{filename}"'})
+                disposition = f"attachment; filename=\"{kind}-mask.png\"; filename*=UTF-8''{quote(filename, safe='')}"
+                self._binary(STATE.export_mask_png(image_id, kind), "image/png", headers={"Content-Disposition": disposition})
             elif path.startswith("/api/project/masks/"):
                 project_id, kind = _route_ids(path, "/api/project/masks/")
                 if kind not in {"mosaic", "exclude"}:
@@ -1103,30 +1104,28 @@ class MosaicHandler(BaseHTTPRequestHandler):
                     payload.get("draft"),
                     copy_to_default=copy_to_default,
                     copy_to_browser=copy_to_browser,
+                    stream_image=_read_bool(payload.get("streamImage", True), "画像応答の転送"),
                     client_save_token=_read_client_save_token(payload.get("clientSaveToken")),
                     suffix=_read_save_suffix(payload.get("suffix", "_censored")),
                     output_format=str(payload.get("format", "original")),
                     keep_metadata=_read_bool(payload.get("keepMetadata", True), "メタ情報の保持"),
                 ))
                 revision, save_token = rendered.candidate_revision, rendered.save_token
-                if copy_to_default:
+                response_headers = {
+                    "X-Mozarie-Revision": str(revision),
+                    "X-Mozarie-Save-Token": save_token,
+                    "X-Mozarie-No-Effect": "1" if rendered.no_effect else "0",
+                }
+                if rendered.response_path is None:
+                    if copy_to_default:
+                        response_headers["X-Mozarie-Output-Path-B64"] = base64.urlsafe_b64encode(str(rendered.output_path).encode("utf-8")).decode("ascii")
                     self._binary(
                         b"", "application/octet-stream",
-                        headers={
-                            "X-Mozarie-Revision": str(revision),
-                            "X-Mozarie-Save-Token": save_token,
-                            "X-Mozarie-Output-Path-B64": base64.urlsafe_b64encode(str(rendered.output_path).encode("utf-8")).decode("ascii"),
-                            "X-Mozarie-No-Effect": "1" if rendered.no_effect else "0",
-                        },
+                        headers=response_headers,
                     )
                 else:
-                    assert rendered.response_path is not None
                     try:
-                        self._stream_path(rendered.response_path, rendered.mime_type, {
-                            "X-Mozarie-Revision": str(revision),
-                            "X-Mozarie-Save-Token": save_token,
-                            "X-Mozarie-No-Effect": "1" if rendered.no_effect else "0",
-                        })
+                        self._stream_path(rendered.response_path, rendered.mime_type, response_headers)
                     finally:
                         if rendered.response_path_is_temporary:
                             rendered.response_path.unlink(missing_ok=True)

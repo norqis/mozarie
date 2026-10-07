@@ -8,6 +8,8 @@ from collections.abc import Sequence
 import cv2
 import numpy as np
 
+from .masks import mask_bounds
+
 
 Point = tuple[float, float]
 
@@ -51,9 +53,8 @@ def polygon_mask(points: Sequence[Point], width: int, height: int) -> np.ndarray
 
 def polygon_roi_and_point(points: Sequence[Point], width: int, height: int) -> tuple[tuple[int, int, int, int], Point, np.ndarray]:
     mask = polygon_mask(points, width, height)
-    ys, xs = np.nonzero(mask)
-    left, right = int(xs.min()), int(xs.max()) + 1
-    top, bottom = int(ys.min()), int(ys.max()) + 1
+    bounds = mask_bounds(mask != 0)
+    assert bounds is not None
     distance = cv2.distanceTransform((mask > 0).astype(np.uint8), cv2.DIST_L2, 5)
     y, x = np.unravel_index(int(np.argmax(distance)), distance.shape)
-    return (left, top, right, bottom), (float(x), float(y)), mask
+    return bounds, (float(x), float(y)), mask

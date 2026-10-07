@@ -251,9 +251,9 @@ class RemainingDataIntegrityContracts(unittest.TestCase):
     def test_job_snapshot_never_waits_for_writer_and_is_an_immutable_consistent_copy(self) -> None:
         """DI-215.1: polling returns the last single publication without waiting."""
         state = self.state()
-        state.job = Job(kind="detect", state="running", total=3, completed=1, current="a.png", image_ids=("a", "b", "c"), completed_image_ids=("a",))
-        with state.lock:
-            expected = state._publish_job_snapshot_unchecked()
+        state.job = Job(kind="detect", state="running", total=3, current="a.png", image_ids=("a", "b", "c"))
+        state._record_job_success(0, "a", None)
+        expected = state.job_snapshot()
         acquired = threading.Event()
         release = threading.Event()
 

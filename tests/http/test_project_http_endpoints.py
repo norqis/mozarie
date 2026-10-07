@@ -22,6 +22,7 @@ import zipfile
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
+from urllib.parse import unquote
 
 import numpy as np
 from PIL import Image
@@ -229,6 +230,44 @@ class ProjectHttpCoverageTests(unittest.TestCase):
             actual = np.asarray(exported)
         expected = apply.copy(); expected[exclude > 0] = 0
         self.assertTrue(np.array_equal(actual, expected), "single mosaic export subtracts the exclusion mask pixel-for-pixel")
+
+    def test_mask_download_encodes_unicode_filename_and_keeps_connection_reusable(self) -> None:
+        names = ("source.png", "日本語.png", "space % name.png", "🎨.png")
+        for name in names[1:]:
+            with Image.new("RGB", (12, 8), "white") as image:
+                image.save(self.source_dir / name)
+        project_id, _image_id = self.create_and_load()
+        images = self.state.list_images()
+        before_project = self.state.workspace_store.project(project_id)
+        image_ids = {image["relativePath"]: image["id"] for image in images}
+        connection = http.client.HTTPConnection("127.0.0.1", self.server.server_port, timeout=5)
+        try:
+            for name in names:
+                for kind in ("mosaic", "exclude"):
+                    with self.subTest(name=name, kind=kind):
+                        connection.request("GET", f"/api/project/mask/{image_ids[name]}/{kind}")
+                        socket = connection.sock
+                        response = connection.getresponse()
+                        body = response.read()
+                        self.assertEqual(response.status, 200)
+                        self.assertEqual(response.getheader("Content-Type"), "image/png")
+                        disposition = response.getheader("Content-Disposition")
+                        fallback, encoded = disposition.split("; filename*=UTF-8''", 1)
+                        self.assertEqual(fallback, f'attachment; filename="{kind}-mask.png"')
+                        self.assertTrue(disposition.isascii())
+                        self.assertNotIn(" ", encoded)
+                        self.assertEqual(unquote(encoded), f"{name}.{kind}.png")
+                        with Image.open(io.BytesIO(body)) as mask:
+                            self.assertEqual((mask.format, mask.mode, mask.size), ("PNG", "L", (12, 8)))
+                            self.assertEqual(mask.getextrema(), (0, 0))
+                        connection.request("GET", "/api/images")
+                        reused = connection.getresponse()
+                        self.assertEqual(reused.status, 200)
+                        self.assertEqual(json.loads(reused.read())["images"], images)
+                        self.assertIs(connection.sock, socket, "the next response uses the same HTTP connection")
+            self.assertEqual(self.state.workspace_store.project(project_id), before_project)
+        finally:
+            connection.close()
 
     def test_project_mask_zip_keeps_same_named_images_from_distinct_sources_identifiable(self) -> None:
         first = self.root / "first-source"

@@ -123,7 +123,10 @@
       "status": "automated",
       "testIds": [
         "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > browser overwrite replaces only the selected source",
-        "python:tests.test_settings_import_regressions.SettingsImportRegressionTests.test_live_drag_handle_overwrites_original_without_parent_picker"
+        "python:tests.test_settings_import_regressions.SettingsImportRegressionTests.test_live_drag_handle_overwrites_original_without_parent_picker",
+        "python:tests.saving.test_apply_unchanged_source.ApplyUnchangedSourceTests.test_copy_and_requested_changes_still_write_output",
+        "python:tests.saving.test_native_save_transfer.NativeSaveTransferTests.test_changed_native_save_keeps_stage_until_commit_and_publishes_pixels",
+        "python:tests.saving.test_native_save_transfer.NativeSaveTransferTests.test_chromium_single_and_batch_native_overwrite_request_no_image_transfer"
       ]
     },
     {
@@ -145,7 +148,9 @@
       "observation": "候補・マスク・確認済み・非表示・一覧画像を保持する。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > saving twice keeps catalog masks flags and candidates"
+        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > saving twice keeps catalog masks flags and candidates",
+        "python:tests.saving.test_apply_unchanged_source.ApplyUnchangedSourceTests.test_unchanged_overwrite_does_not_read_or_stage_source_and_preserves_workspace",
+        "python:tests.saving.test_native_save_transfer.NativeSaveTransferTests.test_unchanged_native_save_needs_no_image_read_or_stage_and_reuses_connection"
       ]
     },
     {
@@ -775,7 +780,10 @@
       "testIds": [
         "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > source change during render rejects overwrite",
         "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > fractional source timestamps remain saveable after catalog restore",
-        "python:tests.test_server.MozarieTests.test_filesystem_save_rejects_change_during_source_read"
+        "python:tests.test_server.MozarieTests.test_filesystem_save_rejects_change_during_source_read",
+        "python:tests.saving.test_apply_unchanged_source.ApplyUnchangedSourceTests.test_unchanged_overwrite_rejects_changed_or_missing_source",
+        "python:tests.saving.test_native_save_transfer.NativeSaveTransferTests.test_unchanged_native_save_rechecks_source_before_render",
+        "python:tests.saving.test_native_save_transfer.NativeSaveTransferTests.test_unchanged_native_save_rechecks_source_before_commit"
       ]
     },
     {
@@ -1146,11 +1154,14 @@
       "sourceIds": [
         "SV-071"
       ],
-      "observation": "画像応答はサーバーの一時ファイルからストリームされ、完成画像の応答用RAM複製を残さない。",
+      "observation": "ブラウザーに必要な画像応答は一時ファイルからストリームされ、応答用RAM複製を残さない。ネイティブ上書きは画像を転送せず、無変更なら応答用の一時コピーも作らない。",
       "status": "automated",
       "testIds": [
         "python:tests.test_http_live_endpoints.LiveHttpEndpointTests.test_live_browser_save_render_streams_a_stable_image_response",
-        "python:tests.test_server.MozarieTests.test_browser_file_system_copy_token_keeps_no_backend_render_temp"
+        "python:tests.test_server.MozarieTests.test_browser_file_system_copy_token_keeps_no_backend_render_temp",
+        "python:tests.saving.test_native_save_transfer.NativeSaveTransferTests.test_default_and_explicit_streaming_still_return_the_complete_image",
+        "python:tests.saving.test_native_save_transfer.NativeSaveTransferTests.test_unchanged_native_save_needs_no_image_read_or_stage_and_reuses_connection",
+        "python:tests.saving.test_native_save_transfer.NativeSaveTransferTests.test_chromium_single_and_batch_native_overwrite_request_no_image_transfer"
       ]
     },
     {
@@ -1163,7 +1174,10 @@
       "testIds": [
         "python:tests.test_server.MozarieTests.test_browser_file_system_copy_token_keeps_no_backend_render_temp",
         "python:tests.test_server.MozarieTests.test_browser_copy_render_writes_configured_unicode_destination_before_commit",
-        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > partial streamed output is aborted and removed"
+        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > partial streamed output is aborted and removed",
+        "python:tests.saving.test_native_save_transfer.NativeSaveTransferTests.test_changed_native_save_keeps_stage_until_commit_and_publishes_pixels",
+        "python:tests.saving.test_native_save_transfer.NativeSaveTransferTests.test_native_stage_survives_elapsed_time_and_is_released_by_cancel_or_recovery",
+        "python:tests.saving.test_native_save_transfer.NativeSaveTransferTests.test_browser_copy_response_keeps_ownership_even_if_streaming_was_disabled"
       ]
     },
     {
@@ -1361,7 +1375,8 @@
       "status": "automated",
       "testIds": [
         "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > copy reserve render commit acknowledgement succeeds",
-        "python:tests.test_server.MozarieTests.test_browser_copy_render_writes_configured_unicode_destination_before_commit"
+        "python:tests.test_server.MozarieTests.test_browser_copy_render_writes_configured_unicode_destination_before_commit",
+        "python:tests.saving.test_native_save_transfer.NativeSaveTransferTests.test_copy_output_path_header_is_preserved_without_image_transfer"
       ]
     },
     {
@@ -1396,7 +1411,8 @@
       "status": "automated",
       "testIds": [
         "python:tests.test_save_recovery.SaveRecoveryTests.test_workspace_receipt_wins_and_keeps_the_final_output",
-        "python:tests.test_server.MozarieTests.test_background_copy_receipt_recovers_the_private_stage_at_startup_without_removing_output"
+        "python:tests.test_server.MozarieTests.test_background_copy_receipt_recovers_the_private_stage_at_startup_without_removing_output",
+        "python:tests.saving.test_native_save_transfer.NativeSaveTransferTests.test_native_stage_survives_elapsed_time_and_is_released_by_cancel_or_recovery"
       ]
     },
     {
@@ -1496,7 +1512,9 @@
       "status": "automated",
       "testIds": [
         "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > recoverable commit failures reconcile token state",
-        "python:tests.test_server.MozarieTests.test_browser_overwrite_keeps_the_committed_receipt_when_journal_finishing_is_unavailable"
+        "python:tests.test_server.MozarieTests.test_browser_overwrite_keeps_the_committed_receipt_when_journal_finishing_is_unavailable",
+        "python:tests.saving.test_apply_staging_failures.ApplyStagingFailureTests.test_thumbnail_cleanup_failure_after_commit_keeps_batch_successful",
+        "python:tests.saving.test_apply_staging_failures.ApplyStagingFailureTests.test_browser_commit_cleanup_failure_keeps_receipt_and_finishes_other_cleanup"
       ]
     },
     {
