@@ -63,6 +63,7 @@ async function withDrafts(run, { count = 3, durable = true } = {}) {
       if (action === "cancel") { uploads.delete(payload.sessionId); await route.fulfill({ json: {} }); return; }
       const wait = control.nextWrite; control.nextWrite = null;
       if (wait && !await wait(payload)) { await route.fulfill({ status: 500, json: { error: { code: "internal_error" } } }); return; }
+      if (request.method() === "DELETE") { saved.delete(imageId); await route.fulfill({ json: {} }); return; }
       const next = { ...saved.get(imageId), ...payload, ...uploads.get(payload.sessionId) };
       for (const empty of payload.emptyLayers || []) next[empty] = "";
       for (const field of ["dirtyLayers", "dirtyRois", "emptyLayers", "sessionId"]) delete next[field];
@@ -148,6 +149,26 @@ test("pending and failed metadata-only drafts survive image switches until their
   assert.equal(await page.evaluate(() => state.drafts.has("draft-0")), false, "successful inactive retry releases the now durable draft");
   await select(page, "draft-0");
   assert.equal(await page.evaluate(() => state.manualEnabled), false);
+}));
+
+test("failed empty draft deletion keeps the cleared canvas until retry succeeds", { timeout: 30000 }, () => withDrafts(async (page, control) => {
+  const write = control.holdWrite();
+  await page.locator(".candidate-row-manual-apply .candidate-delete").click();
+  await write.received;
+  await page.evaluate(() => { window.pendingDraftSwitch = selectImage("draft-1"); });
+  await page.waitForFunction(() => state.pendingImageId === "draft-1");
+  assert.equal(await page.evaluate(() => state.currentId), "draft-0", "empty draft deletion is still pending");
+  write.release(false);
+  await page.evaluate(() => window.pendingDraftSwitch);
+  await page.locator("#errorDialog").waitFor({ state: "visible" });
+  await page.locator("#errorDialog button").last().click();
+  assert.deepEqual(await page.evaluate(() => [state.currentId, addCtx.getImageData(5, 5, 1, 1).data[3], state.draftDirty]), ["draft-0", 0, true]);
+  assert.ok(control.saved.get("draft-0").add, "failed DELETE leaves the older server copy intact");
+  await select(page, "draft-1");
+  assert.equal(control.saved.has("draft-0"), false, "retry commits the cleared draft before departure");
+  assert.equal(await page.evaluate(() => state.drafts.has("draft-0")), false);
+  await select(page, "draft-0");
+  assert.equal(await page.evaluate(() => addCtx.getImageData(5, 5, 1, 1).data[3]), 0, "revisit cannot resurrect the older pixels");
 }));
 
 test("project creation retries failed metadata saves before discarding the previous editor", { timeout: 30000 }, () => withDrafts(async (page, control) => {

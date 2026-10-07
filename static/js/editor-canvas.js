@@ -542,7 +542,8 @@ async function saveDraft(historyIndexOverride = null) {
     const hasExclusionErase = encoded.exclusionErase ?? retained.exclusionErase ?? "";
     if (!hasAdd && !hasExclusion && !hasExclusionErase && snapshot.history.length === 0 && snapshot.removedCandidateIds.length === 0 && snapshot.manualExclusionForced === snapshot.defaultManualExclusionForced) {
       state.drafts.delete(imageId);
-      void queueWorkspaceDraft(imageId);
+      if (keepLocalHistory) void queueWorkspaceDraft(imageId);
+      else await queueWorkspaceDraft(imageId, true);
       return;
     }
     const pendingLayers = new Set(previous.dirtyLayers || []);
@@ -580,7 +581,8 @@ async function saveDraft(historyIndexOverride = null) {
       } : {}),
       dirtyLayers: [...pendingLayers], dirtyRois: pendingRois,
     });
-    void queueWorkspaceDraft(imageId);
+    if (keepLocalHistory) void queueWorkspaceDraft(imageId);
+    else void queueWorkspaceDraft(imageId, true).catch(showUserError);
   }).catch((error) => {
     if (state.currentId === imageId && isCurrentCatalogEpoch(catalogEpoch)) {
       markDraftDirty(...dirtyLayers);
@@ -590,7 +592,10 @@ async function saveDraft(historyIndexOverride = null) {
     throw error;
   });
   state.draftSaveChains.set(imageId, save);
-  save.finally(() => { if (state.draftSaveChains.get(imageId) === save) state.draftSaveChains.delete(imageId); }).catch(() => {});
+  save.finally(() => {
+    if (state.draftSaveChains.get(imageId) === save) state.draftSaveChains.delete(imageId);
+    releaseInactiveWorkspaceDraft(imageId);
+  }).catch(() => {});
   return save;
 }
 

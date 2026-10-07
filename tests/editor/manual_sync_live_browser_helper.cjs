@@ -7,6 +7,7 @@ async function main() {
   const [origin] = process.argv.slice(2);
   const browser = await chromium.launch();
   const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  let releaseSave = () => {};
   try {
     const page = await context.newPage();
     const peer = await context.newPage();
@@ -53,16 +54,26 @@ async function main() {
     await page.evaluate(() => restoreProjectHistory("redo"));
     assert.deepEqual(await pixels(), [0, 0], "redo returns to the actual empty mask");
     await page.evaluate(() => restoreProjectHistory("undo"));
-    // Keep a real encoded draft queued while another image is selected.
-    await page.evaluate(async () => {
+    // Hold the actual HTTP commit while another image is selected and a peer edits.
+    let saveStarted;
+    const started = new Promise((resolve) => { saveStarted = resolve; });
+    const gate = new Promise((resolve) => { releaseSave = resolve; });
+    await page.route("**/api/workspace/manual/*/commit", async (route) => {
+      saveStarted(); await gate; await route.continue();
+    });
+    await page.evaluate(() => {
       addCtx.fillStyle = "white"; addCtx.fillRect(50, 35, 1, 1);
       refreshManualLayerPresence("add"); markMaskDirty(); markDraftDirty("add");
-      await saveDraft();
-      clearTimeout(state.workspaceDraftTimers.get(state.currentId));
+      window.pendingManualSave = saveDraft().catch(() => {});
+    });
+    await started;
+    await page.evaluate(async () => {
       const other = state.images.find((image) => image.id !== state.currentId);
       await selectImage(other.id, true, { saveCurrentDraft: false });
     });
     await peerSave([[10, 30]]);
+    releaseSave();
+    await page.evaluate(() => window.pendingManualSave);
     await page.evaluate(() => syncCatalogOnReturn());
     const conflict = await page.evaluate(async (id) => {
       try { await flushWorkspaceDraft(id); return null; } catch (error) { return error.code; }
@@ -79,6 +90,7 @@ async function main() {
     assert.deepEqual(saved, [255, 0], "durable peer pixels survive the conflicting write");
     console.log("peer manual sync, inactive conflict, and empty-mask undo/redo passed");
   } finally {
+    releaseSave();
     await context.close(); await browser.close();
   }
 }

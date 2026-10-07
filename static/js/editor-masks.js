@@ -356,7 +356,7 @@ function renderCandidates() {
     const enabled = makeToggle(isEnabled, isApply ? t("candidates.manualToggle") : t("candidates.manualExcludeToggle"), () => {
       if (isBusy() || state.importing || currentImageActionPending()) return;
       if (isApply) state.manualEnabled = !state.manualEnabled; else state.manualExclusionEnabled = !state.manualExclusionEnabled;
-      markMaskDirty(); saveDraft();
+      markMaskDirty(); saveDraft().catch(showUserError);
       recordHistoryOperation({ kind: "manualState" });
       refreshCurrentReviewAndMask(); requestMosaicPreview(); renderCandidates(); render();
     }, candidateMutationLocked);
@@ -371,7 +371,7 @@ function renderCandidates() {
     if (!isApply) {
       const forced = makeForceToggle(state.manualExclusionForced, () => {
         if (isBusy() || state.importing || currentImageActionPending()) return;
-        state.manualExclusionForced = !state.manualExclusionForced; markMaskDirty(); saveDraft();
+        state.manualExclusionForced = !state.manualExclusionForced; markMaskDirty(); saveDraft().catch(showUserError);
         recordHistoryOperation({ kind: "manualState" }); refreshCurrentReviewAndMask(); requestMosaicPreview(); renderCandidates(); render();
       }, candidateMutationLocked);
       appendRow(row, label, enabled, [blink, candidateEffectiveToggle(blinkId, role, candidateViewLocked), forced, remove]);
@@ -387,7 +387,7 @@ function renderCandidates() {
     const enabled = makeToggle(state.manualExclusionEraseEnabled, t("candidates.manualExcludeEraseToggle"), () => {
       if (isBusy() || state.importing || currentImageActionPending()) return;
       state.manualExclusionEraseEnabled = !state.manualExclusionEraseEnabled; markMaskDirty();
-      saveDraft(); recordHistoryOperation({ kind: "manualState" }); refreshCurrentReviewAndMask(); requestMosaicPreview(); renderCandidates(); render();
+      saveDraft().catch(showUserError); recordHistoryOperation({ kind: "manualState" }); refreshCurrentReviewAndMask(); requestMosaicPreview(); renderCandidates(); render();
     }, candidateMutationLocked);
     const blink = makeDisplay(blinkId, "exclude");
     row.dataset.candidateBlinkId = blinkId; row.dataset.candidateBlinkRole = "exclude";
@@ -664,7 +664,7 @@ async function deleteCandidate(candidate) {
   if (state.currentId !== imageId || !isCurrentGeneration(generation) || currentImageActionPending() || !state.candidates.some((item) => item.id === candidate.id)) return;
   clearRoleCandidateDisplayMode(candidate.role); state.removedCandidateIds.add(candidate.id);
   setCandidateDisplayMode([candidate.id], "off");
-  markMaskDirty(); recordHistoryOperation({ kind: "removeCandidates", ids: [candidate.id] }); syncCurrentCandidateRecord(); refreshCurrentReviewAndMask(); requestMosaicPreview(); saveDraft(); renderCandidates(); render(); renderCatalogViews();
+  markMaskDirty(); recordHistoryOperation({ kind: "removeCandidates", ids: [candidate.id] }); syncCurrentCandidateRecord(); refreshCurrentReviewAndMask(); requestMosaicPreview(); saveDraft().catch(showUserError); renderCandidates(); render(); renderCatalogViews();
 }
 
 function deleteManualMask() {
@@ -672,7 +672,7 @@ function deleteManualMask() {
   addCtx.clearRect(0, 0, addCanvas.width, addCanvas.height);
   state.manualMaskPresent = false; state.manualEnabled = true;
   setCandidateDisplayMode(["manual:apply"], "off");
-  recordHistoryOperation({ kind: "clearManual", role: "apply" }); markMaskDirty(); markDraftDirty("add"); saveDraft(); requestMosaicPreview(); updateCandidateStatus(); refreshCurrentReviewAndMask(); renderCandidates(); render();
+  recordHistoryOperation({ kind: "clearManual", role: "apply" }); markMaskDirty(); markDraftDirty("add"); saveDraft().catch(showUserError); requestMosaicPreview(); updateCandidateStatus(); refreshCurrentReviewAndMask(); renderCandidates(); render();
 }
 
 function deleteManualExclusion() {
@@ -681,7 +681,7 @@ function deleteManualExclusion() {
   state.manualExclusionPresent = false;
   state.manualExclusionEnabled = true;
   setCandidateDisplayMode(["manual:exclude"], "off");
-  recordHistoryOperation({ kind: "clearManual", role: "exclude" }); markMaskDirty(); markDraftDirty("exclusion"); saveDraft(); requestMosaicPreview(); refreshCurrentReviewAndMask(); renderCandidates(); render();
+  recordHistoryOperation({ kind: "clearManual", role: "exclude" }); markMaskDirty(); markDraftDirty("exclusion"); saveDraft().catch(showUserError); requestMosaicPreview(); refreshCurrentReviewAndMask(); renderCandidates(); render();
 }
 
 function deleteManualExclusionErase() {
@@ -690,7 +690,7 @@ function deleteManualExclusionErase() {
   state.manualExclusionErasePresent = false;
   state.manualExclusionEraseEnabled = true;
   setCandidateDisplayMode(["manual:excludeErase"], "off");
-  recordHistoryOperation({ kind: "clearManual", role: "excludeErase" }); markMaskDirty(); markDraftDirty("exclusionErase"); saveDraft(); requestMosaicPreview(); refreshCurrentReviewAndMask(); renderCandidates(); render();
+  recordHistoryOperation({ kind: "clearManual", role: "excludeErase" }); markMaskDirty(); markDraftDirty("exclusionErase"); saveDraft().catch(showUserError); requestMosaicPreview(); refreshCurrentReviewAndMask(); renderCandidates(); render();
 }
 
 function shouldBlinkNewManual(role) {
@@ -737,7 +737,7 @@ async function batchCandidateOperation(spec) {
     setCandidateDisplayMode([...ids, ...manualRoles.map((manualRole) => `manual:${manualRole}`)], "off");
     ids.forEach((id) => state.removedCandidateIds.add(id));
     if (!ids.length && !manualRoles.length) { renderCandidates(); return; }
-    markMaskDirty(); recordHistoryOperation({ kind: "clearCandidateRole", ids, manualRoles }); syncCurrentCandidateRecord(); refreshCurrentReviewAndMask(); requestMosaicPreview(); saveDraft(); renderCandidates(); render(); renderCatalogViews();
+    markMaskDirty(); recordHistoryOperation({ kind: "clearCandidateRole", ids, manualRoles }); syncCurrentCandidateRecord(); refreshCurrentReviewAndMask(); requestMosaicPreview(); saveDraft().catch(showUserError); renderCandidates(); render(); renderCatalogViews();
     return;
   }
   state.candidateBatchPending.add(imageId);
@@ -757,7 +757,7 @@ async function batchCandidateOperation(spec) {
         markMaskDirty();
       }
       if (manualErase) { state.manualExclusionEraseEnabled = operation === "enable"; markMaskDirty(); }
-      if (manual || manualErase) saveDraft();
+      if (manual || manualErase) saveDraft().catch(showUserError);
       retainCurrentCandidateBundle(imageId, result.candidateRevision);
       recordHistoryOperation({ kind: "candidateBatch" }); syncCurrentCandidateRecord(); refreshCurrentReviewAndMask(); requestMosaicPreview(); renderCandidates(); render();
       if (hasDurableHistory()) void refreshProjectHistory(imageId);
@@ -814,7 +814,7 @@ async function addBoundaryCandidate() {
     if (catalogChanged) {
       if (state.currentId === imageId && state.imageGeneration === viewGeneration) {
         await reconcileCurrentCandidates(imageId, viewGeneration);
-        if (createdCandidateIds.length) { recordHistoryOperation({ kind: "addCandidates", ids: createdCandidateIds }); saveDraft(); }
+        if (createdCandidateIds.length) { recordHistoryOperation({ kind: "addCandidates", ids: createdCandidateIds }); saveDraft().catch(showUserError); }
         if (!state.boundaryDrafts.length) setStatusKey("status.boundaryDone");
       }
     }

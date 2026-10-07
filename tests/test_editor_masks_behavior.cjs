@@ -167,7 +167,7 @@ const context = {
   t: (key, values) => values?.label ? `${key}:${values.label}` : key, confirmationRequired: () => false, confirmAction: async () => true,
   markMaskDirty: () => events.push("dirty"), markDraftDirty: (...layers) => events.push(`draft:${layers.join(",")}`), queueImageMutation: async (_imageId, action) => action(), publishWorkspaceFlags() {}, saveWorkspaceFlagNow: async () => true, refreshReviewViews() {},
   markDraftDirtyRoi: (layer, roi) => dirtyRois.push({ layer, roi: roi && { ...roi } }), mergeMosaicPreviewRoi: (_previous, roi) => roi,
-  calculatedBlockSize: () => 8, composeCurrentMask: () => events.push("compose-roi"), flushMaskComposition: () => events.push("flush"), requestMosaicPreview: () => events.push("preview"), scheduleManualWorkspaceSave: () => events.push("save"), saveDraft: () => events.push("draft-save"),
+  calculatedBlockSize: () => 8, composeCurrentMask: () => events.push("compose-roi"), flushMaskComposition: () => events.push("flush"), requestMosaicPreview: () => events.push("preview"), scheduleManualWorkspaceSave: () => events.push("save"), saveDraft: async () => events.push("draft-save"),
   ensureHistoryCanvases: () => true, releaseHistoryCanvases() {},
   setReviewed: () => events.push("review"), updateHistoryButtons() {}, updateCandidateStatus() {}, refreshCurrentReviewAndMask() {}, refreshMaskStatus() {},
   fillUiRefreshes: [], renderCandidates: () => events.push("candidates"), render: () => events.push("render"), renderCatalogViews: () => events.push("catalog"), updateActionButtons: () => context.fillUiRefreshes.push("actions"),

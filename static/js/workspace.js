@@ -508,6 +508,10 @@ function queueWorkspaceDraft(imageId, immediate = false) {
       if (hasDurableHistory() && state.currentId === imageId) void refreshProjectHistory(imageId);
       if (state.drafts.get(imageId) === draft) releaseInactiveWorkspaceDraft(imageId);
       return result;
+    }).catch((error) => {
+      state.workspaceUnsavedImageId = imageId;
+      setStatusKey("status.workspaceUnsaved", {}, "warning");
+      throw error;
     });
     const pending = state.workspaceDraftPending.get(imageId);
     if (pending) {
@@ -515,8 +519,7 @@ function queueWorkspaceDraft(imageId, immediate = false) {
       pending.resolve(completed.catch((error) => {
         // Retain the bitmap and dirty layers for retry, while making it explicit
         // that the displayed hand-drawn edit is not durable yet.
-        state.workspaceUnsavedImageId = imageId;
-        setStatusKey("status.workspaceUnsaved", {}, "warning"); showUserError(error);
+        showUserError(error);
       }));
     }
     return completed;
@@ -607,6 +610,8 @@ async function loadWorkspaceDraft(imageId) {
 function scheduleManualWorkspaceSave() {
   const imageId = state.currentId;
   if (!imageId) return Promise.resolve();
+  // Capture each completed stroke before a later stroke can change the canvas.
+  if (hasDurableHistory()) return saveDraft().catch(showUserError);
   const previous = state.draftSaveChains.get(imageId) || Promise.resolve();
   const next = previous.then(() => new Promise((resolve, reject) => setTimeout(() => {
     try { void saveDraft().catch(showUserError); resolve(); } catch (error) { reject(error); }

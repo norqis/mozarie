@@ -645,7 +645,7 @@ async function testDetectionImportAndSaveBehaviour() {
     Promise, Map, Set, Array, Object, Number, String, Boolean, Math, JSON, structuredClone,
     state, $: (selector) => element(selector),
     isBusy: () => false, activeDetection: () => false, currentImageActionPending: () => false, catalogStagingEditsActive: () => false, isProcessableImage: (image) => Boolean(image && !image.hidden), flushAllImageMutations: async () => {}, flushAllWorkspaceMutations: async () => {}, processableImages: (images = state.images) => images.filter((image) => !image.hidden), imageMatchesStateFilter: () => true, updateActionButtons() {}, updateProgress() {}, showUserError() {}, setStatusKey() {}, closeProcessing() {},
-    saveDraft: () => calls.push("draft"), refreshMaskStatus: () => calls.push("refresh"), saveTargets: () => ["one"],
+    saveDraft: async () => calls.push("draft"), refreshMaskStatus: () => calls.push("refresh"), saveTargets: () => ["one"],
     openApplyDialog: async () => calls.push("apply"), openSingleSaveDialog: async (id) => calls.push(`single:${id}`), waitForCandidateMutations: async () => { calls.push("wait"); }, imageHasMask: () => true,
     detectionConfidence: () => 0.5, normaliseDetectionConfidence: Number, setDetectionConfidence() {}, showModalFromInvoker() {},
     t: (key) => key, api: async () => ({}), isCurrentGeneration: () => true, setSettingsForm() {}, scheduleJobPoll() {}, showProcessing() {}, syncDetectionTargetSwitch() {}, syncDetectionFluidColorFill() {},

@@ -292,6 +292,6 @@ async function saveAll() {
   if (isBusy() || state.importing || catalogStagingEditsActive()) return;
   if (state.candidateUpdateChains.size) await waitForCandidateMutations();
   if (isBusy() || state.importing) return;
-  saveDraft(); refreshMaskStatus();
+  saveDraft().catch(showUserError); refreshMaskStatus();
   if (processableImages().length) await openApplyDialog();
 }

@@ -1186,7 +1186,10 @@
         "node:tests/test_import_picker_e2e.cjs::import picker browser coverage",
         "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_peer_manual_sync_conflicts_and_last_stroke_undo_use_real_workspace",
         "python:tests.test_http_live_endpoints.LiveHttpEndpointTests.test_manual_revision_conflicts_keep_pixels_and_empty_delete_is_undoable",
-        "python:tests.core.test_mask_bounds_memory.MaskBoundsMemoryTests.test_manual_history_decodes_each_changed_png_once_and_keeps_undo_pixels"
+        "python:tests.core.test_mask_bounds_memory.MaskBoundsMemoryTests.test_manual_history_decodes_each_changed_png_once_and_keeps_undo_pixels",
+        "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_rapid_strokes_keep_separate_undo_steps_after_reopen",
+        "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_slow_encoder_does_not_merge_subsequent_stroke_history",
+        "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_pending_upload_does_not_merge_subsequent_stroke_history"
       ]
     },
     {
@@ -1200,7 +1203,10 @@
         "node:tests/test_editor_masks_behavior.cjs::editor masks, fill, candidates, and history",
         "node:tests/test_project_history_browser_e2e.cjs::project Ctrl+Z flushes the durable edit and keeps browser history canvases released",
         "node:tests/test_import_picker_e2e.cjs::import picker browser coverage",
-        "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_peer_manual_sync_conflicts_and_last_stroke_undo_use_real_workspace"
+        "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_peer_manual_sync_conflicts_and_last_stroke_undo_use_real_workspace",
+        "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_rapid_strokes_keep_separate_undo_steps_after_reopen",
+        "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_slow_encoder_does_not_merge_subsequent_stroke_history",
+        "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_pending_upload_does_not_merge_subsequent_stroke_history"
       ]
     },
     {
@@ -1697,7 +1703,8 @@
         "node:tests/test_workspace_runtime.cjs::workspace runtime contracts",
         "node:tests/editor/test_draft_residency_e2e.cjs::legacy non-durable drafts keep local history when leaving after a save",
         "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_anonymous_compact_draft_keeps_layers_through_edit_undo_redo_and_reload",
-        "python:tests.test_http_live_endpoints.LiveHttpEndpointTests.test_manual_png_processing_does_not_block_catalog_reads"
+        "python:tests.test_http_live_endpoints.LiveHttpEndpointTests.test_manual_png_processing_does_not_block_catalog_reads",
+        "node:tests/editor/test_draft_residency_e2e.cjs::failed empty draft deletion keeps the cleared canvas until retry succeeds"
       ]
     },
     {
