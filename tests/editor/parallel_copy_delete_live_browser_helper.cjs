@@ -16,7 +16,7 @@ async function main() {
         canvas.getContext("2d").fillRect(0, 0, 64, 48);
         const blob = await new Promise((resolve) => canvas.toBlob(resolve));
         const entries = [];
-        for (const name of kind === "recovery" ? ["browser1.png"] : ["browser1.png", "browser2.png"]) {
+        for (const name of kind.startsWith("recovery") ? ["browser1.png"] : ["browser1.png", "browser2.png"]) {
           const fileHandle = await parent.getFileHandle(name, { create: true });
           const stream = await fileHandle.createWritable(); await stream.write(blob); await stream.close();
           entries.push({ file: await fileHandle.getFile(), relativePath: name, fileHandle, parentHandle: parent });
@@ -24,7 +24,7 @@ async function main() {
         await importFiles(entries);
       }, kind);
     }
-    if (kind === "recovery") {
+    if (kind.startsWith("recovery")) {
       await page.waitForFunction(() => state.images.length === 1 && !state.importing);
       const prepares = [];
       await page.route("**/api/catalog/delete-source/prepare", async (route) => {
@@ -33,12 +33,15 @@ async function main() {
       });
       await page.evaluate(async () => { await runBrowserSave(state.images.map((image) => image.id), "_recovery", true, "copy"); });
       const savedEdits = await page.evaluate(async () => (await pendingSourceDeletes())[0].savedEdits);
+      assert.equal(savedEdits.transformRevision, 0);
       assert.deepEqual(savedEdits, prepares[0].savedEdits, "IndexedDB owns the exact copy's edit version before prepare");
-      await page.evaluate(async () => {
+      await page.evaluate(async (kind) => {
         const image = state.images[0];
-        await api(`/api/workspace/manual/${image.id}`, { method: "POST", body: JSON.stringify({ manualEnabled: false, hasEffectiveMask: false }) });
+        await api(kind === "recovery-flip" ? `/api/images/${image.id}/transform` : `/api/workspace/manual/${image.id}`, {
+          method: "POST", body: JSON.stringify(kind === "recovery-flip" ? { flipH: true, flipV: false } : { manualEnabled: false, hasEffectiveMask: false }),
+        });
         await resumePendingSourceDeletes();
-      });
+      }, kind);
       assert.deepEqual(prepares[1].savedEdits, savedEdits, "retry uses the saved copy version after a new edit");
       assert.equal(await page.evaluate(async () => (await (await navigator.storage.getDirectory()).getFileHandle("browser1.png")).kind), "file");
       assert.equal(await page.evaluate(async () => (await api("/api/images")).images.length), 1);

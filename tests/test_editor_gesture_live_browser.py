@@ -260,18 +260,71 @@ class LiveEditorGestureBrowserTests(unittest.TestCase):
         self.assertEqual(self.state.list_images(), [])
         self.assertEqual(self.source_path.read_bytes(), self.source_bytes)
 
-    def test_browser_copy_delete_recovery_keeps_edits_made_after_the_copy(self) -> None:
+    def _check_browser_copy_delete_recovery(self, flip: bool) -> None:
         self.state.close_project()
         helper = Path(__file__).with_name("editor") / "parallel_copy_delete_live_browser_helper.cjs"
         result = subprocess.run(
-            ["node", str(helper), self.origin, "recovery"], cwd=Path(__file__).resolve().parents[1],
+            ["node", str(helper), self.origin, "recovery-flip" if flip else "recovery"], cwd=Path(__file__).resolve().parents[1],
             env={**os.environ, "PYTHONUTF8": "1"}, text=True, encoding="utf-8", errors="replace",
             capture_output=True, timeout=90, check=False,
         )
         self.assertEqual(result.returncode, 0, f"browser copy delete recovery failed\n{result.stdout}\n{result.stderr}")
         self.assertTrue((self.output_dir / "browser1_recovery.png").is_file())
         image_id = self.state.list_images()[0]["id"]
-        self.assertFalse(self.state.manual_workspace(image_id)["manualEnabled"])
+        if flip: self.assertTrue(self.state.images[image_id].flip_horizontal)
+        else: self.assertFalse(self.state.manual_workspace(image_id)["manualEnabled"])
+
+    def test_browser_copy_delete_recovery_keeps_edits_made_after_the_copy(self) -> None:
+        self._check_browser_copy_delete_recovery(False)
+
+    def test_browser_copy_delete_recovery_keeps_a_flip_made_after_the_copy(self) -> None:
+        self._check_browser_copy_delete_recovery(True)
+
+    def _check_copy_delete_rollback(self, mode: str) -> None:
+        self.state.close_project()
+        helper = Path(__file__).with_name("saving") / "copy_delete_rollback_live_browser_helper.cjs"
+        result = subprocess.run(
+            ["node", str(helper), self.origin, mode], cwd=Path(__file__).resolve().parents[1],
+            env={**os.environ, "PYTHONUTF8": "1"}, text=True, encoding="utf-8", errors="replace",
+            capture_output=True, timeout=90, check=False,
+        )
+        self.assertEqual(result.returncode, 0, f"copy delete rollback failed\n{result.stdout}\n{result.stderr}")
+        self.assertEqual(self.source_path.read_bytes(), self.source_bytes)
+        self.assertEqual(len(self.state.list_images()), 1)
+        with Image.open(self.output_dir / "source_copy.png") as image:
+            self.assertEqual(image.getpixel((0, 0))[:3], (255, 0, 0))
+        if mode not in {"foreign", "checkpoint-failure"}: self.assertTrue((self.output_dir / "source_retry.png").is_file())
+        if mode.startswith("flip"):
+            self.assertTrue(self.state.list_images()[0]["flipH"])
+            with Image.open(self.output_dir / "source_retry.png") as image:
+                self.assertEqual(image.getpixel((0, 0))[:3], (0, 0, 255))
+
+    def test_single_copy_delete_preserves_a_peer_flip(self) -> None:
+        self._check_copy_delete_rollback("flip-single")
+
+    def test_batch_copy_delete_preserves_a_peer_flip(self) -> None:
+        self._check_copy_delete_rollback("flip-batch")
+
+    def test_rejected_copy_delete_restores_metadata_and_allows_another_save(self) -> None:
+        self._check_copy_delete_rollback("rollback")
+
+    def test_rejected_single_copy_delete_restores_metadata_and_allows_another_save(self) -> None:
+        self._check_copy_delete_rollback("rollback-single")
+
+    def test_copy_delete_restoration_retries_project_handle_persistence_after_reload(self) -> None:
+        self._check_copy_delete_rollback("remember-failure")
+
+    def test_copy_delete_restoration_survives_a_lost_ack_response_and_reload(self) -> None:
+        self._check_copy_delete_rollback("lost-ack")
+
+    def test_copy_delete_failed_restoration_checkpoint_keeps_the_source_and_recovery_snapshot(self) -> None:
+        self._check_copy_delete_rollback("checkpoint-failure")
+
+    def test_rejected_copy_delete_preserves_a_recreated_foreign_file(self) -> None:
+        self._check_copy_delete_rollback("foreign")
+
+    def test_copy_delete_restoration_survives_a_lost_cancel_response_and_reload(self) -> None:
+        self._check_copy_delete_rollback("resume")
 
     def test_named_compact_draft_keeps_layers_through_edit_undo_redo_and_reload(self) -> None:
         self._check_compact_draft_reload(named=True)

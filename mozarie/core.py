@@ -271,6 +271,7 @@ class BrowserSaveReceipt:
     relative_path: str | None = None
     edited_filename: str | None = None
     manual_revision: int = 0
+    transform_revision: int | None = None
 
 
 @dataclass

@@ -984,7 +984,7 @@ class MosaicHandler(BaseHTTPRequestHandler):
                 self._json(STATE.source_delete_status(str(payload.get("deleteToken", ""))))
             elif path == "/api/catalog/delete-source/cancel":
                 self._json(self._catalog_mutation(expected_project_id, expected_catalog_generation,
-                                                   lambda: STATE.cancel_source_delete(str(payload.get("deleteToken", "")))))
+                                                   lambda: STATE.cancel_source_delete(str(payload.get("deleteToken", "")), restored_sources=payload.get("restoredSources"))))
             elif path == "/api/catalog/delete-source/ack":
                 self._json(STATE.acknowledge_source_delete(str(payload.get("deleteToken", ""))))
             elif path == "/api/masks/clear":

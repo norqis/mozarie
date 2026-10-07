@@ -150,7 +150,7 @@ const { chromium } = require("playwright");
         };
       });
       page = await open();
-      await page.waitForFunction(async () => !(await navigator.locks.query()).held.some((lock) => lock.name === "mozarie-browser-save-ownership"));
+      await page.evaluate(() => navigator.locks.request("mozarie-browser-save-ownership", () => true));
       if (mode.includes("cancel-failure") || mode.includes("ack-failure")) {
         assert.equal(await page.evaluate(() => reconcilePendingBrowserSaves()), false);
         assert.equal(await page.evaluate(() => state.status.key), "save.recoveryPending");

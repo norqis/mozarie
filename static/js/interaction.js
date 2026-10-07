@@ -334,6 +334,8 @@ function browserDeleteEntry(image) {
   const access = sourceAccessFor(image.id);
   return access?.fileHandle && access?.parentHandle ? {
     imageId: image.id, name: access.fileHandle.name || access.name, fileHandle: access.fileHandle, parentHandle: access.parentHandle,
+    rootHandle: access.rootHandle, sourceId: image.sourceId, rememberedSourceId: access.rememberedSourceId,
+    clientKey: access.clientKey, relativePath: image.relativePath, sourceKind: access.sourceKind,
     sizeBytes: image.sizeBytes, mtimeNs: image.mtimeNs, state: "ready",
   } : null;
 }
@@ -486,6 +488,10 @@ async function resumePendingSourceDeletes(requestPermission = false) {
         pending.state = "prepared";
         await rememberPendingSourceDelete(pending);
         status = await api("/api/catalog/delete-source/status", { method: "POST", body: JSON.stringify({ deleteToken: pending.deleteToken }), resyncOnStale: false });
+      }
+      if (pending.state === "restored") {
+        if (!await restoreCopiedBrowserSourcesAfterRejectedDelete(pending)) throw codedError("source_restore_failed");
+        return;
       }
       const recovery = ["prepared", "claimed"].includes(status.state) ? await recoverPendingBrowserDeletes(pending) : { deleted: pending.browserDeletedImageIds || [], unresolved: false };
       if (["prepared", "claimed"].includes(status.state) && recovery.unresolved) return;

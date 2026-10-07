@@ -236,7 +236,7 @@ class LiveHttpEndpointTests(unittest.TestCase):
         self.assertTrue(self.state.workspace_store.has_image(image_id)); self.assertEqual(source.read_bytes(), original)
         status, result = commit(token, "keep")
         self.assertEqual(status, 200); self.assertTrue(result["stale"])
-        saved_edits = {"candidateRevision": result["candidateRevision"], "manualRevision": result["manualRevision"]}
+        saved_edits = {"candidateRevision": result["candidateRevision"], "manualRevision": result["manualRevision"], "transformRevision": result["transformRevision"]}
         self.state.acknowledge_browser_save(token)
         status, _, body = self.request("POST", "/api/catalog/delete-source/prepare", {
             "imageIds": [image_id], "deleteToken": str(uuid.uuid4()), "savedEdits": saved_edits,
@@ -246,7 +246,7 @@ class LiveHttpEndpointTests(unittest.TestCase):
             token = render_copy("_" + phase)
             status, result = commit(token, "keep")
             self.assertEqual(status, 200)
-            saved_edits = {"candidateRevision": result["candidateRevision"], "manualRevision": result["manualRevision"]}
+            saved_edits = {"candidateRevision": result["candidateRevision"], "manualRevision": result["manualRevision"], "transformRevision": result["transformRevision"]}
             self.state.acknowledge_browser_save(token)
             delete_token = str(uuid.uuid4())
             status, _, body = self.request("POST", "/api/catalog/delete-source/prepare", {
@@ -272,6 +272,85 @@ class LiveHttpEndpointTests(unittest.TestCase):
         self.assertEqual((status, json.loads(body).get("error_code")), (400, "save_state_changed"))
         self.assertEqual(source.read_bytes(), original)
         self.assertTrue(self.state.workspace_store.has_image(image_id))
+
+    def _check_copy_delete_transform_race(self, phase: str) -> None:
+        source = self.source_dir / "source.png"
+        with Image.new("RGB", (12, 8), "red") as image:
+            image.paste("blue", (6, 0, 12, 8)); image.save(source)
+        original = source.read_bytes()
+        image_id = self.state.set_root(str(self.source_dir))[0]["id"]
+        output = self.source_dir.parent / "output"; output.mkdir()
+        self.state.update_settings({"saving": {"default_output_directory": str(output)}})
+        save_token = str(uuid.uuid4()); delete_token = str(uuid.uuid4())
+        payload = {"imageId": image_id, "candidateRevision": 0, "expectedManualRevision": 0,
+                   "clientSaveToken": save_token, "copyToDefault": True, "divisor": 100, "suffix": "_copy"}
+        for endpoint in ("reserve", "render"):
+            status, _, body = self.request("POST", f"/api/save/{endpoint}", payload, authorized=True)
+            self.assertEqual(status, 200, body)
+        status, _, body = self.request("POST", "/api/save/commit", {
+            "imageId": image_id, "candidateRevision": 0, "saveToken": save_token, "sourceAction": "keep",
+        }, authorized=True)
+        self.assertEqual(status, 200, body)
+        result = json.loads(body)
+        saved = {"candidateRevision": result["candidateRevision"], "manualRevision": result["manualRevision"], "transformRevision": result["transformRevision"]}
+        prepare = {"imageIds": [image_id], "deleteToken": delete_token, "savedEdits": saved}
+        copied = output / "source_copy.png"
+        with Image.open(copied) as image:
+            self.assertEqual(image.getpixel((0, 0)), (255, 0, 0))
+        self.state.acknowledge_browser_save(save_token)
+        if phase != "prepare":
+            status, _, body = self.request("POST", "/api/catalog/delete-source/prepare", prepare, authorized=True)
+            self.assertEqual(status, 200, body)
+        if phase == "commit":
+            status, _, body = self.request("POST", "/api/catalog/delete-source/claim", {"deleteToken": delete_token}, authorized=True)
+            self.assertEqual(status, 200, body)
+        status, _, body = self.request("POST", f"/api/images/{image_id}/transform", {"flipH": True, "flipV": False}, authorized=True)
+        self.assertEqual(status, 200, body)
+        endpoint = "/api/catalog/delete-source" + ("" if phase == "commit" else "/" + phase)
+        status, _, body = self.request("POST", endpoint, prepare if phase == "prepare" else {"deleteToken": delete_token, "imageIds": [image_id]}, authorized=True)
+        self.assertEqual((status, json.loads(body).get("error_code")), (400, "save_state_changed"))
+        self.assertEqual(source.read_bytes(), original)
+        self.assertTrue(self.state.workspace_store.has_image(image_id))
+        self.assertTrue(self.state.images[image_id].flip_horizontal)
+        with Image.open(copied) as image:
+            self.assertEqual(image.getpixel((0, 0)), (255, 0, 0))
+        if phase == "commit": self.state.release_source_delete_claim(delete_token)
+        if phase != "prepare": self.state.cancel_source_delete(delete_token)
+
+    def test_copy_delete_preserves_flip_added_before_prepare(self) -> None:
+        self._check_copy_delete_transform_race("prepare")
+
+    def test_copy_delete_preserves_flip_added_before_claim(self) -> None:
+        self._check_copy_delete_transform_race("claim")
+
+    def test_copy_delete_preserves_flip_added_before_commit(self) -> None:
+        self._check_copy_delete_transform_race("commit")
+
+    def test_copy_delete_without_a_saved_transform_revision_retains_the_source(self) -> None:
+        image_id = self.state.set_root(str(self.source_dir))[0]["id"]
+        source = self.state.images[image_id].path
+        original = source.read_bytes()
+        for phase in ("prepare", "claim", "commit"):
+            with self.subTest(phase=phase):
+                token = str(uuid.uuid4())
+                saved = {"candidateRevision": 0, "manualRevision": 0}
+                payload = {"imageIds": [image_id], "deleteToken": token, "savedEdits": saved}
+                if phase != "prepare":
+                    saved["transformRevision"] = 0
+                    self.state.prepare_source_delete(payload)
+                    if phase == "commit": self.state.claim_source_delete(token)
+                    with self.state.workspace_store._connect() as db:
+                        row = db.execute("SELECT items_json FROM source_delete_operations WHERE token=?", (token,)).fetchone()
+                        items = json.loads(row[0])
+                        for item in items: item.pop("saveTransformRevision")
+                        db.execute("UPDATE source_delete_operations SET items_json=? WHERE token=?", (json.dumps(items), token))
+                endpoint = "/api/catalog/delete-source" + ("" if phase == "commit" else "/" + phase)
+                status, _, body = self.request("POST", endpoint, payload, authorized=True)
+                self.assertEqual((status, json.loads(body).get("error_code")), (400, "save_state_changed"))
+                self.assertEqual(source.read_bytes(), original)
+                self.assertTrue(self.state.workspace_store.has_image(image_id))
+                if phase == "commit": self.state.release_source_delete_claim(token)
+                if phase != "prepare": self.state.cancel_source_delete(token)
 
     def test_render_rejects_a_dialog_draft_from_before_peer_manual_edit(self) -> None:
         image_id = self.state.set_root(str(self.source_dir))[0]["id"]

@@ -812,9 +812,13 @@ class RemainingDataIntegrityContracts(unittest.TestCase):
         state.cancel_browser_save(image_id, revision, first)
         self.assertFalse(first_path.exists(), "a replacement same-image save recovers the abandoned private render")
 
+        state.set_image_transform(image_id, {"flipH": True, "flipV": False})
+        saved_transform_revision = state.images[image_id].transform_revision
         state.reserve_browser_save(image_id, revision, second, copy_to_default=False, suffix="_censored", output_format="original", keep_metadata=True)
         state.render_browser_save(image_id, revision, 100, None, client_save_token=second)
         committed = state.commit_browser_save(image_id, revision, second, "overwrite")
+        self.assertEqual(committed["transformRevision"], saved_transform_revision)
+        self.assertEqual(state.browser_save_status(image_id, revision, second, "overwrite")["transformRevision"], saved_transform_revision)
         new_revision = state._candidate_revision(image_id)
         state.reserve_browser_save(image_id, new_revision, pending, copy_to_default=False, suffix="_censored", output_format="original", keep_metadata=True)
         pending_render = state.render_browser_save(image_id, new_revision, 100, None, client_save_token=pending)
@@ -824,6 +828,7 @@ class RemainingDataIntegrityContracts(unittest.TestCase):
         state.shutdown(); self.states.remove(state)
         reopened = self.state(); reopened.open_project(project_id)
         self.assertEqual(reopened.browser_save_status(image_id, revision, second, "overwrite")["state"], "committed")
+        self.assertEqual(reopened.browser_save_status(image_id, revision, second, "overwrite")["transformRevision"], saved_transform_revision)
         self.assertEqual(reopened.commit_browser_save(image_id, revision, second, "overwrite"), committed, "a lost commit response replays the durable terminal receipt")
         self.assertEqual(
             reopened.browser_save_status(image_id, new_revision, pending, "keep"),

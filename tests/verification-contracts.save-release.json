@@ -141,7 +141,13 @@
         "python:tests.test_http_live_endpoints.LiveHttpEndpointTests.test_copy_delete_rejects_new_edits_before_commit_and_browser_delete_claim",
         "python:tests.test_http_live_endpoints.LiveHttpEndpointTests.test_render_rejects_a_dialog_draft_from_before_peer_manual_edit",
         "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_single_copy_rejects_stale_canvas_after_catalog_metadata_refresh",
-        "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_batch_copy_rejects_stale_draft_after_catalog_metadata_refresh"
+        "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_batch_copy_rejects_stale_draft_after_catalog_metadata_refresh",
+        "python:tests.test_http_live_endpoints.LiveHttpEndpointTests.test_copy_delete_preserves_flip_added_before_prepare",
+        "python:tests.test_http_live_endpoints.LiveHttpEndpointTests.test_copy_delete_preserves_flip_added_before_claim",
+        "python:tests.test_http_live_endpoints.LiveHttpEndpointTests.test_copy_delete_preserves_flip_added_before_commit",
+        "python:tests.test_http_live_endpoints.LiveHttpEndpointTests.test_copy_delete_without_a_saved_transform_revision_retains_the_source",
+        "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_single_copy_delete_preserves_a_peer_flip",
+        "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_batch_copy_delete_preserves_a_peer_flip"
       ]
     },
     {
@@ -496,7 +502,8 @@
         "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > copy then source delete follows durable commit",
         "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_browser_copy_delete_recovery_keeps_edits_made_after_the_copy",
         "python:tests.test_server.MozarieTests.test_browser_copy_delete_keeps_source_changed_after_final_preflight",
-        "python:tests.test_save_recovery.SaveRecoveryTests.test_quarantine_source_excludes_writers_until_rename"
+        "python:tests.test_save_recovery.SaveRecoveryTests.test_quarantine_source_excludes_writers_until_rename",
+        "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_browser_copy_delete_recovery_keeps_a_flip_made_after_the_copy"
       ]
     },
     {
@@ -1437,7 +1444,9 @@
         "python:tests.saving.test_native_overwrite_recovery.NativeOverwriteRecoveryTests.test_receipt_failure_restores_original_and_allows_retry_for_each_output_path",
         "python:tests.saving.test_native_overwrite_recovery.NativeOverwriteRecoveryTests.test_external_edit_at_same_path_survives_receipt_failure_and_recovery",
         "python:tests.saving.test_native_overwrite_recovery.NativeOverwriteRecoveryTests.test_external_edit_at_renamed_path_survives_receipt_failure_and_recovery",
-        "python:tests.saving.test_native_overwrite_recovery.NativeOverwriteRecoveryTests.test_external_edit_at_converted_path_survives_receipt_failure_and_recovery"
+        "python:tests.saving.test_native_overwrite_recovery.NativeOverwriteRecoveryTests.test_external_edit_at_converted_path_survives_receipt_failure_and_recovery",
+        "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_rejected_copy_delete_preserves_a_recreated_foreign_file",
+        "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_copy_delete_failed_restoration_checkpoint_keeps_the_source_and_recovery_snapshot"
       ]
     },
     {
@@ -1469,7 +1478,12 @@
         "python:tests.saving.test_native_overwrite_recovery.NativeOverwriteRecoveryTests.test_receipt_failure_restores_original_and_allows_retry_for_each_output_path",
         "python:tests.saving.test_native_overwrite_recovery.NativeOverwriteRecoveryTests.test_external_edit_at_same_path_survives_receipt_failure_and_recovery",
         "python:tests.saving.test_native_overwrite_recovery.NativeOverwriteRecoveryTests.test_external_edit_at_renamed_path_survives_receipt_failure_and_recovery",
-        "python:tests.saving.test_native_overwrite_recovery.NativeOverwriteRecoveryTests.test_external_edit_at_converted_path_survives_receipt_failure_and_recovery"
+        "python:tests.saving.test_native_overwrite_recovery.NativeOverwriteRecoveryTests.test_external_edit_at_converted_path_survives_receipt_failure_and_recovery",
+        "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_rejected_copy_delete_restores_metadata_and_allows_another_save",
+        "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_rejected_single_copy_delete_restores_metadata_and_allows_another_save",
+        "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_copy_delete_restoration_survives_a_lost_cancel_response_and_reload",
+        "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_copy_delete_restoration_survives_a_lost_ack_response_and_reload",
+        "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_copy_delete_restoration_retries_project_handle_persistence_after_reload"
       ]
     },
     {

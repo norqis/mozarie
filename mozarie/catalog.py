@@ -1389,7 +1389,7 @@ class CatalogMixin:
                     saved = payload.get("savedEdits")
                     if saved is not None and (len(requested_ids) != 1 or not isinstance(saved, dict)
                             or any(isinstance(saved.get(key), bool) or not isinstance(saved.get(key), int) or saved[key] < 0
-                                   for key in ("candidateRevision", "manualRevision"))):
+                                   for key in ("candidateRevision", "manualRevision", "transformRevision"))):
                         raise ClientError("保存した編集内容の版が正しくありません。", "save_state_changed")
                     for image_id, record in records.items():
                         if record is None:
@@ -1405,11 +1405,11 @@ class CatalogMixin:
                             if identity is None:
                                 failures.append({"imageId": image_id, "reason": "source_unavailable"}); continue
                         prepared.append(image_id)
-                        item = {"imageId": image_id, "sourceKind": record.source_kind,
+                        item = {"imageId": image_id, "sourceKind": record.source_kind, "sourceId": record.source_id,
                                 "relativePath": record.relative_path, "sourcePath": str(record.path),
                                 "mtimeNs": record.mtime_ns, "sizeBytes": record.size_bytes}
                         if saved:
-                            item.update(saveCandidateRevision=saved["candidateRevision"], saveManualRevision=saved["manualRevision"])
+                            item.update(saveCandidateRevision=saved["candidateRevision"], saveManualRevision=saved["manualRevision"], saveTransformRevision=saved["transformRevision"])
                         if identity is not None: item["fileIdentity"] = identity
                         items.append(item)
                     self._assert_saved_delete_edits(items)
@@ -1429,7 +1429,10 @@ class CatalogMixin:
         with self.lock:
             revisions = self.workspace_store.manual_revisions([item["imageId"] for item in saved_items])
             if any(item["saveManualRevision"] != revisions.get(item["imageId"])
-                   or item["saveCandidateRevision"] != self._candidate_revision(item["imageId"]) for item in saved_items):
+                   or item["saveCandidateRevision"] != self._candidate_revision(item["imageId"])
+                   or type(item.get("saveTransformRevision")) is not int
+                   or self.images.get(item["imageId"]) is None
+                   or item["saveTransformRevision"] != self.images[item["imageId"]].transform_revision for item in saved_items):
                 raise ClientError("保存後に編集内容が変更されました。保存をやり直してください。", "save_state_changed")
 
     def delete_images_with_sources(self, payload: dict[str, Any]) -> dict[str, Any]:
@@ -1679,10 +1682,17 @@ class CatalogMixin:
             released = self.workspace_store.release_source_delete_claim(token)
             return {"deleteToken": token, "state": released["state"]}
 
-    def cancel_source_delete(self, token: str) -> dict[str, Any]:
+    def cancel_source_delete(self, token: str, *, restored_sources: list[dict[str, Any]] | None = None) -> dict[str, Any]:
+        if restored_sources is not None and (not isinstance(restored_sources, list) or any(
+                not isinstance(source, dict) or not isinstance(source.get("imageId"), str)
+                or any(type(source.get(key)) is not int or source[key] < 0 for key in ("sourceMtimeMs", "sourceSizeBytes"))
+                for source in restored_sources)):
+            raise ClientError("復元後の元画像情報が正しくありません。", "input_invalid")
         with self.import_lock:
             operation = self.source_delete_status(token)
-            image_ids = [str(item["imageId"]) for item in (self.workspace_store.source_delete_operation(token) or {}).get("items", [])]
+            prepared = self.workspace_store.source_delete_operation(token) or {}
+            items = {str(item["imageId"]): item for item in prepared.get("items", [])}
+            image_ids = list(items)
             with self.lock:
                 records = [self.images[image_id] for image_id in image_ids if image_id in self.images]
             locks = [(record.image_id, self.image_io_lock(record.image_id)) for record in records]
@@ -1692,6 +1702,22 @@ class CatalogMixin:
                     self._assert_catalog_mutable(allow_terminal_cleanup=True)
                     operation = self.source_delete_status(token)
                     if operation["state"] != "prepared": return operation
+                    for restored in restored_sources or []:
+                        item = items.get(restored["imageId"])
+                        if item is None or item.get("sourceKind") != "session" or not item.get("sourceId"):
+                            raise ClientError("復元対象の元画像が変更されています。", "save_state_changed")
+                        metadata = {**restored, "workspaceId": prepared["workspaceId"], "sourceId": item["sourceId"],
+                                    "relativePath": item["relativePath"], "originalMtimeMs": round(item["mtimeNs"] / 1_000_000),
+                                    "originalSizeBytes": item["sizeBytes"]}
+                        try:
+                            self.workspace_store.restore_browser_source_metadata(item["imageId"], metadata)
+                        except ValueError as exc:
+                            raise ClientError("復元対象の元画像が変更されています。", "save_state_changed") from exc
+                        record = self.images.get(item["imageId"])
+                        if (self.workspace_id == prepared["workspaceId"] and record is not None
+                                and record.source_id == item["sourceId"] and record.relative_path == item["relativePath"]):
+                            record.mtime_ns = restored["sourceMtimeMs"] * 1_000_000
+                            record.size_bytes = restored["sourceSizeBytes"]
                     result = {"removedImageIds": [], "failed": [], "state": "cancelled"}
                     self.workspace_store.update_source_delete_operation(token, "cancelled", result, expected_states={"prepared"})
                     return {"deleteToken": token, **result}

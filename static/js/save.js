@@ -591,6 +591,7 @@ async function startSingleSave(event) {
   const deleteOriginal = copying && $("#singleSaveDeleteOriginal").checked;
   const format = selectedSingleOutputFormat(); const keepMetadata = $("#singleSaveKeepMetadata").checked;
   let sourcePreparation = null;
+  let sourceRestored = false;
   const beginPreparation = () => { sourcePreparation = beginSaveSourcePreparation([save.imageId], mode, deleteOriginal, format); };
   if (!copying) beginPreparation();
   const outputDirectory = $("#singleSaveOutputDirectoryStatus");
@@ -668,7 +669,8 @@ async function startSingleSave(event) {
       if (committed.sourceDeletePending) browserSourceDelete = { deleted: false, retryable: false };
       if (copying && committed.outputPath) output = committed.outputPath;
       if (copying && deleteOriginal && access?.fileHandle) browserSourceDelete = committed.stale
-        ? { deleted: false, error: codedError("save_state_changed") } : await deleteCopiedBrowserSource(image, saveToken, { candidateRevision: entry.candidateRevision, manualRevision: committed.manualRevision });
+        ? { deleted: false, error: codedError("save_state_changed") } : await deleteCopiedBrowserSource(image, saveToken, { candidateRevision: entry.candidateRevision, manualRevision: committed.manualRevision, transformRevision: committed.transformRevision });
+      sourceRestored = Boolean(browserSourceDelete?.restored);
     }
     catch (error) {
       const reconcile = !commitStarted || isDefinitiveCommitRejection(error) || error.saveState === "pending";
@@ -735,6 +737,7 @@ async function startSingleSave(event) {
     }
   } finally {
     state.saveStarting = false; renderCandidates(); updateActionButtons(); syncSingleSaveMode();
+    if (sourceRestored) await syncCatalogOnReturn();
   }
 }
 
@@ -1165,6 +1168,12 @@ async function snapshotSourceHandle(access) {
 }
 
 async function restoreSourceHandle(access, snapshot, deleted) {
+  if (deleted) {
+    try {
+      await access.parentHandle.getFileHandle(access.fileHandle.name || access.name);
+      throw codedError("source_restore_failed");
+    } catch (error) { if (error?.name !== "NotFoundError") throw error; }
+  }
   const handle = deleted
     ? await access.parentHandle.getFileHandle(access.fileHandle.name || access.name, { create: true })
     : access.fileHandle;
@@ -1200,7 +1209,8 @@ async function deleteCopiedBrowserSource(image, saveToken, savedEdits) {
   const deleteToken = crypto.randomUUID();
   // Persist the handle before prepare: a server receipt must never outlive
   // the browser capability needed to complete its claimed deletion.
-  let pending = { deleteToken, saveToken, savedEdits, retryOnResume: true, imageIds: [image.id], browserDeletedImageIds: [], browserEntries: [browserEntry], state: "preparing" };
+  let pending = { deleteToken, saveToken, savedEdits, projectId: state.project?.id || null, workspaceId: state.workspaceId,
+    retryOnResume: true, imageIds: [image.id], browserDeletedImageIds: [], browserEntries: [browserEntry], state: "preparing" };
   return withSourceDeleteLock(deleteToken, async () => {
   try {
     await rememberPendingSourceDelete(pending);
@@ -1228,6 +1238,7 @@ async function deleteCopiedBrowserSource(image, saveToken, savedEdits) {
         // explicit recovery action.  Do not report source deletion as done.
         return { deleted: false, error: codedError("source_restore_failed") };
       }
+      return { deleted: false, error, restored: true };
     }
     // Do not cancel or remove the durable record. resumePendingSourceDeletes
     // reconciles the claimed/deleted state after reconnect or restart.
@@ -1238,17 +1249,36 @@ async function deleteCopiedBrowserSource(image, saveToken, savedEdits) {
 }
 
 async function restoreCopiedBrowserSourcesAfterRejectedDelete(pending) {
-  const entries = (pending.browserEntries || []).filter((entry) => entry.state === "deleted");
+  const entries = (pending.browserEntries || []).filter((entry) => ["deleted", "restored"].includes(entry.state));
   if (!entries.length || entries.some((entry) => !(entry.sourceSnapshot instanceof Blob))) return false;
   try {
     for (const entry of entries) {
-      await restoreSourceHandle(entry, entry.sourceSnapshot, true);
-      entry.state = "ready";
+      if (entry.state === "restored") {
+        if (!sourceFileMatches(await entry.fileHandle.getFile(), entry.lastModified, entry.size)) throw codedError("source_restore_failed");
+      } else {
+        await restoreSourceHandle(entry, entry.sourceSnapshot, true);
+        entry.state = "restored";
+      }
     }
     pending.browserDeletedImageIds = []; pending.state = "restored"; pending.retryOnResume = false;
     await rememberPendingSourceDelete(pending);
     await releaseSourceDeleteClaim(pending.deleteToken);
-    await api("/api/catalog/delete-source/cancel", { method: "POST", body: JSON.stringify({ deleteToken: pending.deleteToken }), resyncOnStale: false });
+    const result = await api("/api/catalog/delete-source/cancel", { method: "POST", body: JSON.stringify({
+      deleteToken: pending.deleteToken, restoredSources: entries.map((entry) => ({ imageId: entry.imageId, ...sourceCommitMetadata(entry) })),
+    }), resyncOnStale: false });
+    if (result.state !== "cancelled") throw codedError("source_restore_failed");
+    for (const entry of entries) {
+      const access = { fileHandle: entry.fileHandle, parentHandle: entry.parentHandle, rootHandle: entry.rootHandle,
+        sourceId: entry.sourceId, rememberedSourceId: entry.rememberedSourceId, clientKey: entry.clientKey,
+        relativePath: entry.relativePath, sourceKind: entry.sourceKind, name: entry.name, size: entry.size, lastModified: entry.lastModified };
+      if (pending.projectId && entry.sourceKind === "browser-files") await rememberProjectSource(pending.projectId, entry.fileHandle, entry.imageId,
+        entry.rememberedSourceId || entry.sourceId, entry.clientKey, entry.relativePath, entry.parentHandle);
+      const image = state.images.find((image) => image.id === entry.imageId);
+      if (state.workspaceId === pending.workspaceId && image && image.sourceId === entry.sourceId && image.relativePath === entry.relativePath) {
+        image.mtimeNs = entry.lastModified * 1000000; image.sizeBytes = entry.size;
+        state.sourceAccess.set(entry.imageId, access);
+      }
+    }
     await acknowledgeSourceDelete(pending.deleteToken);
     return true;
   } catch {
@@ -1420,8 +1450,9 @@ async function runBrowserSave(imageIds, suffix, deleteOriginal, mode = "copy", r
               });
               if (committed.sourceDeletePending) { save.sourceDeleteFailures.push(sourceImage?.name || entry.imageId); save.sourceDeleteNotAvailable = true; }
               if (!browserCopyDelete) return { committed, sourceAction };
-              const sourceDelete = committed.stale ? { deleted: false } : await deleteCopiedBrowserSource(sourceImage, saveToken, { candidateRevision: entry.candidateRevision, manualRevision: committed.manualRevision });
+              const sourceDelete = committed.stale ? { deleted: false } : await deleteCopiedBrowserSource(sourceImage, saveToken, { candidateRevision: entry.candidateRevision, manualRevision: committed.manualRevision, transformRevision: committed.transformRevision });
               if (!sourceDelete.deleted) save.sourceDeleteFailures.push(sourceImage?.name || entry.imageId);
+              if (sourceDelete.restored) save.sourceRestored = true;
               return { committed, sourceAction: sourceDelete.deleted ? "deleted" : "keep" };
             }
             catch (error) {
@@ -1597,6 +1628,7 @@ async function runBrowserSave(imageIds, suffix, deleteOriginal, mode = "copy", r
       $("#applyCancelButton").hidden = true;
       $("#applyCloseButton").hidden = false;
       refreshApplyTargets(); renderCandidates(); updateActionButtons();
+      if (save.sourceRestored) await syncCatalogOnReturn();
     }
   }
 }
