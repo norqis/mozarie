@@ -12,6 +12,8 @@ import hashlib
 import io
 import json
 import sqlite3
+import socket
+import socketserver
 import subprocess
 import tempfile
 import threading
@@ -900,6 +902,88 @@ class LiveHttpEndpointTests(unittest.TestCase):
         )
         self.assertEqual(status, 200, response.decode("utf-8") if status != 200 else "")
         self.assertNotIn(retry, self.state._manual_uploads)
+
+    def _check_stream_framing(self, kind: str, change: str) -> None:
+        source = self.source_dir / "source.png"
+        with Image.new("RGB", (12, 8), "white") as image:
+            image.save(source)
+        if kind == "export":
+            status, _, body = self.request("POST", "/api/projects", {"name": "Stream " + change}, authorized=True)
+            self.assertEqual(status, 200, body)
+            project_id = json.loads(body)["project"]["id"]
+            self.state.set_root(str(self.source_dir))
+            route = f"/api/project/masks/{project_id}/mosaic"
+            content_type = b"Content-Type: application/zip"
+        else:
+            image_id = self.state.set_root(str(self.source_dir))[0]["id"]
+            route = f"/api/image/{image_id}"
+            content_type = b"Content-Type: image/png"
+        write = socketserver._SocketWriter.write
+        open_file = Path.open
+        originals = []
+
+        def mutate_after_headers(writer, data):
+            if not originals and data.startswith(b"HTTP/1.1 200") and content_type in data:
+                path = next(self.state.cache_dir.glob("mozarie-masks-*.zip")) if kind == "export" else source
+                with open_file(path, "rb") as handle:
+                    originals.append(handle.read())
+                if change == "grow":
+                    with open_file(path, "ab") as handle:
+                        handle.write(b"EXTRA-BYTES")
+                elif change == "shrink":
+                    with open_file(path, "r+b") as handle:
+                        handle.truncate(16)
+            return write(writer, data)
+
+        class UnreadableSource:
+            def __init__(self, handle): self.handle = handle
+            def __enter__(self): return self
+            def __exit__(self, *args): return self.handle.__exit__(*args)
+            def fileno(self): return self.handle.fileno()
+            def read(self, _size): raise OSError("injected source read failure")
+
+        def fail_source_read(path, *args, **kwargs):
+            handle = open_file(path, *args, **kwargs)
+            return UnreadableSource(handle) if path == source and args == ("rb",) and change == "read_error" else handle
+
+        request = (
+            f"GET {route} HTTP/1.1\r\nHost: 127.0.0.1:{self.server.server_port}\r\n\r\n"
+            f"GET /api/images HTTP/1.1\r\nHost: 127.0.0.1:{self.server.server_port}\r\nConnection: close\r\n\r\n"
+        ).encode("ascii")
+        with patch.object(socketserver._SocketWriter, "write", mutate_after_headers), patch.object(Path, "open", fail_source_read):
+            with socket.create_connection(("127.0.0.1", self.server.server_port), timeout=5) as client:
+                client.sendall(request)
+                chunks = []
+                while chunk := client.recv(65536):
+                    chunks.append(chunk)
+        self.assertEqual(len(originals), 1)
+        headers, body = b"".join(chunks).split(b"\r\n\r\n", 1)
+        self.assertTrue(headers.startswith(b"HTTP/1.1 200"), headers)
+        length = int(next(line.split(b":", 1)[1] for line in headers.split(b"\r\n") if line.startswith(b"Content-Length:")))
+        self.assertEqual(length, len(originals[0]))
+        if change in {"shrink", "read_error"}:
+            self.assertEqual(body, originals[0][:16] if change == "shrink" else b"")
+        else:
+            self.assertEqual(body[:length], originals[0])
+            next_headers, next_body = body[length:].split(b"\r\n\r\n", 1)
+            self.assertTrue(next_headers.startswith(b"HTTP/1.1 200"), next_headers)
+            next_length = int(next(line.split(b":", 1)[1] for line in next_headers.split(b"\r\n") if line.startswith(b"Content-Length:")))
+            self.assertEqual(len(next_body), next_length)
+            self.assertIn("images", json.loads(next_body))
+        self.assertEqual(list(self.state.cache_dir.glob("mozarie-masks-*.zip")), [])
+
+    def test_image_stream_keeps_response_boundaries_when_source_size_changes(self) -> None:
+        for change in ("unchanged", "grow", "shrink"):
+            with self.subTest(change=change):
+                self._check_stream_framing("image", change)
+
+    def test_export_stream_keeps_response_boundaries_when_file_size_changes(self) -> None:
+        for change in ("unchanged", "grow", "shrink"):
+            with self.subTest(change=change):
+                self._check_stream_framing("export", change)
+
+    def test_stream_read_failure_closes_without_a_second_response(self) -> None:
+        self._check_stream_framing("image", "read_error")
 
     def test_project_mask_export_succeeds_when_warnings_are_errors(self) -> None:
         status, _headers, body = self.request("POST", "/api/projects", {"name": "Masks"}, authorized=True)

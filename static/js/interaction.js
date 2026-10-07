@@ -712,7 +712,20 @@ function droppedFile(file, relativePath = file.name, fileHandle = null, parentHa
   return { file, relativePath, fileHandle, parentHandle };
 }
 
-async function directFilesFromDrop(dataTransfer) {
+async function collectImportHandle(handle, relativePath, parentHandle, rootHandle, entries, session, file = null) {
+  if (!await waitForImportSession(session)) return false;
+  if (handle.kind === "file") {
+    entries.push({ handle, relativePath, parentHandle, ...(rootHandle ? { rootHandle } : {}), ...(file ? { file } : {}) });
+  } else {
+    for await (const child of handle.values()) {
+      const path = relativePath ? `${relativePath}/${child.name}` : child.name;
+      if (!await collectImportHandle(child, path, handle, rootHandle, entries, session)) return false;
+    }
+  }
+  return true;
+}
+
+async function directFilesFromDrop(dataTransfer, session) {
   // Both APIs must be called during the drop event, before its data store is
   // protected again. Keep File snapshots when handle access is unsupported,
   // rejected, or returns null (for example a drag from another application).
@@ -726,14 +739,13 @@ async function directFilesFromDrop(dataTransfer) {
   });
   const snapshots = pending.length ? await Promise.all(pending) : files.map((file) => ({ handle: null, file }));
   const entries = [];
-  async function collectHandle(handle, parent = "", parentHandle = null, file = null) {
-    const relativePath = parent ? `${parent}/${handle.name}` : handle.name;
-    if (handle.kind === "file") entries.push({ handle, relativePath, parentHandle, ...(file ? { file } : {}) });
-    else for await (const entry of handle.values()) await collectHandle(entry, relativePath, handle);
-  }
   for (const { handle, file } of snapshots) {
-    if (handle) await collectHandle(handle, "", null, file);
-    else if (file) entries.push(droppedFile(file, file.webkitRelativePath || file.name));
+    if (handle) {
+      if (!await collectImportHandle(handle, handle.name, null, null, entries, session, file)) break;
+    } else {
+      if (!await waitForImportSession(session)) break;
+      if (file) entries.push(droppedFile(file, file.webkitRelativePath || file.name));
+    }
   }
   return { handleEntries: entries };
 }
@@ -815,8 +827,8 @@ async function importFiles(files) {
     await flushAllImageMutations();
     await flushAllWorkspaceMutations();
     await startImportServerSession(session);
-    session.total = supportedFiles.length; session.completed = 0; session.successes = 0; session.failures = []; session.paused = false; session.cancelled = false;
-    showProcessing({ kind: "import", state: "running", total: session.total, completed: 0, current: "" });
+    session.total = supportedFiles.length; session.completed = 0; session.successes = 0; session.failures = [];
+    showProcessing({ kind: "import", state: session.paused ? "paused" : "running", total: session.total, completed: 0, current: "" });
     session.requestedParallelism = importParallelism();
     const workerCount = Math.min(supportedFiles.length, session.requestedParallelism);
     session.parallelism = workerCount;
@@ -1050,13 +1062,7 @@ async function importDirectoryHandle(directoryHandle, session = beginImportSessi
   const entries = [];
   try {
     showProcessing({ kind: "import", state: "running", total: 1, completed: 0, current: directoryHandle.name || "" });
-    async function collect(handle, relativePath = "", parentHandle = null) {
-      if (!await waitForImportSession(session)) return;
-      const path = relativePath ? `${relativePath}/${handle.name}` : handle.name;
-      if (handle.kind === "file") entries.push({ handle, relativePath: path, parentHandle, rootHandle: directoryHandle });
-      else for await (const child of handle.values()) await collect(child, path, handle);
-    }
-    for await (const handle of directoryHandle.values()) await collect(handle, "", directoryHandle);
+    await collectImportHandle(directoryHandle, "", null, directoryHandle, entries, session);
     if (!await waitForImportSession(session)) return finishImportSession(session);
     await importHandleEntries(entries, session);
   }
@@ -1078,13 +1084,7 @@ async function importProjectDirectoryHandle(directoryHandle, projectId, sourceId
     session.importIntent = importIntent;
     const entries = [];
     showProcessing({ kind: "import", state: "running", total: 1, completed: 0, current: directoryHandle.name || "" });
-    async function collect(handle, relativePath = "", parentHandle = null) {
-      if (!await waitForImportSession(session)) return;
-      const path = relativePath ? `${relativePath}/${handle.name}` : handle.name;
-      if (handle.kind === "file") entries.push({ handle, relativePath: path, parentHandle, rootHandle: directoryHandle });
-      else for await (const child of handle.values()) await collect(child, path, handle);
-    }
-    for await (const handle of directoryHandle.values()) await collect(handle, "", directoryHandle);
+    await collectImportHandle(directoryHandle, "", null, directoryHandle, entries, session);
     if (await waitForImportSession(session) && !await importHandleEntries(entries, session)) throw codedError("project_source_unavailable");
   } finally { finishImportSession(session); }
 }
@@ -1142,7 +1142,9 @@ async function importDroppedFiles(event) {
   const session = beginImportSession();
   if (!session) return;
   try {
-    const dropped = await directFilesFromDrop(event.dataTransfer);
+    showProcessing({ kind: "import", state: "running", total: 1, completed: 0, current: "" });
+    const dropped = await directFilesFromDrop(event.dataTransfer, session);
+    if (!await waitForImportSession(session)) return;
     if (dropped?.handleEntries) await importHandleEntries(dropped.handleEntries, session);
     else await importFiles(dropped, session);
   } catch (error) { showUserError(error); }

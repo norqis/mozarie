@@ -1234,7 +1234,10 @@
       "observation": "CIで単一版のストリーム応答とtokenを確認する。",
       "status": "automated",
       "testIds": [
-        "python:tests.test_http_live_endpoints.LiveHttpEndpointTests.test_live_browser_save_render_streams_a_stable_image_response"
+        "python:tests.test_http_live_endpoints.LiveHttpEndpointTests.test_live_browser_save_render_streams_a_stable_image_response",
+        "python:tests.test_http_live_endpoints.LiveHttpEndpointTests.test_image_stream_keeps_response_boundaries_when_source_size_changes",
+        "python:tests.test_http_live_endpoints.LiveHttpEndpointTests.test_export_stream_keeps_response_boundaries_when_file_size_changes",
+        "python:tests.test_http_live_endpoints.LiveHttpEndpointTests.test_stream_read_failure_closes_without_a_second_response"
       ]
     },
     {

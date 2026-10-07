@@ -1494,10 +1494,10 @@ class MosaicHandler(BaseHTTPRequestHandler):
                 self.send_header("X-Content-Type-Options", "nosniff")
                 for key, value in headers.items(): self.send_header(key, value)
                 self.end_headers()
-                while chunk := source.read(IO_CHUNK_BYTES): self.wfile.write(chunk)
             except CLIENT_DISCONNECT_ERRORS:
                 self.close_connection = True
                 return
+            self._stream_body(source, stat.st_size)
 
     def _stream_file(self, handle: BinaryIO, record: ImageRecord | None, content_type: str, cache_control: str) -> None:
         stat = os.fstat(handle.fileno())
@@ -1516,12 +1516,24 @@ class MosaicHandler(BaseHTTPRequestHandler):
         except CLIENT_DISCONNECT_ERRORS:
             self.close_connection = True
             return
-        while chunk := handle.read(IO_CHUNK_BYTES):
-            try:
+        self._stream_body(handle, size)
+
+    def _stream_body(self, source: BinaryIO, size: int) -> None:
+        remaining = size
+        try:
+            while remaining:
+                chunk = source.read(min(IO_CHUNK_BYTES, remaining))
+                if not chunk:
+                    self.close_connection = True
+                    LOGGER.warning("HTTPファイル送信を中断: 読込途中でファイルが終了しました: %s", self.path)
+                    return
                 self.wfile.write(chunk)
-            except CLIENT_DISCONNECT_ERRORS:
-                self.close_connection = True
-                return
+                remaining -= len(chunk)
+        except CLIENT_DISCONNECT_ERRORS:
+            self.close_connection = True
+        except OSError:
+            self.close_connection = True
+            LOGGER.exception("HTTPファイル送信に失敗: %s", self.path)
 
     def log_message(self, format: str, *args: Any) -> None:
         try:

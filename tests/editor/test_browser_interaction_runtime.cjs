@@ -238,7 +238,9 @@ nodeTest("interaction and catalog mutation controls", async () => {
   for (const action of ["hide", "show", "reviewed", "unreviewed", "detect", "clear", "remove"]) await test.runSelectionAction(action);
   assert.deepEqual(test.droppedFile(file("a.png")).relativePath, "a.png");
   const directory = { name: "folder", kind: "directory", async *values() { yield { name: "a.png", kind: "file", getFile: async () => file("a.png") }; } };
-  assert.equal((await test.directFilesFromDrop({ items: [{ kind: "file", getAsFileSystemHandle: async () => directory }, { kind: "text" }] })).handleEntries.length, 1);
+  const dropSession = test.beginImportSession();
+  assert.equal((await test.directFilesFromDrop({ items: [{ kind: "file", getAsFileSystemHandle: async () => directory }, { kind: "text" }] }, dropSession)).handleEntries.length, 1);
+  test.finishImportSession(dropSession);
   assert.equal(test.isSupportedImageFile(file("x.PNG")), true); assert.equal(test.isSupportedImageFile(file("x.gif")), false); assert.match(test.newClientKey(), /^key-/);
   state.sourceAccess.set("gone", {}); test.pruneSourceAccess();
   test.rememberImportedSource({ clientKey: "key", sourceId: "source", entry: { file: file("a.png"), relativePath: "a.png", fileHandle: {}, parentHandle: {} }, data: { imported: [{ clientKey: "key", imageId: "one" }, { clientKey: "other", imageId: "two" }] } }, { sourceKind: "browser-files" });

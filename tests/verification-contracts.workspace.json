@@ -422,7 +422,8 @@
       "status": "automated",
       "testIds": [
         "node:tests/test_import_picker_e2e.cjs::import picker browser coverage",
-        "node:tests/import/test_import_cancellation_e2e.cjs::cancelled parallel import shows committed images, retains source handles and stops unstarted files"
+        "node:tests/import/test_import_cancellation_e2e.cjs::cancelled parallel import shows committed images, retains source handles and stops unstarted files",
+        "node:tests/importing/test_directory_scan_lifecycle_e2e.cjs::pausing folder import while its server session starts preserves the paused controls"
       ]
     },
     {
@@ -444,7 +445,12 @@
       "observation": "完了済みの扱いを画面に示し、新規処理を止め、操作を再有効化する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
+        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage",
+        "node:tests/importing/test_directory_scan_lifecycle_e2e.cjs::folder picker cancellation stops nested enumeration before reading more siblings",
+        "node:tests/importing/test_directory_scan_lifecycle_e2e.cjs::dropped folder scanning exposes progress and cancels without uploading partial entries",
+        "node:tests/importing/test_directory_scan_lifecycle_e2e.cjs::project directory reconnect cancellation releases every active iterator",
+        "node:tests/importing/test_directory_scan_lifecycle_e2e.cjs::cancelling folder import while its server session starts prevents file uploads",
+        "node:tests/test_import_drop_contract.cjs::drop cancellation discards snapshots while handle access is pending"
       ]
     },
     {
