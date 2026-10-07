@@ -1,5 +1,15 @@
 # 自動テストの対応
 
+全体監査4回目では、手描き画像とその版を同じ取得応答で渡し、一覧の更新だけで未更新の画素へ新しい版を付けないことを確認した。
+
+| 契約 | 追加した観測とテスト |
+| --- | --- |
+| WS-100.5 | `manual_snapshot_live_browser_helper.cjs` を `LiveEditorGestureBrowserTests` の選択・名前変更・一覧同期・画像追加・他画像削除の5試験から実行する。別タブで編集した非選択画像を読み、続けて描いて両方の画素を保存する。PNG取得・デコード失敗では旧画素と版を保持し、再試行する。一覧更新後の旧画素による保存は競合となり、別タブの画素を保持する。 |
+| DI-184.1 | `test_return_sync_refreshes_pixels_after_metadata_already_updated_the_catalog` は、一覧の版が先に更新された後でも復帰時に画素を更新し、そのまま編集を保存できることを確認する。 |
+| SV-012.1 | `test_single_copy_rejects_stale_canvas_after_catalog_metadata_refresh` と `test_batch_copy_rejects_stale_draft_after_catalog_metadata_refresh` は、名前変更後も実際に保持する画素の版で描画を要求し、古い手描き状態のファイルを生成しない。 |
+| ED-085.1 | `MaskBoundsMemoryTests.test_manual_history_decodes_each_changed_png_once_and_keeps_undo_pixels` はPNGの実デコードが変更前後で各1回であることと、追加・削除・変更の戻す／やり直すが画素単位で一致することを確認する。 |
+| ED-114.2 | `LiveHttpEndpointTests.test_manual_png_processing_does_not_block_catalog_reads` はPillowの画像デコード境界で待ち合わせ、手描きPNG処理中も実HTTPの一覧取得が完了し、処理後の画素と版が確定することを確認する。 |
+
 全体監査3回目では、次の実HTTP・SQLite・Chromiumの観測を既存契約へ追加した。手動確認項目は追加しない。
 
 | 契約 | 追加した観測とテスト |

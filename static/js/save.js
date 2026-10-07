@@ -304,7 +304,7 @@ async function openSingleSaveDialog(imageId = state.currentId) {
   const image = state.images.find((entry) => entry.id === imageId);
   if (!isProcessableImage(image) || isBusy() || state.importing || currentImageActionPending() || state.currentId !== imageId || !isCurrentGeneration(generation)
     || !state.currentImage || state.projectReadOnly || image.sourceDimensionsChanged) return;
-  state.singleSave = { imageId, generation, manualRevision: Number(image.manualRevision || 0), divisor: Number($("#divisor").value), draft: draftPayload([imageId])[imageId] || null, invoker };
+  state.singleSave = { imageId, generation, manualRevision: workspaceDraftRevision(imageId), divisor: Number($("#divisor").value), draft: draftPayload([imageId])[imageId] || null, invoker };
   $("#singleSaveTarget").textContent = t("apply.singleTarget", { name: imageDisplayPath(image) });
   if (!state.singleSaveDialogInitialized) {
     $("#singleSaveCopyMode").checked = true;
@@ -773,6 +773,7 @@ function discardRemovedBrowserSaveState() {
     for (const imageId of ids) if (!remainingImageIds.has(imageId)) removedImageIds.add(imageId);
   };
   collectRemoved(state.drafts.keys());
+  collectRemoved(state.workspaceDraftRevisions?.keys() || []);
   collectRemoved(state.projectHistory.keys());
   collectRemoved(state.maskStatus.keys());
   collectRemoved(state.sourceAccess.keys());
@@ -793,6 +794,7 @@ function discardRemovedBrowserSaveState() {
   for (const imageId of removedImageIds) {
     if (typeof invalidateProjectHistoryRefresh === "function") invalidateProjectHistoryRefresh(imageId);
     state.drafts.delete(imageId);
+    state.workspaceDraftRevisions?.delete(imageId);
     state.projectHistory.delete(imageId);
     state.maskStatus.delete(imageId);
     state.draftSaveChains.delete(imageId);
@@ -1249,6 +1251,7 @@ async function ensureDistinctBrowserSaveSources(inputs) {
 
 async function runBrowserSave(imageIds, suffix, deleteOriginal, mode = "copy", removeSaved = false, prepared = null) {
   const imagesById = new Map(state.images.map((image) => [image.id, image]));
+  const drafts = new Map(Object.entries(draftPayload(imageIds)));
   const inputs = {
     imageIds: [...imageIds],
     divisor: Number($("#applyDivisor").value),
@@ -1260,10 +1263,10 @@ async function runBrowserSave(imageIds, suffix, deleteOriginal, mode = "copy", r
     removeSaved,
     projectId: state.project?.id || null,
     parallelism: Math.max(1, Math.round(Number(state.settings?.saving?.parallelism) || 2)),
-    drafts: new Map(Object.entries(draftPayload(imageIds))),
+    drafts,
     sources: new Map(imageIds.map((imageId) => [imageId, {
       image: imagesById.get(imageId),
-      manualRevision: Number(imagesById.get(imageId)?.manualRevision || 0),
+      manualRevision: drafts.has(imageId) ? workspaceDraftRevision(imageId) : Number(imagesById.get(imageId)?.manualRevision || 0),
       access: sourceAccessFor(imageId) ? { ...sourceAccessFor(imageId) } : null,
     }])),
   };

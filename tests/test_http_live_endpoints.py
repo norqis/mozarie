@@ -104,6 +104,8 @@ class LiveHttpEndpointTests(unittest.TestCase):
     def test_manual_revision_conflicts_keep_pixels_and_empty_delete_is_undoable(self) -> None:
         image_id = self.state.set_root(str(self.source_dir))[0]["id"]
         endpoint = f"/api/workspace/manual/{image_id}"
+        status, _, body = self.request("GET", endpoint)
+        self.assertEqual((status, json.loads(body)), (200, {"draft": None, "manualRevision": 0}))
         with Image.new("RGBA", (12, 8)) as mask, io.BytesIO() as output:
             mask.putpixel((2, 2), (255, 255, 255, 255))
             mask.putpixel((8, 4), (255, 255, 255, 255))
@@ -137,6 +139,8 @@ class LiveHttpEndpointTests(unittest.TestCase):
         status, _, body = self.request("DELETE", endpoint, {"expectedManualRevision": 1}, authorized=True)
         self.assertEqual((status, json.loads(body)["manualRevision"]), (200, 2))
         self.assertIsNone(self.state.manual_workspace(image_id))
+        status, _, body = self.request("GET", endpoint)
+        self.assertEqual((status, json.loads(body)), (200, {"draft": None, "manualRevision": 2}))
         self.state.restore_project_history(image_id, "undo")
         restored = self.state._decode_workspace_mask(self.state.manual_workspace(image_id)["add"])
         with Image.open(io.BytesIO(restored)) as mask:
@@ -151,6 +155,52 @@ class LiveHttpEndpointTests(unittest.TestCase):
         self.assertEqual((status, json.loads(body)["manualRevision"]), (200, 4))
         snapshot = self.state.catalog_snapshot()
         self.assertEqual(snapshot["images"][0]["manualRevision"], 4)
+
+    def test_manual_png_processing_does_not_block_catalog_reads(self) -> None:
+        image_id = self.state.set_root(str(self.source_dir))[0]["id"]
+
+        def mask_url(x):
+            with Image.new("RGBA", (12, 8)) as mask, io.BytesIO() as output:
+                mask.putpixel((x, 3), (255, 255, 255, 255))
+                mask.save(output, format="PNG")
+                return "data:image/png;base64," + base64.b64encode(output.getvalue()).decode("ascii")
+
+        self.state.save_manual_workspace(image_id, {"add": mask_url(2), "expectedManualRevision": 0})
+        payload = {"add": mask_url(4), "dirtyLayers": ["add"], "expectedManualRevision": 1}
+        decoding = threading.Event(); release_decode = threading.Event(); listed = threading.Event()
+        failures = []; responses = []
+        original_load = PngImagePlugin.PngImageFile.load
+
+        def load(image, *args, **kwargs):
+            if threading.current_thread() is writer and not decoding.is_set() and image.tile:
+                decoding.set()
+                if not release_decode.wait(THREAD_TIMEOUT):
+                    raise TimeoutError("PNG decode was not released")
+            return original_load(image, *args, **kwargs)
+
+        def save():
+            try: self.state.save_manual_workspace(image_id, payload)
+            except BaseException as error: failures.append(error)
+
+        def read():
+            try: responses.append(self.request("GET", "/api/images"))
+            except BaseException as error: failures.append(error)
+            finally: listed.set()
+
+        writer = threading.Thread(target=save); reader = threading.Thread(target=read)
+        with patch.object(PngImagePlugin.PngImageFile, "load", load):
+            try:
+                writer.start(); self.assertTrue(decoding.wait(THREAD_TIMEOUT))
+                reader.start(); self.assertTrue(listed.wait(THREAD_TIMEOUT))
+                self.assertEqual(failures, [], "catalogue reads must finish before PNG processing resumes")
+            finally:
+                release_decode.set(); join_threads(writer, reader)
+        self.assertEqual(failures, [])
+        status, _, body = responses[0]
+        self.assertEqual(status, 200, body)
+        self.assertEqual(json.loads(body)["images"][0]["manualRevision"], 1)
+        self.assertEqual(self.state.manual_workspace_snapshot(image_id)["manualRevision"], 2)
+        self.assertEqual(self.state.manual_workspace(image_id)["add"], payload["add"])
 
     def test_copy_delete_rejects_new_edits_before_commit_and_browser_delete_claim(self) -> None:
         image_id = self.state.set_root(str(self.source_dir))[0]["id"]

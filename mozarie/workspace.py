@@ -2386,9 +2386,7 @@ class WorkspaceStore:
         if before is None and after is None: return None
         if before == after: return None
         try:
-            source = cls._decode_png_mask(before if before is not None else after)
-            assert source is not None
-            with source:
+            with open_image(io.BytesIO(before if before is not None else after)) as source:
                 width, height = source.size
             if roi is None:
                 left, top, right, bottom = 0, 0, width, height

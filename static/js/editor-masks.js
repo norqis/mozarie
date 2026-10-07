@@ -1307,6 +1307,7 @@ async function restoreProjectHistory(direction) {
       const changed = new Set(result.changedImageIds || []);
       for (const changedId of changed) {
         state.drafts.delete(changedId); state.maskStatus.delete(changedId); state.projectHistory.delete(changedId); releaseCandidateBundles(changedId);
+        state.workspaceDraftRevisions.delete(changedId);
         const record = state.images.find((image) => image.id === changedId);
         if (record && changedId === imageId && result.current) {
           record.candidateRevision = Number(result.current.candidateRevision || 0);
@@ -1390,6 +1391,7 @@ async function syncProjectlessCandidateHistory(imageId, previous, generation) {
 
 async function resyncProjectlessHistory(imageId, generation) {
   state.drafts.delete(imageId); state.maskStatus.delete(imageId); releaseCandidateBundles(imageId);
+  state.workspaceDraftRevisions.delete(imageId);
   const snapshot = await api("/api/images");
   const replaced = reconcileCatalogSnapshot(snapshot, state.project?.id || null, state.serverCatalogGeneration);
   state.images = snapshot.images || state.images; loadReviewedPaths(); applyProjectSnapshot(snapshot); renderCatalogViews();

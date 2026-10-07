@@ -102,8 +102,8 @@ async function toggleManual(page) {
 
 test("cold durable draft visits release inactive PNGs and reload identical pixels", { timeout: 30000 }, () => withDrafts(async (page, control) => {
   for (let index = 1; index < 30; index += 1) await select(page, `draft-${index}`);
-  assert.deepEqual(await page.evaluate(() => ({ drafts: [...state.drafts.keys()], statuses: state.maskStatus.size, masked: state.images.filter(imageHasMask).length })),
-    { drafts: ["draft-29"], statuses: 1, masked: 30 }, "visiting images does not retain every stored PNG or lose gallery mask flags");
+  assert.deepEqual(await page.evaluate(() => ({ drafts: [...state.drafts.keys()], revisions: [...state.workspaceDraftRevisions.keys()], statuses: state.maskStatus.size, masked: state.images.filter(imageHasMask).length })),
+    { drafts: ["draft-29"], revisions: ["draft-29"], statuses: 1, masked: 30 }, "visiting images does not retain every stored PNG or lose gallery mask flags");
   await select(page, "draft-0");
   assert.equal(control.reads.get("draft-0"), 2, "a released draft is read again from durable storage");
   assert.equal(await page.evaluate(() => addCtx.getImageData(5, 5, 1, 1).data[3]), 255);

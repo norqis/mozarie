@@ -664,7 +664,7 @@ class MosaicHandler(BaseHTTPRequestHandler):
                 image_id = path.removeprefix("/api/candidates/")
                 self._json(STATE.candidate_snapshot(image_id))
             elif path.startswith("/api/workspace/manual/"):
-                self._json({"draft": STATE.manual_workspace(path.removeprefix("/api/workspace/manual/"))})
+                self._json(STATE.manual_workspace_snapshot(path.removeprefix("/api/workspace/manual/")))
             elif path.startswith("/api/mask/"):
                 image_id, candidate_id = _route_ids(path, "/api/mask/")
                 self._send_candidate_mask(image_id, candidate_id, _request_version(parsed.query), _request_preview_expand(parsed.query))

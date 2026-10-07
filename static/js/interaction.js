@@ -617,6 +617,7 @@ async function permanentlyDeleteImages(images, visibleImages) {
       invalidateProjectHistoryRefresh(image.id);
       releaseImageCaches(image.id); releaseCandidateBundles(image.id); clearCandidateMutationState(image.id);
       state.sourceAccess.delete(image.id); state.drafts.delete(image.id); state.projectHistory.delete(image.id); state.maskStatus.delete(image.id); clearReviewForRemovedImage(image);
+      state.workspaceDraftRevisions?.delete(image.id);
       state.selectedImageIds.delete(image.id);
     }
     state.images = data.images || state.images;
@@ -989,6 +990,7 @@ function remapImportedImageIds(imageIds) {
   const remapMap = (source) => new Map([...source].map(([id, value]) => [map.get(id) || id, value]));
   state.sourceAccess = remapMap(state.sourceAccess);
   state.drafts = remapMap(state.drafts);
+  if (state.workspaceDraftRevisions) state.workspaceDraftRevisions = remapMap(state.workspaceDraftRevisions);
   state.maskStatus = remapMap(state.maskStatus);
   for (const [sourceId, source] of state.projectlessDirectorySources) {
     source.imageIds = new Set([...source.imageIds].map((id) => map.get(id) || id));

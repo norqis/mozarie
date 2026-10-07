@@ -1636,7 +1636,12 @@
       "testIds": [
         "node:tests/test_import_picker_e2e.cjs::import picker browser coverage",
         "python:tests.test_server.MozarieTests.test_catalog_reload_is_rejected_while_worker_is_alive_and_stale_worker_cannot_commit",
-        "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_peer_manual_sync_conflicts_and_last_stroke_undo_use_real_workspace"
+        "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_peer_manual_sync_conflicts_and_last_stroke_undo_use_real_workspace",
+        "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_selecting_peer_edited_image_keeps_manual_snapshot_and_revision_together",
+        "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_renaming_cannot_bless_old_pixels_with_a_peer_manual_revision",
+        "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_catalog_resync_cannot_bless_old_pixels_with_a_peer_manual_revision",
+        "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_importing_cannot_bless_old_pixels_with_a_peer_manual_revision",
+        "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_removing_other_image_cannot_bless_old_pixels_with_a_peer_manual_revision"
       ]
     },
     {

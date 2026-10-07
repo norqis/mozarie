@@ -189,6 +189,7 @@ function createRuntime({ commit, copy = null, deleteOriginal = false, renderBina
   ).runInContext(runtimeContext);
   const { state, beginSaveSourcePreparation, ensureSaveSources, finishApplyJob, runBrowserSave, saveTargets, processableImages, isBusy, catalogStagingEditsActive, selectedSaveMode, chooseOutputDirectory, startApplyFromDialog, startSingleSave, refreshOutputDirectoryStatus, writeSourceHandle, restoreSourceHandle, renderOutputDirectory, pickOutputDirectory: pickOutputDirectoryApi, reserveSaveRender, renderDefaultCopy, renderStreamedSave, commitBrowserSaveWithRetry, acknowledgePendingBrowserSave, nextVisibleImage, translate } = context.__browserSaveRuntime;
   state.images = initialImages || [{ id: "image-1", relativePath: "nested/source.png", width: 32, height: 32, candidateCount: 1, enabledCandidateCount: 1 }];
+  state.workspaceDraftRevisions = new Map(state.images.map((image) => [image.id, Number(image.manualRevision || 0)]));
   state.settings = { saving: { parallelism: 1, default_output_directory: "G:/output", preserve_directory_structure: true }, confirmations: { overwriteSource: false, deleteSourceAfterCopy: false } };
   getElement("#applyPreserveDirectoryStructure").checked = true;
   getElement("#singleSavePreserveDirectoryStructure").checked = true;

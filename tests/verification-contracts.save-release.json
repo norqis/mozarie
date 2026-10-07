@@ -139,7 +139,9 @@
       "testIds": [
         "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > copy success deletes original only after commit",
         "python:tests.test_http_live_endpoints.LiveHttpEndpointTests.test_copy_delete_rejects_new_edits_before_commit_and_browser_delete_claim",
-        "python:tests.test_http_live_endpoints.LiveHttpEndpointTests.test_render_rejects_a_dialog_draft_from_before_peer_manual_edit"
+        "python:tests.test_http_live_endpoints.LiveHttpEndpointTests.test_render_rejects_a_dialog_draft_from_before_peer_manual_edit",
+        "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_single_copy_rejects_stale_canvas_after_catalog_metadata_refresh",
+        "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_batch_copy_rejects_stale_draft_after_catalog_metadata_refresh"
       ]
     },
     {

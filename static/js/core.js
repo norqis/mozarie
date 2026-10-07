@@ -443,7 +443,7 @@ function replaceCatalogSnapshot(snapshot, expectedProjectId) {
   const previousImages = new Map(state.images.map((image) => [image.id, image]));
   for (const image of images) {
     const previous = previousImages.get(image.id);
-    if (!previous || (Number(previous.manualRevision || 0) === Number(image.manualRevision || 0)
+    if (!previous || (Number(state.workspaceDraftRevisions?.get(image.id) ?? previous.manualRevision ?? 0) === Number(image.manualRevision || 0)
       && Number(previous.candidateRevision || 0) === Number(image.candidateRevision || 0)
       && imageAssetVersion(previous) === imageAssetVersion(image))) continue;
     if (hasPendingWorkspaceDraft(image.id)) {
@@ -451,11 +451,13 @@ function replaceCatalogSnapshot(snapshot, expectedProjectId) {
       Object.assign(image, previous, { hidden, reviewed, flipH, flipV, transformRevision });
     } else if (image.id !== state.currentId) {
       state.drafts.delete(image.id); state.maskStatus.delete(image.id);
+      state.workspaceDraftRevisions?.delete(image.id);
     }
   }
   const availableIds = new Set(images.map((image) => image.id));
   for (const image of state.images.filter((image) => !availableIds.has(image.id))) {
     releaseImageCaches(image.id); state.sourceAccess.delete(image.id); state.drafts.delete(image.id); state.maskStatus.delete(image.id);
+    state.workspaceDraftRevisions?.delete(image.id);
     clearReviewForRemovedImage(image); state.selectedImageIds.delete(image.id);
   }
   state.images = images;
@@ -531,7 +533,7 @@ async function syncCatalogOnReturn() {
       ? snapshot.images.find((image) => image.id === state.currentId) : null;
     const resourcesChanged = previous && current && (imageAssetVersion(previous) !== imageAssetVersion(current)
       || Number(previous.candidateRevision || 0) !== Number(current.candidateRevision || 0)
-      || Number(previous.manualRevision || 0) !== Number(current.manualRevision || 0));
+      || state.workspaceDraftRevisions?.get(previous.id) !== Number(current.manualRevision || 0));
     const deferReload = resourcesChanged && (hasPendingWorkspaceDraft(previous.id) || isBusy() || isGestureActive()
       || state.activeStroke || currentImageActionPending() || state.candidateUpdateChains.has(previous.id)
       || state.imageMutationChains.has(previous.id));
@@ -1040,6 +1042,7 @@ function resetCatalog(images, root) {
   loadReviewedPaths();
   state.currentId = null; state.currentImage = null; state.pendingImageId = null; state.pendingImageKey = null; state.pendingCandidateKey = null; state.maskStatus.clear();
   state.candidates = []; state.candidateImages = new Map(); state.drafts.clear(); state.selectedImageIds.clear(); state.selectionAnchorId = null; state.batchMode = false; clearCandidateBlink(); state.contextMenuImageId = null; state.contextMenuOrigin = null; clearBoundaryInteraction();
+  state.workspaceDraftRevisions?.clear();
   state.candidateUpdateChains.clear(); state.candidateUpdateVersions.clear(); state.candidateDeleting.clear(); state.candidateBatchPending.clear(); state.imageMutationChains.clear(); state.candidateControlLocks.clear();
   discardCatalogNodes(state.galleryNodes, $("#gallery"));
   discardCatalogNodes(state.overviewNodes, $("#overviewGrid"));

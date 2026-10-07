@@ -2686,19 +2686,24 @@ class CatalogMixin:
                 self._assert_request_catalog_expectation()
                 self._assert_catalog_mutable()
                 self._assert_image_editable(image_id)
-                if image_id not in self.images:
+                record = self.images.get(image_id)
+                if record is None:
                     raise ClientError("画像が見つかりません。", "image_not_found")
                 committed = dict(payload)
-                dirty_layers = committed.get("dirtyLayers")
-                existing = self.workspace_store.manual(image_id, self._encode_workspace_mask) if self.workspace_id else self.projectless_manual_drafts.get(image_id)
-                if dirty_layers is not None:
-                    existing = existing or {}
-                    for layer in ("add", "exclusion", "exclusionErase"):
-                        committed.setdefault(layer, existing.get(layer, ""))
                 committed["candidateRevision"] = self._candidate_revision(image_id)
-                committed["hasEffectiveMask"] = self._effective_mask_for_draft(
-                    image_id, self.candidates.get(image_id, []), committed,
-                )
+                committed.setdefault("manualExclusionForced", self.settings["detection"].get("exclude_forced_default", True))
+                candidates = list(self.candidates.get(image_id, []))
+            # Image ownership stays locked; unrelated catalogue reads need not
+            # wait for full-resolution PNG decoding and mask composition.
+            if committed.get("dirtyLayers") is not None:
+                existing = self.workspace_store.manual(image_id, self._encode_workspace_mask) if self.workspace_id else self.projectless_manual_drafts.get(image_id)
+                for layer in ("add", "exclusion", "exclusionErase"):
+                    committed.setdefault(layer, (existing or {}).get(layer, ""))
+            committed["hasEffectiveMask"] = self._effective_mask_for_draft(image_id, candidates, committed)
+            with self.lock:
+                self._assert_image_editable(image_id)
+                if self.images.get(image_id) is not record:
+                    raise ClientError("画像一覧が変更されました。", "stale_catalog")
                 try:
                     # The manual row, its normalized removal IDs, exact candidate
                     # revision, and gallery scalar are one SQLite transaction.
@@ -2713,6 +2718,12 @@ class CatalogMixin:
         self.image_for_id(image_id)
         if not self.workspace_id or not self.workspace_store.has_image(image_id): return self.projectless_manual_drafts.get(image_id)
         return self.workspace_store.manual(image_id, self._encode_workspace_mask)
+
+    def manual_workspace_snapshot(self, image_id: str) -> dict[str, Any]:
+        with self.image_io_lock(image_id):
+            draft = self.manual_workspace(image_id)
+            revision = self.workspace_store.manual_revisions([image_id]).get(image_id, 0) if self.workspace_id else 0
+            return {"draft": draft, "manualRevision": revision}
 
     def project_history_status(self, image_id: str) -> dict[str, bool]:
         self.image_for_id(image_id)

@@ -90,7 +90,8 @@ async function selectImage(imageId, force = false, { saveCurrentDraft = true, pr
     // workspace request and all draft image decodes must finish before the
     // current editor is touched.
     const hasDraft = state.drafts.has(imageId);
-    const draft = hasDraft ? state.drafts.get(imageId) : await loadWorkspaceDraft(imageId);
+    const snapshot = hasDraft ? null : await loadWorkspaceDraft(imageId);
+    const draft = hasDraft ? state.drafts.get(imageId) : snapshot.draft;
     const draftImages = await decodeDraftImages(draft);
     try {
       if (!isCurrentGeneration(generation) || !isCurrentCatalogEpoch(catalogEpoch)) {
@@ -123,7 +124,14 @@ async function selectImage(imageId, force = false, { saveCurrentDraft = true, pr
         releaseCandidateBitmapBundle({ candidateImages: previousCandidateImages });
       }
       syncResourceOwnership();
-      canvasSizeForImage(record); await restoreDraft(imageId, generation, draft, draftImages); prepareOriginalImage(); requestMosaicPreview();
+      canvasSizeForImage(record);
+      if (!await restoreDraft(imageId, generation, draft, draftImages)) return false;
+      if (!hasDraft) {
+        state.workspaceDraftRevisions.set(imageId, snapshot.manualRevision);
+        const live = state.images.find((image) => image.id === imageId);
+        if (live) live.manualRevision = snapshot.manualRevision;
+      }
+      prepareOriginalImage(); requestMosaicPreview();
       if (preservedView) state.view = preservedView; else fitImage();
       updateBlockSizeDisplay(); refreshMaskStatus();
       $("#emptyState").hidden = true;
@@ -193,6 +201,7 @@ async function refreshWorkspaceImages(snapshot, imageIds, { clearWorkspace = fal
     state.maskStatus.delete(imageId);
     if (!resetWorkspace) continue;
     state.drafts.delete(imageId);
+    state.workspaceDraftRevisions.delete(imageId);
     state.projectHistory.delete(imageId);
     clearCandidateMutationState(imageId);
   }

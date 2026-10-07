@@ -147,6 +147,44 @@ class LiveEditorGestureBrowserTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, f"manual sync browser failed\n{result.stdout}\n{result.stderr}")
         self.assertEqual(self.source_path.read_bytes(), self.source_bytes)
 
+    def _check_manual_snapshot(self, mode: str) -> None:
+        shutil.copy2(self.source_path, self.source_dir / "other.png")
+        self.state.set_root(str(self.source_dir))
+        helper = Path(__file__).with_name("editor") / "manual_snapshot_live_browser_helper.cjs"
+        result = subprocess.run(
+            ["node", str(helper), self.origin, mode], cwd=Path(__file__).resolve().parents[1],
+            env={**os.environ, "PYTHONUTF8": "1"}, text=True, encoding="utf-8", errors="replace",
+            capture_output=True, timeout=90, check=False,
+        )
+        self.assertEqual(result.returncode, 0, f"manual snapshot {mode} failed\n{result.stdout}\n{result.stderr}")
+        self.assertEqual(self.source_path.read_bytes(), self.source_bytes)
+
+    def test_selecting_peer_edited_image_keeps_manual_snapshot_and_revision_together(self) -> None:
+        self._check_manual_snapshot("selection")
+
+    def test_renaming_cannot_bless_old_pixels_with_a_peer_manual_revision(self) -> None:
+        self._check_manual_snapshot("rename")
+
+    def test_return_sync_refreshes_pixels_after_metadata_already_updated_the_catalog(self) -> None:
+        self._check_manual_snapshot("return")
+
+    def test_single_copy_rejects_stale_canvas_after_catalog_metadata_refresh(self) -> None:
+        self._check_manual_snapshot("single-copy")
+        self.assertEqual(list(self.output_dir.iterdir()), [])
+
+    def test_batch_copy_rejects_stale_draft_after_catalog_metadata_refresh(self) -> None:
+        self._check_manual_snapshot("batch-copy")
+        self.assertEqual(list(self.output_dir.iterdir()), [])
+
+    def test_catalog_resync_cannot_bless_old_pixels_with_a_peer_manual_revision(self) -> None:
+        self._check_manual_snapshot("resync")
+
+    def test_importing_cannot_bless_old_pixels_with_a_peer_manual_revision(self) -> None:
+        self._check_manual_snapshot("import")
+
+    def test_removing_other_image_cannot_bless_old_pixels_with_a_peer_manual_revision(self) -> None:
+        self._check_manual_snapshot("remove")
+
     def test_parallel_copy_delete_completes_every_real_file_and_workspace_row(self) -> None:
         shutil.copy2(self.source_path, self.source_dir / "other.png")
         self.state.set_root(str(self.source_dir))

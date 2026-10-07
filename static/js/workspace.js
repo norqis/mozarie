@@ -5,9 +5,18 @@ state.workspaceDraftTimers = new Map();
 state.workspaceDraftPending = new Map();
 state.workspaceMutationErrors = new Map();
 state.workspaceFlagPending = new Map();
+// The catalogue can refresh without replacing the editor's pixels. Save against
+// the revision of the draft actually loaded, not a newer catalogue description.
+state.workspaceDraftRevisions = new Map();
 // Metadata-only edits have no dirty PNG layers. Object provenance distinguishes
 // those unsaved snapshots from server copies without retaining another payload.
 const persistedWorkspaceDrafts = new WeakSet();
+
+function workspaceDraftRevision(imageId) {
+  const revision = state.workspaceDraftRevisions.get(imageId);
+  if (revision === undefined) throw codedError("save_state_changed");
+  return revision;
+}
 
 function hasPendingWorkspaceDraft(imageId) {
   const draft = state.drafts.get(imageId);
@@ -20,6 +29,7 @@ function hasPendingWorkspaceDraft(imageId) {
 function releaseInactiveWorkspaceDraft(imageId) {
   if (!hasDurableHistory() || state.currentId === imageId || state.pendingImageId === imageId || hasPendingWorkspaceDraft(imageId)) return;
   state.drafts.delete(imageId);
+  state.workspaceDraftRevisions.delete(imageId);
   state.maskStatus.delete(imageId);
 }
 
@@ -424,11 +434,14 @@ async function uploadManualLayer(imageId, sessionId, layer, dataUrl) {
 
 async function saveWorkspaceDraft(imageId, draft) {
   const epoch = state.catalogEpoch;
-  const expectedManualRevision = Number(state.images.find((image) => image.id === imageId)?.manualRevision || 0);
+  const expectedManualRevision = workspaceDraftRevision(imageId);
   const acknowledge = (result) => {
     const image = state.images.find((entry) => entry.id === imageId);
-    if (state.catalogEpoch === epoch && image && Number(image.manualRevision || 0) === expectedManualRevision
-      && Number.isInteger(result.manualRevision)) image.manualRevision = result.manualRevision;
+    if (state.catalogEpoch === epoch && image && state.workspaceDraftRevisions.get(imageId) === expectedManualRevision
+      && Number.isInteger(result.manualRevision)) {
+      state.workspaceDraftRevisions.set(imageId, result.manualRevision);
+      if (Number(image.manualRevision || 0) === expectedManualRevision) image.manualRevision = result.manualRevision;
+    }
     return result;
   };
   if (!draft) return acknowledge(await api(`/api/workspace/manual/${encodeURIComponent(imageId)}`, { method: "DELETE", body: JSON.stringify({ expectedManualRevision }) }));
@@ -570,7 +583,7 @@ async function loadWorkspaceDraft(imageId) {
   // the history base; fabricating an empty log would rebuild empty layers.
   const draft = data.draft || null;
   if (draft) persistedWorkspaceDrafts.add(draft);
-  return draft;
+  return { draft, manualRevision: Number(data.manualRevision || 0) };
 }
 
 function scheduleManualWorkspaceSave() {

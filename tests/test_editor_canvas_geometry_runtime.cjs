@@ -45,7 +45,7 @@ const overlayCanvas = canvas();
 const layerCanvas = canvas();
 const state = {
   currentId: "image", currentImage: { width: 100, height: 80, alpha: 255 }, candidates: [], candidateImages: new Map(), removedCandidateIds: new Set(),
-  maskStatus: new Map(),
+  maskStatus: new Map(), workspaceDraftRevisions: new Map(),
   images: [{ id: "image", assetVersion: "v1", candidateRevision: 1, enabledCandidateCount: 0 }], imageGeneration: 0, candidateBatchPending: new Set(),
   imageCache: cache(), candidateBundleCache: cache(), imageInflight: new Map(), candidateInflight: new Map(), imageLoadControllers: new Map(), candidateLoadControllers: new Map(), resourceImageKeys: new Set(), resourceCandidateKeys: new Set(), catalogLoadControllers: new Set(), catalogEpoch: 1,
   drafts: new Map(), draftLayerDirty: new Set(), draftSaveChains: new Map(), history: [], historyIndex: 0, historyBaseDirty: false, historyRemovedCandidateIds: new Set(), historyCandidateIds: new Set(),
@@ -412,7 +412,7 @@ nodeTest("editor canvas geometry contracts", async () => {
   await test.selectImage("broken", true, { saveCurrentDraft: false });
   assert.equal(context.lastUserError, loadError, "image load failures reach the standard user error path");
   context.cachedImage = async () => ({ width: 12, height: 9, alpha: 255 });
-  context.loadWorkspaceDraft = async () => null; context.decodeDraftImages = async () => [null, null, null, null, null, null];
+  context.loadWorkspaceDraft = async () => ({ draft: null, manualRevision: 0 }); context.decodeDraftImages = async () => [null, null, null, null, null, null];
   await test.selectImage("next-after-broken", true, { saveCurrentDraft: false });
   assert.equal(state.currentId, "next-after-broken", "a failed main image does not block selecting the next normal image");
 
@@ -424,7 +424,7 @@ nodeTest("editor canvas geometry contracts", async () => {
   state.imageCache = cache(); state.candidateBundleCache = cache(); state.drafts = new Map(); state.mosaicPreviewEnabled = false;
   context.cachedImage = async () => ({ width: 12, height: 9, alpha: 255 });
   context.loadCandidateBundle = async () => ({ candidates: [{ id: "candidate", enabled: true, role: "apply" }], candidateImages: new Map([["candidate", { alpha: 255 }]]), candidateRevision: 3 });
-  context.loadWorkspaceDraft = async () => null; context.decodeDraftImages = async () => [null, null, null, null, null, null];
+  context.loadWorkspaceDraft = async () => ({ draft: null, manualRevision: 0 }); context.decodeDraftImages = async () => [null, null, null, null, null, null];
   await test.selectImage("selected", true, { saveCurrentDraft: false });
   assert.equal(state.currentId, "selected");
   assert.equal(state.candidates[0].id, "candidate");

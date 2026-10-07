@@ -498,7 +498,7 @@ class HttpCoverageTests(unittest.TestCase):
         state.job.as_dict.return_value = {"state": "idle"}
         state.catalog_snapshot.return_value = [{"id": "x"}]
         state.candidate_snapshot.return_value = []
-        state.manual_workspace.return_value = {"add": None}
+        state.manual_workspace_snapshot.return_value = {"draft": {"add": None}, "manualRevision": 0}
         handler = self.handler()
         handler._require_local_host = Mock(); handler._json = Mock(); handler._client_error = Mock()
         handler._send_image = Mock(); handler._send_candidate_mask = Mock()
