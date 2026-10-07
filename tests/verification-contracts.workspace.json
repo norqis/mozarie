@@ -1530,7 +1530,8 @@
       "status": "automated",
       "testIds": [
         "python:tests.workspace.test_project_catalog_lifecycle.ProjectCatalogCoverageTests.test_clear_project_images_closes_live_project_but_keeps_empty_project_and_sources",
-        "python:tests.workspace.test_boundary_catalog_concurrency.BoundaryCatalogConcurrencyTests.test_clear_replace_and_delete_project_finish_during_boundary_preparation"
+        "python:tests.workspace.test_boundary_catalog_concurrency.BoundaryCatalogConcurrencyTests.test_clear_replace_and_delete_project_finish_during_boundary_preparation",
+        "python:tests.test_project_native_relink_http.ProjectNativeRelinkHttpTests.test_relink_publish_failure_restores_durable_source_and_retries"
       ]
     },
     {

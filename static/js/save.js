@@ -394,8 +394,20 @@ async function reserveSaveRender(entry, payload, clientSaveToken) {
   return reserved;
 }
 
+const browserSaveOwnershipLock = "mozarie-browser-save-ownership";
+
+function withBrowserSaveOwnership(callback) {
+  return globalThis.navigator?.locks?.request
+    ? navigator.locks.request(browserSaveOwnershipLock, { mode: "shared" }, callback)
+    : callback();
+}
+
 async function reconcilePendingBrowserSaves() {
-  const pending = pendingSaveTokens();
+  // Every save creates fresh tokens while holding shared ownership. Snapshot
+  // only abandoned tokens; release before HTTP so recovery never queues saves.
+  const pending = globalThis.navigator?.locks?.request
+    ? await navigator.locks.request(browserSaveOwnershipLock, { mode: "exclusive", ifAvailable: true }, (lock) => lock ? pendingSaveTokens() : {})
+    : (state.saving ? {} : pendingSaveTokens());
   const deferred = [];
   await Promise.all(Object.entries(pending).map(async ([saveToken, entry]) => {
     const status = await api("/api/save/status", { method: "POST", body: JSON.stringify({ ...entry, saveToken, sourceAction: entry.sourceAction || "keep" }) }).catch(() => null);
@@ -496,6 +508,7 @@ async function startSingleSave(event) {
     if (copying && !await ensureDirectoryStructurePreference($("#singleSavePreserveDirectoryStructure"))) return;
     if (!copying && !await confirmAction(t("confirm.overwriteSource.title"), t("confirm.overwriteSource.message"), "overwriteSource")) return;
     if (deleteOriginal && !await confirmAction(t("confirm.deleteSourceAfterCopy.title"), t("confirm.deleteSourceAfterCopy.message"), "deleteSourceAfterCopy")) return;
+    await withBrowserSaveOwnership(async () => {
     state.saving = true; updateActionButtons(); syncSingleSaveMode(); setSingleSaveResult("");
     let entry; let saveToken = ""; let output = null; let sourceSnapshot = null; let sourceRename = null; let cleanupIntent = null; let browserSourceDelete = null;
     const cleanupProjectId = state.project?.id || null;
@@ -609,6 +622,7 @@ async function startSingleSave(event) {
     } finally {
       state.saving = false; renderCandidates(); updateActionButtons(); syncSingleSaveMode();
     }
+    });
   } catch (error) {
     if (!isCancelledSaveSourceAccess(error)) {
       setSingleSaveResult(t(`errorCode.${userErrorCode(error)}`), true);
@@ -1269,7 +1283,7 @@ async function runBrowserSave(imageIds, suffix, deleteOriginal, mode = "copy", r
   $("#applyCancelButton").hidden = false;
   updateActionButtons();
   try {
-    {
+    await withBrowserSaveOwnership(async () => {
       const saveEntry = async (entry) => {
         showBrowserSaveProgress(save, entry);
         const draft = inputs.drafts.get(entry.imageId) || null;
@@ -1420,7 +1434,7 @@ async function runBrowserSave(imageIds, suffix, deleteOriginal, mode = "copy", r
       }));
       const failed = settled.find((result) => result.status === "rejected");
       if (failed) throw failed.reason;
-    }
+    });
     const cancelled = save.cancelled;
     setApplyResult(cancelled
       ? t("apply.cancelled", { completed: save.completed })

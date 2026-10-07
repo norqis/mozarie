@@ -812,7 +812,11 @@
       "status": "automated",
       "testIds": [
         "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > recoverable commit failures reconcile token state",
-        "node:tests/test_browser_save_runtime.cjs::native batch overwrite cancels rejected or pending commits but preserves unknown outcomes"
+        "node:tests/test_browser_save_runtime.cjs::native batch overwrite cancels rejected or pending commits but preserves unknown outcomes",
+        "node:tests/saving/test_active_save_recovery_e2e.cjs::batch save survives recovery in its own tab and another tab without serializing saves",
+        "node:tests/saving/test_active_save_recovery_e2e.cjs::single save survives recovery in its own tab and another tab without serializing saves",
+        "node:tests/saving/test_active_save_recovery_e2e.cjs::closing the saving tab releases ownership so another tab can cancel its abandoned token",
+        "node:tests/saving/test_active_save_recovery_e2e.cjs::slow abandoned-save recovery neither blocks a new save nor includes its new token"
       ]
     },
     {

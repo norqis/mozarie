@@ -104,12 +104,9 @@ function createRuntime({ commit, copy = null, deleteOriginal = false, renderBina
     },
   };
   const browserWindow = { devicePixelRatio: 1, addEventListener() {} };
-  let outputLockTail = Promise.resolve();
   const browserNavigator = { locks: { request(name, options, callback) {
     lockRequests.push([name, options]);
-    const result = outputLockTail.then(callback, callback);
-    outputLockTail = result.catch(() => {});
-    return result;
+    return Promise.resolve(callback({ name, mode: options.mode || "exclusive" }));
   } } };
   const context = {
     codedError(code) { const error = new Error(); error.code = code; return error; },

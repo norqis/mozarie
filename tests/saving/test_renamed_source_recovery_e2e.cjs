@@ -62,8 +62,8 @@ async function startOverwrite(page, mode, format = "original") {
   }
 }
 
-for (const [mode, format] of [["single", "original"], ["batch", "original"], ["single", "jpg"], ["batch", "jpg"]]) {
-  test(`${mode} renamed overwrite survives closing the tab after server commit${format === "jpg" ? " using JPG" : ""}`, { timeout: 60000 }, async () => {
+function renameRecoveryScenario(mode, format) {
+  return async () => {
     await withRenameFixture(async ({ page, context, open, project, snapshot, publish, image }) => {
       const targetName = format === "jpg" ? "renamed.jpg" : "renamed.png";
       let notifyAck; const receivedAck = new Promise((resolve) => { notifyAck = resolve; });
@@ -113,8 +113,13 @@ for (const [mode, format] of [["single", "original"], ["batch", "original"], ["s
         return { path: access.relativePath, name: file.name, parent: access.parentHandle?.kind, size: file.size > 0, rows: (await rememberedProjectSources(state.project.id)).files.filter((source) => source.imageId === "image-1").map((source) => source.relativePath) };
       }), { path: targetName, name: targetName, parent: "directory", size: true, rows: [targetName] });
     }, mode === "single" ? "existing-client-key" : null);
-  });
+  };
 }
+
+test("single renamed overwrite survives closing the tab after server commit", { timeout: 60000 }, renameRecoveryScenario("single", "original"));
+test("batch renamed overwrite survives closing the tab after server commit", { timeout: 60000 }, renameRecoveryScenario("batch", "original"));
+test("single renamed overwrite survives closing the tab after server commit using JPG", { timeout: 60000 }, renameRecoveryScenario("single", "jpg"));
+test("batch renamed overwrite survives closing the tab after server commit using JPG", { timeout: 60000 }, renameRecoveryScenario("batch", "jpg"));
 
 test("rejected renamed overwrite removes pending access and preserves the original handle", { timeout: 60000 }, async () => {
   await withRenameFixture(async ({ page, context }) => {

@@ -311,6 +311,9 @@ class CatalogMixin:
             if prehydrated is not None:
                 self._refresh_catalog_records(records)
             session: tuple[Path | None, Any | None]
+            # Model preparation publishes progress through self.lock. Clear
+            # its cache before publication, without holding that state lock.
+            self._invalidate_sam_cache()
             with self.lock:
                 if publish_catalog_id is None:
                     self._assert_catalog_mutable()
@@ -382,9 +385,6 @@ class CatalogMixin:
                     for record in records
                 )
                 session = (None, None) if keep_session else self._detach_session_unchecked()
-            # Model preparation publishes progress through self.lock. Never
-            # wait for its SAM lock while holding that state lock.
-            self._invalidate_sam_cache()
             self._clear_cache()
             if prehydrated is None:
                 # Cache cleanup intentionally happens before masks are materialised.
@@ -947,6 +947,7 @@ class CatalogMixin:
                 with ExitStack() as stack:
                     for _image_id, image_lock in sorted(locks):
                         stack.enter_context(image_lock)
+                    self._invalidate_sam_cache()
                     with self.lock:
                         if (self.catalog_id, self.catalog_generation, tuple(self.images)) != (catalog_id, generation, image_ids_before):
                             raise ClientError("画像一覧が変更されたため、操作をやり直してください。", "catalog_changed")
@@ -955,7 +956,6 @@ class CatalogMixin:
                         except ValueError as exc:
                             raise ClientError("プロジェクトが見つかりません。", "project_not_found") from exc
                         _detached_catalog, session = self._detach_catalog_state_unchecked()
-                    self._invalidate_sam_cache()
                     self._clear_cache()
                     self._release_detached_session(session)
             else:
@@ -1306,6 +1306,7 @@ class CatalogMixin:
             with ExitStack() as stack:
                 for _image_id, image_lock in sorted(locks):
                     stack.enter_context(image_lock)
+                self._invalidate_sam_cache()
                 with self.lock:
                     self._assert_catalog_detachable_unchecked()
                     if (self.catalog_id, self.workspace_id, self.catalog_generation, tuple(self.images)) != (catalog_id, workspace_id, catalog_generation, image_ids):
@@ -1324,7 +1325,6 @@ class CatalogMixin:
                         self.workspace_id = publish_catalog_id
                         self.project_read_only = publish_read_only
                         self.catalog_sources = [dict(source) for source in publish_sources or []]
-                self._invalidate_sam_cache()
                 self._clear_cache()
                 self._release_detached_session(session)
         self.cleanup_browser_save_files()

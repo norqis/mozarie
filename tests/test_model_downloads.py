@@ -51,17 +51,20 @@ class ModelDownloadTests(unittest.TestCase):
     def test_worker_start_failure_restores_idle_and_allows_retry(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             manager = ModelDownloadManager(Path(directory))
+            payload = b"fixture model"
+            entry = self.entry(payload)
             try:
                 before = manager.snapshot()
-                with patch("mozarie.model_downloads.threading.Thread.start", side_effect=RuntimeError("can't start new thread")):
+                with patch("mozarie.model_downloads.threading.Thread.start", side_effect=RuntimeError("can't start new thread")), patch.dict("mozarie.model_downloads.MODEL_DOWNLOADS", {"fixture": entry}):
                     with self.assertRaisesRegex(RuntimeError, "can't start new thread"):
-                        manager.start("sam_vit_b", "vit_b")
+                        manager.start("fixture", "vit_b")
                 self.assertEqual(manager.snapshot(), before)
                 self.assertEqual(manager.cancel(), before)
-                with patch.object(manager, "_run", side_effect=lambda _keys: manager._set(state="complete")):
-                    manager.start("sam_vit_b", "vit_b")
+                with patch("mozarie.model_downloads.build_opener", return_value=_Opener(_Response(payload))), patch.dict("mozarie.model_downloads.MODEL_DOWNLOADS", {"fixture": entry}):
+                    manager.start("fixture", "vit_b")
                     join_threads(manager._thread)
                 self.assertEqual(manager.snapshot()["state"], "complete")
+                self.assertEqual(entry.destination(Path(directory)).read_bytes(), payload)
             finally:
                 manager.shutdown()
 
