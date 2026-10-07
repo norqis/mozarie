@@ -1952,7 +1952,8 @@ class WorkspaceStore:
 
     def _write_candidate_state_db(self, db: sqlite3.Connection, image_id: str, revision: int, candidates: list[Any], effective: bool,
                                   *, replace: bool, history_group: str | None = None, expected_revision: int | None = None,
-                                  require_candidate_masks: bool = False) -> None:
+                                  require_candidate_masks: bool = False, manual_flags: dict[str, bool] | None = None,
+                                  manual_revision: int | None = None) -> None:
         if expected_revision is not None:
             current = db.execute("SELECT candidate_revision FROM images WHERE image_id=?", (image_id,)).fetchone()
             if current is None or int(current["candidate_revision"]) != expected_revision:
@@ -1986,7 +1987,30 @@ class WorkspaceStore:
                     ON CONFLICT(image_id,candidate_id) DO UPDATE SET expand_px=excluded.expand_px""",
                            (image_id, candidate.candidate_id, int(candidate.expand_px)))
         self._update_manual_candidate_state(db, image_id, revision, {candidate.candidate_id for candidate in candidates}, effective)
+        if manual_flags:
+            columns = {"manualEnabled": "manual_enabled", "manualExclusionEnabled": "exclusion_enabled",
+                       "manualExclusionEraseEnabled": "exclusion_erase_enabled"}
+            assignments = ",".join(f"{columns[key]}=?" for key in manual_flags)
+            db.execute(f"UPDATE manual_edits SET {assignments} WHERE image_id=?", (*map(int, manual_flags.values()), image_id))
+            db.execute("UPDATE images SET manual_revision=? WHERE image_id=?", (manual_revision, image_id))
         self._record_history_db(db, image_id, before, self._history_state_db(db, image_id), group_id=history_group)
+
+    def commit_candidate_role_state(self, image_id: str, revision: int, candidates: list[Any], effective: bool,
+                                    manual_flags: dict[str, bool], expected_manual_revision: int) -> int:
+        """A role toggle changes candidate and manual metadata in one history step."""
+        with self._lock, self._connect() as db:
+            db.execute("BEGIN IMMEDIATE")
+            try:
+                manual_revision = self._manual_revision_db(db, image_id, expected_manual_revision) + 1
+                if db.execute("SELECT 1 FROM manual_edits WHERE image_id=?", (image_id,)).fetchone() is None:
+                    raise ClientError("手描きの編集内容が変更されました。", "manual_revision_conflict")
+                self._write_candidate_state_db(db, image_id, revision, candidates, effective, replace=False,
+                                               manual_flags=manual_flags, manual_revision=manual_revision)
+                db.execute("COMMIT")
+                return manual_revision
+            except Exception:
+                db.execute("ROLLBACK")
+                raise
 
     def commit_candidate_states(self, states: list[tuple[str, int, list[Any], bool, bool]], *, history_group: str | None = None) -> None:
         """Commit a complete multi-image candidate operation in one SQLite transaction."""

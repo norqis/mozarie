@@ -622,11 +622,13 @@ def read_stable_source_bytes(record: ImageRecord, expected: tuple[int, int] | No
     return source
 
 
-def canonical_image(record: ImageRecord, source: bytes | None = None) -> tuple[Image.Image, bytes, dict[str, Any]]:
+def canonical_image(record: ImageRecord, source: bytes | None = None, *, require_static: bool = False) -> tuple[Image.Image, bytes, dict[str, Any]]:
     """Load source pixels into the stable, unflipped editing coordinate space."""
     raw = read_stable_source_bytes(record) if source is None else source
     try:
         with open_image_without_png_text(record.path, raw) as image:
+            if require_static and getattr(image, "is_animated", False):
+                raise ClientError("アニメーション画像の加工保存には対応していません。", "image_format_unsupported")
             image.load()
             normalized = ImageOps.exif_transpose(image)
             info = dict(image.info)
@@ -676,7 +678,7 @@ def _render_output(record: ImageRecord, mask: np.ndarray | None, block_size: int
     suffix, image_format, mime = _output_spec(record, output_format)
     if output_format == "jpg" and keep_metadata:
         raise ClientError("JPG形式ではメタ情報を保持できません。", "input_invalid")
-    canonical, source, source_info = canonical_image(record)
+    canonical, source, source_info = canonical_image(record, require_static=True)
     modified = canonical if mask is None or not np.any(mask) else _apply_mosaic_to_image(canonical, mask, block_size)
     if record.flip_horizontal: modified = ImageOps.mirror(modified)
     if record.flip_vertical: modified = ImageOps.flip(modified)

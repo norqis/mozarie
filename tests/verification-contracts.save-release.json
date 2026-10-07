@@ -523,7 +523,11 @@
       "observation": "寸法・形式を保持し、モザイク範囲に加工を反映する。",
       "status": "automated",
       "testIds": [
-        "python:tests.test_server.MozarieTests.test_png_metadata_is_preserved_after_save"
+        "python:tests.test_server.MozarieTests.test_png_metadata_is_preserved_after_save",
+        "python:tests.saving.test_animated_source_save.AnimatedSourceSaveTests.test_render_rejects_animation_independent_of_format_and_metadata",
+        "python:tests.saving.test_animated_source_save.AnimatedSourceSaveTests.test_native_overwrite_rejects_animation_without_replacing_source",
+        "python:tests.saving.test_animated_source_save.AnimatedSourceSaveTests.test_browser_render_rejects_animation_before_staging_output",
+        "python:tests.saving.test_animated_source_save.AnimatedSourceSaveTests.test_unchanged_animation_copy_and_overwrite_preserve_all_source_bytes"
       ]
     },
     {

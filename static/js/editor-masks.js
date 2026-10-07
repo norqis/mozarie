@@ -743,21 +743,38 @@ async function batchCandidateOperation(spec) {
   state.candidateBatchPending.add(imageId);
   const send = async () => {
     try {
-      const result = await api("/api/candidates/batch", { method: "POST", body: JSON.stringify({ imageId, role, operation }) });
+      const durable = hasDurableHistory();
+      const durableManual = durable && (manual || manualErase);
+      const manualFlags = {};
+      if (manual) manualFlags[role === "apply" ? "manualEnabled" : "manualExclusionEnabled"] = operation === "enable";
+      if (manualErase) manualFlags.manualExclusionEraseEnabled = operation === "enable";
+      if (durable) await flushWorkspaceDraft(imageId);
+      if (state.currentId !== imageId || !isCurrentGeneration(generation)) return;
+      const expectedManualRevision = durableManual ? workspaceDraftRevision(imageId) : null;
+      const result = await api("/api/candidates/batch", { method: "POST", body: JSON.stringify({ imageId, role, operation,
+        ...(durableManual ? { manualFlags, expectedManualRevision } : {}),
+      }) });
       if (state.currentId !== imageId || !isCurrentGeneration(generation)) {
+        if (durable) { state.drafts.delete(imageId); state.workspaceDraftRevisions.delete(imageId); }
         await refreshCandidateRecord(imageId, true);
         renderCatalogViews();
         return;
       }
       changed.forEach((item) => { item.enabled = operation === "enable"; });
-      markMaskDirty();
-      if (manual) {
-        if (role === "apply") state.manualEnabled = operation === "enable";
-        else state.manualExclusionEnabled = operation === "enable";
+      Object.assign(state, manualFlags);
+      if (durable) {
+        invalidateMaskComposition();
+        const draft = state.drafts.get(imageId);
+        if (draft) Object.assign(draft, manualFlags, { candidateRevision: result.candidateRevision, hasEffectiveMask: hasEffectiveMask() });
+        if (durableManual) {
+          state.workspaceDraftRevisions.set(imageId, result.manualRevision);
+          const record = currentRecord();
+          if (record && Number(record.manualRevision || 0) === expectedManualRevision) record.manualRevision = result.manualRevision;
+        }
+      } else {
         markMaskDirty();
+        if (manual || manualErase) saveDraft().catch(showUserError);
       }
-      if (manualErase) { state.manualExclusionEraseEnabled = operation === "enable"; markMaskDirty(); }
-      if (manual || manualErase) saveDraft().catch(showUserError);
       retainCurrentCandidateBundle(imageId, result.candidateRevision);
       recordHistoryOperation({ kind: "candidateBatch" }); syncCurrentCandidateRecord(); refreshCurrentReviewAndMask(); requestMosaicPreview(); renderCandidates(); render();
       if (hasDurableHistory()) void refreshProjectHistory(imageId);

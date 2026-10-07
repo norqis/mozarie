@@ -48,6 +48,69 @@ def join_threads(*threads: threading.Thread) -> None:
 
 
 class LiveHttpEndpointTests(unittest.TestCase):
+    def _prepare_mixed_role_toggle(self):
+        image_id = self.state.set_root(str(self.source_dir))[0]["id"]
+        mask_path = self.state.cache_dir / image_id / "role-mask.png"
+        mask_path.parent.mkdir(parents=True, exist_ok=True)
+        with Image.new("L", (12, 8), 255) as mask:
+            mask.save(mask_path)
+        with self.state.image_io_lock(image_id), self.state.lock:
+            self.state._commit_candidate_snapshot(image_id, [Candidate("role", "penis", .9, mask_path)], replace=True)
+        with Image.new("RGBA", (12, 8), "white") as mask, io.BytesIO() as output:
+            mask.save(output, format="PNG")
+            encoded = "data:image/png;base64," + base64.b64encode(output.getvalue()).decode("ascii")
+        revision = self.state.save_manual_workspace(image_id, {"add": encoded, "manualEnabled": True})
+        return image_id, {"imageId": image_id, "role": "apply", "operation": "disable",
+                          "manualFlags": {"manualEnabled": False}, "expectedManualRevision": revision}
+
+    def test_role_toggle_commits_metadata_and_one_history_without_rewriting_pngs(self):
+        image_id, payload = self._prepare_mixed_role_toggle()
+        previous = self.state.workspace_store.manual(image_id, self.state._encode_workspace_mask)
+        with self.state.workspace_store._connect() as db:
+            count = db.execute("SELECT COUNT(*) FROM history_entries WHERE image_id=?", (image_id,)).fetchone()[0]
+            db.execute("""CREATE TRIGGER no_role_png_rewrite BEFORE UPDATE OF add_png,exclusion_png,exclusion_erase_png
+                       ON manual_edits BEGIN SELECT RAISE(ABORT, 'toggle must not rewrite manual PNGs'); END""")
+        status, _headers, body = self.request("POST", "/api/candidates/batch", payload, authorized=True)
+        self.assertEqual(status, 200, body)
+        result = json.loads(body)
+        self.assertEqual(result["manualRevision"], payload["expectedManualRevision"] + 1)
+        self.assertEqual(result["candidateRevision"], self.state._candidate_revision(image_id))
+        self.assertFalse(self.state.candidates[image_id][0].enabled)
+        current = self.state.workspace_store.manual(image_id, self.state._encode_workspace_mask)
+        self.assertEqual(current["add"], previous["add"])
+        self.assertFalse(current["manualEnabled"])
+        self.assertFalse(current["hasEffectiveMask"])
+        with self.state.workspace_store._connect() as db:
+            self.assertEqual(db.execute("SELECT COUNT(*) FROM history_entries WHERE image_id=?", (image_id,)).fetchone()[0], count + 1)
+
+    def test_role_toggle_manual_conflict_and_sql_failure_leave_both_states_unchanged(self):
+        image_id, payload = self._prepare_mixed_role_toggle()
+        before = self.state.workspace_store.export_state(image_id)
+        candidate_revision = self.state._candidate_revision(image_id)
+        for failure in ("manual_conflict", "sql_failure"):
+            with self.subTest(failure=failure):
+                request = dict(payload)
+                if failure == "manual_conflict":
+                    request["expectedManualRevision"] -= 1
+                else:
+                    with self.state.workspace_store._connect() as db:
+                        db.execute("""CREATE TRIGGER reject_role_history BEFORE INSERT ON history_entries
+                                   BEGIN SELECT RAISE(ABORT, 'history disk failure'); END""")
+                try:
+                    status, _headers, body = self.request("POST", "/api/candidates/batch", request, authorized=True)
+                    self.assertEqual(status, 400 if failure == "manual_conflict" else 500, body)
+                    if failure == "manual_conflict":
+                        self.assertEqual(json.loads(body)["error_code"], "manual_revision_conflict")
+                    self.assertEqual(self.state.workspace_store.export_state(image_id), before)
+                    self.assertEqual(self.state._candidate_revision(image_id), candidate_revision)
+                    self.assertTrue(self.state.candidates[image_id][0].enabled)
+                finally:
+                    if failure == "sql_failure":
+                        with self.state.workspace_store._connect() as db:
+                            db.execute("DROP TRIGGER reject_role_history")
+        status, _headers, body = self.request("POST", "/api/candidates/batch", payload, authorized=True)
+        self.assertEqual(status, 200, body)
+
     def setUp(self) -> None:
         self._temporary_directory = tempfile.TemporaryDirectory()
         root = Path(self._temporary_directory.name).resolve()

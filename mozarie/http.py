@@ -1017,6 +1017,10 @@ class MosaicHandler(BaseHTTPRequestHandler):
                     revisions = self._catalog_mutation(expected_project_id, expected_catalog_generation,
                                                        lambda: STATE.batch_update_candidates_many(image_ids, payload))
                     self._json({"ok": True, "candidateRevisions": revisions})
+                elif "manualFlags" in payload:
+                    revision, manual_revision = self._catalog_mutation(expected_project_id, expected_catalog_generation,
+                                                                       lambda: STATE.batch_update_candidate_role(image_id, payload))
+                    self._json({"ok": True, "candidateRevision": revision, "manualRevision": manual_revision})
                 else:
                     revision = self._catalog_mutation(expected_project_id, expected_catalog_generation,
                                                       lambda: STATE.batch_update_candidates(image_id, payload))

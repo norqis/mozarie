@@ -1685,7 +1685,15 @@
       "status": "automated",
       "testIds": [
         "node:tests/test_editor_direct_observations_e2e.cjs::direct editor boundary and gesture observations > ED-114.1 anonymous drawing fill deletion boundary and flip are one history step with buttons and shortcuts",
-        "node:tests/test_editor_direct_observations_e2e.cjs::direct editor boundary and gesture observations > ED-114.1 candidate toggle force padding and role batch are one button and shortcut history step"
+        "node:tests/test_editor_direct_observations_e2e.cjs::direct editor boundary and gesture observations > ED-114.1 candidate toggle force padding and role batch are one button and shortcut history step",
+        "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_mixed_apply_role_toggle_is_one_durable_history_operation",
+        "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_mixed_exclude_role_toggle_restores_exclusion_and_erase_together",
+        "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_manual_only_role_toggle_keeps_one_history_operation",
+        "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_candidate_only_role_toggle_keeps_one_history_operation",
+        "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_role_toggle_waits_for_pending_stroke_without_merging_its_history",
+        "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_failed_role_toggle_keeps_both_states_and_allows_retry",
+        "python:tests.test_http_live_endpoints.LiveHttpEndpointTests.test_role_toggle_commits_metadata_and_one_history_without_rewriting_pngs",
+        "python:tests.test_http_live_endpoints.LiveHttpEndpointTests.test_role_toggle_manual_conflict_and_sql_failure_leave_both_states_unchanged"
       ]
     },
     {

@@ -18,6 +18,7 @@ from PIL import Image
 import mozarie.http as http_module
 import mozarie.state as state_module
 from mozarie.domain import Candidate
+from mozarie.core import CandidateRole
 from mozarie.http import MosaicHandler
 from mozarie.state import StudioState
 
@@ -147,6 +148,41 @@ class LiveEditorGestureBrowserTests(unittest.TestCase):
 
     def test_rapid_strokes_keep_separate_undo_steps_after_reopen(self) -> None:
         self._check_rapid_stroke_history("rapid")
+
+    def _check_role_toggle_history(self, mode: str) -> None:
+        image_id = next(iter(self.state.images))
+        if mode in {"exclude", "manual"}:
+            candidates = list(self.state.candidates[image_id]) if mode == "exclude" else []
+            if mode == "exclude":
+                candidates.append(Candidate("excluded", "penis", .9, candidates[0].mask_path,
+                                            role=CandidateRole.EXCLUDE, forced=True))
+            with self.state.image_io_lock(image_id), self.state.lock:
+                self.state._commit_candidate_snapshot(image_id, candidates, replace=True)
+        helper = Path(__file__).with_name("editor") / "role_toggle_history_live_browser_helper.cjs"
+        result = subprocess.run(
+            ["node", str(helper), self.origin, mode], cwd=Path(__file__).resolve().parents[1],
+            text=True, encoding="utf-8", errors="replace", capture_output=True, timeout=90,
+        )
+        self.assertEqual(result.returncode, 0, f"role toggle {mode} failed\n{result.stdout}\n{result.stderr}")
+        self.assertEqual(self.source_path.read_bytes(), self.source_bytes)
+
+    def test_mixed_apply_role_toggle_is_one_durable_history_operation(self) -> None:
+        self._check_role_toggle_history("apply")
+
+    def test_mixed_exclude_role_toggle_restores_exclusion_and_erase_together(self) -> None:
+        self._check_role_toggle_history("exclude")
+
+    def test_manual_only_role_toggle_keeps_one_history_operation(self) -> None:
+        self._check_role_toggle_history("manual")
+
+    def test_candidate_only_role_toggle_keeps_one_history_operation(self) -> None:
+        self._check_role_toggle_history("candidate")
+
+    def test_role_toggle_waits_for_pending_stroke_without_merging_its_history(self) -> None:
+        self._check_role_toggle_history("pending")
+
+    def test_failed_role_toggle_keeps_both_states_and_allows_retry(self) -> None:
+        self._check_role_toggle_history("failure")
 
     def test_slow_encoder_does_not_merge_subsequent_stroke_history(self) -> None:
         self._check_rapid_stroke_history("encoder")

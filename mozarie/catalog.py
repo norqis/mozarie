@@ -3123,6 +3123,22 @@ class CatalogMixin:
                 return self._commit_candidate_snapshot(image_id, candidates, replace=replace_snapshot)
 
     def batch_update_candidates(self, image_id: str, payload: dict[str, Any], *, history_group: str | None = None) -> int:
+        revision, _manual_revision = self._batch_update_candidates(image_id, payload, history_group=history_group)
+        return revision
+
+    def batch_update_candidate_role(self, image_id: str, payload: dict[str, Any]) -> tuple[int, int | None]:
+        flags = payload.get("manualFlags")
+        allowed = {"manualEnabled"} if payload.get("role") == "apply" else {"manualExclusionEnabled", "manualExclusionEraseEnabled"}
+        expected = payload.get("expectedManualRevision")
+        if (payload.get("operation") not in {"enable", "disable"} or not isinstance(flags, dict) or not flags
+                or not set(flags) <= allowed or any(not isinstance(value, bool) for value in flags.values())
+                or isinstance(expected, bool) or not isinstance(expected, int) or expected < 0):
+            raise ClientError("候補の一括操作が正しくありません。", "input_invalid")
+        return self._batch_update_candidates(image_id, payload, manual_flags=flags, expected_manual_revision=expected)
+
+    def _batch_update_candidates(self, image_id: str, payload: dict[str, Any], *, history_group: str | None = None,
+                                 manual_flags: dict[str, bool] | None = None,
+                                 expected_manual_revision: int | None = None) -> tuple[int, int | None]:
         """Apply one simple bulk operation and advance the revision once."""
         self.image_for_id(image_id)
         self._assert_image_editable(image_id)
@@ -3150,7 +3166,7 @@ class CatalogMixin:
                     if not selected:
                         raise ClientError("更新する候補がありません。", "candidate_not_found")
                     if all(item.expand_px == expand_px for item in selected):
-                        return self._candidate_revision(image_id)
+                        return self._candidate_revision(image_id), None
                 if operation == "delete":
                     candidates = [replace(item) for item in current if item not in selected]
                     paths = [item.mask_path for item in selected]
@@ -3164,11 +3180,23 @@ class CatalogMixin:
                             item.expand_px = expand_px
                         else:
                             item.enabled = operation == "enable"
-                revision = self._commit_candidate_snapshot(image_id, candidates, replace=operation == "delete", history_group=history_group)
+                manual_revision = None
+                if manual_flags:
+                    draft = self.workspace_store.manual(image_id, self._encode_workspace_mask) or {}
+                    draft.update(manual_flags)
+                    revision = self._candidate_revision(image_id) + 1
+                    manual_revision = self.workspace_store.commit_candidate_role_state(
+                        image_id, revision, candidates, self._effective_mask_for_draft(image_id, candidates, draft),
+                        manual_flags, expected_manual_revision,
+                    )
+                    self.candidates[image_id] = candidates
+                    self.candidate_revisions[image_id] = revision
+                else:
+                    revision = self._commit_candidate_snapshot(image_id, candidates, replace=operation == "delete", history_group=history_group)
             # The SQLite revision is already durable. Cache cleanup must not
             # turn that successful user operation into an error.
             self._delete_mask_files(paths, [])
-            return revision
+            return revision, manual_revision
 
     def batch_update_candidates_many(self, image_ids: list[str], payload: dict[str, Any]) -> dict[str, int]:
         unique = list(dict.fromkeys(str(image_id) for image_id in image_ids if str(image_id)))
