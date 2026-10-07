@@ -213,6 +213,40 @@ class LiveEditorGestureBrowserTests(unittest.TestCase):
     def test_pending_upload_does_not_merge_subsequent_stroke_history(self) -> None:
         self._check_rapid_stroke_history("upload")
 
+    def _check_review_history_order(self, mode: str) -> None:
+        shutil.copy2(self.source_path, self.source_dir / "other.png")
+        if mode == "anonymous":
+            self.state.close_project()
+        self.state.set_root(str(self.source_dir))
+        if mode == "context-clear":
+            image_id = next(image_id for image_id, image in self.state.images.items() if image.path.name == "gesture.png")
+            self.state.set_image_flags(image_id, {"reviewed": True})
+        helper = Path(__file__).with_name("editor") / "review_history_order_live_browser_helper.cjs"
+        result = subprocess.run(
+            ["node", str(helper), self.origin, mode], cwd=Path(__file__).resolve().parents[1],
+            text=True, encoding="utf-8", errors="replace", capture_output=True, timeout=90,
+        )
+        self.assertEqual(result.returncode, 0, f"review history {mode} failed\n{result.stdout}\n{result.stderr}")
+        self.assertEqual(self.source_path.read_bytes(), self.source_bytes)
+
+    def test_review_and_next_waits_for_prior_stroke_encoding(self) -> None:
+        self._check_review_history_order("next")
+
+    def test_anonymous_review_and_next_keeps_stroke_history_order(self) -> None:
+        self._check_review_history_order("anonymous")
+
+    def test_context_review_waits_for_prior_stroke_encoding(self) -> None:
+        self._check_review_history_order("context")
+
+    def test_context_unreview_keeps_prior_stroke_history_order(self) -> None:
+        self._check_review_history_order("context-clear")
+
+    def test_failed_stroke_prevents_review_navigation_and_allows_retry(self) -> None:
+        self._check_review_history_order("manual-failure")
+
+    def test_failed_review_keeps_prior_stroke_and_allows_retry(self) -> None:
+        self._check_review_history_order("context-failure")
+
     def _check_group_history_pending_draft(self, direction: str, outcome: str) -> None:
         shutil.copy2(self.source_path, self.source_dir / "other.png")
         self.state.set_root(str(self.source_dir))

@@ -1759,7 +1759,8 @@
       "observation": "無名作業で確認済み→未確認、非表示→再表示を各1回実行し、現在画像のボタンとCtrl+Z/Ctrl+Shift+Zで戻す → 確認済みと非表示を履歴へ1回ずつ記録し、非表示中もUndoで再表示できる",
       "status": "automated",
       "testIds": [
-        "node:tests/test_editor_direct_observations_e2e.cjs::direct editor boundary and gesture observations > ED-116.1 and ED-116.2 anonymous reviewed and hidden toggles round-trip through history and catalog state"
+        "node:tests/test_editor_direct_observations_e2e.cjs::direct editor boundary and gesture observations > ED-116.1 and ED-116.2 anonymous reviewed and hidden toggles round-trip through history and catalog state",
+        "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_anonymous_review_and_next_keeps_stroke_history_order"
       ]
     },
     {
@@ -1781,7 +1782,12 @@
       "observation": "名前付きPJで確認済み→未確認、非表示→再表示を各1回実行し、ボタンとCtrl+Z/Ctrl+Shift+Zで戻す → 各変更を永続履歴へ1回ずつ記録し、PJ再開後も非表示・確認済み・一覧状態を復元する",
       "status": "automated",
       "testIds": [
-        "python:tests.test_workspace.WorkspaceTests.test_named_project_flag_history_survives_reopen_and_keeps_other_project_isolated"
+        "python:tests.test_workspace.WorkspaceTests.test_named_project_flag_history_survives_reopen_and_keeps_other_project_isolated",
+        "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_review_and_next_waits_for_prior_stroke_encoding",
+        "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_context_review_waits_for_prior_stroke_encoding",
+        "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_context_unreview_keeps_prior_stroke_history_order",
+        "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_failed_stroke_prevents_review_navigation_and_allows_retry",
+        "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_failed_review_keeps_prior_stroke_and_allows_retry"
       ]
     },
     {

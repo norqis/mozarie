@@ -701,7 +701,10 @@ function saveWorkspaceFlagNow(image, field, desired, onSaved, force = false) {
   if (!force && pending?.desired === desired) return pending.promise;
   if (!force && !pending && image[field] === desired) return Promise.resolve(true);
   let promise;
-  promise = queueWorkspaceFlags(image.id, { [field]: desired }).then((flags) => {
+  promise = (async () => {
+    if (field === "reviewed" && hasDurableHistory()) await flushWorkspaceDraft(image.id);
+    return queueWorkspaceFlags(image.id, { [field]: desired });
+  })().then((flags) => {
     if (!publishWorkspaceFlags(image.id, flags)) return false;
     onSaved?.();
     return true;
