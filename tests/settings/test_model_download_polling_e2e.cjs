@@ -84,8 +84,8 @@ test("model progress callers share one request until it completes", { timeout: 3
   });
 });
 
-for (const outcome of ["running", "failure"]) {
-  test(`cancelled download ignores an older ${outcome} status response`, { timeout: 30000 }, async () => {
+function cancelledStatusResponse(outcome) {
+  return async () => {
     await withDownloadPage(async (page) => {
       const held = await holdStatus(page, outcome === "failure");
       try {
@@ -101,8 +101,10 @@ for (const outcome of ["running", "failure"]) {
         assert.equal(await page.locator("#modelDownloadStart").isVisible(), true, "a new download can be started after cancellation");
       } finally { held.release(); }
     });
-  });
+  };
 }
+test("cancelled download ignores an older running status response", { timeout: 30000 }, cancelledStatusResponse("running"));
+test("cancelled download ignores an older failure status response", { timeout: 30000 }, cancelledStatusResponse("failure"));
 
 test("a previous progress response cannot replace a new completed download", { timeout: 30000 }, async () => {
   await withDownloadPage(async (page) => {
@@ -161,8 +163,8 @@ test("a current progress error restores close and stops polling", { timeout: 300
   });
 });
 
-for (const outcome of ["cancelling", "failure"]) {
-  test(`progress waits for a pending ${outcome} cancellation before checking completion`, { timeout: 30000 }, async () => {
+function pendingCancellation(outcome) {
+  return async () => {
     await withDownloadPage(async (page) => {
       let releaseStatus; let statusReached; let releaseCancel; let cancelReached;
       const statusGate = new Promise((resolve) => { releaseStatus = resolve; });
@@ -195,5 +197,7 @@ for (const outcome of ["cancelling", "failure"]) {
         await terminal(page, "cancelled");
       } finally { releaseStatus(); releaseCancel(); }
     });
-  });
+  };
 }
+test("progress waits for a pending cancelling cancellation before checking completion", { timeout: 30000 }, pendingCancellation("cancelling"));
+test("progress waits for a pending failure cancellation before checking completion", { timeout: 30000 }, pendingCancellation("failure"));
