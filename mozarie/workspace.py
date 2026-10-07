@@ -1120,6 +1120,8 @@ class WorkspaceStore:
                     (record.relative_path, record.size_bytes, record.mtime_ns, int(getattr(record, "width", 0)), int(getattr(record, "height", 0)))
                     for record in records
                 ))
+                # Imports arrive one file at a time; drive the indexed lookup
+                # from incoming rows instead of scanning the growing source.
                 existing = {
                     str(row["relative_path"]): row for row in db.execute("""SELECT images.*,
                         transform.flip_horizontal AS transform_flip_horizontal,
@@ -1127,9 +1129,9 @@ class WorkspaceStore:
                         transform.source_flip_horizontal AS transform_source_flip_horizontal,
                         transform.source_flip_vertical AS transform_source_flip_vertical,
                         transform.revision AS transform_revision
-                        FROM images JOIN workspace_reconcile_records AS incoming ON incoming.relative_path=images.relative_path
+                        FROM workspace_reconcile_records AS incoming CROSS JOIN images
                         LEFT JOIN image_transforms AS transform ON transform.image_id=images.image_id
-                        WHERE images.source_id=?""", (source_id,))
+                        WHERE images.source_id=? AND images.relative_path=incoming.relative_path""", (source_id,))
                 }
                 requested_ids = {
                     str(getattr(record, "image_id", ""))

@@ -4846,6 +4846,7 @@
       "status": "automated",
       "testIds": [
         "python:tests.test_workspace.WorkspaceTests.test_bulk_workspace_queries_accept_more_than_sqlite_variable_limit",
+        "python:tests.workspace.test_import_lookup_cost.ImportLookupCostTests.test_single_image_reconciliation_cost_is_independent_of_source_size",
         "python:tests.test_workspace.WorkspaceTests.test_reconcile_images_loads_transforms_without_per_image_queries"
       ]
     },
