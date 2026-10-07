@@ -42,7 +42,7 @@ test("editor verification contract preserves its baseline with no manual checkli
   assert.deepEqual(contract.source, { path: "docs/manual-verification/editor.md", commit: "264f70d" });
   assert.equal(contract.baseline.rows, 129);
   assert.equal(contract.baseline.observations, contract.observations.length, "baseline records the complete split observation count");
-  assert.equal(contract.observations.length, 174, "the ledger contains every split or retired observation");
+  assert.equal(contract.observations.length, 175, "the ledger contains every split or retired observation");
 
   const keys = new Set();
   for (const observation of contract.observations) {

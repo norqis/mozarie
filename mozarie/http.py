@@ -944,18 +944,18 @@ class MosaicHandler(BaseHTTPRequestHandler):
                                                    lambda: STATE.begin_manual_upload(image_id, str(payload.get("sessionId", "")), payload.get("dirtyLayers"))))
             elif path.startswith("/api/workspace/manual/") and path.endswith("/commit"):
                 image_id = path.removeprefix("/api/workspace/manual/").removesuffix("/commit").rstrip("/")
-                self._catalog_mutation(expected_project_id, expected_catalog_generation,
+                revision = self._catalog_mutation(expected_project_id, expected_catalog_generation,
                                        lambda: STATE.commit_manual_upload(image_id, str(payload.get("sessionId", "")), payload))
-                self._json({"ok": True})
+                self._json({"ok": True, "manualRevision": revision})
             elif path.startswith("/api/workspace/manual/") and path.endswith("/cancel"):
                 image_id = path.removeprefix("/api/workspace/manual/").removesuffix("/cancel").rstrip("/")
                 self._catalog_mutation(expected_project_id, expected_catalog_generation,
                                        lambda: STATE.cancel_manual_upload(image_id, str(payload.get("sessionId", ""))))
                 self._json({"ok": True})
             elif path.startswith("/api/workspace/manual/"):
-                self._catalog_mutation(expected_project_id, expected_catalog_generation,
+                revision = self._catalog_mutation(expected_project_id, expected_catalog_generation,
                                        lambda: STATE.save_manual_workspace(path.removeprefix("/api/workspace/manual/"), payload))
-                self._json({"ok": True})
+                self._json({"ok": True, "manualRevision": revision})
             elif path.startswith("/api/images/") and path.endswith("/transform"):
                 image_id = path.removeprefix("/api/images/").removesuffix("/transform").rstrip("/")
                 self._json(self._catalog_mutation(expected_project_id, expected_catalog_generation,
@@ -1106,6 +1106,7 @@ class MosaicHandler(BaseHTTPRequestHandler):
                     copy_to_browser=copy_to_browser,
                     stream_image=_read_bool(payload.get("streamImage", True), "画像応答の転送"),
                     client_save_token=_read_client_save_token(payload.get("clientSaveToken")),
+                    expected_manual_revision=_read_candidate_revision(payload["expectedManualRevision"]) if "expectedManualRevision" in payload else None,
                     suffix=_read_save_suffix(payload.get("suffix", "_censored")),
                     output_format=str(payload.get("format", "original")),
                     keep_metadata=_read_bool(payload.get("keepMetadata", True), "メタ情報の保持"),
@@ -1245,9 +1246,9 @@ class MosaicHandler(BaseHTTPRequestHandler):
                                                   lambda: STATE.delete_candidate(image_id, candidate_id))
                 self._json({"deleted": deleted, "candidateRevision": STATE._candidate_revision(image_id)})
             elif path.startswith("/api/workspace/manual/"):
-                self._catalog_mutation(expected_project_id, expected_catalog_generation,
-                                       lambda: STATE.delete_manual_workspace(path.removeprefix("/api/workspace/manual/")))
-                self._json({"ok": True})
+                revision = self._catalog_mutation(expected_project_id, expected_catalog_generation,
+                                       lambda: STATE.delete_manual_workspace(path.removeprefix("/api/workspace/manual/"), (payload or {}).get("expectedManualRevision")))
+                self._json({"ok": True, "manualRevision": revision})
             else:
                 self._client_error(ClientError("APIが見つかりません。", "api_not_found"), HTTPStatus.NOT_FOUND)
             _log_operation_finished(operation, operation_started_at)

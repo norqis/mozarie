@@ -135,6 +135,60 @@ class LiveEditorGestureBrowserTests(unittest.TestCase):
     def test_anonymous_compact_draft_keeps_layers_through_edit_undo_redo_and_reload(self) -> None:
         self._check_compact_draft_reload(named=False)
 
+    def test_peer_manual_sync_conflicts_and_last_stroke_undo_use_real_workspace(self) -> None:
+        shutil.copy2(self.source_path, self.source_dir / "other.png")
+        self.state.set_root(str(self.source_dir))
+        helper = Path(__file__).with_name("editor") / "manual_sync_live_browser_helper.cjs"
+        result = subprocess.run(
+            ["node", str(helper), self.origin], cwd=Path(__file__).resolve().parents[1],
+            env={**os.environ, "PYTHONUTF8": "1"}, text=True, encoding="utf-8", errors="replace",
+            capture_output=True, timeout=90, check=False,
+        )
+        self.assertEqual(result.returncode, 0, f"manual sync browser failed\n{result.stdout}\n{result.stderr}")
+        self.assertEqual(self.source_path.read_bytes(), self.source_bytes)
+
+    def test_parallel_copy_delete_completes_every_real_file_and_workspace_row(self) -> None:
+        shutil.copy2(self.source_path, self.source_dir / "other.png")
+        self.state.set_root(str(self.source_dir))
+        helper = Path(__file__).with_name("editor") / "parallel_copy_delete_live_browser_helper.cjs"
+        result = subprocess.run(
+            ["node", str(helper), self.origin], cwd=Path(__file__).resolve().parents[1],
+            env={**os.environ, "PYTHONUTF8": "1"}, text=True, encoding="utf-8", errors="replace",
+            capture_output=True, timeout=90, check=False,
+        )
+        self.assertEqual(result.returncode, 0, f"parallel copy delete browser failed\n{result.stdout}\n{result.stderr}")
+        self.assertEqual(sorted(path.name for path in self.output_dir.glob("*.png")), ["gesture_parallel.png", "other_parallel.png"])
+        self.assertFalse(list(self.source_dir.glob("*.png")))
+        self.assertEqual(self.state.list_images(), [])
+        for path in self.output_dir.glob("*.png"):
+            with Image.open(path) as image: self.assertEqual(image.size, (64, 48))
+
+    def test_parallel_browser_copy_delete_keeps_surviving_save_tokens(self) -> None:
+        self.state.close_project()
+        helper = Path(__file__).with_name("editor") / "parallel_copy_delete_live_browser_helper.cjs"
+        result = subprocess.run(
+            ["node", str(helper), self.origin, "browser"], cwd=Path(__file__).resolve().parents[1],
+            env={**os.environ, "PYTHONUTF8": "1"}, text=True, encoding="utf-8", errors="replace",
+            capture_output=True, timeout=90, check=False,
+        )
+        self.assertEqual(result.returncode, 0, f"browser handle copy delete failed\n{result.stdout}\n{result.stderr}")
+        self.assertEqual(sorted(path.name for path in self.output_dir.glob("*.png")), ["browser1_parallel.png", "browser2_parallel.png"])
+        self.assertEqual(self.state.list_images(), [])
+        self.assertEqual(self.source_path.read_bytes(), self.source_bytes)
+
+    def test_browser_copy_delete_recovery_keeps_edits_made_after_the_copy(self) -> None:
+        self.state.close_project()
+        helper = Path(__file__).with_name("editor") / "parallel_copy_delete_live_browser_helper.cjs"
+        result = subprocess.run(
+            ["node", str(helper), self.origin, "recovery"], cwd=Path(__file__).resolve().parents[1],
+            env={**os.environ, "PYTHONUTF8": "1"}, text=True, encoding="utf-8", errors="replace",
+            capture_output=True, timeout=90, check=False,
+        )
+        self.assertEqual(result.returncode, 0, f"browser copy delete recovery failed\n{result.stdout}\n{result.stderr}")
+        self.assertTrue((self.output_dir / "browser1_recovery.png").is_file())
+        image_id = self.state.list_images()[0]["id"]
+        self.assertFalse(self.state.manual_workspace(image_id)["manualEnabled"])
+
     def test_named_compact_draft_keeps_layers_through_edit_undo_redo_and_reload(self) -> None:
         self._check_compact_draft_reload(named=True)
 

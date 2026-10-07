@@ -216,7 +216,7 @@ class ProjectWorkspaceCoverageTests(unittest.TestCase):
             manual = store.manual(first, lambda value: base64.b64encode(value).decode() if value else "")
             self.assertEqual(manual["removedCandidateIds"], ["candidate"])
             self.assertFalse(manual["manualEnabled"])
-            self.assertEqual(store.manual_mask_statuses([first]), {first: (True, 1)})
+            self.assertEqual(store.manual_mask_statuses([first]), {first: (True, 1, 1)})
             exported = store.export_state(first)
             self.assertNotIn("_manual_raw", exported); self.assertIn("mask", exported["candidates"][0]); self.assertIn("add", exported["manual"])
             store.delete_manual([first]); self.assertIsNone(store.manual(first, lambda value: value))

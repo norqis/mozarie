@@ -410,6 +410,7 @@ class SavingMixin:
         copy_to_browser: bool = False,
         stream_image: bool = True,
         client_save_token: str | None = None,
+        expected_manual_revision: int | None = None,
         suffix: str = "_censored",
         output_format: str = "original",
         keep_metadata: bool = True,
@@ -417,14 +418,6 @@ class SavingMixin:
         self._assert_image_editable(image_id)
         stream_image = stream_image or copy_to_browser
         record = self.image_snapshot(image_id)
-        if draft is None:
-            draft = self.workspace_store.manual(image_id, self._encode_workspace_mask)
-        try:
-            draft_masks = decode_draft_masks(draft, record.width, record.height)
-        except (MemoryError, OSError) as exc:
-            raise ClientError("保存用の手描きマスクを読み込めません。使用可能なメモリを確認してください。", "image_read_failed") from exc
-        manual_exclude_forced = draft_manual_exclusion_forced(draft, self.settings["detection"].get("exclude_forced_default", True))
-        removed_candidate_ids = {str(value) for value in draft.get("removedCandidateIds", [])} if isinstance(draft, dict) else set()
         divisor = _read_mosaic_divisor(divisor)
         if output_format not in {"original", "png", "jpg"} or not isinstance(keep_metadata, bool):
             raise ClientError("保存形式が正しくありません。", "input_invalid")
@@ -453,6 +446,8 @@ class SavingMixin:
                     current_revision = self._candidate_revision(image_id)
                     if revision != current_revision:
                         raise ClientError("候補が変更されました。保存をやり直してください。", "save_state_changed")
+                    if expected_manual_revision is not None and expected_manual_revision != self.workspace_store.manual_revisions([image_id]).get(image_id, 0):
+                        raise ClientError("手描きが変更されました。保存をやり直してください。", "save_state_changed")
                     catalog_generation = self.catalog_generation
                     # Disabled candidates have no effect on the rendered mask;
                     # do not decode their full-resolution PNGs for every
@@ -460,7 +455,7 @@ class SavingMixin:
                     candidates = [
                         replace(candidate)
                         for candidate in self.candidates.get(image_id, [])
-                        if candidate.enabled and candidate.candidate_id not in removed_candidate_ids
+                        if candidate.enabled
                     ]
                     if client_save_token is None:
                         raise ClientError("保存確認トークンがありません。保存をやり直してください。", "save_state_changed")
@@ -473,6 +468,15 @@ class SavingMixin:
                         output_destination = reserved.output_destination
                         if output_path is None or output_destination is None:
                             raise ClientError("保存先の準備が見つかりません。保存をやり直してください。", "save_state_changed")
+                if draft is None:
+                    draft = self.workspace_store.manual(image_id, self._encode_workspace_mask)
+                try:
+                    draft_masks = decode_draft_masks(draft, record.width, record.height)
+                except (MemoryError, OSError) as exc:
+                    raise ClientError("保存用の手描きマスクを読み込めません。使用可能なメモリを確認してください。", "image_read_failed") from exc
+                manual_exclude_forced = draft_manual_exclusion_forced(draft, self.settings["detection"].get("exclude_forced_default", True))
+                removed_candidate_ids = {str(value) for value in draft.get("removedCandidateIds", [])} if isinstance(draft, dict) else set()
+                candidates = [candidate for candidate in candidates if candidate.candidate_id not in removed_candidate_ids]
                 # A candidate can disappear between the metadata snapshot and the
                 # disk read.  Do not compose a silently reduced mask.
                 shape = (record.height, record.width)
@@ -626,6 +630,7 @@ class SavingMixin:
                 if (durable_receipt.get("imageId") != image_id or durable_receipt.get("revision") != revision):
                     raise ClientError("保存確認トークンが保存対象と一致しません。保存をやり直してください。", "save_state_changed")
                 return {"cleared": bool(durable_receipt.get("cleared")), "stale": bool(durable_receipt.get("stale")),
+                        "candidateRevision": revision, "manualRevision": durable_receipt.get("manualRevision"),
                         "deleted": bool(durable_receipt.get("deleted")), "catalogGeneration": int(durable_receipt.get("catalogGeneration") or 0),
                         "outputPath": str(durable_receipt.get("outputPath") or ""),
                         "relativePath": durable_receipt.get("relativePath"), "editedFilename": durable_receipt.get("editedFilename"),
@@ -637,6 +642,7 @@ class SavingMixin:
                     if receipt.image_id != image_id or receipt.candidate_revision != revision:
                         raise ClientError("保存確認トークンが保存対象と一致しません。保存をやり直してください。", "save_state_changed")
                     return {"cleared": receipt.cleared, "stale": receipt.stale, "deleted": receipt.deleted,
+                            "candidateRevision": revision, "manualRevision": receipt.manual_revision,
                             "catalogGeneration": receipt.catalog_generation, "sourceDeletePending": receipt.source_delete_pending,
                             "sourceAction": receipt.source_action, "relativePath": receipt.relative_path,
                             "editedFilename": receipt.edited_filename}
@@ -657,6 +663,7 @@ class SavingMixin:
                         if receipt.image_id != image_id or receipt.candidate_revision != revision:
                             raise ClientError("保存確認トークンが保存対象と一致しません。保存をやり直してください。", "save_state_changed")
                         return {"cleared": receipt.cleared, "stale": receipt.stale, "deleted": receipt.deleted,
+                                "candidateRevision": revision, "manualRevision": receipt.manual_revision,
                                 "catalogGeneration": receipt.catalog_generation, "sourceDeletePending": receipt.source_delete_pending,
                                 "sourceAction": receipt.source_action, "relativePath": receipt.relative_path,
                                 "editedFilename": receipt.edited_filename}
@@ -675,6 +682,10 @@ class SavingMixin:
                     if not token_allows_action(token_details):
                         raise ClientError("保存確認トークンと元画像の処理が一致しません。保存をやり直してください。", "save_state_changed")
                     catalog_invalid = token_details.catalog_generation != self.catalog_generation or record is None
+                    edits_current = (revision == self._candidate_revision(image_id)
+                                     and token_details.manual_revision == self.workspace_store.manual_revisions([image_id]).get(image_id, 0))
+                    if source_action == "deleted" and not edits_current:
+                        raise ClientError("保存後に編集内容が変更されました。保存をやり直してください。", "save_state_changed")
                     if catalog_invalid:
                         self._discard_browser_save_token_unchecked(save_token)
                         cleanup_paths = self._take_browser_save_cleanup_unchecked()
@@ -800,19 +811,19 @@ class SavingMixin:
                         record = self.images.get(image_id)
                         if record is None or self.catalog_generation != catalog_generation:
                             raise ClientError("画像一覧が変更されました。保存をやり直してください。", "save_state_changed")
-                        current_revision = self._candidate_revision(image_id)
                         deleted = source_action == "deleted"
                         # A save only writes an image. It must retain the
                         # candidate/manual workspace and both image flags.
-                        cleared = revision == current_revision
+                        cleared = edits_current
                         persisted_mtime = record_snapshot.mtime_ns
                         persisted_size = record_snapshot.size_bytes
                         if source_action == "overwrite" and record_snapshot.source_kind == "session":
                             persisted_mtime = source_mtime_ns
                             persisted_size = source_size_bytes
                         if source_action == "deleted": self.save_journal.phase(save_token, "workspace_committing")
-                        receipt_generation = catalog_generation + (1 if deleted else 0)
+                        receipt_generation = catalog_generation
                         durable_save_receipt = {"token": save_token, "imageId": image_id, "revision": revision,
+                                                "manualRevision": token_details.manual_revision,
                                                 "sourceAction": source_action, "cleared": cleared, "stale": not cleared,
                                                 "deleted": deleted, "catalogGeneration": receipt_generation,
                                                 "sourceDeletePending": source_delete_pending,
@@ -900,12 +911,11 @@ class SavingMixin:
                         self.candidates.pop(image_id, None)
                         self.projectless_manual_drafts.pop(image_id, None)
                         self._image_io_locks.pop(image_id, None)
-                        self.catalog_generation += 1
                     self.browser_save_tokens.pop(save_token, None)
                     if token_details.output_destination is not None:
                         self._release_output_destination(token_details.output_destination)
                     response_generation = self.catalog_generation
-                    self.browser_save_receipts[save_token] = BrowserSaveReceipt(image_id, revision, source_action, cleared, not cleared, deleted, response_generation, source_delete_pending, time.monotonic(), record.relative_path, record.edited_filename)
+                    self.browser_save_receipts[save_token] = BrowserSaveReceipt(image_id, revision, source_action, cleared, not cleared, deleted, response_generation, source_delete_pending, time.monotonic(), record.relative_path, record.edited_filename, token_details.manual_revision)
                     rendered_path = token_details.rendered_path
                     if deleted:
                         self._discard_browser_save_tokens_for_image_unchecked(image_id)
@@ -937,6 +947,7 @@ class SavingMixin:
                 if source_action != "keep":
                     self.invalidate_sam_image(image_id)
                 return {"cleared": cleared, "stale": not cleared, "deleted": deleted,
+                        "candidateRevision": revision, "manualRevision": token_details.manual_revision,
                         "catalogGeneration": response_generation,
                         "sourceAction": source_action,
                         "sourceDeletePending": source_delete_pending,
@@ -951,6 +962,7 @@ class SavingMixin:
             if receipt is not None:
                 if receipt.image_id == image_id and receipt.candidate_revision == revision:
                     return {"state": "committed", "cleared": receipt.cleared, "stale": receipt.stale, "deleted": receipt.deleted,
+                            "candidateRevision": revision, "manualRevision": receipt.manual_revision,
                             "catalogGeneration": receipt.catalog_generation, "sourceDeletePending": receipt.source_delete_pending,
                             "sourceAction": receipt.source_action, "relativePath": receipt.relative_path,
                             "editedFilename": receipt.edited_filename}
@@ -963,6 +975,7 @@ class SavingMixin:
         if (durable_receipt is not None and durable_receipt.get("imageId") == image_id
                 and durable_receipt.get("revision") == revision):
             return {"state": "committed", "cleared": bool(durable_receipt.get("cleared")),
+                    "candidateRevision": revision, "manualRevision": durable_receipt.get("manualRevision"),
                     "stale": bool(durable_receipt.get("stale")), "deleted": bool(durable_receipt.get("deleted")),
                     "catalogGeneration": int(durable_receipt.get("catalogGeneration") or 0),
                     "outputPath": str(durable_receipt.get("outputPath") or ""),

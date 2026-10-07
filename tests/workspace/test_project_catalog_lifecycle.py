@@ -371,7 +371,7 @@ class ProjectCatalogCoverageTests(unittest.TestCase):
             result = state.remove_images_from_catalog([target])
         self.assertEqual(result["removedImageIds"], [target])
         self.assertEqual([image["id"] for image in result["images"]], [remaining])
-        self.assertEqual(result["catalogGeneration"], generation + 1)
+        self.assertEqual(result["catalogGeneration"], generation)
         self.assertEqual(state.order, [remaining])
         self.assertFalse(state.workspace_store.has_image(target))
         self.assertTrue(state.workspace_store.has_image(remaining))

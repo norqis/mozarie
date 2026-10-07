@@ -1635,7 +1635,8 @@
       "status": "automated",
       "testIds": [
         "node:tests/test_import_picker_e2e.cjs::import picker browser coverage",
-        "python:tests.test_server.MozarieTests.test_catalog_reload_is_rejected_while_worker_is_alive_and_stale_worker_cannot_commit"
+        "python:tests.test_server.MozarieTests.test_catalog_reload_is_rejected_while_worker_is_alive_and_stale_worker_cannot_commit",
+        "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_peer_manual_sync_conflicts_and_last_stroke_undo_use_real_workspace"
       ]
     },
     {
@@ -2542,7 +2543,8 @@
       "status": "automated",
       "testIds": [
         "python:tests.test_server.MozarieTests.test_import_session_records_requested_and_effective_parallelism_without_a_fixed_cap",
-        "python:tests.test_server.MozarieTests.test_rejected_import_transfer_closes_the_unread_request_connection"
+        "python:tests.test_server.MozarieTests.test_rejected_import_transfer_closes_the_unread_request_connection",
+        "python:tests.test_http_live_endpoints.LiveHttpEndpointTests.test_concurrent_first_uploads_share_one_session_and_close_its_handle"
       ]
     },
     {

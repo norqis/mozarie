@@ -1183,7 +1183,9 @@
       "testIds": [
         "node:tests/test_editor_masks_behavior.cjs::editor masks, fill, candidates, and history",
         "node:tests/test_project_history_browser_e2e.cjs::project Ctrl+Z flushes the durable edit and keeps browser history canvases released",
-        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
+        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage",
+        "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_peer_manual_sync_conflicts_and_last_stroke_undo_use_real_workspace",
+        "python:tests.test_http_live_endpoints.LiveHttpEndpointTests.test_manual_revision_conflicts_keep_pixels_and_empty_delete_is_undoable"
       ]
     },
     {
@@ -1196,7 +1198,8 @@
       "testIds": [
         "node:tests/test_editor_masks_behavior.cjs::editor masks, fill, candidates, and history",
         "node:tests/test_project_history_browser_e2e.cjs::project Ctrl+Z flushes the durable edit and keeps browser history canvases released",
-        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
+        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage",
+        "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_peer_manual_sync_conflicts_and_last_stroke_undo_use_real_workspace"
       ]
     },
     {
@@ -2006,10 +2009,14 @@
     },
     {
       "key": "ED-132.3",
-      "sourceIds": ["ED-132"],
+      "sourceIds": [
+        "ED-132"
+      ],
       "observation": "画像一覧の右クリックメニューをEscで閉じても、選択・スクロール・操作前のフォーカスを変更しない。キーボード起動は対象カードへ戻る。",
       "status": "automated",
-      "testIds": ["node:tests/test_import_picker_e2e.cjs::import picker browser coverage"]
+      "testIds": [
+        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
+      ]
     },
     {
       "key": "ED-120.1",

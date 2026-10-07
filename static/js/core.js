@@ -92,6 +92,7 @@ const USER_ERROR_CODES = {
   output_name_conflict: "output_name_conflict", rename_conflict: "rename_conflict", rename_case_only_unsupported: "rename_case_only_unsupported", rename_extension_unsupported: "rename_extension_unsupported",
   clipboard_write_failed: "clipboard_write_failed",
   workspace_corrupt: "workspace_corrupt", workspace_write_failed: "workspace_write_failed", workspace_database_error: "workspace_write_failed",
+  manual_revision_conflict: "manual_revision_conflict",
   output_unavailable: "output_folder_unavailable", model_not_configured: "model_not_configured",
   directory_picker_unsupported: "directory_picker_unsupported", output_name_exhausted: "output_name_exhausted",
   model_file_missing: "model_file_missing", model_file_invalid: "model_file_invalid", model_load_failed: "model_load_failed", sam_checkpoint_missing: "sam_checkpoint_missing",
@@ -439,6 +440,19 @@ function replaceCatalogSnapshot(snapshot, expectedProjectId) {
   const preservesEditor = (snapshot?.project?.id || null) === (expectedProjectId || null)
     && Boolean(state.currentId && state.currentImage && images.some((image) => image.id === state.currentId));
   if (!preservesEditor) { resetCatalog(images, snapshot.root || ""); return; }
+  const previousImages = new Map(state.images.map((image) => [image.id, image]));
+  for (const image of images) {
+    const previous = previousImages.get(image.id);
+    if (!previous || (Number(previous.manualRevision || 0) === Number(image.manualRevision || 0)
+      && Number(previous.candidateRevision || 0) === Number(image.candidateRevision || 0)
+      && imageAssetVersion(previous) === imageAssetVersion(image))) continue;
+    if (hasPendingWorkspaceDraft(image.id)) {
+      const { hidden, reviewed, flipH, flipV, transformRevision } = image;
+      Object.assign(image, previous, { hidden, reviewed, flipH, flipV, transformRevision });
+    } else if (image.id !== state.currentId) {
+      state.drafts.delete(image.id); state.maskStatus.delete(image.id);
+    }
+  }
   const availableIds = new Set(images.map((image) => image.id));
   for (const image of state.images.filter((image) => !availableIds.has(image.id))) {
     releaseImageCaches(image.id); state.sourceAccess.delete(image.id); state.drafts.delete(image.id); state.maskStatus.delete(image.id);
@@ -516,7 +530,8 @@ async function syncCatalogOnReturn() {
     const current = (snapshot?.project?.id || null) === knownProjectId
       ? snapshot.images.find((image) => image.id === state.currentId) : null;
     const resourcesChanged = previous && current && (imageAssetVersion(previous) !== imageAssetVersion(current)
-      || Number(previous.candidateRevision || 0) !== Number(current.candidateRevision || 0));
+      || Number(previous.candidateRevision || 0) !== Number(current.candidateRevision || 0)
+      || Number(previous.manualRevision || 0) !== Number(current.manualRevision || 0));
     const deferReload = resourcesChanged && (hasPendingWorkspaceDraft(previous.id) || isBusy() || isGestureActive()
       || state.activeStroke || currentImageActionPending() || state.candidateUpdateChains.has(previous.id)
       || state.imageMutationChains.has(previous.id));

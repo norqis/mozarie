@@ -423,10 +423,19 @@ async function uploadManualLayer(imageId, sessionId, layer, dataUrl) {
 }
 
 async function saveWorkspaceDraft(imageId, draft) {
-  if (!draft) return api(`/api/workspace/manual/${encodeURIComponent(imageId)}`, { method: "DELETE" });
+  const epoch = state.catalogEpoch;
+  const expectedManualRevision = Number(state.images.find((image) => image.id === imageId)?.manualRevision || 0);
+  const acknowledge = (result) => {
+    const image = state.images.find((entry) => entry.id === imageId);
+    if (state.catalogEpoch === epoch && image && Number(image.manualRevision || 0) === expectedManualRevision
+      && Number.isInteger(result.manualRevision)) image.manualRevision = result.manualRevision;
+    return result;
+  };
+  if (!draft) return acknowledge(await api(`/api/workspace/manual/${encodeURIComponent(imageId)}`, { method: "DELETE", body: JSON.stringify({ expectedManualRevision }) }));
   const payload = workspaceDraftPayload(draft);
+  payload.expectedManualRevision = expectedManualRevision;
   const dirtyLayers = Array.isArray(payload.dirtyLayers) ? payload.dirtyLayers : [];
-  if (!dirtyLayers.length) return api(`/api/workspace/manual/${encodeURIComponent(imageId)}`, { method: "POST", body: JSON.stringify(payload) });
+  if (!dirtyLayers.length) return acknowledge(await api(`/api/workspace/manual/${encodeURIComponent(imageId)}`, { method: "POST", body: JSON.stringify(payload) }));
   const sessionId = crypto.randomUUID();
   await api(`/api/workspace/manual/${encodeURIComponent(imageId)}/begin`, { method: "POST", body: JSON.stringify({ sessionId, dirtyLayers }) });
   try {
@@ -439,7 +448,7 @@ async function saveWorkspaceDraft(imageId, draft) {
     delete payload.add; delete payload.exclusion; delete payload.exclusionErase;
     payload.emptyLayers = emptyLayers;
     payload.sessionId = sessionId;
-    return await api(`/api/workspace/manual/${encodeURIComponent(imageId)}/commit`, { method: "POST", body: JSON.stringify(payload) });
+    return acknowledge(await api(`/api/workspace/manual/${encodeURIComponent(imageId)}/commit`, { method: "POST", body: JSON.stringify(payload) }));
   } catch (error) {
     await api(`/api/workspace/manual/${encodeURIComponent(imageId)}/cancel`, { method: "POST", body: JSON.stringify({ sessionId }) }).catch(() => {});
     throw error;

@@ -295,7 +295,7 @@ class ApplyStagingFailureTests(unittest.TestCase):
                     self.assertEqual(state.workspace_store.export_state(image_id), workspace)
                     self.assertEqual(state.project_history_status(image_id), history)
                 else:
-                    self.assertEqual(state.catalog_generation, generation + 1)
+                    self.assertEqual(state.catalog_generation, generation)
                     self.assertFalse(source.exists())
                     self.assertNotIn(image_id, state.images)
                     self.assertNotIn(image_id, state.order)

@@ -480,7 +480,7 @@ async function resumePendingSourceDeletes(requestPermission = false) {
         // local durable intent includes the handle, so prepare it now instead
         // of throwing the user's copy+delete request away.
         const images = pending.imageIds.map((imageId) => state.images.find((image) => image.id === imageId)).filter(Boolean);
-        const prepared = await catalogApi("/api/catalog/delete-source/prepare", { imageIds: images.map((image) => image.id), deleteToken: pending.deleteToken }, { method: "POST" });
+        const prepared = await catalogApi("/api/catalog/delete-source/prepare", { imageIds: images.map((image) => image.id), deleteToken: pending.deleteToken, savedEdits: pending.savedEdits }, { method: "POST" });
         if (!pending.browserEntries?.length) pending.browserEntries = images.filter((image) => (prepared.preparedImageIds || []).includes(image.id)).map(browserDeleteEntry).filter(Boolean);
         pending.imageIds = prepared.preparedImageIds || pending.imageIds;
         pending.state = "prepared";

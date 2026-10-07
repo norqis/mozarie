@@ -489,7 +489,7 @@ class HttpCoverageTests(unittest.TestCase):
                     handler.do_DELETE()
         state.remove_image_from_catalog.assert_called_once_with("x")
         state.delete_candidate.assert_called_once_with("x", "y")
-        state.delete_manual_workspace.assert_called_once_with("x")
+        state.delete_manual_workspace.assert_called_once_with("x", None)
 
     def test_http_get_routes_dispatch_json_and_asset_paths(self) -> None:
         state = MagicMock()

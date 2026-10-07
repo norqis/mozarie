@@ -137,7 +137,9 @@
       "observation": "実行ボタンが操作でき、コピーの成功後にだけ元画像を削除する。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > copy success deletes original only after commit"
+        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > copy success deletes original only after commit",
+        "python:tests.test_http_live_endpoints.LiveHttpEndpointTests.test_copy_delete_rejects_new_edits_before_commit_and_browser_delete_claim",
+        "python:tests.test_http_live_endpoints.LiveHttpEndpointTests.test_render_rejects_a_dialog_draft_from_before_peer_manual_edit"
       ]
     },
     {
@@ -489,7 +491,8 @@
         "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > standalone file grants are queried and restored without duplicate requests",
         "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > denied revoked and inactive save grants preserve source and output",
         "node:tests/test_folder_permissions_e2e.cjs::project folder restore retains each nested file's direct parent",
-        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > copy then source delete follows durable commit"
+        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > copy then source delete follows durable commit",
+        "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_browser_copy_delete_recovery_keeps_edits_made_after_the_copy"
       ]
     },
     {
@@ -1146,7 +1149,9 @@
       "status": "automated",
       "testIds": [
         "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > 400 browser copies stay bounded by configured parallelism",
-        "python:tests.test_server.MozarieTests.test_import_session_records_requested_and_effective_parallelism_without_a_fixed_cap"
+        "python:tests.test_server.MozarieTests.test_import_session_records_requested_and_effective_parallelism_without_a_fixed_cap",
+        "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_parallel_copy_delete_completes_every_real_file_and_workspace_row",
+        "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_parallel_browser_copy_delete_keeps_surviving_save_tokens"
       ]
     },
     {

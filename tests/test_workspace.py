@@ -38,7 +38,7 @@ class WorkspaceTests(unittest.TestCase):
             catalog = self._new_catalog(store)
             image_id = store.reconcile_images(catalog, [self._image(Path(directory))])["001.png"]["image_id"]
             store.save_manual(str(image_id), {"add": "x", "manualEnabled": True, "hasEffectiveMask": True}, lambda value: self._png() if value else None)
-            self.assertEqual(store.manual_mask_statuses([str(image_id)]), {str(image_id): (True, 0)})
+            self.assertEqual(store.manual_mask_statuses([str(image_id)]), {str(image_id): (True, 0, 1)})
 
     def test_manual_effective_mask_requires_the_client_scalar(self):
         with tempfile.TemporaryDirectory() as directory:

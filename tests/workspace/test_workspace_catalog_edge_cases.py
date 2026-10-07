@@ -582,7 +582,8 @@ class StateCatalogExtraCoverageTests(unittest.TestCase):
         with self.assertRaises(Exception): self.state.read_candidate_mask_png(image_id, "absent")
         self.state.workspace_store.delete_images([image_id])
         self.assertIsNone(self.state.manual_workspace(image_id))
-        self.state.delete_manual_workspace(image_id)
+        with self.assertRaisesRegex(ValueError, "workspace image is missing"):
+            self.state.delete_manual_workspace(image_id)
 
     def test_handseg_cpu_provider_failure(self) -> None:
         image_id = self.add_image(); item = self.state.images[image_id]

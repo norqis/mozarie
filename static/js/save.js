@@ -299,12 +299,12 @@ async function openSingleSaveDialog(imageId = state.currentId) {
   const generation = state.imageGeneration;
   if (!imageId || isBusy() || state.importing || currentImageActionPending()) return;
   if (state.candidateUpdateChains.size) await waitForCandidateMutations();
-  try { await flushDraftSaves([imageId]); }
+  try { await flushWorkspaceDraft(imageId); }
   catch (error) { showUserError(error, invoker); return; }
   const image = state.images.find((entry) => entry.id === imageId);
   if (!isProcessableImage(image) || isBusy() || state.importing || currentImageActionPending() || state.currentId !== imageId || !isCurrentGeneration(generation)
     || !state.currentImage || state.projectReadOnly || image.sourceDimensionsChanged) return;
-  state.singleSave = { imageId, generation, divisor: Number($("#divisor").value), draft: draftPayload([imageId])[imageId] || null, invoker };
+  state.singleSave = { imageId, generation, manualRevision: Number(image.manualRevision || 0), divisor: Number($("#divisor").value), draft: draftPayload([imageId])[imageId] || null, invoker };
   $("#singleSaveTarget").textContent = t("apply.singleTarget", { name: imageDisplayPath(image) });
   if (!state.singleSaveDialogInitialized) {
     $("#singleSaveCopyMode").checked = true;
@@ -522,8 +522,8 @@ async function startSingleSave(event) {
     const access = sourceAccessFor(save.imageId);
     if (!copying) await ensureSaveSources([save.imageId], "overwrite", false, format, sourcePreparation);
     const rendered = copying
-      ? await renderDefaultCopy(entry, { imageId: save.imageId, candidateRevision: entry.candidateRevision, divisor: save.divisor, draft: save.draft, copyToDefault: true, suffix, format, keepMetadata })
-      : { response: await renderStreamedSave(entry, { imageId: save.imageId, candidateRevision: entry.candidateRevision, divisor: save.divisor, draft: save.draft, suffix, format, keepMetadata, streamImage: image.sourceKind !== "filesystem" || Boolean(access?.fileHandle) }) };
+      ? await renderDefaultCopy(entry, { imageId: save.imageId, candidateRevision: entry.candidateRevision, expectedManualRevision: save.manualRevision, divisor: save.divisor, draft: save.draft, copyToDefault: true, suffix, format, keepMetadata })
+      : { response: await renderStreamedSave(entry, { imageId: save.imageId, candidateRevision: entry.candidateRevision, expectedManualRevision: save.manualRevision, divisor: save.divisor, draft: save.draft, suffix, format, keepMetadata, streamImage: image.sourceKind !== "filesystem" || Boolean(access?.fileHandle) }) };
     const response = rendered.response;
     saveToken = rendered.saveToken || response?.headers.get("X-Mozarie-Save-Token") || "";
     if (!saveToken) throw Object.assign(new Error("save_state_changed"), { code: "save_state_changed" });
@@ -565,7 +565,8 @@ async function startSingleSave(event) {
       await finishFormattedSourceRename(access, sourceRename);
       if (committed.sourceDeletePending) browserSourceDelete = { deleted: false, retryable: false };
       if (copying && committed.outputPath) output = committed.outputPath;
-      if (copying && deleteOriginal && access?.fileHandle) browserSourceDelete = await deleteCopiedBrowserSource(image, saveToken);
+      if (copying && deleteOriginal && access?.fileHandle) browserSourceDelete = committed.stale
+        ? { deleted: false, error: codedError("save_state_changed") } : await deleteCopiedBrowserSource(image, saveToken, { candidateRevision: entry.candidateRevision, manualRevision: committed.manualRevision });
     }
     catch (error) {
       const reconcile = !commitStarted || isDefinitiveCommitRejection(error) || error.saveState === "pending";
@@ -1088,7 +1089,7 @@ async function restoreSourceHandle(access, snapshot, deleted) {
   access.name = file.name; access.size = file.size; access.lastModified = file.lastModified;
 }
 
-async function deleteCopiedBrowserSource(image, saveToken) {
+async function deleteCopiedBrowserSource(image, saveToken, savedEdits) {
   // The output has already been committed when this starts.  Keep deletion's
   // File System Access handle and server claim in IndexedDB so a lost response
   // or closed tab can finish this exact operation once.  The entry below also
@@ -1106,11 +1107,11 @@ async function deleteCopiedBrowserSource(image, saveToken) {
   const deleteToken = crypto.randomUUID();
   // Persist the handle before prepare: a server receipt must never outlive
   // the browser capability needed to complete its claimed deletion.
-  let pending = { deleteToken, saveToken, retryOnResume: true, imageIds: [image.id], browserDeletedImageIds: [], browserEntries: [browserEntry], state: "preparing" };
+  let pending = { deleteToken, saveToken, savedEdits, retryOnResume: true, imageIds: [image.id], browserDeletedImageIds: [], browserEntries: [browserEntry], state: "preparing" };
   return withSourceDeleteLock(deleteToken, async () => {
   try {
     await rememberPendingSourceDelete(pending);
-    const prepared = await catalogApi("/api/catalog/delete-source/prepare", { imageIds: [image.id], deleteToken }, { method: "POST" });
+    const prepared = await catalogApi("/api/catalog/delete-source/prepare", { imageIds: [image.id], deleteToken, savedEdits }, { method: "POST" });
     if (!(prepared.preparedImageIds || []).includes(image.id)) throw codedError("save_state_changed");
     pending = { ...pending, state: "prepared" };
     await rememberPendingSourceDelete(pending);
@@ -1262,6 +1263,7 @@ async function runBrowserSave(imageIds, suffix, deleteOriginal, mode = "copy", r
     drafts: new Map(Object.entries(draftPayload(imageIds))),
     sources: new Map(imageIds.map((imageId) => [imageId, {
       image: imagesById.get(imageId),
+      manualRevision: Number(imagesById.get(imageId)?.manualRevision || 0),
       access: sourceAccessFor(imageId) ? { ...sourceAccessFor(imageId) } : null,
     }])),
   };
@@ -1300,7 +1302,7 @@ async function runBrowserSave(imageIds, suffix, deleteOriginal, mode = "copy", r
           let rendered;
           try {
             rendered = await renderDefaultCopy(entry, { imageId: entry.imageId, candidateRevision: entry.candidateRevision,
-              divisor: inputs.divisor, draft, copyToDefault: true, suffix: inputs.suffix, format: inputs.format, keepMetadata: inputs.keepMetadata });
+              expectedManualRevision: source.manualRevision, divisor: inputs.divisor, draft, copyToDefault: true, suffix: inputs.suffix, format: inputs.format, keepMetadata: inputs.keepMetadata });
           } finally { inputs.drafts.delete(entry.imageId); }
           const saveToken = rendered.saveToken;
           if (!saveToken) throw Object.assign(new Error("save_state_changed"), { code: "save_state_changed" });
@@ -1324,7 +1326,7 @@ async function runBrowserSave(imageIds, suffix, deleteOriginal, mode = "copy", r
               });
               if (committed.sourceDeletePending) { save.sourceDeleteFailures.push(sourceImage?.name || entry.imageId); save.sourceDeleteNotAvailable = true; }
               if (!browserCopyDelete) return { committed, sourceAction };
-              const sourceDelete = await deleteCopiedBrowserSource(sourceImage, saveToken);
+              const sourceDelete = committed.stale ? { deleted: false } : await deleteCopiedBrowserSource(sourceImage, saveToken, { candidateRevision: entry.candidateRevision, manualRevision: committed.manualRevision });
               if (!sourceDelete.deleted) save.sourceDeleteFailures.push(sourceImage?.name || entry.imageId);
               return { committed, sourceAction: sourceDelete.deleted ? "deleted" : "keep" };
             }
@@ -1347,7 +1349,7 @@ async function runBrowserSave(imageIds, suffix, deleteOriginal, mode = "copy", r
           let binary;
           try {
             binary = await renderStreamedSave(entry, {
-              imageId: entry.imageId, candidateRevision: entry.candidateRevision, divisor: inputs.divisor, draft,
+              imageId: entry.imageId, candidateRevision: entry.candidateRevision, expectedManualRevision: source.manualRevision, divisor: inputs.divisor, draft,
               format: inputs.format, keepMetadata: inputs.keepMetadata,
             });
           } finally { inputs.drafts.delete(entry.imageId); }
@@ -1394,7 +1396,7 @@ async function runBrowserSave(imageIds, suffix, deleteOriginal, mode = "copy", r
           let binary;
           try {
             binary = await renderStreamedSave(entry, {
-              imageId: entry.imageId, candidateRevision: entry.candidateRevision, divisor: inputs.divisor, draft,
+              imageId: entry.imageId, candidateRevision: entry.candidateRevision, expectedManualRevision: source.manualRevision, divisor: inputs.divisor, draft,
               format: inputs.format, keepMetadata: inputs.keepMetadata, streamImage: false,
             });
           } finally { inputs.drafts.delete(entry.imageId); }

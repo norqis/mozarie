@@ -229,6 +229,7 @@ class BrowserSaveToken:
     flip_vertical: bool = False
     source_flip_horizontal: bool = False
     source_flip_vertical: bool = False
+    manual_revision: int = 0
 
 
 @dataclass(frozen=True)
@@ -269,6 +270,7 @@ class BrowserSaveReceipt:
     completed_at: float = 0.0
     relative_path: str | None = None
     edited_filename: str | None = None
+    manual_revision: int = 0
 
 
 @dataclass

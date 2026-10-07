@@ -87,6 +87,7 @@ class JobsSavingCoverageTests(unittest.TestCase):
         state.cache_dir = directory / "cache"; state._image_io_locks = {}
         state.workspace_store = Mock()
         state.workspace_store.browser_save_receipt.return_value = None
+        state.workspace_store.manual_revisions.return_value = {}
         state.workspace_store.acknowledge_browser_save_receipt.return_value = True
         state.save_journal = Mock()
         state.save_journal.row.return_value = None

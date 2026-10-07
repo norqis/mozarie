@@ -105,7 +105,7 @@ class WorkspaceCoverageTests(unittest.TestCase):
             manual = store.manual(image_id, lambda value: value)
             self.assertEqual(manual["removedCandidateIds"], ["candidate"])
             self.assertFalse(manual["manualEnabled"])
-            self.assertEqual(store.manual_mask_statuses([image_id]), {image_id: (True, 1)})
+            self.assertEqual(store.manual_mask_statuses([image_id]), {image_id: (True, 1, 1)})
             store.delete_manual([image_id])
             self.assertIsNone(store.manual(image_id, lambda value: value))
 

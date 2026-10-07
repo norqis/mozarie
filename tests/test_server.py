@@ -920,7 +920,7 @@ class MozarieTests(unittest.TestCase):
             self.assertEqual(failures, [])
             revision = state._candidate_revision(image_id)
             self.assertEqual(revision, 2)
-            self.assertEqual(state.workspace_store.manual_mask_statuses([image_id])[image_id], (False, revision))
+            self.assertEqual(state.workspace_store.manual_mask_statuses([image_id])[image_id][:2], (False, revision))
 
     def test_catalog_snapshot_uses_the_persisted_manual_effective_mask(self):
         with tempfile.TemporaryDirectory() as directory:

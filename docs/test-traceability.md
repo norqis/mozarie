@@ -1,5 +1,15 @@
 # 自動テストの対応
 
+全体監査3回目では、次の実HTTP・SQLite・Chromiumの観測を既存契約へ追加した。手動確認項目は追加しない。
+
+| 契約 | 追加した観測とテスト |
+| --- | --- |
+| WS-100.5、ED-085.1、ED-086.1 | `manual_sync_live_browser_helper.cjs` を `LiveEditorGestureBrowserTests.test_peer_manual_sync_conflicts_and_last_stroke_undo_use_real_workspace` から実行。別タブの手描き画素を復帰時に表示し、非選択画像の未保存の編集は競合時に保持する。最後の手描き全消去を戻すと全筆跡が戻り、やり直すと空になる。 |
+| ED-085.1 | `LiveHttpEndpointTests.test_manual_revision_conflicts_keep_pixels_and_empty_delete_is_undoable` は通常保存・ストリーム確定・削除・履歴復元の版と画素を確認。履歴INSERT失敗では画素と版が共に戻る。 |
+| SV-012.1、SV-096.1 | `test_copy_delete_rejects_new_edits_before_commit_and_browser_delete_claim`、`test_render_rejects_a_dialog_draft_from_before_peer_manual_edit` は描画前・描画後・削除予約後の編集を保持する。`test_browser_copy_delete_recovery_keeps_edits_made_after_the_copy` はIndexedDBに残したコピー時の版を再開時にも使い、元画像を削除しない。 |
+| SV-070.2 | `test_parallel_copy_delete_completes_every_real_file_and_workspace_row` と `test_parallel_browser_copy_delete_keeps_surviving_save_tokens` は2要求が同時に確定へ到達するまでHTTP境界で待ち合わせ、ネイティブ元画像とOPFS元画像の両方で全出力・全削除を確認する。 |
+| WS-137.1 | `LiveHttpEndpointTests.test_concurrent_first_uploads_share_one_session_and_close_its_handle` は初回並列転送の一時領域とロックハンドルを共有し、終了時に閉じることを確認する。 |
+
 ED-132.3 は画像一覧の右クリックメニューを閉じた後のフォーカス・選択・スクロール維持と、キーボード起動時の復帰先を実Chromiumで確認する。
 
 履歴分岐のマスクURLは `LiveHttpEndpointTests.test_history_branch_uses_fresh_mask_urls_and_keeps_manual_revision_current` で、枠変更→元に戻す→別の枠変更→元に戻す・やり直すを実HTTPへ送り、画素とURLの対応、手描きrevisionの一致、復元失敗後の旧マスク取得と次編集を確認する。内容の復元と表示用revisionを区別し、対象外画像のrevisionは変えない。
@@ -42,12 +52,12 @@ SV-058.1 の2万画像性能試験は、一覧・編集画面を往復する各�
 | 分野 | 自動 | 手動 | 対象外 | 合計 |
 | --- | ---: | ---: | ---: | ---: |
 | 起動・読み込み・一覧・プロジェクト | 216 | 0 | 19 | 235 |
-| 描画・境界・候補・表示・履歴 | 172 | 0 | 2 | 174 |
+| 描画・境界・候補・表示・履歴 | 173 | 0 | 2 | 175 |
 | 検出・モデル・設定・ショートカット | 203 | 0 | 18 | 221 |
 | 保存・書き出し・異常時・リリース | 122 | 0 | 16 | 138 |
 | 通信・対象の組合せ・プロジェクトデータ | 474 | 0 | 5 | 479 |
 | 画像反転・保存形式・メタ情報 | 150 | 0 | 3 | 153 |
-| **合計** | **1,337** | **0** | **63** | **1,400** |
+| **合計** | **1,338** | **0** | **63** | **1,401** |
 
 件数は契約JSONの `observations[].status` から集計した値です。変更時はこの表も同じコミットで更新します。
 

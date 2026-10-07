@@ -17,6 +17,7 @@ import tempfile
 import threading
 import time
 import unittest
+import uuid
 import warnings
 from unittest.mock import patch
 from pathlib import Path
@@ -99,6 +100,180 @@ class LiveHttpEndpointTests(unittest.TestCase):
             return response.status, dict(response.getheaders()), response.read()
         finally:
             connection.close()
+
+    def test_manual_revision_conflicts_keep_pixels_and_empty_delete_is_undoable(self) -> None:
+        image_id = self.state.set_root(str(self.source_dir))[0]["id"]
+        endpoint = f"/api/workspace/manual/{image_id}"
+        with Image.new("RGBA", (12, 8)) as mask, io.BytesIO() as output:
+            mask.putpixel((2, 2), (255, 255, 255, 255))
+            mask.putpixel((8, 4), (255, 255, 255, 255))
+            mask.save(output, format="PNG")
+            png = "data:image/png;base64," + base64.b64encode(output.getvalue()).decode("ascii")
+        payload = {"add": png, "hasEffectiveMask": True, "expectedManualRevision": 0}
+        status, _, body = self.request("POST", endpoint, payload, authorized=True)
+        self.assertEqual(status, 200, body)
+        self.assertEqual(json.loads(body)["manualRevision"], 1)
+        with self.state.workspace_store._connect() as db:
+            db.execute("CREATE TRIGGER reject_manual_history BEFORE INSERT ON history_entries BEGIN SELECT RAISE(ABORT, 'history unavailable'); END")
+        try:
+            status, _, body = self.request("DELETE", endpoint, {"expectedManualRevision": 1}, authorized=True)
+            self.assertNotEqual(status, 200, body)
+            self.assertEqual(self.state.workspace_store.manual_revisions([image_id]), {image_id: 1})
+            self.assertEqual(self.state.manual_workspace(image_id)["add"], png)
+        finally:
+            with self.state.workspace_store._connect() as db: db.execute("DROP TRIGGER reject_manual_history")
+        for method, value in (("POST", {**payload, "add": ""}), ("DELETE", {"expectedManualRevision": 0})):
+            status, _, body = self.request(method, endpoint, value, authorized=True)
+            self.assertEqual(json.loads(body).get("error_code"), "manual_revision_conflict", (status, body))
+            self.assertEqual(self.state.manual_workspace(image_id)["add"], png)
+        session_id = "a1000000-0000-4000-8000-000000000001"
+        status, _, body = self.request("POST", endpoint + "/begin", {"sessionId": session_id, "dirtyLayers": ["add"]}, authorized=True)
+        self.assertEqual(status, 200, body)
+        status, _, body = self.request("POST", endpoint + "/commit", {
+            "sessionId": session_id, "dirtyLayers": ["add"], "emptyLayers": ["add"], "expectedManualRevision": 0,
+        }, authorized=True)
+        self.assertEqual(json.loads(body).get("error_code"), "manual_revision_conflict", (status, body))
+        self.assertEqual(self.state.workspace_store.manual_revisions([image_id]), {image_id: 1})
+        status, _, body = self.request("DELETE", endpoint, {"expectedManualRevision": 1}, authorized=True)
+        self.assertEqual((status, json.loads(body)["manualRevision"]), (200, 2))
+        self.assertIsNone(self.state.manual_workspace(image_id))
+        self.state.restore_project_history(image_id, "undo")
+        restored = self.state._decode_workspace_mask(self.state.manual_workspace(image_id)["add"])
+        with Image.open(io.BytesIO(restored)) as mask:
+            self.assertEqual(mask.getpixel((2, 2))[3], 255)
+            self.assertEqual(mask.getpixel((8, 4))[3], 255)
+        self.assertEqual(self.state.workspace_store.manual_revisions([image_id]), {image_id: 3})
+        status, _, body = self.request("POST", endpoint, {**payload, "expectedManualRevision": 2}, authorized=True)
+        self.assertEqual(json.loads(body).get("error_code"), "manual_revision_conflict", (status, body))
+        self.state.restore_project_history(image_id, "redo")
+        self.assertIsNone(self.state.manual_workspace(image_id))
+        status, _, body = self.request("DELETE", endpoint, {"expectedManualRevision": 4}, authorized=True)
+        self.assertEqual((status, json.loads(body)["manualRevision"]), (200, 4))
+        snapshot = self.state.catalog_snapshot()
+        self.assertEqual(snapshot["images"][0]["manualRevision"], 4)
+
+    def test_copy_delete_rejects_new_edits_before_commit_and_browser_delete_claim(self) -> None:
+        image_id = self.state.set_root(str(self.source_dir))[0]["id"]
+        output = self.source_dir.parent / "output"; output.mkdir()
+        self.state.update_settings({"saving": {"default_output_directory": str(output)}})
+        source = self.source_dir / "source.png"
+        original = source.read_bytes()
+
+        def render_copy(suffix: str) -> str:
+            token = str(uuid.uuid4())
+            payload = {"imageId": image_id, "candidateRevision": self.state._candidate_revision(image_id),
+                       "clientSaveToken": token, "copyToDefault": True, "divisor": 100, "suffix": suffix,
+                       "expectedManualRevision": self.state.workspace_store.manual_revisions([image_id])[image_id]}
+            for endpoint in ("reserve", "render"):
+                status, _, body = self.request("POST", f"/api/save/{endpoint}", payload, authorized=True)
+                self.assertEqual(status, 200, body)
+            return token
+
+        def edit() -> None:
+            self.state.save_manual_workspace(image_id, {"add": "", "manualEnabled": False, "hasEffectiveMask": False})
+
+        def commit(token: str, action: str) -> tuple[int, dict]:
+            status, _, body = self.request("POST", "/api/save/commit", {
+                "imageId": image_id, "candidateRevision": self.state._candidate_revision(image_id), "saveToken": token, "sourceAction": action,
+            }, authorized=True)
+            return status, json.loads(body)
+
+        token = render_copy("_stale"); edit()
+        status, result = commit(token, "deleted")
+        self.assertEqual((status, result.get("error_code")), (400, "save_state_changed"))
+        self.assertTrue(self.state.workspace_store.has_image(image_id)); self.assertEqual(source.read_bytes(), original)
+        status, result = commit(token, "keep")
+        self.assertEqual(status, 200); self.assertTrue(result["stale"])
+        saved_edits = {"candidateRevision": result["candidateRevision"], "manualRevision": result["manualRevision"]}
+        self.state.acknowledge_browser_save(token)
+        status, _, body = self.request("POST", "/api/catalog/delete-source/prepare", {
+            "imageIds": [image_id], "deleteToken": str(uuid.uuid4()), "savedEdits": saved_edits,
+        }, authorized=True)
+        self.assertEqual((status, json.loads(body).get("error_code")), (400, "save_state_changed"))
+        for phase in ("claim", "commit"):
+            token = render_copy("_" + phase)
+            status, result = commit(token, "keep")
+            self.assertEqual(status, 200)
+            saved_edits = {"candidateRevision": result["candidateRevision"], "manualRevision": result["manualRevision"]}
+            self.state.acknowledge_browser_save(token)
+            delete_token = str(uuid.uuid4())
+            status, _, body = self.request("POST", "/api/catalog/delete-source/prepare", {
+                "imageIds": [image_id], "deleteToken": delete_token, "savedEdits": saved_edits,
+            }, authorized=True)
+            self.assertEqual(status, 200, body)
+            if phase == "commit":
+                self.state.claim_source_delete(delete_token)
+            edit()
+            endpoint = "/api/catalog/delete-source/claim" if phase == "claim" else "/api/catalog/delete-source"
+            status, _, body = self.request("POST", endpoint, {"deleteToken": delete_token, "imageIds": [image_id]}, authorized=True)
+            self.assertEqual((status, json.loads(body).get("error_code")), (400, "save_state_changed"))
+            self.assertTrue(self.state.workspace_store.has_image(image_id)); self.assertEqual(source.read_bytes(), original)
+            if phase == "commit": self.state.release_source_delete_claim(delete_token)
+            self.state.cancel_source_delete(delete_token)
+        token = render_copy("_candidate")
+        revision = self.state._candidate_revision(image_id)
+        with self.state.image_io_lock(image_id), self.state.lock:
+            self.state._commit_candidate_snapshot(image_id, [], replace=True)
+        status, _, body = self.request("POST", "/api/save/commit", {
+            "imageId": image_id, "candidateRevision": revision, "saveToken": token, "sourceAction": "deleted",
+        }, authorized=True)
+        self.assertEqual((status, json.loads(body).get("error_code")), (400, "save_state_changed"))
+        self.assertEqual(source.read_bytes(), original)
+        self.assertTrue(self.state.workspace_store.has_image(image_id))
+
+    def test_render_rejects_a_dialog_draft_from_before_peer_manual_edit(self) -> None:
+        image_id = self.state.set_root(str(self.source_dir))[0]["id"]
+        token = str(uuid.uuid4())
+        self.state.reserve_browser_save(image_id, 0, token, copy_to_default=False, suffix="_saved", output_format="original", keep_metadata=True)
+        self.state.save_manual_workspace(image_id, {"hasEffectiveMask": False, "manualEnabled": False})
+        status, _, body = self.request("POST", "/api/save/render", {
+            "imageId": image_id, "candidateRevision": 0, "expectedManualRevision": 0,
+            "clientSaveToken": token, "divisor": 100, "draft": {"manualEnabled": True},
+        }, authorized=True)
+        self.assertEqual(status, 400)
+        self.assertEqual((status, json.loads(body).get("error_code")), (400, "save_state_changed"))
+        self.assertEqual(self.state.browser_save_tokens[token].state, "rendering")
+        self.assertFalse(self.state.manual_workspace(image_id)["manualEnabled"])
+
+    def test_concurrent_first_uploads_share_one_session_and_close_its_handle(self) -> None:
+        first_open = threading.Event(); release_open = threading.Event(); second_started = threading.Event(); second_open = threading.Event()
+        opened = []; paths = []; failures = []
+        original_open = Path.open
+
+        def controlled_open(path, *args, **kwargs):
+            handle = original_open(path, *args, **kwargs)
+            if path.name == ".active.lock":
+                opened.append(handle)
+                self.addCleanup(handle.close)
+                if len(opened) == 1:
+                    first_open.set()
+                    if not release_open.wait(THREAD_TIMEOUT):
+                        handle.close(); raise TimeoutError("session open was not released")
+                else:
+                    second_open.set()
+            return handle
+
+        def ensure(second=False):
+            try:
+                if second: second_started.set()
+                paths.append(self.state._ensure_session())
+            except BaseException as error: failures.append(error)
+
+        first = threading.Thread(target=ensure); second = threading.Thread(target=ensure, args=(True,))
+        with patch.object(Path, "open", controlled_open):
+            try:
+                first.start(); self.assertTrue(first_open.wait(THREAD_TIMEOUT))
+                second.start(); self.assertTrue(second_started.wait(THREAD_TIMEOUT))
+                self.assertFalse(second_open.wait(0.1), "the second upload must wait for the first session publication")
+            finally:
+                release_open.set(); join_threads(first, second)
+        self.assertEqual(failures, [])
+        self.assertEqual(len(set(paths)), 1)
+        self.assertEqual(len(opened), 1)
+        self.assertIs(self.state._session_lock_handle, opened[0])
+        self.assertEqual(len(list(self.state.session_base_dir.glob("session-*"))), 1)
+        self.state.shutdown()
+        self.assertTrue(opened[0].closed)
 
     def test_named_project_open_discards_active_projectless_catalog_across_restart(self) -> None:
         status, _headers, body = self.request("POST", "/api/projects", {"name": "Named target"}, authorized=True)

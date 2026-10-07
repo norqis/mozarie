@@ -1308,7 +1308,10 @@ async function restoreProjectHistory(direction) {
       for (const changedId of changed) {
         state.drafts.delete(changedId); state.maskStatus.delete(changedId); state.projectHistory.delete(changedId); releaseCandidateBundles(changedId);
         const record = state.images.find((image) => image.id === changedId);
-        if (record && changedId === imageId && result.current) record.candidateRevision = Number(result.current.candidateRevision || 0);
+        if (record && changedId === imageId && result.current) {
+          record.candidateRevision = Number(result.current.candidateRevision || 0);
+          record.manualRevision = Number(result.current.manualRevision || 0);
+        }
       }
       invalidateProjectHistoryRefresh(imageId);
       state.projectHistory.set(imageId, { canUndo: result.canUndo === true, canRedo: result.canRedo === true });
