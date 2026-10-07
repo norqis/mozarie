@@ -1447,7 +1447,14 @@
         "python:tests.saving.test_browser_overwrite_recovery.BrowserOverwriteRecoveryTests.test_batch_renamed_overwrite_crash_removes_uncommitted_target",
         "python:tests.saving.test_browser_overwrite_recovery.BrowserOverwriteRecoveryTests.test_committed_single_overwrite_survives_lost_response",
         "python:tests.saving.test_browser_overwrite_recovery.BrowserOverwriteRecoveryTests.test_committed_batch_rename_finishes_source_cleanup",
-        "python:tests.saving.test_browser_overwrite_recovery.BrowserOverwriteRecoveryTests.test_backend_restart_restores_unknown_token_and_preserves_project_edits"
+        "python:tests.saving.test_browser_overwrite_recovery.BrowserOverwriteRecoveryTests.test_backend_restart_restores_unknown_token_and_preserves_project_edits",
+        "python:tests.saving.test_browser_overwrite_recovery.BrowserOverwriteRecoveryTests.test_cancelled_overwrite_preserves_later_external_edit",
+        "python:tests.saving.test_browser_overwrite_recovery.BrowserOverwriteRecoveryTests.test_cancelled_rename_preserves_later_external_target",
+        "python:tests.saving.test_browser_overwrite_recovery.BrowserOverwriteRecoveryTests.test_committed_rename_preserves_later_external_original",
+        "python:tests.saving.test_browser_overwrite_recovery.BrowserOverwriteRecoveryTests.test_failed_source_write_does_not_rewrite_unchanged_original",
+        "python:tests.saving.test_browser_overwrite_recovery.BrowserOverwriteRecoveryTests.test_unrecorded_source_write_keeps_original_backup_without_rollback",
+        "python:tests.saving.test_browser_overwrite_recovery.BrowserOverwriteRecoveryTests.test_cancelled_rename_accepts_an_already_removed_target",
+        "python:tests.saving.test_browser_overwrite_recovery.BrowserOverwriteRecoveryTests.test_committed_rename_accepts_an_already_removed_original"
       ]
     },
     {

@@ -94,7 +94,8 @@ class BrowserOverwriteRecoveryTests(unittest.TestCase):
                         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
                         # The interrupted pre-commit request never reached HTTP;
                         # only the subsequent successful UI save is committed.
-                        self.assertEqual(requests.count("/api/save/commit"), 2 if "committed" in mode else 1)
+                        expected = (1 if "committed" in mode else 0) if "external" in mode or "unrecorded" in mode else (2 if "committed" in mode else 1)
+                        self.assertEqual(requests.count("/api/save/commit"), expected)
                     finally:
                         server.shutdown(); server.server_close(); thread.join(5)
                         state.shutdown()
@@ -137,3 +138,24 @@ class BrowserOverwriteRecoveryTests(unittest.TestCase):
 
     def test_committed_backup_delete_failure_keeps_receipt_until_retry(self):
         self.check_recovery("single-committed-delete-failure")
+
+    def test_cancelled_overwrite_preserves_later_external_edit(self):
+        self.check_recovery("single-external")
+
+    def test_cancelled_rename_preserves_later_external_target(self):
+        self.check_recovery("single-rename-external")
+
+    def test_committed_rename_preserves_later_external_original(self):
+        self.check_recovery("single-rename-committed-external")
+
+    def test_failed_source_write_does_not_rewrite_unchanged_original(self):
+        self.check_recovery("single-write-failure")
+
+    def test_unrecorded_source_write_keeps_original_backup_without_rollback(self):
+        self.check_recovery("single-unrecorded")
+
+    def test_cancelled_rename_accepts_an_already_removed_target(self):
+        self.check_recovery("single-rename-target-missing")
+
+    def test_committed_rename_accepts_an_already_removed_original(self):
+        self.check_recovery("single-rename-committed-original-missing")

@@ -52,21 +52,42 @@ const { chromium } = require("playwright");
       }
     };
     const bytes = (name = "source.png") => page.evaluate(async (name) => [...new Uint8Array(await (await (await (await navigator.storage.getDirectory()).getFileHandle(name)).getFile()).arrayBuffer())], name);
-    let heldRoute; let token; let resolveCommit;
+    let heldRoute; let token; let resolveCommit; let externalBytes;
+    const externalName = rename && !committed ? "renamed.png" : "source.png";
     const atCommit = new Promise((resolve) => { resolveCommit = resolve; });
-    if (mode.includes("idb-failure")) {
-      await page.evaluate(() => {
+    if (mode.includes("idb-failure") || mode.includes("write-failure") || mode.includes("unrecorded")) {
+      await page.evaluate((mode) => {
+        if (mode.includes("write-failure")) {
+          const create = FileSystemFileHandle.prototype.createWritable;
+          window.sourceWriteCalls = 0;
+          FileSystemFileHandle.prototype.createWritable = function (...args) {
+            window.sourceWriteCalls += 1;
+            if (window.sourceWriteCalls === 1) throw new DOMException("fixture write denied", "NotAllowedError");
+            return create.apply(this, args);
+          };
+          return;
+        }
+        let puts = 0;
         const put = IDBObjectStore.prototype.put;
         IDBObjectStore.prototype.put = function (...args) {
           const request = put.apply(this, args);
-          if (this.name === "sourceOverwrites") {
+          if (this.name === "sourceOverwrites" && ++puts === (mode.includes("unrecorded") ? 2 : 1)) {
             IDBObjectStore.prototype.put = put;
             request.addEventListener("success", () => this.transaction.abort(), { once: true });
           }
           return request;
         };
-      });
+      }, mode);
       await start(); await page.waitForFunction(() => !state.saving && !state.saveStarting && document.querySelector("#errorDialog").open);
+      if (mode.includes("unrecorded")) {
+        const writtenBytes = await bytes(); assert.notDeepEqual(writtenBytes, original);
+        assert.equal(await page.evaluate(() => reconcilePendingBrowserSaves()), false);
+        assert.deepEqual(await bytes(), writtenBytes, "an unrecorded write is not overwritten on an uncertain recovery");
+        assert.equal(await page.evaluate(() => Object.keys(pendingSaveTokens()).length), 1);
+        assert.deepEqual(await page.evaluate(async () => [...new Uint8Array(await (await browserOverwriteStore(Object.keys(pendingSaveTokens())[0])).snapshot.arrayBuffer())]), original);
+        return;
+      }
+      if (mode.includes("write-failure")) assert.equal(await page.evaluate(() => window.sourceWriteCalls), 1, "unchanged originals are not rewritten by rollback");
       assert.deepEqual(await bytes(), original);
       await page.locator("#errorDialogClose").click(); await page.locator("#singleSaveCloseButton").click();
     } else {
@@ -81,6 +102,25 @@ const { chromium } = require("playwright");
       void cdp.send("Page.crash").catch(() => {}); await crashed;
       await heldRoute.abort("connectionfailed").catch(() => {}); await page.close();
       await context.unroute("**/api/save/commit");
+      if (mode.includes("missing")) {
+        const editor = await context.newPage();
+        await editor.goto(`${origin}/i18n/en.json`, { waitUntil: "domcontentloaded" });
+        await editor.evaluate(async (name) => (await navigator.storage.getDirectory()).removeEntry(name), committed ? "source.png" : "renamed.png");
+        await editor.close();
+      }
+      if (mode.includes("external")) {
+        const editor = await context.newPage();
+        await editor.goto(`${origin}/i18n/en.json`, { waitUntil: "domcontentloaded" });
+        externalBytes = await editor.evaluate(async (name) => {
+          const parent = await navigator.storage.getDirectory(); const handle = await parent.getFileHandle(name);
+          const surface = document.createElement("canvas"); surface.width = 30; surface.height = 30;
+          const draw = surface.getContext("2d"); draw.fillStyle = "green"; draw.fillRect(0, 0, 30, 30);
+          const blob = await new Promise((resolve) => surface.toBlob(resolve));
+          const writer = await handle.createWritable(); await writer.write(blob); await writer.close();
+          return [...new Uint8Array(await blob.arrayBuffer())];
+        }, externalName);
+        await editor.close();
+      }
       if (mode.includes("restart")) await context.request.post(`${origin}/fixture/restart`);
       if (mode.includes("restore-failure")) await context.addInitScript(() => {
         const create = FileSystemFileHandle.prototype.createWritable;
@@ -109,6 +149,14 @@ const { chromium } = require("playwright");
       });
       page = await open();
       await page.waitForFunction(async () => !(await navigator.locks.query()).held.some((lock) => lock.name === "mozarie-browser-save-ownership"));
+      if (mode.includes("external")) {
+        assert.equal(await page.evaluate(() => reconcilePendingBrowserSaves()), false);
+        assert.deepEqual(await bytes(externalName), externalBytes, "recovery preserves a later edit instead of overwriting or deleting it");
+        assert.equal(await page.evaluate(() => Object.keys(pendingSaveTokens()).length), 1);
+        assert.ok(await page.evaluate((token) => browserOverwriteStore(token), token.saveToken));
+        if (committed) assert.equal(await page.evaluate(async (token) => (await api("/api/save/status", { method: "POST", body: JSON.stringify(token) })).state, token), "committed");
+        return;
+      }
       if (mode.includes("restore-failure") || mode.includes("read-failure") || mode.includes("delete-failure")) {
         await page.evaluate(() => reconcilePendingBrowserSaves());
         assert.equal(await page.evaluate(() => Object.keys(pendingSaveTokens()).length), 1);

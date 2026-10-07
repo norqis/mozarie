@@ -221,7 +221,7 @@ nodeTest("workspace runtime contracts", async () => {
     },
   };
   assert.equal(await context.workspaceTest.directoryCatalogStore(), openedDb, "a directory database creates its store on first open and returns the opened database");
-  assert.equal(createdStores, 3, "the directory database owns catalog, project-source, and source-delete stores");
+  assert.equal(createdStores, 4, "the directory database owns catalog, project-source, source-delete and source-overwrite stores");
   context.indexedDB = context.window.indexedDB = {
     open() {
       const request = {};

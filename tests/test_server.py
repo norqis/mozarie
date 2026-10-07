@@ -7079,7 +7079,7 @@ class MozarieTests(unittest.TestCase):
                 response = connection.getresponse()
                 self.assertEqual(response.status, 200)
                 self.assertEqual(json.loads(response.read()), {"state": "pending"})
-                cancel.assert_called_once_with("image", 3, "one-time-token")
+                cancel.assert_called_once_with("image", 3, "one-time-token", restored_source=None)
         finally:
             if connection is not None:
                 connection.close()

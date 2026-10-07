@@ -127,7 +127,11 @@ test("abandoned-save recovery uses the configured pool and retains only failed t
     await expect.poll(() => routes.length).toBe(4);
     await routes[2].fulfill({ json: { state: "unknown" } });
     await routes[3].fulfill({ json: { state: "unknown" } });
-    await page.evaluate(() => window.recovery);
+    assert.equal(await page.evaluate(() => window.recovery), false);
+    assert.equal(await page.evaluate(() => state.status.kind), "warning");
     assert.deepEqual(await page.evaluate(() => Object.keys(pendingSaveTokens())), [first]);
+    await context.unroute("**/api/save/status");
+    assert.equal(await page.evaluate(() => reconcilePendingBrowserSaves()), true);
+    assert.deepEqual(await page.evaluate(() => Object.keys(pendingSaveTokens())), []);
   });
 });

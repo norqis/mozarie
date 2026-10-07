@@ -413,13 +413,17 @@ function withBrowserOverwriteLock(imageId, callback) {
 function browserOverwriteRecord(entry, access, image) {
   return { entry, access: { ...access }, projectId: state.project?.id || null, baseline: {
     workspaceId: state.workspaceId, sourceId: image.sourceId, relativePath: image.relativePath,
-    originalMtimeMs: Math.round(Number(image.mtimeNs) / 1000000), originalSizeBytes: image.sizeBytes,
+    originalMtimeMs: sourceCommitMetadata(access).sourceMtimeMs, originalSizeBytes: access.size,
   } };
 }
 
 async function pendingBrowserOverwrite(saveToken) {
   const entry = JSON.parse(localStorage.getItem(`${pendingSaveStorageKey}${saveToken}`) || "null");
   return entry?.browserSource ? browserOverwriteStore(saveToken) : null;
+}
+
+function sourceFileMatches(file, mtimeMs, sizeBytes) {
+  return Math.round(file.lastModified) === mtimeMs && file.size === sizeBytes;
 }
 
 async function finishPendingBrowserOverwrite(saveToken) {
@@ -439,8 +443,12 @@ async function finishPendingBrowserOverwrite(saveToken) {
     if (live) Object.assign(live, replacement);
     const image = state.images.find((item) => item.id === pending.entry.imageId);
     if (image) { image.relativePath = relativePath; image.editedFilename = null; }
-    try { await access.parentHandle.removeEntry(access.fileHandle.name || access.name); }
-    catch (error) {
+    try {
+      const oldName = access.fileHandle.name || access.name;
+      const oldFile = await (await access.parentHandle.getFileHandle(oldName)).getFile();
+      if (!sourceFileMatches(oldFile, pending.baseline.originalMtimeMs, pending.baseline.originalSizeBytes)) throw codedError("source_rename_cleanup_pending");
+      await access.parentHandle.removeEntry(oldName);
+    } catch (error) {
       if (error?.name !== "NotFoundError") { renderCatalogViews(); throw codedError("source_rename_cleanup_pending"); }
     }
   }
@@ -451,15 +459,26 @@ async function finishPendingBrowserOverwrite(saveToken) {
 
 async function restorePendingBrowserOverwrite(saveToken, pending) {
   if (pending.targetName) {
-    try { await pending.access.parentHandle.removeEntry(pending.targetName); }
-    catch (error) { if (error?.name !== "NotFoundError") throw codedError("source_restore_failed"); }
+    try {
+      const target = await (await pending.access.parentHandle.getFileHandle(pending.targetName)).getFile();
+      if (!sourceFileMatches(target, pending.written?.sourceMtimeMs, pending.written?.sourceSizeBytes)) throw codedError("source_restore_failed");
+      await pending.access.parentHandle.removeEntry(pending.targetName);
+    } catch (error) { if (error?.name !== "NotFoundError") throw codedError("source_restore_failed"); }
     if (pending.projectId && pending.access.sourceKind === "browser-files") {
       await forgetPendingProjectSource(pending.projectId, pending.access.rememberedSourceId || pending.access.sourceId, pending.access.clientKey);
     }
   } else {
-    if (!pending.restored) {
-      await restoreSourceHandle(pending.access, pending.snapshot, false);
-      pending.restored = sourceCommitMetadata(pending.access);
+    const current = await pending.access.fileHandle.getFile();
+    if (pending.restored) {
+      if (!sourceFileMatches(current, pending.restored.sourceMtimeMs, pending.restored.sourceSizeBytes)) throw codedError("source_restore_failed");
+    } else {
+      if (sourceFileMatches(current, pending.baseline.originalMtimeMs, pending.baseline.originalSizeBytes)) {
+        pending.restored = sourceCommitMetadata(current);
+      } else {
+        if (!sourceFileMatches(current, pending.written?.sourceMtimeMs, pending.written?.sourceSizeBytes)) throw codedError("source_restore_failed");
+        await restoreSourceHandle(pending.access, pending.snapshot, false);
+        pending.restored = sourceCommitMetadata(pending.access);
+      }
       await browserOverwriteStore(saveToken, pending);
     }
     await api("/api/save/cancel", { method: "POST", body: JSON.stringify({
@@ -483,8 +502,7 @@ async function reconcilePendingBrowserSaves() {
   let recovered = true;
   const recoverEntry = ([saveToken, entry]) => withBrowserOverwriteLock(entry.imageId, async () => {
     try {
-    const status = await api("/api/save/status", { method: "POST", body: JSON.stringify({ ...entry, saveToken, sourceAction: entry.sourceAction || "keep" }) }).catch(() => null);
-    if (!status) return;
+    const status = await api("/api/save/status", { method: "POST", body: JSON.stringify({ ...entry, saveToken, sourceAction: entry.sourceAction || "keep" }) });
     if (["unknown", "cancelled"].includes(status.state)) {
       const overwrite = await pendingBrowserOverwrite(saveToken);
       if (overwrite) await restorePendingBrowserOverwrite(saveToken, overwrite);
@@ -632,8 +650,10 @@ async function startSingleSave(event) {
           else {
             sourceSnapshot = await snapshotSourceHandle(access);
             if (!(sourceSnapshot instanceof Blob)) throw codedError("source_restore_failed");
-            await browserOverwriteStore(saveToken, { ...browserOverwriteRecord(entry, access, image), snapshot: sourceSnapshot });
+            const overwrite = { ...browserOverwriteRecord(entry, access, image), snapshot: sourceSnapshot };
+            await browserOverwriteStore(saveToken, overwrite);
             await writeSourceHandle(access, response);
+            await browserOverwriteStore(saveToken, { ...overwrite, written: sourceCommitMetadata(access) });
           }
           await ensureHandlePermission(access, false);
         }
@@ -1110,20 +1130,21 @@ async function writeFormattedSourceHandle(access, image, format, response, saveT
     if (typeof error?.code === "string" || error?.name !== "NotFoundError") throw error;
   }
   access.clientKey ||= newClientKey();
-  await browserOverwriteStore(saveToken, { ...browserOverwriteRecord(entry, access, image), targetName });
+  const overwrite = { ...browserOverwriteRecord(entry, access, image), targetName };
+  await browserOverwriteStore(saveToken, overwrite);
   const targetHandle = await access.parentHandle.getFileHandle(targetName, { create: true });
+  overwrite.written = sourceCommitMetadata(await targetHandle.getFile());
+  await browserOverwriteStore(saveToken, overwrite);
   const relativePath = access.relativePath ? `${access.relativePath.split("/").slice(0, -1).concat(targetName).filter(Boolean).join("/")}` : targetName;
   const replacement = { ...access, fileHandle: targetHandle, name: targetName, relativePath };
   const pendingProjectId = access.sourceKind === "browser-files" ? state.project?.id : null;
-  try {
-    await writeSourceHandle(replacement, response);
-    if (pendingProjectId) {
-      replacement.clientKey ||= newClientKey();
-      // Retain both handles until the server decides which relative path won.
-      await rememberProjectSource(pendingProjectId, targetHandle, null, replacement.rememberedSourceId || replacement.sourceId, replacement.clientKey, relativePath, replacement.parentHandle);
-    }
+  await writeSourceHandle(replacement, response);
+  await browserOverwriteStore(saveToken, { ...overwrite, written: sourceCommitMetadata(replacement) });
+  if (pendingProjectId) {
+    replacement.clientKey ||= newClientKey();
+    // Retain both handles until the server decides which relative path won.
+    await rememberProjectSource(pendingProjectId, targetHandle, null, replacement.rememberedSourceId || replacement.sourceId, replacement.clientKey, relativePath, replacement.parentHandle);
   }
-  catch (error) { try { await access.parentHandle.removeEntry(targetName); } catch {} throw error; }
   return { previousName: access.fileHandle.name || access.name, replacement, pendingProjectId };
 }
 
@@ -1435,8 +1456,10 @@ async function runBrowserSave(imageIds, suffix, deleteOriginal, mode = "copy", r
               else {
                 sourceSnapshot = await snapshotSourceHandle(access);
                 if (!(sourceSnapshot instanceof Blob)) throw codedError("source_restore_failed");
-                await browserOverwriteStore(saveToken, { ...browserOverwriteRecord(entry, access, sourceImage), snapshot: sourceSnapshot });
+                const overwrite = { ...browserOverwriteRecord(entry, access, sourceImage), snapshot: sourceSnapshot };
+                await browserOverwriteStore(saveToken, overwrite);
                 await writeSourceHandle(access, binary);
+                await browserOverwriteStore(saveToken, { ...overwrite, written: sourceCommitMetadata(access) });
               }
               sourceAction = "overwrite";
             } else {
