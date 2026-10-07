@@ -1426,7 +1426,9 @@
         "python:tests.saving.test_browser_overwrite_recovery.BrowserOverwriteRecoveryTests.test_unreadable_backup_is_retained_until_indexeddb_recovers",
         "python:tests.saving.test_browser_overwrite_recovery.BrowserOverwriteRecoveryTests.test_metadata_retry_does_not_rewrite_restored_source",
         "python:tests.saving.test_browser_overwrite_recovery.BrowserOverwriteRecoveryTests.test_committed_backup_delete_failure_keeps_receipt_until_retry",
-        "node:tests/saving/test_active_save_recovery_e2e.cjs::abandoned-save recovery uses the configured pool and retains only failed tokens"
+        "node:tests/saving/test_active_save_recovery_e2e.cjs::abandoned-save recovery uses the configured pool and retains only failed tokens",
+        "python:tests.saving.test_browser_overwrite_recovery.BrowserOverwriteRecoveryTests.test_cancel_network_failure_reports_incomplete_recovery_and_retries",
+        "python:tests.saving.test_browser_overwrite_recovery.BrowserOverwriteRecoveryTests.test_ack_network_failure_reports_incomplete_recovery_and_retries"
       ]
     },
     {

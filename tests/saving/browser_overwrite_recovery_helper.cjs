@@ -98,7 +98,7 @@ const { chromium } = require("playwright");
       });
       await start(); await atCommit;
       assert.notDeepEqual(await bytes(rename ? "renamed.png" : "source.png"), original);
-      const crashed = page.waitForEvent("crash"); const cdp = await context.newCDPSession(page);
+      const crashed = page.waitForEvent("crash", { timeout: 60000 }); const cdp = await context.newCDPSession(page);
       void cdp.send("Page.crash").catch(() => {}); await crashed;
       await heldRoute.abort("connectionfailed").catch(() => {}); await page.close();
       await context.unroute("**/api/save/commit");
@@ -137,6 +137,8 @@ const { chromium } = require("playwright");
           return request;
         };
       });
+      if (mode.includes("cancel-failure")) await context.route("**/api/save/cancel", (route) => route.fulfill({ status: 503, json: { error_code: "internal_error" } }));
+      if (mode.includes("ack-failure")) await context.route("**/api/save/ack", (route) => route.fulfill({ status: 503, json: { error_code: "internal_error" } }));
       if (mode.includes("metadata-failure")) await context.route("**/api/save/cancel", (route) => route.request().postDataJSON().restoredSource
         ? route.fulfill({ status: 503, json: { error_code: "workspace_database_error" } }) : route.continue());
       if (mode.includes("delete-failure")) await context.addInitScript(() => {
@@ -149,6 +151,14 @@ const { chromium } = require("playwright");
       });
       page = await open();
       await page.waitForFunction(async () => !(await navigator.locks.query()).held.some((lock) => lock.name === "mozarie-browser-save-ownership"));
+      if (mode.includes("cancel-failure") || mode.includes("ack-failure")) {
+        assert.equal(await page.evaluate(() => reconcilePendingBrowserSaves()), false);
+        assert.equal(await page.evaluate(() => state.status.key), "save.recoveryPending");
+        assert.equal(await page.evaluate(() => state.status.kind), "warning");
+        assert.equal(await page.evaluate(() => Object.keys(pendingSaveTokens()).length), 1);
+        assert.notDeepEqual(await bytes(), original);
+        await context.unroute(mode.includes("cancel-failure") ? "**/api/save/cancel" : "**/api/save/ack");
+      }
       if (mode.includes("external")) {
         assert.equal(await page.evaluate(() => reconcilePendingBrowserSaves()), false);
         assert.deepEqual(await bytes(externalName), externalBytes, "recovery preserves a later edit instead of overwriting or deleting it");
@@ -179,7 +189,7 @@ const { chromium } = require("playwright");
         const peer = await open();
         await Promise.all([page.evaluate(() => reconcilePendingBrowserSaves()), peer.evaluate(() => reconcilePendingBrowserSaves())]);
         await peer.close();
-      } else await page.evaluate(() => reconcilePendingBrowserSaves());
+      } else assert.equal(await page.evaluate(() => reconcilePendingBrowserSaves()), true);
       assert.equal(await page.evaluate(() => Object.keys(pendingSaveTokens()).length), 0, JSON.stringify(await page.evaluate(() => ({ status: state.status, pending: pendingSaveTokens() }))));
       assert.equal(await page.evaluate((token) => browserOverwriteStore(token), token.saveToken), null);
       const names = await page.evaluate(async () => { const names = []; for await (const name of (await navigator.storage.getDirectory()).keys()) names.push(name); return names; });

@@ -112,6 +112,7 @@ test("slow abandoned-save recovery neither blocks a new save nor includes its ne
 test("abandoned-save recovery uses the configured pool and retains only failed tokens", { timeout: 60000 }, async () => {
   await withPendingSaves(async ({ open, context }) => {
     const page = await open();
+    await page.waitForFunction(() => state.status?.key === "status.imagesLoaded");
     const routes = [];
     await context.route("**/api/save/status", (route) => { routes.push(route); });
     await page.evaluate(() => {

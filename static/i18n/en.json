@@ -1,4 +1,5 @@
 {
+  "save.recoveryPending": "Save confirmation or recovery is incomplete. Check the connection and try again.",
   "review.hidden": "Hidden",
   "catalog.removeFromList": "Remove from list",
   "status.removedFromList": "Removed {count} images from the list. Source images were kept.",

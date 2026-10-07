@@ -1,4 +1,5 @@
 {
+  "save.recoveryPending": "保存の確認・復旧が完了していません。接続を確認して、もう一度実行してください。",
   "review.hidden": "非表示",
   "catalog.removeFromList": "一覧から削除",
   "status.removedFromList": "一覧から{count}件削除しました。元画像は保持されています。",

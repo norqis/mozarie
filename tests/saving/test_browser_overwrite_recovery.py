@@ -159,3 +159,9 @@ class BrowserOverwriteRecoveryTests(unittest.TestCase):
 
     def test_committed_rename_accepts_an_already_removed_original(self):
         self.check_recovery("single-rename-committed-original-missing")
+
+    def test_cancel_network_failure_reports_incomplete_recovery_and_retries(self):
+        self.check_recovery("single-cancel-failure")
+
+    def test_ack_network_failure_reports_incomplete_recovery_and_retries(self):
+        self.check_recovery("single-committed-ack-failure")

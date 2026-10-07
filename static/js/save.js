@@ -510,10 +510,11 @@ async function reconcilePendingBrowserSaves() {
     }
     if (status.state === "committed") {
       if (status.sourceDeletePending) deferred.push(entry.displayName || status.outputPath || entry.imageId || saveToken);
-      await acknowledgePendingBrowserSave(saveToken); return;
+      if (!await acknowledgePendingBrowserSave(saveToken)) recovered = false;
+      return;
     }
-    if (["rendering", "pending", "cleanup_pending"].includes(status.state)) await cancelBrowserSave(entry, saveToken);
-    } catch (error) { recovered = false; setStatus(t(`errorCode.${error?.code || "source_restore_failed"}`), "warning"); }
+    if (["rendering", "pending", "cleanup_pending"].includes(status.state) && !await cancelBrowserSave(entry, saveToken)) recovered = false;
+    } catch { recovered = false; }
   });
   const entries = Object.entries(pending); let next = 0;
   await Promise.all(Array.from({ length: Math.min(entries.length, state.settings?.saving?.parallelism || 1) }, async () => {
@@ -523,6 +524,7 @@ async function reconcilePendingBrowserSaves() {
     complete: t("apply.complete", { completed: deferred.length }),
     names: new Intl.ListFormat(document.documentElement.lang === "en" ? "en" : "ja", { style: "long", type: "conjunction" }).format(deferred),
   }), "warning");
+  if (!recovered) setStatusKey("save.recoveryPending", {}, "warning");
   return recovered;
 }
 
@@ -1631,12 +1633,13 @@ async function cancelBrowserSave(entry, saveToken) {
   const result = await api("/api/save/cancel", { method: "POST", body: JSON.stringify({
     imageId: entry.imageId, candidateRevision: entry.candidateRevision, saveToken,
   }) }).catch(() => null);
-  if (result?.state === "committed") await acknowledgePendingBrowserSave(saveToken);
-  else if (result && ["cancelled", "unknown", "cleanup_pending"].includes(result.state)) {
+  if (result?.state === "committed") return acknowledgePendingBrowserSave(saveToken);
+  if (result && ["cancelled", "unknown", "cleanup_pending"].includes(result.state)) {
     const overwrite = await pendingBrowserOverwrite(saveToken);
     if (overwrite) await restorePendingBrowserOverwrite(saveToken, overwrite);
-    if (result.state !== "cleanup_pending") forgetPendingSave(saveToken);
+    if (result.state !== "cleanup_pending") { forgetPendingSave(saveToken); return true; }
   }
+  return false;
 }
 
 window.addEventListener("online", () => { void reconcilePendingBrowserSaves(); });
