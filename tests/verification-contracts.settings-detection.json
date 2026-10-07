@@ -1322,7 +1322,8 @@
       "observation": "サーバーとの通信失敗を表示し、未取得モデルを利用可能と表示しない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_settings_runtime.cjs::SD-069 model download polling failure is visible and leaves no acquired path"
+        "node:tests/test_settings_runtime.cjs::SD-069 model download polling failure is visible and leaves no acquired path",
+        "python:tests.test_model_downloads.ModelDownloadTests.test_worker_start_failure_restores_idle_and_allows_retry"
       ]
     },
     {

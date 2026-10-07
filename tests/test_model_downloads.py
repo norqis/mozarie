@@ -48,6 +48,23 @@ class _Opener:
 
 
 class ModelDownloadTests(unittest.TestCase):
+    def test_worker_start_failure_restores_idle_and_allows_retry(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            manager = ModelDownloadManager(Path(directory))
+            try:
+                before = manager.snapshot()
+                with patch("mozarie.model_downloads.threading.Thread.start", side_effect=RuntimeError("can't start new thread")):
+                    with self.assertRaisesRegex(RuntimeError, "can't start new thread"):
+                        manager.start("sam_vit_b", "vit_b")
+                self.assertEqual(manager.snapshot(), before)
+                self.assertEqual(manager.cancel(), before)
+                with patch.object(manager, "_run", side_effect=lambda _keys: manager._set(state="complete")):
+                    manager.start("sam_vit_b", "vit_b")
+                    join_threads(manager._thread)
+                self.assertEqual(manager.snapshot()["state"], "complete")
+            finally:
+                manager.shutdown()
+
     def entry(self, payload: bytes) -> ModelDownload:
         return ModelDownload("fixture", "target_segmentation", "https://models.example/file", "models/file.onnx", len(payload), hashlib.sha256(payload).hexdigest())
 

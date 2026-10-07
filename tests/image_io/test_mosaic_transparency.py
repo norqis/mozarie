@@ -10,10 +10,26 @@ import numpy as np
 from PIL import Image, PngImagePlugin
 
 from mozarie.core import ImageRecord
+from mozarie.detection import _inference_pixels, _clip_detection_masks_to_alpha
 from mozarie.image_io import parse_png_chunks, render_output, render_with_mask
 
 
 class MosaicTransparencyTests(unittest.TestCase):
+    def test_colorkey_detection_blacks_out_and_clips_invisible_pixels(self):
+        for mode in ("RGB", "L"):
+            with self.subTest(mode=mode):
+                path, _, _ = self.source(mode)
+                with Image.open(path) as image:
+                    pixels, alpha = _inference_pixels(image)
+                np.testing.assert_array_equal(alpha, [[0, 255, 255, 255]])
+                np.testing.assert_array_equal(pixels[0, 0], [0, 0, 0])
+                np.testing.assert_array_equal(pixels[0, 1], [20, 30, 40] if mode == "RGB" else [20, 20, 20])
+                mask = np.full((1, 4), 255, dtype=np.uint8)
+                segments = [{"mask": mask, "_detector_mask": mask, "exclusions": {"hand": mask}}]
+                _clip_detection_masks_to_alpha(segments, alpha)
+                for result in (segments[0]["mask"], segments[0]["_detector_mask"], segments[0]["exclusions"]["hand"]):
+                    np.testing.assert_array_equal(result, [[0, 255, 255, 255]])
+
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary.cleanup)

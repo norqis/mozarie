@@ -69,7 +69,7 @@ def _fill_metadata_fluid_roi(search: np.ndarray, left: float, top: float, right:
 
 def _inference_pixels(image: Image.Image) -> tuple[np.ndarray, np.ndarray | None]:
     """Return detector pixels and the visible-image mask in edit coordinates."""
-    has_alpha = "A" in image.getbands() or (image.mode == "P" and "transparency" in image.info)
+    has_alpha = "A" in image.getbands() or "transparency" in image.info
     if not has_alpha:
         return np.asarray(image.convert("RGB")).copy(), None
     rgba = image.convert("RGBA")

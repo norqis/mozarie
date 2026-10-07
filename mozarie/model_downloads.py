@@ -119,13 +119,19 @@ class ModelDownloadManager:
                 raise ModelDownloadInProgress()
             self._cancel = threading.Event()
             self._response = None
+            previous_job = self._job
             self._job = {
                 "state": "running", "key": key, "total": len(keys), "completed": 0,
                 "current": keys[0], "received": 0, "expected": MODEL_DOWNLOADS[keys[0]].size, "phase": "checking",
                 "paths": {}, "errorCode": "",
             }
             self._thread = threading.Thread(target=self._run, args=(keys,), daemon=True, name="mozarie-model-download")
-            self._thread.start()
+            try:
+                self._thread.start()
+            except RuntimeError:
+                self._thread = None
+                self._job = previous_job
+                raise
             LOGGER.info("モデルダウンロードを開始: 対象=%d件", len(keys))
             return self.snapshot()
 
