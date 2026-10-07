@@ -2198,7 +2198,7 @@ class CatalogMixin:
                         # path that identifies this image within its source.
                         destination = source_import_dir / relative
                         if destination.exists():
-                            if source_kind != "browser-directory":
+                            if source_kind != "browser-directory" and intent != "restore":
                                 raise ClientError("同じソース内に同じ相対パスの画像があります。", "input_invalid")
                             destination = unique_session_import_destination(destination)
                         destination.parent.mkdir(parents=True, exist_ok=True)
@@ -2557,7 +2557,7 @@ class CatalogMixin:
         session_imports_dir: Path | None,
     ) -> Path | None:
         if record.source_kind == "filesystem":
-            return root
+            return record.source_root or root
         if record.source_kind == "session":
             return session_imports_dir
         return None
@@ -2570,7 +2570,7 @@ class CatalogMixin:
         if record is None:
             raise ClientError("画像が見つかりません。フォルダを再読込してください。", "image_not_found")
         try:
-            allowed_root = self._allowed_root_for_record(record, record.source_root or root, session_imports_dir)
+            allowed_root = self._allowed_root_for_record(record, root, session_imports_dir)
             if allowed_root is None:
                 raise ValueError
             record.path.resolve().relative_to(allowed_root.resolve())

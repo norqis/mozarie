@@ -1657,7 +1657,10 @@
         "python:tests.workspace.test_browser_source_reopen.BrowserSourceReopenTests.test_unnamed_file_and_directory_imports_reopen_every_image_with_its_history",
         "python:tests.workspace.test_browser_source_reopen.BrowserSourceReopenTests.test_legacy_split_file_sources_keep_same_path_images_and_independent_history",
         "node:tests/workspace/test_browser_source_reopen_e2e.cjs::legacy source aliases restore distinct same-name file handles without swapping images",
-        "node:tests/workspace/test_browser_source_reopen_e2e.cjs::legacy directory aliases restore every canonical source and retain permission retry targets"
+        "node:tests/workspace/test_browser_source_reopen_e2e.cjs::legacy directory aliases restore every canonical source and retain permission retry targets",
+        "python:tests.workspace.test_browser_source_reopen.BrowserSourceReopenTests.test_reconnecting_in_the_same_session_keeps_edits_and_only_one_staged_image",
+        "python:tests.jobs.test_multi_source_jobs.MultiSourceJobTests.test_browser_single_and_bulk_save_accept_every_reopened_source",
+        "python:tests.jobs.test_multi_source_jobs.MultiSourceJobTests.test_detection_and_copy_save_process_all_reopened_native_sources"
       ]
     },
     {

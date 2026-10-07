@@ -6,6 +6,7 @@ const vm = require("node:vm");
 
 const jsRoot = path.join(__dirname, "..", "..", "static", "js");
 const imageDisplayPathSource = fs.readFileSync(path.join(jsRoot, "core.js"), "utf8").match(/function imageDisplayPath\(image\) \{[\s\S]*?\n\}/)?.[0];
+const workspaceDraftRevisionSource = fs.readFileSync(path.join(jsRoot, "workspace.js"), "utf8").match(/function workspaceDraftRevision\(imageId\) \{[\s\S]*?\n\}/)?.[0];
 
 function sourceBlob(name, size, lastModified) {
   return Object.assign(new Blob([new Uint8Array(size)]), { name, lastModified });
@@ -327,6 +328,8 @@ function makeSaveRuntime() {
     modalInvokers: new Map(), updateProgress() { calls.push("progress"); }, setStatusKey(key) { calls.push(`status:${key}`); }, scheduleJobPoll() { calls.push("schedule"); },
   };
   context.confirmed = true;
+  state.workspaceDraftRevisions = new Map(state.images.map((image) => [image.id, 0]));
+  vm.runInNewContext(workspaceDraftRevisionSource, context, { filename: path.join(jsRoot, "workspace.js") });
   vm.runInNewContext(imageDisplayPathSource, context, { filename: path.join(jsRoot, "core.js") });
   const source = fs.readFileSync(path.join(jsRoot, "save.js"), "utf8");
   vm.runInNewContext(source, context, { filename: path.join(jsRoot, "save.js") });
