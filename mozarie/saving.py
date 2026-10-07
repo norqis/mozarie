@@ -859,8 +859,6 @@ class SavingMixin:
                         # A journal outage must not restore the source or
                         # cancel an output that the workspace already recorded.
                         raise
-                    if source_stage is not None:
-                        source_stage.rollback()
                     self.save_journal.phase(save_token, "cleanup_pending")
                     with self.lock:
                         self._discard_browser_save_token_unchecked(save_token)
@@ -868,7 +866,27 @@ class SavingMixin:
                     self._unlink_browser_save_cleanup(cleanup_paths)
                     if published_output is not None:
                         self._unlink_browser_save_cleanup([published_output])
-                    self.save_journal.cleanup(save_token)
+                    restored = self.save_journal.cleanup(save_token)
+                    if not restored and source_stage is not None:
+                        try:
+                            stat = record_snapshot.path.stat()
+                        except OSError:
+                            stat = None
+                        with self.lock:
+                            live = self.images.get(image_id)
+                            if live is not None:
+                                live.path = record_snapshot.path
+                                live.relative_path = record_snapshot.relative_path
+                                if stat is not None:
+                                    live.set_asset_fingerprint(stat.st_mtime_ns, stat.st_size)
+                                    if live.source_kind == "filesystem":
+                                        live.mtime_ns = stat.st_mtime_ns
+                                        live.size_bytes = stat.st_size
+                                self.source_mismatches[image_id] = False
+                        raise ClientError(
+                            "元画像の復元を保留しました。外部の変更を確認してMozarieを再起動してください。",
+                            "save_recovery_pending",
+                        )
                     raise
 
                 with self.lock:

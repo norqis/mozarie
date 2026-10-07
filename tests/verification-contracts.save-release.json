@@ -1428,7 +1428,11 @@
         "python:tests.saving.test_browser_overwrite_recovery.BrowserOverwriteRecoveryTests.test_committed_backup_delete_failure_keeps_receipt_until_retry",
         "node:tests/saving/test_active_save_recovery_e2e.cjs::abandoned-save recovery uses the configured pool and retains only failed tokens",
         "python:tests.saving.test_browser_overwrite_recovery.BrowserOverwriteRecoveryTests.test_cancel_network_failure_reports_incomplete_recovery_and_retries",
-        "python:tests.saving.test_browser_overwrite_recovery.BrowserOverwriteRecoveryTests.test_ack_network_failure_reports_incomplete_recovery_and_retries"
+        "python:tests.saving.test_browser_overwrite_recovery.BrowserOverwriteRecoveryTests.test_ack_network_failure_reports_incomplete_recovery_and_retries",
+        "python:tests.saving.test_native_overwrite_recovery.NativeOverwriteRecoveryTests.test_receipt_failure_restores_original_and_allows_retry_for_each_output_path",
+        "python:tests.saving.test_native_overwrite_recovery.NativeOverwriteRecoveryTests.test_external_edit_at_same_path_survives_receipt_failure_and_recovery",
+        "python:tests.saving.test_native_overwrite_recovery.NativeOverwriteRecoveryTests.test_external_edit_at_renamed_path_survives_receipt_failure_and_recovery",
+        "python:tests.saving.test_native_overwrite_recovery.NativeOverwriteRecoveryTests.test_external_edit_at_converted_path_survives_receipt_failure_and_recovery"
       ]
     },
     {
@@ -1456,7 +1460,11 @@
         "python:tests.saving.test_browser_overwrite_recovery.BrowserOverwriteRecoveryTests.test_failed_source_write_does_not_rewrite_unchanged_original",
         "python:tests.saving.test_browser_overwrite_recovery.BrowserOverwriteRecoveryTests.test_unrecorded_source_write_keeps_original_backup_without_rollback",
         "python:tests.saving.test_browser_overwrite_recovery.BrowserOverwriteRecoveryTests.test_cancelled_rename_accepts_an_already_removed_target",
-        "python:tests.saving.test_browser_overwrite_recovery.BrowserOverwriteRecoveryTests.test_committed_rename_accepts_an_already_removed_original"
+        "python:tests.saving.test_browser_overwrite_recovery.BrowserOverwriteRecoveryTests.test_committed_rename_accepts_an_already_removed_original",
+        "python:tests.saving.test_native_overwrite_recovery.NativeOverwriteRecoveryTests.test_receipt_failure_restores_original_and_allows_retry_for_each_output_path",
+        "python:tests.saving.test_native_overwrite_recovery.NativeOverwriteRecoveryTests.test_external_edit_at_same_path_survives_receipt_failure_and_recovery",
+        "python:tests.saving.test_native_overwrite_recovery.NativeOverwriteRecoveryTests.test_external_edit_at_renamed_path_survives_receipt_failure_and_recovery",
+        "python:tests.saving.test_native_overwrite_recovery.NativeOverwriteRecoveryTests.test_external_edit_at_converted_path_survives_receipt_failure_and_recovery"
       ]
     },
     {

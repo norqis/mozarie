@@ -258,7 +258,7 @@ test("SD-128 current-image run uses the saved apply and exclusion padding for on
       state.settings.detection.default_candidate_padding_px,
       state.settings.detection.default_exclude_candidate_padding_px,
     ]), [3, 11]);
-    const request = page.waitForRequest((item) => new URL(item.url()).pathname === "/api/detect" && item.method() === "POST");
+    const request = page.waitForResponse((item) => new URL(item.url()).pathname === "/api/detect" && item.request().method() === "POST").then((response) => response.request());
     await page.locator("#detectCurrentButton").click();
     assert.deepEqual(JSON.parse((await request).postData()).imageIds, ["sample"]);
     assert.equal(fixture.detectRequests.length, 1);
@@ -280,7 +280,7 @@ test("SD-129 selected-image run uses the saved apply and exclusion padding for o
       document.querySelector("#detectCandidatePadding").value,
       document.querySelector("#detectExcludeCandidatePadding").value,
     ]), ["3", "11"]);
-    const request = page.waitForRequest((item) => new URL(item.url()).pathname === "/api/detect" && item.method() === "POST");
+    const request = page.waitForResponse((item) => new URL(item.url()).pathname === "/api/detect" && item.request().method() === "POST").then((response) => response.request());
     await page.locator("#detectStartButton").click();
     assert.deepEqual(JSON.parse((await request).postData()).imageIds, ["sample-two"]);
   });
@@ -291,7 +291,7 @@ test("SD-130 all-image run persists and uses the dialog apply and exclusion padd
     await page.locator("#detectAllButton").click();
     await page.locator("#detectCandidatePadding").fill("5");
     await page.locator("#detectExcludeCandidatePadding").fill("13");
-    const request = page.waitForRequest((item) => new URL(item.url()).pathname === "/api/detect" && item.method() === "POST");
+    const request = page.waitForResponse((item) => new URL(item.url()).pathname === "/api/detect" && item.request().method() === "POST").then((response) => response.request());
     await page.locator("#detectStartButton").click();
     assert.deepEqual(JSON.parse((await request).postData()).imageIds, ["sample", "sample-two"]);
     assert.equal(fixture.settingsPayloads.at(-1).body.detection.default_candidate_padding_px, 5);
@@ -312,7 +312,7 @@ test("SD-131 zero padding runs all current and selected routes without substitut
     ], [0, 0]);
 
     await selectFirst(page);
-    let request = page.waitForRequest((item) => new URL(item.url()).pathname === "/api/detect" && item.method() === "POST");
+    let request = page.waitForResponse((item) => new URL(item.url()).pathname === "/api/detect" && item.request().method() === "POST").then((response) => response.request());
     await page.locator("#detectCurrentButton").click();
     assert.deepEqual(JSON.parse((await request).postData()).imageIds, ["sample"]);
     await page.waitForFunction(() => !state.processing && !isBusy());
@@ -326,7 +326,7 @@ test("SD-131 zero padding runs all current and selected routes without substitut
       document.querySelector("#detectCandidatePadding").value,
       document.querySelector("#detectExcludeCandidatePadding").value,
     ]), ["0", "0"]);
-    request = page.waitForRequest((item) => new URL(item.url()).pathname === "/api/detect" && item.method() === "POST");
+    request = page.waitForResponse((item) => new URL(item.url()).pathname === "/api/detect" && item.request().method() === "POST").then((response) => response.request());
     await page.locator("#detectStartButton").click();
     assert.deepEqual(JSON.parse((await request).postData()).imageIds, ["sample-two"]);
     assert.equal(fixture.detectRequests.length, 3);
