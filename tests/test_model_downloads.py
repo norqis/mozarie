@@ -60,9 +60,16 @@ class ModelDownloadTests(unittest.TestCase):
                         manager.start("fixture", "vit_b")
                 self.assertEqual(manager.snapshot(), before)
                 self.assertEqual(manager.cancel(), before)
-                with patch("mozarie.model_downloads.build_opener", return_value=_Opener(_Response(payload))), patch.dict("mozarie.model_downloads.MODEL_DOWNLOADS", {"fixture": entry}):
+                workers = []
+                original_start = threading.Thread.start
+
+                def start(thread):
+                    workers.append(thread)
+                    original_start(thread)
+
+                with patch("mozarie.model_downloads.build_opener", return_value=_Opener(_Response(payload))), patch.dict("mozarie.model_downloads.MODEL_DOWNLOADS", {"fixture": entry}), patch("mozarie.model_downloads.threading.Thread.start", new=start):
                     manager.start("fixture", "vit_b")
-                    join_threads(manager._thread)
+                    join_threads(*workers)
                 self.assertEqual(manager.snapshot()["state"], "complete")
                 self.assertEqual(entry.destination(Path(directory)).read_bytes(), payload)
             finally:
