@@ -81,6 +81,7 @@ async function main() {
       const [renderRequest, renderResponse] = await Promise.all([request, response]);
       assert.equal(renderRequest.postDataJSON().expectedManualRevision, peerResult.manualRevision - 1);
       assert.equal(renderResponse.status(), 400);
+      await page.waitForFunction(() => !state.saving && !state.saveStarting);
       console.log(`${mode} does not render stale pixels against a newer catalogue revision`);
       return;
     }
