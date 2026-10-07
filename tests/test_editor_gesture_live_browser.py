@@ -151,9 +151,14 @@ class LiveEditorGestureBrowserTests(unittest.TestCase):
 
     def _check_role_toggle_history(self, mode: str) -> None:
         image_id = next(iter(self.state.images))
-        if mode in {"exclude", "manual"}:
-            candidates = list(self.state.candidates[image_id]) if mode == "exclude" else []
-            if mode == "exclude":
+        if mode == "boundary-pending":
+            from tests.detection.test_candidate_publication import BoundaryPredictor
+            self.state.sam_predictor = BoundaryPredictor()
+            self.state.settings["models"].update({"provider": "cpu", "hand_detection_enabled": False, "hand_segmentation_enabled": False})
+            self.state.settings["detection"]["fluid_exclusion_enabled"] = False
+        if mode in {"exclude", "forced", "manual"}:
+            candidates = list(self.state.candidates[image_id]) if mode in {"exclude", "forced"} else []
+            if mode in {"exclude", "forced"}:
                 candidates.append(Candidate("excluded", "penis", .9, candidates[0].mask_path,
                                             role=CandidateRole.EXCLUDE, forced=True))
             with self.state.image_io_lock(image_id), self.state.lock:
@@ -171,6 +176,24 @@ class LiveEditorGestureBrowserTests(unittest.TestCase):
 
     def test_mixed_exclude_role_toggle_restores_exclusion_and_erase_together(self) -> None:
         self._check_role_toggle_history("exclude")
+
+    def test_individual_candidate_toggle_does_not_add_empty_manual_history(self) -> None:
+        self._check_role_toggle_history("individual")
+
+    def test_individual_candidate_forced_toggle_does_not_add_empty_manual_history(self) -> None:
+        self._check_role_toggle_history("forced")
+
+    def test_individual_candidate_toggle_waits_for_prior_stroke_history(self) -> None:
+        self._check_role_toggle_history("individual-pending")
+
+    def test_single_candidate_padding_waits_for_prior_stroke_history(self) -> None:
+        self._check_role_toggle_history("single-padding-pending")
+
+    def test_batch_candidate_padding_waits_for_prior_stroke_history(self) -> None:
+        self._check_role_toggle_history("batch-padding-pending")
+
+    def test_boundary_candidate_addition_waits_for_prior_stroke_history(self) -> None:
+        self._check_role_toggle_history("boundary-pending")
 
     def test_manual_only_role_toggle_keeps_one_history_operation(self) -> None:
         self._check_role_toggle_history("manual")

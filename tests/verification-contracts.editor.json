@@ -1693,7 +1693,13 @@
         "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_role_toggle_waits_for_pending_stroke_without_merging_its_history",
         "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_failed_role_toggle_keeps_both_states_and_allows_retry",
         "python:tests.test_http_live_endpoints.LiveHttpEndpointTests.test_role_toggle_commits_metadata_and_one_history_without_rewriting_pngs",
-        "python:tests.test_http_live_endpoints.LiveHttpEndpointTests.test_role_toggle_manual_conflict_and_sql_failure_leave_both_states_unchanged"
+        "python:tests.test_http_live_endpoints.LiveHttpEndpointTests.test_role_toggle_manual_conflict_and_sql_failure_leave_both_states_unchanged",
+        "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_individual_candidate_toggle_does_not_add_empty_manual_history",
+        "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_individual_candidate_forced_toggle_does_not_add_empty_manual_history",
+        "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_individual_candidate_toggle_waits_for_prior_stroke_history",
+        "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_single_candidate_padding_waits_for_prior_stroke_history",
+        "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_batch_candidate_padding_waits_for_prior_stroke_history",
+        "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_boundary_candidate_addition_waits_for_prior_stroke_history"
       ]
     },
     {

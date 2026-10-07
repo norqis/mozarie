@@ -151,6 +151,7 @@ async function commitBatchCandidatePadding(session, value) {
   state.candidateBatchPending.add(imageId); closeCandidatePadding({ commit: true }); renderCandidates();
   try {
     const result = await enqueueCandidateMutation(imageId, async () => {
+      if (hasDurableHistory()) await flushWorkspaceDraft(imageId);
       const result = await api("/api/candidates/batch", { method: "POST", body: JSON.stringify({ imageId, role: session.role, operation: "set_padding", expandPx: value }) });
     if (state.currentId === imageId && isCurrentGeneration(generation)) {
       await reconcileCurrentCandidates(imageId, generation);
@@ -410,7 +411,7 @@ function renderCandidates() {
       const previousEnabled = candidate.enabled;
       const previousMaskStatus = state.maskStatus.has(state.currentId) ? state.maskStatus.get(state.currentId) : imageHasMask(currentRecord());
       candidate.enabled = !candidate.enabled;
-      markMaskDirty();
+      if (hasDurableHistory()) invalidateMaskComposition(); else markMaskDirty();
       const editorState = historyEditorState(); syncCurrentCandidateRecord(); refreshCurrentReviewAndMask(); requestMosaicPreview(); render();
       const updated = await updateCandidate(candidate, previousEnabled, previousMaskStatus);
       if (updated) recordHistoryOperation({ kind: "candidateState", editorState });
@@ -432,7 +433,7 @@ function renderCandidates() {
         const previousForced = candidate.forced !== false;
         const previousMaskStatus = state.maskStatus.has(state.currentId) ? state.maskStatus.get(state.currentId) : imageHasMask(currentRecord());
         candidate.forced = !previousForced;
-        markMaskDirty();
+        if (hasDurableHistory()) invalidateMaskComposition(); else markMaskDirty();
         const editorState = historyEditorState(); syncCurrentCandidateRecord(); refreshCurrentReviewAndMask(); requestMosaicPreview(); render();
         const updated = await updateCandidate(candidate, candidate.enabled, previousMaskStatus, previousForced);
         if (updated) recordHistoryOperation({ kind: "candidateState", editorState });
@@ -611,6 +612,7 @@ async function updateCandidate(candidate, previousEnabled, previousMaskStatus, p
   const desiredExpandPx = candidate.expandPx || 0;
   const send = async () => {
     try {
+      if (hasDurableHistory()) await flushWorkspaceDraft(imageId);
       const result = await api(`/api/candidate/${encodeURIComponent(imageId)}/${encodeURIComponent(candidate.id)}`, {
         method: "POST", body: JSON.stringify({ enabled: desired, color: candidate.color, ...(desiredExpandPx !== previousExpandPx ? { expandPx: desiredExpandPx } : {}), ...(candidate.role === "exclude" ? { forced: desiredForced } : {}) }),
       });
@@ -800,6 +802,7 @@ async function addBoundaryCandidate() {
   const createdCandidateIds = [];
   state.boundaryPending = true; updateBoundaryActions(); updateActionButtons(); setStatusKey("status.boundaryDetecting", {}, "running");
   try {
+    if (hasDurableHistory()) await flushWorkspaceDraft(imageId);
     for (const request of requests) {
       const body = request.draft.type === "polygon"
         ? { imageId, points: request.draft.points.map((point) => ({ ...point })) }
