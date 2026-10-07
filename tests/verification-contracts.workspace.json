@@ -1676,11 +1676,15 @@
       "sourceIds": [
         "WS-101"
       ],
-      "observation": "権威一覧への置換後も現PJの画像だけへ保存済みhandleとサイズ・更新時刻を対応付ける。",
+      "observation": "権威一覧への置換後も現PJの画像だけへ保存済みhandleとサイズ・更新時刻を対応付け、復元待機中に上書きされた元画像の新しい参照を保持する。",
       "status": "automated",
       "testIds": [
         "node:tests/test_folder_permissions_e2e.cjs::browser directory restore keeps canonical source paths separate",
-        "node:tests/test_project_ui_runtime.cjs::project dialogs, A-B-A switching, failed-open recovery, and duplicate transition guards"
+        "node:tests/test_project_ui_runtime.cjs::project dialogs, A-B-A switching, failed-open recovery, and duplicate transition guards",
+        "node:tests/saving/test_renamed_source_recovery_e2e.cjs::background source restore preserves a concurrent renamed overwrite",
+        "node:tests/saving/test_renamed_source_recovery_e2e.cjs::background source restore preserves a concurrent JPG overwrite",
+        "node:tests/saving/test_renamed_source_recovery_e2e.cjs::background source restore preserves same-name overwrite metadata and unrelated handles",
+        "node:tests/saving/test_renamed_source_recovery_e2e.cjs::background source restore drops an obsolete permission prompt after overwrite"
       ]
     },
     {
@@ -1703,7 +1707,8 @@
       "status": "automated",
       "testIds": [
         "node:tests/test_folder_permissions_e2e.cjs::browser directory restore keeps canonical source paths separate",
-        "node:tests/test_project_ui_runtime.cjs::project dialogs, A-B-A switching, failed-open recovery, and duplicate transition guards"
+        "node:tests/test_project_ui_runtime.cjs::project dialogs, A-B-A switching, failed-open recovery, and duplicate transition guards",
+        "node:tests/saving/test_renamed_source_recovery_e2e.cjs::background source restore drops an obsolete permission prompt after overwrite"
       ]
     },
     {

@@ -3342,10 +3342,12 @@
       "sourceIds": [
         "DI-189"
       ],
-      "observation": "未読本文を残す失敗は400または409と`Connection: close`を返し、次の要求を同じ接続で処理しない",
+      "observation": "未読本文を残す入力・一時保存の失敗はConnection: closeを返し、次の要求を同じ接続で処理しない。読み切った不正JSONは400を返し、接続を再利用できる。",
       "status": "automated",
       "testIds": [
-        "python:tests.http.test_request_framing_and_delete_authority.DataIntegrityHttpContracts.test_json_post_and_binary_import_framing_failures_do_not_mutate_state"
+        "python:tests.http.test_request_framing_and_delete_authority.DataIntegrityHttpContracts.test_json_post_and_binary_import_framing_failures_do_not_mutate_state",
+        "python:tests.test_http_live_endpoints.LiveHttpEndpointTests.test_json_staging_failure_closes_before_unread_bytes_become_a_request",
+        "python:tests.test_http_live_endpoints.LiveHttpEndpointTests.test_fully_read_invalid_json_preserves_the_next_request"
       ]
     },
     {

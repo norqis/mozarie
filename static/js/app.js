@@ -118,16 +118,25 @@ function canonicalRememberedProjectSources(remembered, catalogSources, sourceIma
 async function restoreBrowserProjectSourcesForCurrentCatalog(catalogSources = []) {
   const projectId = state.project?.id; const epoch = state.catalogEpoch; const restoreGeneration = ++browserSourceRestoreGeneration;
   if (!projectId) return;
+  const catalogGeneration = state.serverCatalogGeneration;
+  const current = () => restoreGeneration === browserSourceRestoreGeneration && isCurrentCatalogEpoch(epoch)
+    && state.project?.id === projectId && state.serverCatalogGeneration === catalogGeneration;
+  // Saves update access objects in place while permission queries are pending.
+  const initialAccess = new Map([...state.sourceAccess].map(([id, access]) => [id, { ...access }]));
+  const unchangedAccess = (before, live) => {
+    if (!before || !live) return before === live;
+    const keys = Object.keys(before);
+    return keys.length === Object.keys(live).length && keys.every((key) => Object.hasOwn(live, key) && before[key] === live[key]);
+  };
   let remembered;
   try { remembered = await rememberedProjectSources(projectId); }
   catch { return; }
+  if (!current()) return;
   const { files, directories } = canonicalRememberedProjectSources(remembered, catalogSources, state.images);
-  if (!isCurrentCatalogEpoch(epoch) || state.project?.id !== projectId) return;
   const stagedAccess = new Map();
   const pending = [];
   const imagesById = new Map(state.images.map((image) => [image.id, image]));
   const imagesBySourcePath = new Map(state.images.map((image) => [`${image.sourceId}\0${image.relativePath}`, image]));
-  const promotedSources = [];
   const directorySourceIds = new Set(directories.map((source) => source.sourceId));
   const imagesByDirectorySource = new Map();
   for (const image of state.images) {
@@ -141,20 +150,24 @@ async function restoreBrowserProjectSourcesForCurrentCatalog(catalogSources = []
     const image = source.imageId ? imagesById.get(source.imageId)
       : imagesBySourcePath.get(`${source.sourceId}\0${source.relativePath}`);
     if (!image || image.relativePath !== source.relativePath) continue;
-    if (await ensureProjectSourcePermission(source.handle)) {
+    const permitted = await ensureProjectSourcePermission(source.handle);
+    if (!current()) return;
+    if (permitted) {
       stagedAccess.set(image.id, {
         fileHandle: source.handle, parentHandle: source.parentHandle || null, sourceId: source.sourceId, rememberedSourceId: source.rememberedSourceId, clientKey: source.clientKey, relativePath: source.relativePath,
         sourceKind: "browser-files", size: image.sizeBytes, lastModified: Math.round(Number(image.mtimeNs) / 1000000),
       });
-      if (!source.imageId) promotedSources.push({ ...source, imageId: image.id, sourceId: source.rememberedSourceId });
       continue;
     }
-    pending.push({ ...source, projectId, kind: "file", key: `file:${source.sourceId}:${source.clientKey || source.relativePath}` });
+    pending.push({ ...source, imageId: image.id, projectId, kind: "file", key: `file:${source.sourceId}:${source.clientKey || source.relativePath}` });
   }
   for (const source of directories) {
-    if (!await ensureProjectSourcePermission(source.handle)) { pending.push({ ...source, projectId, kind: "directory", key: `directory:${source.sourceId}` }); continue; }
+    const permitted = await ensureProjectSourcePermission(source.handle);
+    if (!current()) return;
+    if (!permitted) { pending.push({ ...source, projectId, kind: "directory", key: `directory:${source.sourceId}` }); continue; }
     async function collect(handle, parent = "") {
       for await (const child of handle.values()) {
+        if (!current()) return false;
         const relativePath = parent ? `${parent}/${child.name}` : child.name;
         if (child.kind === "file") {
           for (const image of imagesByDirectorySource.get(source.sourceId)?.get(relativePath) || []) {
@@ -163,17 +176,23 @@ async function restoreBrowserProjectSourcesForCurrentCatalog(catalogSources = []
               sourceKind: "browser-directory", size: image.sizeBytes, lastModified: Math.round(Number(image.mtimeNs) / 1000000),
             });
           }
-        } else await collect(child, relativePath);
+        } else if (!await collect(child, relativePath)) return false;
       }
+      return current();
     }
-    try { await collect(source.handle); }
+    try { if (!await collect(source.handle)) return; }
     catch { pending.push({ ...source, projectId, kind: "directory", key: `directory:${source.sourceId}` }); }
   }
-  if (restoreGeneration === browserSourceRestoreGeneration && isCurrentCatalogEpoch(epoch) && state.project?.id === projectId) {
-    if (promotedSources.length) await rememberProjectSources(projectId, promotedSources);
-    if (restoreGeneration !== browserSourceRestoreGeneration || !isCurrentCatalogEpoch(epoch) || state.project?.id !== projectId) return;
-    state.sourceAccess = stagedAccess;
-    pendingBrowserProjectSources = pending; renderProjectCurrent();
+  if (current()) {
+    const restoredAccess = new Map();
+    for (const image of state.images) {
+      const live = state.sourceAccess.get(image.id);
+      const access = unchangedAccess(initialAccess.get(image.id), live) ? stagedAccess.get(image.id) : live;
+      if (access && access.sourceId === image.sourceId && access.relativePath === image.relativePath) restoredAccess.set(image.id, access);
+    }
+    state.sourceAccess = restoredAccess;
+    pendingBrowserProjectSources = pending.filter((source) => source.kind !== "file" || !restoredAccess.has(source.imageId));
+    renderProjectCurrent();
   }
 }
 

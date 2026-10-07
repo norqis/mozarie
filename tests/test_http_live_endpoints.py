@@ -522,6 +522,60 @@ class LiveHttpEndpointTests(unittest.TestCase):
         finally:
             connection.close()
 
+    def test_json_staging_failure_closes_before_unread_bytes_become_a_request(self) -> None:
+        for failure in ("create", "write"):
+            with self.subTest(failure=failure):
+                payload = json.dumps({"value": "x" * (http_module.IO_CHUNK_BYTES + 32 if failure == "write" else 32)}).encode()
+                request = (
+                    f"POST /api/settings HTTP/1.1\r\nHost: 127.0.0.1:{self.server.server_port}\r\n"
+                    f"Origin: {self.origin}\r\nX-Mozarie-Token: {self.state.session_token}\r\n"
+                    f"Content-Type: application/json\r\nContent-Length: {len(payload)}\r\n\r\n"
+                ).encode() + payload + (
+                    f"GET /api/images HTTP/1.1\r\nHost: 127.0.0.1:{self.server.server_port}\r\nConnection: close\r\n\r\n"
+                ).encode()
+                if failure == "create":
+                    boundary = patch.object(tempfile, "SpooledTemporaryFile", side_effect=OSError("injected staging creation failure"))
+                else:
+                    boundary = patch.object(tempfile.SpooledTemporaryFile, "write", side_effect=OSError("injected staging disk full"))
+                with boundary, self.assertLogs("mozarie", level="ERROR"):
+                    with socket.create_connection(("127.0.0.1", self.server.server_port), timeout=5) as client:
+                        client.sendall(request)
+                        chunks = []
+                        try:
+                            while chunk := client.recv(65536):
+                                chunks.append(chunk)
+                        except ConnectionResetError:
+                            pass  # Closing a socket with unread input may reset it on Windows.
+                response = b"".join(chunks)
+                headers, body = response.split(b"\r\n\r\n", 1)
+                self.assertTrue(headers.startswith(b"HTTP/1.1 500"), headers)
+                self.assertIn(b"Connection: close", headers)
+                self.assertEqual(response.count(b"HTTP/1.1 "), 1)
+                self.assertEqual(json.loads(body)["error_code"], "internal_error")
+                self.assertEqual(self.state.list_images(), [])
+
+    def test_fully_read_invalid_json_preserves_the_next_request(self) -> None:
+        for payload in (b"{invalid}", b"[]", b'{"value":"\xff"}'):
+            with self.subTest(payload=payload):
+                connection = http.client.HTTPConnection("127.0.0.1", self.server.server_port, timeout=5)
+                try:
+                    connection.request("POST", "/api/settings", body=payload, headers={
+                        "Origin": self.origin, "X-Mozarie-Token": self.state.session_token,
+                        "Content-Type": "application/json",
+                    })
+                    response = connection.getresponse()
+                    self.assertEqual(response.status, 400)
+                    self.assertEqual(json.loads(response.read())["error_code"], "input_invalid")
+                    original_socket = connection.sock
+                    self.assertIsNotNone(original_socket)
+                    connection.request("GET", "/api/health")
+                    response = connection.getresponse()
+                    self.assertEqual(response.status, 200)
+                    self.assertTrue(json.loads(response.read())["ok"])
+                    self.assertIs(connection.sock, original_socket)
+                finally:
+                    connection.close()
+
     def test_live_binary_import_validates_then_stages_an_image(self) -> None:
         headers = {
             "Origin": self.origin,

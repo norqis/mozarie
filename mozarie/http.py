@@ -1271,8 +1271,8 @@ class MosaicHandler(BaseHTTPRequestHandler):
     def _read_json_body(self, content_length: int | None = None) -> dict[str, Any]:
         if content_length is None:
             content_length = self._request_body_length(required=True)
+        remaining = content_length
         try:
-            remaining = content_length
             # JSON operations are normally small, but keep framing safe even
             # when a catalogue has a long image list.  Large mask PNGs use the
             # binary transaction route and never pass through this parser.
@@ -1281,8 +1281,8 @@ class MosaicHandler(BaseHTTPRequestHandler):
                     chunk = self.rfile.read(min(IO_CHUNK_BYTES, remaining))
                     if not chunk:
                         self._reject_unread_request(ClientError("リクエストを最後まで読み込めません。", "input_invalid"))
-                    staged.write(chunk)
                     remaining -= len(chunk)
+                    staged.write(chunk)
                 staged.seek(0)
                 text = io.TextIOWrapper(staged, encoding="utf-8")
                 try:
@@ -1293,6 +1293,9 @@ class MosaicHandler(BaseHTTPRequestHandler):
             raise
         except (UnicodeDecodeError, ValueError) as exc:
             raise ClientError("JSONを読み込めません。", "input_invalid") from exc
+        finally:
+            if remaining:
+                self.close_connection = True
         if not isinstance(payload, dict):
             raise ClientError("JSONオブジェクトが必要です。", "input_invalid")
         return payload

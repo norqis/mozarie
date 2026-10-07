@@ -29,7 +29,7 @@ async function withRenameFixture(run, clientKey = null) {
       return page;
     };
     const page = await open();
-    await page.evaluate(async (clientKey) => {
+    const metadata = await page.evaluate(async (clientKey) => {
       const parent = await navigator.storage.getDirectory();
       const handle = await parent.getFileHandle("source.png", { create: true });
       const output = await handle.createWritable();
@@ -40,7 +40,11 @@ async function withRenameFixture(run, clientKey = null) {
       await rememberProjectSource(state.project.id, handle, "image-1", access.sourceId, clientKey, access.relativePath, parent);
       state.settings.confirmations.overwriteSource = false;
       document.querySelector("#applyOutputFormat").value = "original";
+      const metadata = { sizeBytes: file.size, mtimeNs: file.lastModified * 1000000 };
+      Object.assign(state.images[0], metadata);
+      return metadata;
     }, clientKey);
+    Object.assign(images[0], metadata); publish(images);
     await run({ page, context, open, project, snapshot, publish, image: images[0] });
   } finally {
     await context?.close();
@@ -158,3 +162,64 @@ test("renamed overwrite does not commit when storing the replacement handle fail
     }), { names: ["source.png"], error: "project_source_unavailable", saving: false });
   });
 });
+
+function restoreDuringOverwriteScenario(format, { sameName = false, denied = false } = {}) {
+  return async () => {
+    await withRenameFixture(async ({ page, context, snapshot, publish, image }) => {
+      const targetName = sameName ? "source.png" : format === "jpg" ? "renamed.jpg" : "renamed.png";
+      if (sameName) {
+        image.editedFilename = null;
+        await page.evaluate(() => { state.images[0].editedFilename = null; });
+      }
+      const other = await page.evaluate(async () => {
+        const parent = await navigator.storage.getDirectory();
+        const handle = await parent.getFileHandle("untouched.png", { create: true });
+        const output = await handle.createWritable();
+        await output.write(await (await fetch("/api/image/image-1")).blob()); await output.close();
+        const file = await handle.getFile();
+        await rememberProjectSource(state.project.id, handle, "image-2", "client-source", "unrelated", "untouched.png", parent);
+        const other = { ...state.images[0], id: "image-2", relativePath: "untouched.png", editedFilename: null, sizeBytes: file.size, mtimeNs: file.lastModified * 1000000 };
+        state.images.push(other); return other;
+      });
+      publish([image, other]);
+      await context.route("**/api/save/commit", async (route) => {
+        publish([{ ...image, relativePath: targetName, editedFilename: null }, other]);
+        await route.fulfill({ json: { cleared: true, stale: false, sourceAction: "overwrite", relativePath: targetName, editedFilename: null } });
+      });
+      await context.route("**/api/save/ack", (route) => route.fulfill({ json: { acknowledged: true } }));
+      await page.evaluate(async ({ sources, denied }) => {
+        await restoreBrowserProjectSourcesForCurrentCatalog(sources);
+        state.sourceAccess.delete("image-2");
+        const query = FileSystemFileHandle.prototype.queryPermission;
+        FileSystemFileHandle.prototype.queryPermission = async function (...args) {
+          FileSystemFileHandle.prototype.queryPermission = query;
+          await new Promise((resolve) => { window.releaseOldRestore = resolve; });
+          return denied ? "denied" : query.apply(this, args);
+        };
+        window.oldSourceRestore = restoreBrowserProjectSourcesForCurrentCatalog(sources);
+      }, { sources: snapshot().sources, denied });
+      await page.waitForFunction(() => typeof window.releaseOldRestore === "function");
+      await startOverwrite(page, "batch", format);
+      await page.evaluate(() => window.saveResult);
+      assert.equal(await page.evaluate(() => state.sourceAccess.get("image-1")?.fileHandle.name), targetName);
+      await page.evaluate(async () => { window.releaseOldRestore(); await window.oldSourceRestore; });
+      assert.deepEqual(await page.evaluate(async () => {
+        const access = state.sourceAccess.get("image-1");
+        let readError = null; let size = 0;
+        try { size = (await access.fileHandle.getFile()).size; } catch (error) { readError = error.name; }
+        const file = readError ? null : await access.fileHandle.getFile();
+        const names = []; for await (const handle of (await navigator.storage.getDirectory()).values()) names.push(handle.name);
+        return { image: state.images[0].relativePath, path: access.relativePath, handle: access.fileHandle.name, readable: size > 0, readError,
+          metadataCurrent: file && access.size === file.size && access.lastModified === file.lastModified,
+          stored: (await rememberedProjectSources(state.project.id)).files.filter((row) => row.imageId === "image-1").map((row) => row.relativePath), saving: state.saving,
+          unrelated: state.sourceAccess.get("image-2")?.fileHandle.name, pending: pendingBrowserProjectSources.length, names: names.sort() };
+      }), { image: targetName, path: targetName, handle: targetName, readable: true, readError: null, metadataCurrent: true, stored: [targetName], saving: false,
+        unrelated: "untouched.png", pending: 0, names: [targetName, "untouched.png"].sort() });
+    }, "restore-race");
+  };
+}
+
+test("background source restore preserves a concurrent renamed overwrite", { timeout: 60000 }, restoreDuringOverwriteScenario("original"));
+test("background source restore preserves a concurrent JPG overwrite", { timeout: 60000 }, restoreDuringOverwriteScenario("jpg"));
+test("background source restore preserves same-name overwrite metadata and unrelated handles", { timeout: 60000 }, restoreDuringOverwriteScenario("original", { sameName: true }));
+test("background source restore drops an obsolete permission prompt after overwrite", { timeout: 60000 }, restoreDuringOverwriteScenario("original", { denied: true }));
