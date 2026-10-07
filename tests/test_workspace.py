@@ -275,12 +275,19 @@ class WorkspaceTests(unittest.TestCase):
             after = store.history_state(edited); store.record_history(edited, before, after)
 
             reopened = WorkspaceStore(root)
-            semantic = lambda state: {key: value for key, value in state.items() if key != "_manual_raw"}
+            def semantic(state):
+                content = {key: value for key, value in state.items() if key not in {"_manual_raw", "revision"}}
+                if content.get("manual"):
+                    content["manual"] = {key: value for key, value in content["manual"].items() if key != "revision"}
+                return content
             self.assertEqual(semantic(reopened.history_state(edited)), semantic(after))
             self.assertEqual(reopened.history_state(other), other_before)
-            self.assertEqual(reopened.restore_history(edited, "undo"), [edited]); self.assertEqual(reopened.history_state(edited), before)
+            self.assertEqual(reopened.restore_history(edited, "undo"), [edited]); self.assertEqual(semantic(reopened.history_state(edited)), semantic(before))
+            undone_revision = reopened.history_state(edited)["revision"]
+            self.assertGreater(undone_revision, after["revision"])
             self.assertEqual(reopened.history_state(other), other_before)
             self.assertEqual(reopened.restore_history(edited, "redo"), [edited]); redone = reopened.history_state(edited)
+            self.assertGreater(redone["revision"], undone_revision)
             self.assertEqual(semantic(redone), semantic(after))
             self.assertEqual(Image.open(io.BytesIO(redone["_manual_raw"]["add"])).convert("RGBA").getpixel((1, 1))[3], 255)
 

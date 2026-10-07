@@ -7,6 +7,7 @@ They cover the browser-facing contract without substituting handler methods.
 from __future__ import annotations
 
 import http.client
+import base64
 import hashlib
 import io
 import json
@@ -141,7 +142,7 @@ class LiveHttpEndpointTests(unittest.TestCase):
         self.assertEqual([image.relative_path for image in self.state.images.values()], ["browser.png"])
         projectless_sources = self.state.workspace_store.project_sources(old_workspace_id)
         self.assertEqual(len(projectless_sources), 1)
-        self.assertEqual((projectless_sources[0]["kind"], projectless_sources[0]["identity"]), ("browser-files", source_id))
+        self.assertEqual((projectless_sources[0]["kind"], projectless_sources[0]["identity"]), ("browser-files", f"browser:{source_id}"))
 
         status, _headers, body = self.request("POST", "/api/project/open", {"projectId": named_id}, authorized=True)
         self.assertEqual(status, 200, body.decode("utf-8") if status != 200 else "")
@@ -468,6 +469,108 @@ class LiveHttpEndpointTests(unittest.TestCase):
                         for x, y in [(5, 5), (35, 5), (5, 35), (35, 35)]:
                             np.testing.assert_allclose(thumbnail.getpixel((x, y)), pixels[y, x], atol=3,
                                 err_msg="CSS applies the view flip once, so thumbnail bytes must retain source orientation")
+
+    def test_history_branch_uses_fresh_mask_urls_and_keeps_manual_revision_current(self) -> None:
+        image_id = self.state.set_root(str(self.source_dir))[0]["id"]
+        mask_path = self.state.cache_dir / "point.png"
+        with Image.new("L", (12, 8)) as mask:
+            mask.putpixel((6, 4), 255)
+            mask.save(mask_path)
+        self.state._commit_candidate_snapshot(image_id, [Candidate("point", "penis", .9, mask_path)], replace=True)
+        self.state.save_manual_workspace(image_id, {
+            "add": "data:image/png;base64," + base64.b64encode(mask_path.read_bytes()).decode("ascii"),
+            "manualEnabled": True, "candidateRevision": self.state._candidate_revision(image_id),
+            "hasEffectiveMask": True,
+        })
+
+        def action(path, payload):
+            status, _headers, body = self.request("POST", path, payload, authorized=True)
+            self.assertEqual(status, 200, body.decode("utf-8"))
+
+        def current_mask():
+            revision = self.state._candidate_revision(image_id)
+            self.assertEqual(self.state.manual_workspace(image_id)["candidateRevision"], revision)
+            url = f"/api/mask/{image_id}/point?v={revision}-point"
+            status, headers, body = self.request("GET", url)
+            self.assertEqual(status, 200)
+            self.assertIn("immutable", headers["Cache-Control"])
+            with Image.open(io.BytesIO(body)) as mask:
+                pixels = np.asarray(mask).copy()
+            return revision, url, pixels
+
+        action("/api/candidates/batch", {"imageId": image_id, "role": "apply", "operation": "set_padding", "expandPx": 1})
+        first = current_mask()
+        action(f"/api/project/history/{image_id}/undo", {})
+        undone = current_mask()
+        action("/api/candidates/batch", {"imageId": image_id, "role": "apply", "operation": "set_padding", "expandPx": 3})
+        branch = current_mask()
+        self.assertGreater(branch[0], undone[0])
+        self.assertGreater(undone[0], first[0])
+        self.assertNotEqual(first[1], branch[1])
+        self.assertGreater(np.count_nonzero(branch[2]), np.count_nonzero(first[2]))
+        action(f"/api/project/history/{image_id}/undo", {})
+        second_undo = current_mask()
+        action(f"/api/project/history/{image_id}/redo", {})
+        redone = current_mask()
+        self.assertGreater(redone[0], second_undo[0])
+        np.testing.assert_array_equal(redone[2], branch[2])
+
+        revision_before_failure = redone[0]
+        with patch.object(self.state.workspace_store, "hydrate_candidates", side_effect=OSError("cache unavailable")):
+            with self.assertRaisesRegex(OSError, "cache unavailable"):
+                self.state.restore_project_history(image_id, "undo")
+        self.assertEqual(self.state._candidate_revision(image_id), revision_before_failure)
+        self.assertEqual(self.state.workspace_store.candidate_revisions([image_id])[image_id], revision_before_failure)
+        np.testing.assert_array_equal(current_mask()[2], branch[2])
+        action("/api/candidates/batch", {"imageId": image_id, "role": "apply", "operation": "set_padding", "expandPx": 2})
+        self.assertGreater(current_mask()[0], revision_before_failure)
+
+    def test_overwritten_same_stat_image_has_fresh_asset_urls_after_reopen_and_restart(self) -> None:
+        source = self.source_dir / "source.png"
+        with Image.new("RGB", (2, 1)) as image:
+            image.putpixel((0, 0), (255, 0, 0)); image.putpixel((1, 0), (0, 0, 255))
+            image.save(source)
+        project = self.state.create_project("Cache identity")
+        record = self.state.set_root(str(self.source_dir))[0]
+        image_id = record["id"]
+        original_stat = source.stat()
+        initial_version = record["assetVersion"]
+        initial_bytes = self.request("GET", f"/api/image/{image_id}?v={initial_version}")[2]
+        self.state.set_image_transform(image_id, {"flipH": True, "flipV": False})
+        options = {"imageId": image_id, "candidateRevision": self.state._candidate_revision(image_id),
+                   "clientSaveToken": "00000000-0000-4000-8000-000000000099", "copyToDefault": False,
+                   "format": "original", "keepMetadata": True, "streamImage": False, "divisor": 100, "draft": None}
+        for path in ("/api/save/reserve", "/api/save/render"):
+            status, _headers, body = self.request("POST", path, options, authorized=True)
+            self.assertEqual(status, 200, body.decode("utf-8"))
+        status, _headers, body = self.request("POST", "/api/save/commit", {
+            "imageId": image_id, "candidateRevision": options["candidateRevision"],
+            "saveToken": options["clientSaveToken"], "sourceAction": "overwrite",
+        }, authorized=True)
+        self.assertEqual(status, 200, body.decode("utf-8"))
+        self.assertEqual((source.stat().st_mtime_ns, source.stat().st_size), (original_stat.st_mtime_ns, original_stat.st_size))
+        versions = {initial_version, self.state.list_images()[0]["assetVersion"]}
+        self.assertEqual(len(versions), 2)
+        for restart in (False, True):
+            self.state.close_project()
+            if restart:
+                cache, sessions = self.state.cache_dir, self.state.session_base_dir
+                self.state.shutdown()
+                self.state = StudioState(cache, sessions)
+                http_module.STATE = self.state
+            current = self.state.open_project(project["id"])["images"][0]
+            self.assertNotIn(current["assetVersion"], versions)
+            versions.add(current["assetVersion"])
+            self.assertEqual(self.state.asset_version(self.state.image_snapshot(image_id)), current["assetVersion"])
+            status, headers, image_bytes = self.request("GET", f"/api/image/{image_id}?v={current['assetVersion']}")
+            self.assertEqual(status, 200)
+            self.assertIn("immutable", headers["Cache-Control"])
+            self.assertNotEqual(image_bytes, initial_bytes)
+            with Image.open(io.BytesIO(image_bytes)) as image:
+                self.assertEqual(image.getpixel((0, 0)), (0, 0, 255))
+            self.assertEqual(self.request("GET", f"/api/thumbnail/{image_id}?v={current['assetVersion']}")[0], 200)
+        self.state.remove_images_from_catalog([image_id])
+        self.assertEqual(list((self.state.cache_dir / "thumbnails").glob(f"{image_id}-*.jpg")), [])
 
     def test_live_manual_layer_transfer_persists_and_recovers_after_cancel_or_commit_failure(self) -> None:
         """Run the browser's begin/layer/commit protocol through a real server."""

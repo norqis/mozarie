@@ -1008,6 +1008,10 @@ class CatalogMixin:
             {**source, "exists": source["kind"] != "native-folder" or bool(source.get("nativePath") and Path(str(source["nativePath"])).is_dir())}
             for source in self.workspace_store.project_sources(catalog_id)
         ]
+        file_source_ids = {source["id"] for source in sources if source["kind"] == "browser-files"}
+        source_images = [{key: image[key] for key in ("id", "sourceId", "relativePath")}
+                         for image in self.workspace_store.project_images(catalog_id)
+                         if image["sourceId"] in file_source_ids] if file_source_ids else []
         native_roots = [Path(str(source["nativePath"])) for source in sources
                         if source["kind"] == "native-folder" and source.get("nativePath") and Path(str(source["nativePath"])).is_dir()]
         if native_roots:
@@ -1057,14 +1061,14 @@ class CatalogMixin:
                 or not Path(str(source["nativePath"])).is_dir()
                 for source in sources
             )
-            return {"project": project, "images": images, "needsSource": needs_source, "sources": sources}
+            return {"project": project, "images": images, "needsSource": needs_source, "sources": sources, "sourceImages": source_images}
         if resume:
             project = self.workspace_store.set_project_status(catalog_id, "working")
         self._detach_catalog(
             prune_workspace=False, publish_catalog_id=catalog_id,
             publish_read_only=project["status"] == "completed", publish_sources=sources,
         )
-        return {"project": project, "images": [], "needsSource": bool(sources), "sources": sources}
+        return {"project": project, "images": [], "needsSource": bool(sources), "sources": sources, "sourceImages": source_images}
 
     def source_mismatch_snapshot(self) -> list[dict[str, Any]]:
         with self.lock:
@@ -2214,7 +2218,7 @@ class CatalogMixin:
                 try:
                     if self.workspace_id is None:
                         created_projectless_id, durable_source_id, stored_images = self.workspace_store.create_projectless_browser_workspace(
-                            added, kind=source_kind, display_name=source_kind, source_identity=browser_identity,
+                            added, kind=source_kind, display_name=source_kind, source_identity=f"browser:{browser_identity}",
                         )
                         self.workspace_store.activate_projectless_catalog(created_projectless_id)
                         self.workspace_id = created_projectless_id
@@ -2711,6 +2715,7 @@ class CatalogMixin:
                             or self.catalog_generation != catalog_generation
                             or any(changed_id not in self.images for changed_id in record_ids)):
                         raise ClientError("プロジェクト一覧が更新されました。もう一度操作してください。", "stale_catalog")
+                    previous_revisions = {changed_id: self._candidate_revision(changed_id) for changed_id in record_ids}
                     changed_ids = self.workspace_store.restore_history(
                         image_id, direction,
                         member_guard=self._assert_history_images_present,
@@ -2736,6 +2741,7 @@ class CatalogMixin:
                             image_id, "redo" if direction == "undo" else "undo",
                             member_guard=self._assert_history_images_present,
                             expected_members=record_ids,
+                            _rollback_revisions=previous_revisions,
                         )
                         raise
                     for changed_id, (revision, candidates, hidden, reviewed, transform) in hydrated.items():
@@ -2933,9 +2939,9 @@ class CatalogMixin:
 
     @staticmethod
     def asset_version(record: ImageRecord) -> str:
-        """The inexpensive HTTP version based on the catalogued file stat."""
+        """Keep reopened assets distinct even when an overwrite retained file stats."""
         mtime_ns, size_bytes = record.asset_fingerprint()
-        return f"{mtime_ns}-{size_bytes}-{record.asset_revision}"
+        return f"{mtime_ns}-{size_bytes}-{record.asset_revision}.{record.asset_instance}"
 
     def read_candidate_mask_png(self, image_id: str, candidate_id: str, *, expected_revision: int | None = None,
                                 expand_px_override: int | None = None) -> bytes:

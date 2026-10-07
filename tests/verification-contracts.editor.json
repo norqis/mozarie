@@ -1218,7 +1218,8 @@
       "observation": "Undo後に新しい描画 → 新操作が保存され、分岐前のRedoはできない",
       "status": "automated",
       "testIds": [
-        "python:tests.test_workspace.WorkspaceTests.test_history_restores_one_image_and_discards_its_redo_after_new_edit"
+        "python:tests.test_workspace.WorkspaceTests.test_history_restores_one_image_and_discards_its_redo_after_new_edit",
+        "python:tests.test_http_live_endpoints.LiveHttpEndpointTests.test_history_branch_uses_fresh_mask_urls_and_keeps_manual_revision_current"
       ]
     },
     {

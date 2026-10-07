@@ -246,16 +246,63 @@ test("DI-184 same-project return synchronization preserves a still-authoritative
       addCtx.fillStyle = "rgba(37, 149, 211, 1)"; addCtx.fillRect(11, 7, 1, 1); markDraftDirty("add");
       window.__returnAuthorityImage = state.currentImage;
     });
-    fixture.resetScenario();
-    fixture.setCatalog(catalogue.map((image) => image.id === "D" ? { ...image, reviewed: true } : image));
+    const generation = await page.evaluate(() => state.serverCatalogGeneration);
+    fixture.setCatalog(catalogue.map((image) => ({ ...image, reviewed: image.reviewed || image.id === "D", hidden: image.id === "C", flipH: image.id === "A" })));
     await page.evaluate(async () => { await syncCatalogOnReturn(); });
     assert.deepEqual(await page.evaluate(() => ({ ids: state.images.map((image) => image.id), currentId: state.currentId,
       sameImageObject: state.currentImage === window.__returnAuthorityImage,
       pixel: [...addCtx.getImageData(11, 7, 1, 1).data], draftPresent: state.drafts.has("A"),
       peerReviewed: state.images.find((image) => image.id === "D")?.reviewed,
+      hidden: state.hiddenImageIds.has("C"), flipPressed: document.querySelector("#flipHorizontalButton").getAttribute("aria-pressed"),
+      generation: state.serverCatalogGeneration,
     })), { ids: ["A", "B", "C", "D"], currentId: "A", sameImageObject: true,
-      pixel: [37, 149, 211, 255], draftPresent: true, peerReviewed: true },
+      pixel: [37, 149, 211, 255], draftPresent: true, peerReviewed: true, hidden: true, flipPressed: "true", generation },
     "visibility/pageshow authority refresh updates peer records without resetting a valid current canvas or its unsaved draft");
+  } finally {
+    await context?.close(); await browser.close(); await closeServer(fixture.server);
+  }
+});
+
+test("same-generation return reloads changed pixels and masks while pending edits keep their old revision", { timeout: 60000 }, async () => {
+  const fixture = await startFixtureServer(); fixture.setCatalog(catalogue);
+  const browser = await chromium.launch({ headless: true });
+  let context; let page;
+  try {
+    ({ context, page } = await openPage(browser, fixture));
+    await selectImage(page, "A");
+    const data = await page.evaluate(() => {
+      const canvas = document.createElement("canvas"); canvas.width = 100; canvas.height = 80;
+      const ctx = canvas.getContext("2d"); ctx.fillStyle = "blue"; ctx.fillRect(0, 0, 100, 80);
+      const image = canvas.toDataURL(); ctx.clearRect(0, 0, 100, 80); ctx.fillRect(12, 8, 1, 1);
+      state.view = { x: 27, y: 38, scale: 2 };
+      return { image, mask: canvas.toDataURL() };
+    });
+    let revision = 1; let manualReads = 0;
+    await page.route("**/api/image/A?*", (route) => route.fulfill({ contentType: "image/png", body: Buffer.from(data.image.split(",")[1], "base64") }));
+    await page.route("**/api/candidates/A", (route) => route.fulfill({ json: { candidates: [], candidateRevision: revision } }));
+    await page.route("**/api/workspace/manual/A", (route) => {
+      manualReads += 1;
+      return route.fulfill({ json: { draft: { add: data.mask, exclusion: "", exclusionErase: "", manualEnabled: true, candidateRevision: revision } } });
+    });
+    const publish = () => fixture.setCatalog(catalogue.map((image) => image.id === "A" ? { ...image, assetVersion: `asset-${revision}`, candidateRevision: revision } : image));
+    publish();
+    await page.evaluate(() => syncCatalogOnReturn());
+    assert.deepEqual(await page.evaluate(() => ({
+      version: currentRecord().assetVersion, revision: currentRecord().candidateRevision, view: state.view,
+      original: [...originalCtx.getImageData(0, 0, 1, 1).data], add: [...addCtx.getImageData(12, 8, 1, 1).data],
+    })), { version: "asset-1", revision: 1, view: { x: 27, y: 38, scale: 2 }, original: [0, 0, 255, 255], add: [0, 0, 255, 255] });
+    assert.equal(manualReads, 1);
+    await page.evaluate(() => { addCtx.fillStyle = "red"; addCtx.fillRect(15, 10, 1, 1); markDraftDirty("add"); });
+    revision = 2; publish();
+    await page.evaluate(() => syncCatalogOnReturn());
+    assert.deepEqual(await page.evaluate(() => ({ version: currentRecord().assetVersion, revision: currentRecord().candidateRevision,
+      add: [...addCtx.getImageData(15, 10, 1, 1).data] })), { version: "asset-1", revision: 1, add: [255, 0, 0, 255] });
+    assert.equal(manualReads, 1, "pending edits cannot be replaced by a return refresh");
+    await page.evaluate(async () => { resetCurrentDraft(); state.draftDirty = false; state.draftLayerDirty.clear(); state.drafts.delete("A"); await syncCatalogOnReturn(); });
+    assert.equal(manualReads, 2, "after discarding the pending edit the next return loads the still-new server revision");
+    assert.deepEqual(await page.evaluate(() => ({ version: currentRecord().assetVersion, revision: currentRecord().candidateRevision,
+      pixel: [...addCtx.getImageData(15, 10, 1, 1).data], view: state.view })),
+    { version: "asset-2", revision: 2, pixel: [0, 0, 0, 0], view: { x: 27, y: 38, scale: 2 } });
   } finally {
     await context?.close(); await browser.close(); await closeServer(fixture.server);
   }

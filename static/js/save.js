@@ -927,7 +927,7 @@ async function persistBrowserSourceAccess(imageId, access, canonicalImage = null
     access.relativePath = canonicalImage.relativePath;
     access.name = String(canonicalImage.relativePath).split("/").at(-1) || access.name;
   }
-  await rememberProjectSource(state.project.id, access.fileHandle, imageId, access.sourceId, access.clientKey, access.relativePath, access.parentHandle || null);
+  await rememberProjectSource(state.project.id, access.fileHandle, imageId, access.rememberedSourceId || access.sourceId, access.clientKey, access.relativePath, access.parentHandle || null);
 }
 
 async function reconnectSaveSourceParent(image, access, pickedParent) {
@@ -1036,7 +1036,7 @@ async function writeFormattedSourceHandle(access, image, format, response) {
     if (pendingProjectId) {
       replacement.clientKey ||= newClientKey();
       // Retain both handles until the server decides which relative path won.
-      await rememberProjectSource(pendingProjectId, targetHandle, null, replacement.sourceId, replacement.clientKey, relativePath, replacement.parentHandle);
+      await rememberProjectSource(pendingProjectId, targetHandle, null, replacement.rememberedSourceId || replacement.sourceId, replacement.clientKey, relativePath, replacement.parentHandle);
     }
   }
   catch (error) { try { await access.parentHandle.removeEntry(targetName); } catch {} throw error; }
@@ -1053,7 +1053,7 @@ async function finishFormattedSourceRename(access, rename) {
 async function discardFormattedSourceRename(access, rename) {
   if (!rename) return;
   try { await access.parentHandle.removeEntry(rename.replacement.fileHandle.name || rename.replacement.name); } catch {}
-  if (rename.pendingProjectId) await forgetPendingProjectSource(rename.pendingProjectId, rename.replacement.sourceId, rename.replacement.clientKey);
+  if (rename.pendingProjectId) await forgetPendingProjectSource(rename.pendingProjectId, rename.replacement.rememberedSourceId || rename.replacement.sourceId, rename.replacement.clientKey);
 }
 
 function sourceCommitMetadata(access) {

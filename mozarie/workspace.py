@@ -2507,12 +2507,14 @@ class WorkspaceStore:
                 raise
 
     @staticmethod
-    def _restore_history_state(db: sqlite3.Connection, image_id: str, state: dict[str, Any], manual_delta: dict[str, Any], *, forward: bool, restore_reviewed: bool = True) -> None:
+    def _restore_history_state(db: sqlite3.Connection, image_id: str, state: dict[str, Any], manual_delta: dict[str, Any], *, forward: bool, restore_reviewed: bool = True, rollback_revision: int | None = None) -> None:
         if not isinstance(state, dict) or not isinstance(state.get("candidates"), list):
             raise ValueError("workspace history is invalid")
         revision = state.get("revision")
         if isinstance(revision, bool) or not isinstance(revision, int) or revision < 0:
             raise ValueError("workspace history is invalid")
+        revision = (int(db.execute("SELECT candidate_revision FROM images WHERE image_id=?", (image_id,)).fetchone()["candidate_revision"]) + 1
+                    if rollback_revision is None else rollback_revision)
         manual = state.get("manual")
         # Candidate PNG BLOBs are immutable operation resources.  Retain rows
         # from later detection generations and switch their metadata/deleted
@@ -2553,7 +2555,7 @@ class WorkspaceStore:
                 exclusion_erase_enabled,exclusion_forced,removed_candidate_ids,candidate_revision,has_effective_mask,history_json,updated_at)
                 VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)""", (image_id, *blobs, int(bool(manual.get("manualEnabled"))),
                 int(bool(manual.get("exclusionEnabled"))), int(bool(manual.get("eraseEnabled"))), int(bool(manual.get("exclusionForced"))),
-                manual["removed"], int(manual.get("revision", revision)), int(bool(manual.get("effective"))), "{}", time.time_ns()))
+                manual["removed"], revision, int(bool(manual.get("effective"))), "{}", time.time_ns()))
         flags = state.get("flags", {})
         if not isinstance(flags, dict) or not isinstance(flags.get("hidden", False), bool) or not isinstance(flags.get("reviewed", False), bool):
             raise ValueError("workspace history is invalid")
@@ -2618,6 +2620,7 @@ class WorkspaceStore:
     def restore_history(
         self, image_id: str, direction: str, member_guard: Callable[[list[str]], None] | None = None,
         expected_members: list[str] | None = None,
+        _rollback_revisions: dict[str, int] | None = None,
     ) -> list[str]:
         if direction not in {"undo", "redo"}:
             raise ValueError("invalid history direction")
@@ -2674,7 +2677,8 @@ class WorkspaceStore:
                     if not isinstance(delta, dict) or not isinstance(delta.get("manual", {}), dict):
                         raise ValueError("workspace history is invalid")
                     self._restore_history_state(db, str(member["image_id"]), state, delta.get("manual", {}),
-                                                forward=direction == "redo", restore_reviewed=flag_only and review_changed)
+                                                forward=direction == "redo", restore_reviewed=flag_only and review_changed,
+                                                rollback_revision=(_rollback_revisions or {}).get(str(member["image_id"])))
                     if direction == "undo":
                         previous = db.execute("SELECT entry_id FROM history_entries WHERE image_id=? AND entry_id<? ORDER BY entry_id DESC LIMIT 1", (member["image_id"], member["entry_id"])).fetchone()
                         db.execute("""INSERT INTO history_cursors(image_id,entry_id) VALUES(?,?)

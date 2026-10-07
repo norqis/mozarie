@@ -9,12 +9,16 @@ state.workspaceFlagPending = new Map();
 // those unsaved snapshots from server copies without retaining another payload.
 const persistedWorkspaceDrafts = new WeakSet();
 
-function releaseInactiveWorkspaceDraft(imageId) {
+function hasPendingWorkspaceDraft(imageId) {
   const draft = state.drafts.get(imageId);
-  if (!hasDurableHistory() || state.currentId === imageId || state.pendingImageId === imageId
+  return Boolean((state.currentId === imageId && state.draftDirty)
     || (draft && (!persistedWorkspaceDrafts.has(draft) || draft.dirtyLayers?.length))
     || state.workspaceDraftTimers.has(imageId) || state.draftSaveChains.has(imageId)
-    || state.workspaceDraftChains.has(imageId) || state.workspaceMutationErrors.has(imageId)) return;
+    || state.workspaceDraftChains.has(imageId) || state.workspaceMutationErrors.has(imageId));
+}
+
+function releaseInactiveWorkspaceDraft(imageId) {
+  if (!hasDurableHistory() || state.currentId === imageId || state.pendingImageId === imageId || hasPendingWorkspaceDraft(imageId)) return;
   state.drafts.delete(imageId);
   state.maskStatus.delete(imageId);
 }

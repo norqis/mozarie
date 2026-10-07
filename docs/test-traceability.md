@@ -1,5 +1,13 @@
 # 自動テストの対応
 
+履歴分岐のマスクURLは `LiveHttpEndpointTests.test_history_branch_uses_fresh_mask_urls_and_keeps_manual_revision_current` で、枠変更→元に戻す→別の枠変更→元に戻す・やり直すを実HTTPへ送り、画素とURLの対応、手描きrevisionの一致、復元失敗後の旧マスク取得と次編集を確認する。内容の復元と表示用revisionを区別し、対象外画像のrevisionは変えない。
+
+上書き後のキャッシュは `LiveHttpEndpointTests.test_overwritten_same_stat_image_has_fresh_asset_urls_after_reopen_and_restart` で、更新時刻・ファイルサイズが同じでも変更前の画像URLを再利用しないこと、再開・再起動後の画素、サムネイル生成と一覧削除時の清掃を確認する。
+
+WS-101.1 は `workspace/test_browser_source_reopen.py` と実Chromiumの `workspace/test_browser_source_reopen_e2e.cjs` で、未命名のファイル・フォルダー読込から命名・再開までの全画像と履歴保持、旧ソース識別子の分裂、同名で内容が異なるファイルのハンドル対応、権限不足時の復元対象、再開を繰り返してもIDB行が増えないことを確認する。元のソース行や画像IDを統合・削除しない。
+
+DI-184.1 の復帰同期は一覧世代を変えずに確認済み・非表示・反転を変更する。現在のキャンバスと未保存の下書きを維持し、画像・候補の版だけが変わった場合は未保存中の旧版を保ち、編集がないときに画素・マスクを再取得して表示倍率と位置を保持する。
+
 元画像削除は一時退避直後の進捗記録と復元記録をSQLite triggerで失敗させ、元パス・候補を保持したまま同tokenの再試行と再起動ができることを確認する。ブラウザー側は実Web LocksとIndexedDBで、実行中の削除を同タブ・別タブの復旧が取り消さず、タブを閉じた後に復旧できることを確認する。
 
 FE-079.1 は四隅の色が異なる画像を実HTTPで取得し、上下・左右反転後のサムネイルを初回生成・キャッシュ再利用の両方で確認する。サーバーは元ファイルの向きを保持し、既存の画面試験で中央画像とサムネイルに同じ反転が一度だけ適用されることを確認する。

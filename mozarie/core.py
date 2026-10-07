@@ -169,6 +169,7 @@ class ImageRecord:
     asset_size_bytes: int | None = field(default=None, repr=False)
     source_kind: str = "filesystem"
     asset_revision: int = 0
+    asset_instance: str = field(default_factory=lambda: uuid.uuid4().hex, repr=False)
     hidden: bool = False
     reviewed: bool = False
     # Edit coordinates are always canonical.  The desired flips are visible

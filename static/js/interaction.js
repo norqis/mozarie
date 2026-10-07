@@ -779,19 +779,20 @@ function pruneSourceAccess() {
 }
 
 async function rememberImportedSource(result, session) {
+  const rememberedSourceId = result.entry.rememberedSourceId || session.rememberedSourceId || result.sourceId;
   for (const imported of result.data.imported || []) {
     if (imported.clientKey !== result.clientKey || !result.entry.fileHandle || !imported.imageId) continue;
     state.sourceAccess.set(imported.imageId, {
       fileHandle: result.entry.fileHandle, parentHandle: result.entry.parentHandle || null, rootHandle: result.entry.rootHandle || null,
       name: result.entry.file.name, size: result.entry.file.size, lastModified: result.entry.file.lastModified,
-      sourceId: result.sourceId, clientKey: result.clientKey, relativePath: result.entry.relativePath, sourceKind: session.sourceKind,
+      sourceId: result.sourceId, rememberedSourceId, clientKey: result.clientKey, relativePath: result.entry.relativePath, sourceKind: session.sourceKind,
     });
     if (session.sourceKind === "browser-directory") {
       const source = state.projectlessDirectorySources.get(result.sourceId);
       if (source) source.imageIds.add(imported.imageId);
       continue;
     }
-    if (state.project?.id) await rememberProjectSource(state.project.id, result.entry.fileHandle, imported.imageId, result.sourceId, result.clientKey, result.entry.relativePath, result.entry.parentHandle || null);
+    if (state.project?.id) await rememberProjectSource(state.project.id, result.entry.fileHandle, imported.imageId, rememberedSourceId, result.clientKey, result.entry.relativePath, result.entry.parentHandle || null);
   }
 }
 
@@ -1022,7 +1023,7 @@ async function importFileHandles(handles, session = beginImportSession()) {
   session.sourceKind = "browser-files";
   return importHandleEntries(handles.map((item) => {
     const handle = item?.handle || item;
-    return { handle, clientKey: item?.clientKey || null, relativePath: item?.relativePath || handle.name, parentHandle: item?.parentHandle || null };
+    return { handle, rememberedSourceId: item?.rememberedSourceId, clientKey: item?.clientKey || null, relativePath: item?.relativePath || handle.name, parentHandle: item?.parentHandle || null };
   }), session);
 }
 
@@ -1056,13 +1057,15 @@ async function importDirectoryHandle(directoryHandle, session = beginImportSessi
   }
 }
 
-async function importProjectDirectoryHandle(directoryHandle, projectId, sourceId = null, importIntent = "add") {
+async function importProjectDirectoryHandle(directoryHandle, projectId, sourceId = null, importIntent = "add", rememberedSourceId = sourceId) {
   const session = beginImportSession({ allowDuringCatalogTransition: true }); if (!session) return;
   try {
     await flushAllImageMutations();
     await flushAllWorkspaceMutations();
     session.catalogId = projectId;
-    session.sourceId = await rememberProjectSource(projectId, directoryHandle, null, sourceId);
+    const storedSourceId = await rememberProjectSource(projectId, directoryHandle, null, rememberedSourceId);
+    session.sourceId = sourceId || storedSourceId;
+    session.rememberedSourceId = storedSourceId;
     session.sourceKind = "browser-directory";
     session.importIntent = importIntent;
     const entries = [];
@@ -1087,7 +1090,7 @@ async function importProjectFileHandles(sources, projectId) {
     if (!handle) continue;
     const sourceId = source?.sourceId || crypto.randomUUID();
     const handles = groups.get(sourceId) || [];
-    handles.push({ handle, clientKey: source?.clientKey || null, relativePath: source?.relativePath || handle.name, parentHandle: source?.parentHandle || null }); groups.set(sourceId, handles);
+    handles.push({ handle, sourceId, rememberedSourceId: source?.rememberedSourceId, clientKey: source?.clientKey || null, relativePath: source?.relativePath || handle.name, parentHandle: source?.parentHandle || null }); groups.set(sourceId, handles);
   }
   const failures = [];
   for (const [sourceId, handles] of groups) {

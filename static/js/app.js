@@ -88,40 +88,48 @@ let pendingBrowserProjectSources = [];
 const browserSourceRestoreBusy = new Set();
 let browserSourceRestoreGeneration = 0;
 function clearPendingBrowserProjectSources() { browserSourceRestoreGeneration += 1; pendingBrowserProjectSources = []; browserSourceRestoreBusy.clear(); }
+function canonicalRememberedProjectSources(remembered, catalogSources, sourceImages) {
+  const byId = new Map(catalogSources.map((source) => [source.id, source]));
+  const aliases = new Map();
+  for (const source of catalogSources) for (const alias of [source.identity, source.identity?.replace(/^browser:/, "")]) {
+    if (!alias) continue;
+    const ids = aliases.get(alias) || new Set(); ids.add(source.id); aliases.set(alias, ids);
+  }
+  const imagesById = new Map(sourceImages.map((image) => [image.id, image]));
+  const canonicalIds = (row, kind) => byId.get(row.sourceId)?.kind === kind ? [row.sourceId]
+    : [...(aliases.get(row.sourceId) || [])].filter((id) => byId.get(id)?.kind === kind);
+  const files = new Map();
+  for (const row of remembered.files) {
+    const image = imagesById.get(row.imageId);
+    const matched = image?.relativePath === row.relativePath && byId.get(image?.sourceId)?.kind === "browser-files";
+    const ids = matched ? [image.sourceId] : canonicalIds(row, "browser-files");
+    for (const sourceId of ids) {
+      const priority = (matched ? 4 : 0) + (sourceId === row.sourceId ? 2 : 1);
+      const key = `${sourceId}\0${row.relativePath}`;
+      if (!files.has(key) || files.get(key).priority < priority) files.set(key, { priority, source: { ...row, sourceId, rememberedSourceId: row.sourceId } });
+    }
+  }
+  const directories = new Map();
+  for (const row of remembered.directories) for (const sourceId of canonicalIds(row, "browser-directory")) {
+    if (!directories.has(sourceId) || row.sourceId === sourceId) directories.set(sourceId, { ...row, sourceId, rememberedSourceId: row.sourceId });
+  }
+  return { files: [...files.values()].map((entry) => entry.source), directories: [...directories.values()] };
+}
 async function restoreBrowserProjectSourcesForCurrentCatalog(catalogSources = []) {
   const projectId = state.project?.id; const epoch = state.catalogEpoch; const restoreGeneration = ++browserSourceRestoreGeneration;
   if (!projectId) return;
   let remembered;
   try { remembered = await rememberedProjectSources(projectId); }
   catch { return; }
-  const { files, directories } = remembered;
+  const { files, directories } = canonicalRememberedProjectSources(remembered, catalogSources, state.images);
   if (!isCurrentCatalogEpoch(epoch) || state.project?.id !== projectId) return;
   const stagedAccess = new Map();
   const pending = [];
   const imagesById = new Map(state.images.map((image) => [image.id, image]));
   const imagesBySourcePath = new Map(state.images.map((image) => [`${image.sourceId}\0${image.relativePath}`, image]));
-  const fileSourceAliases = new Map();
-  for (const source of catalogSources) {
-    if (source.kind !== "browser-files") continue;
-    for (const alias of [source.id, source.identity, source.identity?.replace(/^browser:/, "")]) if (alias) fileSourceAliases.set(alias, source.id);
-  }
   const promotedSources = [];
-  const directorySourceAliases = new Map();
-  const directorySourceIds = new Set();
+  const directorySourceIds = new Set(directories.map((source) => source.sourceId));
   const imagesByDirectorySource = new Map();
-  const addDirectorySourceAlias = (alias, sourceId) => {
-    const sourceIds = directorySourceAliases.get(alias) || new Set();
-    sourceIds.add(sourceId); directorySourceAliases.set(alias, sourceIds);
-  };
-  for (const source of catalogSources) {
-    if (source.kind !== "browser-directory") continue;
-    directorySourceIds.add(source.id);
-    addDirectorySourceAlias(source.id, source.id);
-    if (source.identity) {
-      addDirectorySourceAlias(source.identity, source.id);
-      if (source.identity.startsWith("browser:")) addDirectorySourceAlias(source.identity.slice("browser:".length), source.id);
-    }
-  }
   for (const image of state.images) {
     if (!directorySourceIds.has(image.sourceId)) continue;
     const relativePath = image.relativePath;
@@ -131,29 +139,27 @@ async function restoreBrowserProjectSourcesForCurrentCatalog(catalogSources = []
   }
   for (const source of files) {
     const image = source.imageId ? imagesById.get(source.imageId)
-      : imagesBySourcePath.get(`${fileSourceAliases.get(source.sourceId) || source.sourceId}\0${source.relativePath}`);
+      : imagesBySourcePath.get(`${source.sourceId}\0${source.relativePath}`);
     if (!image || image.relativePath !== source.relativePath) continue;
     if (await ensureProjectSourcePermission(source.handle)) {
       stagedAccess.set(image.id, {
-        fileHandle: source.handle, parentHandle: source.parentHandle || null, sourceId: source.sourceId, clientKey: source.clientKey, relativePath: source.relativePath,
+        fileHandle: source.handle, parentHandle: source.parentHandle || null, sourceId: source.sourceId, rememberedSourceId: source.rememberedSourceId, clientKey: source.clientKey, relativePath: source.relativePath,
         sourceKind: "browser-files", size: image.sizeBytes, lastModified: Math.round(Number(image.mtimeNs) / 1000000),
       });
-      if (!source.imageId) promotedSources.push({ ...source, imageId: image.id });
+      if (!source.imageId) promotedSources.push({ ...source, imageId: image.id, sourceId: source.rememberedSourceId });
       continue;
     }
     pending.push({ ...source, projectId, kind: "file", key: `file:${source.sourceId}:${source.clientKey || source.relativePath}` });
   }
   for (const source of directories) {
-    const canonicalSourceIds = directorySourceAliases.get(source.sourceId);
-    if (!canonicalSourceIds?.size) continue;
     if (!await ensureProjectSourcePermission(source.handle)) { pending.push({ ...source, projectId, kind: "directory", key: `directory:${source.sourceId}` }); continue; }
     async function collect(handle, parent = "") {
       for await (const child of handle.values()) {
         const relativePath = parent ? `${parent}/${child.name}` : child.name;
         if (child.kind === "file") {
-          for (const sourceId of canonicalSourceIds) for (const image of imagesByDirectorySource.get(sourceId)?.get(relativePath) || []) {
+          for (const image of imagesByDirectorySource.get(source.sourceId)?.get(relativePath) || []) {
             stagedAccess.set(image.id, {
-              fileHandle: child, parentHandle: handle, rootHandle: source.handle, name: child.name, sourceId: image.sourceId, relativePath,
+              fileHandle: child, parentHandle: handle, rootHandle: source.handle, name: child.name, sourceId: image.sourceId, rememberedSourceId: source.rememberedSourceId, relativePath,
               sourceKind: "browser-directory", size: image.sizeBytes, lastModified: Math.round(Number(image.mtimeNs) / 1000000),
             });
           }
@@ -293,7 +299,7 @@ async function restoreBrowserProjectSource(source) {
     // Call requestPermission directly from this click handler. A project open
     // has already awaited IndexedDB and cannot retain user activation.
     if (!await requestProjectSourcePermission(source.handle, source.kind === "directory" ? "readwrite" : "read")) return;
-    if (source.kind === "directory") await importProjectDirectoryHandle(source.handle, state.project.id, source.sourceId, "restore");
+    if (source.kind === "directory") await importProjectDirectoryHandle(source.handle, state.project.id, source.sourceId, "restore", source.rememberedSourceId);
     else if ((await importProjectFileHandles([source], state.project.id)).length) throw codedError("project_source_unavailable");
     pendingBrowserProjectSources = pendingBrowserProjectSources.filter((item) => item.key !== source.key || item.projectId !== source.projectId);
     await showSourceMismatches();
@@ -483,12 +489,12 @@ async function openProject(project, resume = false) {
       let files = [];
       let directories = [];
       if (data.needsSource) {
-        ({ files, directories } = await rememberedProjectSources(project.id));
+        ({ files, directories } = canonicalRememberedProjectSources(await rememberedProjectSources(project.id), data.sources || [], data.sourceImages || data.images || []));
         if (!isCurrentCatalogEpoch(epoch)) return;
         for (const source of directories) {
           if (!await ensureProjectSourcePermission(source.handle)) { restoreFailures.push({ ...source, projectId: project.id, kind: "directory", key: `directory:${source.sourceId}` }); continue; }
           try {
-            await importProjectDirectoryHandle(source.handle, project.id, source.sourceId, "restore");
+            await importProjectDirectoryHandle(source.handle, project.id, source.sourceId, "restore", source.rememberedSourceId);
           } catch (error) { restoreFailures.push({ ...source, projectId: project.id, kind: "directory", key: `directory:${source.sourceId}` }); }
           if (!isCurrentCatalogEpoch(epoch)) return;
         }

@@ -240,7 +240,8 @@
       "observation": "実行ボタンが操作でき、対象画像だけを上書きし、対象外の元画像を保持する。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > browser overwrite replaces only the selected source"
+        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > browser overwrite replaces only the selected source",
+        "python:tests.test_http_live_endpoints.LiveHttpEndpointTests.test_overwritten_same_stat_image_has_fresh_asset_urls_after_reopen_and_restart"
       ]
     },
     {

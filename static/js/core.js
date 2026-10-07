@@ -508,19 +508,33 @@ async function syncCatalogOnReturn() {
   const controller = new AbortController();
   state.catalogRefreshController = controller;
   const epoch = state.catalogEpoch;
-  const knownGeneration = state.serverCatalogGeneration;
   const knownProjectId = state.project?.id || null;
   try {
     const snapshot = await api("/api/images", { signal: controller.signal });
     if (controller.signal.aborted || !isCurrentCatalogEpoch(epoch)) return;
-    const changed = (Number.isSafeInteger(snapshot.catalogGeneration) && snapshot.catalogGeneration !== knownGeneration)
-      || (snapshot?.project?.id || null) !== knownProjectId;
+    const previous = currentRecord();
+    const current = (snapshot?.project?.id || null) === knownProjectId
+      ? snapshot.images.find((image) => image.id === state.currentId) : null;
+    const resourcesChanged = previous && current && (imageAssetVersion(previous) !== imageAssetVersion(current)
+      || Number(previous.candidateRevision || 0) !== Number(current.candidateRevision || 0));
+    const deferReload = resourcesChanged && (hasPendingWorkspaceDraft(previous.id) || isBusy() || isGestureActive()
+      || state.activeStroke || currentImageActionPending() || state.candidateUpdateChains.has(previous.id)
+      || state.imageMutationChains.has(previous.id));
+    if (deferReload) {
+      // Keep old pixels paired with their old revision while an edit is pending.
+      const { hidden, reviewed, flipH, flipV, transformRevision } = current;
+      Object.assign(current, previous, { hidden, reviewed, flipH, flipV, transformRevision });
+    }
     catalogResponse(snapshot);
     if (typeof flushPendingBrowserSaveAcks === "function") void flushPendingBrowserSaveAcks();
-    if (changed) {
-      replaceCatalogSnapshot(snapshot, knownProjectId);
-      state.missingNativeSources = typeof missingNativeSources === "function" ? missingNativeSources(snapshot.sources) : [];
-      if (typeof restoreBrowserProjectSourcesForCurrentCatalog === "function") void restoreBrowserProjectSourcesForCurrentCatalog(snapshot.sources).catch(() => {});
+    replaceCatalogSnapshot(snapshot, knownProjectId);
+    state.missingNativeSources = typeof missingNativeSources === "function" ? missingNativeSources(snapshot.sources) : [];
+    if (typeof restoreBrowserProjectSourcesForCurrentCatalog === "function") void restoreBrowserProjectSourcesForCurrentCatalog(snapshot.sources).catch(() => {});
+    if (resourcesChanged && !deferReload) {
+      state.drafts.delete(previous.id); state.maskStatus.delete(previous.id); releaseImageCaches(previous.id);
+      await selectImage(previous.id, true, { preserveView: true, saveCurrentDraft: false });
+    } else if (current && state.currentImage) {
+      syncFlipControls(); render();
     }
   } catch (error) {
     if (error?.name !== "AbortError") showUserError(error);
