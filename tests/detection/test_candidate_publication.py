@@ -71,6 +71,46 @@ class CandidatePublicationTests(unittest.TestCase):
         self.image_path = source / "source.png"
         self.mask_dir = self.state.cache_dir / self.image_id
 
+    def test_equal_score_auxiliary_tiles_publish_separate_candidates_and_the_best_duplicate(self):
+        source = self.root / "tiles"
+        source.mkdir()
+        with Image.new("RGB", (24, 18), "white") as image:
+            image.save(source / "tiles.png")
+        image_id = self.state.set_root(str(source))[0]["id"]
+        self.state.settings["models"].update({"ntd11_enabled": True, "ntd11": self.state.settings["models"]["target_segmentation"]})
+
+        class EmptyTarget:
+            def detect(self, *_args):
+                return []
+
+        class Auxiliary:
+            def __init__(self):
+                self.calls = 0
+
+            def detect(self, rgb, *_args):
+                self.calls += 1
+                if self.calls > 2:
+                    return []
+                masks = []
+                if self.calls == 1:
+                    first = np.zeros(rgb.shape[:2], dtype=np.uint8); first[1:3, 1:3] = 255
+                    masks.append({"class_name": "penis", "confidence": .9, "mask": first})
+                second = np.zeros(rgb.shape[:2], dtype=np.uint8); second[8:10, 10:12] = 255
+                masks.append({"class_name": "penis", "confidence": .9 if self.calls == 1 else .95, "mask": second})
+                return masks
+
+        with patch("mozarie.detection.TargetSegmenter", return_value=EmptyTarget()), patch("mozarie.detection.GenericYoloSegmenter", return_value=Auxiliary()):
+            self.state.start_detection([image_id], parallelism=1, target_classes={"penis"})
+            self.state.worker_thread.join(30)
+            self.assertFalse(self.state.worker_thread.is_alive())
+        self.assertEqual(self.state.job.state, "complete", self.state.job.error)
+        candidates = self.state.candidates[image_id]
+        self.assertEqual([candidate.confidence for candidate in candidates], [.95, .9])
+        for candidate, (x, y) in zip(candidates, ((10, 8), (1, 1))):
+            with Image.open(candidate.mask_path) as mask:
+                expected = np.zeros((18, 24), dtype=np.uint8); expected[y:y + 2, x:x + 2] = 255
+                np.testing.assert_array_equal(np.asarray(mask), expected)
+
     def _detect(self) -> None:
         self.state.start_detection([self.image_id], parallelism=1, target_classes={"penis"})
         self.state.worker_thread.join(10)

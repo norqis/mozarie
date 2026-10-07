@@ -540,8 +540,8 @@ def merge_segment(
         return
     candidate = {"class_name": class_name, "confidence": confidence, "mask": mask, "source": source}
     winner = max([*matching, candidate], key=_segment_rank)
-    for duplicate in matching:
-        segments.remove(duplicate)
+    duplicate_ids = {id(segment) for segment in matching}
+    segments[:] = [segment for segment in segments if id(segment) not in duplicate_ids]
     segments.append(winner)
 
 
@@ -579,8 +579,8 @@ def merge_tile_segment(
         segments.append(candidate)
         return
     winner = max([*matching, candidate], key=_segment_rank)
-    for duplicate in matching:
-        segments.remove(duplicate)
+    duplicate_ids = {id(segment) for segment in matching}
+    segments[:] = [segment for segment in segments if id(segment) not in duplicate_ids]
     segments.append(winner)
 
 

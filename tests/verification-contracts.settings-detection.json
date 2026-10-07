@@ -628,7 +628,8 @@
       "observation": "SAMの準備を要求せず、輪郭補正なしで完了する",
       "status": "automated",
       "testIds": [
-        "python:tests.test_server.MozarieTests.test_standard_detection_never_loads_sam_and_keeps_handseg_evidence"
+        "python:tests.test_server.MozarieTests.test_standard_detection_never_loads_sam_and_keeps_handseg_evidence",
+        "python:tests.detection.test_candidate_publication.CandidatePublicationTests.test_equal_score_auxiliary_tiles_publish_separate_candidates_and_the_best_duplicate"
       ]
     },
     {
@@ -1166,7 +1167,9 @@
       "status": "automated",
       "testIds": [
         "python:tests.test_detection_regressions.DetectionIntegrityRegressionTests.test_broad_auxiliary_mask_confirms_only_the_best_matching_target",
-        "python:tests.test_detection_regressions.DetectionIntegrityRegressionTests.test_source_priority_beats_confidence_independent_of_input_order"
+        "python:tests.test_detection_regressions.DetectionIntegrityRegressionTests.test_source_priority_beats_confidence_independent_of_input_order",
+        "python:tests.detection.test_tile_merge.TileMergeTests.test_later_duplicate_does_not_compare_an_unrelated_numpy_mask",
+        "python:tests.detection.test_tile_merge.TileMergeTests.test_bridge_removes_every_duplicate_without_reordering_other_classes"
       ]
     },
     {

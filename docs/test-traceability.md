@@ -2,6 +2,8 @@
 
 全体監査5回目では WS-101.1 に次を追加した。`jobs/test_multi_source_jobs.py` は再開した複数native-folderの画像をそれぞれ単一・一括保存の準備へ渡し、実検出ジョブ・候補公開・一括コピー保存まで通す。外部推論だけを固定マスクに置き換え、全出力の画素と原本保持を確認する。`BrowserSourceReopenTests.test_reconnecting_in_the_same_session_keeps_edits_and_only_one_staged_image` は、file/directory sourceの同一session内での再接続を繰り返し、画像ID・候補・手描き・履歴・編集名を保ち、一時画像を1枚だけ残す。再接続失敗時も旧画像と編集を保持し、通常addの同名拒否は維持する。
 
+SD-039.1・SD-147.1 は `detection/test_tile_merge.py` と `CandidatePublicationTests.test_equal_score_auxiliary_tiles_publish_separate_candidates_and_the_best_duplicate` で、同class・同scoreの離れた候補の後ろに重複候補が来ても、実検出ジョブが完了することを確認する。非重複候補の順序、source優先度、同順位での既存候補保持、複数候補をまたぐ重複、最終公開マスクの全画素を照合する。外部推論だけを固定出力へ置き換え、実モデルの精度確認とは扱わない。
+
 全体監査4回目では、手描き画像とその版を同じ取得応答で渡し、一覧の更新だけで未更新の画素へ新しい版を付けないことを確認した。
 
 ブラウザー保存と全体flushの既存fixtureも、直接設定する下書きへ取得済みの版を対で設定する。保存処理や失敗境界の判定は製品実装を使う。
