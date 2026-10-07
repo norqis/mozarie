@@ -1189,7 +1189,9 @@
         "python:tests.core.test_mask_bounds_memory.MaskBoundsMemoryTests.test_manual_history_decodes_each_changed_png_once_and_keeps_undo_pixels",
         "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_rapid_strokes_keep_separate_undo_steps_after_reopen",
         "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_slow_encoder_does_not_merge_subsequent_stroke_history",
-        "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_pending_upload_does_not_merge_subsequent_stroke_history"
+        "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_pending_upload_does_not_merge_subsequent_stroke_history",
+        "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_group_undo_preserves_another_images_pending_stroke",
+        "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_group_undo_keeps_another_images_failed_stroke_retryable"
       ]
     },
     {
@@ -1206,7 +1208,9 @@
         "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_peer_manual_sync_conflicts_and_last_stroke_undo_use_real_workspace",
         "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_rapid_strokes_keep_separate_undo_steps_after_reopen",
         "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_slow_encoder_does_not_merge_subsequent_stroke_history",
-        "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_pending_upload_does_not_merge_subsequent_stroke_history"
+        "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_pending_upload_does_not_merge_subsequent_stroke_history",
+        "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_group_redo_preserves_another_images_pending_stroke",
+        "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_group_redo_keeps_another_images_failed_stroke_retryable"
       ]
     },
     {

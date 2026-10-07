@@ -1189,7 +1189,7 @@ nodeTest("editor masks, fill, candidates, and history", async (t) => {
   context.reconcileCatalogSnapshot = () => false;
   context.loadReviewedPaths = () => {};
   state.projectHistory = new Map([["image", { canUndo: true, canRedo: true }]]); state.drafts = new Map([["image", { local: true }]]);
-  context.flushWorkspaceDraft = async (imageId) => { historyFlushes += 1; assert.equal(imageId, "image", "history flushes the selected project image first"); };
+  context.flushAllWorkspaceMutations = async () => { historyFlushes += 1; };
   context.applyProjectSnapshot = () => { historySnapshots += 1; };
   context.selectImage = async (imageId, force, options) => { historySelects += 1; assert.deepEqual({ imageId, force, saveCurrentDraft: options.saveCurrentDraft }, { imageId: "image", force: true, saveCurrentDraft: false }, "changed project history reloads the selected image without resaving its draft"); };
   context.api = async (url, options = {}) => {
@@ -1200,7 +1200,7 @@ nodeTest("editor masks, fill, candidates, and history", async (t) => {
     throw new Error(`unexpected history request: ${url}`);
   };
   await test.restoreProjectHistory("undo");
-  assert.equal(historyFlushes, 1, "project history flushes its debounced draft before undo");
+  assert.equal(historyFlushes, 1, "project history flushes all pending drafts before undo");
   assert.equal(historySnapshots, 1, "project history refreshes catalogue state after a change");
   assert.equal(historySelects, 1, "project history reloads the changed current image");
   assert.equal(state.images[0].candidateRevision, 9, "project history retains the server candidate revision");

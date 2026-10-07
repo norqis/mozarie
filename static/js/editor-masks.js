@@ -1299,7 +1299,7 @@ async function restoreProjectHistory(direction) {
   try {
     await queueImageMutation(imageId, async () => {
       await waitForCandidateMutations();
-      await flushWorkspaceDraft(imageId);
+      await flushAllWorkspaceMutations();
       const freshHistory = await api(`/api/project/history/${encodeURIComponent(imageId)}`);
       state.projectHistory.set(imageId, { canUndo: freshHistory.canUndo === true, canRedo: freshHistory.canRedo === true });
       if ((direction === "undo" && !freshHistory.canUndo) || (direction === "redo" && !freshHistory.canRedo)) return;

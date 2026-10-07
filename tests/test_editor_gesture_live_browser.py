@@ -154,6 +154,33 @@ class LiveEditorGestureBrowserTests(unittest.TestCase):
     def test_pending_upload_does_not_merge_subsequent_stroke_history(self) -> None:
         self._check_rapid_stroke_history("upload")
 
+    def _check_group_history_pending_draft(self, direction: str, outcome: str) -> None:
+        shutil.copy2(self.source_path, self.source_dir / "other.png")
+        self.state.set_root(str(self.source_dir))
+        self.state.set_image_flags_bulk({"imageIds": list(self.state.images), "reviewed": True})
+        if direction == "redo":
+            self.state.restore_project_history(next(iter(self.state.images)), "undo")
+        helper = Path(__file__).with_name("editor") / "group_history_pending_draft_live_browser_helper.cjs"
+        result = subprocess.run(
+            ["node", str(helper), self.origin, direction, outcome], cwd=Path(__file__).resolve().parents[1],
+            env={**os.environ, "PYTHONUTF8": "1"}, text=True, encoding="utf-8", errors="replace",
+            capture_output=True, timeout=60, check=False,
+        )
+        self.assertEqual(result.returncode, 0, f"group history {direction}/{outcome} failed\n{result.stdout}\n{result.stderr}")
+        self.assertEqual(self.source_path.read_bytes(), self.source_bytes)
+
+    def test_group_undo_preserves_another_images_pending_stroke(self) -> None:
+        self._check_group_history_pending_draft("undo", "success")
+
+    def test_group_redo_preserves_another_images_pending_stroke(self) -> None:
+        self._check_group_history_pending_draft("redo", "success")
+
+    def test_group_undo_keeps_another_images_failed_stroke_retryable(self) -> None:
+        self._check_group_history_pending_draft("undo", "failure")
+
+    def test_group_redo_keeps_another_images_failed_stroke_retryable(self) -> None:
+        self._check_group_history_pending_draft("redo", "failure")
+
     def test_peer_manual_sync_conflicts_and_last_stroke_undo_use_real_workspace(self) -> None:
         shutil.copy2(self.source_path, self.source_dir / "other.png")
         self.state.set_root(str(self.source_dir))

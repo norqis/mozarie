@@ -1292,7 +1292,8 @@
       "observation": "対象モデル名と開始操作を表示する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_settings_dialog_e2e.cjs::SD-066 model download confirmation names the selected model and exposes start"
+        "node:tests/test_settings_dialog_e2e.cjs::SD-066 model download confirmation names the selected model and exposes start",
+        "node:tests/settings/test_model_download_polling_e2e.cjs::a delayed start response cannot replace a reopened confirmation"
       ]
     },
     {
@@ -1303,7 +1304,9 @@
       "observation": "進捗を表示し、完了後に利用可能状態になる",
       "status": "automated",
       "testIds": [
-        "node:tests/test_settings_runtime.cjs::SD-067 completed model download publishes the acquired path"
+        "node:tests/test_settings_runtime.cjs::SD-067 completed model download publishes the acquired path",
+        "node:tests/settings/test_model_download_polling_e2e.cjs::model progress callers share one request until it completes",
+        "node:tests/settings/test_model_download_polling_e2e.cjs::a previous progress response cannot replace a new completed download"
       ]
     },
     {
@@ -1314,7 +1317,9 @@
       "observation": "中止を表示し、未完了ファイルを利用可能と表示しない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_settings_runtime.cjs::SD-068 cancelled model download never publishes an unfinished path"
+        "node:tests/test_settings_runtime.cjs::SD-068 cancelled model download never publishes an unfinished path",
+        "node:tests/settings/test_model_download_polling_e2e.cjs::cancelled download ignores an older running status response",
+        "node:tests/settings/test_model_download_polling_e2e.cjs::cancelled download ignores an older failure status response"
       ]
     },
     {
@@ -1326,7 +1331,8 @@
       "status": "automated",
       "testIds": [
         "node:tests/test_settings_runtime.cjs::SD-069 model download polling failure is visible and leaves no acquired path",
-        "python:tests.test_model_downloads.ModelDownloadTests.test_worker_start_failure_restores_idle_and_allows_retry"
+        "python:tests.test_model_downloads.ModelDownloadTests.test_worker_start_failure_restores_idle_and_allows_retry",
+        "node:tests/settings/test_model_download_polling_e2e.cjs::a current progress error restores close and stops polling"
       ]
     },
     {
