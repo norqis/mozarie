@@ -74,6 +74,8 @@ DI-036.2 は `tests/http/test_project_http_endpoints.py` で、日本語・空�
 
 ED-020.2・ED-023.1・WS-141.2 は `tests/editor/test_dialog_keyboard_e2e.cjs` で、実ポインターによる矩形作成後の名前変更ダイアログのEnter/Escape、取消ボタンのEnter、キャンバスのEnter/Escape、処理済みEnterの抑止を確認する。ダイアログ入力で背景の輪郭検出を起動せず、キャンバスでは従来の操作を維持する。
 
+`tests/app/test_startup_catalog_and_detection_controls.cjs` の簡易DOM試験も `core.js` のダイアログ・入力対象判定を読み込み、実際の共通関数を通してイベント接続を検証する。
+
 WS-021.1・WS-114.2・WS-116.2 は `tests/import/test_import_cancellation_e2e.cjs` で、画像追加の中断後も確定済み画像と元画像へのアクセスを保持し、未開始ファイルを送信しないことを確認する。世代・セッション交換後の旧アップロード・一覧応答は、新しいプロジェクト・一覧・元画像の参照・状態表示へ反映しない。実ChromiumとOPFSを使い、HTTP応答の順序・成功・失敗だけを境界で制御する。
 
 旧セッションのファイル取得・アップロード失敗は件数や進捗表示を更新せず、閉じた進捗画面を再表示しないことも確認する。
