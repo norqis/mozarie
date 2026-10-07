@@ -211,7 +211,7 @@ class StateAndCatalogCoverageTests(unittest.TestCase):
     def test_catalog_candidate_and_session_branches(self) -> None:
         image_id = self.add_image()
         record = self.state.images[image_id]
-        self.assertEqual(self.state._allowed_root_for_record(record, self.root, None), self.root)
+        self.assertEqual(self.state._allowed_root_for_record(record, self.root, None), self.root.resolve())
         self.assertIsNone(self.state._allowed_root_for_record(SimpleNamespace(source_kind="other"), self.root, None))
         self.assertTrue(self.state.delete_candidate(image_id, "missing") is False)
         mask = self.cache / image_id / "candidate.png"; mask.parent.mkdir(parents=True); mask.write_bytes(png(size=(8, 8)))
