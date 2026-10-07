@@ -54,7 +54,8 @@ nodeTest("a source snapshot reads durable bytes before destructive work and rest
   await restoreSource({
     name: original.name,
     fileHandle: { name: original.name },
-    parentHandle: { async getFileHandle(name) {
+    parentHandle: { async getFileHandle(name, options) {
+      if (!options?.create) throw new DOMException("source was deleted", "NotFoundError");
       restoredName = name;
       return {
         async createWritable() { return { async write(bytes) { restoredBytes = [...new Uint8Array(await bytes.arrayBuffer())]; }, async close() {}, async abort() {} }; },
@@ -120,14 +121,17 @@ nodeTest("a rejected source snapshot starts neither deletion nor commit", async 
 
 nodeTest("a definitive delete commit rejection restores the exact materialized source bytes", async (t) => {
   const snapshot = new Blob(["original bytes"], { type: "image/png" });
-  const entry = { fileHandle: { getFile: async () => snapshot }, state: "ready" };
-  const restored = t.mock.fn();
+  const image = { id: "image-1", sourceId: "source-1", relativePath: "source.png" };
+  const state = { project: null, workspaceId: "workspace-1", images: [image], sourceAccess: new Map() };
+  const entry = { imageId: image.id, sourceId: image.sourceId, relativePath: image.relativePath,
+    fileHandle: { getFile: async () => snapshot }, state: "ready" };
+  const restored = t.mock.fn(async (access) => { access.name = "source.png"; access.size = snapshot.size; access.lastModified = 123; });
   const remembered = t.mock.fn(async () => {});
   const released = t.mock.fn(async () => {});
   const acknowledged = t.mock.fn(async () => {});
   const request = t.mock.fn(async () => ({ state: "cancelled" }));
   const restore = compiled("restoreCopiedBrowserSourcesAfterRejectedDelete", {
-    Blob,
+    Blob, state, codedError, sourceCommitMetadata: compiled("sourceCommitMetadata", {}),
     restoreSourceHandle: restored,
     rememberPendingSourceDelete: remembered,
     releaseSourceDeleteClaim: released,
@@ -135,7 +139,7 @@ nodeTest("a definitive delete commit rejection restores the exact materialized s
     acknowledgeSourceDelete: acknowledged,
   });
   const removeSource = compiled("deleteCopiedBrowserSource", {
-    browserDeleteEntry: () => entry,
+    state, browserDeleteEntry: () => entry,
     snapshotSourceHandle: async () => snapshot,
     codedError,
     crypto: { randomUUID: () => "delete-token" },
@@ -156,7 +160,13 @@ nodeTest("a definitive delete commit rejection restores the exact materialized s
   assert.equal(result.error.code, "input_invalid");
   assert.equal(restored.mock.callCount(), 1);
   assert.deepEqual(restored.mock.calls[0].arguments, [entry, snapshot, true]);
-  assert.equal(entry.state, "ready");
+  assert.equal(entry.state, "restored");
+  assert.equal(result.restored, true);
+  assert.equal(state.sourceAccess.get(image.id).lastModified, 123);
+  assert.equal(image.mtimeNs, 123000000);
+  const cancel = request.mock.calls.find((call) => call.arguments[0].endsWith("/cancel"));
+  assert.deepEqual(JSON.parse(cancel.arguments[1].body).restoredSources,
+    [{ imageId: image.id, sourceMtimeMs: 123, sourceSizeBytes: snapshot.size }]);
   assert.equal(released.mock.callCount(), 1);
   assert.equal(acknowledged.mock.callCount(), 1);
 });
