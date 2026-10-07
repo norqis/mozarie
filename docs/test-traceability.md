@@ -141,6 +141,8 @@ node --test tests/test_verification_contracts.cjs
 
 コピー保存先が消えた場合は、個別・一括の保存画面で作成確認を出す。取消しでは保存画面・入力・対象を保ち、ブラウザー権限要求・保存準備・設定書込み・作成を始めない。作成を選んだときだけ現在設定された絶対パスを作り、そのまま保存する。既存の使用可能なフォルダーは従来どおり直接保存し、ファイルや利用不能な場所は作成確認を出さず既存のエラーを表示する。新しいパスを直接入力した後にブラウザー元画像の削除を伴う場合、権限要求をユーザー操作内で始めるため、既存フォルダーなら保存の再押下を案内する。`tests/test_missing_output_directory_e2e.cjs` の個別・一括操作、長いパス表示、再表示時の状態更新、ブラウザー権限境界、`tests.test_settings_import_regressions.SettingsImportRegressionTests.test_missing_output_requires_explicit_create_and_uses_current_configured_path` と `test_unusable_output_is_not_reported_as_missing_or_overwritten` が画面・HTTP・ディスク状態を検証する。
 
+FE-084.1 の色指定透過PNGは `tests/image_io/test_mosaic_transparency.py` で、RGB・グレースケールに実マスクを適用した出力を復号して確認する。メタ情報保持のON/OFF、透明部分を含むブラシ、平均色が元の透明色と一致する場合、再保存を含め、透明度・可視部分の平均色・非選択画素を保持する。保持ONではテキスト・背景色・有効ビット数をPNGのalpha形式に合わせて保持し、OFFでは付加情報を除く。色とalphaの扱いは [PNG仕様](https://www.w3.org/TR/png-3/#11tRNS) に従う。
+
 ## 大量画像の保存可否判定
 
 SV-015.1 の保存対象表示は、`tests/saving/test_bulk_save_capabilities.cjs` の `20k bulk save dialog and action locks keep capability lookup linear` でも確認する。実Chromiumで2万件の一覧から全保存画面を開き、対象件数、保存開始中の操作ロック、ローカル画像とブラウザー画像が混在する場合のhandle取得・喪失後の上書き可否を照合する。IDの参照回数を件数に比例する境界で検証し、固定時間待機や実行速度の閾値を使わない。

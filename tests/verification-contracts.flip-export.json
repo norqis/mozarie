@@ -1569,7 +1569,10 @@
       "observation": "指定色の透明度を維持し",
       "status": "automated",
       "testIds": [
-        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_palette_rgb_and_grayscale_colorkey_transparency_survives_metadata_drop"
+        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_palette_rgb_and_grayscale_colorkey_transparency_survives_metadata_drop",
+        "python:tests.image_io.test_mosaic_transparency.MosaicTransparencyTests.test_colorkey_mosaic_preserves_alpha_pixels_and_selected_metadata",
+        "python:tests.image_io.test_mosaic_transparency.MosaicTransparencyTests.test_transparent_colors_do_not_contribute_to_the_visible_average",
+        "python:tests.image_io.test_mosaic_transparency.MosaicTransparencyTests.test_alpha_expansion_remains_editable_and_legacy_renderer_matches"
       ]
     },
     {

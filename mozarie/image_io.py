@@ -155,10 +155,20 @@ def _png_with_original_chunks(source: bytes, image: Image.Image, *, normalize_or
     encoded_ihdr = next(chunk for chunk_type, chunk in encoded_chunks if chunk_type == b"IHDR")
     source_ihdr_data = source_ihdr[8:-4]
     encoded_ihdr_data = encoded_ihdr[8:-4]
+    # Color-key transparency must become independent alpha before averaging:
+    # the resulting visible color can equal the old transparent color key.
+    alpha_expanded = (
+        source_ihdr_data[8] == encoded_ihdr_data[8] == 8
+        and (source_ihdr_data[9], encoded_ihdr_data[9]) in {(0, 4), (2, 6)}
+        and any(kind == b"tRNS" for kind, _chunk in source_chunks)
+    )
+    comparable_header = source_ihdr_data
+    if alpha_expanded:
+        comparable_header = source_ihdr_data[:9] + encoded_ihdr_data[9:10] + source_ihdr_data[10:]
     if normalize_orientation:
-        if source_ihdr_data[8:] != encoded_ihdr_data[8:]:
+        if comparable_header[8:] != encoded_ihdr_data[8:]:
             raise ClientError("PNGの色形式またはビット深度が変化したため保存を中止しました。", "image_format_unsupported")
-    elif source_ihdr_data != encoded_ihdr_data:
+    elif comparable_header != encoded_ihdr_data:
         raise ClientError("このPNGのカラーモードはメタデータを安全に保持して保存できません。", "image_format_unsupported")
     encoded_idat = [chunk for chunk_type, chunk in encoded_chunks if chunk_type == b"IDAT"]
 
@@ -166,8 +176,13 @@ def _png_with_original_chunks(source: bytes, image: Image.Image, *, normalize_or
     wrote_idat = False
     normalized_exif = _png_exif_payload(_normalized_exif_bytes(source)) if normalize_orientation else None
     for chunk_type, chunk in source_chunks:
-        if chunk_type == b"IHDR" and normalize_orientation:
+        if chunk_type == b"IHDR" and (normalize_orientation or alpha_expanded):
             result.extend(encoded_ihdr)
+            continue
+        if alpha_expanded and chunk_type == b"tRNS":
+            continue
+        if alpha_expanded and chunk_type == b"sBIT":
+            result.extend(_png_chunk(b"sBIT", chunk[8:-4] + b"\x08"))
             continue
         if chunk_type == b"eXIf" and normalized_exif is not None:
             result.extend(_png_chunk(b"eXIf", normalized_exif))
@@ -424,8 +439,11 @@ def _webp_with_original_metadata(
 def _apply_mosaic_to_image(image: Image.Image, mask: np.ndarray, block_size: int) -> Image.Image:
     if block_size < 1:
         raise ClientError("モザイク粗さが正しくありません。", "input_invalid")
+    if image.mode in {"RGB", "L"} and "transparency" in image.info:
+        with image.convert(f"{image.mode}A") as expanded:
+            return _apply_mosaic_to_image(expanded, mask, block_size)
     original_mode = image.mode
-    if original_mode not in {"RGB", "RGBA", "L"}:
+    if original_mode not in {"RGB", "RGBA", "L", "LA"}:
         raise ClientError("この画像モードは安全保存に対応していません。", "image_format_unsupported")
     image_array = np.asarray(image)
     if mask.shape != image_array.shape[:2]:
@@ -453,23 +471,24 @@ def _apply_mosaic_to_image(image: Image.Image, mask: np.ndarray, block_size: int
         selected_columns = selected.sum(axis=0, dtype=np.int64)
         counts = np.add.reduceat(selected_columns, x_starts)
 
-        if original_mode == "RGBA":
-            alpha = source_rows[..., 3].astype(np.int64, copy=False)
+        if original_mode in {"RGBA", "LA"}:
+            alpha = source_rows[..., -1].astype(np.int64, copy=False)
             weights = alpha * selected
             alpha_columns = weights.sum(axis=0, dtype=np.int64)
             alpha_sums = np.add.reduceat(alpha_columns, x_starts)
             alpha_valid = alpha_sums > 0
-            colors = np.zeros((len(x_starts), 3), dtype=np.uint8)
-            rgb = source_rows[..., :3].astype(np.int64, copy=False)
-            for channel in range(3):
-                channel_columns = (rgb[..., channel] * weights).sum(axis=0, dtype=np.int64)
+            color_channels = source_rows.shape[2] - 1
+            colors = np.zeros((len(x_starts), color_channels), dtype=np.uint8)
+            values = source_rows[..., :-1].astype(np.int64, copy=False)
+            for channel in range(color_channels):
+                channel_columns = (values[..., channel] * weights).sum(axis=0, dtype=np.int64)
                 sums = np.add.reduceat(channel_columns, x_starts)
                 colors[alpha_valid, channel] = (
                     (sums[alpha_valid] + alpha_sums[alpha_valid] // 2) // alpha_sums[alpha_valid]
                 ).astype(np.uint8)
             per_column = np.repeat(colors, x_widths, axis=0)
             apply = selected & np.repeat(alpha_valid, x_widths)[None, :]
-            output_rows = output[top:bottom, :, :3]
+            output_rows = output[top:bottom, :, :-1]
             output_rows[apply] = np.broadcast_to(per_column, output_rows.shape)[apply]
             continue
 
