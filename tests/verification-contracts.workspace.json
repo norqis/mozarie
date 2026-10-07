@@ -423,7 +423,12 @@
       "testIds": [
         "node:tests/test_import_picker_e2e.cjs::import picker browser coverage",
         "node:tests/import/test_import_cancellation_e2e.cjs::cancelled parallel import shows committed images, retains source handles and stops unstarted files",
-        "node:tests/importing/test_directory_scan_lifecycle_e2e.cjs::pausing folder import while its server session starts preserves the paused controls"
+        "node:tests/importing/test_directory_scan_lifecycle_e2e.cjs::pausing folder import while its server session starts preserves the paused controls",
+        "node:tests/importing/test_directory_scan_lifecycle_e2e.cjs::a completed import upload preserves paused controls until resume",
+        "node:tests/importing/test_directory_scan_lifecycle_e2e.cjs::a failed import upload preserves paused controls until resume",
+        "node:tests/importing/test_directory_scan_lifecycle_e2e.cjs::a delayed file read preserves paused controls when its upload starts",
+        "node:tests/importing/test_directory_scan_lifecycle_e2e.cjs::a failed file read preserves paused controls until resume",
+        "node:tests/importing/test_directory_scan_lifecycle_e2e.cjs::a missing project source preserves paused controls until resume"
       ]
     },
     {
@@ -434,7 +439,12 @@
       "observation": "未処理画像から進捗が再開する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
+        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage",
+        "node:tests/importing/test_directory_scan_lifecycle_e2e.cjs::a completed import upload preserves paused controls until resume",
+        "node:tests/importing/test_directory_scan_lifecycle_e2e.cjs::a failed import upload preserves paused controls until resume",
+        "node:tests/importing/test_directory_scan_lifecycle_e2e.cjs::a delayed file read preserves paused controls when its upload starts",
+        "node:tests/importing/test_directory_scan_lifecycle_e2e.cjs::a failed file read preserves paused controls until resume",
+        "node:tests/importing/test_directory_scan_lifecycle_e2e.cjs::a missing project source preserves paused controls until resume"
       ]
     },
     {

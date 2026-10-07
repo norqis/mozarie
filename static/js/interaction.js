@@ -853,13 +853,13 @@ async function importFiles(files) {
           if (session.catalogId && descriptor.fileHandle && error?.name === "NotFoundError") {
             session.missingFileHandles = true;
             session.completed += 1;
-            showProcessing({ kind: "import", state: "running", total: session.total, completed: session.completed, current: descriptor.relativePath || descriptor.fileHandle.name });
+            showProcessing({ kind: "import", state: session.paused ? "paused" : "running", total: session.total, completed: session.completed, current: descriptor.relativePath || descriptor.fileHandle.name });
             continue;
           }
           if (isFileLocalImportFailure(error)) {
             session.failures.push(importFailure(descriptor, error));
             session.completed += 1;
-            showProcessing({ kind: "import", state: "running", total: session.total, completed: session.completed, current: descriptor.relativePath || descriptor.fileHandle?.name || "" });
+            showProcessing({ kind: "import", state: session.paused ? "paused" : "running", total: session.total, completed: session.completed, current: descriptor.relativePath || descriptor.fileHandle?.name || "" });
             continue;
           }
           throw error;
@@ -867,7 +867,7 @@ async function importFiles(files) {
         if (session.cancelled || state.importSession !== session) return;
         if (!isSupportedImageFile(file)) continue;
         const entry = { ...descriptor, file, relativePath: descriptor.relativePath || file.name };
-        showProcessing({ kind: "import", state: "running", total: session.total, completed: session.completed, current: entry.relativePath });
+        showProcessing({ kind: "import", state: session.paused ? "paused" : "running", total: session.total, completed: session.completed, current: entry.relativePath });
         const stagedSource = Boolean(session.catalogId && session.sourceKind === "browser-files" && entry.fileHandle && session.importIntent !== "restore");
         if (stagedSource) await rememberProjectSource(session.catalogId, entry.fileHandle, null, session.sourceId, clientKey, entry.relativePath);
         let data;
@@ -880,7 +880,7 @@ async function importFiles(files) {
           if (isFileLocalImportFailure(error)) {
             session.failures.push(importFailure(entry, error));
             session.completed += 1;
-            showProcessing({ kind: "import", state: "running", total: session.total, completed: session.completed, current: entry.relativePath });
+            showProcessing({ kind: "import", state: session.paused ? "paused" : "running", total: session.total, completed: session.completed, current: entry.relativePath });
             continue;
           }
           throw error;
@@ -893,7 +893,7 @@ async function importFiles(files) {
         await rememberImportedSource(result, session);
         session.completed += 1;
         session.successes += 1;
-        showProcessing({ kind: "import", state: "running", total: session.total, completed: session.completed, current: entry.relativePath });
+        showProcessing({ kind: "import", state: session.paused ? "paused" : "running", total: session.total, completed: session.completed, current: entry.relativePath });
       }
     };
     const workers = Array.from({ length: workerCount }, worker);
