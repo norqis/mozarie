@@ -66,18 +66,22 @@ async function startOverwrite(page, mode, format = "original") {
   }
 }
 
-function renameRecoveryScenario(mode, format) {
+function renameRecoveryScenario(mode, format, overlapStartup = false) {
   return async () => {
     await withRenameFixture(async ({ page, context, open, project, snapshot, publish, image }) => {
       const targetName = format === "jpg" ? "renamed.jpg" : "renamed.png";
       let notifyAck; const receivedAck = new Promise((resolve) => { notifyAck = resolve; });
       let holdAck = true;
+      let releaseStartupAck; let notifyStartupAck;
+      const startupAckGate = new Promise((resolve) => { releaseStartupAck = resolve; });
+      const startupAckReceived = new Promise((resolve) => { notifyStartupAck = resolve; });
       await context.route("**/api/save/commit", async (route) => {
         publish([{ ...image, relativePath: targetName, editedFilename: null }]);
         await route.fulfill({ json: { cleared: true, stale: false, sourceAction: "overwrite", relativePath: targetName, editedFilename: null } });
       });
       await context.route("**/api/save/ack", async (route) => {
         if (holdAck) { notifyAck(); return; }
+        if (overlapStartup) { notifyStartupAck(); await startupAckGate; }
         await route.fulfill({ json: { acknowledged: true } });
       });
       await context.route("**/api/save/status", (route) => route.fulfill({ json: { state: "committed", sourceAction: "overwrite" } }));
@@ -89,6 +93,7 @@ function renameRecoveryScenario(mode, format) {
       await page.close(); holdAck = false;
       if (mode === "single") publish([]);
       page = await open();
+      if (overlapStartup) await startupAckReceived;
       if (mode === "batch") {
         await page.waitForFunction((name) => state.sourceAccess.get("image-1")?.fileHandle?.name === name, targetName);
       } else {
@@ -109,7 +114,33 @@ function renameRecoveryScenario(mode, format) {
           if (imported.length) publish([committedImage]);
           await route.fulfill({ json: { ...snapshot(), imported } });
         });
-        await page.evaluate((project) => openProject(project), project);
+        if (overlapStartup) {
+          let releaseImages; let notifyImages;
+          const imagesGate = new Promise((resolve) => { releaseImages = resolve; });
+          const imagesReceived = new Promise((resolve) => { notifyImages = resolve; });
+          await context.route("**/api/images", async (route) => {
+            notifyImages(); await imagesGate; await route.fulfill({ json: snapshot() });
+          });
+          const opening = page.evaluate((project) => openProject(project), project);
+          try {
+            await imagesReceived;
+            assert.equal(await page.evaluate(() => state.sourceAccess.has("image-1")), true);
+            // Observe completion without replacing restoration or its IndexedDB work.
+            await page.evaluate(() => {
+              const restore = restoreBrowserProjectSourcesForCurrentCatalog;
+              window.observedStartupRestores = [];
+              restoreBrowserProjectSourcesForCurrentCatalog = (...args) => {
+                const work = restore(...args); window.observedStartupRestores.push(work); return work;
+              };
+            });
+            const startupContinued = page.waitForRequest((request) => new URL(request.url()).pathname === "/api/projects");
+            releaseStartupAck(); await startupContinued;
+            await page.evaluate(() => Promise.all(window.observedStartupRestores));
+            assert.equal(await page.evaluate(() => state.sourceAccess.has("image-1")), true, "late startup recovery preserves the just-imported source handle");
+          } finally {
+            releaseStartupAck(); releaseImages(); await opening;
+          }
+        } else await page.evaluate((project) => openProject(project), project);
       }
       assert.deepEqual(await page.evaluate(async () => {
         const access = state.sourceAccess.get("image-1");
@@ -124,6 +155,35 @@ test("single renamed overwrite survives closing the tab after server commit", { 
 test("batch renamed overwrite survives closing the tab after server commit", { timeout: 60000 }, renameRecoveryScenario("batch", "original"));
 test("single renamed overwrite survives closing the tab after server commit using JPG", { timeout: 60000 }, renameRecoveryScenario("single", "jpg"));
 test("batch renamed overwrite survives closing the tab after server commit using JPG", { timeout: 60000 }, renameRecoveryScenario("batch", "jpg"));
+test("late startup save acknowledgement preserves a concurrently reopened JPG source", { timeout: 60000 }, renameRecoveryScenario("single", "jpg", true));
+
+test("late initial catalog response preserves the project opened by the user", { timeout: 60000 }, async () => {
+  const fixture = await startFixtureServer();
+  let browser; let context; let releaseImages;
+  try {
+    browser = await chromium.launch(); context = await browser.newContext();
+    const project = { id: "new-project", name: "New", status: "working" };
+    const snapshot = { images: [], project, sources: [], root: "new-root", catalogGeneration: 1, historyDurable: false, readOnly: false };
+    let notifyImages;
+    const imagesGate = new Promise((resolve) => { releaseImages = resolve; });
+    const imagesReceived = new Promise((resolve) => { notifyImages = resolve; });
+    await context.route("**/api/images", async (route) => {
+      notifyImages(); await imagesGate;
+      await route.fulfill({ json: { ...snapshot, project: { ...project, id: "old-project", name: "Old" }, root: "old-root" } });
+    });
+    await context.route("**/api/project/open", (route) => route.fulfill({ json: snapshot }));
+    const page = await context.newPage(); page.setDefaultTimeout(10000);
+    await page.goto(fixture.url, { waitUntil: "domcontentloaded" }); await imagesReceived;
+    await page.evaluate((project) => openProject(project), project);
+    assert.equal(await page.evaluate(() => state.project.id), project.id);
+    const startupContinued = page.waitForRequest((request) => new URL(request.url()).pathname === "/api/projects");
+    releaseImages(); await startupContinued;
+    assert.deepEqual(await page.evaluate(() => ({ project: state.project.id, root: state.reviewRoot })), { project: project.id, root: "new-root" });
+  } finally {
+    releaseImages?.(); await context?.close(); await browser?.close();
+    fixture.server.closeAllConnections(); await closeServer(fixture.server);
+  }
+});
 
 test("rejected renamed overwrite removes pending access and preserves the original handle", { timeout: 60000 }, async () => {
   await withRenameFixture(async ({ page, context }) => {

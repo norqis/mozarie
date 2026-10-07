@@ -1540,17 +1540,23 @@ async function initialise() {
   $("#sourceDeleteResume").addEventListener("click", () => { void resumePendingSourceDeletesFromUser().catch(showUserError); });
   updateBrushSize($("#brushSize").value); resizeRenderCanvas(); updateHistoryButtons(); updateNavigationControls(); updateActionButtons();
   try {
-    const data = catalogResponse(await api("/api/images"));
-    $("#folderPath").value = data.root || "";
-    resetCatalog(data.images || [], data.root || "");
-    applyProjectSnapshot(data);
-    const savesRecovered = typeof reconcilePendingBrowserSaves !== "function" || await reconcilePendingBrowserSaves();
-    state.missingNativeSources = typeof missingNativeSources === "function" ? missingNativeSources(data.sources) : [];
-    if (typeof restoreBrowserProjectSourcesForCurrentCatalog === "function") void restoreBrowserProjectSourcesForCurrentCatalog(data.sources).catch(() => {});
-    if (typeof resumePendingSourceDeletes === "function") void resumePendingSourceDeletes().catch(() => {});
-    if (data.images.length && savesRecovered) {
-      setStatusKey("status.imagesLoaded", { count: state.images.length });
+    const initialCatalogEpoch = state.catalogEpoch;
+    const data = await api("/api/images");
+    if (isCurrentCatalogEpoch(initialCatalogEpoch)) {
+      catalogResponse(data);
+      $("#folderPath").value = data.root || "";
+      resetCatalog(data.images || [], data.root || "");
+      applyProjectSnapshot(data);
     }
+    const savesRecovered = typeof reconcilePendingBrowserSaves !== "function" || await reconcilePendingBrowserSaves();
+    if (isCurrentCatalogEpoch(initialCatalogEpoch)) {
+      state.missingNativeSources = typeof missingNativeSources === "function" ? missingNativeSources(data.sources) : [];
+      if (typeof restoreBrowserProjectSourcesForCurrentCatalog === "function") void restoreBrowserProjectSourcesForCurrentCatalog(data.sources).catch(() => {});
+      if (data.images.length && savesRecovered) {
+        setStatusKey("status.imagesLoaded", { count: state.images.length });
+      }
+    }
+    if (typeof resumePendingSourceDeletes === "function") void resumePendingSourceDeletes().catch(() => {});
     if (typeof flushPendingBrowserSaveAcks === "function") void flushPendingBrowserSaveAcks();
   } catch (error) { showUserError(error); }
   void api("/api/projects?sort=updated_desc")

@@ -1582,7 +1582,8 @@
       "observation": "最後に表示したPJまたは無名作業だけが一覧と編集対象に残る",
       "status": "automated",
       "testIds": [
-        "python:tests.workspace.test_project_catalog_lifecycle.ProjectCatalogCoverageTests.test_unnamed_workspace_switch_publishes_atomically_and_rolls_back_failed_replacement"
+        "python:tests.workspace.test_project_catalog_lifecycle.ProjectCatalogCoverageTests.test_unnamed_workspace_switch_publishes_atomically_and_rolls_back_failed_replacement",
+        "node:tests/saving/test_renamed_source_recovery_e2e.cjs::late initial catalog response preserves the project opened by the user"
       ]
     },
     {
@@ -1684,7 +1685,8 @@
         "node:tests/saving/test_renamed_source_recovery_e2e.cjs::background source restore preserves a concurrent renamed overwrite",
         "node:tests/saving/test_renamed_source_recovery_e2e.cjs::background source restore preserves a concurrent JPG overwrite",
         "node:tests/saving/test_renamed_source_recovery_e2e.cjs::background source restore preserves same-name overwrite metadata and unrelated handles",
-        "node:tests/saving/test_renamed_source_recovery_e2e.cjs::background source restore drops an obsolete permission prompt after overwrite"
+        "node:tests/saving/test_renamed_source_recovery_e2e.cjs::background source restore drops an obsolete permission prompt after overwrite",
+        "node:tests/saving/test_renamed_source_recovery_e2e.cjs::late startup save acknowledgement preserves a concurrently reopened JPG source"
       ]
     },
     {
