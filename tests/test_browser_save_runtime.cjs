@@ -2055,6 +2055,25 @@ nodeTest("failed copy reports failure and never deletes its original source", as
   await runCopyFailureCase();
 });
 
+nodeTest("native batch overwrite cancels rejected or pending commits but preserves unknown outcomes", async () => {
+  const image = { id: "image-1", relativePath: "source.png", sourceKind: "filesystem", width: 32, height: 32, candidateCount: 1, enabledCandidateCount: 1 };
+  for (const outcome of ["rejected", "pending", "unknown", "committed"]) {
+    const runtime = createRuntime({
+      initialImages: [image],
+      commit: () => jsonResponse({ error_code: outcome === "rejected" ? "stale_asset" : "internal_error" }, outcome === "rejected" ? 400 : 500),
+      saveStatus: () => jsonResponse({ state: outcome, cleared: true, stale: false, sourceAction: "overwrite" }),
+    });
+    const saving = runtime.runBrowserSave([image.id], "", false, "overwrite");
+    if (outcome === "committed") await saving;
+    else await assert.rejects(saving);
+    assert.equal(runtime.requests.filter((request) => request.path === "/api/save/cancel").length, ["rejected", "pending"].includes(outcome) ? 1 : 0, outcome);
+    assert.equal(runtime.requests.filter((request) => request.path === "/api/save/ack").length, outcome === "committed" ? 1 : 0, outcome);
+    assert.equal(runtime.state.saving, false);
+    assert.equal(runtime.state.applyRunning, false);
+    assert.equal(runtime.state.browserSave, null);
+  }
+});
+
 nodeTest("browser save runtime contracts", async (t) => {
   await t.test("directory save permissions are shared across files and repeated batches", runSharedDirectorySavePermissionCase);
   await t.test("standalone file grants are queried and restored without duplicate requests", runFileOnlySavePermissionCase);

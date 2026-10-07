@@ -1373,8 +1373,13 @@ async function runBrowserSave(imageIds, suffix, deleteOriginal, mode = "copy", r
           const saveToken = binary.headers?.get("X-Mozarie-Save-Token") || "";
           const noEffect = binary.headers?.get("X-Mozarie-No-Effect") === "1";
           sourceAction = noEffect ? "keep" : "overwrite";
-          const committed = await commitBrowserSaveWithRetry({ imageId: entry.imageId, candidateRevision: entry.candidateRevision, deleteOriginal: inputs.deleteOriginal, sourceAction, saveToken });
-          return finishBrowserSaveEntry(committed, entry, save, sourceAction, noEffect);
+          try {
+            const committed = await commitBrowserSaveWithRetry({ imageId: entry.imageId, candidateRevision: entry.candidateRevision, deleteOriginal: inputs.deleteOriginal, sourceAction, saveToken });
+            return finishBrowserSaveEntry(committed, entry, save, sourceAction, noEffect);
+          } catch (error) {
+            if (isDefinitiveCommitRejection(error) || error.saveState === "pending") await cancelBrowserSave(entry, saveToken);
+            throw error;
+          }
         } else {
           throw codedError("source_action_unavailable");
         }

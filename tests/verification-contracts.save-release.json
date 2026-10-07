@@ -805,7 +805,8 @@
       "observation": "未取得の保存結果を成功表示しない。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > recoverable commit failures reconcile token state"
+        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > recoverable commit failures reconcile token state",
+        "node:tests/test_browser_save_runtime.cjs::native batch overwrite cancels rejected or pending commits but preserves unknown outcomes"
       ]
     },
     {
