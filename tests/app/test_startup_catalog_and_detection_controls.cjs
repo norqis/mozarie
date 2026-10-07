@@ -219,7 +219,7 @@ async function testBoundApplicationEvents() {
 
 async function testApplicationStartupPaths() {
   const { document, element } = browserFixture();
-  const state = { settings: null, images: [], view: { scale: 1, x: 0, y: 0 }, displayMode: "single", compareSplit: .5 };
+  const state = { settings: null, images: [], catalogEpoch: 0, view: { scale: 1, x: 0, y: 0 }, displayMode: "single", compareSplit: .5 };
   const apiResults = [];
   let animationFrame = null;
   let animationFrameRequests = 0;
@@ -261,6 +261,10 @@ async function testApplicationStartupPaths() {
   ]) context[name] = () => {};
   context.toolRailItems = () => [];
   context.setToolRailTabStop = () => {};
+  const coreSource = fs.readFileSync(path.join(jsRoot, "core.js"), "utf8");
+  const epochHelper = coreSource.match(/function isCurrentCatalogEpoch\([\s\S]*?(?=function catalogStagingEditsActive\()/)?.[0];
+  assert.ok(epochHelper);
+  vm.runInNewContext(epochHelper, context, { filename: path.join(jsRoot, "core.js") });
   const source = fs.readFileSync(path.join(jsRoot, "app.js"), "utf8");
   vm.runInNewContext(source, context, { filename: path.join(jsRoot, "app.js") });
   vm.runInNewContext("globalThis.appCoverage={ initialise, bindEvents };", context, { filename: "test-app-exports.js" });
