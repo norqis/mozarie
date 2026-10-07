@@ -1688,6 +1688,8 @@
         "node:tests/editor/test_draft_transition_e2e.cjs::failed outgoing encoding cancels the latest transition without clearing its canvas",
         "node:tests/editor/test_draft_transition_e2e.cjs::compact server layers become the base of local undo instead of an empty history",
         "node:tests/editor/test_draft_residency_e2e.cjs::pending and failed metadata-only drafts survive image switches until their own save succeeds",
+        "node:tests/editor/test_draft_residency_e2e.cjs::project creation retries failed metadata saves before discarding the previous editor",
+        "node:tests/test_workspace_runtime.cjs::workspace runtime contracts",
         "node:tests/editor/test_draft_residency_e2e.cjs::legacy non-durable drafts keep local history when leaving after a save",
         "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_anonymous_compact_draft_keeps_layers_through_edit_undo_redo_and_reload"
       ]

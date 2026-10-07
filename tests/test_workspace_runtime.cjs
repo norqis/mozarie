@@ -169,7 +169,28 @@ nodeTest("workspace runtime contracts", async () => {
   assert.equal(state.workspaceDraftTimers.has("one"), false, "flushing an image sends its pending timer immediately");
 
   state.workspaceMutationErrors.set("one", new Error("stored failure"));
-  await assert.rejects(context.workspaceTest.flushWorkspaceDraft("one"), /stored failure/, "an image flush surfaces and consumes a remembered mutation failure");
+  await context.workspaceTest.flushWorkspaceDraft("one");
+  assert.equal(state.workspaceMutationErrors.has("one"), false, "an image flush clears a remembered failure only after a successful write");
+
+  for (const flush of [() => context.workspaceTest.flushWorkspaceDraft("one"), () => context.workspaceTest.flushAllWorkspaceMutations()]) {
+    for (const metadata of [{ add: "stored mask", dirtyLayers: [], manualEnabled: false }, null]) {
+      calls.length = 0;
+      if (metadata) state.drafts.set("one", metadata); else state.drafts.delete("one");
+      rejectFirst = true;
+      await context.workspaceTest.queueWorkspaceDraft("one");
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        rejectFirst = true;
+        await assert.rejects(flush(), /write failed/);
+        assert.equal(state.workspaceMutationErrors.has("one"), true, "repeated failures preserve the pending metadata or deletion");
+      }
+      await flush();
+      assert.equal(state.workspaceMutationErrors.has("one"), false);
+      assert.deepEqual(calls.map(([, method]) => method), Array(4).fill(metadata ? "POST" : "DELETE"), "each retry resends the current edit, including a deleted draft");
+      const written = calls.length;
+      await flush();
+      assert.equal(calls.length, written, "a durable edit causes no further writes");
+    }
+  }
 
   calls.length = 0;
   const loaded = await context.workspaceTest.loadWorkspaceDraft("one");
