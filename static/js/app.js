@@ -1525,11 +1525,11 @@ async function initialise() {
     $("#folderPath").value = data.root || "";
     resetCatalog(data.images || [], data.root || "");
     applyProjectSnapshot(data);
-    if (typeof reconcilePendingBrowserSaves === "function") await reconcilePendingBrowserSaves();
+    const savesRecovered = typeof reconcilePendingBrowserSaves !== "function" || await reconcilePendingBrowserSaves();
     state.missingNativeSources = typeof missingNativeSources === "function" ? missingNativeSources(data.sources) : [];
     if (typeof restoreBrowserProjectSourcesForCurrentCatalog === "function") void restoreBrowserProjectSourcesForCurrentCatalog(data.sources).catch(() => {});
     if (typeof resumePendingSourceDeletes === "function") void resumePendingSourceDeletes().catch(() => {});
-    if (data.images.length) {
+    if (data.images.length && savesRecovered) {
       setStatusKey("status.imagesLoaded", { count: state.images.length });
     }
     if (typeof flushPendingBrowserSaveAcks === "function") void flushPendingBrowserSaveAcks();

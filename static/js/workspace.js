@@ -66,7 +66,7 @@ function projectSourceId() { return crypto.randomUUID(); }
 async function directoryCatalogStore() {
   if (!window.indexedDB) return null;
   return new Promise((resolve) => {
-    const request = indexedDB.open(DIRECTORY_DB, 4);
+    const request = indexedDB.open(DIRECTORY_DB, 5);
     request.onupgradeneeded = () => {
       const names = request.result.objectStoreNames;
       if (!names?.contains?.("directories")) request.result.createObjectStore("directories", { keyPath: "catalogId" });
@@ -75,10 +75,28 @@ async function directoryCatalogStore() {
         : request.result.createObjectStore("projectSources", { keyPath: "key" });
       if (!sources.indexNames.contains("projectId")) sources.createIndex("projectId", "projectId", { unique: false });
       if (!names?.contains?.("sourceDeletes")) request.result.createObjectStore("sourceDeletes", { keyPath: "deleteToken" });
+      if (!names?.contains?.("sourceOverwrites")) request.result.createObjectStore("sourceOverwrites", { keyPath: "saveToken" });
     };
     request.onsuccess = () => resolve(request.result);
     request.onerror = () => resolve(null);
   });
+}
+
+async function browserOverwriteStore(saveToken, payload) {
+  const db = await directoryCatalogStore();
+  if (!db) throw codedError("source_restore_failed");
+  try {
+    return await new Promise((resolve, reject) => {
+      const transaction = db.transaction("sourceOverwrites", payload === undefined ? "readonly" : "readwrite");
+      const store = transaction.objectStore("sourceOverwrites");
+      const request = payload === undefined ? store.get(saveToken)
+        : payload === null ? store.delete(saveToken) : store.put({ ...payload, saveToken });
+      transaction.oncomplete = () => resolve(request.result || null);
+      transaction.onerror = () => reject(transaction.error);
+      transaction.onabort = () => reject(transaction.error);
+    });
+  } catch { throw codedError("source_restore_failed"); }
+  finally { db.close(); }
 }
 
 async function rememberPendingSourceDelete(payload) {

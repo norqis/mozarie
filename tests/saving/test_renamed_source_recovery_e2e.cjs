@@ -80,7 +80,7 @@ function renameRecoveryScenario(mode, format) {
       await startOverwrite(page, mode, format);
       await receivedAck;
       const pending = await page.evaluate(async () => (await rememberedProjectSources(state.project.id)).files.map((source) => ({ path: source.relativePath, pending: !source.imageId, parent: source.parentHandle?.kind, clientKey: source.clientKey })));
-      assert.ok(pending.some((row) => row.path === targetName && row.pending && row.parent === "directory" && row.clientKey), "new handle is durable before commit acknowledgement, including legacy rows without clientKey");
+      assert.ok(pending.some((row) => row.path === targetName && !row.pending && row.parent === "directory" && row.clientKey), "new handle is finalized before commit acknowledgement, including legacy rows without clientKey");
       const committedImage = { ...image, relativePath: targetName, editedFilename: null };
       await page.close(); holdAck = false;
       if (mode === "single") publish([]);

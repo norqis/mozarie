@@ -1789,6 +1789,21 @@ class WorkspaceStore:
                 db.execute("ROLLBACK")
                 raise
 
+    def restore_browser_source_metadata(self, image_id: str, source: dict[str, Any]) -> None:
+        """Refresh a rolled-back browser file's timestamp without changing edits."""
+        with self._lock, self._connect() as db:
+            updated = db.execute("""UPDATE images SET mtime_ns=?,size_bytes=?,updated_at=?
+                WHERE image_id=? AND catalog_id=? AND source_id=? AND relative_path=?
+                AND source_id IN (SELECT source_id FROM project_sources WHERE kind IN ('browser-files','browser-directory'))
+                AND ((ROUND(mtime_ns / 1000000.0)=? AND size_bytes=?)
+                    OR (ROUND(mtime_ns / 1000000.0)=? AND size_bytes=?))""", (
+                source["sourceMtimeMs"] * 1_000_000, source["sourceSizeBytes"], time.time_ns(),
+                image_id, source["workspaceId"], source["sourceId"], source["relativePath"],
+                source["originalMtimeMs"], source["originalSizeBytes"], source["sourceMtimeMs"], source["sourceSizeBytes"],
+            ))
+            if updated.rowcount != 1:
+                raise ValueError("browser source changed before restoration")
+
     def commit_save(self, image_id: str, *, mtime_ns: int | None = None, size_bytes: int | None = None,
                     relative_path: str | None = None,
                     clear_edited_filename: bool = False,

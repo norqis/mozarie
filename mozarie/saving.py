@@ -1014,10 +1014,17 @@ class SavingMixin:
             with self.lock: self.browser_save_receipts.pop(save_token, None)
         return {"acknowledged": acknowledged}
 
-    def cancel_browser_save(self, image_id: str, revision: int, save_token: str) -> dict[str, Any]:
+    def cancel_browser_save(self, image_id: str, revision: int, save_token: str, *, restored_source: dict[str, Any] | None = None) -> dict[str, Any]:
         """Cancel a still-pending token and remove only its own new copy."""
         # Serialise claiming and cancellation with commit; once commit has
         # detached a token, cancellation must never remove its successful copy.
+        if restored_source is not None:
+            if (not isinstance(restored_source, dict)
+                    or any(not isinstance(restored_source.get(key), str) or not restored_source[key]
+                           for key in ("workspaceId", "sourceId", "relativePath"))
+                    or any(type(restored_source.get(key)) is not int or restored_source[key] < 0
+                           for key in ("originalMtimeMs", "originalSizeBytes", "sourceMtimeMs", "sourceSizeBytes"))):
+                raise ClientError("復元後の元画像情報が正しくありません。", "input_invalid")
         with self.import_lock:
             receipt = self.workspace_store.browser_save_receipt(save_token)
             if receipt is not None:
@@ -1029,10 +1036,22 @@ class SavingMixin:
             with self.lock:
                 self._assert_request_catalog_expectation()
                 details = self.browser_save_tokens.get(save_token)
+                journal = self.save_journal.row(save_token)
+                if journal is not None and journal.get("recovery_decision") == "commit":
+                    return {"state": "committed"}
+                if restored_source is not None:
+                    if ((details is not None and (details.image_id != image_id or details.candidate_revision != revision))
+                            or (journal is not None and (journal["image_id"] != image_id or int(journal["revision"]) != revision))):
+                        raise ClientError("保存確認トークンが保存対象と一致しません。", "save_state_changed")
+                    try:
+                        self.workspace_store.restore_browser_source_metadata(image_id, restored_source)
+                    except ValueError as exc:
+                        raise ClientError("復元対象の元画像が変更されています。", "save_state_changed") from exc
+                    record = self.images.get(image_id)
+                    if record is not None:
+                        record.mtime_ns = restored_source["sourceMtimeMs"] * 1_000_000
+                        record.size_bytes = restored_source["sourceSizeBytes"]
                 if details is None or details.image_id != image_id or details.candidate_revision != revision:
-                    journal = self.save_journal.row(save_token)
-                    if journal is not None and journal.get("recovery_decision") == "commit":
-                        return {"state": "committed"}
                     return {"state": str(journal["state"])} if journal is not None else {"state": "unknown"}
                 self._discard_browser_save_token_unchecked(save_token)
                 cleanup_paths = self._take_browser_save_cleanup_unchecked()

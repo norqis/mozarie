@@ -753,8 +753,7 @@ class MosaicHandler(BaseHTTPRequestHandler):
                 import_session_id = self.headers.get("X-Mozarie-Import-Session", "")
                 raw_mtime = self.headers.get("X-Mozarie-File-Mtime", "0")
                 raw_size = self.headers.get("X-Mozarie-File-Size", "0")
-                if (source_identity and not _is_canonical_uuid(source_identity)
-                        or source_kind not in {"browser-files", "browser-directory"}
+                if (source_kind not in {"browser-files", "browser-directory"}
                         or import_intent not in {"add", "restore"}
                         or not raw_mtime.isdigit() or not raw_size.isdigit()):
                     self._reject_unread_request(ClientError("画像の更新情報が正しくありません。", "input_invalid"))
@@ -1155,7 +1154,7 @@ class MosaicHandler(BaseHTTPRequestHandler):
             elif path == "/api/save/cancel":
                 self._json(self._catalog_mutation(expected_project_id, expected_catalog_generation, lambda: STATE.cancel_browser_save(
                     str(payload.get("imageId", "")), _read_candidate_revision(payload.get("candidateRevision")),
-                    str(payload.get("saveToken", "")),
+                    str(payload.get("saveToken", "")), restored_source=payload.get("restoredSource"),
                 )))
             elif path == "/api/apply":
                 divisor = _read_mosaic_divisor(payload.get("divisor"))

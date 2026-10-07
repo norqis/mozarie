@@ -1660,7 +1660,8 @@
         "node:tests/workspace/test_browser_source_reopen_e2e.cjs::legacy directory aliases restore every canonical source and retain permission retry targets",
         "python:tests.workspace.test_browser_source_reopen.BrowserSourceReopenTests.test_reconnecting_in_the_same_session_keeps_edits_and_only_one_staged_image",
         "python:tests.jobs.test_multi_source_jobs.MultiSourceJobTests.test_browser_single_and_bulk_save_accept_every_reopened_source",
-        "python:tests.jobs.test_multi_source_jobs.MultiSourceJobTests.test_detection_and_copy_save_process_all_reopened_native_sources"
+        "python:tests.jobs.test_multi_source_jobs.MultiSourceJobTests.test_detection_and_copy_save_process_all_reopened_native_sources",
+        "python:tests.saving.test_browser_overwrite_recovery.BrowserOverwriteRecoveryTests.test_backend_restart_restores_unknown_token_and_preserves_project_edits"
       ]
     },
     {

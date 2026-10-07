@@ -1419,7 +1419,14 @@
       "observation": "クライアント生成UUIDトークンでpending/commit/cancelを再開し、通信不明だけでトークンを捨てない。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > client UUID pending token survives a tab restart and resumes cancellation"
+        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > client UUID pending token survives a tab restart and resumes cancellation",
+        "python:tests.saving.test_browser_overwrite_recovery.BrowserOverwriteRecoveryTests.test_overwrite_backup_failure_leaves_source_untouched",
+        "python:tests.saving.test_browser_overwrite_recovery.BrowserOverwriteRecoveryTests.test_failed_restore_keeps_backup_until_retry",
+        "python:tests.saving.test_browser_overwrite_recovery.BrowserOverwriteRecoveryTests.test_two_tabs_recover_the_same_overwrite_once",
+        "python:tests.saving.test_browser_overwrite_recovery.BrowserOverwriteRecoveryTests.test_unreadable_backup_is_retained_until_indexeddb_recovers",
+        "python:tests.saving.test_browser_overwrite_recovery.BrowserOverwriteRecoveryTests.test_metadata_retry_does_not_rewrite_restored_source",
+        "python:tests.saving.test_browser_overwrite_recovery.BrowserOverwriteRecoveryTests.test_committed_backup_delete_failure_keeps_receipt_until_retry",
+        "node:tests/saving/test_active_save_recovery_e2e.cjs::abandoned-save recovery uses the configured pool and retains only failed tokens"
       ]
     },
     {
@@ -1432,7 +1439,15 @@
       "testIds": [
         "python:tests.test_save_recovery.SaveRecoveryTests.test_workspace_receipt_wins_and_keeps_the_final_output",
         "python:tests.test_server.MozarieTests.test_background_copy_receipt_recovers_the_private_stage_at_startup_without_removing_output",
-        "python:tests.saving.test_native_save_transfer.NativeSaveTransferTests.test_native_stage_survives_elapsed_time_and_is_released_by_cancel_or_recovery"
+        "python:tests.saving.test_native_save_transfer.NativeSaveTransferTests.test_native_stage_survives_elapsed_time_and_is_released_by_cancel_or_recovery",
+        "python:tests.saving.test_browser_overwrite_recovery.BrowserOverwriteRecoveryTests.test_restored_metadata_requires_matching_save_and_source_identity",
+        "python:tests.saving.test_browser_overwrite_recovery.BrowserOverwriteRecoveryTests.test_single_overwrite_crash_restores_source_and_can_save_again",
+        "python:tests.saving.test_browser_overwrite_recovery.BrowserOverwriteRecoveryTests.test_batch_overwrite_crash_restores_source_and_can_save_again",
+        "python:tests.saving.test_browser_overwrite_recovery.BrowserOverwriteRecoveryTests.test_single_renamed_overwrite_crash_removes_uncommitted_target",
+        "python:tests.saving.test_browser_overwrite_recovery.BrowserOverwriteRecoveryTests.test_batch_renamed_overwrite_crash_removes_uncommitted_target",
+        "python:tests.saving.test_browser_overwrite_recovery.BrowserOverwriteRecoveryTests.test_committed_single_overwrite_survives_lost_response",
+        "python:tests.saving.test_browser_overwrite_recovery.BrowserOverwriteRecoveryTests.test_committed_batch_rename_finishes_source_cleanup",
+        "python:tests.saving.test_browser_overwrite_recovery.BrowserOverwriteRecoveryTests.test_backend_restart_restores_unknown_token_and_preserves_project_edits"
       ]
     },
     {

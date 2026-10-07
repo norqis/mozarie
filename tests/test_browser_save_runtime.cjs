@@ -3,6 +3,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const vm = require("node:vm");
 const nodeTest = require("node:test");
+const { indexedDBFixture } = require("./helpers/indexeddb_fixture.cjs");
 
 const staticRoot = path.join(__dirname, "..", "static");
 const index = fs.readFileSync(path.join(staticRoot, "index.html"), "utf8");
@@ -103,12 +104,14 @@ function createRuntime({ commit, copy = null, deleteOriginal = false, renderBina
       };
     },
   };
-  const browserWindow = { devicePixelRatio: 1, addEventListener() {} };
+  const indexedDB = indexedDBFixture();
+  const browserWindow = { devicePixelRatio: 1, addEventListener() {}, indexedDB };
   const browserNavigator = { locks: { request(name, options, callback) {
     lockRequests.push([name, options]);
     return Promise.resolve(callback({ name, mode: options.mode || "exclusive" }));
   } } };
   const context = {
+    indexedDB,
     codedError(code) { const error = new Error(); error.code = code; return error; },
     console,
     document,
@@ -158,7 +161,10 @@ function createRuntime({ commit, copy = null, deleteOriginal = false, renderBina
           if (!response.ok) return response;
           return response;
         }
-        return renderBinary ? await renderBinary({ options, requests }) : binaryResponse([4, 5, 6], renderToken);
+        const response = renderBinary ? await renderBinary({ options, requests }) : binaryResponse([4, 5, 6], renderToken);
+        if (!response.ok) return response;
+        const headers = response.headers;
+        return { ...response, headers: { get: (name) => name === "X-Mozarie-Save-Token" ? payload.clientSaveToken : headers.get(name) } };
       }
       if (requestPath === "/api/save/commit") {
         const response = await commit({ options, requests });
@@ -203,6 +209,7 @@ function createRuntime({ commit, copy = null, deleteOriginal = false, renderBina
     "gallery.detectAll": "detect all",
     "apply.outputDirectoryUnset": "Save location: not selected",
   };
+  new vm.Script("void reconcilePendingBrowserSaves();").runInContext(runtimeContext);
   return { element: getElement, elements, beginSaveSourcePreparation, ensureSaveSources, finishApplyJob, imageFetches: () => imageFetches, lockRequests, navigator: browserNavigator, requests, runBrowserSave, saveTargets, processableImages, isBusy, catalogStagingEditsActive, selectedSaveMode, chooseOutputDirectory, startApplyFromDialog, startSingleSave, refreshOutputDirectoryStatus, writeSourceHandle, restoreSourceHandle, renderOutputDirectory, pickOutputDirectory: pickOutputDirectoryApi, reserveSaveRender, renderDefaultCopy, renderStreamedSave, commitBrowserSaveWithRetry, acknowledgePendingBrowserSave, nextVisibleImage, state, translate, window: browserWindow };
 }
 
@@ -756,9 +763,12 @@ async function runBrowserSourceCollisionCases() {
   });
   const parents = ["one", "two"].map((imageId) => ({
     physicalId: "parent", async isSameEntry(other) { return this.physicalId === other.physicalId; },
+    created: new Map(),
     async getFileHandle(name, options = {}) {
+      if (this.created.has(name)) return this.created.get(name);
       if (!options.create) throw new DOMException("missing", "NotFoundError");
-      return { name, async createWritable() { return { async write() {}, async close() {}, async abort() {} }; }, async getFile() { return sourceBlob(name, 3, 2); } };
+      const handle = { name, async createWritable() { return { async write() {}, async close() {}, async abort() {} }; }, async getFile() { return sourceBlob(name, 3, 2); } };
+      this.created.set(name, handle); return handle;
     },
     async removeEntry() {}, imageId,
   }));

@@ -108,3 +108,26 @@ test("slow abandoned-save recovery neither blocks a new save nor includes its ne
     assert.equal(await second.evaluate(() => window.saveError || null), null);
   });
 });
+
+test("abandoned-save recovery uses the configured pool and retains only failed tokens", { timeout: 60000 }, async () => {
+  await withPendingSaves(async ({ open, context }) => {
+    const page = await open();
+    const routes = [];
+    await context.route("**/api/save/status", (route) => { routes.push(route); });
+    await page.evaluate(() => {
+      state.settings.saving.parallelism = 2;
+      for (let index = 0; index < 4; index += 1) rememberPendingSave({ imageId: `recovery-${index}`, candidateRevision: 0 }, `token-${index}`);
+      window.recovery = reconcilePendingBrowserSaves();
+    });
+    await expect.poll(() => routes.length).toBe(2);
+    const first = routes[0].request().postDataJSON().saveToken;
+    await routes[0].fulfill({ status: 503, json: { error_code: "internal_error" } });
+    await expect.poll(() => routes.length).toBe(3);
+    await routes[1].fulfill({ json: { state: "unknown" } });
+    await expect.poll(() => routes.length).toBe(4);
+    await routes[2].fulfill({ json: { state: "unknown" } });
+    await routes[3].fulfill({ json: { state: "unknown" } });
+    await page.evaluate(() => window.recovery);
+    assert.deepEqual(await page.evaluate(() => Object.keys(pendingSaveTokens())), [first]);
+  });
+});

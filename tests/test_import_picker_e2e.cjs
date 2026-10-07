@@ -499,7 +499,7 @@ function startFixtureServer(options = {}) {
       let body = ""; for await (const chunk of request) body += chunk;
       const payload = JSON.parse(body); const token = saveTokens.get(payload.saveToken); if (token) token.state = "cancelled";
       saveRequests.push({ path: requestPath, payload });
-      response.writeHead(200, { "Content-Type": "application/json" }); response.end(JSON.stringify({ ok: true }));
+      response.writeHead(200, { "Content-Type": "application/json" }); response.end(JSON.stringify({ state: token ? "cancelled" : "unknown" }));
       return;
     }
     if (requestPath === "/api/catalog/clear" && request.method === "POST") {
