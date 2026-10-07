@@ -887,7 +887,7 @@ function bindEvents() {
   $("#modelDownloadStart").addEventListener("click", () => { void beginModelDownload(); });
   $("#modelDownloadCopy").addEventListener("click", () => { void copyCommand("#modelDownloadCommand", "#modelDownloadCopyResult"); });
   $("#modelDownloadClose").addEventListener("click", () => $("#modelDownloadDialog").close());
-  $("#modelDownloadDialog").addEventListener("cancel", (event) => { if (modelDownloadPoll) event.preventDefault(); else $("#modelDownloadDialog").close(); });
+  $("#modelDownloadDialog").addEventListener("cancel", (event) => { if ($("#modelDownloadClose").disabled) event.preventDefault(); else $("#modelDownloadDialog").close(); });
   $("#settingsProvider").addEventListener("change", syncProviderSelection);
   document.querySelectorAll('[data-settings-panel="models"] input, [data-settings-panel="models"] select').forEach((control) => {
     control.addEventListener("input", markModelStatusDirty);

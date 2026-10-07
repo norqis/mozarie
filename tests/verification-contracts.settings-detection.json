@@ -1295,7 +1295,8 @@
       "status": "automated",
       "testIds": [
         "node:tests/test_settings_dialog_e2e.cjs::SD-066 model download confirmation names the selected model and exposes start",
-        "node:tests/settings/test_model_download_polling_e2e.cjs::a delayed start response cannot replace a reopened confirmation"
+        "node:tests/settings/test_model_download_polling_e2e.cjs::a pending download start keeps close and Escape from losing progress",
+        "python:tests.test_model_download_live_browser.LiveModelDownloadBrowserTests.test_pending_start_retains_progress_and_cancellation"
       ]
     },
     {
@@ -1308,7 +1309,8 @@
       "testIds": [
         "node:tests/test_settings_runtime.cjs::SD-067 completed model download publishes the acquired path",
         "node:tests/settings/test_model_download_polling_e2e.cjs::model progress callers share one request until it completes",
-        "node:tests/settings/test_model_download_polling_e2e.cjs::a previous progress response cannot replace a new completed download"
+        "node:tests/settings/test_model_download_polling_e2e.cjs::a previous progress response cannot replace a new completed download",
+        "python:tests.test_model_download_live_browser.LiveModelDownloadBrowserTests.test_reload_recovers_the_existing_download_and_cancels_it"
       ]
     },
     {
@@ -1336,7 +1338,10 @@
         "node:tests/test_settings_runtime.cjs::SD-069 model download polling failure is visible and leaves no acquired path",
         "python:tests.test_model_downloads.ModelDownloadTests.test_worker_start_failure_restores_idle_and_allows_retry",
         "node:tests/settings/test_model_download_polling_e2e.cjs::a current progress error restores close and stops polling",
-        "node:tests/settings/test_model_download_polling_e2e.cjs::progress waits for a pending failure cancellation before checking completion"
+        "node:tests/settings/test_model_download_polling_e2e.cjs::progress waits for a pending failure cancellation before checking completion",
+        "node:tests/settings/test_model_download_polling_e2e.cjs::a failed download start restores close and allows retry",
+        "node:tests/settings/test_model_download_polling_e2e.cjs::a failed download reconnect restores close and allows retry",
+        "python:tests.test_model_download_live_browser.LiveModelDownloadBrowserTests.test_lost_start_response_recovers_the_existing_download_on_retry"
       ]
     },
     {

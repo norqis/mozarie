@@ -51,7 +51,7 @@ async function holdStatus(page, fail = false) {
 }
 async function begin(page) {
   await page.locator("#modelDownloadStart").click();
-  await page.waitForFunction(() => document.querySelector("#modelDownloadClose").disabled);
+  await page.waitForFunction(() => window.modelPollCount() === 1);
 }
 async function terminal(page, state) {
   assert.equal(await page.locator("#modelDownloadStatus").textContent(), await page.evaluate((value) => t(`modelDownload.${value}`), state));
@@ -126,7 +126,7 @@ test("a previous progress response cannot replace a new completed download", { t
   });
 });
 
-test("a delayed start response cannot replace a reopened confirmation", { timeout: 30000 }, async () => {
+test("a pending download start keeps close and Escape from losing progress", { timeout: 30000 }, async () => {
   await withDownloadPage(async (page) => {
     let release; let reached;
     const gate = new Promise((resolve) => { release = resolve; });
@@ -134,18 +134,44 @@ test("a delayed start response cannot replace a reopened confirmation", { timeou
     await page.route("**/api/model-download/start", async (route) => { reached(); await gate; await reply(route, "running"); });
     try {
       await page.locator("#modelDownloadStart").click(); await started;
-      await page.locator("#modelDownloadClose").click();
-      await page.locator('[data-model-download="sam"]').click();
-      const finished = page.waitForResponse((response) => new URL(response.url()).pathname === "/api/model-download/start");
-      release(); await (await finished).finished();
-      // Evaluate after the response body has been consumed by the real API client.
-      await page.evaluate(() => new Promise(requestAnimationFrame));
-      assert.equal(await page.locator("#modelDownloadStart").isVisible(), true);
-      assert.equal(await page.locator("#modelDownloadClose").isEnabled(), true);
-      assert.equal(await page.evaluate(() => window.modelPollCount()), 0);
+      assert.equal(await page.locator("#modelDownloadClose").isDisabled(), true);
+      await page.keyboard.press("Escape");
+      assert.equal(await page.locator("#modelDownloadDialog").isVisible(), true);
+      release();
+      await page.waitForFunction(() => window.modelPollCount() === 1);
+      assert.equal(await page.locator("#modelDownloadCancel").isVisible(), true);
+      await page.locator("#modelDownloadCancel").click();
+      await page.waitForFunction(() => !document.querySelector("#modelDownloadClose").disabled);
+      await terminal(page, "cancelled");
     } finally { release(); }
   });
 });
+
+for (const failure of ["start", "reconnect"]) {
+  test(`a failed download ${failure} restores close and allows retry`, { timeout: 30000 }, async () => {
+    await withDownloadPage(async (page) => {
+      const failedReply = (route) => route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error_code: "internal_error" }) });
+      await page.route("**/api/model-download/start", failure === "start" ? failedReply : (route) => route.fulfill({
+        status: 400, contentType: "application/json", body: JSON.stringify({ error_code: "operation_in_progress" }),
+      }));
+      if (failure === "reconnect") await page.route("**/api/model-download", failedReply);
+      await page.locator("#modelDownloadStart").click();
+      await page.locator("#errorDialog").waitFor({ state: "visible" });
+      await page.locator("#errorDialog button").last().click();
+      assert.equal(await page.locator("#modelDownloadClose").isEnabled(), true);
+      assert.equal(await page.locator("#modelDownloadStart").isVisible(), true);
+      assert.equal(await page.locator("#modelDownloadSecurity").isVisible(), true);
+      assert.equal(await page.evaluate(() => window.modelPollCount()), 0);
+      await page.keyboard.press("Escape");
+      assert.equal(await page.locator("#modelDownloadDialog").isVisible(), false);
+      await page.locator('[data-model-download="sam"]').click();
+      await page.route("**/api/model-download/start", (route) => reply(route, "complete"));
+      await page.locator("#modelDownloadStart").click();
+      await page.waitForFunction(() => document.querySelector("#modelDownloadStatus").textContent === t("modelDownload.complete"));
+      await terminal(page, "complete");
+    });
+  });
+}
 
 test("a current progress error restores close and stops polling", { timeout: 30000 }, async () => {
   await withDownloadPage(async (page) => {
