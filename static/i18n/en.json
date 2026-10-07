@@ -1,4 +1,5 @@
 {
+  "save.recoveryPending": "Save confirmation or recovery is incomplete. Check the connection and try again.",
   "review.hidden": "Hidden",
   "catalog.removeFromList": "Remove from list",
   "status.removedFromList": "Removed {count} images from the list. Source images were kept.",
@@ -680,6 +681,9 @@
   "errorDialog.workspace_corrupt.cause": "The workspace data is damaged or unavailable.",
   "errorDialog.workspace_corrupt.action": "Close Mozarie, back up the workspace data, and restart it.",
   "errorDialog.workspace_write_failed.title": "Workspace changes cannot be saved",
+  "errorDialog.manual_revision_conflict.title": "Edited in another window",
+  "errorDialog.manual_revision_conflict.cause": "The saved brush edits have changed. Unsaved edits in this window are retained.",
+  "errorDialog.manual_revision_conflict.action": "Check the edits in the other window. Reloading discards unsaved edits in this window.",
   "errorDialog.workspace_write_failed.cause": "Mozarie cannot write workspace data.",
   "errorDialog.workspace_write_failed.action": "Check available space and write permission, then try again.",
   "errorDialog.model_not_configured.title": "A required model is not selected",
@@ -807,5 +811,12 @@
   "sourceDelete.notAvailable": "{complete} {output} The copy was saved, but the original could not be deleted safely.",
   "sourceDelete.batchNotAvailable": "{complete} Copies were saved, but these originals could not be deleted safely: {names}.",
   "settings.shortcut.cycleMosaicTool": "Cycle mosaic tools",
-  "settings.shortcut.cycleExclusionTool": "Cycle exclusion tools"
+  "settings.shortcut.cycleExclusionTool": "Cycle exclusion tools",
+  "sourceDelete.result": "Source images deleted: {count}.",
+  "sourceDelete.resultFailed": "Source images deleted: {count}. Failed: {failed} — {details}",
+  "sourceDelete.resultCleanup": "Source images deleted: {count}. Cleanup will be retried for {cleanup} source files.",
+  "sourceDelete.resultFailedCleanup": "Source images deleted: {count}. Failed: {failed} — {details} Cleanup will be retried for {cleanup} source files.",
+  "errorDialog.source_delete_failed.title": "Cannot delete the source image",
+  "errorDialog.source_delete_failed.cause": "The selected original image could not be deleted.",
+  "errorDialog.source_delete_failed.action": "Select the image folder again, check its access permissions, then retry deletion."
 }

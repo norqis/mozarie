@@ -530,6 +530,8 @@ async function chooseSettingsModelFile(button) {
 }
 
 let modelDownloadPoll = null;
+let modelDownloadRefresh = null;
+let modelDownloadGeneration = 0;
 let pendingModelDownloadKey = null;
 let modelDownloadStatusRefreshPending = false;
 
@@ -606,12 +608,23 @@ function renderModelDownloadItems(keys) {
   }
 }
 
-async function refreshModelDownload() {
-  try { renderModelDownload(await api("/api/model-download")); } catch (error) {
-    if (modelDownloadPoll) { clearInterval(modelDownloadPoll); modelDownloadPoll = null; }
-    $("#modelDownloadStatus").textContent = ""; $("#modelDownloadStatus").classList.remove("error"); showUserError(error, $("#modelDownloadClose"));
-    $("#modelDownloadCancel").hidden = true; $("#modelDownloadClose").disabled = false;
-  }
+function refreshModelDownload() {
+  if (modelDownloadRefresh) return modelDownloadRefresh;
+  const generation = modelDownloadGeneration;
+  const pending = (async () => {
+    try {
+      const job = await api("/api/model-download");
+      if (generation === modelDownloadGeneration) renderModelDownload(job);
+    } catch (error) {
+      if (generation !== modelDownloadGeneration) return;
+      if (modelDownloadPoll) { clearInterval(modelDownloadPoll); modelDownloadPoll = null; }
+      $("#modelDownloadStatus").textContent = ""; $("#modelDownloadStatus").classList.remove("error"); showUserError(error, $("#modelDownloadClose"));
+      $("#modelDownloadCancel").hidden = true; $("#modelDownloadClose").disabled = false;
+    }
+  })();
+  const completed = pending.finally(() => { if (modelDownloadRefresh === completed) modelDownloadRefresh = null; });
+  modelDownloadRefresh = completed;
+  return completed;
 }
 
 function modelPreparationCommand(key) {
@@ -620,6 +633,7 @@ function modelPreparationCommand(key) {
 }
 
 function showUnsupportedModelDownload(key) {
+  modelDownloadGeneration += 1;
   pendingModelDownloadKey = null;
   $("#modelDownloadMessage").textContent = t(`modelDownload.${key}`);
   renderModelDownloadItems([key]);
@@ -635,6 +649,7 @@ function showUnsupportedModelDownload(key) {
 }
 
 function modelDownloadConfirmation(key) {
+  modelDownloadGeneration += 1;
   const samType = selectedSamType();
   const samKey = `sam_${samType}`;
   const keys = key === "all" ? [samKey, "hand_detection", "hand_segmentation"] : [key === "sam" ? samKey : key];
@@ -659,28 +674,49 @@ function startModelDownload(key) {
 async function beginModelDownload() {
   const key = pendingModelDownloadKey;
   if (!key) return;
+  const generation = ++modelDownloadGeneration;
   let started = false;
   $("#modelDownloadStatus").textContent = ""; $("#modelDownloadStatus").classList.remove("error");
   $("#modelDownloadProgress").value = 0; $("#modelDownloadProgress").max = 1;
   $("#modelDownloadStart").hidden = true; $("#modelDownloadSecurity").hidden = true;
+  $("#modelDownloadClose").disabled = true;
   modelDownloadStatusRefreshPending = true;
   try {
     const modelKey = key === "sam" ? `sam_${selectedSamType()}` : key;
-    const job = await api("/api/model-download/start", { method: "POST", body: JSON.stringify({ modelKey, samType: selectedSamType() }) });
+    let job; let resumed = false;
+    try {
+      job = await api("/api/model-download/start", { method: "POST", body: JSON.stringify({ modelKey, samType: selectedSamType() }) });
+    } catch (error) {
+      if (error.code !== "operation_in_progress") throw error;
+      job = await api("/api/model-download");
+      resumed = true;
+    }
+    if (generation !== modelDownloadGeneration) return;
     started = true;
+    if (resumed) renderModelDownloadItems(job.current ? [job.current] : []);
     renderModelDownload(job);
     if (!modelDownloadPoll && ["running", "cancelling"].includes(job.state)) modelDownloadPoll = setInterval(() => { void refreshModelDownload(); }, 350);
-  } catch (error) { showUserError(error, $("#modelDownloadStart")); }
+  } catch (error) { if (generation === modelDownloadGeneration) showUserError(error, $("#modelDownloadStart")); }
   finally {
-    if (!started && pendingModelDownloadKey === key) {
+    if (!started && generation === modelDownloadGeneration) {
       $("#modelDownloadStart").hidden = false; $("#modelDownloadSecurity").hidden = false;
+      $("#modelDownloadClose").disabled = false;
       modelDownloadStatusRefreshPending = false;
     }
   }
 }
 
-async function cancelModelDownload() {
-  try { renderModelDownload(await api("/api/model-download/cancel", { method: "POST", body: JSON.stringify({}) })); } catch (error) { showUserError(error, $("#modelDownloadCancel")); }
+function cancelModelDownload() {
+  const generation = ++modelDownloadGeneration;
+  const pending = (async () => {
+    try {
+      const job = await api("/api/model-download/cancel", { method: "POST", body: JSON.stringify({}) });
+      if (generation === modelDownloadGeneration) renderModelDownload(job);
+    } catch (error) { if (generation === modelDownloadGeneration) showUserError(error, $("#modelDownloadCancel")); }
+  })();
+  const completed = pending.finally(() => { if (modelDownloadRefresh === completed) modelDownloadRefresh = null; });
+  modelDownloadRefresh = completed;
+  return completed;
 }
 
 let settingsStatusGeneration = 0;

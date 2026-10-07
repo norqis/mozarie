@@ -9,6 +9,7 @@ const vm = require("node:vm");
 function interaction() {
   const context = vm.createContext({
     window: new EventTarget(),
+    state: { importSession: { paused: false, cancelled: false } },
   });
   vm.runInContext(fs.readFileSync(path.join(__dirname, "../static/js/interaction.js"), "utf8"), context);
   return context;
@@ -21,7 +22,7 @@ test("drop snapshots every File and handle request before the transfer becomes p
     getAsFile() { assert.equal(readable, true); calls.push(`file${index}`); return file; },
     getAsFileSystemHandle() { assert.equal(readable, true); calls.push(`handle${index}`); return index ? Promise.reject(new Error("denied")) : Promise.resolve(null); },
   })) };
-  const pending = context.directFilesFromDrop(transfer); readable = false;
+  const pending = context.directFilesFromDrop(transfer, context.state.importSession); readable = false;
   const dropped = await pending;
   assert.deepEqual(calls, ["file0", "handle0", "file1", "handle1"]);
   assert.deepEqual(Array.from(dropped.handleEntries, (entry) => entry.file), files);
@@ -35,7 +36,7 @@ test("drop accepts unsupported handle APIs and FileList-only transfers", async (
     { items: [{ kind: "file", getAsFile: () => file }] },
     { items: [{ kind: "file", getAsFile: () => file, getAsFileSystemHandle() { throw new Error("unavailable"); } }] },
   ]) {
-    const result = await context.directFilesFromDrop(transfer);
+    const result = await context.directFilesFromDrop(transfer, context.state.importSession);
     assert.equal(result.handleEntries.length, 1);
     assert.equal(result.handleEntries[0].file, file);
     assert.equal(result.handleEntries[0].relativePath, "plain.png");
@@ -50,10 +51,20 @@ test("drop keeps native handles, nested relative paths, and each immediate paren
   const result = await context.directFilesFromDrop({ items: [
     { kind: "file", getAsFile: () => file, getAsFileSystemHandle: () => Promise.resolve(direct) },
     { kind: "file", getAsFile: () => null, getAsFileSystemHandle: () => Promise.resolve(directory) },
-  ] });
+  ] }, context.state.importSession);
   assert.equal(result.handleEntries[0].handle, direct);
   assert.equal(result.handleEntries[0].file, file);
   assert.equal(result.handleEntries[1].handle, nested);
   assert.equal(result.handleEntries[1].relativePath, "folder/deep.png");
   assert.equal(result.handleEntries[1].parentHandle, directory);
+});
+
+
+test("drop cancellation discards snapshots while handle access is pending", async () => {
+  const context = interaction(); const session = context.state.importSession;
+  const file = new File(["image"], "cancelled.png");
+  let release; const gate = new Promise((resolve) => { release = resolve; });
+  const pending = context.directFilesFromDrop({ items: [{ kind: "file", getAsFile: () => file, getAsFileSystemHandle: () => gate }] }, session);
+  session.cancelled = true; release(null);
+  assert.equal((await pending).handleEntries.length, 0);
 });

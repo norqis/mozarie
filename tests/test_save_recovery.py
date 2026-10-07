@@ -307,15 +307,67 @@ class SaveRecoveryTests(unittest.TestCase):
             root = Path(raw); source = root / "source.png"; source.write_bytes(b"owned")
             quarantine = root / ".source.png.mozarie-delete-token"; journal = SaveJournal(root)
             journal.reserve("token", "image", 1, None, None)
+            stat = source.stat()
+            fingerprint = (stat.st_mtime_ns, stat.st_size)
             with mock.patch.object(SaveJournal, "_windows_handle_identity", return_value=None):
-                self.assertFalse(journal.quarantine_source("token", source, quarantine))
+                self.assertFalse(journal.quarantine_source("token", source, quarantine, fingerprint))
             self.assertTrue(source.exists())
             self.assertFalse(quarantine.exists())
-            self.assertTrue(journal.quarantine_source("token", source, quarantine))
+            self.assertTrue(journal.quarantine_source("token", source, quarantine, fingerprint))
             self.assertFalse(source.exists())
             self.assertEqual(quarantine.read_bytes(), b"owned")
             del journal
             gc.collect()
+
+    def test_quarantine_source_excludes_writers_until_rename(self):
+        from ctypes import wintypes
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        create = kernel32.CreateFileW
+        create.argtypes = [wintypes.LPCWSTR, wintypes.DWORD, wintypes.DWORD, ctypes.c_void_p, wintypes.DWORD, wintypes.DWORD, wintypes.HANDLE]
+        create.restype = wintypes.HANDLE
+        close = kernel32.CloseHandle
+        close.argtypes = [wintypes.HANDLE]
+        close.restype = wintypes.BOOL
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw).resolve()
+            source = root / "source.png"
+            source.write_bytes(b"owned")
+            quarantine = root / ".source.png.mozarie-delete-token"
+            journal = SaveJournal(root)
+            journal.reserve("token", "image", 1, None, None)
+            stat = source.stat()
+            fingerprint = (stat.st_mtime_ns, stat.st_size)
+            record = journal.quarantine
+            attempts = []
+
+            def try_writer(*args):
+                target = source if source.exists() else quarantine
+                # This writer allows every sharing mode; the held quarantine
+                # handle must be the one that excludes its write access.
+                handle = create(str(target), 0x40000000, 0x7, None, 3, 0x80, None)
+                error = ctypes.get_last_error()
+                if handle != wintypes.HANDLE(-1).value:
+                    close(handle)
+                attempts.append(target)
+                self.assertEqual(handle, wintypes.HANDLE(-1).value)
+                self.assertEqual(error, 32)
+                result = record(*args)
+                row = journal.row("token")
+                self.assertEqual(row["state"], "source_quarantined")
+                self.assertEqual(row["source_path"], str(source))
+                self.assertEqual(row["quarantine"], str(quarantine))
+                self.assertEqual((row["quarantine_mtime"], row["quarantine_size"]), args[3])
+                self.assertEqual(row["quarantine_identity"], args[4])
+                return result
+
+            with mock.patch.object(journal, "quarantine", side_effect=try_writer):
+                self.assertTrue(journal.quarantine_source("token", source, quarantine, fingerprint))
+            self.assertEqual(attempts, [source])
+            self.assertFalse(source.exists())
+            self.assertEqual(quarantine.read_bytes(), b"owned")
+            self.assertTrue(journal.cleanup("token"))
+            self.assertEqual(source.read_bytes(), b"owned")
+            self.assertFalse(quarantine.exists())
 
     @unittest.skipUnless(__import__("os").name == "nt", "Windows handle publish contract")
     def test_publish_stage_records_its_handle_identity_before_replacement_can_win(self):
@@ -349,7 +401,9 @@ class SaveRecoveryTests(unittest.TestCase):
             root = Path(raw); source = root / "source.png"; source.write_bytes(b"owned")
             quarantine = root / ".source.png.mozarie-delete-token"; quarantine.write_bytes(b"outside")
             journal = SaveJournal(root); journal.reserve("token", "image", 1, None, None)
-            self.assertFalse(journal.quarantine_source("token", source, quarantine))
+            stat = source.stat()
+            fingerprint = (stat.st_mtime_ns, stat.st_size)
+            self.assertFalse(journal.quarantine_source("token", source, quarantine, fingerprint))
             self.assertEqual(source.read_bytes(), b"owned")
             self.assertEqual(quarantine.read_bytes(), b"outside")
             del journal

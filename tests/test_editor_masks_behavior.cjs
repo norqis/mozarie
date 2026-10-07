@@ -128,7 +128,7 @@ const state = {
   removedCandidateIds: new Set(), candidateImages: new Map(), candidatePaddingPreviewImages: new Map(), blinkCandidateIds: new Set(), blinkModes: new Map(), blinkRoleModes: new Map(), blinkPhase: false, blinkTimer: null,
   manualMaskPresent: true, manualExclusionPresent: true, manualExclusionErasePresent: true, manualEnabled: true, manualExclusionEnabled: true, manualExclusionEraseEnabled: true, manualExclusionForced: false,
   candidateUpdateChains: new Map(), candidateUpdateVersions: new Map(), candidateDeleting: new Set(), candidateBatchPending: new Set(),
-  maskStatus: new Map(), images: [{ id: "image", assetVersion: "a", candidateRevision: 4, candidateCount: 0, enabledCandidateCount: 0 }],
+  maskStatus: new Map(), workspaceDraftRevisions: new Map(), images: [{ id: "image", assetVersion: "a", candidateRevision: 4, candidateCount: 0, enabledCandidateCount: 0 }],
   history: [], historyIndex: 0, historyRestoreToken: 0, historyRemovedCandidateIds: new Set(), historyCandidateIds: new Set(["apply", "exclude"]), historyBaseDirty: false, hiddenImageIds: new Set(), reviewedImageIds: new Set(),
   boundaryDrafts: [{ id: "draft", type: "rectangle", roi: { left: 1, top: 2, right: 10, bottom: 12 } }], boundaryActiveId: "draft", boundaryPending: false,
   importing: false, projectReadOnly: false, projectHistoryBusy: false, project: null, projectHistory: new Map(), drafts: new Map(), pendingImageId: null, fillPending: false, tool: "brush", view: { x: 0, y: 0, scale: 1 }, settings: { editing: { fill_color_tolerance: 12 } },
@@ -167,7 +167,7 @@ const context = {
   t: (key, values) => values?.label ? `${key}:${values.label}` : key, confirmationRequired: () => false, confirmAction: async () => true,
   markMaskDirty: () => events.push("dirty"), markDraftDirty: (...layers) => events.push(`draft:${layers.join(",")}`), queueImageMutation: async (_imageId, action) => action(), publishWorkspaceFlags() {}, saveWorkspaceFlagNow: async () => true, refreshReviewViews() {},
   markDraftDirtyRoi: (layer, roi) => dirtyRois.push({ layer, roi: roi && { ...roi } }), mergeMosaicPreviewRoi: (_previous, roi) => roi,
-  calculatedBlockSize: () => 8, composeCurrentMask: () => events.push("compose-roi"), flushMaskComposition: () => events.push("flush"), requestMosaicPreview: () => events.push("preview"), scheduleManualWorkspaceSave: () => events.push("save"), saveDraft: () => events.push("draft-save"),
+  calculatedBlockSize: () => 8, composeCurrentMask: () => events.push("compose-roi"), flushMaskComposition: () => events.push("flush"), requestMosaicPreview: () => events.push("preview"), scheduleManualWorkspaceSave: () => events.push("save"), saveDraft: async () => events.push("draft-save"),
   ensureHistoryCanvases: () => true, releaseHistoryCanvases() {},
   setReviewed: () => events.push("review"), updateHistoryButtons() {}, updateCandidateStatus() {}, refreshCurrentReviewAndMask() {}, refreshMaskStatus() {},
   fillUiRefreshes: [], renderCandidates: () => events.push("candidates"), render: () => events.push("render"), renderCatalogViews: () => events.push("catalog"), updateActionButtons: () => context.fillUiRefreshes.push("actions"),
@@ -1189,7 +1189,7 @@ nodeTest("editor masks, fill, candidates, and history", async (t) => {
   context.reconcileCatalogSnapshot = () => false;
   context.loadReviewedPaths = () => {};
   state.projectHistory = new Map([["image", { canUndo: true, canRedo: true }]]); state.drafts = new Map([["image", { local: true }]]);
-  context.flushWorkspaceDraft = async (imageId) => { historyFlushes += 1; assert.equal(imageId, "image", "history flushes the selected project image first"); };
+  context.flushAllWorkspaceMutations = async () => { historyFlushes += 1; };
   context.applyProjectSnapshot = () => { historySnapshots += 1; };
   context.selectImage = async (imageId, force, options) => { historySelects += 1; assert.deepEqual({ imageId, force, saveCurrentDraft: options.saveCurrentDraft }, { imageId: "image", force: true, saveCurrentDraft: false }, "changed project history reloads the selected image without resaving its draft"); };
   context.api = async (url, options = {}) => {
@@ -1200,7 +1200,7 @@ nodeTest("editor masks, fill, candidates, and history", async (t) => {
     throw new Error(`unexpected history request: ${url}`);
   };
   await test.restoreProjectHistory("undo");
-  assert.equal(historyFlushes, 1, "project history flushes its debounced draft before undo");
+  assert.equal(historyFlushes, 1, "project history flushes all pending drafts before undo");
   assert.equal(historySnapshots, 1, "project history refreshes catalogue state after a change");
   assert.equal(historySelects, 1, "project history reloads the changed current image");
   assert.equal(state.images[0].candidateRevision, 9, "project history retains the server candidate revision");

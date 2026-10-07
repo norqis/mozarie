@@ -169,6 +169,7 @@ class ImageRecord:
     asset_size_bytes: int | None = field(default=None, repr=False)
     source_kind: str = "filesystem"
     asset_revision: int = 0
+    asset_instance: str = field(default_factory=lambda: uuid.uuid4().hex, repr=False)
     hidden: bool = False
     reviewed: bool = False
     # Edit coordinates are always canonical.  The desired flips are visible
@@ -228,6 +229,7 @@ class BrowserSaveToken:
     flip_vertical: bool = False
     source_flip_horizontal: bool = False
     source_flip_vertical: bool = False
+    manual_revision: int = 0
 
 
 @dataclass(frozen=True)
@@ -268,6 +270,8 @@ class BrowserSaveReceipt:
     completed_at: float = 0.0
     relative_path: str | None = None
     edited_filename: str | None = None
+    manual_revision: int = 0
+    transform_revision: int | None = None
 
 
 @dataclass
@@ -537,8 +541,8 @@ def merge_segment(
         return
     candidate = {"class_name": class_name, "confidence": confidence, "mask": mask, "source": source}
     winner = max([*matching, candidate], key=_segment_rank)
-    for duplicate in matching:
-        segments.remove(duplicate)
+    duplicate_ids = {id(segment) for segment in matching}
+    segments[:] = [segment for segment in segments if id(segment) not in duplicate_ids]
     segments.append(winner)
 
 
@@ -576,8 +580,8 @@ def merge_tile_segment(
         segments.append(candidate)
         return
     winner = max([*matching, candidate], key=_segment_rank)
-    for duplicate in matching:
-        segments.remove(duplicate)
+    duplicate_ids = {id(segment) for segment in matching}
+    segments[:] = [segment for segment in segments if id(segment) not in duplicate_ids]
     segments.append(winner)
 
 

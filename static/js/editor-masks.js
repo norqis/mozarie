@@ -151,6 +151,7 @@ async function commitBatchCandidatePadding(session, value) {
   state.candidateBatchPending.add(imageId); closeCandidatePadding({ commit: true }); renderCandidates();
   try {
     const result = await enqueueCandidateMutation(imageId, async () => {
+      if (hasDurableHistory()) await flushWorkspaceDraft(imageId);
       const result = await api("/api/candidates/batch", { method: "POST", body: JSON.stringify({ imageId, role: session.role, operation: "set_padding", expandPx: value }) });
     if (state.currentId === imageId && isCurrentGeneration(generation)) {
       await reconcileCurrentCandidates(imageId, generation);
@@ -356,7 +357,7 @@ function renderCandidates() {
     const enabled = makeToggle(isEnabled, isApply ? t("candidates.manualToggle") : t("candidates.manualExcludeToggle"), () => {
       if (isBusy() || state.importing || currentImageActionPending()) return;
       if (isApply) state.manualEnabled = !state.manualEnabled; else state.manualExclusionEnabled = !state.manualExclusionEnabled;
-      markMaskDirty(); saveDraft();
+      markMaskDirty(); saveDraft().catch(showUserError);
       recordHistoryOperation({ kind: "manualState" });
       refreshCurrentReviewAndMask(); requestMosaicPreview(); renderCandidates(); render();
     }, candidateMutationLocked);
@@ -371,7 +372,7 @@ function renderCandidates() {
     if (!isApply) {
       const forced = makeForceToggle(state.manualExclusionForced, () => {
         if (isBusy() || state.importing || currentImageActionPending()) return;
-        state.manualExclusionForced = !state.manualExclusionForced; markMaskDirty(); saveDraft();
+        state.manualExclusionForced = !state.manualExclusionForced; markMaskDirty(); saveDraft().catch(showUserError);
         recordHistoryOperation({ kind: "manualState" }); refreshCurrentReviewAndMask(); requestMosaicPreview(); renderCandidates(); render();
       }, candidateMutationLocked);
       appendRow(row, label, enabled, [blink, candidateEffectiveToggle(blinkId, role, candidateViewLocked), forced, remove]);
@@ -387,7 +388,7 @@ function renderCandidates() {
     const enabled = makeToggle(state.manualExclusionEraseEnabled, t("candidates.manualExcludeEraseToggle"), () => {
       if (isBusy() || state.importing || currentImageActionPending()) return;
       state.manualExclusionEraseEnabled = !state.manualExclusionEraseEnabled; markMaskDirty();
-      saveDraft(); recordHistoryOperation({ kind: "manualState" }); refreshCurrentReviewAndMask(); requestMosaicPreview(); renderCandidates(); render();
+      saveDraft().catch(showUserError); recordHistoryOperation({ kind: "manualState" }); refreshCurrentReviewAndMask(); requestMosaicPreview(); renderCandidates(); render();
     }, candidateMutationLocked);
     const blink = makeDisplay(blinkId, "exclude");
     row.dataset.candidateBlinkId = blinkId; row.dataset.candidateBlinkRole = "exclude";
@@ -410,7 +411,7 @@ function renderCandidates() {
       const previousEnabled = candidate.enabled;
       const previousMaskStatus = state.maskStatus.has(state.currentId) ? state.maskStatus.get(state.currentId) : imageHasMask(currentRecord());
       candidate.enabled = !candidate.enabled;
-      markMaskDirty();
+      if (hasDurableHistory()) invalidateMaskComposition(); else markMaskDirty();
       const editorState = historyEditorState(); syncCurrentCandidateRecord(); refreshCurrentReviewAndMask(); requestMosaicPreview(); render();
       const updated = await updateCandidate(candidate, previousEnabled, previousMaskStatus);
       if (updated) recordHistoryOperation({ kind: "candidateState", editorState });
@@ -432,7 +433,7 @@ function renderCandidates() {
         const previousForced = candidate.forced !== false;
         const previousMaskStatus = state.maskStatus.has(state.currentId) ? state.maskStatus.get(state.currentId) : imageHasMask(currentRecord());
         candidate.forced = !previousForced;
-        markMaskDirty();
+        if (hasDurableHistory()) invalidateMaskComposition(); else markMaskDirty();
         const editorState = historyEditorState(); syncCurrentCandidateRecord(); refreshCurrentReviewAndMask(); requestMosaicPreview(); render();
         const updated = await updateCandidate(candidate, candidate.enabled, previousMaskStatus, previousForced);
         if (updated) recordHistoryOperation({ kind: "candidateState", editorState });
@@ -611,6 +612,7 @@ async function updateCandidate(candidate, previousEnabled, previousMaskStatus, p
   const desiredExpandPx = candidate.expandPx || 0;
   const send = async () => {
     try {
+      if (hasDurableHistory()) await flushWorkspaceDraft(imageId);
       const result = await api(`/api/candidate/${encodeURIComponent(imageId)}/${encodeURIComponent(candidate.id)}`, {
         method: "POST", body: JSON.stringify({ enabled: desired, color: candidate.color, ...(desiredExpandPx !== previousExpandPx ? { expandPx: desiredExpandPx } : {}), ...(candidate.role === "exclude" ? { forced: desiredForced } : {}) }),
       });
@@ -664,7 +666,7 @@ async function deleteCandidate(candidate) {
   if (state.currentId !== imageId || !isCurrentGeneration(generation) || currentImageActionPending() || !state.candidates.some((item) => item.id === candidate.id)) return;
   clearRoleCandidateDisplayMode(candidate.role); state.removedCandidateIds.add(candidate.id);
   setCandidateDisplayMode([candidate.id], "off");
-  markMaskDirty(); recordHistoryOperation({ kind: "removeCandidates", ids: [candidate.id] }); syncCurrentCandidateRecord(); refreshCurrentReviewAndMask(); requestMosaicPreview(); saveDraft(); renderCandidates(); render(); renderCatalogViews();
+  markMaskDirty(); recordHistoryOperation({ kind: "removeCandidates", ids: [candidate.id] }); syncCurrentCandidateRecord(); refreshCurrentReviewAndMask(); requestMosaicPreview(); saveDraft().catch(showUserError); renderCandidates(); render(); renderCatalogViews();
 }
 
 function deleteManualMask() {
@@ -672,7 +674,7 @@ function deleteManualMask() {
   addCtx.clearRect(0, 0, addCanvas.width, addCanvas.height);
   state.manualMaskPresent = false; state.manualEnabled = true;
   setCandidateDisplayMode(["manual:apply"], "off");
-  recordHistoryOperation({ kind: "clearManual", role: "apply" }); markMaskDirty(); markDraftDirty("add"); saveDraft(); requestMosaicPreview(); updateCandidateStatus(); refreshCurrentReviewAndMask(); renderCandidates(); render();
+  recordHistoryOperation({ kind: "clearManual", role: "apply" }); markMaskDirty(); markDraftDirty("add"); saveDraft().catch(showUserError); requestMosaicPreview(); updateCandidateStatus(); refreshCurrentReviewAndMask(); renderCandidates(); render();
 }
 
 function deleteManualExclusion() {
@@ -681,7 +683,7 @@ function deleteManualExclusion() {
   state.manualExclusionPresent = false;
   state.manualExclusionEnabled = true;
   setCandidateDisplayMode(["manual:exclude"], "off");
-  recordHistoryOperation({ kind: "clearManual", role: "exclude" }); markMaskDirty(); markDraftDirty("exclusion"); saveDraft(); requestMosaicPreview(); refreshCurrentReviewAndMask(); renderCandidates(); render();
+  recordHistoryOperation({ kind: "clearManual", role: "exclude" }); markMaskDirty(); markDraftDirty("exclusion"); saveDraft().catch(showUserError); requestMosaicPreview(); refreshCurrentReviewAndMask(); renderCandidates(); render();
 }
 
 function deleteManualExclusionErase() {
@@ -690,7 +692,7 @@ function deleteManualExclusionErase() {
   state.manualExclusionErasePresent = false;
   state.manualExclusionEraseEnabled = true;
   setCandidateDisplayMode(["manual:excludeErase"], "off");
-  recordHistoryOperation({ kind: "clearManual", role: "excludeErase" }); markMaskDirty(); markDraftDirty("exclusionErase"); saveDraft(); requestMosaicPreview(); refreshCurrentReviewAndMask(); renderCandidates(); render();
+  recordHistoryOperation({ kind: "clearManual", role: "excludeErase" }); markMaskDirty(); markDraftDirty("exclusionErase"); saveDraft().catch(showUserError); requestMosaicPreview(); refreshCurrentReviewAndMask(); renderCandidates(); render();
 }
 
 function shouldBlinkNewManual(role) {
@@ -737,27 +739,44 @@ async function batchCandidateOperation(spec) {
     setCandidateDisplayMode([...ids, ...manualRoles.map((manualRole) => `manual:${manualRole}`)], "off");
     ids.forEach((id) => state.removedCandidateIds.add(id));
     if (!ids.length && !manualRoles.length) { renderCandidates(); return; }
-    markMaskDirty(); recordHistoryOperation({ kind: "clearCandidateRole", ids, manualRoles }); syncCurrentCandidateRecord(); refreshCurrentReviewAndMask(); requestMosaicPreview(); saveDraft(); renderCandidates(); render(); renderCatalogViews();
+    markMaskDirty(); recordHistoryOperation({ kind: "clearCandidateRole", ids, manualRoles }); syncCurrentCandidateRecord(); refreshCurrentReviewAndMask(); requestMosaicPreview(); saveDraft().catch(showUserError); renderCandidates(); render(); renderCatalogViews();
     return;
   }
   state.candidateBatchPending.add(imageId);
   const send = async () => {
     try {
-      const result = await api("/api/candidates/batch", { method: "POST", body: JSON.stringify({ imageId, role, operation }) });
+      const durable = hasDurableHistory();
+      const durableManual = durable && (manual || manualErase);
+      const manualFlags = {};
+      if (manual) manualFlags[role === "apply" ? "manualEnabled" : "manualExclusionEnabled"] = operation === "enable";
+      if (manualErase) manualFlags.manualExclusionEraseEnabled = operation === "enable";
+      if (durable) await flushWorkspaceDraft(imageId);
+      if (state.currentId !== imageId || !isCurrentGeneration(generation)) return;
+      const expectedManualRevision = durableManual ? workspaceDraftRevision(imageId) : null;
+      const result = await api("/api/candidates/batch", { method: "POST", body: JSON.stringify({ imageId, role, operation,
+        ...(durableManual ? { manualFlags, expectedManualRevision } : {}),
+      }) });
       if (state.currentId !== imageId || !isCurrentGeneration(generation)) {
+        if (durable) { state.drafts.delete(imageId); state.workspaceDraftRevisions.delete(imageId); }
         await refreshCandidateRecord(imageId, true);
         renderCatalogViews();
         return;
       }
       changed.forEach((item) => { item.enabled = operation === "enable"; });
-      markMaskDirty();
-      if (manual) {
-        if (role === "apply") state.manualEnabled = operation === "enable";
-        else state.manualExclusionEnabled = operation === "enable";
+      Object.assign(state, manualFlags);
+      if (durable) {
+        invalidateMaskComposition();
+        const draft = state.drafts.get(imageId);
+        if (draft) Object.assign(draft, manualFlags, { candidateRevision: result.candidateRevision, hasEffectiveMask: hasEffectiveMask() });
+        if (durableManual) {
+          state.workspaceDraftRevisions.set(imageId, result.manualRevision);
+          const record = currentRecord();
+          if (record && Number(record.manualRevision || 0) === expectedManualRevision) record.manualRevision = result.manualRevision;
+        }
+      } else {
         markMaskDirty();
+        if (manual || manualErase) saveDraft().catch(showUserError);
       }
-      if (manualErase) { state.manualExclusionEraseEnabled = operation === "enable"; markMaskDirty(); }
-      if (manual || manualErase) saveDraft();
       retainCurrentCandidateBundle(imageId, result.candidateRevision);
       recordHistoryOperation({ kind: "candidateBatch" }); syncCurrentCandidateRecord(); refreshCurrentReviewAndMask(); requestMosaicPreview(); renderCandidates(); render();
       if (hasDurableHistory()) void refreshProjectHistory(imageId);
@@ -783,6 +802,7 @@ async function addBoundaryCandidate() {
   const createdCandidateIds = [];
   state.boundaryPending = true; updateBoundaryActions(); updateActionButtons(); setStatusKey("status.boundaryDetecting", {}, "running");
   try {
+    if (hasDurableHistory()) await flushWorkspaceDraft(imageId);
     for (const request of requests) {
       const body = request.draft.type === "polygon"
         ? { imageId, points: request.draft.points.map((point) => ({ ...point })) }
@@ -814,7 +834,7 @@ async function addBoundaryCandidate() {
     if (catalogChanged) {
       if (state.currentId === imageId && state.imageGeneration === viewGeneration) {
         await reconcileCurrentCandidates(imageId, viewGeneration);
-        if (createdCandidateIds.length) { recordHistoryOperation({ kind: "addCandidates", ids: createdCandidateIds }); saveDraft(); }
+        if (createdCandidateIds.length) { recordHistoryOperation({ kind: "addCandidates", ids: createdCandidateIds }); saveDraft().catch(showUserError); }
         if (!state.boundaryDrafts.length) setStatusKey("status.boundaryDone");
       }
     }
@@ -1299,7 +1319,7 @@ async function restoreProjectHistory(direction) {
   try {
     await queueImageMutation(imageId, async () => {
       await waitForCandidateMutations();
-      await flushWorkspaceDraft(imageId);
+      await flushAllWorkspaceMutations();
       const freshHistory = await api(`/api/project/history/${encodeURIComponent(imageId)}`);
       state.projectHistory.set(imageId, { canUndo: freshHistory.canUndo === true, canRedo: freshHistory.canRedo === true });
       if ((direction === "undo" && !freshHistory.canUndo) || (direction === "redo" && !freshHistory.canRedo)) return;
@@ -1307,8 +1327,12 @@ async function restoreProjectHistory(direction) {
       const changed = new Set(result.changedImageIds || []);
       for (const changedId of changed) {
         state.drafts.delete(changedId); state.maskStatus.delete(changedId); state.projectHistory.delete(changedId); releaseCandidateBundles(changedId);
+        state.workspaceDraftRevisions.delete(changedId);
         const record = state.images.find((image) => image.id === changedId);
-        if (record && changedId === imageId && result.current) record.candidateRevision = Number(result.current.candidateRevision || 0);
+        if (record && changedId === imageId && result.current) {
+          record.candidateRevision = Number(result.current.candidateRevision || 0);
+          record.manualRevision = Number(result.current.manualRevision || 0);
+        }
       }
       invalidateProjectHistoryRefresh(imageId);
       state.projectHistory.set(imageId, { canUndo: result.canUndo === true, canRedo: result.canRedo === true });
@@ -1387,6 +1411,7 @@ async function syncProjectlessCandidateHistory(imageId, previous, generation) {
 
 async function resyncProjectlessHistory(imageId, generation) {
   state.drafts.delete(imageId); state.maskStatus.delete(imageId); releaseCandidateBundles(imageId);
+  state.workspaceDraftRevisions.delete(imageId);
   const snapshot = await api("/api/images");
   const replaced = reconcileCatalogSnapshot(snapshot, state.project?.id || null, state.serverCatalogGeneration);
   state.images = snapshot.images || state.images; loadReviewedPaths(); applyProjectSnapshot(snapshot); renderCatalogViews();

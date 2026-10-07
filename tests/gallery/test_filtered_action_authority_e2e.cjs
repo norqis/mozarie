@@ -246,16 +246,131 @@ test("DI-184 same-project return synchronization preserves a still-authoritative
       addCtx.fillStyle = "rgba(37, 149, 211, 1)"; addCtx.fillRect(11, 7, 1, 1); markDraftDirty("add");
       window.__returnAuthorityImage = state.currentImage;
     });
-    fixture.resetScenario();
-    fixture.setCatalog(catalogue.map((image) => image.id === "D" ? { ...image, reviewed: true } : image));
+    const generation = await page.evaluate(() => state.serverCatalogGeneration);
+    fixture.setCatalog(catalogue.map((image) => ({ ...image, reviewed: image.reviewed || image.id === "D", hidden: image.id === "C", flipH: image.id === "A" })));
     await page.evaluate(async () => { await syncCatalogOnReturn(); });
     assert.deepEqual(await page.evaluate(() => ({ ids: state.images.map((image) => image.id), currentId: state.currentId,
       sameImageObject: state.currentImage === window.__returnAuthorityImage,
       pixel: [...addCtx.getImageData(11, 7, 1, 1).data], draftPresent: state.drafts.has("A"),
       peerReviewed: state.images.find((image) => image.id === "D")?.reviewed,
+      hidden: state.hiddenImageIds.has("C"), flipPressed: document.querySelector("#flipHorizontalButton").getAttribute("aria-pressed"),
+      generation: state.serverCatalogGeneration,
     })), { ids: ["A", "B", "C", "D"], currentId: "A", sameImageObject: true,
-      pixel: [37, 149, 211, 255], draftPresent: true, peerReviewed: true },
+      pixel: [37, 149, 211, 255], draftPresent: true, peerReviewed: true, hidden: true, flipPressed: "true", generation },
     "visibility/pageshow authority refresh updates peer records without resetting a valid current canvas or its unsaved draft");
+  } finally {
+    await context?.close(); await browser.close(); await closeServer(fixture.server);
+  }
+});
+
+test("same-generation return reloads changed pixels and masks while pending edits keep their old revision", { timeout: 60000 }, async () => {
+  const fixture = await startFixtureServer(); fixture.setCatalog(catalogue);
+  const browser = await chromium.launch({ headless: true });
+  let context; let page;
+  try {
+    ({ context, page } = await openPage(browser, fixture));
+    await selectImage(page, "A");
+    const data = await page.evaluate(() => {
+      const canvas = document.createElement("canvas"); canvas.width = 100; canvas.height = 80;
+      const ctx = canvas.getContext("2d"); ctx.fillStyle = "blue"; ctx.fillRect(0, 0, 100, 80);
+      const image = canvas.toDataURL(); ctx.clearRect(0, 0, 100, 80); ctx.fillRect(12, 8, 1, 1);
+      state.view = { x: 27, y: 38, scale: 2 };
+      return { image, mask: canvas.toDataURL() };
+    });
+    let revision = 1; let manualReads = 0;
+    await page.route("**/api/image/A?*", (route) => route.fulfill({ contentType: "image/png", body: Buffer.from(data.image.split(",")[1], "base64") }));
+    await page.route("**/api/candidates/A", (route) => route.fulfill({ json: { candidates: [], candidateRevision: revision } }));
+    await page.route("**/api/workspace/manual/A", (route) => {
+      manualReads += 1;
+      return route.fulfill({ json: { draft: { add: data.mask, exclusion: "", exclusionErase: "", manualEnabled: true, candidateRevision: revision } } });
+    });
+    const publish = () => fixture.setCatalog(catalogue.map((image) => image.id === "A" ? { ...image, assetVersion: `asset-${revision}`, candidateRevision: revision } : image));
+    publish();
+    await page.evaluate(() => syncCatalogOnReturn());
+    assert.deepEqual(await page.evaluate(() => ({
+      version: currentRecord().assetVersion, revision: currentRecord().candidateRevision, view: state.view,
+      original: [...originalCtx.getImageData(0, 0, 1, 1).data], add: [...addCtx.getImageData(12, 8, 1, 1).data],
+    })), { version: "asset-1", revision: 1, view: { x: 27, y: 38, scale: 2 }, original: [0, 0, 255, 255], add: [0, 0, 255, 255] });
+    assert.equal(manualReads, 1);
+    await page.evaluate(() => { addCtx.fillStyle = "red"; addCtx.fillRect(15, 10, 1, 1); markDraftDirty("add"); });
+    revision = 2; publish();
+    await page.evaluate(() => syncCatalogOnReturn());
+    assert.deepEqual(await page.evaluate(() => ({ version: currentRecord().assetVersion, revision: currentRecord().candidateRevision,
+      add: [...addCtx.getImageData(15, 10, 1, 1).data] })), { version: "asset-1", revision: 1, add: [255, 0, 0, 255] });
+    assert.equal(manualReads, 1, "pending edits cannot be replaced by a return refresh");
+    await page.evaluate(async () => { resetCurrentDraft(); state.draftDirty = false; state.draftLayerDirty.clear(); state.drafts.delete("A"); await syncCatalogOnReturn(); });
+    assert.equal(manualReads, 2, "after discarding the pending edit the next return loads the still-new server revision");
+    assert.deepEqual(await page.evaluate(() => ({ version: currentRecord().assetVersion, revision: currentRecord().candidateRevision,
+      pixel: [...addCtx.getImageData(15, 10, 1, 1).data], view: state.view })),
+    { version: "asset-2", revision: 2, pixel: [0, 0, 0, 0], view: { x: 27, y: 38, scale: 2 } });
+  } finally {
+    await context?.close(); await browser.close(); await closeServer(fixture.server);
+  }
+});
+
+test("return synchronization retains usable editor resources after stale-image and mask-load failures", { timeout: 60000 }, async () => {
+  const fixture = await startFixtureServer(); fixture.setCatalog(catalogue.map((image) => ({ ...image, assetVersion: "revision-0", candidateRevision: 0 })));
+  const browser = await chromium.launch({ headless: true });
+  let context; let page;
+  try {
+    ({ context, page } = await openPage(browser, fixture));
+    let revision = 0; let failure = ""; let failedRequest; let releaseFailure;
+    const pixels = Buffer.from((await page.evaluate(() => {
+      const source = document.createElement("canvas"); source.width = 100; source.height = 80;
+      const paint = source.getContext("2d"); paint.fillStyle = "red"; paint.fillRect(0, 0, 50, 80);
+      paint.fillStyle = "blue"; paint.fillRect(50, 0, 50, 80); return source.toDataURL();
+    })).split(",")[1], "base64");
+    await page.route("**/api/candidates/A", (route) => route.fulfill({ json: { candidateRevision: revision, candidates: [
+      { id: "point", role: "apply", enabled: true, forced: false, labelToken: "boundary", source: "boundary", refinement: null, confidence: 1, color: "#ff3d4d" },
+    ] } }));
+    await page.route(/\/api\/image\/A(?:\?|$)/, async (route) => {
+      if (failure === "single-image") return route.fulfill({ status: 500, json: { error_code: "internal_error" } });
+      if (failure !== "image" && failure !== "superseded") return route.fulfill({ contentType: "image/png", body: pixels });
+      failedRequest();
+      await new Promise((resolve) => { releaseFailure = resolve; });
+      if (failure === "image") await route.fulfill({ status: 409, json: { error_code: "stale_asset" } });
+      else await route.fulfill({ contentType: "image/png", body: pixels });
+    });
+    await page.route("**/api/mask/A/point?*", (route) => failure === "mask"
+      ? route.fulfill({ status: 503, json: { error_code: "internal_error" } }) : route.continue());
+    await page.evaluate(() => { state.mosaicPreviewEnabled = false; });
+    await selectImage(page, "A");
+    await page.evaluate(() => { state.displayMode = "single"; state.mosaicPreviewEnabled = false; state.view = { x: 10, y: 10, scale: 1 }; flushRender(); });
+    for (const target of ["single-image", "image", "mask", "superseded"]) {
+      await page.waitForFunction(() => !state.renderFrame && !state.mosaicWorkerBusy && !state.mosaicPreviewRequested);
+      const previous = await page.evaluate(() => {
+        window.returnBefore = { image: state.currentImage, mask: state.candidateImages.get("point"), draft: state.drafts.get("A") };
+        return { version: imageAssetVersion(currentRecord()), revision: currentRecord().candidateRevision };
+      });
+      revision += 1; failure = target;
+      fixture.setCatalog(catalogue.map((image) => image.id === "A" ? { ...image, assetVersion: `revision-${revision}`, candidateRevision: revision, reviewed: true, flipH: target === "single-image" } : image));
+      const requestStarted = new Promise((resolve) => { failedRequest = resolve; });
+      const refresh = page.evaluate(() => syncCatalogOnReturn());
+      if (target === "image" || target === "superseded") {
+        await requestStarted;
+        await page.waitForFunction((value) => state.candidateBundleCache.has(candidateCacheKey("A", value)), revision);
+        fixture.setCatalog(catalogue.map((image) => image.id === "A" ? { ...image, assetVersion: `revision-${revision}`, candidateRevision: revision, reviewed: true, flipH: true } : image));
+        await page.evaluate(() => syncCatalogOnReturn());
+        releaseFailure();
+      }
+      await refresh;
+      assert.deepEqual(await page.evaluate(() => ({
+        version: imageAssetVersion(currentRecord()), revision: currentRecord().candidateRevision, reviewed: currentRecord().reviewed,
+        flipH: Boolean(currentRecord().flipH),
+        image: state.currentImage === window.returnBefore.image && state.currentImage.width > 0,
+        mask: state.candidateImages.get("point") === window.returnBefore.mask && window.returnBefore.mask.width > 0,
+        draft: state.drafts.get("A") === window.returnBefore.draft, pending: state.pendingImageId,
+      })), { ...previous, reviewed: true, flipH: target !== "mask", image: true, mask: true, draft: true, pending: null });
+      await expect.poll(() => page.evaluate(() => [...ctx.getImageData(Math.round(35 * devicePixelRatio), Math.round(35 * devicePixelRatio), 1, 1).data]))
+        .toEqual(target !== "mask" ? [0, 0, 255, 255] : [255, 0, 0, 255]);
+      failure = "";
+      if (target === "superseded") await expect(page.locator("#errorDialog")).not.toBeVisible();
+      else await page.locator("#errorDialogClose").click();
+      await page.evaluate(() => syncCatalogOnReturn());
+      assert.deepEqual(await page.evaluate(() => ({ version: imageAssetVersion(currentRecord()), revision: currentRecord().candidateRevision,
+        image: state.currentImage.width > 0, mask: state.candidateImages.get("point")?.width > 0 })),
+      { version: `revision-${revision}`, revision, image: true, mask: true });
+    }
   } finally {
     await context?.close(); await browser.close(); await closeServer(fixture.server);
   }
@@ -305,6 +420,7 @@ test("DI-161 DI-164 DI-168 DI-181 DI-183 and DI-185 use the captured visible ord
     assert.deepEqual(matrix.hidden, { visible: ["D"], processable: false, next: null }, "an already-hidden H image remains viewable but is never a processing target or wrapped successor");
 
     const domOrder = await page.evaluate(() => {
+      setViewMode("overview");
       state.overviewFilter = new Set(["reviewed"]); state.overviewFolder = "two"; state.overviewQuery = ""; renderOverview(true);
       state.overviewFilter.clear(); state.overviewFolder = ""; renderOverview(true);
       const cards = [...document.querySelectorAll(".overview-item")];

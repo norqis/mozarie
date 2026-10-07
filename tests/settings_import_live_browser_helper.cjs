@@ -130,10 +130,13 @@ async function drop(page, names, { target = "#gallery", rejectHandle = false, in
           getAsFile() { if (!readable) throw new Error("protected data store"); calls.push(`file:${name}`); return new File(["x"], name); },
           getAsFileSystemHandle() { if (!readable) throw new Error("protected data store"); calls.push(`handle:${name}`); return reject ? Promise.reject(new Error("no handle")) : Promise.resolve(null); },
         });
-        const pending = directFilesFromDrop({ items: [item("one.png", false), item("two.png", true)], files: [] });
-        readable = false;
-        const result = await pending;
-        return { calls, names: result.handleEntries.map((entry) => entry.file.name) };
+        const session = beginImportSession();
+        try {
+          const pending = directFilesFromDrop({ items: [item("one.png", false), item("two.png", true)], files: [] }, session);
+          readable = false;
+          const result = await pending;
+          return { calls, names: result.handleEntries.map((entry) => entry.file.name) };
+        } finally { finishImportSession(session); }
       }), { calls: ["file:one.png", "handle:one.png", "file:two.png", "handle:two.png"], names: ["one.png", "two.png"] });
       assert.equal(await page.evaluate(() => {
         const transfer = new DataTransfer(); transfer.setData("text/plain", "own-drag");

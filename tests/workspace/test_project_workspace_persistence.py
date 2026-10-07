@@ -216,7 +216,7 @@ class ProjectWorkspaceCoverageTests(unittest.TestCase):
             manual = store.manual(first, lambda value: base64.b64encode(value).decode() if value else "")
             self.assertEqual(manual["removedCandidateIds"], ["candidate"])
             self.assertFalse(manual["manualEnabled"])
-            self.assertEqual(store.manual_mask_statuses([first]), {first: (True, 1)})
+            self.assertEqual(store.manual_mask_statuses([first]), {first: (True, 1, 1)})
             exported = store.export_state(first)
             self.assertNotIn("_manual_raw", exported); self.assertIn("mask", exported["candidates"][0]); self.assertIn("add", exported["manual"])
             store.delete_manual([first]); self.assertIsNone(store.manual(first, lambda value: value))
@@ -413,8 +413,10 @@ class ProjectWorkspaceCoverageTests(unittest.TestCase):
             self.assertEqual(store.restore_history(image_id, "redo"), [image_id])
             with self.assertRaisesRegex(ValueError, "direction"):
                 store.restore_history(image_id, "sideways")
+            store.save_manual(image_id, {"add": two, "removedCandidateIds": [], "hasEffectiveMask": True,
+                                         "candidateRevision": store.candidate_revisions([image_id])[image_id]}, lambda value: value)
             group = store.begin_history_group()
-            store.clear_image_workspaces({image_id: 2}, history_group=group)
+            store.clear_image_workspaces({image_id: store.candidate_revisions([image_id])[image_id] + 1}, history_group=group)
             self.assertFalse(store.history_status(image_id)["canUndo"])
             store.finish_history_group(group, failed=True)
             self.assertFalse(store.history_status(image_id)["canUndo"])

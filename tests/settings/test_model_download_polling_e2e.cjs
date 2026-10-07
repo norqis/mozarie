@@ -1,0 +1,231 @@
+"use strict";
+const assert = require("node:assert/strict");
+const test = require("node:test");
+const { chromium } = require("playwright");
+const { startFixtureServer, closeServer } = require("../test_import_picker_e2e.cjs");
+
+async function withDownloadPage(run) {
+  const fixture = await startFixtureServer();
+  const browser = await chromium.launch();
+  const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  try {
+    await context.addInitScript(() => {
+      const nativeSet = window.setInterval; const nativeClear = window.clearInterval;
+      const timers = new Map(); let id = -1;
+      window.setInterval = (callback, delay, ...args) => {
+        if (delay !== 350) return nativeSet(callback, delay, ...args);
+        timers.set(id, () => callback(...args)); return id--;
+      };
+      window.clearInterval = (timer) => timers.delete(timer) || nativeClear(timer);
+      window.tickModelPoll = () => { for (const callback of [...timers.values()]) callback(); };
+      window.modelPollCount = () => timers.size;
+    });
+    const page = await context.newPage();
+    page.setDefaultTimeout(10000);
+    await page.goto(fixture.url, { waitUntil: "domcontentloaded" });
+    await page.waitForFunction(() => state.settings && state.images.length === 2);
+    await page.locator("#settingsButton").click();
+    await page.locator("#settingsTabModels").click();
+    await page.locator("#settingsPrecisionCard label.model-switch").click();
+    await page.route("**/api/model-download/start", (route) => reply(route, "running"));
+    await page.route("**/api/model-download/cancel", (route) => reply(route, "cancelled"));
+    await page.locator('[data-model-download="sam"]').click();
+    await run(page);
+  } finally {
+    await context.close(); await browser.close(); await closeServer(fixture.server);
+  }
+}
+
+const reply = (route, state) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ state, received: state === "complete" ? 10 : 3, expected: 10 }) });
+async function holdStatus(page, fail = false) {
+  let release; let reached;
+  const gate = new Promise((resolve) => { release = resolve; });
+  const started = new Promise((resolve) => { reached = resolve; });
+  let requests = 0;
+  await page.route("**/api/model-download", async (route) => {
+    requests++; reached(); await gate;
+    if (fail) await route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ code: "internal_error", error: "temporary failure" }) });
+    else await reply(route, "running");
+  });
+  return { release, started, requests: () => requests };
+}
+async function begin(page) {
+  await page.locator("#modelDownloadStart").click();
+  await page.waitForFunction(() => window.modelPollCount() === 1);
+}
+async function terminal(page, state) {
+  assert.equal(await page.locator("#modelDownloadStatus").textContent(), await page.evaluate((value) => t(`modelDownload.${value}`), state));
+  assert.equal(await page.locator("#modelDownloadClose").isEnabled(), true);
+  assert.equal(await page.locator("#modelDownloadCancel").isVisible(), false);
+  assert.equal(await page.evaluate(() => window.modelPollCount()), 0);
+  assert.equal(await page.locator("#errorDialog").isVisible(), false);
+}
+
+test("model progress callers share one request until it completes", { timeout: 30000 }, async () => {
+  await withDownloadPage(async (page) => {
+    let release; let reached;
+    const gate = new Promise((resolve) => { release = resolve; });
+    const started = new Promise((resolve) => { reached = resolve; });
+    let requests = 0;
+    await page.route("**/api/model-download", async (route) => { requests++; reached(); await gate; await reply(route, "complete"); });
+    try {
+      await begin(page);
+      await page.evaluate(() => {
+        window.firstPoll = refreshModelDownload();
+        window.secondPoll = refreshModelDownload();
+        window.tickModelPoll(); window.tickModelPoll();
+      });
+      await started;
+      release();
+      await page.evaluate(() => Promise.all([window.firstPoll, window.secondPoll]));
+      assert.equal(requests, 1, "interval ticks cannot pile up status requests");
+      await terminal(page, "complete");
+    } finally { release(); }
+  });
+});
+
+function cancelledStatusResponse(outcome) {
+  return async () => {
+    await withDownloadPage(async (page) => {
+      const held = await holdStatus(page, outcome === "failure");
+      try {
+        await begin(page);
+        await page.evaluate(() => { window.pendingPoll = refreshModelDownload(); });
+        await held.started;
+        await page.locator("#modelDownloadCancel").click();
+        await page.waitForFunction(() => !document.querySelector("#modelDownloadClose").disabled);
+        held.release(); await page.evaluate(() => window.pendingPoll);
+        await terminal(page, "cancelled");
+        await page.locator("#modelDownloadClose").click();
+        await page.locator('[data-model-download="sam"]').click();
+        assert.equal(await page.locator("#modelDownloadStart").isVisible(), true, "a new download can be started after cancellation");
+      } finally { held.release(); }
+    });
+  };
+}
+test("cancelled download ignores an older running status response", { timeout: 30000 }, cancelledStatusResponse("running"));
+test("cancelled download ignores an older failure status response", { timeout: 30000 }, cancelledStatusResponse("failure"));
+
+test("a previous progress response cannot replace a new completed download", { timeout: 30000 }, async () => {
+  await withDownloadPage(async (page) => {
+    const held = await holdStatus(page);
+    try {
+      await begin(page);
+      await page.evaluate(() => { window.pendingPoll = refreshModelDownload(); });
+      await held.started;
+      await page.locator("#modelDownloadCancel").click();
+      await page.waitForFunction(() => !document.querySelector("#modelDownloadClose").disabled);
+      await page.locator("#modelDownloadClose").click();
+      await page.locator('[data-model-download="sam"]').click();
+      await page.route("**/api/model-download/start", (route) => reply(route, "complete"));
+      await page.locator("#modelDownloadStart").click();
+      await page.waitForFunction(() => document.querySelector("#modelDownloadStatus").textContent === t("modelDownload.complete"));
+      held.release(); await page.evaluate(() => window.pendingPoll);
+      await terminal(page, "complete");
+    } finally { held.release(); }
+  });
+});
+
+test("a pending download start keeps close and Escape from losing progress", { timeout: 30000 }, async () => {
+  await withDownloadPage(async (page) => {
+    let release; let reached;
+    const gate = new Promise((resolve) => { release = resolve; });
+    const started = new Promise((resolve) => { reached = resolve; });
+    await page.route("**/api/model-download/start", async (route) => { reached(); await gate; await reply(route, "running"); });
+    try {
+      await page.locator("#modelDownloadStart").click(); await started;
+      assert.equal(await page.locator("#modelDownloadClose").isDisabled(), true);
+      await page.keyboard.press("Escape");
+      assert.equal(await page.locator("#modelDownloadDialog").isVisible(), true);
+      release();
+      await page.waitForFunction(() => window.modelPollCount() === 1);
+      assert.equal(await page.locator("#modelDownloadCancel").isVisible(), true);
+      await page.locator("#modelDownloadCancel").click();
+      await page.waitForFunction(() => !document.querySelector("#modelDownloadClose").disabled);
+      await terminal(page, "cancelled");
+    } finally { release(); }
+  });
+});
+
+function failedDownload(failure) {
+  return async () => {
+    await withDownloadPage(async (page) => {
+      const failedReply = (route) => route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error_code: "internal_error" }) });
+      await page.route("**/api/model-download/start", failure === "start" ? failedReply : (route) => route.fulfill({
+        status: 400, contentType: "application/json", body: JSON.stringify({ error_code: "operation_in_progress" }),
+      }));
+      if (failure === "reconnect") await page.route("**/api/model-download", failedReply);
+      await page.locator("#modelDownloadStart").click();
+      await page.locator("#errorDialog").waitFor({ state: "visible" });
+      await page.locator("#errorDialog button").last().click();
+      assert.equal(await page.locator("#modelDownloadClose").isEnabled(), true);
+      assert.equal(await page.locator("#modelDownloadStart").isVisible(), true);
+      assert.equal(await page.locator("#modelDownloadSecurity").isVisible(), true);
+      assert.equal(await page.evaluate(() => window.modelPollCount()), 0);
+      await page.keyboard.press("Escape");
+      assert.equal(await page.locator("#modelDownloadDialog").isVisible(), false);
+      await page.locator('[data-model-download="sam"]').click();
+      await page.route("**/api/model-download/start", (route) => reply(route, "complete"));
+      await page.locator("#modelDownloadStart").click();
+      await page.waitForFunction(() => document.querySelector("#modelDownloadStatus").textContent === t("modelDownload.complete"));
+      await terminal(page, "complete");
+    });
+  };
+}
+test("a failed download start restores close and allows retry", { timeout: 30000 }, failedDownload("start"));
+test("a failed download reconnect restores close and allows retry", { timeout: 30000 }, failedDownload("reconnect"));
+
+test("a current progress error restores close and stops polling", { timeout: 30000 }, async () => {
+  await withDownloadPage(async (page) => {
+    const held = await holdStatus(page, true);
+    try {
+      await begin(page);
+      await page.evaluate(() => { window.pendingPoll = refreshModelDownload(); });
+      await held.started; held.release(); await page.evaluate(() => window.pendingPoll);
+      await page.locator("#errorDialog").waitFor({ state: "visible" });
+      await page.locator("#errorDialog button").last().click();
+      assert.equal(await page.locator("#modelDownloadClose").isEnabled(), true);
+      assert.equal(await page.locator("#modelDownloadCancel").isVisible(), false);
+      assert.equal(await page.evaluate(() => window.modelPollCount()), 0);
+    } finally { held.release(); }
+  });
+});
+
+function pendingCancellation(outcome) {
+  return async () => {
+    await withDownloadPage(async (page) => {
+      let releaseStatus; let statusReached; let releaseCancel; let cancelReached;
+      const statusGate = new Promise((resolve) => { releaseStatus = resolve; });
+      const statusStarted = new Promise((resolve) => { statusReached = resolve; });
+      const cancelGate = new Promise((resolve) => { releaseCancel = resolve; });
+      const cancelStarted = new Promise((resolve) => { cancelReached = resolve; });
+      let requests = 0;
+      await page.route("**/api/model-download", async (route) => { requests++; statusReached(); await statusGate; await reply(route, "cancelled"); });
+      await page.route("**/api/model-download/cancel", async (route) => {
+        cancelReached(); await cancelGate;
+        if (outcome === "failure") return route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ code: "internal_error", error: "temporary failure" }) });
+        await reply(route, "cancelling");
+      });
+      try {
+        await begin(page);
+        await page.evaluate(() => { window.earlierPoll = refreshModelDownload(); });
+        await statusStarted;
+        await page.locator("#modelDownloadCancel").click(); await cancelStarted;
+        releaseStatus(); await page.evaluate(() => window.earlierPoll);
+        assert.equal(await page.evaluate(() => window.modelPollCount()), 1, "an older terminal GET cannot stop polling before cancellation settles");
+        await page.evaluate(() => { window.duringCancel = refreshModelDownload(); window.tickModelPoll(); });
+        releaseCancel(); await page.evaluate(() => window.duringCancel);
+        assert.equal(requests, 1, "progress requests wait for the cancellation result");
+        if (outcome === "failure") {
+          await page.locator("#errorDialog").waitFor({ state: "visible" });
+          await page.locator("#errorDialog button").last().click();
+        }
+        await page.evaluate(() => { window.tickModelPoll(); });
+        await page.waitForFunction(() => document.querySelector("#modelDownloadStatus").textContent === t("modelDownload.cancelled"));
+        await terminal(page, "cancelled");
+      } finally { releaseStatus(); releaseCancel(); }
+    });
+  };
+}
+test("progress waits for a pending cancelling cancellation before checking completion", { timeout: 30000 }, pendingCancellation("cancelling"));
+test("progress waits for a pending failure cancellation before checking completion", { timeout: 30000 }, pendingCancellation("failure"));

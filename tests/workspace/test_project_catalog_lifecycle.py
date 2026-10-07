@@ -371,7 +371,7 @@ class ProjectCatalogCoverageTests(unittest.TestCase):
             result = state.remove_images_from_catalog([target])
         self.assertEqual(result["removedImageIds"], [target])
         self.assertEqual([image["id"] for image in result["images"]], [remaining])
-        self.assertEqual(result["catalogGeneration"], generation + 1)
+        self.assertEqual(result["catalogGeneration"], generation)
         self.assertEqual(state.order, [remaining])
         self.assertFalse(state.workspace_store.has_image(target))
         self.assertTrue(state.workspace_store.has_image(remaining))
@@ -571,10 +571,12 @@ class ProjectCatalogCoverageTests(unittest.TestCase):
 
         def semantic_export(image_id: str) -> dict:
             exported = state.workspace_store.export_state(image_id)
+            exported.pop("revision")
             for candidate in exported["candidates"]:
                 raw = base64.b64decode(candidate["mask"].split(",", 1)[-1]); image = Image.open(io.BytesIO(raw)).convert("L")
                 candidate["mask"] = (image.size, image.tobytes())
             if exported["manual"]:
+                exported["manual"].pop("revision")
                 for key in ("add", "exclusion", "erase"):
                     value = exported["manual"].get(key)
                     if not value: continue
@@ -586,9 +588,13 @@ class ProjectCatalogCoverageTests(unittest.TestCase):
             before = semantic_export(target); other_before = semantic_export(other)
             change(); after = semantic_export(target)
             self.assertNotEqual(after, before)
+            revision = state._candidate_revision(target)
             state.restore_project_history(target, "undo"); self.assertEqual(semantic_export(target), before)
+            self.assertGreater(state._candidate_revision(target), revision)
+            revision = state._candidate_revision(target)
             self.assertEqual(semantic_export(other), other_before)
             state.restore_project_history(target, "redo"); self.assertEqual(semantic_export(target), after)
+            self.assertGreater(state._candidate_revision(target), revision)
             self.assertEqual(semantic_export(other), other_before)
 
         assert_round_trip(lambda: state.set_candidate_state(target, "target-candidate", {"enabled": False}))

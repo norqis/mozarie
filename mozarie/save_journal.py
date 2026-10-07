@@ -113,7 +113,7 @@ class SaveJournal:
     def quarantine(self, token: str, source: Path, path: Path, fingerprint: tuple[int, int], identity: str | None) -> None:
         """Persist the source ownership proof before it is renamed away."""
         with self._lock, self._connection() as db:
-            db.execute("UPDATE saves SET source_path=?,quarantine=?,quarantine_mtime=?,quarantine_size=?,quarantine_identity=?,updated_at=? WHERE token=?",
+            db.execute("UPDATE saves SET state='source_quarantined',source_path=?,quarantine=?,quarantine_mtime=?,quarantine_size=?,quarantine_identity=?,updated_at=? WHERE token=?",
                 (str(source), str(path), fingerprint[0], fingerprint[1], identity, time.time_ns(), token))
 
     def replacement_backup(
@@ -425,7 +425,7 @@ class SaveJournal:
         """Delete only the file currently held by its verified Windows handle."""
         return os.name == "nt" and cls._delete_windows_owned(target, identity)
 
-    def quarantine_source(self, token: str, source: Path, quarantine: Path) -> bool:
+    def quarantine_source(self, token: str, source: Path, quarantine: Path, fingerprint: tuple[int, int]) -> bool:
         """Atomically move a verified Windows source into its journaled quarantine."""
         if os.name != "nt":
             return False
@@ -436,20 +436,16 @@ class SaveJournal:
         create.argtypes = [wintypes.LPCWSTR, wintypes.DWORD, wintypes.DWORD, ctypes.c_void_p, wintypes.DWORD, wintypes.DWORD, wintypes.HANDLE]
         create.restype = wintypes.HANDLE
         close = kernel32.CloseHandle; close.argtypes = [wintypes.HANDLE]; close.restype = wintypes.BOOL
-        handle = create(str(source), 0x10080, 0x3, None, 3, 0x80, None)
+        # Hold the rendered source unchanged through ownership recording and rename.
+        handle = create(str(source), 0x10080, 0x1, None, 3, 0x80, None)
         if handle == wintypes.HANDLE(-1).value:
             return False
         try:
             identity = self._windows_handle_identity(handle)
-            if identity is None:
+            if identity is None or self._windows_handle_fingerprint(handle) != fingerprint:
                 return False
-            stat = source.stat()
-            self.quarantine(token, source, quarantine, (stat.st_mtime_ns, stat.st_size), identity)
-            if not self._rename_windows_handle(handle, quarantine, identity):
-                return False
-            stat = quarantine.stat()
-            self.quarantine(token, source, quarantine, (stat.st_mtime_ns, stat.st_size), identity)
-            return True
+            self.quarantine(token, source, quarantine, fingerprint, identity)
+            return self._rename_windows_handle(handle, quarantine, identity)
         finally:
             close(handle)
 

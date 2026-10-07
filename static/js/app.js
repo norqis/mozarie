@@ -88,33 +88,57 @@ let pendingBrowserProjectSources = [];
 const browserSourceRestoreBusy = new Set();
 let browserSourceRestoreGeneration = 0;
 function clearPendingBrowserProjectSources() { browserSourceRestoreGeneration += 1; pendingBrowserProjectSources = []; browserSourceRestoreBusy.clear(); }
+function canonicalRememberedProjectSources(remembered, catalogSources, sourceImages) {
+  const byId = new Map(catalogSources.map((source) => [source.id, source]));
+  const aliases = new Map();
+  for (const source of catalogSources) for (const alias of [source.identity, source.identity?.replace(/^browser:/, "")]) {
+    if (!alias) continue;
+    const ids = aliases.get(alias) || new Set(); ids.add(source.id); aliases.set(alias, ids);
+  }
+  const imagesById = new Map(sourceImages.map((image) => [image.id, image]));
+  const canonicalIds = (row, kind) => byId.get(row.sourceId)?.kind === kind ? [row.sourceId]
+    : [...(aliases.get(row.sourceId) || [])].filter((id) => byId.get(id)?.kind === kind);
+  const files = new Map();
+  for (const row of remembered.files) {
+    const image = imagesById.get(row.imageId);
+    const matched = image?.relativePath === row.relativePath && byId.get(image?.sourceId)?.kind === "browser-files";
+    const ids = matched ? [image.sourceId] : canonicalIds(row, "browser-files");
+    for (const sourceId of ids) {
+      const priority = (matched ? 4 : 0) + (sourceId === row.sourceId ? 2 : 1);
+      const key = `${sourceId}\0${row.relativePath}`;
+      if (!files.has(key) || files.get(key).priority < priority) files.set(key, { priority, source: { ...row, sourceId, rememberedSourceId: row.sourceId } });
+    }
+  }
+  const directories = new Map();
+  for (const row of remembered.directories) for (const sourceId of canonicalIds(row, "browser-directory")) {
+    if (!directories.has(sourceId) || row.sourceId === sourceId) directories.set(sourceId, { ...row, sourceId, rememberedSourceId: row.sourceId });
+  }
+  return { files: [...files.values()].map((entry) => entry.source), directories: [...directories.values()] };
+}
 async function restoreBrowserProjectSourcesForCurrentCatalog(catalogSources = []) {
   const projectId = state.project?.id; const epoch = state.catalogEpoch; const restoreGeneration = ++browserSourceRestoreGeneration;
   if (!projectId) return;
+  const catalogGeneration = state.serverCatalogGeneration;
+  const current = () => restoreGeneration === browserSourceRestoreGeneration && isCurrentCatalogEpoch(epoch)
+    && state.project?.id === projectId && state.serverCatalogGeneration === catalogGeneration;
+  // Saves update access objects in place while permission queries are pending.
+  const initialAccess = new Map([...state.sourceAccess].map(([id, access]) => [id, { ...access }]));
+  const unchangedAccess = (before, live) => {
+    if (!before || !live) return before === live;
+    const keys = Object.keys(before);
+    return keys.length === Object.keys(live).length && keys.every((key) => Object.hasOwn(live, key) && before[key] === live[key]);
+  };
   let remembered;
   try { remembered = await rememberedProjectSources(projectId); }
   catch { return; }
-  const { files, directories } = remembered;
-  if (!isCurrentCatalogEpoch(epoch) || state.project?.id !== projectId) return;
+  if (!current()) return;
+  const { files, directories } = canonicalRememberedProjectSources(remembered, catalogSources, state.images);
   const stagedAccess = new Map();
   const pending = [];
   const imagesById = new Map(state.images.map((image) => [image.id, image]));
-  const directorySourceAliases = new Map();
-  const directorySourceIds = new Set();
+  const imagesBySourcePath = new Map(state.images.map((image) => [`${image.sourceId}\0${image.relativePath}`, image]));
+  const directorySourceIds = new Set(directories.map((source) => source.sourceId));
   const imagesByDirectorySource = new Map();
-  const addDirectorySourceAlias = (alias, sourceId) => {
-    const sourceIds = directorySourceAliases.get(alias) || new Set();
-    sourceIds.add(sourceId); directorySourceAliases.set(alias, sourceIds);
-  };
-  for (const source of catalogSources) {
-    if (source.kind !== "browser-directory") continue;
-    directorySourceIds.add(source.id);
-    addDirectorySourceAlias(source.id, source.id);
-    if (source.identity) {
-      addDirectorySourceAlias(source.identity, source.id);
-      if (source.identity.startsWith("browser:")) addDirectorySourceAlias(source.identity.slice("browser:".length), source.id);
-    }
-  }
   for (const image of state.images) {
     if (!directorySourceIds.has(image.sourceId)) continue;
     const relativePath = image.relativePath;
@@ -123,39 +147,52 @@ async function restoreBrowserProjectSourcesForCurrentCatalog(catalogSources = []
     images.push(image); imagesByPath.set(relativePath, images); imagesByDirectorySource.set(image.sourceId, imagesByPath);
   }
   for (const source of files) {
-    const image = imagesById.get(source.imageId);
-    if (await ensureProjectSourcePermission(source.handle)) {
-      if (image) stagedAccess.set(source.imageId, {
-        fileHandle: source.handle, parentHandle: source.parentHandle || null, sourceId: source.sourceId, clientKey: source.clientKey, relativePath: source.relativePath,
+    const image = source.imageId ? imagesById.get(source.imageId)
+      : imagesBySourcePath.get(`${source.sourceId}\0${source.relativePath}`);
+    if (!image || image.relativePath !== source.relativePath) continue;
+    const permitted = await ensureProjectSourcePermission(source.handle);
+    if (!current()) return;
+    if (permitted) {
+      stagedAccess.set(image.id, {
+        fileHandle: source.handle, parentHandle: source.parentHandle || null, sourceId: source.sourceId, rememberedSourceId: source.rememberedSourceId, clientKey: source.clientKey, relativePath: source.relativePath,
         sourceKind: "browser-files", size: image.sizeBytes, lastModified: Math.round(Number(image.mtimeNs) / 1000000),
       });
       continue;
     }
-    pending.push({ ...source, projectId, kind: "file", key: `file:${source.sourceId}:${source.clientKey || source.relativePath}` });
+    pending.push({ ...source, imageId: image.id, projectId, kind: "file", key: `file:${source.sourceId}:${source.clientKey || source.relativePath}` });
   }
   for (const source of directories) {
-    const canonicalSourceIds = directorySourceAliases.get(source.sourceId);
-    if (!canonicalSourceIds?.size) continue;
-    if (!await ensureProjectSourcePermission(source.handle)) { pending.push({ ...source, projectId, kind: "directory", key: `directory:${source.sourceId}` }); continue; }
+    const permitted = await ensureProjectSourcePermission(source.handle);
+    if (!current()) return;
+    if (!permitted) { pending.push({ ...source, projectId, kind: "directory", key: `directory:${source.sourceId}` }); continue; }
     async function collect(handle, parent = "") {
       for await (const child of handle.values()) {
+        if (!current()) return false;
         const relativePath = parent ? `${parent}/${child.name}` : child.name;
         if (child.kind === "file") {
-          for (const sourceId of canonicalSourceIds) for (const image of imagesByDirectorySource.get(sourceId)?.get(relativePath) || []) {
+          for (const image of imagesByDirectorySource.get(source.sourceId)?.get(relativePath) || []) {
             stagedAccess.set(image.id, {
-              fileHandle: child, parentHandle: handle, rootHandle: source.handle, name: child.name, sourceId: image.sourceId, relativePath,
+              fileHandle: child, parentHandle: handle, rootHandle: source.handle, name: child.name, sourceId: image.sourceId, rememberedSourceId: source.rememberedSourceId, relativePath,
               sourceKind: "browser-directory", size: image.sizeBytes, lastModified: Math.round(Number(image.mtimeNs) / 1000000),
             });
           }
-        } else await collect(child, relativePath);
+        } else if (!await collect(child, relativePath)) return false;
       }
+      return current();
     }
-    try { await collect(source.handle); }
+    try { if (!await collect(source.handle)) return; }
     catch { pending.push({ ...source, projectId, kind: "directory", key: `directory:${source.sourceId}` }); }
   }
-  if (restoreGeneration === browserSourceRestoreGeneration && isCurrentCatalogEpoch(epoch) && state.project?.id === projectId) {
-    state.sourceAccess = stagedAccess;
-    pendingBrowserProjectSources = pending; renderProjectCurrent();
+  if (current()) {
+    const restoredAccess = new Map();
+    for (const image of state.images) {
+      const live = state.sourceAccess.get(image.id);
+      const access = unchangedAccess(initialAccess.get(image.id), live) ? stagedAccess.get(image.id) : live;
+      if (access && access.sourceId === image.sourceId && access.relativePath === image.relativePath) restoredAccess.set(image.id, access);
+    }
+    state.sourceAccess = restoredAccess;
+    pendingBrowserProjectSources = pending.filter((source) => source.kind !== "file" || !restoredAccess.has(source.imageId));
+    renderProjectCurrent();
   }
 }
 
@@ -281,7 +318,7 @@ async function restoreBrowserProjectSource(source) {
     // Call requestPermission directly from this click handler. A project open
     // has already awaited IndexedDB and cannot retain user activation.
     if (!await requestProjectSourcePermission(source.handle, source.kind === "directory" ? "readwrite" : "read")) return;
-    if (source.kind === "directory") await importProjectDirectoryHandle(source.handle, state.project.id, source.sourceId, "restore");
+    if (source.kind === "directory") await importProjectDirectoryHandle(source.handle, state.project.id, source.sourceId, "restore", source.rememberedSourceId);
     else if ((await importProjectFileHandles([source], state.project.id)).length) throw codedError("project_source_unavailable");
     pendingBrowserProjectSources = pendingBrowserProjectSources.filter((item) => item.key !== source.key || item.projectId !== source.projectId);
     await showSourceMismatches();
@@ -471,12 +508,12 @@ async function openProject(project, resume = false) {
       let files = [];
       let directories = [];
       if (data.needsSource) {
-        ({ files, directories } = await rememberedProjectSources(project.id));
+        ({ files, directories } = canonicalRememberedProjectSources(await rememberedProjectSources(project.id), data.sources || [], data.sourceImages || data.images || []));
         if (!isCurrentCatalogEpoch(epoch)) return;
         for (const source of directories) {
           if (!await ensureProjectSourcePermission(source.handle)) { restoreFailures.push({ ...source, projectId: project.id, kind: "directory", key: `directory:${source.sourceId}` }); continue; }
           try {
-            await importProjectDirectoryHandle(source.handle, project.id, source.sourceId, "restore");
+            await importProjectDirectoryHandle(source.handle, project.id, source.sourceId, "restore", source.rememberedSourceId);
           } catch (error) { restoreFailures.push({ ...source, projectId: project.id, kind: "directory", key: `directory:${source.sourceId}` }); }
           if (!isCurrentCatalogEpoch(epoch)) return;
         }
@@ -850,7 +887,7 @@ function bindEvents() {
   $("#modelDownloadStart").addEventListener("click", () => { void beginModelDownload(); });
   $("#modelDownloadCopy").addEventListener("click", () => { void copyCommand("#modelDownloadCommand", "#modelDownloadCopyResult"); });
   $("#modelDownloadClose").addEventListener("click", () => $("#modelDownloadDialog").close());
-  $("#modelDownloadDialog").addEventListener("cancel", (event) => { if (modelDownloadPoll) event.preventDefault(); else $("#modelDownloadDialog").close(); });
+  $("#modelDownloadDialog").addEventListener("cancel", (event) => { if ($("#modelDownloadClose").disabled) event.preventDefault(); else $("#modelDownloadDialog").close(); });
   $("#settingsProvider").addEventListener("change", syncProviderSelection);
   document.querySelectorAll('[data-settings-panel="models"] input, [data-settings-panel="models"] select').forEach((control) => {
     control.addEventListener("input", markModelStatusDirty);
@@ -1503,17 +1540,23 @@ async function initialise() {
   $("#sourceDeleteResume").addEventListener("click", () => { void resumePendingSourceDeletesFromUser().catch(showUserError); });
   updateBrushSize($("#brushSize").value); resizeRenderCanvas(); updateHistoryButtons(); updateNavigationControls(); updateActionButtons();
   try {
-    const data = catalogResponse(await api("/api/images"));
-    $("#folderPath").value = data.root || "";
-    resetCatalog(data.images || [], data.root || "");
-    applyProjectSnapshot(data);
-    if (typeof reconcilePendingBrowserSaves === "function") await reconcilePendingBrowserSaves();
-    state.missingNativeSources = typeof missingNativeSources === "function" ? missingNativeSources(data.sources) : [];
-    if (typeof restoreBrowserProjectSourcesForCurrentCatalog === "function") void restoreBrowserProjectSourcesForCurrentCatalog(data.sources).catch(() => {});
-    if (typeof resumePendingSourceDeletes === "function") void resumePendingSourceDeletes().catch(() => {});
-    if (data.images.length) {
-      setStatusKey("status.imagesLoaded", { count: state.images.length });
+    const initialCatalogEpoch = state.catalogEpoch;
+    const data = await api("/api/images");
+    if (isCurrentCatalogEpoch(initialCatalogEpoch)) {
+      catalogResponse(data);
+      $("#folderPath").value = data.root || "";
+      resetCatalog(data.images || [], data.root || "");
+      applyProjectSnapshot(data);
     }
+    const savesRecovered = typeof reconcilePendingBrowserSaves !== "function" || await reconcilePendingBrowserSaves();
+    if (isCurrentCatalogEpoch(initialCatalogEpoch)) {
+      state.missingNativeSources = typeof missingNativeSources === "function" ? missingNativeSources(data.sources) : [];
+      if (typeof restoreBrowserProjectSourcesForCurrentCatalog === "function") void restoreBrowserProjectSourcesForCurrentCatalog(data.sources).catch(() => {});
+      if (data.images.length && savesRecovered) {
+        setStatusKey("status.imagesLoaded", { count: state.images.length });
+      }
+    }
+    if (typeof resumePendingSourceDeletes === "function") void resumePendingSourceDeletes().catch(() => {});
     if (typeof flushPendingBrowserSaveAcks === "function") void flushPendingBrowserSaveAcks();
   } catch (error) { showUserError(error); }
   void api("/api/projects?sort=updated_desc")

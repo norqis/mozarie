@@ -18,6 +18,7 @@ from PIL import Image
 import mozarie.http as http_module
 import mozarie.state as state_module
 from mozarie.domain import Candidate
+from mozarie.core import CandidateRole
 from mozarie.http import MosaicHandler
 from mozarie.state import StudioState
 
@@ -134,6 +135,296 @@ class LiveEditorGestureBrowserTests(unittest.TestCase):
 
     def test_anonymous_compact_draft_keeps_layers_through_edit_undo_redo_and_reload(self) -> None:
         self._check_compact_draft_reload(named=False)
+
+    def _check_rapid_stroke_history(self, mode: str) -> None:
+        helper = Path(__file__).with_name("editor") / "rapid_stroke_history_live_browser_helper.cjs"
+        result = subprocess.run(
+            ["node", str(helper), self.origin, mode], cwd=Path(__file__).resolve().parents[1],
+            env={**os.environ, "PYTHONUTF8": "1"}, text=True, encoding="utf-8", errors="replace",
+            capture_output=True, timeout=90, check=False,
+        )
+        self.assertEqual(result.returncode, 0, f"rapid stroke history {mode} failed\n{result.stdout}\n{result.stderr}")
+        self.assertEqual(self.source_path.read_bytes(), self.source_bytes)
+
+    def test_rapid_strokes_keep_separate_undo_steps_after_reopen(self) -> None:
+        self._check_rapid_stroke_history("rapid")
+
+    def _check_role_toggle_history(self, mode: str) -> None:
+        image_id = next(iter(self.state.images))
+        if mode == "boundary-pending":
+            from tests.detection.test_candidate_publication import BoundaryPredictor
+            self.state.sam_predictor = BoundaryPredictor()
+            self.state.settings["models"].update({"provider": "cpu", "hand_detection_enabled": False, "hand_segmentation_enabled": False})
+            self.state.settings["detection"]["fluid_exclusion_enabled"] = False
+        if mode in {"exclude", "forced", "manual"}:
+            candidates = list(self.state.candidates[image_id]) if mode in {"exclude", "forced"} else []
+            if mode in {"exclude", "forced"}:
+                candidates.append(Candidate("excluded", "penis", .9, candidates[0].mask_path,
+                                            role=CandidateRole.EXCLUDE, forced=True))
+            with self.state.image_io_lock(image_id), self.state.lock:
+                self.state._commit_candidate_snapshot(image_id, candidates, replace=True)
+        helper = Path(__file__).with_name("editor") / "role_toggle_history_live_browser_helper.cjs"
+        result = subprocess.run(
+            ["node", str(helper), self.origin, mode], cwd=Path(__file__).resolve().parents[1],
+            text=True, encoding="utf-8", errors="replace", capture_output=True, timeout=90,
+        )
+        self.assertEqual(result.returncode, 0, f"role toggle {mode} failed\n{result.stdout}\n{result.stderr}")
+        self.assertEqual(self.source_path.read_bytes(), self.source_bytes)
+
+    def test_mixed_apply_role_toggle_is_one_durable_history_operation(self) -> None:
+        self._check_role_toggle_history("apply")
+
+    def test_mixed_exclude_role_toggle_restores_exclusion_and_erase_together(self) -> None:
+        self._check_role_toggle_history("exclude")
+
+    def test_individual_candidate_toggle_does_not_add_empty_manual_history(self) -> None:
+        self._check_role_toggle_history("individual")
+
+    def test_individual_candidate_forced_toggle_does_not_add_empty_manual_history(self) -> None:
+        self._check_role_toggle_history("forced")
+
+    def test_individual_candidate_toggle_waits_for_prior_stroke_history(self) -> None:
+        self._check_role_toggle_history("individual-pending")
+
+    def test_single_candidate_padding_waits_for_prior_stroke_history(self) -> None:
+        self._check_role_toggle_history("single-padding-pending")
+
+    def test_batch_candidate_padding_waits_for_prior_stroke_history(self) -> None:
+        self._check_role_toggle_history("batch-padding-pending")
+
+    def test_boundary_candidate_addition_waits_for_prior_stroke_history(self) -> None:
+        self._check_role_toggle_history("boundary-pending")
+
+    def test_manual_only_role_toggle_keeps_one_history_operation(self) -> None:
+        self._check_role_toggle_history("manual")
+
+    def test_candidate_only_role_toggle_keeps_one_history_operation(self) -> None:
+        self._check_role_toggle_history("candidate")
+
+    def test_role_toggle_waits_for_pending_stroke_without_merging_its_history(self) -> None:
+        self._check_role_toggle_history("pending")
+
+    def test_failed_role_toggle_keeps_both_states_and_allows_retry(self) -> None:
+        self._check_role_toggle_history("failure")
+
+    def test_slow_encoder_does_not_merge_subsequent_stroke_history(self) -> None:
+        self._check_rapid_stroke_history("encoder")
+
+    def test_pending_upload_does_not_merge_subsequent_stroke_history(self) -> None:
+        self._check_rapid_stroke_history("upload")
+
+    def _check_review_history_order(self, mode: str) -> None:
+        shutil.copy2(self.source_path, self.source_dir / "other.png")
+        if mode == "anonymous":
+            self.state.close_project()
+        self.state.set_root(str(self.source_dir))
+        if mode == "context-clear":
+            image_id = next(image_id for image_id, image in self.state.images.items() if image.path.name == "gesture.png")
+            self.state.set_image_flags(image_id, {"reviewed": True})
+        helper = Path(__file__).with_name("editor") / "review_history_order_live_browser_helper.cjs"
+        result = subprocess.run(
+            ["node", str(helper), self.origin, mode], cwd=Path(__file__).resolve().parents[1],
+            text=True, encoding="utf-8", errors="replace", capture_output=True, timeout=90,
+        )
+        self.assertEqual(result.returncode, 0, f"review history {mode} failed\n{result.stdout}\n{result.stderr}")
+        self.assertEqual(self.source_path.read_bytes(), self.source_bytes)
+
+    def test_review_and_next_waits_for_prior_stroke_encoding(self) -> None:
+        self._check_review_history_order("next")
+
+    def test_anonymous_review_and_next_keeps_stroke_history_order(self) -> None:
+        self._check_review_history_order("anonymous")
+
+    def test_context_review_waits_for_prior_stroke_encoding(self) -> None:
+        self._check_review_history_order("context")
+
+    def test_context_unreview_keeps_prior_stroke_history_order(self) -> None:
+        self._check_review_history_order("context-clear")
+
+    def test_failed_stroke_prevents_review_navigation_and_allows_retry(self) -> None:
+        self._check_review_history_order("manual-failure")
+
+    def test_failed_review_keeps_prior_stroke_and_allows_retry(self) -> None:
+        self._check_review_history_order("context-failure")
+
+    def _check_group_history_pending_draft(self, direction: str, outcome: str) -> None:
+        shutil.copy2(self.source_path, self.source_dir / "other.png")
+        self.state.set_root(str(self.source_dir))
+        self.state.set_image_flags_bulk({"imageIds": list(self.state.images), "reviewed": True})
+        if direction == "redo":
+            self.state.restore_project_history(next(iter(self.state.images)), "undo")
+        helper = Path(__file__).with_name("editor") / "group_history_pending_draft_live_browser_helper.cjs"
+        result = subprocess.run(
+            ["node", str(helper), self.origin, direction, outcome], cwd=Path(__file__).resolve().parents[1],
+            env={**os.environ, "PYTHONUTF8": "1"}, text=True, encoding="utf-8", errors="replace",
+            capture_output=True, timeout=60, check=False,
+        )
+        self.assertEqual(result.returncode, 0, f"group history {direction}/{outcome} failed\n{result.stdout}\n{result.stderr}")
+        self.assertEqual(self.source_path.read_bytes(), self.source_bytes)
+
+    def test_group_undo_preserves_another_images_pending_stroke(self) -> None:
+        self._check_group_history_pending_draft("undo", "success")
+
+    def test_group_redo_preserves_another_images_pending_stroke(self) -> None:
+        self._check_group_history_pending_draft("redo", "success")
+
+    def test_group_undo_keeps_another_images_failed_stroke_retryable(self) -> None:
+        self._check_group_history_pending_draft("undo", "failure")
+
+    def test_group_redo_keeps_another_images_failed_stroke_retryable(self) -> None:
+        self._check_group_history_pending_draft("redo", "failure")
+
+    def test_peer_manual_sync_conflicts_and_last_stroke_undo_use_real_workspace(self) -> None:
+        shutil.copy2(self.source_path, self.source_dir / "other.png")
+        self.state.set_root(str(self.source_dir))
+        helper = Path(__file__).with_name("editor") / "manual_sync_live_browser_helper.cjs"
+        result = subprocess.run(
+            ["node", str(helper), self.origin], cwd=Path(__file__).resolve().parents[1],
+            env={**os.environ, "PYTHONUTF8": "1"}, text=True, encoding="utf-8", errors="replace",
+            capture_output=True, timeout=90, check=False,
+        )
+        self.assertEqual(result.returncode, 0, f"manual sync browser failed\n{result.stdout}\n{result.stderr}")
+        self.assertEqual(self.source_path.read_bytes(), self.source_bytes)
+
+    def _check_manual_snapshot(self, mode: str) -> None:
+        shutil.copy2(self.source_path, self.source_dir / "other.png")
+        self.state.set_root(str(self.source_dir))
+        helper = Path(__file__).with_name("editor") / "manual_snapshot_live_browser_helper.cjs"
+        result = subprocess.run(
+            ["node", str(helper), self.origin, mode], cwd=Path(__file__).resolve().parents[1],
+            env={**os.environ, "PYTHONUTF8": "1"}, text=True, encoding="utf-8", errors="replace",
+            capture_output=True, timeout=90, check=False,
+        )
+        self.assertEqual(result.returncode, 0, f"manual snapshot {mode} failed\n{result.stdout}\n{result.stderr}")
+        self.assertEqual(self.source_path.read_bytes(), self.source_bytes)
+
+    def test_selecting_peer_edited_image_keeps_manual_snapshot_and_revision_together(self) -> None:
+        self._check_manual_snapshot("selection")
+
+    def test_renaming_cannot_bless_old_pixels_with_a_peer_manual_revision(self) -> None:
+        self._check_manual_snapshot("rename")
+
+    def test_return_sync_refreshes_pixels_after_metadata_already_updated_the_catalog(self) -> None:
+        self._check_manual_snapshot("return")
+
+    def test_single_copy_rejects_stale_canvas_after_catalog_metadata_refresh(self) -> None:
+        self._check_manual_snapshot("single-copy")
+        self.assertEqual(list(self.output_dir.iterdir()), [])
+
+    def test_batch_copy_rejects_stale_draft_after_catalog_metadata_refresh(self) -> None:
+        self._check_manual_snapshot("batch-copy")
+        self.assertEqual(list(self.output_dir.iterdir()), [])
+
+    def test_catalog_resync_cannot_bless_old_pixels_with_a_peer_manual_revision(self) -> None:
+        self._check_manual_snapshot("resync")
+
+    def test_importing_cannot_bless_old_pixels_with_a_peer_manual_revision(self) -> None:
+        self._check_manual_snapshot("import")
+
+    def test_removing_other_image_cannot_bless_old_pixels_with_a_peer_manual_revision(self) -> None:
+        self._check_manual_snapshot("remove")
+
+    def test_parallel_copy_delete_completes_every_real_file_and_workspace_row(self) -> None:
+        shutil.copy2(self.source_path, self.source_dir / "other.png")
+        self.state.set_root(str(self.source_dir))
+        helper = Path(__file__).with_name("editor") / "parallel_copy_delete_live_browser_helper.cjs"
+        result = subprocess.run(
+            ["node", str(helper), self.origin], cwd=Path(__file__).resolve().parents[1],
+            env={**os.environ, "PYTHONUTF8": "1"}, text=True, encoding="utf-8", errors="replace",
+            capture_output=True, timeout=90, check=False,
+        )
+        self.assertEqual(result.returncode, 0, f"parallel copy delete browser failed\n{result.stdout}\n{result.stderr}")
+        self.assertEqual(sorted(path.name for path in self.output_dir.glob("*.png")), ["gesture_parallel.png", "other_parallel.png"])
+        self.assertFalse(list(self.source_dir.glob("*.png")))
+        self.assertEqual(self.state.list_images(), [])
+        for path in self.output_dir.glob("*.png"):
+            with Image.open(path) as image: self.assertEqual(image.size, (64, 48))
+
+    def test_parallel_browser_copy_delete_keeps_surviving_save_tokens(self) -> None:
+        self.state.close_project()
+        helper = Path(__file__).with_name("editor") / "parallel_copy_delete_live_browser_helper.cjs"
+        result = subprocess.run(
+            ["node", str(helper), self.origin, "browser"], cwd=Path(__file__).resolve().parents[1],
+            env={**os.environ, "PYTHONUTF8": "1"}, text=True, encoding="utf-8", errors="replace",
+            capture_output=True, timeout=90, check=False,
+        )
+        self.assertEqual(result.returncode, 0, f"browser handle copy delete failed\n{result.stdout}\n{result.stderr}")
+        self.assertEqual(sorted(path.name for path in self.output_dir.glob("*.png")), ["browser1_parallel.png", "browser2_parallel.png"])
+        self.assertEqual(self.state.list_images(), [])
+        self.assertEqual(self.source_path.read_bytes(), self.source_bytes)
+
+    def _check_browser_copy_delete_recovery(self, flip: bool) -> None:
+        self.state.close_project()
+        helper = Path(__file__).with_name("editor") / "parallel_copy_delete_live_browser_helper.cjs"
+        result = subprocess.run(
+            ["node", str(helper), self.origin, "recovery-flip" if flip else "recovery"], cwd=Path(__file__).resolve().parents[1],
+            env={**os.environ, "PYTHONUTF8": "1"}, text=True, encoding="utf-8", errors="replace",
+            capture_output=True, timeout=90, check=False,
+        )
+        self.assertEqual(result.returncode, 0, f"browser copy delete recovery failed\n{result.stdout}\n{result.stderr}")
+        self.assertTrue((self.output_dir / "browser1_recovery.png").is_file())
+        image_id = self.state.list_images()[0]["id"]
+        if flip: self.assertTrue(self.state.images[image_id].flip_horizontal)
+        else: self.assertFalse(self.state.manual_workspace(image_id)["manualEnabled"])
+
+    def test_browser_copy_delete_recovery_keeps_edits_made_after_the_copy(self) -> None:
+        self._check_browser_copy_delete_recovery(False)
+
+    def test_browser_copy_delete_recovery_keeps_a_flip_made_after_the_copy(self) -> None:
+        self._check_browser_copy_delete_recovery(True)
+
+    def _check_copy_delete_rollback(self, mode: str) -> None:
+        self.state.close_project()
+        helper = Path(__file__).with_name("saving") / "copy_delete_rollback_live_browser_helper.cjs"
+        result = subprocess.run(
+            ["node", str(helper), self.origin, mode], cwd=Path(__file__).resolve().parents[1],
+            env={**os.environ, "PYTHONUTF8": "1"}, text=True, encoding="utf-8", errors="replace",
+            capture_output=True, timeout=90, check=False,
+        )
+        self.assertEqual(result.returncode, 0, f"copy delete rollback failed\n{result.stdout}\n{result.stderr}")
+        self.assertEqual(self.source_path.read_bytes(), self.source_bytes)
+        self.assertEqual(len(self.state.list_images()), 1)
+        if mode == "workspace-switch": return
+        with Image.open(self.output_dir / "source_copy.png") as image:
+            self.assertEqual(image.getpixel((0, 0))[:3], (255, 0, 0))
+        if mode not in {"foreign", "checkpoint-failure"}: self.assertTrue((self.output_dir / "source_retry.png").is_file())
+        if mode.startswith("flip"):
+            self.assertTrue(self.state.list_images()[0]["flipH"])
+            with Image.open(self.output_dir / "source_retry.png") as image:
+                self.assertEqual(image.getpixel((0, 0))[:3], (0, 0, 255))
+
+    def test_single_copy_delete_preserves_a_peer_flip(self) -> None:
+        self._check_copy_delete_rollback("flip-single")
+
+    def test_batch_copy_delete_preserves_a_peer_flip(self) -> None:
+        self._check_copy_delete_rollback("flip-batch")
+
+    def test_rejected_copy_delete_restores_metadata_and_allows_another_save(self) -> None:
+        self._check_copy_delete_rollback("rollback")
+
+    def test_unselected_unnamed_copy_delete_rollback_keeps_source_access_and_allows_another_save(self) -> None:
+        self._check_copy_delete_rollback("rollback-unselected")
+
+    def test_unselected_workspace_switch_discards_previous_source_access(self) -> None:
+        self._check_copy_delete_rollback("workspace-switch")
+
+    def test_rejected_single_copy_delete_restores_metadata_and_allows_another_save(self) -> None:
+        self._check_copy_delete_rollback("rollback-single")
+
+    def test_copy_delete_restoration_retries_project_handle_persistence_after_reload(self) -> None:
+        self._check_copy_delete_rollback("remember-failure")
+
+    def test_copy_delete_restoration_survives_a_lost_ack_response_and_reload(self) -> None:
+        self._check_copy_delete_rollback("lost-ack")
+
+    def test_copy_delete_failed_restoration_checkpoint_keeps_the_source_and_recovery_snapshot(self) -> None:
+        self._check_copy_delete_rollback("checkpoint-failure")
+
+    def test_rejected_copy_delete_preserves_a_recreated_foreign_file(self) -> None:
+        self._check_copy_delete_rollback("foreign")
+
+    def test_copy_delete_restoration_survives_a_lost_cancel_response_and_reload(self) -> None:
+        self._check_copy_delete_rollback("resume")
 
     def test_named_compact_draft_keeps_layers_through_edit_undo_redo_and_reload(self) -> None:
         self._check_compact_draft_reload(named=True)

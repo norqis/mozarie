@@ -6,6 +6,7 @@ const vm = require("node:vm");
 
 const jsRoot = path.join(__dirname, "..", "..", "static", "js");
 const imageDisplayPathSource = fs.readFileSync(path.join(jsRoot, "core.js"), "utf8").match(/function imageDisplayPath\(image\) \{[\s\S]*?\n\}/)?.[0];
+const workspaceDraftRevisionSource = fs.readFileSync(path.join(jsRoot, "workspace.js"), "utf8").match(/function workspaceDraftRevision\(imageId\) \{[\s\S]*?\n\}/)?.[0];
 
 function sourceBlob(name, size, lastModified) {
   return Object.assign(new Blob([new Uint8Array(size)]), { name, lastModified });
@@ -23,7 +24,7 @@ function element(children = {}) {
   const attributes = new Map();
   const node = {
     attributes, children: [], classList: classList(), dataset: {}, disabled: false, hidden: false,
-    textContent: "", title: "", value: "", style: {}, tabIndex: -1, scrollTop: 0,
+    textContent: "", title: "", value: "", style: {}, tabIndex: -1, scrollTop: 0, clientHeight: 900, clientWidth: 100,
     append(child) { this.children.push(child); child.parentNode = this; },
     insertBefore(child, before) { if (child.parentNode) child.parentNode.children.splice(child.parentNode.children.indexOf(child), 1); const index = before ? this.children.indexOf(before) : -1; if (index >= 0) this.children.splice(index, 0, child); else this.children.push(child); child.parentNode = this; },
     remove() { this.parentNode?.children.splice(this.parentNode.children.indexOf(this), 1); this.removed = true; },
@@ -327,6 +328,8 @@ function makeSaveRuntime() {
     modalInvokers: new Map(), updateProgress() { calls.push("progress"); }, setStatusKey(key) { calls.push(`status:${key}`); }, scheduleJobPoll() { calls.push("schedule"); },
   };
   context.confirmed = true;
+  state.workspaceDraftRevisions = new Map(state.images.map((image) => [image.id, 0]));
+  vm.runInNewContext(workspaceDraftRevisionSource, context, { filename: path.join(jsRoot, "workspace.js") });
   vm.runInNewContext(imageDisplayPathSource, context, { filename: path.join(jsRoot, "core.js") });
   const source = fs.readFileSync(path.join(jsRoot, "save.js"), "utf8");
   vm.runInNewContext(source, context, { filename: path.join(jsRoot, "save.js") });
@@ -548,7 +551,7 @@ async function saveInteractions() {
   const access = { fileHandle: handle, name: file.name, size: file.size, lastModified: file.lastModified }; await runtime.ensureHandlePermission(access, true); file = sourceBlob("session.png", 4, 3); await assert.rejects(runtime.ensureHandlePermission(access), (error) => error?.code === "stale_asset"); file = sourceBlob("session.png", 2, 3);
   state.images = [{ id: "session", sourceKind: "session" }]; state.sourceAccess.set("session", access); await runtime.ensureSaveSources(["session"], "overwrite", false); await assert.rejects(runtime.ensureSaveSources(["missing"], "overwrite", false), (error) => error?.code === "source_action_unavailable"); await assert.rejects(runtime.ensureSaveSources(["missing"], "copy", true), (error) => error?.code === "source_action_unavailable");
   const binary = { body: { async pipeTo(stream) { await stream.write(Uint8Array.from([1])); await stream.close(); } } }; await runtime.writeSourceHandle(access, binary); assert.equal(access.size, 2); assert.ok(await runtime.snapshotSourceHandle(access) instanceof Blob, "source overwrite snapshots browser bytes before a destructive mutation");
-  access.parentHandle = { async getFileHandle() { return handle; } }; await runtime.restoreSourceHandle(access, new Blob([Uint8Array.from([1])]), true);
+  access.parentHandle = { async getFileHandle(_name, options) { if (!options?.create) throw Object.assign(new Error("source was deleted"), { name: "NotFoundError" }); return handle; } }; await runtime.restoreSourceHandle(access, new Blob([Uint8Array.from([1])]), true);
   // Migration coverage map: the browser runtime executes the durable save details
   // that used to be exercised below through an output directory handle:
   // picker error/cancel and duplicate-submit lock: runOutputDirectoryPermissionCases and runOutputPermissionSubmissionLockCases;

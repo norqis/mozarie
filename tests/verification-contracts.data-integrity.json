@@ -3214,7 +3214,12 @@
         "node:tests/gallery/test_filtered_action_authority_e2e.cjs::DI-163 and DI-184 deleting another selected image preserves the current unsaved canvas and draft",
         "node:tests/gallery/test_filtered_action_authority_e2e.cjs::DI-166 DI-167 DI-171 and DI-184 batch delete cancellation conflict and disconnect preserve authority",
         "node:tests/gallery/test_filtered_action_authority_e2e.cjs::DI-181.6 delayed conflicted and disconnected review or hide never move or erase the current editor early",
-        "node:tests/gallery/test_filtered_action_authority_e2e.cjs::DI-184 same-project return synchronization preserves a still-authoritative editor draft"
+        "node:tests/gallery/test_filtered_action_authority_e2e.cjs::DI-184 same-project return synchronization preserves a still-authoritative editor draft",
+        "node:tests/gallery/test_filtered_action_authority_e2e.cjs::same-generation return reloads changed pixels and masks while pending edits keep their old revision",
+        "node:tests/gallery/test_filtered_action_authority_e2e.cjs::return synchronization retains usable editor resources after stale-image and mask-load failures",
+        "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_return_sync_refreshes_pixels_after_metadata_already_updated_the_catalog",
+        "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_unselected_unnamed_copy_delete_rollback_keeps_source_access_and_allows_another_save",
+        "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_unselected_workspace_switch_discards_previous_source_access"
       ]
     },
     {
@@ -3339,10 +3344,12 @@
       "sourceIds": [
         "DI-189"
       ],
-      "observation": "未読本文を残す失敗は400または409と`Connection: close`を返し、次の要求を同じ接続で処理しない",
+      "observation": "未読本文を残す入力・一時保存の失敗はConnection: closeを返し、次の要求を同じ接続で処理しない。読み切った不正JSONは400を返し、接続を再利用できる。",
       "status": "automated",
       "testIds": [
-        "python:tests.http.test_request_framing_and_delete_authority.DataIntegrityHttpContracts.test_json_post_and_binary_import_framing_failures_do_not_mutate_state"
+        "python:tests.http.test_request_framing_and_delete_authority.DataIntegrityHttpContracts.test_json_post_and_binary_import_framing_failures_do_not_mutate_state",
+        "python:tests.test_http_live_endpoints.LiveHttpEndpointTests.test_json_staging_failure_closes_before_unread_bytes_become_a_request",
+        "python:tests.test_http_live_endpoints.LiveHttpEndpointTests.test_fully_read_invalid_json_preserves_the_next_request"
       ]
     },
     {
@@ -4268,11 +4275,13 @@
       "sourceIds": [
         "DI-224"
       ],
-      "observation": "永続化した削除トークンの状態を再照会する",
+      "observation": "永続化した削除トークンの状態を再照会する。実行中の同タブ・別タブの操作は復旧対象にせず、所有タブ終了後に復旧できる。",
       "status": "automated",
       "testIds": [
         "node:tests/source_files/test_delete_recovery_runtime.cjs::source-delete startup recovery reconciles a lost prepare, an already-missing entry, and an empty receipt",
-        "node:tests/test_source_delete_e2e.cjs::unknown browser-source deletion remains recoverable instead of silently committing or cancelling"
+        "node:tests/test_source_delete_e2e.cjs::unknown browser-source deletion remains recoverable instead of silently committing or cancelling",
+        "node:tests/saving/test_active_source_delete_recovery_e2e.cjs::active source deletion survives recovery in the same tab and another tab",
+        "node:tests/saving/test_active_source_delete_recovery_e2e.cjs::closing the source deletion tab releases its intent for recovery"
       ]
     },
     {
@@ -4384,7 +4393,9 @@
       "status": "automated",
       "testIds": [
         "python:tests.test_save_recovery.SaveRecoveryTests.test_owned_quarantine_restores_to_the_recorded_source_path",
-        "python:tests.test_save_recovery.SaveRecoveryTests.test_committed_quarantine_conflict_is_not_deleted"
+        "python:tests.test_save_recovery.SaveRecoveryTests.test_committed_quarantine_conflict_is_not_deleted",
+        "python:tests.data_integrity.test_persistence_and_authority_transactions.RemainingDataIntegrityContracts.test_source_delete_progress_failure_restores_source_and_same_token_retries",
+        "python:tests.data_integrity.test_persistence_and_authority_transactions.RemainingDataIntegrityContracts.test_source_delete_progress_failure_restores_source_and_restarts"
       ]
     },
     {
@@ -4846,6 +4857,9 @@
       "status": "automated",
       "testIds": [
         "python:tests.test_workspace.WorkspaceTests.test_bulk_workspace_queries_accept_more_than_sqlite_variable_limit",
+        "python:tests.workspace.test_import_lookup_cost.ImportLookupCostTests.test_single_image_reconciliation_cost_is_independent_of_source_size",
+        "python:tests.workspace.test_import_lookup_cost.ImportLookupCostTests.test_single_image_import_does_not_copy_or_sort_the_existing_catalog",
+        "python:tests.workspace.test_import_lookup_cost.ImportLookupCostTests.test_import_preserves_stable_order_for_equal_case_insensitive_paths",
         "python:tests.test_workspace.WorkspaceTests.test_reconcile_images_loads_transforms_without_per_image_queries"
       ]
     },

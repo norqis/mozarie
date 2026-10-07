@@ -591,7 +591,7 @@ class StudioState(CatalogMixin, SavingMixin, DetectionMixin, JobsMixin):
             finally:
                 self._release_manual_writer(session)
 
-    def commit_manual_upload(self, image_id: str, session_id: str, payload: dict[str, Any]) -> None:
+    def commit_manual_upload(self, image_id: str, session_id: str, payload: dict[str, Any]) -> int:
         if not self._valid_import_session_id(session_id):
             raise ClientError("手描き保存セッションが正しくありません。", "input_invalid")
         with self.lock:
@@ -620,7 +620,7 @@ class StudioState(CatalogMixin, SavingMixin, DetectionMixin, JobsMixin):
                 raise
         save_succeeded = False
         try:
-            self.save_manual_workspace(image_id, committed)
+            version = self.save_manual_workspace(image_id, committed)
             save_succeeded = True
         finally:
             with self.lock:
@@ -640,6 +640,7 @@ class StudioState(CatalogMixin, SavingMixin, DetectionMixin, JobsMixin):
                     self._release_manual_writer(session)
         self.cleanup_manual_upload_files()
         LOGGER.info("手描きマスク転送を完了: レイヤー=%d件 所要=%.2f秒", len(session["layers"]), time.monotonic() - session["started_at"])
+        return version
 
     def cancel_manual_upload(self, image_id: str, session_id: str) -> None:
         with self.lock:
@@ -656,9 +657,11 @@ class StudioState(CatalogMixin, SavingMixin, DetectionMixin, JobsMixin):
             finally:
                 self._release_manual_writer(session)
 
-    def _cancel_manual_uploads_unchecked(self, reason: str) -> None:
+    def _cancel_manual_uploads_unchecked(self, reason: str, *, image_ids: set[str] | None = None) -> None:
         """Call while ``lock`` is held when a catalogue transition invalidates staged layers."""
         for session_id, session in tuple(self._manual_uploads.items()):
+            if image_ids is not None and session["image_id"] not in image_ids:
+                continue
             if not session["writer"].acquire(blocking=False):
                 session["abandon_reason"] = reason
                 continue
@@ -863,26 +866,27 @@ class StudioState(CatalogMixin, SavingMixin, DetectionMixin, JobsMixin):
                 continue
 
     def _ensure_session(self) -> Path:
-        if self.session_imports_dir is not None:
-            return self.session_imports_dir
-        self.session_base_dir.mkdir(parents=True, exist_ok=True)
-        session_dir = self.session_base_dir / f"session-{uuid.uuid4().hex}"
-        imports_dir = session_dir / "imports"
-        imports_dir.mkdir(parents=True)
-        lock_handle = (session_dir / ".active.lock").open("w+b")
-        try:
-            lock_handle.write(b"1")
-            lock_handle.flush()
-            lock_handle.seek(0)
-            msvcrt.locking(lock_handle.fileno(), msvcrt.LK_NBLCK, 1)
-        except Exception:
-            lock_handle.close()
-            shutil.rmtree(session_dir, ignore_errors=True)
-            raise
-        self.session_dir = session_dir
-        self.session_imports_dir = imports_dir
-        self._session_lock_handle = lock_handle
-        return imports_dir
+        with self.lock:
+            if self.session_imports_dir is not None:
+                return self.session_imports_dir
+            self.session_base_dir.mkdir(parents=True, exist_ok=True)
+            session_dir = self.session_base_dir / f"session-{uuid.uuid4().hex}"
+            imports_dir = session_dir / "imports"
+            imports_dir.mkdir(parents=True)
+            lock_handle = (session_dir / ".active.lock").open("w+b")
+            try:
+                lock_handle.write(b"1")
+                lock_handle.flush()
+                lock_handle.seek(0)
+                msvcrt.locking(lock_handle.fileno(), msvcrt.LK_NBLCK, 1)
+            except Exception:
+                lock_handle.close()
+                shutil.rmtree(session_dir, ignore_errors=True)
+                raise
+            self.session_dir = session_dir
+            self.session_imports_dir = imports_dir
+            self._session_lock_handle = lock_handle
+            return imports_dir
 
     def _detach_session_unchecked(self) -> tuple[Path | None, Any | None]:
         session_dir = self.session_dir

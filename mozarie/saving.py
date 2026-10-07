@@ -410,6 +410,7 @@ class SavingMixin:
         copy_to_browser: bool = False,
         stream_image: bool = True,
         client_save_token: str | None = None,
+        expected_manual_revision: int | None = None,
         suffix: str = "_censored",
         output_format: str = "original",
         keep_metadata: bool = True,
@@ -417,14 +418,6 @@ class SavingMixin:
         self._assert_image_editable(image_id)
         stream_image = stream_image or copy_to_browser
         record = self.image_snapshot(image_id)
-        if draft is None:
-            draft = self.workspace_store.manual(image_id, self._encode_workspace_mask)
-        try:
-            draft_masks = decode_draft_masks(draft, record.width, record.height)
-        except (MemoryError, OSError) as exc:
-            raise ClientError("保存用の手描きマスクを読み込めません。使用可能なメモリを確認してください。", "image_read_failed") from exc
-        manual_exclude_forced = draft_manual_exclusion_forced(draft, self.settings["detection"].get("exclude_forced_default", True))
-        removed_candidate_ids = {str(value) for value in draft.get("removedCandidateIds", [])} if isinstance(draft, dict) else set()
         divisor = _read_mosaic_divisor(divisor)
         if output_format not in {"original", "png", "jpg"} or not isinstance(keep_metadata, bool):
             raise ClientError("保存形式が正しくありません。", "input_invalid")
@@ -453,6 +446,8 @@ class SavingMixin:
                     current_revision = self._candidate_revision(image_id)
                     if revision != current_revision:
                         raise ClientError("候補が変更されました。保存をやり直してください。", "save_state_changed")
+                    if expected_manual_revision is not None and expected_manual_revision != self.workspace_store.manual_revisions([image_id]).get(image_id, 0):
+                        raise ClientError("手描きが変更されました。保存をやり直してください。", "save_state_changed")
                     catalog_generation = self.catalog_generation
                     # Disabled candidates have no effect on the rendered mask;
                     # do not decode their full-resolution PNGs for every
@@ -460,7 +455,7 @@ class SavingMixin:
                     candidates = [
                         replace(candidate)
                         for candidate in self.candidates.get(image_id, [])
-                        if candidate.enabled and candidate.candidate_id not in removed_candidate_ids
+                        if candidate.enabled
                     ]
                     if client_save_token is None:
                         raise ClientError("保存確認トークンがありません。保存をやり直してください。", "save_state_changed")
@@ -473,6 +468,15 @@ class SavingMixin:
                         output_destination = reserved.output_destination
                         if output_path is None or output_destination is None:
                             raise ClientError("保存先の準備が見つかりません。保存をやり直してください。", "save_state_changed")
+                if draft is None:
+                    draft = self.workspace_store.manual(image_id, self._encode_workspace_mask)
+                try:
+                    draft_masks = decode_draft_masks(draft, record.width, record.height)
+                except (MemoryError, OSError) as exc:
+                    raise ClientError("保存用の手描きマスクを読み込めません。使用可能なメモリを確認してください。", "image_read_failed") from exc
+                manual_exclude_forced = draft_manual_exclusion_forced(draft, self.settings["detection"].get("exclude_forced_default", True))
+                removed_candidate_ids = {str(value) for value in draft.get("removedCandidateIds", [])} if isinstance(draft, dict) else set()
+                candidates = [candidate for candidate in candidates if candidate.candidate_id not in removed_candidate_ids]
                 # A candidate can disappear between the metadata snapshot and the
                 # disk read.  Do not compose a silently reduced mask.
                 shape = (record.height, record.width)
@@ -626,6 +630,7 @@ class SavingMixin:
                 if (durable_receipt.get("imageId") != image_id or durable_receipt.get("revision") != revision):
                     raise ClientError("保存確認トークンが保存対象と一致しません。保存をやり直してください。", "save_state_changed")
                 return {"cleared": bool(durable_receipt.get("cleared")), "stale": bool(durable_receipt.get("stale")),
+                        "candidateRevision": revision, "manualRevision": durable_receipt.get("manualRevision"), "transformRevision": durable_receipt.get("transformRevision"),
                         "deleted": bool(durable_receipt.get("deleted")), "catalogGeneration": int(durable_receipt.get("catalogGeneration") or 0),
                         "outputPath": str(durable_receipt.get("outputPath") or ""),
                         "relativePath": durable_receipt.get("relativePath"), "editedFilename": durable_receipt.get("editedFilename"),
@@ -637,6 +642,7 @@ class SavingMixin:
                     if receipt.image_id != image_id or receipt.candidate_revision != revision:
                         raise ClientError("保存確認トークンが保存対象と一致しません。保存をやり直してください。", "save_state_changed")
                     return {"cleared": receipt.cleared, "stale": receipt.stale, "deleted": receipt.deleted,
+                            "candidateRevision": revision, "manualRevision": receipt.manual_revision, "transformRevision": receipt.transform_revision,
                             "catalogGeneration": receipt.catalog_generation, "sourceDeletePending": receipt.source_delete_pending,
                             "sourceAction": receipt.source_action, "relativePath": receipt.relative_path,
                             "editedFilename": receipt.edited_filename}
@@ -657,6 +663,7 @@ class SavingMixin:
                         if receipt.image_id != image_id or receipt.candidate_revision != revision:
                             raise ClientError("保存確認トークンが保存対象と一致しません。保存をやり直してください。", "save_state_changed")
                         return {"cleared": receipt.cleared, "stale": receipt.stale, "deleted": receipt.deleted,
+                                "candidateRevision": revision, "manualRevision": receipt.manual_revision, "transformRevision": receipt.transform_revision,
                                 "catalogGeneration": receipt.catalog_generation, "sourceDeletePending": receipt.source_delete_pending,
                                 "sourceAction": receipt.source_action, "relativePath": receipt.relative_path,
                                 "editedFilename": receipt.edited_filename}
@@ -675,6 +682,10 @@ class SavingMixin:
                     if not token_allows_action(token_details):
                         raise ClientError("保存確認トークンと元画像の処理が一致しません。保存をやり直してください。", "save_state_changed")
                     catalog_invalid = token_details.catalog_generation != self.catalog_generation or record is None
+                    edits_current = (revision == self._candidate_revision(image_id)
+                                     and token_details.manual_revision == self.workspace_store.manual_revisions([image_id]).get(image_id, 0))
+                    if source_action == "deleted" and not edits_current:
+                        raise ClientError("保存後に編集内容が変更されました。保存をやり直してください。", "save_state_changed")
                     if catalog_invalid:
                         self._discard_browser_save_token_unchecked(save_token)
                         cleanup_paths = self._take_browser_save_cleanup_unchecked()
@@ -764,8 +775,9 @@ class SavingMixin:
                         # owns deletion for filesystem catalogue records.
                         if record_snapshot.source_kind != "session" or record_snapshot.path.exists():
                             quarantine_path = record_snapshot.path.with_name(f".{record_snapshot.path.name}.mozarie-delete-{save_token}")
-                            self.save_journal.phase(save_token, "source_quarantined", quarantine_path)
-                            if not self.save_journal.quarantine_source(save_token, record_snapshot.path, quarantine_path):
+                            if not self.save_journal.quarantine_source(
+                                save_token, record_snapshot.path, quarantine_path, token_details.source_fingerprint,
+                            ):
                                 # The copy has already published.  Keep it and
                                 # retain the original when this filesystem
                                 # cannot prove an atomic recoverable deletion.
@@ -800,19 +812,19 @@ class SavingMixin:
                         record = self.images.get(image_id)
                         if record is None or self.catalog_generation != catalog_generation:
                             raise ClientError("画像一覧が変更されました。保存をやり直してください。", "save_state_changed")
-                        current_revision = self._candidate_revision(image_id)
                         deleted = source_action == "deleted"
                         # A save only writes an image. It must retain the
                         # candidate/manual workspace and both image flags.
-                        cleared = revision == current_revision
+                        cleared = edits_current
                         persisted_mtime = record_snapshot.mtime_ns
                         persisted_size = record_snapshot.size_bytes
                         if source_action == "overwrite" and record_snapshot.source_kind == "session":
                             persisted_mtime = source_mtime_ns
                             persisted_size = source_size_bytes
                         if source_action == "deleted": self.save_journal.phase(save_token, "workspace_committing")
-                        receipt_generation = catalog_generation + (1 if deleted else 0)
+                        receipt_generation = catalog_generation
                         durable_save_receipt = {"token": save_token, "imageId": image_id, "revision": revision,
+                                                "manualRevision": token_details.manual_revision, "transformRevision": token_details.transform_revision,
                                                 "sourceAction": source_action, "cleared": cleared, "stale": not cleared,
                                                 "deleted": deleted, "catalogGeneration": receipt_generation,
                                                 "sourceDeletePending": source_delete_pending,
@@ -848,8 +860,6 @@ class SavingMixin:
                         # A journal outage must not restore the source or
                         # cancel an output that the workspace already recorded.
                         raise
-                    if source_stage is not None:
-                        source_stage.rollback()
                     self.save_journal.phase(save_token, "cleanup_pending")
                     with self.lock:
                         self._discard_browser_save_token_unchecked(save_token)
@@ -857,7 +867,27 @@ class SavingMixin:
                     self._unlink_browser_save_cleanup(cleanup_paths)
                     if published_output is not None:
                         self._unlink_browser_save_cleanup([published_output])
-                    self.save_journal.cleanup(save_token)
+                    restored = self.save_journal.cleanup(save_token)
+                    if not restored and source_stage is not None:
+                        try:
+                            stat = record_snapshot.path.stat()
+                        except OSError:
+                            stat = None
+                        with self.lock:
+                            live = self.images.get(image_id)
+                            if live is not None:
+                                live.path = record_snapshot.path
+                                live.relative_path = record_snapshot.relative_path
+                                if stat is not None:
+                                    live.set_asset_fingerprint(stat.st_mtime_ns, stat.st_size)
+                                    if live.source_kind == "filesystem":
+                                        live.mtime_ns = stat.st_mtime_ns
+                                        live.size_bytes = stat.st_size
+                                self.source_mismatches[image_id] = False
+                        raise ClientError(
+                            "元画像の復元を保留しました。外部の変更を確認してMozarieを再起動してください。",
+                            "save_recovery_pending",
+                        )
                     raise
 
                 with self.lock:
@@ -900,12 +930,11 @@ class SavingMixin:
                         self.candidates.pop(image_id, None)
                         self.projectless_manual_drafts.pop(image_id, None)
                         self._image_io_locks.pop(image_id, None)
-                        self.catalog_generation += 1
                     self.browser_save_tokens.pop(save_token, None)
                     if token_details.output_destination is not None:
                         self._release_output_destination(token_details.output_destination)
                     response_generation = self.catalog_generation
-                    self.browser_save_receipts[save_token] = BrowserSaveReceipt(image_id, revision, source_action, cleared, not cleared, deleted, response_generation, source_delete_pending, time.monotonic(), record.relative_path, record.edited_filename)
+                    self.browser_save_receipts[save_token] = BrowserSaveReceipt(image_id, revision, source_action, cleared, not cleared, deleted, response_generation, source_delete_pending, time.monotonic(), record.relative_path, record.edited_filename, token_details.manual_revision, token_details.transform_revision)
                     rendered_path = token_details.rendered_path
                     if deleted:
                         self._discard_browser_save_tokens_for_image_unchecked(image_id)
@@ -937,6 +966,7 @@ class SavingMixin:
                 if source_action != "keep":
                     self.invalidate_sam_image(image_id)
                 return {"cleared": cleared, "stale": not cleared, "deleted": deleted,
+                        "candidateRevision": revision, "manualRevision": token_details.manual_revision, "transformRevision": token_details.transform_revision,
                         "catalogGeneration": response_generation,
                         "sourceAction": source_action,
                         "sourceDeletePending": source_delete_pending,
@@ -951,6 +981,7 @@ class SavingMixin:
             if receipt is not None:
                 if receipt.image_id == image_id and receipt.candidate_revision == revision:
                     return {"state": "committed", "cleared": receipt.cleared, "stale": receipt.stale, "deleted": receipt.deleted,
+                            "candidateRevision": revision, "manualRevision": receipt.manual_revision, "transformRevision": receipt.transform_revision,
                             "catalogGeneration": receipt.catalog_generation, "sourceDeletePending": receipt.source_delete_pending,
                             "sourceAction": receipt.source_action, "relativePath": receipt.relative_path,
                             "editedFilename": receipt.edited_filename}
@@ -963,6 +994,7 @@ class SavingMixin:
         if (durable_receipt is not None and durable_receipt.get("imageId") == image_id
                 and durable_receipt.get("revision") == revision):
             return {"state": "committed", "cleared": bool(durable_receipt.get("cleared")),
+                    "candidateRevision": revision, "manualRevision": durable_receipt.get("manualRevision"), "transformRevision": durable_receipt.get("transformRevision"),
                     "stale": bool(durable_receipt.get("stale")), "deleted": bool(durable_receipt.get("deleted")),
                     "catalogGeneration": int(durable_receipt.get("catalogGeneration") or 0),
                     "outputPath": str(durable_receipt.get("outputPath") or ""),
@@ -1001,10 +1033,17 @@ class SavingMixin:
             with self.lock: self.browser_save_receipts.pop(save_token, None)
         return {"acknowledged": acknowledged}
 
-    def cancel_browser_save(self, image_id: str, revision: int, save_token: str) -> dict[str, Any]:
+    def cancel_browser_save(self, image_id: str, revision: int, save_token: str, *, restored_source: dict[str, Any] | None = None) -> dict[str, Any]:
         """Cancel a still-pending token and remove only its own new copy."""
         # Serialise claiming and cancellation with commit; once commit has
         # detached a token, cancellation must never remove its successful copy.
+        if restored_source is not None:
+            if (not isinstance(restored_source, dict)
+                    or any(not isinstance(restored_source.get(key), str) or not restored_source[key]
+                           for key in ("workspaceId", "sourceId", "relativePath"))
+                    or any(type(restored_source.get(key)) is not int or restored_source[key] < 0
+                           for key in ("originalMtimeMs", "originalSizeBytes", "sourceMtimeMs", "sourceSizeBytes"))):
+                raise ClientError("復元後の元画像情報が正しくありません。", "input_invalid")
         with self.import_lock:
             receipt = self.workspace_store.browser_save_receipt(save_token)
             if receipt is not None:
@@ -1016,10 +1055,22 @@ class SavingMixin:
             with self.lock:
                 self._assert_request_catalog_expectation()
                 details = self.browser_save_tokens.get(save_token)
+                journal = self.save_journal.row(save_token)
+                if journal is not None and journal.get("recovery_decision") == "commit":
+                    return {"state": "committed"}
+                if restored_source is not None:
+                    if ((details is not None and (details.image_id != image_id or details.candidate_revision != revision))
+                            or (journal is not None and (journal["image_id"] != image_id or int(journal["revision"]) != revision))):
+                        raise ClientError("保存確認トークンが保存対象と一致しません。", "save_state_changed")
+                    try:
+                        self.workspace_store.restore_browser_source_metadata(image_id, restored_source)
+                    except ValueError as exc:
+                        raise ClientError("復元対象の元画像が変更されています。", "save_state_changed") from exc
+                    record = self.images.get(image_id)
+                    if record is not None:
+                        record.mtime_ns = restored_source["sourceMtimeMs"] * 1_000_000
+                        record.size_bytes = restored_source["sourceSizeBytes"]
                 if details is None or details.image_id != image_id or details.candidate_revision != revision:
-                    journal = self.save_journal.row(save_token)
-                    if journal is not None and journal.get("recovery_decision") == "commit":
-                        return {"state": "committed"}
                     return {"state": str(journal["state"])} if journal is not None else {"state": "unknown"}
                 self._discard_browser_save_token_unchecked(save_token)
                 cleanup_paths = self._take_browser_save_cleanup_unchecked()

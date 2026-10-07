@@ -143,12 +143,12 @@ test("DI-081 deleted project loses every browser source handle while another pro
       const directory = (name) => ({ kind: "directory", name });
       await rememberProjectSource("deleted-project", directory("deleted-root"), null, "deleted-directory");
       await rememberProjectSource("deleted-project", file("A.png"), "image-a", "deleted-file", "client-a", "A.png");
-      await rememberProjectSource("other-project", directory("other-root"), null, "other-directory");
-      await rememberProjectSource("other-project", file("B.png"), "image-b", "other-file", "client-b", "B.png");
+      await rememberProjectSource("ledger-project", directory("other-root"), null, "other-directory");
+      await rememberProjectSource("ledger-project", file("B.png"), "image-b", "other-file", "client-b", "B.png");
       const intentId = await rememberProjectSourceCleanup("deleted-project");
       const removed = await forgetProjectSources("deleted-project");
       const deleted = await rememberedProjectSources("deleted-project");
-      const other = await rememberedProjectSources("other-project");
+      const other = await rememberedProjectSources("ledger-project");
       const db = await directoryCatalogStore();
       const rows = await new Promise((resolve, reject) => {
         const request = db.transaction("projectSources").objectStore("projectSources").getAll();
@@ -168,7 +168,7 @@ test("DI-081 deleted project loses every browser source handle while another pro
       "the deleted project's browser file and directory handles are removed");
     assert.deepEqual(result.other.files.map((row) => row.imageId), ["image-b"]);
     assert.deepEqual(result.other.directories.map((row) => row.sourceId), ["other-directory"]);
-    assert.deepEqual(result.rows.map((row) => row.projectId), ["other-project", "other-project"],
+    assert.deepEqual(result.rows.map((row) => row.projectId), ["ledger-project", "ledger-project"],
       "the IndexedDB projectId index contains no deleted-project row and preserves the other project");
     assert.equal((result.cleanup.intents || []).some((intent) => intent.intentId === result.intentId), false,
       "successful cleanup clears only its durable intent");
@@ -187,12 +187,12 @@ test("DI-081 deleted project loses every browser source handle while another pro
     });
     assert.deepEqual(cleared, { project: null, ids: [], current: null, candidates: 0, drafts: 0, history: 0, candidateImages: 0 },
       "deleting the current project releases its browser image, candidate, draft, and history references");
-    await page.reload({ waitUntil: "domcontentloaded" }); await page.waitForFunction(() => state.settings && state.images.length === 2);
+    await page.reload({ waitUntil: "domcontentloaded" }); await page.waitForFunction(() => state.settings && state.images.length === 2 && state.status?.key === "status.imagesLoaded");
     const restoredOther = await page.evaluate(async () => {
-      state.project = { id: "other-project", name: "Other", status: "active" };
+      state.project = { id: "ledger-project", name: "Other", status: "active" };
       state.images = [{ id: "image-b", relativePath: "B.png", sourceId: "other-file", sourceKind: "session", sizeBytes: 3, mtimeNs: 456000000,
         width: 2, height: 2, reviewed: false, hidden: false }];
-      await restoreBrowserProjectSourcesForCurrentCatalog([]);
+      await restoreBrowserProjectSourcesForCurrentCatalog([{ id: "other-file", kind: "browser-files" }, { id: "other-directory", kind: "browser-directory" }]);
       const access = state.sourceAccess.get("image-b");
       return { ids: [...state.sourceAccess.keys()], sourceId: access?.sourceId, relativePath: access?.relativePath, size: access?.size, lastModified: access?.lastModified };
     });

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -17,6 +19,33 @@ def subprocess_python() -> str:
 
 
 class RuntimeProfileSubprocessTests(unittest.TestCase):
+    def test_setup_marker_preserves_profiles_in_paths_with_punctuation(self) -> None:
+        source_root = Path(__file__).resolve().parents[1]
+        setup = (source_root / "setup.bat").read_text(encoding="utf-8")
+        marker_line = next(line for line in setup.splitlines() if "ConvertFrom-Json).profile" in line)
+        command = re.search(r'-Command "(.+)"`', marker_line).group(1)
+        with tempfile.TemporaryDirectory() as directory:
+            for name in ("plain", "日本語 O'Connor [trial]"):
+                app = (Path(directory) / name).resolve()
+                venv = app / ".venv"
+                venv.mkdir(parents=True)
+                for profile in ("cuda", "directml", "cpu"):
+                    with self.subTest(path=name, profile=profile):
+                        marker = venv / ".mozarie-runtime.json"
+                        marker.write_text(json.dumps({"schema": 1, "profile": profile}), encoding="utf-8")
+                        app_dir = str(app) + os.sep
+                        # Execute only the product's marker read, including CMD's
+                        # path substitution for the old form of this command.
+                        result = subprocess.run(
+                            ["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", command.replace("%APP_DIR%", app_dir)],
+                            cwd=app, env=os.environ | {"APP_DIR": app_dir},
+                            capture_output=True, text=True, encoding="utf-8", errors="replace",
+                            creationflags=subprocess.CREATE_NO_WINDOW, timeout=30, check=False,
+                        )
+                        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                        self.assertEqual(result.stdout.strip(), profile)
+                        self.assertEqual(json.loads(marker.read_text(encoding="utf-8"))["profile"], profile)
+
     def test_module_execution_avoids_the_app_http_module_shadow(self) -> None:
         """The batch/updater form must keep stdlib http ahead of mozarie/http.py."""
         source_root = Path(__file__).resolve().parents[1]

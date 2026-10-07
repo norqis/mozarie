@@ -499,7 +499,7 @@ function startFixtureServer(options = {}) {
       let body = ""; for await (const chunk of request) body += chunk;
       const payload = JSON.parse(body); const token = saveTokens.get(payload.saveToken); if (token) token.state = "cancelled";
       saveRequests.push({ path: requestPath, payload });
-      response.writeHead(200, { "Content-Type": "application/json" }); response.end(JSON.stringify({ ok: true }));
+      response.writeHead(200, { "Content-Type": "application/json" }); response.end(JSON.stringify({ state: token ? "cancelled" : "unknown" }));
       return;
     }
     if (requestPath === "/api/catalog/clear" && request.method === "POST") {
@@ -4443,7 +4443,7 @@ async function main() {
     assert.deepEqual({ scrollTop: pointerContextAfter.scrollTop, currentId: pointerContextAfter.currentId, selected: pointerContextAfter.selected }, { scrollTop: pointerContextBefore.before.scrollTop, currentId: pointerContextBefore.before.currentId, selected: pointerContextBefore.before.selected }, "the gallery action applies only to its menu target and does not change its scroll, current image, or selection after rendering");
     assert.deepEqual(pointerContextAfter.hidden, ["pointer-1"], "the gallery action changes only the right-clicked target");
     const overviewPointerBefore = await page.evaluate(async () => {
-      state.viewMode = "overview"; state.batchMode = true; state.overviewFilter = new Set(); state.selectedImageIds = new Set(["pointer-0", "pointer-2"]); state.selectionAnchorId = "pointer-0";
+      setViewMode("overview"); state.batchMode = true; state.overviewFilter = new Set(); state.selectedImageIds = new Set(["pointer-0", "pointer-2"]); state.selectionAnchorId = "pointer-0";
       renderOverview(true); const grid = document.querySelector("#overviewGrid"); grid.scrollTop = 100; await new Promise((resolve) => requestAnimationFrame(resolve)); renderOverview(true);
       const current = document.querySelector('.overview-item[data-id="pointer-0"]'); const target = document.querySelector('.overview-item[data-id="pointer-1"]'); current.focus();
       const snapshot = () => ({ scrollTop: grid.scrollTop, currentId: state.currentId, selected: [...state.selectedImageIds].sort(), focused: document.activeElement?.dataset.id, tabStops: [...document.querySelectorAll('.overview-item[tabindex="0"]')].map((item) => item.dataset.id) });
@@ -4454,6 +4454,7 @@ async function main() {
     assert.equal(overviewPointerBefore.pointerPrevented, true, "secondary overview pointerdown prevents focus movement");
     assert.deepEqual(overviewPointerBefore.after, overviewPointerBefore.before, "right-clicking an overview card leaves logical focus, selection, tab stop, current image, and scroll unchanged");
     assert.equal(overviewPointerBefore.target, "pointer-1", "the overview menu targets the right-clicked card");
+    assert.equal(await page.evaluate(() => state.contextMenuOrigin?.dataset.id), "pointer-0", "Escape must restore the pre-click focus rather than the menu's action target");
     await page.keyboard.press("Escape");
     await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(resolve)));
     const overviewPointerAfter = await page.evaluate(() => ({ scrollTop: document.querySelector("#overviewGrid").scrollTop, currentId: state.currentId, selected: [...state.selectedImageIds].sort(), focused: document.activeElement?.dataset.id, tabStops: [...document.querySelectorAll('.overview-item[tabindex="0"]')].map((item) => item.dataset.id) }));

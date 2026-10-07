@@ -1,4 +1,5 @@
 {
+  "save.recoveryPending": "保存の確認・復旧が完了していません。接続を確認して、もう一度実行してください。",
   "review.hidden": "非表示",
   "catalog.removeFromList": "一覧から削除",
   "status.removedFromList": "一覧から{count}件削除しました。元画像は保持されています。",
@@ -680,6 +681,9 @@
   "errorDialog.workspace_corrupt.cause": "作業データが壊れているか使用できません。",
   "errorDialog.workspace_corrupt.action": "Mozarieを閉じて作業データを退避し、再起動してください。",
   "errorDialog.workspace_write_failed.title": "作業内容を保存できません",
+  "errorDialog.manual_revision_conflict.title": "別の画面で編集されています",
+  "errorDialog.manual_revision_conflict.cause": "保存済みの手描きが変更されています。この画面の未保存の編集は保持しています。",
+  "errorDialog.manual_revision_conflict.action": "ほかの画面の編集を確認してください。再読み込みすると、この画面の未保存の編集は破棄されます。",
   "errorDialog.workspace_write_failed.cause": "作業データに書き込めません。",
   "errorDialog.workspace_write_failed.action": "空き容量と書込権限を確認して再試行してください。",
   "errorDialog.model_not_configured.title": "必要なモデルが未選択です",
@@ -807,5 +811,12 @@
   "sourceDelete.notAvailable": "{complete} {output} コピーは保存しましたが、元画像を安全に削除できませんでした。",
   "sourceDelete.batchNotAvailable": "{complete} コピーは保存しましたが、元画像を安全に削除できませんでした: {names}。",
   "settings.shortcut.cycleMosaicTool": "モザイクツールを順に切替",
-  "settings.shortcut.cycleExclusionTool": "除外ツールを順に切替"
+  "settings.shortcut.cycleExclusionTool": "除外ツールを順に切替",
+  "sourceDelete.result": "元画像を{count}件削除しました。",
+  "sourceDelete.resultFailed": "元画像を{count}件削除しました。失敗{failed}件: {details}",
+  "sourceDelete.resultCleanup": "元画像を{count}件削除しました。 元画像ファイルの後処理{cleanup}件を再試行します。",
+  "sourceDelete.resultFailedCleanup": "元画像を{count}件削除しました。失敗{failed}件: {details} 元画像ファイルの後処理{cleanup}件を再試行します。",
+  "errorDialog.source_delete_failed.title": "元画像を削除できません",
+  "errorDialog.source_delete_failed.cause": "選択した元画像を削除できませんでした。",
+  "errorDialog.source_delete_failed.action": "画像フォルダーを選び直し、アクセス権限を確認してから、もう一度削除してください。"
 }

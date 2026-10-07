@@ -7,7 +7,7 @@
   },
   "baseline": {
     "rows": 129,
-    "observations": 174
+    "observations": 175
   },
   "observations": [
     {
@@ -1183,7 +1183,15 @@
       "testIds": [
         "node:tests/test_editor_masks_behavior.cjs::editor masks, fill, candidates, and history",
         "node:tests/test_project_history_browser_e2e.cjs::project Ctrl+Z flushes the durable edit and keeps browser history canvases released",
-        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
+        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage",
+        "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_peer_manual_sync_conflicts_and_last_stroke_undo_use_real_workspace",
+        "python:tests.test_http_live_endpoints.LiveHttpEndpointTests.test_manual_revision_conflicts_keep_pixels_and_empty_delete_is_undoable",
+        "python:tests.core.test_mask_bounds_memory.MaskBoundsMemoryTests.test_manual_history_decodes_each_changed_png_once_and_keeps_undo_pixels",
+        "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_rapid_strokes_keep_separate_undo_steps_after_reopen",
+        "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_slow_encoder_does_not_merge_subsequent_stroke_history",
+        "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_pending_upload_does_not_merge_subsequent_stroke_history",
+        "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_group_undo_preserves_another_images_pending_stroke",
+        "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_group_undo_keeps_another_images_failed_stroke_retryable"
       ]
     },
     {
@@ -1196,7 +1204,13 @@
       "testIds": [
         "node:tests/test_editor_masks_behavior.cjs::editor masks, fill, candidates, and history",
         "node:tests/test_project_history_browser_e2e.cjs::project Ctrl+Z flushes the durable edit and keeps browser history canvases released",
-        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
+        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage",
+        "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_peer_manual_sync_conflicts_and_last_stroke_undo_use_real_workspace",
+        "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_rapid_strokes_keep_separate_undo_steps_after_reopen",
+        "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_slow_encoder_does_not_merge_subsequent_stroke_history",
+        "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_pending_upload_does_not_merge_subsequent_stroke_history",
+        "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_group_redo_preserves_another_images_pending_stroke",
+        "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_group_redo_keeps_another_images_failed_stroke_retryable"
       ]
     },
     {
@@ -1218,7 +1232,8 @@
       "observation": "Undo後に新しい描画 → 新操作が保存され、分岐前のRedoはできない",
       "status": "automated",
       "testIds": [
-        "python:tests.test_workspace.WorkspaceTests.test_history_restores_one_image_and_discards_its_redo_after_new_edit"
+        "python:tests.test_workspace.WorkspaceTests.test_history_restores_one_image_and_discards_its_redo_after_new_edit",
+        "python:tests.test_http_live_endpoints.LiveHttpEndpointTests.test_history_branch_uses_fresh_mask_urls_and_keeps_manual_revision_current"
       ]
     },
     {
@@ -1670,7 +1685,21 @@
       "status": "automated",
       "testIds": [
         "node:tests/test_editor_direct_observations_e2e.cjs::direct editor boundary and gesture observations > ED-114.1 anonymous drawing fill deletion boundary and flip are one history step with buttons and shortcuts",
-        "node:tests/test_editor_direct_observations_e2e.cjs::direct editor boundary and gesture observations > ED-114.1 candidate toggle force padding and role batch are one button and shortcut history step"
+        "node:tests/test_editor_direct_observations_e2e.cjs::direct editor boundary and gesture observations > ED-114.1 candidate toggle force padding and role batch are one button and shortcut history step",
+        "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_mixed_apply_role_toggle_is_one_durable_history_operation",
+        "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_mixed_exclude_role_toggle_restores_exclusion_and_erase_together",
+        "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_manual_only_role_toggle_keeps_one_history_operation",
+        "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_candidate_only_role_toggle_keeps_one_history_operation",
+        "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_role_toggle_waits_for_pending_stroke_without_merging_its_history",
+        "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_failed_role_toggle_keeps_both_states_and_allows_retry",
+        "python:tests.test_http_live_endpoints.LiveHttpEndpointTests.test_role_toggle_commits_metadata_and_one_history_without_rewriting_pngs",
+        "python:tests.test_http_live_endpoints.LiveHttpEndpointTests.test_role_toggle_manual_conflict_and_sql_failure_leave_both_states_unchanged",
+        "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_individual_candidate_toggle_does_not_add_empty_manual_history",
+        "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_individual_candidate_forced_toggle_does_not_add_empty_manual_history",
+        "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_individual_candidate_toggle_waits_for_prior_stroke_history",
+        "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_single_candidate_padding_waits_for_prior_stroke_history",
+        "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_batch_candidate_padding_waits_for_prior_stroke_history",
+        "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_boundary_candidate_addition_waits_for_prior_stroke_history"
       ]
     },
     {
@@ -1688,8 +1717,12 @@
         "node:tests/editor/test_draft_transition_e2e.cjs::failed outgoing encoding cancels the latest transition without clearing its canvas",
         "node:tests/editor/test_draft_transition_e2e.cjs::compact server layers become the base of local undo instead of an empty history",
         "node:tests/editor/test_draft_residency_e2e.cjs::pending and failed metadata-only drafts survive image switches until their own save succeeds",
+        "node:tests/editor/test_draft_residency_e2e.cjs::project creation retries failed metadata saves before discarding the previous editor",
+        "node:tests/test_workspace_runtime.cjs::workspace runtime contracts",
         "node:tests/editor/test_draft_residency_e2e.cjs::legacy non-durable drafts keep local history when leaving after a save",
-        "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_anonymous_compact_draft_keeps_layers_through_edit_undo_redo_and_reload"
+        "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_anonymous_compact_draft_keeps_layers_through_edit_undo_redo_and_reload",
+        "python:tests.test_http_live_endpoints.LiveHttpEndpointTests.test_manual_png_processing_does_not_block_catalog_reads",
+        "node:tests/editor/test_draft_residency_e2e.cjs::failed empty draft deletion keeps the cleared canvas until retry succeeds"
       ]
     },
     {
@@ -1726,7 +1759,8 @@
       "observation": "無名作業で確認済み→未確認、非表示→再表示を各1回実行し、現在画像のボタンとCtrl+Z/Ctrl+Shift+Zで戻す → 確認済みと非表示を履歴へ1回ずつ記録し、非表示中もUndoで再表示できる",
       "status": "automated",
       "testIds": [
-        "node:tests/test_editor_direct_observations_e2e.cjs::direct editor boundary and gesture observations > ED-116.1 and ED-116.2 anonymous reviewed and hidden toggles round-trip through history and catalog state"
+        "node:tests/test_editor_direct_observations_e2e.cjs::direct editor boundary and gesture observations > ED-116.1 and ED-116.2 anonymous reviewed and hidden toggles round-trip through history and catalog state",
+        "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_anonymous_review_and_next_keeps_stroke_history_order"
       ]
     },
     {
@@ -1748,7 +1782,12 @@
       "observation": "名前付きPJで確認済み→未確認、非表示→再表示を各1回実行し、ボタンとCtrl+Z/Ctrl+Shift+Zで戻す → 各変更を永続履歴へ1回ずつ記録し、PJ再開後も非表示・確認済み・一覧状態を復元する",
       "status": "automated",
       "testIds": [
-        "python:tests.test_workspace.WorkspaceTests.test_named_project_flag_history_survives_reopen_and_keeps_other_project_isolated"
+        "python:tests.test_workspace.WorkspaceTests.test_named_project_flag_history_survives_reopen_and_keeps_other_project_isolated",
+        "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_review_and_next_waits_for_prior_stroke_encoding",
+        "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_context_review_waits_for_prior_stroke_encoding",
+        "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_context_unreview_keeps_prior_stroke_history_order",
+        "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_failed_stroke_prevents_review_navigation_and_allows_retry",
+        "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_failed_review_keeps_prior_stroke_and_allows_retry"
       ]
     },
     {
@@ -1999,6 +2038,17 @@
       "testIds": [
         "node:tests/test_import_picker_e2e.cjs::import picker browser coverage",
         "node:tests/test_ui_control_manifest.cjs::static UI controls have complete executable interaction contracts"
+      ]
+    },
+    {
+      "key": "ED-132.3",
+      "sourceIds": [
+        "ED-132"
+      ],
+      "observation": "画像一覧の右クリックメニューをEscで閉じても、選択・スクロール・操作前のフォーカスを変更しない。キーボード起動は対象カードへ戻る。",
+      "status": "automated",
+      "testIds": [
+        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
       ]
     },
     {

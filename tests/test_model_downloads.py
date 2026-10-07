@@ -48,6 +48,33 @@ class _Opener:
 
 
 class ModelDownloadTests(unittest.TestCase):
+    def test_worker_start_failure_restores_idle_and_allows_retry(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            manager = ModelDownloadManager(Path(directory))
+            payload = b"fixture model"
+            entry = self.entry(payload)
+            try:
+                before = manager.snapshot()
+                with patch("mozarie.model_downloads.threading.Thread.start", side_effect=RuntimeError("can't start new thread")), patch.dict("mozarie.model_downloads.MODEL_DOWNLOADS", {"fixture": entry}):
+                    with self.assertRaisesRegex(RuntimeError, "can't start new thread"):
+                        manager.start("fixture", "vit_b")
+                self.assertEqual(manager.snapshot(), before)
+                self.assertEqual(manager.cancel(), before)
+                workers = []
+                original_start = threading.Thread.start
+
+                def start(thread):
+                    workers.append(thread)
+                    original_start(thread)
+
+                with patch("mozarie.model_downloads.build_opener", return_value=_Opener(_Response(payload))), patch.dict("mozarie.model_downloads.MODEL_DOWNLOADS", {"fixture": entry}), patch("mozarie.model_downloads.threading.Thread.start", new=start):
+                    manager.start("fixture", "vit_b")
+                    join_threads(*workers)
+                self.assertEqual(manager.snapshot()["state"], "complete")
+                self.assertEqual(entry.destination(Path(directory)).read_bytes(), payload)
+            finally:
+                manager.shutdown()
+
     def entry(self, payload: bytes) -> ModelDownload:
         return ModelDownload("fixture", "target_segmentation", "https://models.example/file", "models/file.onnx", len(payload), hashlib.sha256(payload).hexdigest())
 

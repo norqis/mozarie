@@ -489,7 +489,7 @@ class HttpCoverageTests(unittest.TestCase):
                     handler.do_DELETE()
         state.remove_image_from_catalog.assert_called_once_with("x")
         state.delete_candidate.assert_called_once_with("x", "y")
-        state.delete_manual_workspace.assert_called_once_with("x")
+        state.delete_manual_workspace.assert_called_once_with("x", None)
 
     def test_http_get_routes_dispatch_json_and_asset_paths(self) -> None:
         state = MagicMock()
@@ -498,7 +498,7 @@ class HttpCoverageTests(unittest.TestCase):
         state.job.as_dict.return_value = {"state": "idle"}
         state.catalog_snapshot.return_value = [{"id": "x"}]
         state.candidate_snapshot.return_value = []
-        state.manual_workspace.return_value = {"add": None}
+        state.manual_workspace_snapshot.return_value = {"draft": {"add": None}, "manualRevision": 0}
         handler = self.handler()
         handler._require_local_host = Mock(); handler._json = Mock(); handler._client_error = Mock()
         handler._send_image = Mock(); handler._send_candidate_mask = Mock()

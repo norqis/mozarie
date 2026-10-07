@@ -262,6 +262,8 @@ class WorkspaceStore:
             columns = {str(row["name"]) for row in db.execute("PRAGMA table_info(images)")}
             if "edited_filename" not in columns:
                 db.execute("ALTER TABLE images ADD COLUMN edited_filename TEXT")
+            if "manual_revision" not in columns:
+                db.execute("ALTER TABLE images ADD COLUMN manual_revision INTEGER NOT NULL DEFAULT 0")
             self._migrate_source_delete_operations(db)
             if not existing:
                 db.execute("INSERT INTO meta(key, value) VALUES('schema_version', ?)", (str(self.VERSION),))
@@ -1120,6 +1122,8 @@ class WorkspaceStore:
                     (record.relative_path, record.size_bytes, record.mtime_ns, int(getattr(record, "width", 0)), int(getattr(record, "height", 0)))
                     for record in records
                 ))
+                # Imports arrive one file at a time; drive the indexed lookup
+                # from incoming rows instead of scanning the growing source.
                 existing = {
                     str(row["relative_path"]): row for row in db.execute("""SELECT images.*,
                         transform.flip_horizontal AS transform_flip_horizontal,
@@ -1127,9 +1131,9 @@ class WorkspaceStore:
                         transform.source_flip_horizontal AS transform_source_flip_horizontal,
                         transform.source_flip_vertical AS transform_source_flip_vertical,
                         transform.revision AS transform_revision
-                        FROM images JOIN workspace_reconcile_records AS incoming ON incoming.relative_path=images.relative_path
+                        FROM workspace_reconcile_records AS incoming CROSS JOIN images
                         LEFT JOIN image_transforms AS transform ON transform.image_id=images.image_id
-                        WHERE images.source_id=?""", (source_id,))
+                        WHERE images.source_id=? AND images.relative_path=incoming.relative_path""", (source_id,))
                 }
                 requested_ids = {
                     str(getattr(record, "image_id", ""))
@@ -1442,6 +1446,8 @@ class WorkspaceStore:
                         resized_revision = int(image["candidate_revision"]) + 1
                         self._preserve_resized_workspace_db(db, image_id, old_size, new_size, resized_revision)
                         resized.add(image_id)
+                    if image_id in clear_revisions or old_size != new_size:
+                        db.execute("UPDATE images SET manual_revision=manual_revision+1 WHERE image_id=?", (image_id,))
                     if image_id in clear_revisions:
                         db.execute("""UPDATE images SET size_bytes=?,mtime_ns=?,width=?,height=?,source_blocked=0,
                             candidate_revision=?,updated_at=? WHERE image_id=?""", (record.size_bytes, record.mtime_ns, record.width, record.height, clear_revisions[image_id], now, image_id))
@@ -1708,7 +1714,7 @@ class WorkspaceStore:
             # still cascades all of it.
             db.execute("UPDATE candidates SET deleted=1 WHERE image_id=?", (image_id,))
             db.execute("DELETE FROM manual_edits WHERE image_id=?", (image_id,))
-            db.execute("UPDATE images SET candidate_revision=?,updated_at=? WHERE image_id=?", (revision, time.time_ns(), image_id))
+            db.execute("UPDATE images SET candidate_revision=?,manual_revision=manual_revision+1,updated_at=? WHERE image_id=?", (revision, time.time_ns(), image_id))
             self._record_history_db(db, image_id, before, self._history_state_db(db, image_id), group_id=group_id)
 
     def delete_catalog_images(self, catalog_id: str) -> None:
@@ -1783,6 +1789,21 @@ class WorkspaceStore:
                 db.execute("ROLLBACK")
                 raise
 
+    def restore_browser_source_metadata(self, image_id: str, source: dict[str, Any]) -> None:
+        """Refresh a rolled-back browser file's timestamp without changing edits."""
+        with self._lock, self._connect() as db:
+            updated = db.execute("""UPDATE images SET mtime_ns=?,size_bytes=?,updated_at=?
+                WHERE image_id=? AND catalog_id=? AND source_id=? AND relative_path=?
+                AND source_id IN (SELECT source_id FROM project_sources WHERE kind IN ('browser-files','browser-directory'))
+                AND ((ROUND(mtime_ns / 1000000.0)=? AND size_bytes=?)
+                    OR (ROUND(mtime_ns / 1000000.0)=? AND size_bytes=?))""", (
+                source["sourceMtimeMs"] * 1_000_000, source["sourceSizeBytes"], time.time_ns(),
+                image_id, source["workspaceId"], source["sourceId"], source["relativePath"],
+                source["originalMtimeMs"], source["originalSizeBytes"], source["sourceMtimeMs"], source["sourceSizeBytes"],
+            ))
+            if updated.rowcount != 1:
+                raise ValueError("browser source changed before restoration")
+
     def commit_save(self, image_id: str, *, mtime_ns: int | None = None, size_bytes: int | None = None,
                     relative_path: str | None = None,
                     clear_edited_filename: bool = False,
@@ -1830,6 +1851,7 @@ class WorkspaceStore:
                 if clear_workspace and not delete_image:
                     db.execute("DELETE FROM candidates WHERE image_id=?", (image_id,))
                     db.execute("DELETE FROM manual_edits WHERE image_id=?", (image_id,))
+                    db.execute("UPDATE images SET manual_revision=manual_revision+1 WHERE image_id=?", (image_id,))
                 if save_receipt is not None:
                     token = save_receipt.get("token")
                     if not isinstance(token, str) or not token:
@@ -1930,7 +1952,8 @@ class WorkspaceStore:
 
     def _write_candidate_state_db(self, db: sqlite3.Connection, image_id: str, revision: int, candidates: list[Any], effective: bool,
                                   *, replace: bool, history_group: str | None = None, expected_revision: int | None = None,
-                                  require_candidate_masks: bool = False) -> None:
+                                  require_candidate_masks: bool = False, manual_flags: dict[str, bool] | None = None,
+                                  manual_revision: int | None = None) -> None:
         if expected_revision is not None:
             current = db.execute("SELECT candidate_revision FROM images WHERE image_id=?", (image_id,)).fetchone()
             if current is None or int(current["candidate_revision"]) != expected_revision:
@@ -1964,7 +1987,30 @@ class WorkspaceStore:
                     ON CONFLICT(image_id,candidate_id) DO UPDATE SET expand_px=excluded.expand_px""",
                            (image_id, candidate.candidate_id, int(candidate.expand_px)))
         self._update_manual_candidate_state(db, image_id, revision, {candidate.candidate_id for candidate in candidates}, effective)
+        if manual_flags:
+            columns = {"manualEnabled": "manual_enabled", "manualExclusionEnabled": "exclusion_enabled",
+                       "manualExclusionEraseEnabled": "exclusion_erase_enabled"}
+            assignments = ",".join(f"{columns[key]}=?" for key in manual_flags)
+            db.execute(f"UPDATE manual_edits SET {assignments} WHERE image_id=?", (*map(int, manual_flags.values()), image_id))
+            db.execute("UPDATE images SET manual_revision=? WHERE image_id=?", (manual_revision, image_id))
         self._record_history_db(db, image_id, before, self._history_state_db(db, image_id), group_id=history_group)
+
+    def commit_candidate_role_state(self, image_id: str, revision: int, candidates: list[Any], effective: bool,
+                                    manual_flags: dict[str, bool], expected_manual_revision: int) -> int:
+        """A role toggle changes candidate and manual metadata in one history step."""
+        with self._lock, self._connect() as db:
+            db.execute("BEGIN IMMEDIATE")
+            try:
+                manual_revision = self._manual_revision_db(db, image_id, expected_manual_revision) + 1
+                if db.execute("SELECT 1 FROM manual_edits WHERE image_id=?", (image_id,)).fetchone() is None:
+                    raise ClientError("手描きの編集内容が変更されました。", "manual_revision_conflict")
+                self._write_candidate_state_db(db, image_id, revision, candidates, effective, replace=False,
+                                               manual_flags=manual_flags, manual_revision=manual_revision)
+                db.execute("COMMIT")
+                return manual_revision
+            except Exception:
+                db.execute("ROLLBACK")
+                raise
 
     def commit_candidate_states(self, states: list[tuple[str, int, list[Any], bool, bool]], *, history_group: str | None = None) -> None:
         """Commit a complete multi-image candidate operation in one SQLite transaction."""
@@ -2064,6 +2110,15 @@ class WorkspaceStore:
                     result[str(row["image_id"])] = int(row["candidate_revision"])
         return result
 
+    def manual_revisions(self, image_ids: list[str]) -> dict[str, int]:
+        """Read edit versions without loading mask BLOBs."""
+        revisions = {}
+        with self._connect() as db:
+            for chunk in _chunks(db, image_ids):
+                rows = db.execute(f"SELECT image_id,manual_revision FROM images WHERE image_id IN ({','.join('?' for _ in chunk)})", chunk)
+                revisions.update({str(row["image_id"]): int(row["manual_revision"]) for row in rows})
+        return revisions
+
     def valid_candidate_ids(self, image_id: str) -> set[str]:
         with self._connect() as db:
             rows = db.execute("""SELECT candidate_id FROM candidates
@@ -2087,7 +2142,18 @@ class WorkspaceStore:
                 or int.from_bytes(header[20:24], "big") <= 0):
             raise ValueError("workspace candidate PNG is invalid")
 
-    def _save_manual_db(self, db: sqlite3.Connection, image_id: str, payload: dict[str, Any], decoder: Any) -> None:
+    @staticmethod
+    def _manual_revision_db(db: sqlite3.Connection, image_id: str, expected: int | None = None) -> int:
+        row = db.execute("SELECT manual_revision FROM images WHERE image_id=?", (image_id,)).fetchone()
+        if row is None:
+            raise ValueError("workspace image is missing")
+        revision = int(row["manual_revision"])
+        if expected is not None and expected != revision:
+            raise ClientError("別の画面で手描きの編集内容が変更されました。", "manual_revision_conflict")
+        return revision
+
+    def _save_manual_db(self, db: sqlite3.Connection, image_id: str, payload: dict[str, Any], decoder: Any) -> int:
+        manual_revision = self._manual_revision_db(db, image_id, payload.get("expectedManualRevision")) + 1
         removed = payload.get("removedCandidateIds", [])
         if not isinstance(removed, list) or any(not isinstance(item, str) for item in removed):
             raise ValueError("invalid removed candidates")
@@ -2138,6 +2204,7 @@ class WorkspaceStore:
         # Candidate IDs are revision-local. Persisting only current IDs keeps
         # an old editor tab from suppressing a newly detected mask.
         removed = sorted(set(removed) & valid_ids)
+        updated_at = time.time_ns()
         db.execute("""INSERT INTO manual_edits(
                 image_id,add_png,exclusion_png,exclusion_erase_png,manual_enabled,exclusion_enabled,
                 exclusion_erase_enabled,exclusion_forced,removed_candidate_ids,candidate_revision,
@@ -2146,41 +2213,53 @@ class WorkspaceStore:
                 add_png=excluded.add_png,exclusion_png=excluded.exclusion_png,exclusion_erase_png=excluded.exclusion_erase_png,
                 manual_enabled=excluded.manual_enabled,exclusion_enabled=excluded.exclusion_enabled,exclusion_erase_enabled=excluded.exclusion_erase_enabled,
                 exclusion_forced=excluded.exclusion_forced,removed_candidate_ids=excluded.removed_candidate_ids,candidate_revision=excluded.candidate_revision,has_effective_mask=excluded.has_effective_mask,history_json=excluded.history_json,updated_at=excluded.updated_at""",
-            (image_id,layers["add"],layers["exclusion"],layers["erase"],int(payload.get("manualEnabled", True)),int(payload.get("manualExclusionEnabled", True)),int(payload.get("manualExclusionEraseEnabled", True)),int(payload.get("manualExclusionForced", True)),json.dumps(removed),revision,int(has_effective_mask),history_json,time.time_ns()))
-        db.execute("UPDATE images SET updated_at=? WHERE image_id=?", (time.time_ns(), image_id))
+            (image_id,layers["add"],layers["exclusion"],layers["erase"],int(payload.get("manualEnabled", True)),int(payload.get("manualExclusionEnabled", True)),int(payload.get("manualExclusionEraseEnabled", True)),int(payload.get("manualExclusionForced", True)),json.dumps(removed),revision,int(has_effective_mask),history_json,updated_at))
+        db.execute("UPDATE images SET manual_revision=?,updated_at=? WHERE image_id=?", (manual_revision, updated_at, image_id))
         self._record_history_db(db, image_id, before, self._history_state_db(db, image_id), manual_rois={
             "add": rois.get("add"), "exclusion": rois.get("exclusion"), "erase": rois.get("exclusionErase"),
         })
+        return manual_revision
 
-    def save_manual(self, image_id: str, payload: dict[str, Any], decoder: Any) -> None:
+    def save_manual(self, image_id: str, payload: dict[str, Any], decoder: Any) -> int:
         with self._lock, self._connect() as db:
             db.execute("BEGIN IMMEDIATE")
             try:
-                self._save_manual_db(db, image_id, payload, decoder)
+                version = self._save_manual_db(db, image_id, payload, decoder)
                 db.execute("COMMIT")
+                return version
             except Exception:
                 db.execute("ROLLBACK")
                 raise
 
-    def manual_mask_statuses(self, image_ids: list[str]) -> dict[str, tuple[bool, int]]:
+    def manual_mask_statuses(self, image_ids: list[str]) -> dict[str, tuple[bool, int, int]]:
         if not image_ids:
             return {}
         with self._connect() as db:
-            result: dict[str, tuple[bool, int]] = {}
+            result: dict[str, tuple[bool, int, int]] = {}
             for chunk in _chunks(db, image_ids):
                 rows = db.execute(
-                    f"SELECT image_id,has_effective_mask,candidate_revision FROM manual_edits WHERE image_id IN ({','.join('?' for _ in chunk)})",
+                    f"""SELECT images.image_id,images.manual_revision,manual_edits.has_effective_mask,manual_edits.candidate_revision
+                        FROM images LEFT JOIN manual_edits ON images.image_id=manual_edits.image_id
+                        WHERE images.image_id IN ({','.join('?' for _ in chunk)})""",
                     chunk,
                 ).fetchall()
-                result.update({str(row["image_id"]): (bool(row["has_effective_mask"]), int(row["candidate_revision"])) for row in rows})
+                result.update({str(row["image_id"]): (bool(row["has_effective_mask"]), int(row["candidate_revision"]) if row["candidate_revision"] is not None else -1, int(row["manual_revision"])) for row in rows})
         return result
 
-    def delete_manual(self, image_ids: list[str]) -> None:
-        if not image_ids:
-            return
+    def delete_manual(self, image_ids: list[str], *, expected_revision: int | None = None) -> dict[str, int]:
+        revisions = {}
         with self._lock, self._connect() as db:
-            for chunk in _chunks(db, image_ids):
-                db.execute(f"DELETE FROM manual_edits WHERE image_id IN ({','.join('?' for _ in chunk)})", chunk)
+            db.execute("BEGIN IMMEDIATE")
+            for image_id in image_ids:
+                revision = self._manual_revision_db(db, image_id, expected_revision)
+                before = self._history_state_db(db, image_id)
+                deleted = db.execute("DELETE FROM manual_edits WHERE image_id=?", (image_id,)).rowcount
+                if deleted:
+                    revision += 1
+                    db.execute("UPDATE images SET manual_revision=?,updated_at=? WHERE image_id=?", (revision, time.time_ns(), image_id))
+                    self._record_history_db(db, image_id, before, self._history_state_db(db, image_id))
+                revisions[image_id] = revision
+        return revisions
 
     @staticmethod
     def _pack_blob(value: bytes | None) -> str | None:
@@ -2346,9 +2425,7 @@ class WorkspaceStore:
         if before is None and after is None: return None
         if before == after: return None
         try:
-            source = cls._decode_png_mask(before if before is not None else after)
-            assert source is not None
-            with source:
+            with open_image(io.BytesIO(before if before is not None else after)) as source:
                 width, height = source.size
             if roi is None:
                 left, top, right, bottom = 0, 0, width, height
@@ -2505,12 +2582,14 @@ class WorkspaceStore:
                 raise
 
     @staticmethod
-    def _restore_history_state(db: sqlite3.Connection, image_id: str, state: dict[str, Any], manual_delta: dict[str, Any], *, forward: bool, restore_reviewed: bool = True) -> None:
+    def _restore_history_state(db: sqlite3.Connection, image_id: str, state: dict[str, Any], manual_delta: dict[str, Any], *, forward: bool, restore_reviewed: bool = True, rollback_revision: int | None = None, rollback_manual_revision: int | None = None) -> None:
         if not isinstance(state, dict) or not isinstance(state.get("candidates"), list):
             raise ValueError("workspace history is invalid")
         revision = state.get("revision")
         if isinstance(revision, bool) or not isinstance(revision, int) or revision < 0:
             raise ValueError("workspace history is invalid")
+        revision = (int(db.execute("SELECT candidate_revision FROM images WHERE image_id=?", (image_id,)).fetchone()["candidate_revision"]) + 1
+                    if rollback_revision is None else rollback_revision)
         manual = state.get("manual")
         # Candidate PNG BLOBs are immutable operation resources.  Retain rows
         # from later detection generations and switch their metadata/deleted
@@ -2551,12 +2630,13 @@ class WorkspaceStore:
                 exclusion_erase_enabled,exclusion_forced,removed_candidate_ids,candidate_revision,has_effective_mask,history_json,updated_at)
                 VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)""", (image_id, *blobs, int(bool(manual.get("manualEnabled"))),
                 int(bool(manual.get("exclusionEnabled"))), int(bool(manual.get("eraseEnabled"))), int(bool(manual.get("exclusionForced"))),
-                manual["removed"], int(manual.get("revision", revision)), int(bool(manual.get("effective"))), "{}", time.time_ns()))
+                manual["removed"], revision, int(bool(manual.get("effective"))), "{}", time.time_ns()))
         flags = state.get("flags", {})
         if not isinstance(flags, dict) or not isinstance(flags.get("hidden", False), bool) or not isinstance(flags.get("reviewed", False), bool):
             raise ValueError("workspace history is invalid")
         db.execute("UPDATE images SET candidate_revision=?,hidden=?,reviewed=CASE WHEN ? THEN ? ELSE reviewed END,updated_at=? WHERE image_id=?",
                    (revision, int(flags.get("hidden", False)), int(restore_reviewed), int(flags.get("reviewed", False)), time.time_ns(), image_id))
+        db.execute("UPDATE images SET manual_revision=COALESCE(?,manual_revision+1) WHERE image_id=?", (rollback_manual_revision, image_id))
         transform = state.get("transform", {"flipHorizontal": False, "flipVertical": False})
         if not isinstance(transform, dict) or not isinstance(transform.get("flipHorizontal", False), bool) or not isinstance(transform.get("flipVertical", False), bool):
             raise ValueError("workspace history is invalid")
@@ -2616,6 +2696,8 @@ class WorkspaceStore:
     def restore_history(
         self, image_id: str, direction: str, member_guard: Callable[[list[str]], None] | None = None,
         expected_members: list[str] | None = None,
+        _rollback_revisions: dict[str, int] | None = None,
+        _rollback_manual_revisions: dict[str, int] | None = None,
     ) -> list[str]:
         if direction not in {"undo", "redo"}:
             raise ValueError("invalid history direction")
@@ -2672,7 +2754,9 @@ class WorkspaceStore:
                     if not isinstance(delta, dict) or not isinstance(delta.get("manual", {}), dict):
                         raise ValueError("workspace history is invalid")
                     self._restore_history_state(db, str(member["image_id"]), state, delta.get("manual", {}),
-                                                forward=direction == "redo", restore_reviewed=flag_only and review_changed)
+                                                forward=direction == "redo", restore_reviewed=flag_only and review_changed,
+                                                rollback_revision=(_rollback_revisions or {}).get(str(member["image_id"])),
+                                                rollback_manual_revision=(_rollback_manual_revisions or {}).get(str(member["image_id"])))
                     if direction == "undo":
                         previous = db.execute("SELECT entry_id FROM history_entries WHERE image_id=? AND entry_id<? ORDER BY entry_id DESC LIMIT 1", (member["image_id"], member["entry_id"])).fetchone()
                         db.execute("""INSERT INTO history_cursors(image_id,entry_id) VALUES(?,?)

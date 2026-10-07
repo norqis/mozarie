@@ -223,7 +223,7 @@ function openCatalogContextMenu(event, imageId) {
   event.preventDefault();
   state.contextMenuImageId = imageId;
   const keyboardEvent = event.type === "keydown";
-  state.contextMenuOrigin = event.currentTarget || document.activeElement;
+  state.contextMenuOrigin = keyboardEvent ? event.currentTarget || document.activeElement : document.activeElement;
   state.contextMenuScroll = { gallery: $("#gallery").scrollTop, overview: $("#overviewGrid").scrollTop };
   $("#toggleReviewMenuItem").textContent = t(isReviewed(image) ? "context.unreview" : "context.review");
   const rename = $("#renameImageMenuItem"); const renameAvailable = canRenameCatalogImage(image);
@@ -234,7 +234,7 @@ function openCatalogContextMenu(event, imageId) {
   $("#removeImageMenuItem").textContent = t(isHidden(image) ? "editor.show" : "editor.hide");
   $("#removeFromListMenuItem").disabled = !canRemoveImagesFromList([image]);
   const menu = $("#catalogContextMenu");
-  const cardRect = state.contextMenuOrigin?.getBoundingClientRect?.();
+  const cardRect = (event.currentTarget || state.contextMenuOrigin)?.getBoundingClientRect?.();
   const clientX = !keyboardEvent && Number.isFinite(event.clientX) ? event.clientX : (cardRect ? cardRect.left + Math.min(24, cardRect.width / 2) : 8);
   const clientY = !keyboardEvent && Number.isFinite(event.clientY) ? event.clientY : (cardRect ? cardRect.top + Math.min(24, cardRect.height / 2) : 8);
   menu.style.left = `${clientX}px`;
@@ -334,6 +334,8 @@ function browserDeleteEntry(image) {
   const access = sourceAccessFor(image.id);
   return access?.fileHandle && access?.parentHandle ? {
     imageId: image.id, name: access.fileHandle.name || access.name, fileHandle: access.fileHandle, parentHandle: access.parentHandle,
+    rootHandle: access.rootHandle, sourceId: image.sourceId, rememberedSourceId: access.rememberedSourceId,
+    clientKey: access.clientKey, relativePath: image.relativePath, sourceKind: access.sourceKind,
     sizeBytes: image.sizeBytes, mtimeNs: image.mtimeNs, state: "ready",
   } : null;
 }
@@ -454,12 +456,22 @@ async function recoverPendingBrowserDeletes(pending) {
   return { deleted: pending.browserDeletedImageIds, unresolved };
 }
 
+function withSourceDeleteLock(token, callback, ifAvailable = false) {
+  return globalThis.navigator?.locks?.request
+    ? navigator.locks.request(`mozarie-source-delete:${token}`, { ifAvailable }, (lock) => lock ? callback() : undefined)
+    : callback();
+}
+
 async function resumePendingSourceDeletes(requestPermission = false) {
+  if (state.catalogMutation || state.saving) return;
   const pendingDeletes = await pendingSourceDeletes();
   if (!pendingDeletes.length) return;
   const pendingImageIds = new Set(pendingDeletes.flatMap((pending) => pending.imageIds || []));
   const recoverySelection = deletionSelectionSnapshot(pendingImageIds, galleryFilteredImages());
+  let recovered = false;
   for (const pending of pendingDeletes) {
+    await withSourceDeleteLock(pending.deleteToken, async () => {
+    recovered = true;
     try {
       let status;
       try {
@@ -470,15 +482,19 @@ async function resumePendingSourceDeletes(requestPermission = false) {
         // local durable intent includes the handle, so prepare it now instead
         // of throwing the user's copy+delete request away.
         const images = pending.imageIds.map((imageId) => state.images.find((image) => image.id === imageId)).filter(Boolean);
-        const prepared = await catalogApi("/api/catalog/delete-source/prepare", { imageIds: images.map((image) => image.id), deleteToken: pending.deleteToken }, { method: "POST" });
+        const prepared = await catalogApi("/api/catalog/delete-source/prepare", { imageIds: images.map((image) => image.id), deleteToken: pending.deleteToken, savedEdits: pending.savedEdits }, { method: "POST" });
         if (!pending.browserEntries?.length) pending.browserEntries = images.filter((image) => (prepared.preparedImageIds || []).includes(image.id)).map(browserDeleteEntry).filter(Boolean);
         pending.imageIds = prepared.preparedImageIds || pending.imageIds;
         pending.state = "prepared";
         await rememberPendingSourceDelete(pending);
         status = await api("/api/catalog/delete-source/status", { method: "POST", body: JSON.stringify({ deleteToken: pending.deleteToken }), resyncOnStale: false });
       }
+      if (pending.state === "restored") {
+        if (!await restoreCopiedBrowserSourcesAfterRejectedDelete(pending)) throw codedError("source_restore_failed");
+        return;
+      }
       const recovery = ["prepared", "claimed"].includes(status.state) ? await recoverPendingBrowserDeletes(pending) : { deleted: pending.browserDeletedImageIds || [], unresolved: false };
-      if (["prepared", "claimed"].includes(status.state) && recovery.unresolved) continue;
+      if (["prepared", "claimed"].includes(status.state) && recovery.unresolved) return;
       // A copy's output has already committed before it requests source
       // deletion.  Its durable intent explicitly retries the browser phase;
       // do not silently cancel that request and strand the user's deletion.
@@ -498,7 +514,7 @@ async function resumePendingSourceDeletes(requestPermission = false) {
           for (const entry of pending.browserEntries || []) known.set(entry.imageId, entry);
           state.pendingSourceDeleteEntries = [...known.values()];
           $("#sourceDeleteResume").hidden = false;
-          continue;
+          return;
         }
       }
       if (status.state === "claimed" && !recovery.deleted.length) {
@@ -513,7 +529,7 @@ async function resumePendingSourceDeletes(requestPermission = false) {
         // confirmation visible for an explicit retry instead of silently
         // cancelling it after a restart.
         setStatus(t("sourceDelete.confirmPending"), "warning");
-        continue;
+        return;
       } else if (status.state === "prepared") {
         await api("/api/catalog/delete-source/cancel", { method: "POST", body: JSON.stringify({ deleteToken: pending.deleteToken }), resyncOnStale: false });
       }
@@ -521,11 +537,13 @@ async function resumePendingSourceDeletes(requestPermission = false) {
       if (["committed", "cancelled"].includes(settled.state)) await acknowledgeSourceDelete(pending.deleteToken);
     } catch (error) {
       if (pending.retryOnResume && isDefinitiveCommitRejection(error)
-        && await restoreCopiedBrowserSourcesAfterRejectedDelete(pending)) continue;
+        && await restoreCopiedBrowserSourcesAfterRejectedDelete(pending)) return;
       if (error?.code === "source_delete_not_prepared" && pending.state !== "preparing") await forgetPendingSourceDelete(pending.deleteToken);
       // Keep prepared and cleanup-pending operations until a terminal receipt is acknowledged.
     }
+    }, true);
   }
+  if (!recovered) return;
   const snapshot = await resyncCatalog().catch(() => null);
   if (snapshot) {
     await restoreDeletionSelection(recoverySelection, pendingImageIds);
@@ -546,6 +564,13 @@ async function resumePendingSourceDeletesFromUser() {
 
 window.addEventListener("online", () => { void resumePendingSourceDeletes(false).catch(() => {}); });
 
+function setSourceDeleteStatus(count, failures, cleanup = 0) {
+  const key = failures.length ? "sourceDelete.resultFailed" : "sourceDelete.result";
+  setStatusKey(cleanup ? `${key}Cleanup` : key, {
+    count, cleanup, failures: failures.map((failure) => ({ name: failure.relativePath || failure.imageId || "", reason: failure.reason })),
+  }, failures.length ? "warning" : "success");
+}
+
 async function permanentlyDeleteImages(images, visibleImages) {
   if (!images.length || isBusy() || state.importing) return;
   const ids = images.map((image) => image.id);
@@ -558,6 +583,7 @@ async function permanentlyDeleteImages(images, visibleImages) {
   const token = crypto.randomUUID();
   state.catalogMutation = true; invalidatePendingImage(); updateActionButtons();
   try {
+    await withSourceDeleteLock(token, async () => {
     // Claim the token locally before prepare. A close or lost prepare response
     // can now be reconciled on the next launch instead of leaving a server
     // receipt without an owner.
@@ -570,8 +596,8 @@ async function permanentlyDeleteImages(images, visibleImages) {
       await forgetPendingSourceDelete(token);
       const details = local.failed.map((failure) => `${failure.imageId}: ${failure.reason}`).join("、");
       console.warn("元画像を完全削除: 開始 対象=%d 成功=0 失敗=%d 詳細=%s", images.length, local.failed.length, details);
-      setStatus(`元画像を0件削除しました。失敗${local.failed.length}件: ${details}`, "warning");
-      showUserError(codedError(local.failed[0]?.reason || "source_action_unavailable"));
+      setSourceDeleteStatus(0, local.failed);
+      showUserError(codedError(sourceDeleteErrorCode(local.failed[0]?.reason || "source_action_unavailable")));
       return;
     }
     const prepared = await catalogApi("/api/catalog/delete-source/prepare", { imageIds: local.ready.map((image) => image.id), deleteToken: token }, { method: "POST" });
@@ -604,6 +630,7 @@ async function permanentlyDeleteImages(images, visibleImages) {
       invalidateProjectHistoryRefresh(image.id);
       releaseImageCaches(image.id); releaseCandidateBundles(image.id); clearCandidateMutationState(image.id);
       state.sourceAccess.delete(image.id); state.drafts.delete(image.id); state.projectHistory.delete(image.id); state.maskStatus.delete(image.id); clearReviewForRemovedImage(image);
+      state.workspaceDraftRevisions?.delete(image.id);
       state.selectedImageIds.delete(image.id);
     }
     state.images = data.images || state.images;
@@ -616,11 +643,11 @@ async function permanentlyDeleteImages(images, visibleImages) {
     const failed = [...new Map([...local.failed, ...(prepared.failed || []), ...browser.failed, ...(data.failed || [])]
       .map((failure) => [`${failure.imageId || failure.relativePath || ""}:${failure.reason || ""}`, failure])).values()];
     const failureDetails = failed.map((failure) => `${failure.relativePath || failure.imageId}: ${failure.reason}`).join("、");
-    const cleanupNotice = data.cleanupPendingCount ? ` 元画像ファイルの後処理${data.cleanupPendingCount}件を再試行します。` : "";
     if (failed.length) console.warn("元画像を完全削除: 対象=%d 成功=%d 失敗=%d 詳細=%s", images.length, removed.size, failed.length, failureDetails);
-    setStatus(`元画像を${removed.size}件削除しました。${failed.length ? `失敗${failed.length}件: ${failureDetails}` : ""}${cleanupNotice}`, failed.length ? "warning" : "success");
-    if (failed.length) showUserError(codedError(failed[0].reason));
+    setSourceDeleteStatus(removed.size, failed, data.cleanupPendingCount);
+    if (failed.length) showUserError(codedError(sourceDeleteErrorCode(failed[0].reason)));
     if (data.state === "committed") await acknowledgeSourceDelete(token);
+    });
   } catch (error) {
     await restoreDeletionSelection(selection, imageIds);
     showUserError(error);
@@ -691,7 +718,20 @@ function droppedFile(file, relativePath = file.name, fileHandle = null, parentHa
   return { file, relativePath, fileHandle, parentHandle };
 }
 
-async function directFilesFromDrop(dataTransfer) {
+async function collectImportHandle(handle, relativePath, parentHandle, rootHandle, entries, session, file = null) {
+  if (!await waitForImportSession(session)) return false;
+  if (handle.kind === "file") {
+    entries.push({ handle, relativePath, parentHandle, ...(rootHandle ? { rootHandle } : {}), ...(file ? { file } : {}) });
+  } else {
+    for await (const child of handle.values()) {
+      const path = relativePath ? `${relativePath}/${child.name}` : child.name;
+      if (!await collectImportHandle(child, path, handle, rootHandle, entries, session)) return false;
+    }
+  }
+  return true;
+}
+
+async function directFilesFromDrop(dataTransfer, session) {
   // Both APIs must be called during the drop event, before its data store is
   // protected again. Keep File snapshots when handle access is unsupported,
   // rejected, or returns null (for example a drag from another application).
@@ -705,14 +745,13 @@ async function directFilesFromDrop(dataTransfer) {
   });
   const snapshots = pending.length ? await Promise.all(pending) : files.map((file) => ({ handle: null, file }));
   const entries = [];
-  async function collectHandle(handle, parent = "", parentHandle = null, file = null) {
-    const relativePath = parent ? `${parent}/${handle.name}` : handle.name;
-    if (handle.kind === "file") entries.push({ handle, relativePath, parentHandle, ...(file ? { file } : {}) });
-    else for await (const entry of handle.values()) await collectHandle(entry, relativePath, handle);
-  }
   for (const { handle, file } of snapshots) {
-    if (handle) await collectHandle(handle, "", null, file);
-    else if (file) entries.push(droppedFile(file, file.webkitRelativePath || file.name));
+    if (handle) {
+      if (!await collectImportHandle(handle, handle.name, null, null, entries, session, file)) break;
+    } else {
+      if (!await waitForImportSession(session)) break;
+      if (file) entries.push(droppedFile(file, file.webkitRelativePath || file.name));
+    }
   }
   return { handleEntries: entries };
 }
@@ -765,19 +804,20 @@ function pruneSourceAccess() {
 }
 
 async function rememberImportedSource(result, session) {
+  const rememberedSourceId = result.entry.rememberedSourceId || session.rememberedSourceId || result.sourceId;
   for (const imported of result.data.imported || []) {
     if (imported.clientKey !== result.clientKey || !result.entry.fileHandle || !imported.imageId) continue;
     state.sourceAccess.set(imported.imageId, {
       fileHandle: result.entry.fileHandle, parentHandle: result.entry.parentHandle || null, rootHandle: result.entry.rootHandle || null,
       name: result.entry.file.name, size: result.entry.file.size, lastModified: result.entry.file.lastModified,
-      sourceId: result.sourceId, clientKey: result.clientKey, relativePath: result.entry.relativePath, sourceKind: session.sourceKind,
+      sourceId: result.sourceId, rememberedSourceId, clientKey: result.clientKey, relativePath: result.entry.relativePath, sourceKind: session.sourceKind,
     });
     if (session.sourceKind === "browser-directory") {
       const source = state.projectlessDirectorySources.get(result.sourceId);
       if (source) source.imageIds.add(imported.imageId);
       continue;
     }
-    if (state.project?.id) await rememberProjectSource(state.project.id, result.entry.fileHandle, imported.imageId, result.sourceId, result.clientKey, result.entry.relativePath, result.entry.parentHandle || null);
+    if (state.project?.id) await rememberProjectSource(state.project.id, result.entry.fileHandle, imported.imageId, rememberedSourceId, result.clientKey, result.entry.relativePath, result.entry.parentHandle || null);
   }
 }
 
@@ -793,8 +833,8 @@ async function importFiles(files) {
     await flushAllImageMutations();
     await flushAllWorkspaceMutations();
     await startImportServerSession(session);
-    session.total = supportedFiles.length; session.completed = 0; session.successes = 0; session.failures = []; session.paused = false; session.cancelled = false;
-    showProcessing({ kind: "import", state: "running", total: session.total, completed: 0, current: "" });
+    session.total = supportedFiles.length; session.completed = 0; session.successes = 0; session.failures = [];
+    showProcessing({ kind: "import", state: session.paused ? "paused" : "running", total: session.total, completed: 0, current: "" });
     session.requestedParallelism = importParallelism();
     const workerCount = Math.min(supportedFiles.length, session.requestedParallelism);
     session.parallelism = workerCount;
@@ -813,13 +853,13 @@ async function importFiles(files) {
           if (session.catalogId && descriptor.fileHandle && error?.name === "NotFoundError") {
             session.missingFileHandles = true;
             session.completed += 1;
-            showProcessing({ kind: "import", state: "running", total: session.total, completed: session.completed, current: descriptor.relativePath || descriptor.fileHandle.name });
+            showProcessing({ kind: "import", state: session.paused ? "paused" : "running", total: session.total, completed: session.completed, current: descriptor.relativePath || descriptor.fileHandle.name });
             continue;
           }
           if (isFileLocalImportFailure(error)) {
             session.failures.push(importFailure(descriptor, error));
             session.completed += 1;
-            showProcessing({ kind: "import", state: "running", total: session.total, completed: session.completed, current: descriptor.relativePath || descriptor.fileHandle?.name || "" });
+            showProcessing({ kind: "import", state: session.paused ? "paused" : "running", total: session.total, completed: session.completed, current: descriptor.relativePath || descriptor.fileHandle?.name || "" });
             continue;
           }
           throw error;
@@ -827,8 +867,8 @@ async function importFiles(files) {
         if (session.cancelled || state.importSession !== session) return;
         if (!isSupportedImageFile(file)) continue;
         const entry = { ...descriptor, file, relativePath: descriptor.relativePath || file.name };
-        showProcessing({ kind: "import", state: "running", total: session.total, completed: session.completed, current: entry.relativePath });
-        const stagedSource = Boolean(session.catalogId && session.sourceKind === "browser-files" && entry.fileHandle);
+        showProcessing({ kind: "import", state: session.paused ? "paused" : "running", total: session.total, completed: session.completed, current: entry.relativePath });
+        const stagedSource = Boolean(session.catalogId && session.sourceKind === "browser-files" && entry.fileHandle && session.importIntent !== "restore");
         if (stagedSource) await rememberProjectSource(session.catalogId, entry.fileHandle, null, session.sourceId, clientKey, entry.relativePath);
         let data;
         try { data = await importSingleFile(entry, clientKey, session.catalogId, session.sourceId, session.sourceKind, session.importIntent, session); }
@@ -840,7 +880,7 @@ async function importFiles(files) {
           if (isFileLocalImportFailure(error)) {
             session.failures.push(importFailure(entry, error));
             session.completed += 1;
-            showProcessing({ kind: "import", state: "running", total: session.total, completed: session.completed, current: entry.relativePath });
+            showProcessing({ kind: "import", state: session.paused ? "paused" : "running", total: session.total, completed: session.completed, current: entry.relativePath });
             continue;
           }
           throw error;
@@ -853,7 +893,7 @@ async function importFiles(files) {
         await rememberImportedSource(result, session);
         session.completed += 1;
         session.successes += 1;
-        showProcessing({ kind: "import", state: "running", total: session.total, completed: session.completed, current: entry.relativePath });
+        showProcessing({ kind: "import", state: session.paused ? "paused" : "running", total: session.total, completed: session.completed, current: entry.relativePath });
       }
     };
     const workers = Array.from({ length: workerCount }, worker);
@@ -974,6 +1014,7 @@ function remapImportedImageIds(imageIds) {
   const remapMap = (source) => new Map([...source].map(([id, value]) => [map.get(id) || id, value]));
   state.sourceAccess = remapMap(state.sourceAccess);
   state.drafts = remapMap(state.drafts);
+  if (state.workspaceDraftRevisions) state.workspaceDraftRevisions = remapMap(state.workspaceDraftRevisions);
   state.maskStatus = remapMap(state.maskStatus);
   for (const [sourceId, source] of state.projectlessDirectorySources) {
     source.imageIds = new Set([...source.imageIds].map((id) => map.get(id) || id));
@@ -1008,7 +1049,7 @@ async function importFileHandles(handles, session = beginImportSession()) {
   session.sourceKind = "browser-files";
   return importHandleEntries(handles.map((item) => {
     const handle = item?.handle || item;
-    return { handle, clientKey: item?.clientKey || null, relativePath: item?.relativePath || handle.name, parentHandle: null };
+    return { handle, rememberedSourceId: item?.rememberedSourceId, clientKey: item?.clientKey || null, relativePath: item?.relativePath || handle.name, parentHandle: item?.parentHandle || null };
   }), session);
 }
 
@@ -1027,13 +1068,7 @@ async function importDirectoryHandle(directoryHandle, session = beginImportSessi
   const entries = [];
   try {
     showProcessing({ kind: "import", state: "running", total: 1, completed: 0, current: directoryHandle.name || "" });
-    async function collect(handle, relativePath = "", parentHandle = null) {
-      if (!await waitForImportSession(session)) return;
-      const path = relativePath ? `${relativePath}/${handle.name}` : handle.name;
-      if (handle.kind === "file") entries.push({ handle, relativePath: path, parentHandle, rootHandle: directoryHandle });
-      else for await (const child of handle.values()) await collect(child, path, handle);
-    }
-    for await (const handle of directoryHandle.values()) await collect(handle, "", directoryHandle);
+    await collectImportHandle(directoryHandle, "", null, directoryHandle, entries, session);
     if (!await waitForImportSession(session)) return finishImportSession(session);
     await importHandleEntries(entries, session);
   }
@@ -1042,24 +1077,20 @@ async function importDirectoryHandle(directoryHandle, session = beginImportSessi
   }
 }
 
-async function importProjectDirectoryHandle(directoryHandle, projectId, sourceId = null, importIntent = "add") {
+async function importProjectDirectoryHandle(directoryHandle, projectId, sourceId = null, importIntent = "add", rememberedSourceId = sourceId) {
   const session = beginImportSession({ allowDuringCatalogTransition: true }); if (!session) return;
   try {
     await flushAllImageMutations();
     await flushAllWorkspaceMutations();
     session.catalogId = projectId;
-    session.sourceId = await rememberProjectSource(projectId, directoryHandle, null, sourceId);
+    const storedSourceId = await rememberProjectSource(projectId, directoryHandle, null, rememberedSourceId);
+    session.sourceId = sourceId || storedSourceId;
+    session.rememberedSourceId = storedSourceId;
     session.sourceKind = "browser-directory";
     session.importIntent = importIntent;
     const entries = [];
     showProcessing({ kind: "import", state: "running", total: 1, completed: 0, current: directoryHandle.name || "" });
-    async function collect(handle, relativePath = "", parentHandle = null) {
-      if (!await waitForImportSession(session)) return;
-      const path = relativePath ? `${relativePath}/${handle.name}` : handle.name;
-      if (handle.kind === "file") entries.push({ handle, relativePath: path, parentHandle, rootHandle: directoryHandle });
-      else for await (const child of handle.values()) await collect(child, path, handle);
-    }
-    for await (const handle of directoryHandle.values()) await collect(handle, "", directoryHandle);
+    await collectImportHandle(directoryHandle, "", null, directoryHandle, entries, session);
     if (await waitForImportSession(session) && !await importHandleEntries(entries, session)) throw codedError("project_source_unavailable");
   } finally { finishImportSession(session); }
 }
@@ -1073,7 +1104,7 @@ async function importProjectFileHandles(sources, projectId) {
     if (!handle) continue;
     const sourceId = source?.sourceId || crypto.randomUUID();
     const handles = groups.get(sourceId) || [];
-    handles.push({ handle, clientKey: source?.clientKey || null, relativePath: source?.relativePath || handle.name }); groups.set(sourceId, handles);
+    handles.push({ handle, sourceId, rememberedSourceId: source?.rememberedSourceId, clientKey: source?.clientKey || null, relativePath: source?.relativePath || handle.name, parentHandle: source?.parentHandle || null }); groups.set(sourceId, handles);
   }
   const failures = [];
   for (const [sourceId, handles] of groups) {
@@ -1117,7 +1148,9 @@ async function importDroppedFiles(event) {
   const session = beginImportSession();
   if (!session) return;
   try {
-    const dropped = await directFilesFromDrop(event.dataTransfer);
+    showProcessing({ kind: "import", state: "running", total: 1, completed: 0, current: "" });
+    const dropped = await directFilesFromDrop(event.dataTransfer, session);
+    if (!await waitForImportSession(session)) return;
     if (dropped?.handleEntries) await importHandleEntries(dropped.handleEntries, session);
     else await importFiles(dropped, session);
   } catch (error) { showUserError(error); }

@@ -38,7 +38,7 @@ class WorkspaceTests(unittest.TestCase):
             catalog = self._new_catalog(store)
             image_id = store.reconcile_images(catalog, [self._image(Path(directory))])["001.png"]["image_id"]
             store.save_manual(str(image_id), {"add": "x", "manualEnabled": True, "hasEffectiveMask": True}, lambda value: self._png() if value else None)
-            self.assertEqual(store.manual_mask_statuses([str(image_id)]), {str(image_id): (True, 0)})
+            self.assertEqual(store.manual_mask_statuses([str(image_id)]), {str(image_id): (True, 0, 1)})
 
     def test_manual_effective_mask_requires_the_client_scalar(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -275,12 +275,19 @@ class WorkspaceTests(unittest.TestCase):
             after = store.history_state(edited); store.record_history(edited, before, after)
 
             reopened = WorkspaceStore(root)
-            semantic = lambda state: {key: value for key, value in state.items() if key != "_manual_raw"}
+            def semantic(state):
+                content = {key: value for key, value in state.items() if key not in {"_manual_raw", "revision"}}
+                if content.get("manual"):
+                    content["manual"] = {key: value for key, value in content["manual"].items() if key != "revision"}
+                return content
             self.assertEqual(semantic(reopened.history_state(edited)), semantic(after))
             self.assertEqual(reopened.history_state(other), other_before)
-            self.assertEqual(reopened.restore_history(edited, "undo"), [edited]); self.assertEqual(reopened.history_state(edited), before)
+            self.assertEqual(reopened.restore_history(edited, "undo"), [edited]); self.assertEqual(semantic(reopened.history_state(edited)), semantic(before))
+            undone_revision = reopened.history_state(edited)["revision"]
+            self.assertGreater(undone_revision, after["revision"])
             self.assertEqual(reopened.history_state(other), other_before)
             self.assertEqual(reopened.restore_history(edited, "redo"), [edited]); redone = reopened.history_state(edited)
+            self.assertGreater(redone["revision"], undone_revision)
             self.assertEqual(semantic(redone), semantic(after))
             self.assertEqual(Image.open(io.BytesIO(redone["_manual_raw"]["add"])).convert("RGBA").getpixel((1, 1))[3], 255)
 

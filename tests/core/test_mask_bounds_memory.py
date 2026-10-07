@@ -6,7 +6,7 @@ import unittest
 from unittest.mock import Mock, patch
 
 import numpy as np
-from PIL import Image
+from PIL import Image, PngImagePlugin
 
 from mozarie import detection as detection_module, fluid as fluid_module
 from mozarie.boundary import polygon_roi_and_point
@@ -192,6 +192,29 @@ class MaskBoundsMemoryTests(unittest.TestCase):
         expected[9:13, 10:14] = 255
         np.testing.assert_array_equal(white_fluid_mask(rgb, mask), expected)
         np.testing.assert_array_equal(white_fluid_mask(rgb[::-1, ::-1], mask[::-1, ::-1]), expected[::-1, ::-1])
+
+    def test_manual_history_decodes_each_changed_png_once_and_keeps_undo_pixels(self):
+        before = np.zeros((48, 64), dtype=np.uint8)
+        before[2:5, 3:8] = 255
+        after = before.copy()
+        after[12:16, 20:27] = 255
+        original_load = PngImagePlugin.PngImageFile.load
+        for old, new in ((None, after), (before, None), (before, after)):
+            with self.subTest(before=old is not None, after=new is not None):
+                old_raw = self.png(old) if old is not None else None
+                new_raw = self.png(new) if new is not None else None
+                decoded = []
+
+                def load(image, *args, **kwargs):
+                    if image.tile:
+                        decoded.append(image.size)
+                    return original_load(image, *args, **kwargs)
+
+                with patch.object(PngImagePlugin.PngImageFile, "load", load):
+                    change = WorkspaceStore._manual_xor(old_raw, new_raw)
+                self.assertEqual(len(decoded), int(old is not None) + int(new is not None))
+                self.assert_mask(WorkspaceStore._apply_manual_xor(old_raw, change, forward=True), new)
+                self.assert_mask(WorkspaceStore._apply_manual_xor(new_raw, change, forward=False), old)
 
     def test_dense_manual_history_memory_and_exact_undo_redo(self):
         pixels = np.full((1024, 1024), 255, dtype=np.uint8)

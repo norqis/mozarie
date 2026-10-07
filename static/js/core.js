@@ -85,13 +85,14 @@ const USER_ERROR_CODES = {
   api_not_found: "response_invalid", connection_lost: "connection_lost", output_folder_unavailable: "output_folder_unavailable", output_permission_denied: "output_permission_denied", request_failed: "internal_error",
   image_not_found: "image_not_found", image_hidden: "image_hidden", image_read_failed: "image_read_failed", image_format_unsupported: "image_format_unsupported",
   save_write_failed: "save_write_failed", save_state_changed: "save_state_changed", save_recovery_pending: "save_recovery_pending", folder_not_found: "folder_not_found",
-  source_restore_failed: "project_source_unavailable", source_unavailable: "project_source_unavailable", source_changed: "image_changed", source_delete_failed: "source_action_unavailable", source_delete_recovery_unavailable: "source_delete_recovery_unavailable", source_delete_cleanup_pending: "source_delete_cleanup_pending", browser_source_not_deleted: "source_action_unavailable", source_delete_not_prepared: "catalog_changed", project_source_unavailable: "project_source_unavailable", project_source_conflict: "project_source_conflict", project_source_no_match: "project_source_no_match", project_name_invalid: "project_name_invalid", project_name_duplicate: "project_name_duplicate", project_read_only: "project_read_only",
+  source_restore_failed: "project_source_unavailable", source_unavailable: "project_source_unavailable", source_changed: "image_changed", source_delete_failed: "source_delete_failed", source_delete_recovery_unavailable: "source_delete_recovery_unavailable", source_delete_cleanup_pending: "source_delete_cleanup_pending", browser_source_not_deleted: "source_delete_failed", source_delete_not_prepared: "catalog_changed", project_source_unavailable: "project_source_unavailable", project_source_conflict: "project_source_conflict", project_source_no_match: "project_source_no_match", project_name_invalid: "project_name_invalid", project_name_duplicate: "project_name_duplicate", project_read_only: "project_read_only",
   project_not_found: "folder_not_found", workspace_recreate_required: "workspace_corrupt", source_mismatch: "image_changed",
   source_permission_denied: "source_permission_denied", source_action_unavailable: "source_action_unavailable",
   source_busy: "source_busy", source_write_unsupported: "source_write_unsupported", output_write_unsupported: "output_write_unsupported", output_cleanup_failed: "output_cleanup_failed",
   output_name_conflict: "output_name_conflict", rename_conflict: "rename_conflict", rename_case_only_unsupported: "rename_case_only_unsupported", rename_extension_unsupported: "rename_extension_unsupported",
   clipboard_write_failed: "clipboard_write_failed",
   workspace_corrupt: "workspace_corrupt", workspace_write_failed: "workspace_write_failed", workspace_database_error: "workspace_write_failed",
+  manual_revision_conflict: "manual_revision_conflict",
   output_unavailable: "output_folder_unavailable", model_not_configured: "model_not_configured",
   directory_picker_unsupported: "directory_picker_unsupported", output_name_exhausted: "output_name_exhausted",
   model_file_missing: "model_file_missing", model_file_invalid: "model_file_invalid", model_load_failed: "model_load_failed", sam_checkpoint_missing: "sam_checkpoint_missing",
@@ -122,6 +123,10 @@ function codedError(code, params = {}) {
 function userErrorCode(error) {
   const code = typeof error === "string" ? error : error?.code;
   return USER_ERROR_CODES[code] || "internal_error";
+}
+
+function sourceDeleteErrorCode(reason) {
+  return reason === "source_action_unavailable" ? "source_delete_failed" : reason;
 }
 
 function showUserError(error, invoker = document.activeElement) {
@@ -344,7 +349,13 @@ function closeProcessing() {
 
 function renderStatus() {
   const status = state.status;
-  const message = status ? (status.key ? t(status.key, status.params) : status.message) : "";
+  let params = status?.params;
+  if (status?.key?.startsWith("sourceDelete.result")) {
+    const { count, cleanup, failures } = params;
+    params = { count, cleanup, failed: failures.length,
+      details: failures.map(({ name, reason }) => `${name}: ${t(`errorDialog.${userErrorCode(sourceDeleteErrorCode(reason))}.cause`)}`).join(", ") };
+  }
+  const message = status ? (status.key ? t(status.key, params) : status.message) : "";
   const headerStatus = $("#connectionStatus");
   headerStatus.textContent = message;
   headerStatus.className = `appbar-status ${status?.kind || ""}`;
@@ -434,26 +445,43 @@ function catalogResponse(snapshot) {
   if (isCompleteCatalogSnapshot(snapshot) && typeof applyProjectSnapshot === "function") applyProjectSnapshot(snapshot);
   return snapshot;
 }
-function replaceCatalogSnapshot(snapshot, expectedProjectId) {
+function replaceCatalogSnapshot(snapshot, expectedProjectId, expectedWorkspaceId) {
   const images = snapshot.images || [];
-  const preservesEditor = (snapshot?.project?.id || null) === (expectedProjectId || null)
-    && Boolean(state.currentId && state.currentImage && images.some((image) => image.id === state.currentId));
-  if (!preservesEditor) { resetCatalog(images, snapshot.root || ""); return; }
+  const preservesCatalog = (snapshot?.project?.id || null) === (expectedProjectId || null)
+    && (Boolean(state.currentId && state.currentImage && images.some((image) => image.id === state.currentId))
+      || (!state.currentId && expectedWorkspaceId && snapshot.workspaceId === expectedWorkspaceId));
+  if (!preservesCatalog) { resetCatalog(images, snapshot.root || ""); return; }
+  const previousImages = new Map(state.images.map((image) => [image.id, image]));
+  for (const image of images) {
+    const previous = previousImages.get(image.id);
+    if (!previous || (Number(state.workspaceDraftRevisions?.get(image.id) ?? previous.manualRevision ?? 0) === Number(image.manualRevision || 0)
+      && Number(previous.candidateRevision || 0) === Number(image.candidateRevision || 0)
+      && imageAssetVersion(previous) === imageAssetVersion(image))) continue;
+    if (hasPendingWorkspaceDraft(image.id)) {
+      const { hidden, reviewed, flipH, flipV, transformRevision } = image;
+      Object.assign(image, previous, { hidden, reviewed, flipH, flipV, transformRevision });
+    } else if (image.id !== state.currentId) {
+      state.drafts.delete(image.id); state.maskStatus.delete(image.id);
+      state.workspaceDraftRevisions?.delete(image.id);
+    }
+  }
   const availableIds = new Set(images.map((image) => image.id));
   for (const image of state.images.filter((image) => !availableIds.has(image.id))) {
     releaseImageCaches(image.id); state.sourceAccess.delete(image.id); state.drafts.delete(image.id); state.maskStatus.delete(image.id);
+    state.workspaceDraftRevisions?.delete(image.id);
     clearReviewForRemovedImage(image); state.selectedImageIds.delete(image.id);
   }
   state.images = images;
   loadReviewedPaths(); pruneSourceAccess(); renderCatalogViews(); updateSelectionActionBar(); updateNavigationControls(); updateActionButtons();
 }
 function reconcileCatalogSnapshot(snapshot, expectedProjectId, expectedCatalogGeneration) {
+  const expectedWorkspaceId = state.workspaceId;
   const projectId = snapshot?.project?.id || null;
   const replaced = isCompleteCatalogSnapshot(snapshot)
     && (projectId !== (expectedProjectId || null) || snapshot.catalogGeneration !== expectedCatalogGeneration);
   catalogResponse(snapshot);
   if (replaced) {
-    replaceCatalogSnapshot(snapshot, expectedProjectId);
+    replaceCatalogSnapshot(snapshot, expectedProjectId, expectedWorkspaceId);
     applyProjectSnapshot(snapshot);
     state.missingNativeSources = typeof missingNativeSources === "function" ? missingNativeSources(snapshot.sources) : [];
     if (typeof restoreBrowserProjectSourcesForCurrentCatalog === "function") void restoreBrowserProjectSourcesForCurrentCatalog(snapshot.sources).catch(() => {});
@@ -492,11 +520,12 @@ async function catalogApi(path, payload = {}, options = {}) {
 }
 async function resyncCatalog(epoch = state.catalogEpoch, signal = undefined) {
   const currentProjectId = state.project?.id || null;
+  const currentWorkspaceId = state.workspaceId;
   const snapshot = await api("/api/images", { signal, resyncOnStale: false });
   if (!isCurrentCatalogEpoch(epoch)) return null;
   catalogResponse(snapshot);
   if (typeof flushPendingBrowserSaveAcks === "function") void flushPendingBrowserSaveAcks();
-  replaceCatalogSnapshot(snapshot, currentProjectId);
+  replaceCatalogSnapshot(snapshot, currentProjectId, currentWorkspaceId);
   applyProjectSnapshot(snapshot);
   state.missingNativeSources = typeof missingNativeSources === "function" ? missingNativeSources(snapshot.sources) : [];
   if (typeof restoreBrowserProjectSourcesForCurrentCatalog === "function") void restoreBrowserProjectSourcesForCurrentCatalog(snapshot.sources).catch(() => {});
@@ -508,19 +537,46 @@ async function syncCatalogOnReturn() {
   const controller = new AbortController();
   state.catalogRefreshController = controller;
   const epoch = state.catalogEpoch;
-  const knownGeneration = state.serverCatalogGeneration;
   const knownProjectId = state.project?.id || null;
+  const knownWorkspaceId = state.workspaceId;
   try {
     const snapshot = await api("/api/images", { signal: controller.signal });
     if (controller.signal.aborted || !isCurrentCatalogEpoch(epoch)) return;
-    const changed = (Number.isSafeInteger(snapshot.catalogGeneration) && snapshot.catalogGeneration !== knownGeneration)
-      || (snapshot?.project?.id || null) !== knownProjectId;
+    const previous = currentRecord();
+    const current = (snapshot?.project?.id || null) === knownProjectId
+      ? snapshot.images.find((image) => image.id === state.currentId) : null;
+    const resourcesChanged = previous && current && (imageAssetVersion(previous) !== imageAssetVersion(current)
+      || Number(previous.candidateRevision || 0) !== Number(current.candidateRevision || 0)
+      || state.workspaceDraftRevisions?.get(previous.id) !== Number(current.manualRevision || 0));
+    const deferReload = resourcesChanged && (hasPendingWorkspaceDraft(previous.id) || isBusy() || isGestureActive()
+      || state.activeStroke || currentImageActionPending() || state.candidateUpdateChains.has(previous.id)
+      || state.imageMutationChains.has(previous.id));
+    const retainCurrentResources = (record = current) => {
+      // Keep old pixels paired with their old revision while an edit is pending.
+      const { hidden, reviewed, flipH, flipV, transformRevision } = record;
+      Object.assign(record, previous, { hidden, reviewed, flipH, flipV, transformRevision });
+    };
+    if (deferReload) retainCurrentResources();
     catalogResponse(snapshot);
     if (typeof flushPendingBrowserSaveAcks === "function") void flushPendingBrowserSaveAcks();
-    if (changed) {
-      replaceCatalogSnapshot(snapshot, knownProjectId);
-      state.missingNativeSources = typeof missingNativeSources === "function" ? missingNativeSources(snapshot.sources) : [];
-      if (typeof restoreBrowserProjectSourcesForCurrentCatalog === "function") void restoreBrowserProjectSourcesForCurrentCatalog(snapshot.sources).catch(() => {});
+    replaceCatalogSnapshot(snapshot, knownProjectId, knownWorkspaceId);
+    state.missingNativeSources = typeof missingNativeSources === "function" ? missingNativeSources(snapshot.sources) : [];
+    if (typeof restoreBrowserProjectSourcesForCurrentCatalog === "function") void restoreBrowserProjectSourcesForCurrentCatalog(snapshot.sources).catch(() => {});
+    if (resourcesChanged && !deferReload) {
+      const previousDraft = state.drafts.get(previous.id);
+      const previousMaskStatus = state.maskStatus.get(previous.id);
+      state.drafts.delete(previous.id); state.maskStatus.delete(previous.id);
+      const loading = selectImage(previous.id, true, { preserveView: true, saveCurrentDraft: false, preserveOnFailure: true });
+      const generation = state.imageGeneration;
+      if (!await loading && isCurrentGeneration(generation) && isCurrentCatalogEpoch(epoch) && state.currentId === previous.id) {
+        retainCurrentResources(currentRecord());
+        if (previousDraft) state.drafts.set(previous.id, previousDraft);
+        if (previousMaskStatus !== undefined) state.maskStatus.set(previous.id, previousMaskStatus);
+        syncResourceOwnership();
+        syncFlipControls(); render();
+      }
+    } else if (current && state.currentImage) {
+      syncFlipControls(); render();
     }
   } catch (error) {
     if (error?.name !== "AbortError") showUserError(error);
@@ -645,7 +701,10 @@ function saveWorkspaceFlagNow(image, field, desired, onSaved, force = false) {
   if (!force && pending?.desired === desired) return pending.promise;
   if (!force && !pending && image[field] === desired) return Promise.resolve(true);
   let promise;
-  promise = queueWorkspaceFlags(image.id, { [field]: desired }).then((flags) => {
+  promise = (async () => {
+    if (field === "reviewed" && hasDurableHistory()) await flushWorkspaceDraft(image.id);
+    return queueWorkspaceFlags(image.id, { [field]: desired });
+  })().then((flags) => {
     if (!publishWorkspaceFlags(image.id, flags)) return false;
     onSaved?.();
     return true;
@@ -1000,6 +1059,7 @@ function resetCatalog(images, root) {
   loadReviewedPaths();
   state.currentId = null; state.currentImage = null; state.pendingImageId = null; state.pendingImageKey = null; state.pendingCandidateKey = null; state.maskStatus.clear();
   state.candidates = []; state.candidateImages = new Map(); state.drafts.clear(); state.selectedImageIds.clear(); state.selectionAnchorId = null; state.batchMode = false; clearCandidateBlink(); state.contextMenuImageId = null; state.contextMenuOrigin = null; clearBoundaryInteraction();
+  state.workspaceDraftRevisions?.clear();
   state.candidateUpdateChains.clear(); state.candidateUpdateVersions.clear(); state.candidateDeleting.clear(); state.candidateBatchPending.clear(); state.imageMutationChains.clear(); state.candidateControlLocks.clear();
   discardCatalogNodes(state.galleryNodes, $("#gallery"));
   discardCatalogNodes(state.overviewNodes, $("#overviewGrid"));

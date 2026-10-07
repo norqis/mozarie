@@ -51,10 +51,10 @@ function clearEditor() {
   renderCandidates(); updateHistoryButtons(); updateNavigationControls(); updateActionButtons(); render(); updateBrushCursor();
 }
 
-async function selectImage(imageId, force = false, { saveCurrentDraft = true, preserveView = false } = {}) {
-  if (state.projectOperationPending || isGestureActive()) return;
-  if ((isBusy() || state.importing || state.candidateBatchPending.size) && !force) return;
-  if (state.currentId === imageId && !force && !state.pendingImageId) return;
+async function selectImage(imageId, force = false, { saveCurrentDraft = true, preserveView = false, preserveOnFailure = false } = {}) {
+  if (state.projectOperationPending || isGestureActive()) return false;
+  if ((isBusy() || state.importing || state.candidateBatchPending.size) && !force) return false;
+  if (state.currentId === imageId && !force && !state.pendingImageId) return false;
   if (typeof closeCandidatePadding === "function") closeCandidatePadding();
   state.hover = null; updateBrushCursor();
   const generation = ++state.imageGeneration;
@@ -66,7 +66,7 @@ async function selectImage(imageId, force = false, { saveCurrentDraft = true, pr
   if (!record) {
     state.pendingImageId = null; state.pendingImageKey = null; state.pendingCandidateKey = null;
     updateActionButtons();
-    return;
+    return false;
   }
   state.pendingImageKey = imageCacheKey(record);
   state.pendingCandidateKey = candidateCacheKey(imageId, Number(record.candidateRevision || 0));
@@ -76,7 +76,7 @@ async function selectImage(imageId, force = false, { saveCurrentDraft = true, pr
   if (!imageCached || !candidatesCached) { clearTimeout(state.loadingDelay); state.loadingDelay = null; }
   try {
     if (saveCurrentDraft && outgoingId) await flushDraftSaves([outgoingId]);
-    if (!isCurrentGeneration(generation) || !isCurrentCatalogEpoch(catalogEpoch)) return;
+    if (!isCurrentGeneration(generation) || !isCurrentCatalogEpoch(catalogEpoch)) return false;
     const [image, candidateBundle] = await Promise.all([
       cachedImage(record),
       loadCandidateBundle(imageId, generation),
@@ -84,19 +84,20 @@ async function selectImage(imageId, force = false, { saveCurrentDraft = true, pr
     if (!isCurrentGeneration(generation) || !isCurrentCatalogEpoch(catalogEpoch)) {
       if (!state.imageCache.has(imageCacheKey(record))) closeBitmap(image);
       if (!state.candidateBundleCache.has(candidateCacheKey(imageId, candidateBundle.candidateRevision))) releaseCandidateBitmapBundle(candidateBundle);
-      return;
+      return false;
     }
     // A tab-local draft is newer than the compact server copy. Otherwise the
     // workspace request and all draft image decodes must finish before the
     // current editor is touched.
     const hasDraft = state.drafts.has(imageId);
-    const draft = hasDraft ? state.drafts.get(imageId) : await loadWorkspaceDraft(imageId);
+    const snapshot = hasDraft ? null : await loadWorkspaceDraft(imageId);
+    const draft = hasDraft ? state.drafts.get(imageId) : snapshot.draft;
     const draftImages = await decodeDraftImages(draft);
     try {
       if (!isCurrentGeneration(generation) || !isCurrentCatalogEpoch(catalogEpoch)) {
         if (!state.imageCache.has(imageCacheKey(record))) closeBitmap(image);
         if (!state.candidateBundleCache.has(candidateCacheKey(imageId, candidateBundle.candidateRevision))) releaseCandidateBitmapBundle(candidateBundle);
-        return;
+        return false;
       }
       if (!hasDraft) {
         if (draft) state.drafts.set(imageId, draft); else state.drafts.delete(imageId);
@@ -123,7 +124,14 @@ async function selectImage(imageId, force = false, { saveCurrentDraft = true, pr
         releaseCandidateBitmapBundle({ candidateImages: previousCandidateImages });
       }
       syncResourceOwnership();
-      canvasSizeForImage(record); await restoreDraft(imageId, generation, draft, draftImages); prepareOriginalImage(); requestMosaicPreview();
+      canvasSizeForImage(record);
+      if (!await restoreDraft(imageId, generation, draft, draftImages)) return false;
+      if (!hasDraft) {
+        state.workspaceDraftRevisions.set(imageId, snapshot.manualRevision);
+        const live = state.images.find((image) => image.id === imageId);
+        if (live) live.manualRevision = snapshot.manualRevision;
+      }
+      prepareOriginalImage(); requestMosaicPreview();
       if (preservedView) state.view = preservedView; else fitImage();
       updateBlockSizeDisplay(); refreshMaskStatus();
       $("#emptyState").hidden = true;
@@ -133,6 +141,7 @@ async function selectImage(imageId, force = false, { saveCurrentDraft = true, pr
       if (outgoingId && outgoingId !== imageId) releaseInactiveWorkspaceDraft(outgoingId);
       if (hasDurableHistory()) void refreshProjectHistory(imageId);
       prefetchNeighbors(record);
+      return true;
     } finally {
       releaseDraftImages(draftImages);
     }
@@ -140,10 +149,11 @@ async function selectImage(imageId, force = false, { saveCurrentDraft = true, pr
     if (isCurrentGeneration(generation) && isCurrentCatalogEpoch(catalogEpoch)) {
       clearTimeout(state.loadingDelay); state.loadingDelay = null;
       state.pendingImageId = null; state.pendingImageKey = null; state.pendingCandidateKey = null;
-      if (error.code === "stale_asset") invalidateStaleAsset(imageId);
-      showUserError(error);
+      if (error.code === "stale_asset" && !preserveOnFailure) invalidateStaleAsset(imageId);
+      if (error.name !== "AbortError") showUserError(error);
       updateActionButtons();
     }
+    return false;
   }
 }
 
@@ -191,6 +201,7 @@ async function refreshWorkspaceImages(snapshot, imageIds, { clearWorkspace = fal
     state.maskStatus.delete(imageId);
     if (!resetWorkspace) continue;
     state.drafts.delete(imageId);
+    state.workspaceDraftRevisions.delete(imageId);
     state.projectHistory.delete(imageId);
     clearCandidateMutationState(imageId);
   }
@@ -531,7 +542,8 @@ async function saveDraft(historyIndexOverride = null) {
     const hasExclusionErase = encoded.exclusionErase ?? retained.exclusionErase ?? "";
     if (!hasAdd && !hasExclusion && !hasExclusionErase && snapshot.history.length === 0 && snapshot.removedCandidateIds.length === 0 && snapshot.manualExclusionForced === snapshot.defaultManualExclusionForced) {
       state.drafts.delete(imageId);
-      void queueWorkspaceDraft(imageId);
+      if (keepLocalHistory) void queueWorkspaceDraft(imageId);
+      else await queueWorkspaceDraft(imageId, true);
       return;
     }
     const pendingLayers = new Set(previous.dirtyLayers || []);
@@ -569,7 +581,8 @@ async function saveDraft(historyIndexOverride = null) {
       } : {}),
       dirtyLayers: [...pendingLayers], dirtyRois: pendingRois,
     });
-    void queueWorkspaceDraft(imageId);
+    if (keepLocalHistory) void queueWorkspaceDraft(imageId);
+    else void queueWorkspaceDraft(imageId, true).catch(showUserError);
   }).catch((error) => {
     if (state.currentId === imageId && isCurrentCatalogEpoch(catalogEpoch)) {
       markDraftDirty(...dirtyLayers);
@@ -579,7 +592,10 @@ async function saveDraft(historyIndexOverride = null) {
     throw error;
   });
   state.draftSaveChains.set(imageId, save);
-  save.finally(() => { if (state.draftSaveChains.get(imageId) === save) state.draftSaveChains.delete(imageId); }).catch(() => {});
+  save.finally(() => {
+    if (state.draftSaveChains.get(imageId) === save) state.draftSaveChains.delete(imageId);
+    releaseInactiveWorkspaceDraft(imageId);
+  }).catch(() => {});
   return save;
 }
 

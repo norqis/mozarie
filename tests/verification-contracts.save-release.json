@@ -137,7 +137,17 @@
       "observation": "実行ボタンが操作でき、コピーの成功後にだけ元画像を削除する。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > copy success deletes original only after commit"
+        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > copy success deletes original only after commit",
+        "python:tests.test_http_live_endpoints.LiveHttpEndpointTests.test_copy_delete_rejects_new_edits_before_commit_and_browser_delete_claim",
+        "python:tests.test_http_live_endpoints.LiveHttpEndpointTests.test_render_rejects_a_dialog_draft_from_before_peer_manual_edit",
+        "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_single_copy_rejects_stale_canvas_after_catalog_metadata_refresh",
+        "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_batch_copy_rejects_stale_draft_after_catalog_metadata_refresh",
+        "python:tests.test_http_live_endpoints.LiveHttpEndpointTests.test_copy_delete_preserves_flip_added_before_prepare",
+        "python:tests.test_http_live_endpoints.LiveHttpEndpointTests.test_copy_delete_preserves_flip_added_before_claim",
+        "python:tests.test_http_live_endpoints.LiveHttpEndpointTests.test_copy_delete_preserves_flip_added_before_commit",
+        "python:tests.test_http_live_endpoints.LiveHttpEndpointTests.test_copy_delete_without_a_saved_transform_revision_retains_the_source",
+        "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_single_copy_delete_preserves_a_peer_flip",
+        "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_batch_copy_delete_preserves_a_peer_flip"
       ]
     },
     {
@@ -240,7 +250,8 @@
       "observation": "実行ボタンが操作でき、対象画像だけを上書きし、対象外の元画像を保持する。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > browser overwrite replaces only the selected source"
+        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > browser overwrite replaces only the selected source",
+        "python:tests.test_http_live_endpoints.LiveHttpEndpointTests.test_overwritten_same_stat_image_has_fresh_asset_urls_after_reopen_and_restart"
       ]
     },
     {
@@ -454,6 +465,12 @@
       "status": "automated",
       "testIds": [
         "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > formatted overwrite replaces source after success",
+        "node:tests/saving/test_renamed_source_recovery_e2e.cjs::single renamed overwrite survives closing the tab after server commit",
+        "node:tests/saving/test_renamed_source_recovery_e2e.cjs::batch renamed overwrite survives closing the tab after server commit",
+        "node:tests/saving/test_renamed_source_recovery_e2e.cjs::single renamed overwrite survives closing the tab after server commit using JPG",
+        "node:tests/saving/test_renamed_source_recovery_e2e.cjs::batch renamed overwrite survives closing the tab after server commit using JPG",
+        "node:tests/saving/test_renamed_source_recovery_e2e.cjs::rejected renamed overwrite removes pending access and preserves the original handle",
+        "node:tests/saving/test_renamed_source_recovery_e2e.cjs::renamed overwrite does not commit when storing the replacement handle fails",
         "python:tests.test_recursive_save_rename.WorkspaceRenameTests.test_original_save_retargets_native_aliases_and_keeps_alias_edit"
       ]
     },
@@ -482,7 +499,11 @@
         "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > standalone file grants are queried and restored without duplicate requests",
         "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > denied revoked and inactive save grants preserve source and output",
         "node:tests/test_folder_permissions_e2e.cjs::project folder restore retains each nested file's direct parent",
-        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > copy then source delete follows durable commit"
+        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > copy then source delete follows durable commit",
+        "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_browser_copy_delete_recovery_keeps_edits_made_after_the_copy",
+        "python:tests.test_server.MozarieTests.test_browser_copy_delete_keeps_source_changed_after_final_preflight",
+        "python:tests.test_save_recovery.SaveRecoveryTests.test_quarantine_source_excludes_writers_until_rename",
+        "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_browser_copy_delete_recovery_keeps_a_flip_made_after_the_copy"
       ]
     },
     {
@@ -502,7 +523,11 @@
       "observation": "寸法・形式を保持し、モザイク範囲に加工を反映する。",
       "status": "automated",
       "testIds": [
-        "python:tests.test_server.MozarieTests.test_png_metadata_is_preserved_after_save"
+        "python:tests.test_server.MozarieTests.test_png_metadata_is_preserved_after_save",
+        "python:tests.saving.test_animated_source_save.AnimatedSourceSaveTests.test_render_rejects_animation_independent_of_format_and_metadata",
+        "python:tests.saving.test_animated_source_save.AnimatedSourceSaveTests.test_native_overwrite_rejects_animation_without_replacing_source",
+        "python:tests.saving.test_animated_source_save.AnimatedSourceSaveTests.test_browser_render_rejects_animation_before_staging_output",
+        "python:tests.saving.test_animated_source_save.AnimatedSourceSaveTests.test_unchanged_animation_copy_and_overwrite_preserve_all_source_bytes"
       ]
     },
     {
@@ -805,7 +830,12 @@
       "observation": "未取得の保存結果を成功表示しない。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > recoverable commit failures reconcile token state"
+        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > recoverable commit failures reconcile token state",
+        "node:tests/test_browser_save_runtime.cjs::native batch overwrite cancels rejected or pending commits but preserves unknown outcomes",
+        "node:tests/saving/test_active_save_recovery_e2e.cjs::batch save survives recovery in its own tab and another tab without serializing saves",
+        "node:tests/saving/test_active_save_recovery_e2e.cjs::single save survives recovery in its own tab and another tab without serializing saves",
+        "node:tests/saving/test_active_save_recovery_e2e.cjs::closing the saving tab releases ownership so another tab can cancel its abandoned token",
+        "node:tests/saving/test_active_save_recovery_e2e.cjs::slow abandoned-save recovery neither blocks a new save nor includes its new token"
       ]
     },
     {
@@ -912,7 +942,7 @@
       "sourceIds": [
         "SV-058"
       ],
-      "observation": "DOMとメモリが繰り返しで増え続けず、全件の画像本体を再取得し続けない。",
+      "observation": "DOMとメモリが繰り返しで増え続けず、全件の画像本体を再取得し続けない。ウィンドウサイズ変更や確認状態の再描画でも非表示一覧を全件生成しない。",
       "status": "automated",
       "testIds": [
         "node:tests/test_gallery_performance_e2e.cjs::20k gallery DOM decoded cache and full-image requests stay bounded",
@@ -1134,7 +1164,9 @@
       "status": "automated",
       "testIds": [
         "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > 400 browser copies stay bounded by configured parallelism",
-        "python:tests.test_server.MozarieTests.test_import_session_records_requested_and_effective_parallelism_without_a_fixed_cap"
+        "python:tests.test_server.MozarieTests.test_import_session_records_requested_and_effective_parallelism_without_a_fixed_cap",
+        "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_parallel_copy_delete_completes_every_real_file_and_workspace_row",
+        "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_parallel_browser_copy_delete_keeps_surviving_save_tokens"
       ]
     },
     {
@@ -1213,7 +1245,10 @@
       "observation": "CIで単一版のストリーム応答とtokenを確認する。",
       "status": "automated",
       "testIds": [
-        "python:tests.test_http_live_endpoints.LiveHttpEndpointTests.test_live_browser_save_render_streams_a_stable_image_response"
+        "python:tests.test_http_live_endpoints.LiveHttpEndpointTests.test_live_browser_save_render_streams_a_stable_image_response",
+        "python:tests.test_http_live_endpoints.LiveHttpEndpointTests.test_image_stream_keeps_response_boundaries_when_source_size_changes",
+        "python:tests.test_http_live_endpoints.LiveHttpEndpointTests.test_export_stream_keeps_response_boundaries_when_file_size_changes",
+        "python:tests.test_http_live_endpoints.LiveHttpEndpointTests.test_stream_read_failure_closes_without_a_second_response"
       ]
     },
     {
@@ -1273,6 +1308,7 @@
       "testIds": [
         "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > partial streamed output is aborted and removed",
         "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > browser copy render failure cancels its reservation",
+        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > failed copy and overwrite render retries cancel their reservation",
         "python:tests.test_server.MozarieTests.test_browser_copy_render_keeps_source_and_candidates_when_output_sync_fails",
         "python:tests.saving.test_apply_staging_failures.ApplyStagingFailureTests.test_fsync_failure_releases_stage_and_allows_retry",
         "python:tests.saving.test_apply_staging_failures.ApplyStagingFailureTests.test_stage_directory_failure_releases_reservation_and_allows_retry",
@@ -1399,7 +1435,22 @@
       "observation": "クライアント生成UUIDトークンでpending/commit/cancelを再開し、通信不明だけでトークンを捨てない。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > client UUID pending token survives a tab restart and resumes cancellation"
+        "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > client UUID pending token survives a tab restart and resumes cancellation",
+        "python:tests.saving.test_browser_overwrite_recovery.BrowserOverwriteRecoveryTests.test_overwrite_backup_failure_leaves_source_untouched",
+        "python:tests.saving.test_browser_overwrite_recovery.BrowserOverwriteRecoveryTests.test_failed_restore_keeps_backup_until_retry",
+        "python:tests.saving.test_browser_overwrite_recovery.BrowserOverwriteRecoveryTests.test_two_tabs_recover_the_same_overwrite_once",
+        "python:tests.saving.test_browser_overwrite_recovery.BrowserOverwriteRecoveryTests.test_unreadable_backup_is_retained_until_indexeddb_recovers",
+        "python:tests.saving.test_browser_overwrite_recovery.BrowserOverwriteRecoveryTests.test_metadata_retry_does_not_rewrite_restored_source",
+        "python:tests.saving.test_browser_overwrite_recovery.BrowserOverwriteRecoveryTests.test_committed_backup_delete_failure_keeps_receipt_until_retry",
+        "node:tests/saving/test_active_save_recovery_e2e.cjs::abandoned-save recovery uses the configured pool and retains only failed tokens",
+        "python:tests.saving.test_browser_overwrite_recovery.BrowserOverwriteRecoveryTests.test_cancel_network_failure_reports_incomplete_recovery_and_retries",
+        "python:tests.saving.test_browser_overwrite_recovery.BrowserOverwriteRecoveryTests.test_ack_network_failure_reports_incomplete_recovery_and_retries",
+        "python:tests.saving.test_native_overwrite_recovery.NativeOverwriteRecoveryTests.test_receipt_failure_restores_original_and_allows_retry_for_each_output_path",
+        "python:tests.saving.test_native_overwrite_recovery.NativeOverwriteRecoveryTests.test_external_edit_at_same_path_survives_receipt_failure_and_recovery",
+        "python:tests.saving.test_native_overwrite_recovery.NativeOverwriteRecoveryTests.test_external_edit_at_renamed_path_survives_receipt_failure_and_recovery",
+        "python:tests.saving.test_native_overwrite_recovery.NativeOverwriteRecoveryTests.test_external_edit_at_converted_path_survives_receipt_failure_and_recovery",
+        "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_rejected_copy_delete_preserves_a_recreated_foreign_file",
+        "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_copy_delete_failed_restoration_checkpoint_keeps_the_source_and_recovery_snapshot"
       ]
     },
     {
@@ -1412,7 +1463,32 @@
       "testIds": [
         "python:tests.test_save_recovery.SaveRecoveryTests.test_workspace_receipt_wins_and_keeps_the_final_output",
         "python:tests.test_server.MozarieTests.test_background_copy_receipt_recovers_the_private_stage_at_startup_without_removing_output",
-        "python:tests.saving.test_native_save_transfer.NativeSaveTransferTests.test_native_stage_survives_elapsed_time_and_is_released_by_cancel_or_recovery"
+        "python:tests.saving.test_native_save_transfer.NativeSaveTransferTests.test_native_stage_survives_elapsed_time_and_is_released_by_cancel_or_recovery",
+        "python:tests.saving.test_browser_overwrite_recovery.BrowserOverwriteRecoveryTests.test_restored_metadata_requires_matching_save_and_source_identity",
+        "python:tests.saving.test_browser_overwrite_recovery.BrowserOverwriteRecoveryTests.test_single_overwrite_crash_restores_source_and_can_save_again",
+        "python:tests.saving.test_browser_overwrite_recovery.BrowserOverwriteRecoveryTests.test_batch_overwrite_crash_restores_source_and_can_save_again",
+        "python:tests.saving.test_browser_overwrite_recovery.BrowserOverwriteRecoveryTests.test_single_renamed_overwrite_crash_removes_uncommitted_target",
+        "python:tests.saving.test_browser_overwrite_recovery.BrowserOverwriteRecoveryTests.test_batch_renamed_overwrite_crash_removes_uncommitted_target",
+        "python:tests.saving.test_browser_overwrite_recovery.BrowserOverwriteRecoveryTests.test_committed_single_overwrite_survives_lost_response",
+        "python:tests.saving.test_browser_overwrite_recovery.BrowserOverwriteRecoveryTests.test_committed_batch_rename_finishes_source_cleanup",
+        "python:tests.saving.test_browser_overwrite_recovery.BrowserOverwriteRecoveryTests.test_backend_restart_restores_unknown_token_and_preserves_project_edits",
+        "python:tests.saving.test_browser_overwrite_recovery.BrowserOverwriteRecoveryTests.test_cancelled_overwrite_preserves_later_external_edit",
+        "python:tests.saving.test_browser_overwrite_recovery.BrowserOverwriteRecoveryTests.test_cancelled_rename_preserves_later_external_target",
+        "python:tests.saving.test_browser_overwrite_recovery.BrowserOverwriteRecoveryTests.test_committed_rename_preserves_later_external_original",
+        "python:tests.saving.test_browser_overwrite_recovery.BrowserOverwriteRecoveryTests.test_failed_source_write_does_not_rewrite_unchanged_original",
+        "python:tests.saving.test_browser_overwrite_recovery.BrowserOverwriteRecoveryTests.test_unrecorded_source_write_keeps_original_backup_without_rollback",
+        "python:tests.saving.test_browser_overwrite_recovery.BrowserOverwriteRecoveryTests.test_cancelled_rename_accepts_an_already_removed_target",
+        "python:tests.saving.test_browser_overwrite_recovery.BrowserOverwriteRecoveryTests.test_committed_rename_accepts_an_already_removed_original",
+        "python:tests.saving.test_native_overwrite_recovery.NativeOverwriteRecoveryTests.test_receipt_failure_restores_original_and_allows_retry_for_each_output_path",
+        "python:tests.saving.test_native_overwrite_recovery.NativeOverwriteRecoveryTests.test_external_edit_at_same_path_survives_receipt_failure_and_recovery",
+        "python:tests.saving.test_native_overwrite_recovery.NativeOverwriteRecoveryTests.test_external_edit_at_renamed_path_survives_receipt_failure_and_recovery",
+        "python:tests.saving.test_native_overwrite_recovery.NativeOverwriteRecoveryTests.test_external_edit_at_converted_path_survives_receipt_failure_and_recovery",
+        "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_rejected_copy_delete_restores_metadata_and_allows_another_save",
+        "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_rejected_single_copy_delete_restores_metadata_and_allows_another_save",
+        "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_copy_delete_restoration_survives_a_lost_cancel_response_and_reload",
+        "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_copy_delete_restoration_survives_a_lost_ack_response_and_reload",
+        "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_copy_delete_restoration_retries_project_handle_persistence_after_reload",
+        "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_unselected_unnamed_copy_delete_rollback_keeps_source_access_and_allows_another_save"
       ]
     },
     {

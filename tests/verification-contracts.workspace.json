@@ -141,7 +141,8 @@
       "observation": "既存環境の確認が完了し、二重起動と誤認しない",
       "status": "automated",
       "testIds": [
-        "python:tests.test_updater.UpdaterTests.test_setup_batch_reports_venv_and_running_states_without_marking_ready"
+        "python:tests.test_updater.UpdaterTests.test_setup_batch_reports_venv_and_running_states_without_marking_ready",
+        "python:tests.test_runtime_profile_subprocess.RuntimeProfileSubprocessTests.test_setup_marker_preserves_profiles_in_paths_with_punctuation"
       ]
     },
     {
@@ -421,7 +422,13 @@
       "status": "automated",
       "testIds": [
         "node:tests/test_import_picker_e2e.cjs::import picker browser coverage",
-        "node:tests/import/test_import_cancellation_e2e.cjs::cancelled parallel import shows committed images, retains source handles and stops unstarted files"
+        "node:tests/import/test_import_cancellation_e2e.cjs::cancelled parallel import shows committed images, retains source handles and stops unstarted files",
+        "node:tests/importing/test_directory_scan_lifecycle_e2e.cjs::pausing folder import while its server session starts preserves the paused controls",
+        "node:tests/importing/test_directory_scan_lifecycle_e2e.cjs::a completed import upload preserves paused controls until resume",
+        "node:tests/importing/test_directory_scan_lifecycle_e2e.cjs::a failed import upload preserves paused controls until resume",
+        "node:tests/importing/test_directory_scan_lifecycle_e2e.cjs::a delayed file read preserves paused controls when its upload starts",
+        "node:tests/importing/test_directory_scan_lifecycle_e2e.cjs::a failed file read preserves paused controls until resume",
+        "node:tests/importing/test_directory_scan_lifecycle_e2e.cjs::a missing project source preserves paused controls until resume"
       ]
     },
     {
@@ -432,7 +439,12 @@
       "observation": "未処理画像から進捗が再開する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
+        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage",
+        "node:tests/importing/test_directory_scan_lifecycle_e2e.cjs::a completed import upload preserves paused controls until resume",
+        "node:tests/importing/test_directory_scan_lifecycle_e2e.cjs::a failed import upload preserves paused controls until resume",
+        "node:tests/importing/test_directory_scan_lifecycle_e2e.cjs::a delayed file read preserves paused controls when its upload starts",
+        "node:tests/importing/test_directory_scan_lifecycle_e2e.cjs::a failed file read preserves paused controls until resume",
+        "node:tests/importing/test_directory_scan_lifecycle_e2e.cjs::a missing project source preserves paused controls until resume"
       ]
     },
     {
@@ -443,7 +455,12 @@
       "observation": "完了済みの扱いを画面に示し、新規処理を止め、操作を再有効化する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
+        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage",
+        "node:tests/importing/test_directory_scan_lifecycle_e2e.cjs::folder picker cancellation stops nested enumeration before reading more siblings",
+        "node:tests/importing/test_directory_scan_lifecycle_e2e.cjs::dropped folder scanning exposes progress and cancels without uploading partial entries",
+        "node:tests/importing/test_directory_scan_lifecycle_e2e.cjs::project directory reconnect cancellation releases every active iterator",
+        "node:tests/importing/test_directory_scan_lifecycle_e2e.cjs::cancelling folder import while its server session starts prevents file uploads",
+        "node:tests/test_import_drop_contract.cjs::drop cancellation discards snapshots while handle access is pending"
       ]
     },
     {
@@ -1529,7 +1546,9 @@
       "observation": "画像データを消してPJを閉じる。",
       "status": "automated",
       "testIds": [
-        "python:tests.workspace.test_project_catalog_lifecycle.ProjectCatalogCoverageTests.test_clear_project_images_closes_live_project_but_keeps_empty_project_and_sources"
+        "python:tests.workspace.test_project_catalog_lifecycle.ProjectCatalogCoverageTests.test_clear_project_images_closes_live_project_but_keeps_empty_project_and_sources",
+        "python:tests.workspace.test_boundary_catalog_concurrency.BoundaryCatalogConcurrencyTests.test_clear_replace_and_delete_project_finish_during_boundary_preparation",
+        "python:tests.test_project_native_relink_http.ProjectNativeRelinkHttpTests.test_relink_publish_failure_restores_durable_source_and_retries"
       ]
     },
     {
@@ -1573,7 +1592,8 @@
       "observation": "最後に表示したPJまたは無名作業だけが一覧と編集対象に残る",
       "status": "automated",
       "testIds": [
-        "python:tests.workspace.test_project_catalog_lifecycle.ProjectCatalogCoverageTests.test_unnamed_workspace_switch_publishes_atomically_and_rolls_back_failed_replacement"
+        "python:tests.workspace.test_project_catalog_lifecycle.ProjectCatalogCoverageTests.test_unnamed_workspace_switch_publishes_atomically_and_rolls_back_failed_replacement",
+        "node:tests/saving/test_renamed_source_recovery_e2e.cjs::late initial catalog response preserves the project opened by the user"
       ]
     },
     {
@@ -1633,7 +1653,13 @@
       "status": "automated",
       "testIds": [
         "node:tests/test_import_picker_e2e.cjs::import picker browser coverage",
-        "python:tests.test_server.MozarieTests.test_catalog_reload_is_rejected_while_worker_is_alive_and_stale_worker_cannot_commit"
+        "python:tests.test_server.MozarieTests.test_catalog_reload_is_rejected_while_worker_is_alive_and_stale_worker_cannot_commit",
+        "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_peer_manual_sync_conflicts_and_last_stroke_undo_use_real_workspace",
+        "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_selecting_peer_edited_image_keeps_manual_snapshot_and_revision_together",
+        "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_renaming_cannot_bless_old_pixels_with_a_peer_manual_revision",
+        "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_catalog_resync_cannot_bless_old_pixels_with_a_peer_manual_revision",
+        "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_importing_cannot_bless_old_pixels_with_a_peer_manual_revision",
+        "python:tests.test_editor_gesture_live_browser.LiveEditorGestureBrowserTests.test_removing_other_image_cannot_bless_old_pixels_with_a_peer_manual_revision"
       ]
     },
     {
@@ -1645,7 +1671,15 @@
       "status": "automated",
       "testIds": [
         "node:tests/test_folder_permissions_e2e.cjs::browser directory restore keeps canonical source paths separate",
-        "node:tests/test_project_ui_runtime.cjs::project dialogs, A-B-A switching, failed-open recovery, and duplicate transition guards"
+        "node:tests/test_project_ui_runtime.cjs::project dialogs, A-B-A switching, failed-open recovery, and duplicate transition guards",
+        "python:tests.workspace.test_browser_source_reopen.BrowserSourceReopenTests.test_unnamed_file_and_directory_imports_reopen_every_image_with_its_history",
+        "python:tests.workspace.test_browser_source_reopen.BrowserSourceReopenTests.test_legacy_split_file_sources_keep_same_path_images_and_independent_history",
+        "node:tests/workspace/test_browser_source_reopen_e2e.cjs::legacy source aliases restore distinct same-name file handles without swapping images",
+        "node:tests/workspace/test_browser_source_reopen_e2e.cjs::legacy directory aliases restore every canonical source and retain permission retry targets",
+        "python:tests.workspace.test_browser_source_reopen.BrowserSourceReopenTests.test_reconnecting_in_the_same_session_keeps_edits_and_only_one_staged_image",
+        "python:tests.jobs.test_multi_source_jobs.MultiSourceJobTests.test_browser_single_and_bulk_save_accept_every_reopened_source",
+        "python:tests.jobs.test_multi_source_jobs.MultiSourceJobTests.test_detection_and_copy_save_process_all_reopened_native_sources",
+        "python:tests.saving.test_browser_overwrite_recovery.BrowserOverwriteRecoveryTests.test_backend_restart_restores_unknown_token_and_preserves_project_edits"
       ]
     },
     {
@@ -1653,11 +1687,16 @@
       "sourceIds": [
         "WS-101"
       ],
-      "observation": "権威一覧への置換後も現PJの画像だけへ保存済みhandleとサイズ・更新時刻を対応付ける。",
+      "observation": "権威一覧への置換後も現PJの画像だけへ保存済みhandleとサイズ・更新時刻を対応付け、復元待機中に上書きされた元画像の新しい参照を保持する。",
       "status": "automated",
       "testIds": [
         "node:tests/test_folder_permissions_e2e.cjs::browser directory restore keeps canonical source paths separate",
-        "node:tests/test_project_ui_runtime.cjs::project dialogs, A-B-A switching, failed-open recovery, and duplicate transition guards"
+        "node:tests/test_project_ui_runtime.cjs::project dialogs, A-B-A switching, failed-open recovery, and duplicate transition guards",
+        "node:tests/saving/test_renamed_source_recovery_e2e.cjs::background source restore preserves a concurrent renamed overwrite",
+        "node:tests/saving/test_renamed_source_recovery_e2e.cjs::background source restore preserves a concurrent JPG overwrite",
+        "node:tests/saving/test_renamed_source_recovery_e2e.cjs::background source restore preserves same-name overwrite metadata and unrelated handles",
+        "node:tests/saving/test_renamed_source_recovery_e2e.cjs::background source restore drops an obsolete permission prompt after overwrite",
+        "node:tests/saving/test_renamed_source_recovery_e2e.cjs::late startup save acknowledgement preserves a concurrently reopened JPG source"
       ]
     },
     {
@@ -1680,7 +1719,8 @@
       "status": "automated",
       "testIds": [
         "node:tests/test_folder_permissions_e2e.cjs::browser directory restore keeps canonical source paths separate",
-        "node:tests/test_project_ui_runtime.cjs::project dialogs, A-B-A switching, failed-open recovery, and duplicate transition guards"
+        "node:tests/test_project_ui_runtime.cjs::project dialogs, A-B-A switching, failed-open recovery, and duplicate transition guards",
+        "node:tests/saving/test_renamed_source_recovery_e2e.cjs::background source restore drops an obsolete permission prompt after overwrite"
       ]
     },
     {
@@ -2536,7 +2576,8 @@
       "status": "automated",
       "testIds": [
         "python:tests.test_server.MozarieTests.test_import_session_records_requested_and_effective_parallelism_without_a_fixed_cap",
-        "python:tests.test_server.MozarieTests.test_rejected_import_transfer_closes_the_unread_request_connection"
+        "python:tests.test_server.MozarieTests.test_rejected_import_transfer_closes_the_unread_request_connection",
+        "python:tests.test_http_live_endpoints.LiveHttpEndpointTests.test_concurrent_first_uploads_share_one_session_and_close_its_handle"
       ]
     },
     {

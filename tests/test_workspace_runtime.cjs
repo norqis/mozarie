@@ -29,38 +29,40 @@ vm.runInNewContext(source, context, { filename: workspacePath });
 vm.runInNewContext("globalThis.workspaceTest={queueWorkspaceDraft,flushDraftSaves,flushWorkspaceDraft,flushAllWorkspaceMutations,queueWorkspaceMutation,queueWorkspaceFlags,workspaceDraftPayload,directoryCatalogStore,rememberedOutputDirectoryHandle,rememberOutputDirectoryHandle,rememberedProjectSource,rememberedProjectSources,forgetProjectSources,ensureProjectSourcePermission,catalogForDirectoryHandle,loadWorkspaceDraft,scheduleManualWorkspaceSave};", context, { filename: "test-workspace-exports.js" });
 
 nodeTest("workspace runtime contracts", async () => {
+  state.workspaceDraftRevisions.set("one", 0);
   await context.workspaceTest.queueWorkspaceDraft("one", true);
-  state.drafts.set("one", { add: "data:image/png;base64,a", hasEffectiveMask: true });
+  state.workspaceDraftRevisions.set("one", 0); state.drafts.set("one", { add: "data:image/png;base64,a", hasEffectiveMask: true });
   await context.workspaceTest.queueWorkspaceDraft("one", true);
   assert.deepEqual(calls.map(([, method]) => method), ["DELETE", "POST"], "draft snapshots choose DELETE or POST at enqueue time");
   state.project = { id: "project-one" }; state.currentId = null; state.workspaceDraftChains.clear(); state.workspaceDraftTimers.clear(); state.workspaceMutationErrors.clear(); state.draftSaveChains.clear();
   const durableDraft = { add: "data:image/png;base64,durable", hasEffectiveMask: true };
-  state.drafts.set("one", durableDraft); state.maskStatus = new Map([["one", true]]);
+  state.workspaceDraftRevisions.set("one", 0); state.drafts.set("one", durableDraft); state.maskStatus = new Map([["one", true]]);
   await context.workspaceTest.queueWorkspaceDraft("one", true);
   assert.equal(state.drafts.has("one"), false, "a durable inactive project draft is evicted from the live bitmap cache");
   assert.equal(state.maskStatus.has("one"), false, "evicting a durable project draft also drops its derived mask state");
   const originalApiForRestore = context.api;
   context.api = async () => ({ draft: { add: "data:image/png;base64,durable", hasEffectiveMask: true } });
-  assert.equal((await context.workspaceTest.loadWorkspaceDraft("one")).add, "data:image/png;base64,durable", "revisiting an evicted project draft reloads its durable payload");
-  assert.deepEqual(Object.keys(await context.workspaceTest.loadWorkspaceDraft("one")).sort(), ["add", "hasEffectiveMask"], "a compact server draft does not fabricate an empty local history or history base");
+  assert.equal((await context.workspaceTest.loadWorkspaceDraft("one")).draft.add, "data:image/png;base64,durable", "revisiting an evicted project draft reloads its durable payload");
+  assert.deepEqual(Object.keys((await context.workspaceTest.loadWorkspaceDraft("one")).draft).sort(), ["add", "hasEffectiveMask"], "a compact server draft does not fabricate an empty local history or history base");
   context.api = originalApiForRestore;
   state.project = null;
-  state.drafts.set("one", durableDraft); state.maskStatus.set("one", true);
+  state.workspaceDraftRevisions.set("one", 0); state.drafts.set("one", durableDraft); state.maskStatus.set("one", true);
   await context.workspaceTest.queueWorkspaceDraft("one", true);
   assert.equal(state.drafts.get("one"), durableDraft, "projectless sessions keep their only in-memory draft copy");
   const manyImages = Array.from({ length: 400 }, (_, index) => ({ id: `many-${index}` }));
-  state.images = manyImages; state.project = { id: "project-many" }; state.currentId = null;
+  state.workspaceDraftRevisions.clear(); state.images = manyImages; state.project = { id: "project-many" }; state.currentId = null;
   state.drafts.clear(); state.maskStatus.clear(); state.workspaceDraftChains.clear(); state.workspaceMutationErrors.clear(); calls.length = 0;
   for (let index = 0; index < manyImages.length; index += 1) {
     const image = manyImages[index];
     state.currentId = image.id;
-    state.drafts.set(image.id, { add: `data:image/png;base64,${image.id}`, hasEffectiveMask: true });
+    state.workspaceDraftRevisions.set(image.id, 0); state.drafts.set(image.id, { add: `data:image/png;base64,${image.id}`, hasEffectiveMask: true });
     if (!index) continue;
     await context.workspaceTest.queueWorkspaceDraft(manyImages[index - 1].id, true);
     assert.ok(state.drafts.size <= 1, "inactive project draft bitmap data stays bounded while moving through 400 images");
   }
   state.currentId = null;
   await context.workspaceTest.queueWorkspaceDraft(manyImages.at(-1).id, true);
+  assert.equal(state.workspaceDraftRevisions.size, 0, "evicted draft revisions are released with their pixels");
   assert.equal(state.drafts.size, 0, "400 persisted inactive project drafts are evicted instead of accumulating bitmap state");
   assert.equal(state.maskStatus.size, 0, "evicted project draft status entries plateau with the bitmap cache");
   assert.equal(state.workspaceDraftChains.size, 0, "settled project draft write chains do not grow with the catalogue");
@@ -69,20 +71,20 @@ nodeTest("workspace runtime contracts", async () => {
   const originalApiForManyRestore = context.api;
   context.api = async () => ({ draft: { add: "data:image/png;base64,rehydrated", hasEffectiveMask: true } });
   const rehydrated = await Promise.all(manyImages.map((image) => context.workspaceTest.loadWorkspaceDraft(image.id)));
-  assert.ok(rehydrated.every((draft) => draft?.add === "data:image/png;base64,rehydrated"), "evicted project drafts rehydrate on demand");
+  assert.ok(rehydrated.every(({ draft }) => draft?.add === "data:image/png;base64,rehydrated"), "evicted project drafts rehydrate on demand");
   context.api = originalApiForManyRestore;
   state.project = null; state.drafts.clear(); state.maskStatus.clear(); state.workspaceDraftChains.clear(); state.currentId = null;
   for (let index = 0; index < manyImages.length; index += 1) {
     const image = manyImages[index];
     state.currentId = image.id;
-    state.drafts.set(image.id, { add: `data:image/png;base64,${image.id}`, hasEffectiveMask: true });
+    state.workspaceDraftRevisions.set(image.id, 0); state.drafts.set(image.id, { add: `data:image/png;base64,${image.id}`, hasEffectiveMask: true });
     if (index) await context.workspaceTest.queueWorkspaceDraft(manyImages[index - 1].id, true);
   }
   state.currentId = null;
   await context.workspaceTest.queueWorkspaceDraft(manyImages.at(-1).id, true);
   assert.equal(state.drafts.size, 400, "projectless drafts are never evicted because no durable project recovery path exists");
   state.images = [{ id: "one" }];
-  calls.length = 0; state.drafts.set("one", { add: "data:image/png;base64,a", hasEffectiveMask: true }); rejectFirst = true;
+  calls.length = 0; state.workspaceDraftRevisions.set("one", 0); state.drafts.set("one", { add: "data:image/png;base64,a", hasEffectiveMask: true }); rejectFirst = true;
   const failed = context.workspaceTest.queueWorkspaceDraft("one", true);
   state.drafts.delete("one");
   await context.workspaceTest.queueWorkspaceDraft("one", true);
@@ -128,13 +130,13 @@ nodeTest("workspace runtime contracts", async () => {
   assert.deepEqual(calls.at(-1), ["/api/workspace/image/one", "POST"], "workspace flags ignore an empty image and persist a present image");
 
   calls.length = 0;
-  state.drafts.set("one", { add: "data:image/png;base64,a", hasEffectiveMask: true });
+  state.workspaceDraftRevisions.set("one", 0); state.drafts.set("one", { add: "data:image/png;base64,a", hasEffectiveMask: true });
   await context.workspaceTest.queueWorkspaceDraft("one");
   assert.deepEqual(calls.at(-1), ["/api/workspace/manual/one", "POST"], "a delayed draft is persisted after its debounce");
 
   calls.length = 0;
   state.workspaceDraftChains.clear(); state.workspaceDraftTimers.clear(); state.workspaceMutationErrors.clear();
-  state.drafts.set("one", { add: "", dirtyLayers: ["add"], dirtyRois: { add: [] }, hasEffectiveMask: false });
+  state.workspaceDraftRevisions.set("one", 0); state.drafts.set("one", { add: "", dirtyLayers: ["add"], dirtyRois: { add: [] }, hasEffectiveMask: false });
   rejectFirst = true;
   await context.workspaceTest.queueWorkspaceDraft("one");
   assert.equal(calls.at(-1)[0], "/api/workspace/manual/one/begin", "a delayed failure still begins the retained manual-layer write");
@@ -151,7 +153,7 @@ nodeTest("workspace runtime contracts", async () => {
   assert.equal(clearedStatuses > 0, true, "a successful flush retry removes the stale unsaved warning");
 
   calls.length = 0;
-  state.drafts.set("one", { add: "", dirtyLayers: ["add"], dirtyRois: { add: [] }, hasEffectiveMask: false });
+  state.workspaceDraftRevisions.set("one", 0); state.drafts.set("one", { add: "", dirtyLayers: ["add"], dirtyRois: { add: [] }, hasEffectiveMask: false });
   rejectFirst = true;
   await context.workspaceTest.queueWorkspaceDraft("one");
   rejectFirst = true;
@@ -164,16 +166,38 @@ nodeTest("workspace runtime contracts", async () => {
 
   calls.length = 0;
   state.workspaceDraftTimers.set("one", setTimeout(() => {}, 5000));
-  state.drafts.set("one", { add: "data:image/png;base64,a", hasEffectiveMask: true });
+  state.workspaceDraftRevisions.set("one", 0); state.drafts.set("one", { add: "data:image/png;base64,a", hasEffectiveMask: true });
   await context.workspaceTest.flushWorkspaceDraft("one");
   assert.equal(state.workspaceDraftTimers.has("one"), false, "flushing an image sends its pending timer immediately");
 
   state.workspaceMutationErrors.set("one", new Error("stored failure"));
-  await assert.rejects(context.workspaceTest.flushWorkspaceDraft("one"), /stored failure/, "an image flush surfaces and consumes a remembered mutation failure");
+  await context.workspaceTest.flushWorkspaceDraft("one");
+  assert.equal(state.workspaceMutationErrors.has("one"), false, "an image flush clears a remembered failure only after a successful write");
+
+  for (const flush of [() => context.workspaceTest.flushWorkspaceDraft("one"), () => context.workspaceTest.flushAllWorkspaceMutations()]) {
+    for (const metadata of [{ add: "stored mask", dirtyLayers: [], manualEnabled: false }, null]) {
+      calls.length = 0;
+      state.workspaceDraftRevisions.set("one", 0);
+      if (metadata) state.drafts.set("one", metadata); else state.drafts.delete("one");
+      rejectFirst = true;
+      await context.workspaceTest.queueWorkspaceDraft("one");
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        rejectFirst = true;
+        await assert.rejects(flush(), /write failed/);
+        assert.equal(state.workspaceMutationErrors.has("one"), true, "repeated failures preserve the pending metadata or deletion");
+      }
+      await flush();
+      assert.equal(state.workspaceMutationErrors.has("one"), false);
+      assert.deepEqual(calls.map(([, method]) => method), Array(4).fill(metadata ? "POST" : "DELETE"), "each retry resends the current edit, including a deleted draft");
+      const written = calls.length;
+      await flush();
+      assert.equal(calls.length, written, "a durable edit causes no further writes");
+    }
+  }
 
   calls.length = 0;
   const loaded = await context.workspaceTest.loadWorkspaceDraft("one");
-  assert.equal(loaded, null, "loading an absent draft returns null");
+  assert.equal(loaded.draft, null, "loading an absent draft returns null");
 
   state.currentId = null;
   assert.equal(await context.workspaceTest.scheduleManualWorkspaceSave(), undefined, "no current image has no scheduled encoder");
@@ -197,7 +221,7 @@ nodeTest("workspace runtime contracts", async () => {
     },
   };
   assert.equal(await context.workspaceTest.directoryCatalogStore(), openedDb, "a directory database creates its store on first open and returns the opened database");
-  assert.equal(createdStores, 3, "the directory database owns catalog, project-source, and source-delete stores");
+  assert.equal(createdStores, 4, "the directory database owns catalog, project-source, source-delete and source-overwrite stores");
   context.indexedDB = context.window.indexedDB = {
     open() {
       const request = {};
@@ -277,13 +301,13 @@ nodeTest("workspace runtime contracts", async () => {
   await context.workspaceTest.flushWorkspaceDraft("one");
   assert.equal(state.workspaceDraftChains.has("one"), false, "an image with no pending server write flushes without creating one");
   assert.equal(await context.workspaceTest.queueWorkspaceDraft("missing"), undefined, "a missing catalog image never schedules a manual write");
-  state.drafts.set("one", { add: "data:image/png;base64,a", hasEffectiveMask: true });
+  state.workspaceDraftRevisions.set("one", 0); state.drafts.set("one", { add: "data:image/png;base64,a", hasEffectiveMask: true });
   const debouncedOne = context.workspaceTest.queueWorkspaceDraft("one");
   const debouncedTwo = context.workspaceTest.queueWorkspaceDraft("one");
   await Promise.all([debouncedOne, debouncedTwo]);
   assert.equal(state.workspaceDraftTimers.has("one"), false, "a replacement debounce clears its earlier timer before writing");
   context.api = async (url, options = {}) => { calls.push([url, options.method]); return {}; };
-  state.currentId = null; state.draftDirty = false; state.workspaceDraftChains.clear(); state.workspaceMutationErrors.clear(); state.workspaceDraftTimers.clear(); state.drafts.set("one", {});
+  state.currentId = null; state.draftDirty = false; state.workspaceDraftChains.clear(); state.workspaceMutationErrors.clear(); state.workspaceDraftTimers.clear(); state.workspaceDraftRevisions.set("one", 0); state.drafts.set("one", {});
   state.workspaceDraftTimers.set("one", setTimeout(() => {}, 5000));
   assert.equal(state.workspaceDraftTimers.size, 1, "the global flush fixture begins with one pending timer");
   const flushCalls = calls.length;

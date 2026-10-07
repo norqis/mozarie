@@ -48,12 +48,22 @@ async function runGalleryPerformanceScenario() {
           && document.querySelector(".overview-item")?.getClientRects().length > 0
           && document.querySelectorAll(".gallery-item").length === 0);
         timings.push(performance.now() - started);
+        await page.setViewportSize({ width: 1281 + index % 2, height: 900 });
+        await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+        assert.equal(await page.locator(".gallery-item").count(), 0, "resizing overview does not rebuild the hidden gallery");
+        assert.ok(await page.locator(".overview-item").count() < 2000, "visible overview remains virtualized after resize");
+        await page.evaluate(() => refreshReviewViews());
+        assert.equal(await page.locator(".gallery-item").count(), 0, "review refresh does not rebuild the hidden gallery");
         started = performance.now();
         await page.locator("#closeOverviewButton").click();
         await page.waitForFunction(() => document.querySelector("#overviewPane").hidden
           && document.querySelector(".gallery-item")?.getClientRects().length > 0
           && document.querySelectorAll(".overview-item").length === 0);
         timings.push(performance.now() - started);
+        await page.setViewportSize({ width: 1280 + index % 2, height: 900 });
+        await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+        assert.equal(await page.locator(".overview-item").count(), 0, "resizing editor does not rebuild the hidden overview");
+        assert.ok(await page.locator(".gallery-item").count() < 2000, "visible gallery remains virtualized after resize");
         started = performance.now();
         const filter = index % 2 ? "reviewed" : "unreviewed";
         await page.locator("#galleryFilterButton").click();

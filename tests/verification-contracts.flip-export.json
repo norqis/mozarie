@@ -1481,7 +1481,8 @@
       "observation": "一覧サムネイルと中央画像が同じ向きになる",
       "status": "automated",
       "testIds": [
-        "node:tests/test_flip_export_ui_contracts_e2e.cjs::overwrite then Undo keeps the thumbnail and center image in the same direction"
+        "node:tests/test_flip_export_ui_contracts_e2e.cjs::overwrite then Undo keeps the thumbnail and center image in the same direction",
+        "python:tests.test_http_live_endpoints.LiveHttpEndpointTests.test_thumbnail_pixels_remain_in_source_orientation_before_and_after_flip"
       ]
     },
     {
@@ -1569,7 +1570,11 @@
       "observation": "指定色の透明度を維持し",
       "status": "automated",
       "testIds": [
-        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_palette_rgb_and_grayscale_colorkey_transparency_survives_metadata_drop"
+        "python:tests.test_flip_export_contracts.FlipExportContractTests.test_palette_rgb_and_grayscale_colorkey_transparency_survives_metadata_drop",
+        "python:tests.image_io.test_mosaic_transparency.MosaicTransparencyTests.test_colorkey_mosaic_preserves_alpha_pixels_and_selected_metadata",
+        "python:tests.image_io.test_mosaic_transparency.MosaicTransparencyTests.test_transparent_colors_do_not_contribute_to_the_visible_average",
+        "python:tests.image_io.test_mosaic_transparency.MosaicTransparencyTests.test_colorkey_detection_blacks_out_and_clips_invisible_pixels",
+        "python:tests.image_io.test_mosaic_transparency.MosaicTransparencyTests.test_alpha_expansion_remains_editable_and_legacy_renderer_matches"
       ]
     },
     {

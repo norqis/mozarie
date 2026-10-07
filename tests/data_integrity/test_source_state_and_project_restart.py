@@ -170,7 +170,8 @@ class DataIntegrity051070Tests(unittest.TestCase):
         self.assertEqual(set(undo["changedImageIds"]), {images["A.png"], images["B.png"]})
         restored = {name: self.durable_state(state, image_id) for name, image_id in images.items()}
         for name in ("A.png", "B.png"):
-            self.assertEqual(restored[name], before[name], f"undo restores every selected layer and flag for {name}")
+            self.assertGreater(restored[name]["revision"], cleared[name]["revision"])
+            self.assertEqual({**restored[name], "revision": before[name]["revision"]}, before[name], f"undo restores every selected layer and flag for {name}")
         self.assertTrue(restored["A.png"]["flags"][1])
         self.assertFalse(restored["B.png"]["flags"][1])
         self.assertEqual(restored["E.png"], before["E.png"])
@@ -179,6 +180,9 @@ class DataIntegrity051070Tests(unittest.TestCase):
         redo = state.restore_project_history(images["A.png"], "redo")
         self.assertEqual(set(redo["changedImageIds"]), {images["A.png"], images["B.png"]})
         redone = {name: self.durable_state(state, image_id) for name, image_id in images.items()}
+        for name in ("A.png", "B.png"):
+            self.assertGreater(redone[name]["revision"], restored[name]["revision"])
+            cleared[name]["revision"] = redone[name]["revision"]
         self.assertEqual(redone, cleared, "redo clears only A and B and preserves every outside state")
 
     def test_review_hide_show_and_history_preserve_content_and_editability(self) -> None:
@@ -205,7 +209,11 @@ class DataIntegrity051070Tests(unittest.TestCase):
             self.assertEqual(after_review_undo[key], stable_a[key], f"review undo leaves A {key} unchanged")
         self.assertEqual(after_review_undo["flags"][0], stable_a["flags"][0], "review undo leaves A hidden state unchanged")
         self.assertEqual(self.durable_state(state, b), stable_b, "review undo never changes B")
-        self.assertEqual(state.workspace_store.history_state(a), a_history_state_before, "review undo restores A's complete candidate/manual/transform/hidden history state")
+        current_history = state.workspace_store.history_state(a)
+        self.assertGreater(current_history["revision"], a_history_state_before["revision"])
+        a_history_state_before["revision"] = current_history["revision"]
+        a_history_state_before["manual"]["revision"] = current_history["revision"]
+        self.assertEqual(current_history, a_history_state_before, "review undo restores A's complete candidate/manual/transform/hidden history content with a fresh revision")
         review_history = self._history_rows(state, a)
         self.assertEqual(review_history[: len(content_history_before)], content_history_before, "review toggle preserves every existing history row byte-for-byte")
         self.assertEqual(len(review_history), len(content_history_before) + 1, "review toggle appends exactly one history operation")
@@ -339,6 +347,8 @@ class DataIntegrity051070Tests(unittest.TestCase):
         self.assertEqual(first_undo["changedImageIds"], [first_image], "same-name images have independent history groups")
         self.assertEqual(self.durable_state(reopened, second_image), second_before_first_undo, "first source undo never moves the second source history")
         reopened.restore_project_history(first_image, "redo")
+        self.assertGreater(reopened._candidate_revision(first_image), expected_states[first_image]["revision"])
+        expected_states[first_image]["revision"] = reopened._candidate_revision(first_image)
         self.assertEqual(self.durable_state(reopened, first_image), expected_states[first_image])
 
         missing = first.with_name("source-one-away")

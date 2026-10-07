@@ -21,6 +21,7 @@ const context = {
   saveDraft() {}, showUserError() {},
 };
 vm.runInNewContext(source, context, { filename: workspacePath });
+state.workspaceDraftRevisions.set("one", 0);
 vm.runInNewContext("globalThis.workspaceFlushTest={flushAllWorkspaceMutations};", context, { filename: "test-workspace-flush-exports.js" });
 
 nodeTest("workspace flush runtime contracts", async () => {

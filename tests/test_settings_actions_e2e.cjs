@@ -319,8 +319,8 @@ test("SD-125 an unknown browser deletion remains pending and does not commit the
     await resumePendingSourceDeletes();
   }, token);
   assert.deepEqual(await page.evaluate(async () => (await pendingSourceDeletes()).map((entry) => entry.browserEntries[0]?.state)), ["unknown"]);
-  assert.deepEqual(fixture.sourceDeleteRequests.map((request) => request.path), ["/api/catalog/delete-source/status"],
-    "unknown recovery checks durable status once without commit, cancel, or acknowledgement");
+  assert.deepEqual([...new Set(fixture.sourceDeleteRequests.map((request) => request.path))], ["/api/catalog/delete-source/status"],
+    "startup and explicit recovery only read durable status without commit, cancel, or acknowledgement");
   assert.equal(await page.evaluate(() => state.images.length), 2);
 });
 

@@ -219,7 +219,7 @@ async function testBoundApplicationEvents() {
 
 async function testApplicationStartupPaths() {
   const { document, element } = browserFixture();
-  const state = { settings: null, images: [], view: { scale: 1, x: 0, y: 0 }, displayMode: "single", compareSplit: .5 };
+  const state = { settings: null, images: [], catalogEpoch: 0, view: { scale: 1, x: 0, y: 0 }, displayMode: "single", compareSplit: .5 };
   const apiResults = [];
   let animationFrame = null;
   let animationFrameRequests = 0;
@@ -261,6 +261,10 @@ async function testApplicationStartupPaths() {
   ]) context[name] = () => {};
   context.toolRailItems = () => [];
   context.setToolRailTabStop = () => {};
+  const coreSource = fs.readFileSync(path.join(jsRoot, "core.js"), "utf8");
+  const epochHelper = coreSource.match(/function isCurrentCatalogEpoch\([\s\S]*?(?=function catalogStagingEditsActive\()/)?.[0];
+  assert.ok(epochHelper);
+  vm.runInNewContext(epochHelper, context, { filename: path.join(jsRoot, "core.js") });
   const source = fs.readFileSync(path.join(jsRoot, "app.js"), "utf8");
   vm.runInNewContext(source, context, { filename: path.join(jsRoot, "app.js") });
   vm.runInNewContext("globalThis.appCoverage={ initialise, bindEvents };", context, { filename: "test-app-exports.js" });
@@ -645,7 +649,7 @@ async function testDetectionImportAndSaveBehaviour() {
     Promise, Map, Set, Array, Object, Number, String, Boolean, Math, JSON, structuredClone,
     state, $: (selector) => element(selector),
     isBusy: () => false, activeDetection: () => false, currentImageActionPending: () => false, catalogStagingEditsActive: () => false, isProcessableImage: (image) => Boolean(image && !image.hidden), flushAllImageMutations: async () => {}, flushAllWorkspaceMutations: async () => {}, processableImages: (images = state.images) => images.filter((image) => !image.hidden), imageMatchesStateFilter: () => true, updateActionButtons() {}, updateProgress() {}, showUserError() {}, setStatusKey() {}, closeProcessing() {},
-    saveDraft: () => calls.push("draft"), refreshMaskStatus: () => calls.push("refresh"), saveTargets: () => ["one"],
+    saveDraft: async () => calls.push("draft"), refreshMaskStatus: () => calls.push("refresh"), saveTargets: () => ["one"],
     openApplyDialog: async () => calls.push("apply"), openSingleSaveDialog: async (id) => calls.push(`single:${id}`), waitForCandidateMutations: async () => { calls.push("wait"); }, imageHasMask: () => true,
     detectionConfidence: () => 0.5, normaliseDetectionConfidence: Number, setDetectionConfidence() {}, showModalFromInvoker() {},
     t: (key) => key, api: async () => ({}), isCurrentGeneration: () => true, setSettingsForm() {}, scheduleJobPoll() {}, showProcessing() {}, syncDetectionTargetSwitch() {}, syncDetectionFluidColorFill() {},

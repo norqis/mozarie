@@ -63,6 +63,7 @@ async function withDrafts(run, { count = 3, durable = true } = {}) {
       if (action === "cancel") { uploads.delete(payload.sessionId); await route.fulfill({ json: {} }); return; }
       const wait = control.nextWrite; control.nextWrite = null;
       if (wait && !await wait(payload)) { await route.fulfill({ status: 500, json: { error: { code: "internal_error" } } }); return; }
+      if (request.method() === "DELETE") { saved.delete(imageId); await route.fulfill({ json: {} }); return; }
       const next = { ...saved.get(imageId), ...payload, ...uploads.get(payload.sessionId) };
       for (const empty of payload.emptyLayers || []) next[empty] = "";
       for (const field of ["dirtyLayers", "dirtyRois", "emptyLayers", "sessionId"]) delete next[field];
@@ -102,8 +103,8 @@ async function toggleManual(page) {
 
 test("cold durable draft visits release inactive PNGs and reload identical pixels", { timeout: 30000 }, () => withDrafts(async (page, control) => {
   for (let index = 1; index < 30; index += 1) await select(page, `draft-${index}`);
-  assert.deepEqual(await page.evaluate(() => ({ drafts: [...state.drafts.keys()], statuses: state.maskStatus.size, masked: state.images.filter(imageHasMask).length })),
-    { drafts: ["draft-29"], statuses: 1, masked: 30 }, "visiting images does not retain every stored PNG or lose gallery mask flags");
+  assert.deepEqual(await page.evaluate(() => ({ drafts: [...state.drafts.keys()], revisions: [...state.workspaceDraftRevisions.keys()], statuses: state.maskStatus.size, masked: state.images.filter(imageHasMask).length })),
+    { drafts: ["draft-29"], revisions: ["draft-29"], statuses: 1, masked: 30 }, "visiting images does not retain every stored PNG or lose gallery mask flags");
   await select(page, "draft-0");
   assert.equal(control.reads.get("draft-0"), 2, "a released draft is read again from durable storage");
   assert.equal(await page.evaluate(() => addCtx.getImageData(5, 5, 1, 1).data[3]), 255);
@@ -136,17 +137,70 @@ test("pending and failed metadata-only drafts survive image switches until their
   await select(page, "draft-0");
   assert.equal(await page.evaluate(() => state.manualEnabled), false);
   assert.equal(control.reads.get("draft-0"), 1, "a failed metadata save must not reload the older enabled server copy");
+  control.nextWrite = async () => false;
   assert.equal(await page.evaluate(async () => {
     try { await flushWorkspaceDraft("draft-0"); return "saved"; }
     catch { return "failed"; }
-  }), "failed", "a dependent action receives the previous write failure");
-  assert.equal(await page.evaluate(() => state.workspaceMutationErrors.size), 0, "the failure has been consumed, but that does not make its draft durable");
+  }), "failed", "a failed retry prevents the dependent action");
+  assert.equal(await page.evaluate(() => state.workspaceMutationErrors.size), 1, "the failed metadata edit remains pending for the next action");
   await select(page, "draft-2");
   assert.equal(await page.evaluate(() => state.drafts.get("draft-0")?.manualEnabled), false);
-  await page.evaluate(() => queueWorkspaceDraft("draft-0", true));
+  await page.evaluate(() => flushWorkspaceDraft("draft-0"));
   assert.equal(await page.evaluate(() => state.drafts.has("draft-0")), false, "successful inactive retry releases the now durable draft");
   await select(page, "draft-0");
   assert.equal(await page.evaluate(() => state.manualEnabled), false);
+}));
+
+test("failed empty draft deletion keeps the cleared canvas until retry succeeds", { timeout: 30000 }, () => withDrafts(async (page, control) => {
+  const write = control.holdWrite();
+  await page.locator(".candidate-row-manual-apply .candidate-delete").click();
+  await write.received;
+  await page.evaluate(() => { window.pendingDraftSwitch = selectImage("draft-1"); });
+  await page.waitForFunction(() => state.pendingImageId === "draft-1");
+  assert.equal(await page.evaluate(() => state.currentId), "draft-0", "empty draft deletion is still pending");
+  write.release(false);
+  await page.evaluate(() => window.pendingDraftSwitch);
+  await page.locator("#errorDialog").waitFor({ state: "visible" });
+  await page.locator("#errorDialog button").last().click();
+  assert.deepEqual(await page.evaluate(() => [state.currentId, addCtx.getImageData(5, 5, 1, 1).data[3], state.draftDirty]), ["draft-0", 0, true]);
+  assert.ok(control.saved.get("draft-0").add, "failed DELETE leaves the older server copy intact");
+  await select(page, "draft-1");
+  assert.equal(control.saved.has("draft-0"), false, "retry commits the cleared draft before departure");
+  assert.equal(await page.evaluate(() => state.drafts.has("draft-0")), false);
+  await select(page, "draft-0");
+  assert.equal(await page.evaluate(() => addCtx.getImageData(5, 5, 1, 1).data[3]), 0, "revisit cannot resurrect the older pixels");
+}));
+
+test("project creation retries failed metadata saves before discarding the previous editor", { timeout: 30000 }, () => withDrafts(async (page, control) => {
+  let created = 0;
+  await page.route("**/api/projects", async (route) => {
+    assert.equal(control.saved.get("draft-0").manualEnabled, false, "the old editor is durable before project creation");
+    created += 1;
+    await route.fulfill({ json: { project: { id: "new-project", name: "New" }, catalogGeneration: 2 } });
+  });
+  control.nextWrite = async () => false;
+  await toggleManual(page);
+  await page.locator("#errorDialog").waitFor({ state: "visible" });
+  await page.locator("#errorDialog button").last().click();
+  await page.locator("#projectButton").click();
+  await page.locator("#projectNew").click();
+  await page.locator("#projectNameInput").fill("New");
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    control.nextWrite = async () => false;
+    await page.locator("#projectNameConfirm").click();
+    await page.locator("#errorDialog").waitFor({ state: "visible" });
+    assert.equal(created, 0);
+    assert.deepEqual(await page.evaluate(() => [state.currentId, state.manualEnabled, state.workspaceMutationErrors.size]), ["draft-0", false, 1]);
+    await page.locator("#errorDialog button").last().click();
+  }
+  await page.locator("#projectNameConfirm").click();
+  await page.waitForFunction(() => state.project?.id === "new-project" && !state.projectOperationPending);
+  assert.equal(created, 1);
+  assert.equal(control.saved.get("draft-0").manualEnabled, false);
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await page.waitForFunction(() => state.images.length === 3);
+  await select(page, "draft-0");
+  assert.equal(await page.evaluate(() => state.manualEnabled), false, "the saved setting survives a complete browser reload");
 }));
 
 test("legacy non-durable drafts keep local history when leaving after a save", { timeout: 30000 }, () => withDrafts(async (page, control) => {

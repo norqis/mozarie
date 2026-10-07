@@ -5,17 +5,31 @@ state.workspaceDraftTimers = new Map();
 state.workspaceDraftPending = new Map();
 state.workspaceMutationErrors = new Map();
 state.workspaceFlagPending = new Map();
+// The catalogue can refresh without replacing the editor's pixels. Save against
+// the revision of the draft actually loaded, not a newer catalogue description.
+state.workspaceDraftRevisions = new Map();
 // Metadata-only edits have no dirty PNG layers. Object provenance distinguishes
 // those unsaved snapshots from server copies without retaining another payload.
 const persistedWorkspaceDrafts = new WeakSet();
 
-function releaseInactiveWorkspaceDraft(imageId) {
+function workspaceDraftRevision(imageId) {
+  const revision = state.workspaceDraftRevisions.get(imageId);
+  if (revision === undefined) throw codedError("save_state_changed");
+  return revision;
+}
+
+function hasPendingWorkspaceDraft(imageId) {
   const draft = state.drafts.get(imageId);
-  if (!hasDurableHistory() || state.currentId === imageId || state.pendingImageId === imageId
+  return Boolean((state.currentId === imageId && state.draftDirty)
     || (draft && (!persistedWorkspaceDrafts.has(draft) || draft.dirtyLayers?.length))
     || state.workspaceDraftTimers.has(imageId) || state.draftSaveChains.has(imageId)
-    || state.workspaceDraftChains.has(imageId) || state.workspaceMutationErrors.has(imageId)) return;
+    || state.workspaceDraftChains.has(imageId) || state.workspaceMutationErrors.has(imageId));
+}
+
+function releaseInactiveWorkspaceDraft(imageId) {
+  if (!hasDurableHistory() || state.currentId === imageId || state.pendingImageId === imageId || hasPendingWorkspaceDraft(imageId)) return;
   state.drafts.delete(imageId);
+  state.workspaceDraftRevisions.delete(imageId);
   state.maskStatus.delete(imageId);
 }
 
@@ -52,7 +66,7 @@ function projectSourceId() { return crypto.randomUUID(); }
 async function directoryCatalogStore() {
   if (!window.indexedDB) return null;
   return new Promise((resolve) => {
-    const request = indexedDB.open(DIRECTORY_DB, 4);
+    const request = indexedDB.open(DIRECTORY_DB, 5);
     request.onupgradeneeded = () => {
       const names = request.result.objectStoreNames;
       if (!names?.contains?.("directories")) request.result.createObjectStore("directories", { keyPath: "catalogId" });
@@ -61,10 +75,28 @@ async function directoryCatalogStore() {
         : request.result.createObjectStore("projectSources", { keyPath: "key" });
       if (!sources.indexNames.contains("projectId")) sources.createIndex("projectId", "projectId", { unique: false });
       if (!names?.contains?.("sourceDeletes")) request.result.createObjectStore("sourceDeletes", { keyPath: "deleteToken" });
+      if (!names?.contains?.("sourceOverwrites")) request.result.createObjectStore("sourceOverwrites", { keyPath: "saveToken" });
     };
     request.onsuccess = () => resolve(request.result);
     request.onerror = () => resolve(null);
   });
+}
+
+async function browserOverwriteStore(saveToken, payload) {
+  const db = await directoryCatalogStore();
+  if (!db) throw codedError("source_restore_failed");
+  try {
+    return await new Promise((resolve, reject) => {
+      const transaction = db.transaction("sourceOverwrites", payload === undefined ? "readonly" : "readwrite");
+      const store = transaction.objectStore("sourceOverwrites");
+      const request = payload === undefined ? store.get(saveToken)
+        : payload === null ? store.delete(saveToken) : store.put({ ...payload, saveToken });
+      transaction.oncomplete = () => resolve(request.result || null);
+      transaction.onerror = () => reject(transaction.error);
+      transaction.onabort = () => reject(transaction.error);
+    });
+  } catch { throw codedError("source_restore_failed"); }
+  finally { db.close(); }
 }
 
 async function rememberPendingSourceDelete(payload) {
@@ -132,7 +164,7 @@ async function rememberProjectSources(projectId, sources) {
     });
     return prepared.map((source) => source.stableId);
   } catch (error) {
-    if (error?.code) throw error;
+    if (typeof error?.code === "string") throw error;
     throw codedError("project_source_unavailable");
   } finally { db.close(); }
 }
@@ -419,10 +451,22 @@ async function uploadManualLayer(imageId, sessionId, layer, dataUrl) {
 }
 
 async function saveWorkspaceDraft(imageId, draft) {
-  if (!draft) return api(`/api/workspace/manual/${encodeURIComponent(imageId)}`, { method: "DELETE" });
+  const epoch = state.catalogEpoch;
+  const expectedManualRevision = workspaceDraftRevision(imageId);
+  const acknowledge = (result) => {
+    const image = state.images.find((entry) => entry.id === imageId);
+    if (state.catalogEpoch === epoch && image && state.workspaceDraftRevisions.get(imageId) === expectedManualRevision
+      && Number.isInteger(result.manualRevision)) {
+      state.workspaceDraftRevisions.set(imageId, result.manualRevision);
+      if (Number(image.manualRevision || 0) === expectedManualRevision) image.manualRevision = result.manualRevision;
+    }
+    return result;
+  };
+  if (!draft) return acknowledge(await api(`/api/workspace/manual/${encodeURIComponent(imageId)}`, { method: "DELETE", body: JSON.stringify({ expectedManualRevision }) }));
   const payload = workspaceDraftPayload(draft);
+  payload.expectedManualRevision = expectedManualRevision;
   const dirtyLayers = Array.isArray(payload.dirtyLayers) ? payload.dirtyLayers : [];
-  if (!dirtyLayers.length) return api(`/api/workspace/manual/${encodeURIComponent(imageId)}`, { method: "POST", body: JSON.stringify(payload) });
+  if (!dirtyLayers.length) return acknowledge(await api(`/api/workspace/manual/${encodeURIComponent(imageId)}`, { method: "POST", body: JSON.stringify(payload) }));
   const sessionId = crypto.randomUUID();
   await api(`/api/workspace/manual/${encodeURIComponent(imageId)}/begin`, { method: "POST", body: JSON.stringify({ sessionId, dirtyLayers }) });
   try {
@@ -435,7 +479,7 @@ async function saveWorkspaceDraft(imageId, draft) {
     delete payload.add; delete payload.exclusion; delete payload.exclusionErase;
     payload.emptyLayers = emptyLayers;
     payload.sessionId = sessionId;
-    return await api(`/api/workspace/manual/${encodeURIComponent(imageId)}/commit`, { method: "POST", body: JSON.stringify(payload) });
+    return acknowledge(await api(`/api/workspace/manual/${encodeURIComponent(imageId)}/commit`, { method: "POST", body: JSON.stringify(payload) }));
   } catch (error) {
     await api(`/api/workspace/manual/${encodeURIComponent(imageId)}/cancel`, { method: "POST", body: JSON.stringify({ sessionId }) }).catch(() => {});
     throw error;
@@ -464,6 +508,10 @@ function queueWorkspaceDraft(imageId, immediate = false) {
       if (hasDurableHistory() && state.currentId === imageId) void refreshProjectHistory(imageId);
       if (state.drafts.get(imageId) === draft) releaseInactiveWorkspaceDraft(imageId);
       return result;
+    }).catch((error) => {
+      state.workspaceUnsavedImageId = imageId;
+      setStatusKey("status.workspaceUnsaved", {}, "warning");
+      throw error;
     });
     const pending = state.workspaceDraftPending.get(imageId);
     if (pending) {
@@ -471,8 +519,7 @@ function queueWorkspaceDraft(imageId, immediate = false) {
       pending.resolve(completed.catch((error) => {
         // Retain the bitmap and dirty layers for retry, while making it explicit
         // that the displayed hand-drawn edit is not durable yet.
-        state.workspaceUnsavedImageId = imageId;
-        setStatusKey("status.workspaceUnsaved", {}, "warning"); showUserError(error);
+        showUserError(error);
       }));
     }
     return completed;
@@ -517,17 +564,11 @@ async function flushWorkspaceDraft(imageId) {
     await (chain || Promise.resolve());
     const failure = state.workspaceMutationErrors.get(imageId);
     if (failure) {
-      const draft = state.drafts.get(imageId);
-      // A rejected debounced write leaves its bitmap and dirty layers in the
-      // draft. Requeue that retained edit instead of consuming the error and
-      // allowing the caller to move away with no durable retry.
-      if (draft?.dirtyLayers?.length) {
-        state.workspaceMutationErrors.delete(imageId);
-        await queueWorkspaceDraft(imageId, true);
-        continue;
-      }
-      state.workspaceMutationErrors.delete(imageId);
-      throw failure;
+      // Metadata changes and draft deletion need the same retry as PNG layers.
+      // Only a successful write clears the retained failure.
+      if (!state.images.some((image) => image.id === imageId)) throw failure;
+      await queueWorkspaceDraft(imageId, true);
+      continue;
     }
     if (!state.workspaceDraftTimers.has(imageId) && state.workspaceDraftChains.get(imageId) === chain) return;
   }
@@ -548,15 +589,9 @@ async function flushAllWorkspaceMutations() {
     if (failed) throw failed.reason;
     const failedImageId = [...state.workspaceMutationErrors.keys()][0];
     if (failedImageId) {
-      const storedFailure = state.workspaceMutationErrors.get(failedImageId);
-      const draft = state.drafts.get(failedImageId);
-      if (draft?.dirtyLayers?.length) {
-        state.workspaceMutationErrors.delete(failedImageId);
-        await queueWorkspaceDraft(failedImageId, true);
-        continue;
-      }
-      state.workspaceMutationErrors.delete(failedImageId);
-      throw storedFailure;
+      if (!state.images.some((image) => image.id === failedImageId)) throw state.workspaceMutationErrors.get(failedImageId);
+      await queueWorkspaceDraft(failedImageId, true);
+      continue;
     }
     const stable = [...state.workspaceDraftChains.entries()];
     if (!state.workspaceDraftTimers.size && stable.length === chains.length && stable.every(([imageId, chain]) => chains.some(([knownId, known]) => knownId === imageId && known === chain))) return;
@@ -569,12 +604,14 @@ async function loadWorkspaceDraft(imageId) {
   // the history base; fabricating an empty log would rebuild empty layers.
   const draft = data.draft || null;
   if (draft) persistedWorkspaceDrafts.add(draft);
-  return draft;
+  return { draft, manualRevision: Number(data.manualRevision || 0) };
 }
 
 function scheduleManualWorkspaceSave() {
   const imageId = state.currentId;
   if (!imageId) return Promise.resolve();
+  // Capture each completed stroke before a later stroke can change the canvas.
+  if (hasDurableHistory()) return saveDraft().catch(showUserError);
   const previous = state.draftSaveChains.get(imageId) || Promise.resolve();
   const next = previous.then(() => new Promise((resolve, reject) => setTimeout(() => {
     try { void saveDraft().catch(showUserError); resolve(); } catch (error) { reject(error); }

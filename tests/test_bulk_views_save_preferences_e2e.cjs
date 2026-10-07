@@ -72,6 +72,7 @@ async function main() {
       state.sourceAccess.set("sample-two", { fileHandle, parentHandle: root, sourceKind: "browser-files", sourceId: "opfs-root" });
       state.projectlessDirectorySources.set("opfs-root", { handle: root, imageIds: new Set(["sample", "sample-two"]) });
       state.drafts.set("sample-two", { add: "", exclusion: "", exclusionErase: "", manualEnabled: true, manualExclusionEnabled: true, manualExclusionEraseEnabled: true, removedCandidateIds: [] });
+      state.workspaceDraftRevisions.set("sample-two", 0);
     });
 
     // Seed candidate records only as the fixture's initial backend data, then

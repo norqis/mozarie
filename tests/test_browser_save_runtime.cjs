@@ -3,6 +3,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const vm = require("node:vm");
 const nodeTest = require("node:test");
+const { indexedDBFixture } = require("./helpers/indexeddb_fixture.cjs");
 
 const staticRoot = path.join(__dirname, "..", "static");
 const index = fs.readFileSync(path.join(staticRoot, "index.html"), "utf8");
@@ -103,15 +104,14 @@ function createRuntime({ commit, copy = null, deleteOriginal = false, renderBina
       };
     },
   };
-  const browserWindow = { devicePixelRatio: 1, addEventListener() {} };
-  let outputLockTail = Promise.resolve();
+  const indexedDB = indexedDBFixture();
+  const browserWindow = { devicePixelRatio: 1, addEventListener() {}, indexedDB };
   const browserNavigator = { locks: { request(name, options, callback) {
     lockRequests.push([name, options]);
-    const result = outputLockTail.then(callback, callback);
-    outputLockTail = result.catch(() => {});
-    return result;
+    return Promise.resolve(callback({ name, mode: options.mode || "exclusive" }));
   } } };
   const context = {
+    indexedDB,
     codedError(code) { const error = new Error(); error.code = code; return error; },
     console,
     document,
@@ -161,7 +161,10 @@ function createRuntime({ commit, copy = null, deleteOriginal = false, renderBina
           if (!response.ok) return response;
           return response;
         }
-        return renderBinary ? await renderBinary({ options, requests }) : binaryResponse([4, 5, 6], renderToken);
+        const response = renderBinary ? await renderBinary({ options, requests }) : binaryResponse([4, 5, 6], renderToken);
+        if (!response.ok) return response;
+        const headers = response.headers;
+        return { ...response, headers: { get: (name) => name === "X-Mozarie-Save-Token" ? payload.clientSaveToken : headers.get(name) } };
       }
       if (requestPath === "/api/save/commit") {
         const response = await commit({ options, requests });
@@ -192,6 +195,7 @@ function createRuntime({ commit, copy = null, deleteOriginal = false, renderBina
   ).runInContext(runtimeContext);
   const { state, beginSaveSourcePreparation, ensureSaveSources, finishApplyJob, runBrowserSave, saveTargets, processableImages, isBusy, catalogStagingEditsActive, selectedSaveMode, chooseOutputDirectory, startApplyFromDialog, startSingleSave, refreshOutputDirectoryStatus, writeSourceHandle, restoreSourceHandle, renderOutputDirectory, pickOutputDirectory: pickOutputDirectoryApi, reserveSaveRender, renderDefaultCopy, renderStreamedSave, commitBrowserSaveWithRetry, acknowledgePendingBrowserSave, nextVisibleImage, translate } = context.__browserSaveRuntime;
   state.images = initialImages || [{ id: "image-1", relativePath: "nested/source.png", width: 32, height: 32, candidateCount: 1, enabledCandidateCount: 1 }];
+  state.workspaceDraftRevisions = new Map(state.images.map((image) => [image.id, Number(image.manualRevision || 0)]));
   state.settings = { saving: { parallelism: 1, default_output_directory: "G:/output", preserve_directory_structure: true }, confirmations: { overwriteSource: false, deleteSourceAfterCopy: false } };
   getElement("#applyPreserveDirectoryStructure").checked = true;
   getElement("#singleSavePreserveDirectoryStructure").checked = true;
@@ -205,6 +209,7 @@ function createRuntime({ commit, copy = null, deleteOriginal = false, renderBina
     "gallery.detectAll": "detect all",
     "apply.outputDirectoryUnset": "Save location: not selected",
   };
+  new vm.Script("void reconcilePendingBrowserSaves();").runInContext(runtimeContext);
   return { element: getElement, elements, beginSaveSourcePreparation, ensureSaveSources, finishApplyJob, imageFetches: () => imageFetches, lockRequests, navigator: browserNavigator, requests, runBrowserSave, saveTargets, processableImages, isBusy, catalogStagingEditsActive, selectedSaveMode, chooseOutputDirectory, startApplyFromDialog, startSingleSave, refreshOutputDirectoryStatus, writeSourceHandle, restoreSourceHandle, renderOutputDirectory, pickOutputDirectory: pickOutputDirectoryApi, reserveSaveRender, renderDefaultCopy, renderStreamedSave, commitBrowserSaveWithRetry, acknowledgePendingBrowserSave, nextVisibleImage, state, translate, window: browserWindow };
 }
 
@@ -650,6 +655,27 @@ async function runBrowserCopyRenderFailureCancelsReservationCase() {
   assert.equal(runtime.requests.filter((request) => request.path === "/api/save/commit").length, 399, "only successful browser copies are committed");
 }
 
+async function runRenderRetryFailureCancelsReservationCase() {
+  for (const copying of [true, false]) {
+    const storage = new Map();
+    const fail = () => jsonResponse({ error_code: "save_render_failed" }, 500);
+    const runtime = createRuntime({
+      commit: () => { throw new Error("failed rendering must not commit"); },
+      copy: fail, renderBinary: fail,
+      saveStatus: () => jsonResponse({ state: "rendering" }),
+      sharedStorage: { get length() { return storage.size; }, key: (index) => [...storage.keys()][index],
+        getItem: (key) => storage.get(key) || null, setItem: (key, value) => storage.set(key, value), removeItem: (key) => storage.delete(key) },
+    });
+    const entry = { imageId: "image-1", candidateRevision: 7 };
+    const render = copying ? runtime.renderDefaultCopy : runtime.renderStreamedSave;
+    await assert.rejects(render(entry, { ...entry, copyToDefault: copying }), (error) => error.code === "save_render_failed");
+    const requests = runtime.requests.filter((request) => request.path.startsWith("/api/save/"));
+    assert.deepEqual(requests.map((request) => request.path), ["reserve", "render", "status", "render", "cancel"].map((name) => `/api/save/${name}`));
+    assert.equal(JSON.parse(requests[4].options.body).saveToken, JSON.parse(requests[0].options.body).clientSaveToken);
+    assert.equal([...storage.keys()].some((key) => key.startsWith("mozarie.pending-save-token.")), false, "a failed retry leaves no pending save reservation");
+  }
+}
+
 async function runBrowserHandleConcurrentWriteCase() {
   const entries = ["one", "two"].map((id) => ({ imageId: id, relativePath: `${id}.png`, candidateRevision: 7 }));
   const images = entries.map((entry) => ({ id: entry.imageId, sourceKind: "session", relativePath: entry.relativePath, width: 32, height: 32, candidateCount: 1, enabledCandidateCount: 1 }));
@@ -737,9 +763,12 @@ async function runBrowserSourceCollisionCases() {
   });
   const parents = ["one", "two"].map((imageId) => ({
     physicalId: "parent", async isSameEntry(other) { return this.physicalId === other.physicalId; },
+    created: new Map(),
     async getFileHandle(name, options = {}) {
+      if (this.created.has(name)) return this.created.get(name);
       if (!options.create) throw new DOMException("missing", "NotFoundError");
-      return { name, async createWritable() { return { async write() {}, async close() {}, async abort() {} }; }, async getFile() { return sourceBlob(name, 3, 2); } };
+      const handle = { name, async createWritable() { return { async write() {}, async close() {}, async abort() {} }; }, async getFile() { return sourceBlob(name, 3, 2); } };
+      this.created.set(name, handle); return handle;
     },
     async removeEntry() {}, imageId,
   }));
@@ -2055,6 +2084,25 @@ nodeTest("failed copy reports failure and never deletes its original source", as
   await runCopyFailureCase();
 });
 
+nodeTest("native batch overwrite cancels rejected or pending commits but preserves unknown outcomes", async () => {
+  const image = { id: "image-1", relativePath: "source.png", sourceKind: "filesystem", width: 32, height: 32, candidateCount: 1, enabledCandidateCount: 1 };
+  for (const outcome of ["rejected", "pending", "unknown", "committed"]) {
+    const runtime = createRuntime({
+      initialImages: [image],
+      commit: () => jsonResponse({ error_code: outcome === "rejected" ? "stale_asset" : "internal_error" }, outcome === "rejected" ? 400 : 500),
+      saveStatus: () => jsonResponse({ state: outcome, cleared: true, stale: false, sourceAction: "overwrite" }),
+    });
+    const saving = runtime.runBrowserSave([image.id], "", false, "overwrite");
+    if (outcome === "committed") await saving;
+    else await assert.rejects(saving);
+    assert.equal(runtime.requests.filter((request) => request.path === "/api/save/cancel").length, ["rejected", "pending"].includes(outcome) ? 1 : 0, outcome);
+    assert.equal(runtime.requests.filter((request) => request.path === "/api/save/ack").length, outcome === "committed" ? 1 : 0, outcome);
+    assert.equal(runtime.state.saving, false);
+    assert.equal(runtime.state.applyRunning, false);
+    assert.equal(runtime.state.browserSave, null);
+  }
+});
+
 nodeTest("browser save runtime contracts", async (t) => {
   await t.test("directory save permissions are shared across files and repeated batches", runSharedDirectorySavePermissionCase);
   await t.test("standalone file grants are queried and restored without duplicate requests", runFileOnlySavePermissionCase);
@@ -2107,6 +2155,7 @@ nodeTest("browser save runtime contracts", async (t) => {
   await t.test("concurrent output lock serializes colliding names", runConcurrentOutputLockCases);
   await t.test("partial streamed output is aborted and removed", runPartialOutputCleanupCases);
   await t.test("browser copy render failure cancels its reservation", runBrowserCopyRenderFailureCancelsReservationCase);
+  await t.test("failed copy and overwrite render retries cancel their reservation", runRenderRetryFailureCancelsReservationCase);
   await t.test("browser copy pool obeys configured parallelism", runBrowserCopyPoolAndWriteOverlapCases);
   await t.test("400 browser copies stay bounded by configured parallelism", runBrowserCopyPoolAtScaleCases);
   await t.test("browser overwrite pool obeys configured parallelism", runBrowserHandleOverwritePoolAtScaleCase);

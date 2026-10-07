@@ -664,7 +664,7 @@ class MosaicHandler(BaseHTTPRequestHandler):
                 image_id = path.removeprefix("/api/candidates/")
                 self._json(STATE.candidate_snapshot(image_id))
             elif path.startswith("/api/workspace/manual/"):
-                self._json({"draft": STATE.manual_workspace(path.removeprefix("/api/workspace/manual/"))})
+                self._json(STATE.manual_workspace_snapshot(path.removeprefix("/api/workspace/manual/")))
             elif path.startswith("/api/mask/"):
                 image_id, candidate_id = _route_ids(path, "/api/mask/")
                 self._send_candidate_mask(image_id, candidate_id, _request_version(parsed.query), _request_preview_expand(parsed.query))
@@ -753,8 +753,7 @@ class MosaicHandler(BaseHTTPRequestHandler):
                 import_session_id = self.headers.get("X-Mozarie-Import-Session", "")
                 raw_mtime = self.headers.get("X-Mozarie-File-Mtime", "0")
                 raw_size = self.headers.get("X-Mozarie-File-Size", "0")
-                if (source_identity and not _is_canonical_uuid(source_identity)
-                        or source_kind not in {"browser-files", "browser-directory"}
+                if (source_kind not in {"browser-files", "browser-directory"}
                         or import_intent not in {"add", "restore"}
                         or not raw_mtime.isdigit() or not raw_size.isdigit()):
                     self._reject_unread_request(ClientError("画像の更新情報が正しくありません。", "input_invalid"))
@@ -944,18 +943,18 @@ class MosaicHandler(BaseHTTPRequestHandler):
                                                    lambda: STATE.begin_manual_upload(image_id, str(payload.get("sessionId", "")), payload.get("dirtyLayers"))))
             elif path.startswith("/api/workspace/manual/") and path.endswith("/commit"):
                 image_id = path.removeprefix("/api/workspace/manual/").removesuffix("/commit").rstrip("/")
-                self._catalog_mutation(expected_project_id, expected_catalog_generation,
+                revision = self._catalog_mutation(expected_project_id, expected_catalog_generation,
                                        lambda: STATE.commit_manual_upload(image_id, str(payload.get("sessionId", "")), payload))
-                self._json({"ok": True})
+                self._json({"ok": True, "manualRevision": revision})
             elif path.startswith("/api/workspace/manual/") and path.endswith("/cancel"):
                 image_id = path.removeprefix("/api/workspace/manual/").removesuffix("/cancel").rstrip("/")
                 self._catalog_mutation(expected_project_id, expected_catalog_generation,
                                        lambda: STATE.cancel_manual_upload(image_id, str(payload.get("sessionId", ""))))
                 self._json({"ok": True})
             elif path.startswith("/api/workspace/manual/"):
-                self._catalog_mutation(expected_project_id, expected_catalog_generation,
+                revision = self._catalog_mutation(expected_project_id, expected_catalog_generation,
                                        lambda: STATE.save_manual_workspace(path.removeprefix("/api/workspace/manual/"), payload))
-                self._json({"ok": True})
+                self._json({"ok": True, "manualRevision": revision})
             elif path.startswith("/api/images/") and path.endswith("/transform"):
                 image_id = path.removeprefix("/api/images/").removesuffix("/transform").rstrip("/")
                 self._json(self._catalog_mutation(expected_project_id, expected_catalog_generation,
@@ -985,7 +984,7 @@ class MosaicHandler(BaseHTTPRequestHandler):
                 self._json(STATE.source_delete_status(str(payload.get("deleteToken", ""))))
             elif path == "/api/catalog/delete-source/cancel":
                 self._json(self._catalog_mutation(expected_project_id, expected_catalog_generation,
-                                                   lambda: STATE.cancel_source_delete(str(payload.get("deleteToken", "")))))
+                                                   lambda: STATE.cancel_source_delete(str(payload.get("deleteToken", "")), restored_sources=payload.get("restoredSources"))))
             elif path == "/api/catalog/delete-source/ack":
                 self._json(STATE.acknowledge_source_delete(str(payload.get("deleteToken", ""))))
             elif path == "/api/masks/clear":
@@ -1018,6 +1017,10 @@ class MosaicHandler(BaseHTTPRequestHandler):
                     revisions = self._catalog_mutation(expected_project_id, expected_catalog_generation,
                                                        lambda: STATE.batch_update_candidates_many(image_ids, payload))
                     self._json({"ok": True, "candidateRevisions": revisions})
+                elif "manualFlags" in payload:
+                    revision, manual_revision = self._catalog_mutation(expected_project_id, expected_catalog_generation,
+                                                                       lambda: STATE.batch_update_candidate_role(image_id, payload))
+                    self._json({"ok": True, "candidateRevision": revision, "manualRevision": manual_revision})
                 else:
                     revision = self._catalog_mutation(expected_project_id, expected_catalog_generation,
                                                       lambda: STATE.batch_update_candidates(image_id, payload))
@@ -1106,6 +1109,7 @@ class MosaicHandler(BaseHTTPRequestHandler):
                     copy_to_browser=copy_to_browser,
                     stream_image=_read_bool(payload.get("streamImage", True), "画像応答の転送"),
                     client_save_token=_read_client_save_token(payload.get("clientSaveToken")),
+                    expected_manual_revision=_read_candidate_revision(payload["expectedManualRevision"]) if "expectedManualRevision" in payload else None,
                     suffix=_read_save_suffix(payload.get("suffix", "_censored")),
                     output_format=str(payload.get("format", "original")),
                     keep_metadata=_read_bool(payload.get("keepMetadata", True), "メタ情報の保持"),
@@ -1154,7 +1158,7 @@ class MosaicHandler(BaseHTTPRequestHandler):
             elif path == "/api/save/cancel":
                 self._json(self._catalog_mutation(expected_project_id, expected_catalog_generation, lambda: STATE.cancel_browser_save(
                     str(payload.get("imageId", "")), _read_candidate_revision(payload.get("candidateRevision")),
-                    str(payload.get("saveToken", "")),
+                    str(payload.get("saveToken", "")), restored_source=payload.get("restoredSource"),
                 )))
             elif path == "/api/apply":
                 divisor = _read_mosaic_divisor(payload.get("divisor"))
@@ -1245,9 +1249,9 @@ class MosaicHandler(BaseHTTPRequestHandler):
                                                   lambda: STATE.delete_candidate(image_id, candidate_id))
                 self._json({"deleted": deleted, "candidateRevision": STATE._candidate_revision(image_id)})
             elif path.startswith("/api/workspace/manual/"):
-                self._catalog_mutation(expected_project_id, expected_catalog_generation,
-                                       lambda: STATE.delete_manual_workspace(path.removeprefix("/api/workspace/manual/")))
-                self._json({"ok": True})
+                revision = self._catalog_mutation(expected_project_id, expected_catalog_generation,
+                                       lambda: STATE.delete_manual_workspace(path.removeprefix("/api/workspace/manual/"), (payload or {}).get("expectedManualRevision")))
+                self._json({"ok": True, "manualRevision": revision})
             else:
                 self._client_error(ClientError("APIが見つかりません。", "api_not_found"), HTTPStatus.NOT_FOUND)
             _log_operation_finished(operation, operation_started_at)
@@ -1271,8 +1275,8 @@ class MosaicHandler(BaseHTTPRequestHandler):
     def _read_json_body(self, content_length: int | None = None) -> dict[str, Any]:
         if content_length is None:
             content_length = self._request_body_length(required=True)
+        remaining = content_length
         try:
-            remaining = content_length
             # JSON operations are normally small, but keep framing safe even
             # when a catalogue has a long image list.  Large mask PNGs use the
             # binary transaction route and never pass through this parser.
@@ -1281,8 +1285,8 @@ class MosaicHandler(BaseHTTPRequestHandler):
                     chunk = self.rfile.read(min(IO_CHUNK_BYTES, remaining))
                     if not chunk:
                         self._reject_unread_request(ClientError("リクエストを最後まで読み込めません。", "input_invalid"))
-                    staged.write(chunk)
                     remaining -= len(chunk)
+                    staged.write(chunk)
                 staged.seek(0)
                 text = io.TextIOWrapper(staged, encoding="utf-8")
                 try:
@@ -1293,6 +1297,9 @@ class MosaicHandler(BaseHTTPRequestHandler):
             raise
         except (UnicodeDecodeError, ValueError) as exc:
             raise ClientError("JSONを読み込めません。", "input_invalid") from exc
+        finally:
+            if remaining:
+                self.close_connection = True
         if not isinstance(payload, dict):
             raise ClientError("JSONオブジェクトが必要です。", "input_invalid")
         return payload
@@ -1379,10 +1386,6 @@ class MosaicHandler(BaseHTTPRequestHandler):
                 try:
                     with open_image_without_png_text(record.path) as image:
                         image = ImageOps.exif_transpose(image)
-                        if record.flip_horizontal != record.source_flip_horizontal:
-                            image = ImageOps.mirror(image)
-                        if record.flip_vertical != record.source_flip_vertical:
-                            image = ImageOps.flip(image)
                         image.thumbnail((280, 280), Image.Resampling.LANCZOS)
                         output = io.BytesIO()
                         image.convert("RGB").save(output, format="JPEG", quality=82)
@@ -1498,10 +1501,10 @@ class MosaicHandler(BaseHTTPRequestHandler):
                 self.send_header("X-Content-Type-Options", "nosniff")
                 for key, value in headers.items(): self.send_header(key, value)
                 self.end_headers()
-                while chunk := source.read(IO_CHUNK_BYTES): self.wfile.write(chunk)
             except CLIENT_DISCONNECT_ERRORS:
                 self.close_connection = True
                 return
+            self._stream_body(source, stat.st_size)
 
     def _stream_file(self, handle: BinaryIO, record: ImageRecord | None, content_type: str, cache_control: str) -> None:
         stat = os.fstat(handle.fileno())
@@ -1520,12 +1523,24 @@ class MosaicHandler(BaseHTTPRequestHandler):
         except CLIENT_DISCONNECT_ERRORS:
             self.close_connection = True
             return
-        while chunk := handle.read(IO_CHUNK_BYTES):
-            try:
+        self._stream_body(handle, size)
+
+    def _stream_body(self, source: BinaryIO, size: int) -> None:
+        remaining = size
+        try:
+            while remaining:
+                chunk = source.read(min(IO_CHUNK_BYTES, remaining))
+                if not chunk:
+                    self.close_connection = True
+                    LOGGER.warning("HTTPファイル送信を中断: 読込途中でファイルが終了しました: %s", self.path)
+                    return
                 self.wfile.write(chunk)
-            except CLIENT_DISCONNECT_ERRORS:
-                self.close_connection = True
-                return
+                remaining -= len(chunk)
+        except CLIENT_DISCONNECT_ERRORS:
+            self.close_connection = True
+        except OSError:
+            self.close_connection = True
+            LOGGER.exception("HTTPファイル送信に失敗: %s", self.path)
 
     def log_message(self, format: str, *args: Any) -> None:
         try:

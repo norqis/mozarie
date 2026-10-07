@@ -106,7 +106,8 @@
       "observation": "開いている画面と候補・ダイアログの表示が英語へ切り替わる",
       "status": "automated",
       "testIds": [
-        "node:tests/test_settings_dialog_e2e.cjs::SD-009 changing Japanese to English retranslates the open interface"
+        "node:tests/test_settings_dialog_e2e.cjs::SD-009 changing Japanese to English retranslates the open interface",
+        "node:tests/test_source_delete_e2e.cjs::source deletion translates every result and failure cause across language changes"
       ]
     },
     {
@@ -117,7 +118,8 @@
       "observation": "画面が日本語へ切り替わり、翻訳キーを表示しない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_settings_dialog_e2e.cjs::SD-010 changing English to Japanese leaves no translation key visible"
+        "node:tests/test_settings_dialog_e2e.cjs::SD-010 changing English to Japanese leaves no translation key visible",
+        "node:tests/test_source_delete_e2e.cjs::source deletion translates every result and failure cause across language changes"
       ]
     },
     {
@@ -628,7 +630,8 @@
       "observation": "SAMの準備を要求せず、輪郭補正なしで完了する",
       "status": "automated",
       "testIds": [
-        "python:tests.test_server.MozarieTests.test_standard_detection_never_loads_sam_and_keeps_handseg_evidence"
+        "python:tests.test_server.MozarieTests.test_standard_detection_never_loads_sam_and_keeps_handseg_evidence",
+        "python:tests.detection.test_candidate_publication.CandidatePublicationTests.test_equal_score_auxiliary_tiles_publish_separate_candidates_and_the_best_duplicate"
       ]
     },
     {
@@ -1166,7 +1169,9 @@
       "status": "automated",
       "testIds": [
         "python:tests.test_detection_regressions.DetectionIntegrityRegressionTests.test_broad_auxiliary_mask_confirms_only_the_best_matching_target",
-        "python:tests.test_detection_regressions.DetectionIntegrityRegressionTests.test_source_priority_beats_confidence_independent_of_input_order"
+        "python:tests.test_detection_regressions.DetectionIntegrityRegressionTests.test_source_priority_beats_confidence_independent_of_input_order",
+        "python:tests.detection.test_tile_merge.TileMergeTests.test_later_duplicate_does_not_compare_an_unrelated_numpy_mask",
+        "python:tests.detection.test_tile_merge.TileMergeTests.test_bridge_removes_every_duplicate_without_reordering_other_classes"
       ]
     },
     {
@@ -1289,7 +1294,9 @@
       "observation": "対象モデル名と開始操作を表示する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_settings_dialog_e2e.cjs::SD-066 model download confirmation names the selected model and exposes start"
+        "node:tests/test_settings_dialog_e2e.cjs::SD-066 model download confirmation names the selected model and exposes start",
+        "node:tests/settings/test_model_download_polling_e2e.cjs::a pending download start keeps close and Escape from losing progress",
+        "python:tests.test_model_download_live_browser.LiveModelDownloadBrowserTests.test_pending_start_retains_progress_and_cancellation"
       ]
     },
     {
@@ -1300,7 +1307,10 @@
       "observation": "進捗を表示し、完了後に利用可能状態になる",
       "status": "automated",
       "testIds": [
-        "node:tests/test_settings_runtime.cjs::SD-067 completed model download publishes the acquired path"
+        "node:tests/test_settings_runtime.cjs::SD-067 completed model download publishes the acquired path",
+        "node:tests/settings/test_model_download_polling_e2e.cjs::model progress callers share one request until it completes",
+        "node:tests/settings/test_model_download_polling_e2e.cjs::a previous progress response cannot replace a new completed download",
+        "python:tests.test_model_download_live_browser.LiveModelDownloadBrowserTests.test_reload_recovers_the_existing_download_and_cancels_it"
       ]
     },
     {
@@ -1311,7 +1321,10 @@
       "observation": "中止を表示し、未完了ファイルを利用可能と表示しない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_settings_runtime.cjs::SD-068 cancelled model download never publishes an unfinished path"
+        "node:tests/test_settings_runtime.cjs::SD-068 cancelled model download never publishes an unfinished path",
+        "node:tests/settings/test_model_download_polling_e2e.cjs::cancelled download ignores an older running status response",
+        "node:tests/settings/test_model_download_polling_e2e.cjs::cancelled download ignores an older failure status response",
+        "node:tests/settings/test_model_download_polling_e2e.cjs::progress waits for a pending cancelling cancellation before checking completion"
       ]
     },
     {
@@ -1322,7 +1335,13 @@
       "observation": "サーバーとの通信失敗を表示し、未取得モデルを利用可能と表示しない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_settings_runtime.cjs::SD-069 model download polling failure is visible and leaves no acquired path"
+        "node:tests/test_settings_runtime.cjs::SD-069 model download polling failure is visible and leaves no acquired path",
+        "python:tests.test_model_downloads.ModelDownloadTests.test_worker_start_failure_restores_idle_and_allows_retry",
+        "node:tests/settings/test_model_download_polling_e2e.cjs::a current progress error restores close and stops polling",
+        "node:tests/settings/test_model_download_polling_e2e.cjs::progress waits for a pending failure cancellation before checking completion",
+        "node:tests/settings/test_model_download_polling_e2e.cjs::a failed download start restores close and allows retry",
+        "node:tests/settings/test_model_download_polling_e2e.cjs::a failed download reconnect restores close and allows retry",
+        "python:tests.test_model_download_live_browser.LiveModelDownloadBrowserTests.test_lost_start_response_recovers_the_existing_download_on_retry"
       ]
     },
     {
