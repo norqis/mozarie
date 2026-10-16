@@ -124,6 +124,7 @@
       "testIds": [
         "node:tests/test_browser_save_runtime.cjs::browser save runtime contracts > browser overwrite replaces only the selected source",
         "python:tests.test_settings_import_regressions.SettingsImportRegressionTests.test_live_drag_handle_overwrites_original_without_parent_picker",
+        "python:tests.test_settings_import_regressions.SettingsImportRegressionTests.test_live_native_drag_overwrites_source_pixels_without_parent_picker",
         "python:tests.saving.test_apply_unchanged_source.ApplyUnchangedSourceTests.test_copy_and_requested_changes_still_write_output",
         "python:tests.saving.test_native_save_transfer.NativeSaveTransferTests.test_changed_native_save_keeps_stage_until_commit_and_publishes_pixels",
         "python:tests.saving.test_native_save_transfer.NativeSaveTransferTests.test_chromium_single_and_batch_native_overwrite_request_no_image_transfer"
