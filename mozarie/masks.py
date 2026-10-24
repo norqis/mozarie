@@ -64,32 +64,35 @@ def compose_masks(
         if mask.shape != shape:
             raise ValueError("apply mask dimensions do not match the source image")
         union_mask(result, mask)
-    exclusions = np.zeros(shape, dtype=np.uint8)
+    exclusions = None
     for mask in exclude_masks:
         if mask.shape != shape:
             raise ValueError("exclude mask dimensions do not match the source image")
-        union_mask(exclusions, mask)
+        exclusions = union_mask(exclusions, mask)
     if manual_exclude is not None:
         if manual_exclude.shape != shape:
             raise ValueError("manual exclude mask dimensions do not match the source image")
-        union_mask(exclusions, manual_exclude)
+        exclusions = union_mask(exclusions, manual_exclude)
     if exclusion_erase is not None:
         if exclusion_erase.shape != shape:
             raise ValueError("exclusion erase mask dimensions do not match the source image")
-        exclusions[np.asarray(exclusion_erase) > 0] = 0
-    result[exclusions > 0] = 0
+        if exclusions is not None:
+            exclusions[np.asarray(exclusion_erase) > 0] = 0
+    if exclusions is not None:
+        result[exclusions > 0] = 0
     if manual_add is not None:
         if manual_add.shape != shape:
             raise ValueError("manual add mask dimensions do not match the source image")
         union_mask(result, manual_add)
-    forced_exclusions = np.zeros(shape, dtype=np.uint8)
+    forced_exclusions = None
     for mask in forced_exclude_masks or []:
         if mask.shape != shape:
             raise ValueError("forced exclude mask dimensions do not match the source image")
-        union_mask(forced_exclusions, mask)
+        forced_exclusions = union_mask(forced_exclusions, mask)
     if manual_exclude is not None and manual_exclude_forced:
-        union_mask(forced_exclusions, manual_exclude)
-    if exclusion_erase is not None:
-        forced_exclusions[np.asarray(exclusion_erase) > 0] = 0
-    result[forced_exclusions > 0] = 0
+        forced_exclusions = union_mask(forced_exclusions, manual_exclude)
+    if forced_exclusions is not None:
+        if exclusion_erase is not None:
+            forced_exclusions[np.asarray(exclusion_erase) > 0] = 0
+        result[forced_exclusions > 0] = 0
     return result

@@ -537,10 +537,11 @@ class SavingMixin:
                         shape, [apply_union] if apply_union is not None else [], [exclude_union] if exclude_union is not None else [], add_mask, exclusion_mask,
                         [forced_exclude_union] if forced_exclude_union is not None else [], manual_exclude_forced, exclusion_erase_mask,
                     )
-                    content_no_effect = (mask is None or not np.any(mask)) and record.edited_filename is None and output_format_matches_source(record, output_format) and keep_metadata and \
+                    content_no_effect = (mask is None or not np.any(mask)) and output_format_matches_source(record, output_format) and keep_metadata and \
                         record.flip_horizontal == record.source_flip_horizontal and record.flip_vertical == record.source_flip_vertical
-                    destination_changed = bool(output_filename and output_filename != Path(record.relative_path).name)
-                    no_effect = content_no_effect and (copy_to_default or not destination_changed)
+                    destination_name = output_filename or record.edited_filename
+                    destination_changed = bool(destination_name and destination_name != Path(record.relative_path).name)
+                    no_effect = content_no_effect and (copy_to_default or (not destination_changed and record.edited_filename is None))
                     source_fingerprint = record.asset_fingerprint()
                     # Saving every listed image means an image without a mosaic is
                     # copied as-is.  An overwrite deliberately becomes a commit
@@ -1150,8 +1151,9 @@ class SavingMixin:
                             manual_exclude_forced=manual_exclude_forced,
                             removed_candidate_ids=removed_candidate_ids,
                         )
-                    no_effect = (mask is None or not np.any(mask)) and record.edited_filename is None and output_format_matches_source(record, output_format) and keep_metadata and \
+                    content_no_effect = (mask is None or not np.any(mask)) and output_format_matches_source(record, output_format) and keep_metadata and \
                         record.flip_horizontal == record.source_flip_horizontal and record.flip_vertical == record.source_flip_vertical
+                    no_effect = content_no_effect and record.edited_filename is None
                     source_fingerprint = record.asset_fingerprint()
                     if no_effect and not copy_to_default:
                         _assert_source_stat_matches(record, source_fingerprint)
@@ -1207,7 +1209,7 @@ class SavingMixin:
                             "元画像の復元を保留しました。外部の変更を確認してMozarieを再起動してください。",
                             "save_recovery_pending",
                         )
-                    if no_effect:
+                    if content_no_effect:
                         output = read_stable_source_bytes(record, source_fingerprint); output_suffix = record.path.suffix.lower()
                     else:
                         output, output_suffix, _mime = render_output(record, mask, calculate_block_size(record.width, record.height, divisor), output_format, keep_metadata)
