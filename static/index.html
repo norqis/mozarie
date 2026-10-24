@@ -10,7 +10,7 @@
 </head>
 <body>
   <header class="appbar">
-    <img class="brand-logo" src="/logo.png" alt="" aria-hidden="true">
+    <img draggable="false" class="brand-logo" src="/logo.png" alt="" aria-hidden="true">
     <div class="appbar-commands"><button id="projectButton" type="button" data-i18n="project.open">プロジェクト</button><button id="pickFolder" type="button" popovertarget="pickerMenu" data-i18n="folder.browse">画像を読み込む</button><button id="detectAllButton" type="button" data-i18n="gallery.detectAll">全画像を自動検出</button><button id="saveAllButton" class="primary" type="button" data-i18n="gallery.saveAll">全画像を一括保存</button></div>
     <div id="pickerMenu" class="picker-menu" popover>
       <label for="folderPath" data-i18n="folder.label">画像フォルダ</label>
@@ -151,7 +151,7 @@
       <header class="overview-toolbar">
         <div class="overview-heading">
           <button id="closeOverviewButton" class="text-button" type="button" data-i18n="overview.back">編集に戻る</button>
-          <h2 data-i18n="overview.title">画像一覧</h2>
+          <h2 data-i18n="overview.title">画像一覧</h2><button id="reorderImagesButton" type="button" data-i18n="reorder.start">順番を入れ替え</button>
           <output id="overviewCount" class="muted">0 / 0</output>
           <button id="batchModeButton" type="button" aria-pressed="false" disabled data-i18n="selection.batchMode">一括編集</button>
         </div>
@@ -168,6 +168,15 @@
           <input id="overviewQuery" type="search" autocomplete="off" spellcheck="false" data-i18n-placeholder="overview.searchPlaceholder" placeholder="ファイル名・相対パスを検索">
           <select id="overviewFolder" data-i18n-aria-label="overview.folder" aria-label="フォルダで絞り込み"></select>
         </div>
+      <div id="reorderActions" class="overview-reorder-actions" hidden>
+        <button id="reorderFirst" type="button" data-i18n="reorder.first">先頭へ</button>
+        <button id="reorderPrevious" type="button" data-i18n="reorder.previous">← 前へ</button>
+        <button id="reorderNext" type="button" data-i18n="reorder.next">次へ →</button>
+        <button id="reorderLast" type="button" data-i18n="reorder.last">末尾へ</button>
+        <output id="reorderStatus" aria-live="polite"></output>
+        <button id="reorderCancel" type="button" data-i18n="dialog.renameCancel">取消</button>
+        <button id="reorderApply" type="button" class="primary" data-i18n="reorder.apply">適用</button>
+      </div>
       </header>
       <div id="overviewSelectionBar" class="overview-selection-bar" hidden>
         <output id="selectionCount" aria-live="polite">0件を選択中</output>
@@ -192,7 +201,7 @@
 
   <template id="galleryItemTemplate">
     <button class="gallery-item" type="button" aria-haspopup="menu">
-      <img loading="lazy" alt="">
+      <img loading="lazy" alt="" draggable="false">
       <span class="thumbnail-error" hidden></span>
       <span class="gallery-review-badge"></span>
       <span class="catalog-card-footer"><span class="gallery-name"></span><span class="gallery-meta"></span></span>
@@ -201,7 +210,7 @@
 
   <template id="overviewItemTemplate">
     <button class="overview-item" type="button">
-      <img loading="lazy" alt="">
+      <img loading="lazy" alt="" draggable="false">
       <span class="thumbnail-error" hidden></span>
       <span class="overview-review-badge"></span><span class="catalog-card-footer"><span class="overview-item-name"></span><span class="overview-item-dimensions"></span></span>
     </button>
@@ -416,6 +425,8 @@
       <fieldset id="applySettings">
         <label class="choice-row"><input id="applyCopyMode" type="radio" name="batchSaveMode" value="copy" checked><span data-i18n="apply.copy">コピー保存</span></label>
         <label id="applyOverwriteRow" class="choice-row"><input id="applyOverwriteMode" type="radio" name="batchSaveMode" value="overwrite"><span data-i18n="apply.overwrite">元画像を上書き</span></label>
+        <label class="choice-row"><input id="applyNumbering" type="checkbox"><span data-i18n="numbering.enabled">連番にする</span></label>
+        <div class="numbering-options"><label><input id="applyNumberingDigits" type="number" min="2" max="5" value="2" disabled><span data-i18n="numbering.digits">桁</span></label><select id="applyNumberingPlacement" disabled data-i18n-aria-label="numbering.placement"><option value="only" data-i18n="numbering.only">連番のみ</option><option value="prefix" data-i18n="numbering.prefix">先頭につける</option><option value="suffix" data-i18n="numbering.suffix">末尾につける</option></select></div>
         <label id="applySuffixRow" class="form-row"><span data-i18n="apply.suffix">ファイル名の末尾</span><input id="applySuffix" type="text" value="_censored"></label>
         <label class="form-row"><span data-i18n="apply.format">出力形式</span><select id="applyOutputFormat"><option value="original" data-i18n="apply.formatOriginal">元画像と同じ</option><option value="png">PNG</option><option value="jpg">JPG</option></select></label>
         <label class="choice-row"><input id="applyKeepMetadata" type="checkbox" checked><span data-i18n="apply.keepMetadata">メタ情報を保持</span></label>
@@ -515,6 +526,7 @@
   <script src="/js/core.js"></script>
   <script src="/js/resources.js"></script>
   <script src="/js/gallery.js"></script>
+  <script src="/js/reorder.js"></script>
   <script src="/js/workspace.js"></script>
   <script src="/js/editor-canvas.js"></script>
   <script src="/js/editor-masks.js"></script>

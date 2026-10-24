@@ -127,7 +127,17 @@
         "python:tests.test_settings_import_regressions.SettingsImportRegressionTests.test_live_native_drag_overwrites_source_pixels_without_parent_picker",
         "python:tests.saving.test_apply_unchanged_source.ApplyUnchangedSourceTests.test_copy_and_requested_changes_still_write_output",
         "python:tests.saving.test_native_save_transfer.NativeSaveTransferTests.test_changed_native_save_keeps_stage_until_commit_and_publishes_pixels",
-        "python:tests.saving.test_native_save_transfer.NativeSaveTransferTests.test_chromium_single_and_batch_native_overwrite_request_no_image_transfer"
+        "python:tests.saving.test_native_save_transfer.NativeSaveTransferTests.test_chromium_single_and_batch_native_overwrite_request_no_image_transfer",
+        "python:tests.gallery.test_catalog_order_and_numbering.NumberedFilenameTests.test_all_supported_digit_boundaries",
+        "python:tests.gallery.test_catalog_order_and_numbering.NumberedFilenameTests.test_positions_use_edited_basename_and_requested_format",
+        "python:tests.gallery.test_catalog_order_and_numbering.CatalogOrderAndSaveTests.test_numbered_copy_and_overwrite_keep_source_bytes_and_commit_output_names",
+        "python:tests.gallery.test_catalog_order_and_numbering.CatalogOrderAndSaveTests.test_prepare_rejects_destination_conflicts_before_a_save_token_exists",
+        "python:tests.gallery.test_catalog_order_and_numbering.CatalogOrderAndSaveTests.test_output_name_is_bound_to_reserved_token",
+        "python:tests.gallery.test_catalog_order_and_numbering.CatalogOrderAndSaveTests.test_numbered_copy_keeps_exact_names_and_rejects_existing_and_racing_outputs",
+        "python:tests.gallery.test_catalog_order_and_numbering.CatalogOrderAndSaveTests.test_numbered_output_extension_matches_the_selected_format",
+        "python:tests.gallery.test_catalog_order_and_numbering.CatalogOrderAndSaveTests.test_numbered_copy_respects_format_and_metadata_settings",
+        "python:tests.gallery.test_catalog_order_and_numbering.CatalogOrderAndSaveTests.test_live_reorder_and_numbering_copy_and_overwrite_use_the_applied_order",
+        "node:tests/gallery/test_catalog_reorder_e2e.cjs::overview scrolling, native drag suppression, reorder drafts and numbering controls"
       ]
     },
     {

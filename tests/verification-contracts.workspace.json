@@ -273,7 +273,10 @@
       "observation": "件数・サムネイル・編集対象・入力パスがBと一致し、初期スクロール位置が先頭となる",
       "status": "automated",
       "testIds": [
-        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
+        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage",
+        "python:tests.gallery.test_catalog_order_and_numbering.CatalogOrderAndSaveTests.test_reorder_persists_across_project_reopen_and_rejects_stale_membership",
+          "python:tests.gallery.test_catalog_order_and_numbering.CatalogOrderAndSaveTests.test_removed_images_preserve_remaining_order_and_new_imports_append_in_arrival_order",
+        "node:tests/gallery/test_catalog_reorder_e2e.cjs::overview scrolling, native drag suppression, reorder drafts and numbering controls"
       ]
     },
     {

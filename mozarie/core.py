@@ -87,6 +87,8 @@ IO_CHUNK_BYTES = 1024 * 1024
 LOGGER = logging.getLogger(__name__)
 PUBLIC_ERROR_PARAMS: dict[str, frozenset[str]] = {
     "gpu_out_of_memory": frozenset({"parallelism"}),
+    "numbering_limit": frozenset({"count"}),
+    "numbering_overflow": frozenset({"count", "digits", "required"}),
     "image_read_failed": frozenset({"failures"}),
 }
 
@@ -222,6 +224,7 @@ class BrowserSaveToken:
     allow_copy_action: bool = False
     no_effect: bool = False
     output_format: str = "original"
+    output_filename: str | None = None
     keep_metadata: bool = True
     preserve_directory_structure: bool = True
     transform_revision: int = 0

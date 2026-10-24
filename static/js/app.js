@@ -923,6 +923,7 @@ function bindEvents() {
   $("#settingsFluidToggle").addEventListener("change", () => setFluidExclusionEnabled($("#settingsFluidToggle").checked));
   $("#pickImages").addEventListener("click", () => { void pickImageFiles(); });
   $("#pickFolderFiles").addEventListener("click", () => { void pickImageDirectory(); });
+  document.addEventListener("dragstart", (event) => { if (event.target.closest?.("img, .gallery-item, .overview-item")) event.preventDefault(); }, true);
   document.addEventListener("dragover", (event) => {
     if (event.dataTransfer?.types?.includes("Files")) event.preventDefault();
   });
@@ -1051,7 +1052,8 @@ function bindEvents() {
     renderGallery();
   }));
   $("#overviewButton").addEventListener("click", () => { if (!isBusy() && !state.importing) setViewMode("overview"); });
-  $("#closeOverviewButton").addEventListener("click", () => setViewMode("edit"));
+  $("#closeOverviewButton").addEventListener("click", () => { if (state.reorder?.pending) return; if (state.reorder) cancelCatalogReorder(); setViewMode("edit"); });
+  initCatalogReorder();
   $("#previousImageButton").addEventListener("click", () => runNavigationAction(() => moveCurrentBy(-1)));
   $("#nextImageButton").addEventListener("click", () => runNavigationAction(() => moveCurrentBy(1)));
   $("#reviewAndNextButton").addEventListener("click", () => { void runNavigationAction(reviewAndMoveNext); });
@@ -1235,6 +1237,7 @@ function bindEvents() {
   setPaneCollapsed("gallery", false);
   setPaneCollapsed("inspector", false);
   $("#applyForm").addEventListener("submit", startApplyFromDialog);
+  $("#applyNumbering").addEventListener("change", syncApplyMode);
   $("#chooseOutputDirectoryButton").addEventListener("click", chooseOutputDirectory);
   $("#applyOutputDirectoryStatus").addEventListener("change", () => { if (outputDirectorySaveClickInput !== $("#applyOutputDirectoryStatus")) void commitOutputDirectory($("#applyOutputDirectoryStatus")); });
   $("#applyOutputDirectoryStatus").addEventListener("keydown", (event) => { if (event.key === "Enter") { event.preventDefault(); void commitOutputDirectory($("#applyOutputDirectoryStatus")); } });

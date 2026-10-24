@@ -4728,9 +4728,13 @@ async function main() {
     });
     assert.deepEqual({ all: catalogCardsAndHidden.allIncludesHidden, hidden: catalogCardsAndHidden.hiddenOnly, overview: catalogCardsAndHidden.overviewIncludesHidden }, { all: true, hidden: true, overview: true }, "All includes dimmed hidden cards while Hidden isolates them");
     for (const [name, card] of Object.entries({ gallery: catalogCardsAndHidden.gallery, overview: catalogCardsAndHidden.overview })) {
-      assert.equal(card.footer.height, 32, `${name} card footer has one shared 32px row`);
+      assert.equal(card.footer.height, name === "overview" ? 40 : 32, `${name} card footer leaves room for filename and dimensions`);
       assert.ok(card.image.left - card.card.left >= 5 && card.image.right <= card.card.right - 5 && card.image.top - card.card.top >= 5, `${name} preview stays inside the card border`);
-      assert.ok(Math.abs(card.name.top - card.meta.top) <= 1 && Math.abs(card.name.bottom - card.meta.bottom) <= 1, `${name} filename and dimensions share one baseline row: ${JSON.stringify(card)}`);
+      if (name === "gallery") {
+        assert.ok(Math.abs(card.name.top - card.meta.top) <= 1 && Math.abs(card.name.bottom - card.meta.bottom) <= 1, `gallery filename and dimensions share one baseline row: ${JSON.stringify(card)}`);
+      } else {
+        assert.ok(card.name.bottom <= card.meta.top && card.meta.bottom <= card.footer.bottom, `overview filename and dimensions fit in separate rows: ${JSON.stringify(card)}`);
+      }
     }
 
     for (const [width, language] of [[1024, "ja"], [1920, "en"]]) {

@@ -74,7 +74,7 @@ nodeTest("static UI controls have complete executable interaction contracts", ()
     if (control.exemptReason !== undefined) {
       assert.match(control.exemptReason, /\S/, `${control.id} exemption needs a concrete reason`);
       assert.ok(Array.isArray(control.testIds) && control.testIds.length, `${control.id} exemption needs executed test evidence`);
-      control.testIds.forEach((testId) => assert.match(testId, /^node:tests\/test_[^:]+\.cjs::\S.+$/, `${control.id} needs a complete Node test ID`));
+      control.testIds.forEach((testId) => assert.match(testId, /^node:tests\/(?:[^/:]+\/)*test_[^:]+\.cjs::\S.+$/, `${control.id} needs a complete Node test ID`));
     } else {
       assert.equal(control.testIds, undefined, `${control.id} active ledger control must not carry exemption evidence`);
     }

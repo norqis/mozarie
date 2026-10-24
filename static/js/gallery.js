@@ -40,6 +40,7 @@ function loadThumbnail(image) {
 function observeThumbnail(image, record, scope = "gallery") {
   const source = thumbnailSource(record);
   if (image.dataset.src !== source) forgetThumbnail(image);
+  image.draggable = false;
   image.dataset.src = source; image.loading = "lazy"; image.decoding = "async";
   if (image.dataset.loaded === source) return;
   thumbnailObserver(scope).observe(image);
@@ -96,6 +97,7 @@ function setCatalogNode(windowState, image, index, layout, rowNode) {
   const row = Math.floor(index / layout.columns); const column = index % layout.columns;
   item.dataset.id = image.id; item.dataset.index = String(index); item.style.width = ""; item.style.height = `${layout.rowHeight - options.gap}px`; item.style.transform = "";
   const current = image.id === state.currentId;
+  item.classList.toggle("reorder-selected", scope === "overview" && image.id === state.reorder?.selectedId);
   const batchSelected = scope === "overview" && state.batchMode && state.selectedImageIds.has(image.id);
   item.classList.toggle("current", current); item.classList.toggle("batch-selected", batchSelected); item.classList.toggle("hidden", isHidden(image));
   if (current) item.setAttribute("aria-current", "true"); else item.removeAttribute?.("aria-current");
@@ -131,7 +133,7 @@ function setCatalogNode(windowState, image, index, layout, rowNode) {
     item.onclick = (event) => { windowState.focusId = image.id; selectOverviewImage(image.id, event); };
   }
   item.onpointerdown = (event) => { if (event.button === 2) event.preventDefault?.(); };
-  item.oncontextmenu = (event) => { openCatalogContextMenu(event, image.id); };
+  item.oncontextmenu = (event) => { if (state.reorder) { event.preventDefault(); return; } openCatalogContextMenu(event, image.id); };
   item.tabIndex = image.id === windowState.focusId ? 0 : -1; item.setAttribute("aria-haspopup", "menu");
   item.onkeydown = (event) => {
     if (event.key === "Enter" || event.key === " ") { event.preventDefault?.(); event.stopPropagation?.(); windowState.focusId = image.id; scope === "gallery" ? selectCatalogImage(image.id) : selectOverviewImage(image.id, event); }
@@ -310,7 +312,7 @@ function overviewFolderOptions() {
 function overviewImages() {
   const query = state.overviewQuery.trim().toLowerCase();
   const folder = state.overviewFolder;
-  return state.images.filter((image) => {
+  return reorderImages().filter((image) => {
     if (!imageMatchesStateFilter(image, state.overviewFilter)) return false;
     const path = image.relativePath.replaceAll("\\", "/");
     if (folder && path !== folder && !path.startsWith(`${folder}/`)) return false;
@@ -336,6 +338,7 @@ function syncOverviewFolders() {
   select.value = state.overviewFolder;
 }
 function selectOverviewImage(imageId, event = null) {
+  if (state.reorder) { selectReorderImage(imageId); return; }
   const visibleImages = overviewImages();
   const index = visibleImages.findIndex((image) => image.id === imageId);
   if (index < 0) return;

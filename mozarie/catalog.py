@@ -326,6 +326,7 @@ class CatalogMixin:
                     "source_mismatches": self.source_mismatches,
                     "images": self.images,
                     "order": self.order,
+                    "catalog_order_ranks": self.catalog_order_ranks,
                     "candidates": self.candidates,
                     "candidate_revisions": self.candidate_revisions,
                     "projectless_manual_drafts": self.projectless_manual_drafts,
@@ -363,6 +364,10 @@ class CatalogMixin:
                         self.catalog_id = None
                         self.workspace_id = publish_workspace_id
                         self.project_read_only = False
+                    saved_order = self.workspace_store.catalog_order(self.workspace_id) if self.workspace_id else []
+                    self.catalog_order_ranks = {image_id: index for index, image_id in enumerate(saved_order)}
+                    if saved_order:
+                        self.order.sort(key=lambda image_id: self.catalog_order_ranks.get(image_id, len(saved_order)))
                     if publish_source_mismatches is not None:
                         self.source_mismatches = dict(publish_source_mismatches)
                     # Old unnamed data is removed only after the active pointer
@@ -1279,6 +1284,7 @@ class CatalogMixin:
         catalog_id = self.catalog_id
         self.images = {}
         self.order = []
+        self.catalog_order_ranks = {}
         self.candidates = {}
         self.candidate_revisions = {}
         self.projectless_manual_drafts.clear()
@@ -2047,7 +2053,7 @@ class CatalogMixin:
         catalog_generation: int, rendered_path: Path | None, output_path: Path | None = None,
         output_fingerprint: tuple[int, int] | None = None, output_destination: Path | None = None,
         client_token: str | None = None, allow_copy_action: bool = False, no_effect: bool = False,
-        output_format: str = "original", keep_metadata: bool = True,
+        output_format: str = "original", keep_metadata: bool = True, output_filename: str | None = None,
     ) -> str:
         self._assert_request_catalog_expectation()
         token = client_token or secrets.token_urlsafe(32)
@@ -2056,7 +2062,7 @@ class CatalogMixin:
             details = replace(existing, rendered_path=rendered_path, output_path=output_path,
                               output_fingerprint=output_fingerprint, output_destination=output_destination,
                               state="pending", allow_copy_action=allow_copy_action, no_effect=no_effect,
-                              output_format=output_format, keep_metadata=keep_metadata,
+                              output_format=output_format, keep_metadata=keep_metadata, output_filename=output_filename,
                               manual_revision=self.workspace_store.manual_revisions([record.image_id]).get(record.image_id, 0))
             self.save_journal.update_stage(token, output_path or rendered_path, output_fingerprint)
             self.browser_save_tokens[token] = details
@@ -2067,7 +2073,7 @@ class CatalogMixin:
             image_id=record.image_id, candidate_revision=revision, source_fingerprint=source_fingerprint,
             catalog_generation=catalog_generation, issued_at=time.monotonic(), rendered_path=rendered_path,
             output_path=output_path, output_fingerprint=output_fingerprint, output_destination=output_destination,
-            allow_copy_action=allow_copy_action, no_effect=no_effect, output_format=output_format,
+            allow_copy_action=allow_copy_action, no_effect=no_effect, output_format=output_format, output_filename=output_filename,
             keep_metadata=keep_metadata, transform_revision=record.transform_revision,
             manual_revision=self.workspace_store.manual_revisions([record.image_id]).get(record.image_id, 0),
             flip_horizontal=record.flip_horizontal, flip_vertical=record.flip_vertical,
@@ -2341,7 +2347,7 @@ class CatalogMixin:
                         self.images[record.image_id] = record
                         if previous is None:
                             new_ids.append(record.image_id)
-                    order_key = lambda image_id: self.images[image_id].relative_path.lower()
+                    order_key = (lambda image_id: self.catalog_order_ranks.get(image_id, len(self.catalog_order_ranks))) if self.catalog_order_ranks else (lambda image_id: self.images[image_id].relative_path.lower())
                     if len(new_ids) == 1:
                         insort_right(self.order, new_ids[0], key=order_key)
                     elif new_ids:
@@ -2606,6 +2612,20 @@ class CatalogMixin:
             raise ClientError("画像ファイルが見つかりません。", "image_not_found")
         self._assert_record_stat_matches(record)
         return record
+
+    def reorder_catalog(self, image_ids: list[str]) -> dict[str, Any]:
+        with self.import_lock, self.lock:
+            self._assert_catalog_mutable()
+            if (not isinstance(image_ids, list) or any(not isinstance(value, str) for value in image_ids)
+                    or len(image_ids) != len(self.order) or set(image_ids) != set(self.order)):
+                raise ClientError("画像一覧が変更されました。", "stale_catalog")
+            if image_ids != self.order:
+                if self.workspace_id:
+                    self.workspace_store.set_catalog_order(self.workspace_id, image_ids)
+                self.order = list(image_ids)
+                self.catalog_order_ranks = {image_id: index for index, image_id in enumerate(image_ids)}
+                self.catalog_generation += 1
+        return self.catalog_snapshot()
 
     def list_images(self) -> list[dict[str, Any]]:
         return self.catalog_snapshot(include_sources=False)["images"]
