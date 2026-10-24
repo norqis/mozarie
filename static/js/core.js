@@ -3,6 +3,7 @@ const $ = (selector) => document.querySelector(selector);
 const state = {
   images: [], currentId: null, currentImage: null, pendingImageId: null, galleryFilter: new Set(), maskStatus: new Map(),
   viewMode: "edit", displayMode: "single", compareSplit: .5, overviewFilter: new Set(), overviewQuery: "", overviewFolder: "", reviewedImageIds: new Set(), hiddenImageIds: new Set(), reviewRoot: "",
+  reorder: null,
   selectedImageIds: new Set(), selectionAnchorId: null, batchMode: false,
   navigationShortcutsEnabled: true,
   candidates: [], candidateImages: new Map(), candidatePaddingPreviewImages: new Map(), drafts: new Map(),
@@ -100,6 +101,8 @@ const USER_ERROR_CODES = {
   input_invalid: "input_invalid", session_expired: "session_expired", model_download_network: "model_download_network",
   model_download_write_failed: "model_download_write_failed", model_download_integrity: "model_download_integrity",
   mosaic_preview_failed: "mosaic_preview_failed",
+  numbering_overflow: "numbering_overflow",
+  numbering_limit: "numbering_limit",
   internal_error: "internal_error",
 };
 
@@ -134,9 +137,9 @@ function showUserError(error, invoker = document.activeElement) {
   if (code === "connection_lost") { showConnectionFailure(); return; }
   const dialog = $("#errorDialog");
   if (!dialog) return;
-  $("#errorDialogTitle").textContent = t(`errorDialog.${code}.title`);
-  $("#errorDialogCause").textContent = t(`errorDialog.${code}.cause`);
-  $("#errorDialogAction").textContent = t(`errorDialog.${code}.action`);
+  $("#errorDialogTitle").textContent = t(`errorDialog.${code}.title`, error?.params || {});
+  $("#errorDialogCause").textContent = t(`errorDialog.${code}.cause`, error?.params || {});
+  $("#errorDialogAction").textContent = t(`errorDialog.${code}.action`, error?.params || {});
   if (dialog.open) { focusElement($("#errorDialogClose")); return; }
   showModalFromInvoker(dialog, invoker);
 }
@@ -414,7 +417,7 @@ function calculatedBlockSize(image = currentRecord(), divisor = mosaicDivisor())
 }
 function isBusy({ ignoreOutputDirectoryCommit = false } = {}) {
   return ["running", "pausing", "paused"].includes(state.job?.state)
-    || state.saving || state.saveStarting || state.detectionStarting || state.masksClearing
+    || Boolean(state.reorder) || state.saving || state.saveStarting || state.detectionStarting || state.masksClearing
     || state.processing?.kind === "detect"
     || state.catalogMutation || state.boundaryPending || state.fillPending || state.transformPending || state.outputDirectoryPicking || (!ignoreOutputDirectoryCommit && state.outputDirectoryCommitPending) || state.projectHistoryBusy || state.historyRestoreBusy;
 }
@@ -961,6 +964,12 @@ function updateActionButtons() {
   if (typeof renderProjectCurrent === "function") renderProjectCurrent();
   if (typeof renderProjectTableControls === "function") renderProjectTableControls();
   applyBusyControlLock([...document.querySelectorAll("button, input, select, textarea")], busyLocked, confirmDialog);
+  if (state.reorder) {
+    for (const control of document.querySelectorAll("#reorderActions button, #overviewGrid .overview-item, #closeOverviewButton")) {
+      delete control.dataset.disabledByLock; control.disabled = state.reorder.pending;
+    }
+    syncReorderControls();
+  }
 }
 
 function updateCandidateBatchButtons(hasImage = Boolean(state.currentId && state.currentImage && currentRecord()), mutationLocked = isBusy() || state.importing || state.projectReadOnly || currentRecord()?.sourceDimensionsChanged || state.candidateBatchPending.has(state.currentId), presence, viewLocked = mutationLocked) {

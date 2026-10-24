@@ -201,6 +201,15 @@ function applyRestrictionMessage() {
   const unavailable = state.applyTargetIds.filter((imageId) => !sourceCanOverwrite(imagesById.get(imageId), format)).length;
   return unavailable ? t("apply.overwriteUnavailable", { count: unavailable }) : "";
 }
+function applyNumberingSettings(count) {
+  if (!$("#applyNumbering").checked) return null;
+  const digits = Number($("#applyNumberingDigits").value);
+  const placement = $("#applyNumberingPlacement").value;
+  if (!Number.isInteger(digits) || digits < 2 || digits > 5 || !["only", "prefix", "suffix"].includes(placement)) throw codedError("input_invalid");
+  if (count >= 10 ** digits) throw codedError(count >= 100000 ? "numbering_limit" : "numbering_overflow", { count, digits, required: String(count).length });
+  return { digits, placement };
+}
+
 function syncApplyMode() {
   const imagesById = new Map(state.images.map((image) => [image.id, image]));
   const unavailable = state.applyTargetIds.filter((imageId) => !sourceCanOverwrite(imagesById.get(imageId), selectedApplyOutputFormat())).length;
@@ -211,7 +220,10 @@ function syncApplyMode() {
   $("#applyOutputDirectoryRow").hidden = !copying;
   $("#applyPreserveDirectoryStructureRow").hidden = !copying;
   const outputDirectoryPending = state.outputDirectoryPicking || state.outputDirectoryCommitPending;
-  $("#applySuffix").disabled = state.applyRunning || state.outputDirectoryPicking;
+  const numbering = $("#applyNumbering").checked;
+  $("#applyNumbering").disabled = state.applyRunning || state.saveStarting;
+  for (const id of ["applyNumberingDigits", "applyNumberingPlacement"]) $("#" + id).disabled = !numbering || state.applyRunning || state.saveStarting;
+  $("#applySuffix").disabled = numbering || state.applyRunning || state.outputDirectoryPicking;
   document.querySelectorAll("[data-apply-image-filter]").forEach((input) => {
     input.disabled = state.applyRunning || state.saveStarting || state.outputDirectoryPicking;
   });
@@ -391,7 +403,7 @@ async function reserveSaveRender(entry, payload, clientSaveToken) {
   const reserved = await api("/api/save/reserve", { method: "POST", body: JSON.stringify({
     imageId: entry.imageId, candidateRevision: entry.candidateRevision, clientSaveToken,
     copyToDefault: payload.copyToDefault === true, suffix: payload.suffix, format: payload.format,
-    keepMetadata: payload.keepMetadata,
+    keepMetadata: payload.keepMetadata, outputFilename: payload.outputFilename,
   }) });
   if (reserved.state !== "rendering" && reserved.state !== "pending") throw Object.assign(new Error("save_state_changed"), { code: "save_state_changed" });
   return reserved;
@@ -536,6 +548,7 @@ function outputPathFromResponse(response) {
 }
 
 async function renderDefaultCopy(entry, payload) {
+  payload = { ...payload, outputFilename: entry.outputFilename || undefined };
   const clientSaveToken = newClientSaveToken();
   try {
     const reserved = await reserveSaveRender(entry, payload, clientSaveToken);
@@ -563,6 +576,7 @@ async function renderDefaultCopy(entry, payload) {
 }
 
 async function renderStreamedSave(entry, payload) {
+  payload = { ...payload, outputFilename: entry.outputFilename || undefined };
   const clientSaveToken = newClientSaveToken();
   try {
     await reserveSaveRender(entry, payload, clientSaveToken);
@@ -980,9 +994,9 @@ function sourceNeedsParent(image, access, mode, deleteOriginal, format) {
   return Boolean(access?.fileHandle) && ((mode === "overwrite" && renamedSourceFileName(image, access, format)) || (mode === "copy" && deleteOriginal));
 }
 
-function beginSaveSourcePreparation(imageIds, mode, deleteOriginal, format = "original") {
+function beginSaveSourcePreparation(imageIds, mode, deleteOriginal, format = "original", filenames = null) {
   const prepared = new Map();
-  const imagesById = new Map(state.images.map((image) => [image.id, image]));
+  const imagesById = new Map(state.images.map((image) => [image.id, filenames?.get(image.id) ? { ...image, editedFilename: filenames.get(image.id) } : image]));
   const settle = (request) => {
     try { return Promise.resolve(request()).then((value) => ({ value }), (error) => ({ error })); }
     catch (error) { return Promise.resolve({ error }); }
@@ -1072,8 +1086,8 @@ async function reconnectSaveSourceParent(image, access, pickedParent) {
   await persistBrowserSourceAccess(image.id, access);
 }
 
-async function ensureSaveSources(imageIds, mode, deleteOriginal, format = "original", preparation = null) {
-  const imagesById = new Map(state.images.map((image) => [image.id, image]));
+async function ensureSaveSources(imageIds, mode, deleteOriginal, format = "original", preparation = null, filenames = null) {
+  const imagesById = new Map(state.images.map((image) => [image.id, filenames?.get(image.id) ? { ...image, editedFilename: filenames.get(image.id) } : image]));
   for (const imageId of imageIds) {
     const image = imagesById.get(imageId);
     const access = sourceAccessFor(imageId);
@@ -1391,6 +1405,10 @@ async function runBrowserSave(imageIds, suffix, deleteOriginal, mode = "copy", r
       access: sourceAccessFor(imageId) ? { ...sourceAccessFor(imageId) } : null,
     }])),
   };
+  for (const entry of prepared?.entries || []) {
+    const source = inputs.sources.get(entry.imageId);
+    if (entry.outputFilename && source?.image) source.image = { ...source.image, editedFilename: entry.outputFilename };
+  }
   await ensureDistinctBrowserSaveSources(inputs);
   const result = prepared || await api("/api/save/prepare", {
     method: "POST",
@@ -1685,15 +1703,19 @@ async function startApplyFromDialog(event) {
   const filters = applyImageFilters();
   const capturedImageIds = [...state.applyTargetIds];
   if (!capturedImageIds.length) return;
+  let numbering;
+  try { numbering = applyNumberingSettings(capturedImageIds.length); }
+  catch (error) { showApplyError(error); return; }
+  let prepared = null; let filenames = null;
   const mode = selectedSaveMode();
   const copy = mode === "copy";
   let sourcePreparation = null;
-  const beginPreparation = () => { sourcePreparation = beginSaveSourcePreparation(capturedImageIds, mode, copy && $("#deleteOriginal").checked, selectedApplyOutputFormat()); };
-  if (!copy) beginPreparation();
+  const beginPreparation = () => { sourcePreparation = beginSaveSourcePreparation(capturedImageIds, mode, copy && $("#deleteOriginal").checked, selectedApplyOutputFormat(), filenames); };
+  if (!copy && !numbering) beginPreparation();
   const removeSaved = $("#applyRemoveSaved").checked;
   const outputDirectory = $("#applyOutputDirectoryStatus");
   const outputPathChanged = copy && outputDirectory.value.trim() !== configuredOutputDirectory();
-  const suffix = $("#applySuffix").value;
+  const suffix = numbering ? "" : $("#applySuffix").value;
   const format = selectedApplyOutputFormat();
   state.saveStarting = true;
   syncApplyMode();
@@ -1703,6 +1725,11 @@ async function startApplyFromDialog(event) {
     if (outputPathChanged && currentOutputDirectoryStatus() === "ready" && $("#deleteOriginal").checked
       && capturedImageIds.some((imageId) => sourceAccessFor(imageId)?.fileHandle)) {
       setApplyResult(t("apply.outputDirectoryReadyRetry")); return;
+    }
+    if (numbering) {
+      prepared = await api("/api/save/prepare", { method: "POST", body: JSON.stringify({ imageIds: capturedImageIds, divisor: Number($("#applyDivisor").value), suffix, deleteOriginal: false, copyToDefault: copy, format, keepMetadata: $("#applyKeepMetadata").checked, numbering }) });
+      filenames = new Map(prepared.entries.map((entry) => [entry.imageId, entry.outputFilename]));
+      if (!copy) beginPreparation();
     }
     if (copy && !await prepareCopyOutputDirectory(beginPreparation)) return;
     await persistApplyImageFilters(filters);
@@ -1721,11 +1748,11 @@ async function startApplyFromDialog(event) {
     state.applyRunning = true;
     state.applyCatalogSnapshot = { order: state.images.map((image) => image.id), recordsById: new Map(state.images.map((image) => [image.id, image])) };
     updateActionButtons();
-    await ensureSaveSources(imageIds, mode, copy && $("#deleteOriginal").checked, format, sourcePreparation);
+    await ensureSaveSources(imageIds, mode, copy && $("#deleteOriginal").checked, format, sourcePreparation, filenames);
     if (copy && !await ensureDirectoryStructurePreference($("#applyPreserveDirectoryStructure"))) return;
     if (state.candidateUpdateChains.size) await waitForCandidateMutations();
     if (state.importing) return;
-    const prepared = await api("/api/save/prepare", { method: "POST", body: JSON.stringify({ imageIds, divisor: Number($("#applyDivisor").value), suffix, deleteOriginal: false, copyToDefault: copy, format: selectedApplyOutputFormat(), keepMetadata: $("#applyKeepMetadata").checked }) });
+    prepared ||= await api("/api/save/prepare", { method: "POST", body: JSON.stringify({ imageIds, divisor: Number($("#applyDivisor").value), suffix, deleteOriginal: false, copyToDefault: copy, format: selectedApplyOutputFormat(), keepMetadata: $("#applyKeepMetadata").checked }) });
     await Promise.all(imageIds.map((imageId) => flushWorkspaceDraft(imageId)));
     state.saveStarting = false;
     await runBrowserSave(imageIds, suffix, copy && $("#deleteOriginal").checked, mode, removeSaved, prepared);

@@ -595,7 +595,7 @@ class SavingCoverageTests(unittest.TestCase):
             saving._candidate_revision = lambda _image_id: 7
             saving._start_job = Mock()
             prepared = saving.prepare_browser_save(["x"], 2, "_censored", True)
-            self.assertEqual(prepared, [{"imageId": "x", "relativePath": "folder/source.png", "sourceKind": "filesystem", "candidateRevision": 7, "sourceAction": "deleted"}])
+            self.assertEqual(prepared, [{"imageId": "x", "outputFilename": None, "relativePath": "folder/source.png", "sourceKind": "filesystem", "candidateRevision": 7, "sourceAction": "deleted"}])
             self.assertTrue(saving.start_apply(["x"], 2, {}, copy_to_default=True))
             self.assertEqual(saving._start_job.call_args.args[0], "apply")
 

@@ -804,7 +804,8 @@
       "observation": "各カードの名前・寸法が隠れず、行間隔とスクロール位置が画像取得で跳ねない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_data_integrity_catalog_contracts_e2e.cjs::gallery cards keep footer geometry across minimum, maximum, reload, and tail scroll"
+        "node:tests/test_data_integrity_catalog_contracts_e2e.cjs::gallery cards keep footer geometry across minimum, maximum, reload, and tail scroll",
+        "node:tests/gallery/test_catalog_reorder_e2e.cjs::overview scrolling, native drag suppression, reorder drafts and numbering controls"
       ]
     },
     {
@@ -3256,7 +3257,8 @@
         "node:tests/gallery/test_filter_navigation_and_delete_e2e.cjs::DI-185 repeated filter and folder changes restore visual and DOM catalogue order",
         "node:tests/gallery/test_filter_navigation_and_delete_e2e.cjs::DI-185 virtualized rows preserve screen reading and keyboard order",
         "node:tests/gallery/test_filtered_action_authority_e2e.cjs::DI-161 DI-164 DI-168 DI-181 DI-183 and DI-185 use the captured visible order for every successor boundary",
-        "node:tests/test_source_delete_e2e.cjs::batch source deletion keeps the current canvas when another selected image fails, then moves only after the current image commits"
+        "node:tests/test_source_delete_e2e.cjs::batch source deletion keeps the current canvas when another selected image fails, then moves only after the current image commits",
+        "node:tests/gallery/test_catalog_reorder_e2e.cjs::overview scrolling, native drag suppression, reorder drafts and numbering controls"
       ]
     },
     {

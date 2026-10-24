@@ -75,6 +75,7 @@ _POST_OPERATION_LABELS = {
     "/api/catalog/clear": "画像一覧クリア",
     "/api/workspace/images": "画像状態の一括変更",
     "/api/catalog/remove": "画像一覧から削除",
+    "/api/catalog/reorder": "画像の順番変更",
     "/api/catalog/rename": "画像の保存名変更",
     "/api/catalog/delete-source": "元画像を完全削除",
     "/api/catalog/delete-source/prepare": "元画像削除の確認",
@@ -1075,6 +1076,9 @@ class MosaicHandler(BaseHTTPRequestHandler):
                 image_id = str(payload.get("imageId", ""))
                 self._json(self._catalog_mutation(expected_project_id, expected_catalog_generation,
                                                    lambda: STATE.add_boundary_candidate(image_id, payload)))
+            elif path == "/api/catalog/reorder":
+                self._json(self._catalog_mutation(expected_project_id, expected_catalog_generation,
+                    lambda: STATE.reorder_catalog(payload.get("imageIds"))))
             elif path == "/api/save/prepare":
                 entries = self._catalog_mutation(expected_project_id, expected_catalog_generation, lambda: STATE.prepare_browser_save(
                     payload.get("imageIds", []),
@@ -1084,6 +1088,7 @@ class MosaicHandler(BaseHTTPRequestHandler):
                     copy_to_default=_read_bool(payload.get("copyToDefault", False), "既定の保存先へコピー"),
                     output_format=str(payload.get("format", "original")),
                     keep_metadata=_read_bool(payload.get("keepMetadata", True), "メタ情報の保持"),
+                    numbering=payload.get("numbering"),
                 ))
                 self._json({"entries": entries})
             elif path == "/api/save/reserve":
@@ -1094,6 +1099,7 @@ class MosaicHandler(BaseHTTPRequestHandler):
                     suffix=_read_save_suffix(payload.get("suffix", "_censored")),
                     output_format=str(payload.get("format", "original")),
                     keep_metadata=_read_bool(payload.get("keepMetadata", True), "メタ情報の保持"),
+                    output_filename=payload.get("outputFilename"),
                 )))
             elif path == "/api/save/render":
                 copy_to_default = _read_bool(payload.get("copyToDefault", False), "既定の保存先へコピー")
@@ -1113,6 +1119,7 @@ class MosaicHandler(BaseHTTPRequestHandler):
                     suffix=_read_save_suffix(payload.get("suffix", "_censored")),
                     output_format=str(payload.get("format", "original")),
                     keep_metadata=_read_bool(payload.get("keepMetadata", True), "メタ情報の保持"),
+                    output_filename=payload.get("outputFilename"),
                 ))
                 revision, save_token = rendered.candidate_revision, rendered.save_token
                 response_headers = {

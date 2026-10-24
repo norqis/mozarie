@@ -886,6 +886,16 @@ class WorkspaceStore:
 
         return self.reconcile_images(catalog_id, records, source_id=source_id, before_reconcile=update_root)
 
+    def catalog_order(self, catalog_id: str) -> list[str]:
+        with self._connect() as db:
+            row = db.execute("SELECT value FROM meta WHERE key=?", (f"catalog_order:{catalog_id}",)).fetchone()
+        return json.loads(row["value"]) if row else []
+
+    def set_catalog_order(self, catalog_id: str, image_ids: list[str]) -> None:
+        with self._lock, self._connect() as db:
+            db.execute("INSERT OR REPLACE INTO meta(key,value) VALUES(?,?)",
+                       (f"catalog_order:{catalog_id}", json.dumps(image_ids)))
+
     def project_images(self, catalog_id: str) -> list[dict[str, Any]]:
         with self._connect() as db:
             rows = db.execute("""SELECT images.image_id,images.relative_path,images.width,images.height,
@@ -1077,6 +1087,7 @@ class WorkspaceStore:
                     "SELECT image_id FROM images WHERE catalog_id=?", (catalog_id,)
                 )]
                 db.execute("DELETE FROM meta WHERE key='active_projectless_catalog_id' AND value=?", (catalog_id,))
+                db.execute("DELETE FROM meta WHERE key=?", (f"catalog_order:{catalog_id}",))
                 cursor = db.execute("DELETE FROM catalogs WHERE catalog_id=?", (catalog_id,))
                 if not cursor.rowcount:
                     raise ValueError("project is missing")
@@ -1723,6 +1734,7 @@ class WorkspaceStore:
             db.execute("BEGIN IMMEDIATE")
             try:
                 db.execute("DELETE FROM images WHERE catalog_id=?", (catalog_id,))
+                db.execute("DELETE FROM meta WHERE key=?", (f"catalog_order:{catalog_id}",))
                 db.execute("COMMIT")
             except Exception:
                 db.execute("ROLLBACK")

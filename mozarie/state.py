@@ -146,6 +146,7 @@ class StudioState(CatalogMixin, SavingMixin, DetectionMixin, JobsMixin):
         self.catalog_sources: list[dict[str, Any]] = []
         self.images: dict[str, ImageRecord] = {}
         self.order: list[str] = []
+        self.catalog_order_ranks: dict[str, int] = {}
         self.candidates: dict[str, list[Candidate]] = {}
         self.candidate_revisions: dict[str, int] = {}
         # Kept only for opening databases written by older app processes.

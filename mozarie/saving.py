@@ -27,6 +27,8 @@ from .image_io import (
 )
 from .masks import compose_masks, expand_mask, union_mask
 
+from .numbering import numbered_filenames
+
 class SavingMixin:
     def output_directory_status(self) -> dict[str, str]:
         with self.lock:
@@ -82,14 +84,14 @@ class SavingMixin:
 
     def _copy_destinations_are_available(
         self, records: list[ImageRecord], suffix: str, output_format: str, output_directory: Path,
-        preserve_directory_structure: bool,
+        preserve_directory_structure: bool, *, exact_name: bool = False,
     ) -> None:
         """Reject every flattened collision before a save job or stage exists."""
-        if preserve_directory_structure:
+        if preserve_directory_structure and not exact_name:
             return
         names: set[str] = set()
         for record in records:
-            relative = self._copy_relative_path(record, suffix, output_format, False)
+            relative = self._copy_relative_path(record, suffix, output_format, preserve_directory_structure)
             name = relative.as_posix().casefold()
             destination = output_directory / relative
             if name in names or destination.exists():
@@ -143,14 +145,14 @@ class SavingMixin:
 
     def _reserve_output_destination(
         self, record: ImageRecord, suffix: str, output_directory: Path, output_format: str = "original",
-        preserve_directory_structure: bool = True,
+        preserve_directory_structure: bool = True, *, exact_name: bool = False,
     ) -> Path:
         """Reserve a copy name while another worker may be choosing one."""
         with self.output_destination_lock:
             target = output_directory / self._copy_relative_path(
                 record, suffix, output_format, preserve_directory_structure,
             )
-            if not preserve_directory_structure:
+            if not preserve_directory_structure or exact_name:
                 if target.exists() or target in self.reserved_output_paths:
                     raise ClientError("平坦化後の保存名が重複しています。フォルダー構成を保持するか、ファイル名を変更してください。", "output_name_conflict")
                 self.reserved_output_paths.add(target)
@@ -197,12 +199,23 @@ class SavingMixin:
         except FileExistsError:
             return None
 
-    def reserve_browser_save(self, image_id: str, revision: int, client_save_token: str, *, copy_to_default: bool, suffix: str, output_format: str, keep_metadata: bool) -> dict[str, Any]:
+    def _save_output_filename(self, record: ImageRecord, value: str | None, output_format: str) -> str | None:
+        if value is None:
+            return None
+        name = self._rename_filename(value)
+        extension = Path(record.relative_path).suffix if output_format == "original" else f".{output_format}"
+        if Path(name).suffix.casefold() != extension.casefold():
+            raise ClientError("保存形式と拡張子が一致しません。", "input_invalid")
+        return name
+
+    def reserve_browser_save(self, image_id: str, revision: int, client_save_token: str, *, copy_to_default: bool, suffix: str, output_format: str, keep_metadata: bool, output_filename: str | None = None) -> dict[str, Any]:
         """Create the durable token before decoding masks or rendering pixels."""
         suffix = _read_save_suffix(suffix)
         if output_format not in {"original", "png", "jpg"} or not isinstance(keep_metadata, bool) or (output_format == "jpg" and keep_metadata):
             raise ClientError("保存形式が正しくありません。", "input_invalid")
         record = self.image_snapshot(image_id)
+        output_filename = self._save_output_filename(record, output_filename, output_format)
+        destination_record = replace(record, edited_filename=output_filename) if output_filename else record
         with self.lock:
             self._assert_image_editable(image_id)
             current_revision = self._candidate_revision(image_id)
@@ -210,7 +223,7 @@ class SavingMixin:
                 raise ClientError("候補が変更されました。保存をやり直してください。", "save_state_changed")
             existing = self.browser_save_tokens.get(client_save_token)
             if existing is not None:
-                if existing.image_id != image_id or existing.candidate_revision != revision:
+                if existing.image_id != image_id or existing.candidate_revision != revision or existing.output_filename != output_filename:
                     raise ClientError("保存確認トークンが保存対象と一致しません。保存をやり直してください。", "save_state_changed")
                 return {"state": existing.state, "outputPath": str(existing.output_destination) if existing.output_destination else ""}
             durable = self.save_journal.row(client_save_token)
@@ -229,14 +242,14 @@ class SavingMixin:
         destination = None; staged = None; initial_fingerprint = None
         if configured_output_directory is not None:
             self._copy_destinations_are_available(
-                [record], suffix, output_format, configured_output_directory, preserve_directory_structure,
+                [destination_record], suffix, output_format, configured_output_directory, preserve_directory_structure, exact_name=output_filename is not None,
             )
             try:
                 configured_output_directory = validate_output_directory_ready(configured_output_directory)
             except SettingsError as exc:
                 raise ClientError("保存先フォルダを使用できません。設定で変更してください。", "output_folder_unavailable") from exc
             destination = self._reserve_output_destination(
-                record, suffix, configured_output_directory, output_format, preserve_directory_structure,
+                destination_record, suffix, configured_output_directory, output_format, preserve_directory_structure, exact_name=output_filename is not None,
             )
             staged = destination.parent / ".mozarie-staging" / f"{client_save_token}.stage"
             try:
@@ -265,7 +278,7 @@ class SavingMixin:
                 image_id=image_id, candidate_revision=revision, source_fingerprint=record.asset_fingerprint(),
                 catalog_generation=catalog_generation, issued_at=time.monotonic(), rendered_path=None,
                 output_path=staged, output_fingerprint=initial_fingerprint, output_destination=destination,
-                state="rendering", allow_copy_action=copy_to_default, output_format=output_format,
+                state="rendering", allow_copy_action=copy_to_default, output_format=output_format, output_filename=output_filename,
                 keep_metadata=keep_metadata, preserve_directory_structure=preserve_directory_structure,
                 transform_revision=record.transform_revision,
                 flip_horizontal=record.flip_horizontal, flip_vertical=record.flip_vertical,
@@ -367,10 +380,13 @@ class SavingMixin:
         copy_to_default: bool = False,
         output_format: str = "original",
         keep_metadata: bool = True,
+        numbering: dict[str, Any] | None = None,
     ) -> list[dict[str, Any]]:
         with self.lock:
             self._assert_catalog_mutable()
         records, _catalog_generation = self._records_for_ids_with_catalog(image_ids)
+        filenames = numbered_filenames(records, numbering, output_format)
+        destinations = [replace(record, edited_filename=filenames[record.image_id]) if record.image_id in filenames else record for record in records]
         for record in records:
             self._assert_image_editable(record.image_id)
         _read_mosaic_divisor(divisor)
@@ -385,12 +401,20 @@ class SavingMixin:
             if copy_to_default:
                 output_directory = Path(self.settings["saving"]["default_output_directory"])
                 self._copy_destinations_are_available(
-                    records, suffix, output_format, output_directory,
-                    self._preserve_directory_structure(),
+                    destinations, suffix, output_format, output_directory,
+                    self._preserve_directory_structure(), exact_name=bool(filenames),
                 )
+            if not copy_to_default and filenames:
+                for record in destinations:
+                    if record.source_kind != "filesystem":
+                        continue
+                    destination = self._overwrite_destination(record, output_format)
+                    if destination != record.path and destination.exists():
+                        raise ClientError("保存名が既存ファイルと重複しています。", "output_name_conflict")
             return [
                 {
                     "imageId": record.image_id,
+                    "outputFilename": filenames.get(record.image_id),
                     "relativePath": record.relative_path,
                     "sourceKind": record.source_kind,
                     "candidateRevision": self._candidate_revision(record.image_id),
@@ -414,10 +438,12 @@ class SavingMixin:
         suffix: str = "_censored",
         output_format: str = "original",
         keep_metadata: bool = True,
+        output_filename: str | None = None,
     ) -> BrowserSaveRender:
         self._assert_image_editable(image_id)
         stream_image = stream_image or copy_to_browser
         record = self.image_snapshot(image_id)
+        output_filename = self._save_output_filename(record, output_filename, output_format)
         divisor = _read_mosaic_divisor(divisor)
         if output_format not in {"original", "png", "jpg"} or not isinstance(keep_metadata, bool):
             raise ClientError("保存形式が正しくありません。", "input_invalid")
@@ -460,7 +486,7 @@ class SavingMixin:
                     if client_save_token is None:
                         raise ClientError("保存確認トークンがありません。保存をやり直してください。", "save_state_changed")
                     reserved = self.browser_save_tokens.get(client_save_token)
-                    if reserved is None or reserved.image_id != image_id or reserved.candidate_revision != revision or reserved.state != "rendering":
+                    if reserved is None or reserved.image_id != image_id or reserved.candidate_revision != revision or reserved.state != "rendering" or reserved.output_filename != output_filename:
                         raise ClientError("保存確認トークンが無効または取消済みです。保存をやり直してください。", "save_state_changed")
                     if copy_to_default:
                         configured_output_directory = Path(self.settings["saving"]["default_output_directory"]).resolve()
@@ -511,13 +537,15 @@ class SavingMixin:
                         shape, [apply_union] if apply_union is not None else [], [exclude_union] if exclude_union is not None else [], add_mask, exclusion_mask,
                         [forced_exclude_union] if forced_exclude_union is not None else [], manual_exclude_forced, exclusion_erase_mask,
                     )
-                    no_effect = (mask is None or not np.any(mask)) and record.edited_filename is None and output_format_matches_source(record, output_format) and keep_metadata and \
+                    content_no_effect = (mask is None or not np.any(mask)) and record.edited_filename is None and output_format_matches_source(record, output_format) and keep_metadata and \
                         record.flip_horizontal == record.source_flip_horizontal and record.flip_vertical == record.source_flip_vertical
+                    destination_changed = bool(output_filename and output_filename != Path(record.relative_path).name)
+                    no_effect = content_no_effect and (copy_to_default or not destination_changed)
                     source_fingerprint = record.asset_fingerprint()
                     # Saving every listed image means an image without a mosaic is
                     # copied as-is.  An overwrite deliberately becomes a commit
                     # with ``keep`` instead of touching its source file.
-                    if no_effect:
+                    if content_no_effect:
                         output = read_stable_source_bytes(record, source_fingerprint) if copy_to_default else None
                         output_suffix = record.path.suffix.lower()
                         _output_mime = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp"}.get(output_suffix, "application/octet-stream")
@@ -540,8 +568,11 @@ class SavingMixin:
                     # second response-sized browser buffer.  Overwrites keep
                     # their staged file until commit; copy saves discard it as
                     # soon as the response finishes streaming.
-                    assert output is not None
-                    rendered_path = self._stage_browser_response_output(output, output_suffix)
+                    if content_no_effect:
+                        rendered_path = self._stage_browser_response_source(record, source_fingerprint, output_suffix)
+                    else:
+                        assert output is not None
+                        rendered_path = self._stage_browser_response_output(output, output_suffix)
                     response_path = rendered_path if stream_image else None
                     response_path_is_temporary = copy_to_browser
                     output = None
@@ -573,7 +604,7 @@ class SavingMixin:
                         output_destination=output_destination if copy_to_default else None, client_token=client_save_token,
                         allow_copy_action=copy_to_browser or copy_to_default or no_effect,
                         no_effect=no_effect,
-                        output_format=output_format, keep_metadata=keep_metadata,
+                        output_format=output_format, keep_metadata=keep_metadata, output_filename=output_filename,
                     )
                     # The token or the HTTP handler now owns the staged file.
                     rendered_path = None
@@ -718,7 +749,7 @@ class SavingMixin:
                         staged_fingerprint = (staged_stat.st_mtime_ns, staged_stat.st_size)
                         publication = self._publish_staged_copy(save_token, token_details.output_path, token_details.output_destination, staged_fingerprint)
                         if publication is None:
-                            if not token_details.preserve_directory_structure:
+                            if not token_details.preserve_directory_structure or token_details.output_filename:
                                 raise ClientError("平坦化後の保存名が重複しています。フォルダー構成を保持するか、ファイル名を変更してください。", "output_name_conflict")
                             replacement = self._reassign_output_destination(token_details.output_destination)
                             token_details = replace(token_details, output_destination=replacement)
@@ -739,7 +770,8 @@ class SavingMixin:
                         self.save_journal.published(save_token, destination_fingerprint, identity)
                     if source_action == "overwrite":
                         assert token_details.rendered_path is not None
-                        destination = self._overwrite_destination(record_snapshot, token_details.output_format)
+                        destination_record = replace(record_snapshot, edited_filename=token_details.output_filename) if token_details.output_filename else record_snapshot
+                        destination = self._overwrite_destination(destination_record, token_details.output_format)
                         destination_changed = os.path.normcase(str(destination)) != os.path.normcase(str(record_snapshot.path))
                         if destination_changed or not output_format_matches_source(record_snapshot, token_details.output_format):
                             source_stage = _stage_record_format_replacement(

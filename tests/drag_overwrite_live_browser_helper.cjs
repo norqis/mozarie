@@ -3,6 +3,7 @@
 const assert = require("node:assert/strict");
 const { chromium } = require("playwright");
 const origin = process.argv[2];
+const nativeFilePath = process.argv[3];
 const png = "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFklEQVR4nGP4z8DAwPCfkeE/w38GBgAc+AP+/XLlFAAAAABJRU5ErkJggg==";
 
 async function assertSaveButtonHitTarget(page, startId, pickerId) {
@@ -17,7 +18,10 @@ async function assertSaveButtonHitTarget(page, startId, pickerId) {
 }
 
 (async () => {
-  const browser = await chromium.launch({ headless: true });
+  // Headless shell has no permission UI; Chromium's test flag grants writes
+  // to this test's disposable native file without mocking its handle methods.
+  const browser = await chromium.launch({ headless: true,
+    ...(nativeFilePath ? { args: ["--enable-experimental-web-platform-features"] } : {}) });
   const context = await browser.newContext();
   try {
     const page = await context.newPage();
@@ -33,7 +37,20 @@ async function assertSaveButtonHitTarget(page, startId, pickerId) {
     });
     await page.goto(origin, { waitUntil: "domcontentloaded" });
     await page.waitForFunction(() => state.settings && state.images.length && !state.projectOperationPending);
-    await page.evaluate(async (base64) => {
+    if (nativeFilePath) {
+      await page.evaluate(() => {
+        window.__pickerCalls = 0;
+        window.showDirectoryPicker = async () => { window.__pickerCalls++; throw new Error("unexpected parent picker"); };
+      });
+      const cdp = await context.newCDPSession(page);
+      try {
+        const box = await page.locator("#gallery").boundingBox();
+        for (const type of ["dragEnter", "dragOver", "drop"]) {
+          await cdp.send("Input.dispatchDragEvent", { type, x: box.x + box.width / 2, y: box.y + box.height / 2,
+            data: { items: [], files: [nativeFilePath], dragOperationsMask: 1 } });
+        }
+      } finally { await cdp.detach(); }
+    } else await page.evaluate(async (base64) => {
       const root = await navigator.storage.getDirectory();
       const handle = await root.getFileHandle("drag-source.png", { create: true });
       const writer = await handle.createWritable();
@@ -56,7 +73,11 @@ async function assertSaveButtonHitTarget(page, startId, pickerId) {
     await page.evaluate(() => {
       const image = state.images.find((item) => item.relativePath === "drag-source.png");
       const handle = state.sourceAccess.get(image.id).fileHandle;
+      window.__dragSource = handle;
       window.__writePermissionRequests = 0;
+    });
+    if (!nativeFilePath) await page.evaluate(() => {
+      const handle = window.__dragSource;
       Object.defineProperty(handle, "queryPermission", { value: async ({ mode }) => mode === "readwrite" && !window.__writePermissionRequests ? "prompt" : "granted" });
       Object.defineProperty(handle, "requestPermission", { value: async () => { window.__writePermissionRequests++; return "granted"; } });
     });
@@ -98,7 +119,7 @@ async function assertSaveButtonHitTarget(page, startId, pickerId) {
     }));
     assert.equal(after.pickerCalls, 0, "unchanged source name and original format need no parent picker");
     assert.equal(outputPickerRequests.length, 0, "single source overwrite never opens the Windows output folder picker");
-    assert.equal(after.writePermissionRequests, 1, "the save gesture requests source write permission once");
+    if (!nativeFilePath) assert.equal(after.writePermissionRequests, 1, "the save gesture requests source write permission once");
     assert.equal(after.errorOpen, false);
     assert.notDeepEqual(after.bytes, before.bytes, "overwrite writes real source bytes");
     assert.equal(saveRenderResponses.length, 1);
