@@ -25,7 +25,8 @@ class NumberedFilenameTests(unittest.TestCase):
             self.assertEqual(names[str(limit - 2)], f"{limit - 1}.png")
             with self.assertRaises(ClientError) as error:
                 numbered_filenames(records + [records[0]], {"digits": digits, "placement": "only"})
-            self.assertEqual(error.exception.params["required"], digits + 1)
+            if digits < 5:
+                self.assertEqual(error.exception.params["required"], digits + 1)
             self.assertEqual(error.exception.error_code, "numbering_limit" if digits == 5 else "numbering_overflow")
 
     def test_positions_use_edited_basename_and_requested_format(self):

@@ -10,8 +10,10 @@ def numbered_filenames(records, numbering, output_format="original"):
             or numbering.get("placement") not in {"only", "prefix", "suffix"}):
         raise ClientError("連番の設定が正しくありません。", "input_invalid")
     digits = numbering["digits"]
+    if len(records) >= 100000:
+        raise ClientError("連番で保存できる枚数を超えています。", "numbering_limit", {"count": len(records)})
     if len(records) >= 10 ** digits:
-        raise ClientError("指定桁数では保存できません。", "numbering_limit" if len(records) >= 100000 else "numbering_overflow",
+        raise ClientError("指定桁数では保存できません。", "numbering_overflow",
                           {"count": len(records), "digits": digits, "required": len(str(len(records)))})
     names = {}
     for index, record in enumerate(records, 1):
