@@ -26,6 +26,7 @@ const { chromium } = require("playwright");
     for (const placement of ["only", "prefix", "suffix"]) {
       await page.locator("#saveAllButton").click();
       await page.locator("#applyNumbering").check();
+      await page.locator("#applySuffix").fill("_custom");
       await page.locator("#applyNumberingDigits").fill("2");
       await page.locator("#applyNumberingPlacement").selectOption(placement);
       await page.waitForFunction(() => !document.querySelector("#applyStartButton").disabled);
@@ -59,7 +60,7 @@ const { chromium } = require("playwright");
     const reviewedIds = [original[1].id, original[3].id];
     for (const [index, request] of preparedOrders.entries()) {
       assert.deepEqual(request.imageIds, index === 3 ? reviewedIds : expectedOrder.map((image) => image.id));
-      assert.equal(request.suffix, "");
+      assert.equal(request.suffix, "_custom");
       assert.equal(request.numbering.digits, index === 3 ? 3 : 2);
     }
     assert.deepEqual(errors, []);

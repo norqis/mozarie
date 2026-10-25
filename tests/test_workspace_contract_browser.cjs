@@ -4,6 +4,7 @@ const assert = require("node:assert/strict");
 const test = require("node:test");
 const { chromium } = require("playwright");
 const { closeServer, startFixtureServer } = require("./test_import_picker_e2e.cjs");
+const { waitForAppStartup } = require("./helpers/app_startup.cjs");
 
 async function openFixture(fixture) {
   const browser = await chromium.launch({ headless: true });
@@ -15,13 +16,18 @@ async function openFixture(fixture) {
   const page = await context.newPage();
   await page.goto(fixture.url, { waitUntil: "domcontentloaded" });
   await page.waitForFunction(() => state.settings && state.images.length >= 2 && document.querySelectorAll(".gallery-item").length === state.images.length);
+  await waitForAppStartup(page);
   return { browser, context, page };
 }
 
 async function closeFixture(fixture, opened) {
-  await opened?.context?.close();
-  await opened?.browser?.close();
-  await closeServer(fixture.server);
+  try {
+    if (opened?.page && !opened.page.isClosed()) await opened.page.evaluate(() => flushAllWorkspaceMutations());
+  } finally {
+    await opened?.context?.close();
+    await opened?.browser?.close();
+    await closeServer(fixture.server);
+  }
 }
 
 test("filter popovers close accessibly and retain search, folder, and checkbox state across views", { timeout: 60000 }, async () => {

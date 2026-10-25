@@ -204,14 +204,14 @@ class CatalogOrderAndSaveTests(unittest.TestCase):
         ordered = before[1:] + before[:1]
         for index, (name, data) in enumerate(ordered, 1):
             number = str(index).zfill(2)
-            for output in [f"{number}.png", f"{number}_{Path(name).stem}.png", f"{Path(name).stem}_{number}.png"]:
+            for output in [f"{number}_custom.png", f"{number}_{Path(name).stem}_custom.png", f"{Path(name).stem}_{number}_custom.png"]:
                 self.assertEqual((self.fixture.output / output).read_bytes(), data)
             self.assertEqual((self.fixture.source / f"{number}.png").read_bytes(), data)
         expected_names = []
         for index, (name, _data) in enumerate(ordered, 1):
-            expected_names.extend([f"{index:02d}.png", f"{index:02d}_{Path(name).stem}.png", f"{Path(name).stem}_{index:02d}.png"])
+            expected_names.extend([f"{index:02d}_custom.png", f"{index:02d}_{Path(name).stem}_custom.png", f"{Path(name).stem}_{index:02d}_custom.png"])
         for index, (name, data) in enumerate([ordered[0], ordered[2]], 1):
-            filename = f"{index:03d}_{Path(name).stem}.png"
+            filename = f"{index:03d}_{Path(name).stem}_custom.png"
             expected_names.append(filename)
             self.assertEqual((self.fixture.output / filename).read_bytes(), data)
         self.assertEqual(sorted(path.name for path in self.fixture.output.glob("*.png")), sorted(expected_names))
