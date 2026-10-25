@@ -122,6 +122,35 @@ class UpdaterTests(unittest.TestCase):
     def setUp(self):
         updater._language = "ja"
 
+    def test_prepared_update_installs_without_network_download_or_confirmation(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            app = make_install(root / "install")
+            source = make_source(root / "prepared source 日本語")
+            write_runtime_marker(app)
+            with patch("updater.fetch_latest_release", side_effect=AssertionError("must reuse prepared source")), \
+                    patch("updater.mozarie_running_status", return_value="none"):
+                result = updater.perform_update(app, prepared_source=source,
+                    input_fn=lambda _prompt: self.fail("the UI already confirmed"))
+            self.assertEqual(result, updater.EXIT_UPDATED)
+            self.assertEqual((app / "VERSION").read_text(encoding="utf-8"), "1.2.0")
+            self.assertEqual((app / "server.py").read_bytes(), (source / "server.py").read_bytes())
+
+    def test_update_batch_forwards_prepared_path_with_spaces_and_japanese(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "更新 test"
+            root.mkdir()
+            shutil.copyfile(Path(__file__).parents[1] / "update.bat", root / "update.bat")
+            (root / "updater.py").write_text(
+                'import json, pathlib, sys\npathlib.Path(__file__).with_name("args.json").write_text(json.dumps(sys.argv[1:]), encoding="utf-8")\n',
+                encoding="utf-8")
+            prepared = root / "検証済み source"
+            result = subprocess.run([str(root / "update.bat"), "--prepared", str(prepared)], input="\n", capture_output=True,
+                text=True, encoding="utf-8", errors="replace", timeout=30,
+                env={**os.environ, "MOZARIE_PYTHON": sys.executable}, creationflags=subprocess.CREATE_NO_WINDOW)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertEqual(json.loads((root / "args.json").read_text(encoding="utf-8")), ["--prepared", str(prepared)])
+
     def test_version_parsing_and_display(self):
         self.assertEqual(updater.parse_version("v1.2.3"), (1, 2, 3))
         self.assertEqual(updater.display_version("1.2.3"), "v1.2.3")
@@ -335,7 +364,7 @@ class UpdaterTests(unittest.TestCase):
             root = Path(directory)
             archive = root / "mozarie.zip"
             subprocess.run(
-                ["git", "archive", "--format=zip", "--worktree-attributes", "--prefix=mozarie-release/", "--output", str(archive), "HEAD"],
+                [sys.executable, str(repository / "scripts" / "build-release.py"), "HEAD", str(archive)],
                 cwd=str(repository),
                 check=True,
             )
@@ -1124,7 +1153,7 @@ class UpdaterTests(unittest.TestCase):
         batch = raw.decode("utf-8")
         self.assertEqual(batch.count('"%PYTHON%" -X utf8 "%APP_DIR%updater.py"'), 1)
         self.assertIn(
-            '"%PYTHON%" -X utf8 "%APP_DIR%updater.py"\r\n'
+            '"%PYTHON%" -X utf8 "%APP_DIR%updater.py" %*\r\n'
             'set "EXIT_CODE=%ERRORLEVEL%"\r\n'
             "goto :finish",
             batch,

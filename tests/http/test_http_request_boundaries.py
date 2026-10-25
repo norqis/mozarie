@@ -164,7 +164,7 @@ class HttpBoundaryCoverageTests(unittest.TestCase):
         state.recover_gpu_oom_for_request.return_value = None
         with patch.object(http_module, "STATE", state), patch.object(http_module, "_reserve_update_start", side_effect=(False, True)), patch(
             "mozarie.http.threading.Thread"
-        ) as thread:
+        ) as thread, patch("updater.prepare_update", return_value=Path("prepared")):
             request.path = "/api/model-download/start"
             request._read_json_body = lambda: {"modelKey": "target", "samType": ""}
             request.do_POST()
@@ -184,6 +184,7 @@ class HttpBoundaryCoverageTests(unittest.TestCase):
         self.assertIn("binary", emitted)
         state.render_browser_save.assert_called_once()
         thread.assert_called_once()
+        request.server.mozarie_update_workspace.cleanup()
 
     def test_binary_reader_rejects_oversize_and_thumbnail_staleness_cleans_temp_file(self) -> None:
         self.assertEqual(handler(headers={"Content-Length": str(100_000_000)})._request_body_length(), 100_000_000)

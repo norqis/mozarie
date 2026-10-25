@@ -2025,7 +2025,9 @@
       "observation": "現在版と確認結果を表示し、更新がある場合だけ更新操作を案内する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_settings_dialog_e2e.cjs::SD-096 update check shows current and latest versions then starts the confirmed update"
+        "node:tests/test_settings_dialog_e2e.cjs::SD-096 update check shows current and latest versions then starts the confirmed update",
+        "node:tests/test_settings_dialog_e2e.cjs::update preparation stays visible, prevents duplicate starts and permits retry after failure",
+        "python:tests.http.test_update_preparation.UpdatePreparationTests.test_invalid_downloads_leave_server_running_and_next_request_can_update"
       ]
     },
     {

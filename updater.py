@@ -708,16 +708,33 @@ def apply_update(source_root: Path, app_dir: Path = APP_DIR) -> None:
         pass
 
 
+def prepare_update(app_dir: Path, workspace: Path, *, release=None,
+                   opener=None) -> Path:
+    """Download and validate before the running application is stopped."""
+    opener = urllib.request.urlopen if opener is None else opener
+    release = fetch_latest_release(opener) if release is None else release
+    archive = workspace / "release.zip"
+    print(tr("downloading"))
+    url, digest, size = release_archive(release)
+    download_archive(url, archive, digest, size, opener)
+    print(tr("verifying"))
+    source = extract_archive(archive, workspace / "extracted", app_dir)
+    if parse_version(read_local_version(source)) != parse_version(release["tag_name"]):
+        raise UpdateError(tr("archive_version_mismatch"))
+    return source
+
+
 def _perform_update(
     app_dir: Path = APP_DIR,
     *,
     opener: Callable[..., Any] = urllib.request.urlopen,
     input_fn: Callable[[str], str] = input,
+    prepared_source: Path | None = None,
 ) -> int:
     global _language
     _language = read_language(app_dir)
     current_raw = read_local_version(app_dir)
-    release = fetch_latest_release(opener)
+    release = fetch_latest_release(opener) if prepared_source is None else {"tag_name": read_local_version(prepared_source)}
     latest_raw = release["tag_name"]
     current = display_version(current_raw)
     latest = display_version(latest_raw)
@@ -737,24 +754,17 @@ def _perform_update(
         raise UpdateError(tr("running"))
 
     print(tr("version_change", current=current, latest=latest))
-    answer = input_fn(tr("confirm")).strip().lower()
+    answer = input_fn(tr("confirm")).strip().lower() if prepared_source is None else "yes"
     if answer not in {"y", "yes"}:
         print(tr("cancelled"))
         return EXIT_CANCELLED
 
     with tempfile.TemporaryDirectory(prefix="mozarie-update-") as temporary:
         workspace = Path(temporary)
-        archive = workspace / "release.zip"
-        extracted = workspace / "extracted"
-        extracted.mkdir()
-        print(tr("downloading"))
-        url, digest, size = release_archive(release)
-        download_archive(url, archive, digest, size, opener)
-        print(tr("verifying"))
-        source_root = extract_archive(archive, extracted, app_dir)
-        archive_version = read_local_version(source_root)
-        if parse_version(archive_version) != latest_version:
-            raise UpdateError(tr("archive_version_mismatch"))
+        source_root = prepared_source if prepared_source is not None else prepare_update(app_dir, workspace, release=release, opener=opener)
+        if prepared_source is not None and (not all((source_root / item).is_file() for item in MANAGED_FILES)
+                or not all((source_root / item).is_dir() for item in MANAGED_DIRECTORIES)):
+            raise UpdateError(tr("archive_missing_app"))
         if not retry_pending:
             _write_pending_update(app_dir, latest_raw, runtime_changed=False)
         requirements_updated = install_requirements(source_root, app_dir, pending_version=latest_raw)
@@ -783,11 +793,12 @@ def perform_update(
     *,
     opener: Callable[..., Any] = urllib.request.urlopen,
     input_fn: Callable[[str], str] = input,
+    prepared_source: Path | None = None,
 ) -> int:
     global _language
     _language = read_language(app_dir)
     with MaintenanceLock(app_dir):
-        return _perform_update(app_dir, opener=opener, input_fn=input_fn)
+        return _perform_update(app_dir, opener=opener, input_fn=input_fn, prepared_source=prepared_source)
 
 
 def main() -> int:
@@ -806,6 +817,8 @@ def main() -> int:
             "check_failed": EXIT_RUNNING_CHECK_FAILED,
         }[mozarie_running_status(APP_DIR)]
     try:
+        if len(sys.argv) == 3 and sys.argv[1] == "--prepared":
+            return perform_update(prepared_source=Path(sys.argv[2]))
         return perform_update()
     except KeyboardInterrupt:
         print(f"\n{tr('cancelled')}")

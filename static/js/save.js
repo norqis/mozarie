@@ -223,7 +223,7 @@ function syncApplyMode() {
   const numbering = $("#applyNumbering").checked;
   $("#applyNumbering").disabled = state.applyRunning || state.saveStarting;
   for (const id of ["applyNumberingDigits", "applyNumberingPlacement"]) $("#" + id).disabled = !numbering || state.applyRunning || state.saveStarting;
-  $("#applySuffix").disabled = numbering || state.applyRunning || state.outputDirectoryPicking;
+  $("#applySuffix").disabled = state.applyRunning || state.saveStarting || state.outputDirectoryPicking;
   document.querySelectorAll("[data-apply-image-filter]").forEach((input) => {
     input.disabled = state.applyRunning || state.saveStarting || state.outputDirectoryPicking;
   });
@@ -1759,7 +1759,7 @@ async function startApplyFromDialog(event) {
   const removeSaved = $("#applyRemoveSaved").checked;
   const outputDirectory = $("#applyOutputDirectoryStatus");
   const outputPathChanged = copy && outputDirectory.value.trim() !== configuredOutputDirectory();
-  const suffix = numbering ? "" : $("#applySuffix").value;
+  const suffix = $("#applySuffix").value;
   const format = selectedApplyOutputFormat();
   state.saveStarting = true;
   syncApplyMode();

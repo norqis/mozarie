@@ -93,7 +93,7 @@ class SavingMixin:
         names: set[str] = set()
         conflicts: list[str] = []
         for record in records:
-            relative = self._copy_relative_path(record, suffix, output_format, preserve_directory_structure)
+            relative = self._copy_relative_path(record, "" if exact_name else suffix, output_format, preserve_directory_structure)
             name = relative.as_posix().casefold()
             destination = output_directory / relative
             if name in names or (not exact_name and destination.exists()):
@@ -157,7 +157,7 @@ class SavingMixin:
         """Reserve a copy name while another worker may be choosing one."""
         with self.output_destination_lock:
             target = output_directory / self._copy_relative_path(
-                record, suffix, output_format, preserve_directory_structure,
+                record, "" if exact_name else suffix, output_format, preserve_directory_structure,
             )
             if not preserve_directory_structure or exact_name:
                 if target.exists() or target in self.reserved_output_paths:
@@ -396,12 +396,15 @@ class SavingMixin:
         with self.lock:
             self._assert_catalog_mutable()
         records, _catalog_generation = self._records_for_ids_with_catalog(image_ids)
+        suffix = _read_save_suffix(suffix)
         filenames = numbered_filenames(records, numbering, output_format)
+        if copy_to_default and suffix:
+            filenames = {image_id: f"{Path(name).stem}{suffix}{Path(name).suffix}"
+                         for image_id, name in filenames.items()}
         destinations = [replace(record, edited_filename=filenames[record.image_id]) if record.image_id in filenames else record for record in records]
         for record in records:
             self._assert_image_editable(record.image_id)
         _read_mosaic_divisor(divisor)
-        suffix = _read_save_suffix(suffix)
         if output_format not in {"original", "png", "jpg"} or not isinstance(keep_metadata, bool) or (output_format == "jpg" and keep_metadata):
             raise ClientError("保存形式が正しくありません。", "input_invalid")
         with self.lock:

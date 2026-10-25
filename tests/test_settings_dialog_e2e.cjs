@@ -300,6 +300,35 @@ test("SD-096 update check shows current and latest versions then starts the conf
   });
 });
 
+test("update preparation stays visible, prevents duplicate starts and permits retry after failure", { timeout: 60000 }, async () => {
+  await withSettingsPage(async (page, fixture) => {
+    fixture.setUpdateAvailable(true);
+    await page.locator('[data-settings-tab="info"]').click();
+    await page.locator("#checkUpdateButton").click();
+    await page.waitForFunction(() => document.querySelector("#checkUpdateButton").dataset.available === "true");
+    let held; let reached;
+    const requested = new Promise((resolve) => { reached = resolve; });
+    await page.route("**/api/update/start", (route) => { held = route; reached(); });
+    await page.locator("#checkUpdateButton").click();
+    await page.locator("#confirmAccept").click();
+    await requested;
+    assert.equal(await page.locator("#checkUpdateButton").isDisabled(), true);
+    assert.match(await page.locator("#updateStatus").textContent(), /検証|verifying/i);
+    await page.evaluate(() => startUpdate());
+    assert.equal(fixture.updateStarts.length, 0);
+    await held.fulfill({ status: 400, json: { error_code: "update_preparation_failed" } });
+    await page.locator("#errorDialog").waitFor({ state: "visible" });
+    assert.match(await page.locator("#errorDialogAction").textContent(), /終了していません|still running/i);
+    await page.locator("#errorDialogClose").click();
+    assert.equal(await page.locator("#checkUpdateButton").isEnabled(), true);
+    await page.unroute("**/api/update/start");
+    await page.locator("#checkUpdateButton").click();
+    await page.locator("#confirmAccept").click();
+    await page.waitForFunction(() => document.querySelector("#updateStatus").textContent.includes("検証が完了"));
+    assert.equal(fixture.updateStarts.length, 1);
+  });
+});
+
 async function saveSettingsAndReload(page) {
   await page.locator("#settingsSaveButton").click();
   await page.waitForFunction(() => !document.querySelector("#settingsSaveButton").disabled);
