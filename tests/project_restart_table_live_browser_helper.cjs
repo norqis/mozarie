@@ -23,7 +23,7 @@ async function main() {
       const row = document.querySelector(`#projectListBody tr[data-project-id="${id}"]`);
       return {
         project,
-        cells: [...row.children].slice(0, 6).map((cell) => cell.innerText.trim()),
+        cells: [...row.children].map((cell) => cell.innerText.trim()),
       };
     }), expected.map((project) => project.id));
     for (let index = 0; index < expected.length; index += 1) {
@@ -34,7 +34,7 @@ async function main() {
       }
       const expectedCells = await page.evaluate((project) => [
         projectTitle(project), t(`project.${project.status}`), t("project.imageCount", { count: project.imageCount || 0 }),
-        projectSource(project), projectDate(project.createdAt), projectDate(project.updatedAt),
+        projectDate(project.createdAt), projectDate(project.updatedAt),
       ], project);
       assert.deepEqual(row.cells, expectedCells, `restart project table displays every persisted value for ${project.name}`);
     }

@@ -65,6 +65,7 @@ async function drop(page, names, { target = "#gallery", rejectHandle = false, in
         return route.fulfill({ status: 200, contentType: "application/json", body: "{}" });
       });
       await page.locator("#detectAllButton").click();
+      await page.waitForFunction(() => !state.detectionDialogPreparing);
       await page.locator("#detectConfidenceNumber").fill("0.71");
       const requested = page.waitForResponse((r) => r.url().endsWith("/api/detect"));
       await page.locator("#detectStartButton").click();

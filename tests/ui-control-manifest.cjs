@@ -2,6 +2,7 @@
 // Dynamic template controls deliberately use data-* selectors and are exercised
 // by the candidate, gallery, overview, model, and context-menu E2E cases.
 const ids = `
+projectDetailBack projectDetailResume projectDetailDelete projectDetailMosaic projectDetailExclude
 projectButton projectClose projectNew projectName projectOpenList projectSourceAdd projectSourceRelink projectResume projectComplete projectCloseWorkspace projectListClose projectNameInput projectNameCancel projectNameConfirm sourceMismatchClear sourceMismatchCancel sourceMismatchConfirm sameSourceOpen sameSourceSeparate sameSourceCancel projectDeleteCancel projectDeleteConfirm nativeRelinkPath nativeRelinkCancel nativeRelinkConfirm pickFolder detectAllButton saveAllButton folderPath loadFolderButton pickImages pickFolderFiles settingsButton updateToast batchMoreButton clearAllMasksButton clearCatalogButton galleryFilterButton overviewButton collapseGalleryButton
 brushTool bucketTool mosaicEraserTool eraserTool excludeBucketTool excludeEraserTool boundaryTool rectangleTool polygonTool boundaryBrushTool singleViewButton compareViewButton fitButton flipHorizontalButton flipVerticalButton undoButton redoButton mosaicPreviewButton brushSize mosaicHelpButton divisor bucketTolerance bucketToleranceDecrease bucketToleranceIncrease bucketToleranceClose
 previousImageButton nextImageButton removeAndNextButton removeFromListButton hideAndNextButton reviewAndNextButton boundaryDetectButton boundaryCancelButton collapseInspectorButton detectCurrentButton saveButton downloadCurrentMosaicMask downloadCurrentExcludeMask clearCurrentMasksButton removeCurrentImageButton detectionSettingsButton
@@ -42,6 +43,7 @@ const IMPORTER_TEST = "node:tests/test_import_picker_e2e.cjs::import picker brow
 const PROJECT_ENTRY_TEST = "node:tests/test_project_ui_runtime.cjs::project entry controls open and close their intended dialogs";
 const PROJECT_RUNTIME_TEST = "node:tests/test_project_ui_runtime.cjs::project dialogs, A-B-A switching, failed-open recovery, and duplicate transition guards";
 const PROJECT_CREATION_TEST = "node:tests/test_project_ui_runtime.cjs::project creation, cancellation, duplicate rejection, table columns, and relink payload preserve workspace state";
+const PROJECT_DETAILS_TEST = "node:tests/workspace/test_project_manager_details_e2e.cjs::project manager details keep the catalogue unchanged and expose resume downloads deletion and exact path copying";
 const PROJECT_LIFECYCLE_TEST = "node:tests/test_project_ui_runtime.cjs::project close, complete, resume, and delete produce exact workspace outcomes";
 const PROJECT_CANCEL_TEST = "node:tests/test_project_ui_runtime.cjs::project completion and deletion cancellation preserve the exact project and image list";
 const SAME_SOURCE_TEST = "node:tests/test_project_ui_runtime.cjs::same-source warning offers open separate and cancel without changing work until chosen";
@@ -76,6 +78,11 @@ const exemptions = {
   projectComplete: { reason: "covered by the project lifecycle suite", testIds: [PROJECT_LIFECYCLE_TEST] },
   projectCloseWorkspace: { reason: "covered by the project lifecycle suite", testIds: [PROJECT_LIFECYCLE_TEST] },
   projectListClose: { reason: "covered by the dedicated project entry-control suite", testIds: [PROJECT_ENTRY_TEST] },
+  projectDetailBack: { reason: "covered by real project details navigation and focus restoration", testIds: [PROJECT_DETAILS_TEST] },
+  projectDetailResume: { reason: "covered by real project details resume request and resulting catalogue", testIds: [PROJECT_DETAILS_TEST] },
+  projectDetailDelete: { reason: "covered by project details deletion confirmation and cancellation", testIds: [PROJECT_DETAILS_TEST] },
+  projectDetailMosaic: { reason: "covered by the project details mosaic ZIP download", testIds: [PROJECT_DETAILS_TEST] },
+  projectDetailExclude: { reason: "covered by the project details exclusion ZIP download", testIds: [PROJECT_DETAILS_TEST] },
   projectNameInput: { reason: "covered by the project creation and rename suite", testIds: [PROJECT_CREATION_TEST] },
   projectNameCancel: { reason: "covered by the project creation and rename suite", testIds: [PROJECT_CREATION_TEST] },
   projectNameConfirm: { reason: "covered by the project creation and rename suite", testIds: [PROJECT_CREATION_TEST] },
@@ -151,7 +158,8 @@ const dynamicControls = [
     ["[data-overview-filter]", "change", "navigation", "overview", "overview", "overview:data-overview-filter", "filters the overview fixture"],
     ["[data-selection-action]", "click", "api", "overview", "overview", "overview:data-selection-action", "applies an isolated selection action"],
     ["[data-project-sort]", "click", "navigation", "workspace", "workspace", "workspace:data-project-sort", "sorts the project table"],
-    ['[data-project-action="open"]', "click", "api", "workspace", "workspace", "workspace:data-project-action:open", "opens the exact selected project and replaces the catalog"],
+    ['[data-project-action="open"]', "click", "dialog", "workspace", "workspace", "workspace:data-project-action:open", "shows details without changing the current catalogue"],
+    ['[data-project-action="copy-path"]', "click", "value", "workspace", "workspace", "workspace:data-project-action:copy-path", "copies the exact native source path"],
     ['[data-project-action="mosaic"]', "click", "download", "workspace", "workspace", "workspace:data-project-action:mosaic", "downloads the selected project's mosaic masks"],
     ['[data-project-action="exclude"]', "click", "download", "workspace", "workspace", "workspace:data-project-action:exclude", "downloads the selected project's exclusion masks"],
     ['[data-project-action="delete"]', "click", "dialog", "workspace", "workspace", "workspace:data-project-action:delete", "opens deletion confirmation for the exact selected project"],
@@ -202,7 +210,9 @@ const anonymousStaticControls = [
 // creates it, so a removed operation fails this compact contract check.
 const dynamicSurfaceContracts = [
   { selector: "[data-project-sort]", source: "static/index.html", markers: ['data-project-sort="name"', 'data-project-sort="created"', 'data-project-sort="updated"'] },
-  ...["open", "mosaic", "exclude", "delete"].map((action) => ({ selector: `[data-project-action="${action}"]`, source: "static/js/app.js", markers: ["button.dataset.projectAction = action", `projectActionButton(project, "${action}"`] })),
+  { selector: '[data-project-action="open"]', source: "static/js/app.js", markers: ['projectActionButton(project, "open"'] },
+  { selector: '[data-project-action="copy-path"]', source: "static/js/app.js", markers: ['copy.dataset.projectAction = "copy-path"'] },
+  ...["mosaic", "exclude", "delete"].map((action) => ({ selector: `[data-project-action="${action}"]`, source: "static/index.html", markers: [`data-project-action="${action}"`] })),
   { selector: "#projectBrowserRestoreList button", source: "static/js/app.js", markers: ['const list = $("#projectBrowserRestoreList")', "restoreBrowserProjectSource(source)"] },
   { selector: "#nativeRelinkSources button", source: "static/js/app.js", markers: ['const list = $("#nativeRelinkSources")', "nativeRelinkSourceId = item.id"] },
   { selector: "#sameSourceList button", source: "static/js/app.js", markers: ['const list = $("#sameSourceList")', "sameSourceSelectedProjectId = project.id"] },

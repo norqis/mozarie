@@ -141,7 +141,9 @@
         "python:tests.gallery.test_catalog_order_and_numbering.CatalogOrderAndSaveTests.test_numbered_output_extension_matches_the_selected_format",
         "python:tests.gallery.test_catalog_order_and_numbering.CatalogOrderAndSaveTests.test_numbered_copy_respects_format_and_metadata_settings",
         "python:tests.gallery.test_catalog_order_and_numbering.CatalogOrderAndSaveTests.test_live_reorder_and_numbering_copy_and_overwrite_use_the_applied_order",
-        "node:tests/gallery/test_catalog_reorder_e2e.cjs::overview scrolling, native drag suppression, reorder drafts and numbering controls"
+        "node:tests/gallery/test_catalog_reorder_e2e.cjs::overview scrolling, native drag suppression, reorder drafts and numbering controls",
+        "python:tests.saving.test_numbered_overwrite_batches.NumberedOverwriteBatchTests.test_two_cycle_with_unchanged_third_and_three_cycle_keep_identity_and_pixels",
+        "python:tests.saving.test_numbered_overwrite_batches.NumberedOverwriteBatchTests.test_external_conflicts_are_all_reported_before_tokens_or_writes"
       ]
     },
     {

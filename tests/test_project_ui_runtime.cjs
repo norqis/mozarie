@@ -104,6 +104,8 @@ for (const name of [
   "openSettings", "selectSettingsTab", "moveSettingsTab", "saveSettings", "resetSettings", "chooseSettingsOutputDirectory", "chooseSettingsModelFile", "startModelDownload", "cancelModelDownload", "beginModelDownload", "syncProviderSelection", "markModelStatusDirty", "selectSamVariant", "startUpdate", "handleToolRailKeydown", "setToolRailTabStop", "setModelCardEnabled", "setHandSegmentationAvailable", "setPrecisionDetectionEnabled", "refreshSettingsStatus", "setFluidExclusionEnabled", "pickImageFiles", "pickImageDirectory", "importDroppedFiles", "loadFolder", "openDetectionDialog", "validateDetectionTargets", "runDetection", "saveAll", "saveCurrent", "setDisplayMode", "fitImage", "updateCompareSplitter", "render", "updateBrushCursor", "updateBrushSize", "setHidden", "clearMasks", "closeBatchMoreMenus", "closeFilterPopovers", "syncResourceOwnership", "clearCatalog", "renderGallery", "setViewMode", "runNavigationAction", "moveCurrentBy", "reviewAndMoveNext", "removeImageFromCatalog", "hideAndMoveNext", "runSelectionAction", "clearBatchSelection", "renderOverview", "updateSelectionActionBar", "reconcileOverviewSelection", "batchCandidateOperation", "toggleCandidateDisplay", "toggleCandidateEffective", "renderShortcutBindings", "setTool", "setBoundaryModeMenuOpen", "addBoundaryCandidate", "cancelBoundary", "setMosaicPreviewEnabled", "requestMosaicPreview", "updateBlockSizeDisplay", "setDetectionConfidence", "syncDetectionTargetSwitch", "syncDetectionFluidColorFill", "validateDetectionFluidColorFill", "startDetectionFromDialog", "restoreSnapshot", "resizeRenderCanvas", "refreshApplyTargets", "chooseOutputDirectory", "syncApplyMode", "controlApply", "startApplyFromDialog", "chooseSingleOutputDirectory", "syncSingleSaveMode", "startSingleSave", "showProcessing", "updateProgress", "scheduleJobPoll", "cancelDetection", "setReviewed", "closeCatalogContextMenu", "copyContextMenuImagePath", "setGalleryDropOverlay", "beginBoundaryBrushStroke", "appendBoundaryBrushPoint", "beginManualStroke", "appendManualStrokePoint", "fillAt", "completeManualStroke", "cancelManualStroke", "completeBoundaryBrushStroke", "flushRender", "closeBoundaryModeMenu", "cancelFillWork", "handleWindowKeydown", "addBoundaryDraft", "setSettingsForm", "initCandidatePaddingPopover", "initCatalogReorder",
 ]) if (!(name in context)) context[name] = () => {};
 context.canvas = new Element("canvas"); context.stage = new Element("stage"); context.toolRail = new Element("toolRail"); context.toolRailItems = () => []; context.modelDownloadPoll = null;
+context.resetDetectionDialogState = () => {};
+context.openAllDetectionDialog = () => {};
 
 const appPath = path.join(__dirname, "..", "static", "js", "app.js");
 const corePath = path.join(__dirname, "..", "static", "js", "core.js");
@@ -194,7 +196,7 @@ nodeTest("project dialogs, A-B-A switching, failed-open recovery, and duplicate 
   for (const sort of ["updated_desc", "updated_asc", "name_asc", "name_desc", "created_desc", "created_asc"]) {
     element("#projectSort").value = sort; await test.showProjectList();
     assert.equal(element("#projectListBody").children.length, projects.length, `${sort} renders every project`);
-    assert.equal(element("#projectListBody").children.every((row) => row.children.at(-1).children[0].children.some((child) => child.textContent === "project.deleteShort")), true, `${sort} exposes delete for every project`);
+    assert.equal(element("#projectListBody").children.every((row) => row.children.length === 5), true, `${sort} exposes the five summary columns`);
   }
   openPayload = { project: projects[0], images: [{ id: "native" }], needsSource: false };
   await test.openProject(projects[0]); assert.equal(state.images[0].id, "native", "native projects open immediately");
@@ -359,10 +361,10 @@ nodeTest("project dialogs, A-B-A switching, failed-open recovery, and duplicate 
     await new Promise((resolve) => setImmediate(resolve));
     const rows = element("#projectListBody").children;
     const emptyRow = rows.find((row) => row.dataset.projectId === empty.id);
-    assert.equal(emptyRow.querySelector('[data-project-action="mosaic"]').disabled, true, "an empty project disables mosaic ZIP only");
-    assert.equal(emptyRow.querySelector('[data-project-action="exclude"]').disabled, true, "an empty project disables exclusion ZIP only");
+    assert.equal(emptyRow.querySelector('[data-project-action="mosaic"]'), null, "downloads are shown in the details view");
+    assert.equal(emptyRow.querySelector('[data-project-action="exclude"]'), null, "downloads are shown in the details view");
     assert.equal(emptyRow.querySelector('[data-project-action="open"]').disabled, false, "an empty project can still be opened");
-    assert.equal(emptyRow.querySelector('[data-project-action="delete"]').disabled, false, "an empty project can still be deleted");
+    assert.equal(emptyRow.querySelector('[data-project-action="delete"]'), null, "deletion is shown in the details view");
 
     const working = { id: "working-export", name: "Working", status: "working", imageCount: 1 };
     state.project = working; state.projectReadOnly = false; state.images = [{ id: "draft" }]; state.currentId = "draft";
@@ -475,6 +477,7 @@ nodeTest("project creation, cancellation, duplicate rejection, table columns, an
   const listedProjects = projects.map((project, index) => ({ ...project, createdAt: 1_000_000 + index, updatedAt: 2_000_000 + index }));
   context.api = async (url, options = {}) => {
     if (url.startsWith("/api/projects?")) return { projects: listedProjects };
+    if (url.startsWith("/api/project/detail?")) return { project: listedProjects.find((item) => item.id === new URL(url, "http://fixture").searchParams.get("projectId")), sources: [] };
     if (url === "/api/project/open") {
       const projectId = JSON.parse(options.body).projectId; const project = listedProjects.find((item) => item.id === projectId);
       return { project, images: [{ id: `${projectId}-image` }], needsSource: false };
@@ -484,25 +487,23 @@ nodeTest("project creation, cancellation, duplicate rejection, table columns, an
   await test.showProjectList();
   const rows = element("#projectListBody").children;
   assert.equal(rows.length, 3, "project management lists every project");
-  assert.equal(rows.every((row) => row.children.length === 7), true, "every row renders name, status, image count, source, created, updated, and actions columns");
+  assert.equal(rows.every((row) => row.children.length === 5), true, "every row renders name, status, image count, created, and updated columns");
   rows.forEach((row, index) => {
     const project = listedProjects[index];
     assert.equal(row.children[0].children[0].textContent, project.name);
     assert.equal(row.children[1].children[0].textContent, `project.${project.status}`);
     assert.equal(row.children[2].children[0].textContent, `${project.imageCount}枚`);
-    assert.equal(row.children[3].children[0].textContent, project.sourceRoot);
-    assert.equal(row.children[4].children[0].textContent, test.projectDate(project.createdAt));
-    assert.equal(row.children[5].children[0].textContent, test.projectDate(project.updatedAt));
-    assert.equal(row.children[6].children[0].children.length, 3, "the actions column contains mosaic, exclusion, and delete controls");
+    assert.equal(row.children[3].children[0].textContent, test.projectDate(project.createdAt));
+    assert.equal(row.children[4].children[0].textContent, test.projectDate(project.updatedAt));
   });
   const opensBeforeBackgroundClick = calls.filter(([kind, url]) => kind === "api" && url === "/api/project/open").length;
-  await element("#projectList").listeners.get("click")({ target: rows[0] });
+  await element("#projectListDialog").listeners.get("click")({ target: rows[0] });
   assert.equal(calls.filter(([kind, url]) => kind === "api" && url === "/api/project/open").length, opensBeforeBackgroundClick, "clicking row background does not open a project");
   const secondOpen = rows[1].children[0].children[0]; secondOpen.closest = () => secondOpen;
-  await element("#projectList").listeners.get("click")({ target: secondOpen });
-  for (let attempt = 0; attempt < 5 && state.project?.id !== listedProjects[1].id; attempt += 1) await new Promise((resolve) => setImmediate(resolve));
-  assert.equal(state.project.id, listedProjects[1].id, "the row Open control opens that exact project");
-  assert.equal(state.images[0].id, `${listedProjects[1].id}-image`, "row Open replaces the catalog with the selected project images");
+  await element("#projectListDialog").listeners.get("click")({ target: secondOpen });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(calls.filter(([kind, url]) => kind === "api" && url === "/api/project/open").length, opensBeforeBackgroundClick,
+    "the row control shows details without opening a project");
 
   state.project = projects[0]; state.images = [{ id: "native-image", sourceId: "native-a" }]; state.missingNativeSources = [{ id: "native-a", displayName: "Old", nativePath: "C:/old", kind: "native-folder", exists: false }];
   let relinkPayload = null; let pickerCalls = 0; context.window.showDirectoryPicker = async () => { pickerCalls += 1; return {}; };

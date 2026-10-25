@@ -275,7 +275,7 @@
       "testIds": [
         "node:tests/test_import_picker_e2e.cjs::import picker browser coverage",
         "python:tests.gallery.test_catalog_order_and_numbering.CatalogOrderAndSaveTests.test_reorder_persists_across_project_reopen_and_rejects_stale_membership",
-          "python:tests.gallery.test_catalog_order_and_numbering.CatalogOrderAndSaveTests.test_removed_images_preserve_remaining_order_and_new_imports_append_in_arrival_order",
+        "python:tests.gallery.test_catalog_order_and_numbering.CatalogOrderAndSaveTests.test_removed_images_preserve_remaining_order_and_new_imports_append_in_arrival_order",
         "node:tests/gallery/test_catalog_reorder_e2e.cjs::overview scrolling, native drag suppression, reorder drafts and numbering controls"
       ]
     },
@@ -1116,7 +1116,9 @@
       "observation": "PJの追加・名前変更を行わない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_project_ui_runtime.cjs::project creation, cancellation, duplicate rejection, table columns, and relink payload preserve workspace state"
+        "node:tests/test_project_ui_runtime.cjs::project creation, cancellation, duplicate rejection, table columns, and relink payload preserve workspace state",
+        "node:tests/workspace/test_project_manager_details_e2e.cjs::project manager details keep the catalogue unchanged and expose resume downloads deletion and exact path copying",
+        "node:tests/workspace/test_project_manager_details_e2e.cjs::project detail responses cannot reopen a cancelled or newer view and failures preserve current work"
       ]
     },
     {
@@ -1125,10 +1127,8 @@
         "WS-064"
       ],
       "observation": "名前・状態・画像数・元フォルダー・作成日時・更新日時・行操作を表で表示する",
-      "status": "automated",
-      "testIds": [
-        "node:tests/test_project_ui_runtime.cjs::project creation, cancellation, duplicate rejection, table columns, and relink payload preserve workspace state"
-      ]
+      "status": "retired",
+      "retirementReason": "利用者の要望により一覧を5列にし、行クリックで詳細を表示してから再開する仕様へ変更したため。"
     },
     {
       "key": "WS-065.1",
@@ -1136,10 +1136,8 @@
         "WS-065"
       ],
       "observation": "その行のPJを開く",
-      "status": "automated",
-      "testIds": [
-        "node:tests/test_project_ui_runtime.cjs::project creation, cancellation, duplicate rejection, table columns, and relink payload preserve workspace state"
-      ]
+      "status": "retired",
+      "retirementReason": "行クリックは利用者の要望により詳細を表示し、詳細内の再開ボタンで開く仕様へ変更したため。"
     },
     {
       "key": "WS-066.1",
@@ -1147,10 +1145,8 @@
         "WS-066"
       ],
       "observation": "PJを開かず、選択による別操作パネルを出さない",
-      "status": "automated",
-      "testIds": [
-        "node:tests/test_project_ui_runtime.cjs::project creation, cancellation, duplicate rejection, table columns, and relink payload preserve workspace state"
-      ]
+      "status": "retired",
+      "retirementReason": "利用者の要望により一覧を5列にし、行クリックで詳細を表示してから再開する仕様へ変更したため。"
     },
     {
       "key": "WS-067.1",
@@ -1271,7 +1267,9 @@
       "status": "automated",
       "testIds": [
         "python:tests.workspace.test_project_catalog_lifecycle.ProjectCatalogCoverageTests.test_project_completion_and_deletion_have_exact_persistent_outcomes",
-        "node:tests/test_project_ui_runtime.cjs::project close, complete, resume, and delete produce exact workspace outcomes"
+        "node:tests/test_project_ui_runtime.cjs::project close, complete, resume, and delete produce exact workspace outcomes",
+        "node:tests/workspace/test_project_manager_details_e2e.cjs::project manager details keep the catalogue unchanged and expose resume downloads deletion and exact path copying",
+        "node:tests/workspace/test_project_manager_details_e2e.cjs::project detail responses cannot reopen a cancelled or newer view and failures preserve current work"
       ]
     },
     {
@@ -1305,7 +1303,9 @@
       "status": "automated",
       "testIds": [
         "node:tests/test_workspace_contract_browser.cjs::completed projects keep browsing and exports enabled while every mutation stays disabled",
-        "python:tests.workspace.test_project_catalog_lifecycle.ProjectCatalogCoverageTests.test_project_switch_close_restart_and_rename_restore_rich_state_without_cross_project_leakage"
+        "python:tests.workspace.test_project_catalog_lifecycle.ProjectCatalogCoverageTests.test_project_switch_close_restart_and_rename_restore_rich_state_without_cross_project_leakage",
+        "node:tests/workspace/test_project_manager_details_e2e.cjs::project manager details keep the catalogue unchanged and expose resume downloads deletion and exact path copying",
+        "node:tests/workspace/test_project_manager_details_e2e.cjs::project detail responses cannot reopen a cancelled or newer view and failures preserve current work"
       ]
     },
     {

@@ -12,6 +12,7 @@ function indexedDBFixture() {
       return {
         objectStore: () => ({
           get: (key) => ({ result: rows.get(key) }),
+          getAll: (range) => ({ result: [...rows].filter(([key]) => !range || key >= range.lower && key <= range.upper).map(([, value]) => value) }),
           put: (row) => { const key = row.saveToken || row.key; rows.set(key, { ...row }); return { result: key }; },
           delete: (key) => { rows.delete(key); return {}; },
         }),

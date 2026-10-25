@@ -88,6 +88,11 @@ class StudioState(CatalogMixin, SavingMixin, DetectionMixin, JobsMixin):
         self.settings_store = SettingsStore(APP_DIR)
         self.workspace_store = WorkspaceStore(APP_DIR / "data")
         self.save_journal = SaveJournal(APP_DIR / "data")
+        from .numbered_batch import recover_batches
+        try:
+            recover_batches(self)
+        except (OSError, sqlite3.Error) as exc:
+            LOGGER.warning("連番保存ジャーナルの起動時回復を保留しました: %s", exc)
         try:
             self.save_journal.recover_renames(self._recover_rename_operation)
         except (OSError, sqlite3.Error) as exc:
@@ -160,6 +165,7 @@ class StudioState(CatalogMixin, SavingMixin, DetectionMixin, JobsMixin):
         # A claimed token is being committed outside ``lock``. A later prepare
         # must leave its already-written copy alone until the commit finishes.
         self.browser_save_claims: set[str] = set()
+        self.numbered_save_batches: dict[str, tuple[str, ...]] = {}
         self.browser_save_receipts: dict[str, BrowserSaveReceipt] = {}
         self.source_delete_receipts: dict[str, dict[str, Any]] = {}
         self._pending_browser_save_cleanup: list[tuple[Path, tuple[int, int] | None]] = []
@@ -841,8 +847,24 @@ class StudioState(CatalogMixin, SavingMixin, DetectionMixin, JobsMixin):
         """Remove abandoned import sessions without touching a live instance."""
         if not self.session_base_dir.is_dir():
             return
+        from .numbered_batch import batch_rows
+        protected = set()
+        base = self.session_base_dir.resolve()
+        try:
+            pending_batches = batch_rows(self.save_journal)
+        except (OSError, sqlite3.Error) as exc:
+            LOGGER.warning("連番保存の復旧情報を読めないため一時画像の削除を保留しました: %s", exc)
+            return
+        for _token, members in pending_batches:
+            for member in members:
+                for field in ("source", "backup"):
+                    path = Path(member[field]).resolve() if field in member else None
+                    if path is not None and path.is_relative_to(base):
+                        protected.add(base / path.relative_to(base).parts[0])
         cutoff = time.time() - 60
         for session_dir in self.session_base_dir.glob("session-*"):
+            if session_dir.resolve() in protected:
+                continue
             try:
                 if not session_dir.is_dir():
                     continue

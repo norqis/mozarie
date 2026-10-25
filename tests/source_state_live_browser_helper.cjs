@@ -155,7 +155,7 @@ async function main() {
     const completedRow = page.locator(`#projectListBody tr[data-project-id="${completedId}"]`);
     assert.match(await emptyRow.textContent(), /empty-live/);
     assert.match(await emptyRow.textContent(), /0/);
-    assert.equal(await emptyRow.locator('[data-project-action="delete"]').isDisabled(), false, "empty project remains deletable");
+    assert.equal(await emptyRow.locator('[data-project-action="open"]').isDisabled(), false, "empty project details remain accessible");
     assert.match(await completedRow.textContent(), /completed-live/);
     const completedProject = await page.evaluate((id) => projectListProjects.get(id), completedId);
     assert.equal(completedProject.status, "completed");
@@ -163,16 +163,19 @@ async function main() {
     assert.ok(completedProject.createdAt > 0);
     const completedCells = await completedRow.locator(":scope > *").allTextContents();
     const expectedCompletedCells = await page.evaluate((project) => [
-      projectTitle(project), t("project.completed"), t("project.imageCount", { count: 1 }), projectSource(project),
+      projectTitle(project), t("project.completed"), t("project.imageCount", { count: 1 }),
       projectDate(project.createdAt), projectDate(project.updatedAt),
     ], completedProject);
-    assert.deepEqual(completedCells.slice(0, 6).map((value) => value.trim()), expectedCompletedCells, "completed row displays exact status, count, source, createdAt and updatedAt values");
-    assert.equal(await completedRow.locator('[data-project-action="mosaic"]').isDisabled(), false, "completed row retains mosaic ZIP action");
-    assert.equal(await completedRow.locator('[data-project-action="exclude"]').isDisabled(), false, "completed row retains exclusion ZIP action");
-    assert.equal(await completedRow.locator('[data-project-action="delete"]').isDisabled(), false, "completed row retains delete action");
-    assert.equal(await completedRow.locator('[data-project-action="mosaic"], [data-project-action="exclude"], [data-project-action="delete"]').count(), 3, "completed row keeps both ZIP controls and delete");
+    assert.deepEqual(completedCells.map((value) => value.trim()), expectedCompletedCells, "completed row displays exactly the five summary columns");
+    await completedRow.locator('[data-project-action="open"]').click();
+    await page.locator("#projectDetailMosaic").waitFor({ state: "visible" });
+    assert.equal(await page.locator("#projectDetailMosaic").isDisabled(), false, "completed details retain mosaic ZIP action");
+    assert.equal(await page.locator("#projectDetailExclude").isDisabled(), false, "completed details retain exclusion ZIP action");
+    assert.equal(await page.locator("#projectDetailDelete").isDisabled(), false, "completed details retain delete action");
+    await page.locator("#projectDetailBack").click();
 
     await emptyRow.locator('[data-project-action="open"]').click();
+    await page.locator("#projectDetailResume").click();
     await waitForCatalog(page, emptyId, 0);
     assert.deepEqual(await page.evaluate(() => ["saveButton", "detectCurrentButton", "clearCurrentMasksButton", "undoButton", "redoButton"].map((id) => document.getElementById(id).disabled)), [true, true, true, true, true], "empty project disables image edit and save actions");
     assert.equal(await page.locator("#pickFolder").isDisabled(), false, "empty project still permits image import");
@@ -188,10 +191,8 @@ async function main() {
       return { createdAt: project.createdAt, updatedAt: project.updatedAt };
     }, completedId);
     await page.locator(`#projectListBody tr[data-project-id="${completedId}"] [data-project-action="open"]`).click();
+    await page.locator("#projectDetailResume").click();
     await waitForCatalog(page, completedId, 1);
-    await page.locator("#projectButton").click();
-    await page.waitForFunction(() => document.querySelector("#projectDialog").open && !document.querySelector("#projectResume").hidden);
-    await page.locator("#projectResume").click();
     await page.waitForFunction((id) => state.project?.id === id && state.project.status === "working" && !state.projectReadOnly, completedId);
     await page.evaluate(() => showProjectList());
     await page.waitForFunction(() => document.querySelector("#projectListDialog").open);

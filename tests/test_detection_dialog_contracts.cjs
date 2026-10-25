@@ -66,6 +66,7 @@ test("individual detection settings save all shared options without changing bat
     assert.deepEqual(fixture.detectRequests.at(-1), { imageIds: ["sample"], confidence: 0.64, parallelism: 1, targetClasses: ["penis"], fluidColorFillEnabled: false, fluidColorFillTolerance: 41 });
     await page.waitForFunction(() => !state.processing && !isBusy());
     await page.locator("#detectAllButton").click();
+    await page.waitForFunction(() => !state.detectionDialogPreparing);
     assert.equal(await page.locator("#detectParallelismRow").isVisible(), true);
     assert.equal(await page.locator("#detectImageFilters").isVisible(), true);
     assert.equal(await page.locator("#detectConfidenceNumber").inputValue(), "0.64");
@@ -134,6 +135,7 @@ test("SD-049 editor confidence slider keeps display and request value identical"
 test("SD-050 all-image confidence number synchronizes the slider and start request", { timeout: 60000 }, async () => {
   await withPage(async (page, fixture) => {
     await page.locator("#detectAllButton").click();
+    await page.waitForFunction(() => !state.detectionDialogPreparing);
     await page.locator("#detectConfidenceNumber").fill("1.00");
     await page.locator("#detectConfidenceNumber").dispatchEvent("input");
     assert.equal(await page.locator("#detectConfidenceRange").inputValue(), "1");
@@ -192,6 +194,7 @@ test("SD-053 all-image dialog counts only processable non-hidden images before s
     await page.evaluate(() => { state.images[1].hidden = true; state.hiddenImageIds.add(state.images[1].id); renderCatalogViews(); updateActionButtons(); });
     const before = fixture.detectRequests.length;
     await page.locator("#detectAllButton").click();
+    await page.waitForFunction(() => !state.detectionDialogPreparing);
     await page.waitForFunction(() => document.querySelector("#detectDialog").open);
     assert.match(await page.locator("#detectTargetCount").textContent(), /1/);
     assert.equal(fixture.detectRequests.length, before);
@@ -202,6 +205,7 @@ test("SD-054 cancelling the all-image dialog starts no detection", { timeout: 60
   await withPage(async (page, fixture) => {
     const before = fixture.detectRequests.length;
     await page.locator("#detectAllButton").click();
+    await page.waitForFunction(() => !state.detectionDialogPreparing);
     await page.locator("#detectCancelButton").click();
     await page.waitForFunction(() => !document.querySelector("#detectDialog").open);
     assert.equal(fixture.detectRequests.length, before);
@@ -213,6 +217,7 @@ function targetSelectionContract(penis, pussy, targets) {
   return async () => {
     await withPage(async (page, fixture) => {
       await page.locator("#detectAllButton").click();
+      await page.waitForFunction(() => !state.detectionDialogPreparing);
       await page.evaluate(({ penis, pussy }) => {
         for (const [id, checked] of [["dialogTargetPenis", penis], ["dialogTargetPussy", pussy]]) {
           const input = document.getElementById(id); input.checked = checked; input.dispatchEvent(new Event("change", { bubbles: true }));
@@ -232,6 +237,7 @@ test("SD-022 both-target detection sends both selected target classes", { timeou
 test("SD-023 detection rejects an empty target selection without creating candidates", { timeout: 60000 }, async () => {
   await withPage(async (page, fixture) => {
     await page.locator("#detectAllButton").click();
+    await page.waitForFunction(() => !state.detectionDialogPreparing);
     await page.evaluate(() => {
       for (const id of ["dialogTargetPenis", "dialogTargetPussy"]) { const input = document.getElementById(id); input.checked = false; input.dispatchEvent(new Event("change", { bubbles: true })); }
     });
@@ -246,6 +252,7 @@ test("SD-023 detection rejects an empty target selection without creating candid
 test("SD-127 detection dialog persists distinct apply and exclusion padding", { timeout: 60000 }, async () => {
   await withPage(async (page, fixture) => {
     await page.locator("#detectAllButton").click();
+    await page.waitForFunction(() => !state.detectionDialogPreparing);
     await page.locator("#detectCandidatePadding").fill("3");
     await page.locator("#detectExcludeCandidatePadding").fill("11");
     assert.deepEqual(await page.locator("#detectForm").evaluate(() => [
@@ -259,6 +266,7 @@ test("SD-127 detection dialog persists distinct apply and exclusion padding", { 
     assert.equal(detection.default_exclude_candidate_padding_px, 11);
     await page.waitForFunction(() => !state.processing && !isBusy());
     await page.locator("#detectAllButton").click();
+    await page.waitForFunction(() => !state.detectionDialogPreparing);
     assert.equal(await page.locator("#detectCandidatePadding").inputValue(), "3");
     assert.equal(await page.locator("#detectExcludeCandidatePadding").inputValue(), "11");
   });
@@ -267,6 +275,7 @@ test("SD-127 detection dialog persists distinct apply and exclusion padding", { 
 test("SD-131 invalid padding blocks detection while zero remains valid", { timeout: 60000 }, async () => {
   await withPage(async (page, fixture) => {
     await page.locator("#detectAllButton").click();
+    await page.waitForFunction(() => !state.detectionDialogPreparing);
     const before = fixture.detectRequests.length;
     for (const invalid of ["-1", "1.5", ""]) {
       await page.locator("#detectCandidatePadding").fill(invalid);
@@ -322,6 +331,7 @@ test("SD-129 selected-image run uses the saved apply and exclusion padding for o
 test("SD-130 all-image run persists and uses the dialog apply and exclusion padding for every visible image", { timeout: 60000 }, async () => {
   await withPage(async (page, fixture) => {
     await page.locator("#detectAllButton").click();
+    await page.waitForFunction(() => !state.detectionDialogPreparing);
     await page.locator("#detectCandidatePadding").fill("5");
     await page.locator("#detectExcludeCandidatePadding").fill("13");
     const request = page.waitForResponse((item) => new URL(item.url()).pathname === "/api/detect" && item.request().method() === "POST").then((response) => response.request());
@@ -335,6 +345,7 @@ test("SD-130 all-image run persists and uses the dialog apply and exclusion padd
 test("SD-131 zero padding runs all current and selected routes without substituting a nonzero value", { timeout: 60000 }, async () => {
   await withPage(async (page, fixture) => {
     await page.locator("#detectAllButton").click();
+    await page.waitForFunction(() => !state.detectionDialogPreparing);
     await page.locator("#detectCandidatePadding").fill("0");
     await page.locator("#detectExcludeCandidatePadding").fill("0");
     await page.locator("#detectStartButton").click();

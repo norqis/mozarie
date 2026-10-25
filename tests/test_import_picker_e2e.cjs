@@ -291,6 +291,12 @@ function startFixtureServer(options = {}) {
       response.end(JSON.stringify({ projects: listedProjects }));
       return;
     }
+    if (requestPath === "/api/project/detail" && request.method === "GET") {
+      const project = listedProjects.find((item) => item.id === new URL(request.url, "http://fixture").searchParams.get("projectId"));
+      response.writeHead(project ? 200 : 404, { "Content-Type": "application/json" });
+      response.end(JSON.stringify(project ? { project, sources: [{ kind: "native-folder", displayName: "Fixture", nativePath: project.sourceRoot }] } : { error_code: "project_not_found" }));
+      return;
+    }
     if (requestPath === "/api/project/mismatches" && request.method === "GET") {
       response.writeHead(200, { "Content-Type": "application/json" });
       response.end(JSON.stringify({ images: [] }));
@@ -1389,15 +1395,24 @@ async function runDynamicProjectAndShortcutScenario(browser, fixtureUrl, setting
     recordDynamicControl("[data-project-sort]");
 
     await page.locator('[data-project-action="open"]').click();
+    await page.locator("#projectDetailResume").click();
     await page.waitForFunction(() => document.querySelector("#projectListDialog")?.open === false && state.project?.id === "ledger-project");
     await page.locator('.gallery-item[data-id="sample"]').waitFor({ state: "visible" });
     assert.equal(sameSourceOpenRequests.length, 1, "opening the listed project sends one project-open request");
     assert.equal(sameSourceOpenRequests.at(-1).projectId, "ledger-project", "Open submits the exact selected row project");
-    assert.equal(sameSourceOpenRequests.at(-1).resume, false, "Open does not silently resume the working project");
+    assert.equal(sameSourceOpenRequests.at(-1).resume, true, "Resume explicitly opens the selected project for editing");
     assert.equal(Number.isInteger(sameSourceOpenRequests.at(-1).expectedCatalogGeneration), true, "Open carries the visible catalog generation");
     recordDynamicControl('[data-project-action="open"]');
 
     await page.locator("#projectButton").click(); await page.locator("#projectOpenList").click();
+    await page.locator('[data-project-action="open"]').click();
+    await page.locator('[data-project-action="copy-path"]').waitFor();
+    await page.evaluate(() => {
+      Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText: async (text) => { window.__copiedProjectPath = text; } } });
+    });
+    await page.locator('[data-project-action="copy-path"]').click();
+    assert.equal(await page.evaluate(() => window.__copiedProjectPath), "G:\\ledger-source", "the project detail copy control uses the complete native path");
+    recordDynamicControl('[data-project-action="copy-path"]');
     await page.locator('[data-project-action="mosaic"]').waitFor();
     const [mosaicDownload] = await Promise.all([page.waitForEvent("download"), page.locator('[data-project-action="mosaic"]').click()]);
     assert.equal(mosaicDownload.suggestedFilename(), "Ledger project-mosaic-masks.zip", "Mosaic ZIP exports the exact selected project with its visible name");
@@ -4220,6 +4235,7 @@ async function main() {
     const persistedDetection = await page.evaluate(() => structuredClone(state.settings.detection));
     failNextSettingsSave();
     await page.locator("#detectAllButton").click();
+    await page.waitForFunction(() => !state.detectionDialogPreparing);
     await page.locator("label.target-chip:has(#dialogTargetPenis)").click();
     await page.locator("label.target-chip:has(#dialogTargetPussy)").click();
     await page.locator("#detectConfidenceNumber").fill("0.67");
@@ -4264,10 +4280,12 @@ async function main() {
     assert.equal(await page.locator("#settingsGpuDevice").inputValue(), "3", "the saved GPU choice survives reopening after reload");
     await page.locator("#settingsCloseButton").click();
     await page.locator("#detectAllButton").click();
+    await page.waitForFunction(() => !state.detectionDialogPreparing);
     assert.equal(await page.locator("#detectParallelism").inputValue(), "4", "the saved GPU worker count survives reload");
     await page.locator("#detectDialog").evaluate((dialog) => dialog.close());
     holdDetection(true);
     await page.locator("#detectAllButton").click();
+    await page.waitForFunction(() => !state.detectionDialogPreparing);
     const heldDetectionStarted = page.waitForResponse((response) => response.url().includes("/api/detect") && response.request().method() === "POST");
     await page.locator("#detectStartButton").click();
     await heldDetectionStarted;
