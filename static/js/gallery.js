@@ -98,6 +98,7 @@ function setCatalogNode(windowState, image, index, layout, rowNode) {
   item.dataset.id = image.id; item.dataset.index = String(index); item.style.width = ""; item.style.height = `${layout.rowHeight - options.gap}px`; item.style.transform = "";
   const current = image.id === state.currentId;
   item.classList.toggle("reorder-selected", scope === "overview" && image.id === state.reorder?.selectedId);
+  item.classList.toggle("reorder-placeholder", scope === "overview" && ((Boolean(state.reorder?.drag?.moved) && image.id === state.reorder.drag.id) || state.reorder?.settle?.node === item));
   const batchSelected = scope === "overview" && state.batchMode && state.selectedImageIds.has(image.id);
   item.classList.toggle("current", current); item.classList.toggle("batch-selected", batchSelected); item.classList.toggle("hidden", isHidden(image));
   if (current) item.setAttribute("aria-current", "true"); else item.removeAttribute?.("aria-current");

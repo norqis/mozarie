@@ -68,8 +68,25 @@ test("overview scrolling, native drag suppression, reorder drafts and numbering 
     const target = page.locator('.overview-item[data-id="page-3"]');
     const from = await source.boundingBox(), to = await target.boundingBox();
     await page.mouse.move(from.x + from.width / 2, from.y + 30); await page.mouse.down();
-    await page.mouse.move(to.x + to.width / 2, to.y + 30, { steps: 8 }); await page.mouse.up();
+    await page.mouse.move(to.x + to.width / 2, to.y + 30, { steps: 8 });
     await page.waitForFunction(() => state.reorder.ids[3] === "page-0");
+    const preview = await page.evaluate(() => {
+      const ghost = document.querySelector(".reorder-ghost");
+      const bounds = ghost.getBoundingClientRect();
+      return { x: bounds.x, y: bounds.y, width: bounds.width,
+        pointerEvents: getComputedStyle(ghost).pointerEvents,
+        placeholder: document.querySelector('.overview-item[data-id="page-0"]').classList.contains("reorder-placeholder"),
+        original: state.images[0].id,
+        animations: [...state.reorder.drag.animations.values()].length };
+    });
+    assert.ok(Math.abs(preview.x - to.x) < 2);
+    assert.ok(Math.abs(preview.y - to.y) < 2);
+    assert.ok(Math.abs(preview.width - from.width) < 2);
+    assert.equal(preview.pointerEvents, "none"); assert.equal(preview.placeholder, true);
+    assert.equal(preview.original, "page-0"); assert.ok(preview.animations > 0);
+    await page.mouse.up();
+    await page.waitForFunction(() => state.reorder.ids[3] === "page-0");
+    await page.waitForFunction(() => !document.querySelector(".reorder-ghost, .reorder-placeholder"));
     assert.equal(imports.length, 0);
     await page.locator("#reorderCancel").click();
     assert.deepEqual(await page.evaluate(() => state.images.map((image) => image.id)), original);
@@ -167,5 +184,76 @@ test("overview scrolling, native drag suppression, reorder drafts and numbering 
     await page.waitForFunction(() => !state.importing && state.images.some((image) => image.relativePath === "external.png"));
     assert.equal(imports.length, 1);
     assert.deepEqual(pageErrors, []);
+  } finally { await context.close(); await browser.close(); await closeServer(fixture.server); }
+});
+
+test("reorder drag follows across rows, rolls back cancellation and respects filtered reduced motion", async () => {
+  const fixture = await startFixtureServer();
+  const records = Array.from({ length: 160 }, (_, index) => ({
+    id: `drag-${index}`, relativePath: `folder-${index}/image.png`, sourceKind: "filesystem",
+    width: 100, height: 80, candidateCount: 0, reviewed: index % 2 === 0, hidden: false,
+  }));
+  fixture.setCatalog(records);
+  const browser = await chromium.launch({ headless: true });
+  const context = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+  try {
+    const page = await context.newPage(); const errors = [];
+    page.on("pageerror", (error) => errors.push(error.message));
+    await page.goto(fixture.url, { waitUntil: "domcontentloaded" });
+    await page.waitForFunction(() => state.settings && state.images.length === 160);
+    await page.locator("#overviewButton").click();
+    await page.locator("#reorderImagesButton").click();
+    const begin = async (id) => {
+      const box = await page.locator(`.overview-item[data-id="${id}"]`).boundingBox();
+      await page.mouse.move(box.x + box.width / 2, box.y + 30); await page.mouse.down();
+      return box;
+    };
+    const move = async (id) => {
+      const box = await page.locator(`.overview-item[data-id="${id}"]`).boundingBox();
+      await page.mouse.move(box.x + box.width / 2, box.y + 30, { steps: 6 });
+      return box;
+    };
+    await begin("drag-0");
+    await page.evaluate(() => { window.folderOption = document.querySelector("#overviewFolder option"); });
+    const destination = await move("drag-9");
+    await page.waitForFunction(() => state.reorder.ids[9] === "drag-0");
+    assert.equal(await page.evaluate(() => window.folderOption === document.querySelector("#overviewFolder option")), true,
+      "slot changes retain folder controls instead of rebuilding all folder options");
+    assert.equal(await page.locator(".reorder-placeholder").count(), 1);
+    const ghostBefore = await page.locator(".reorder-ghost").boundingBox();
+    await page.mouse.move(destination.x + destination.width / 2 + 8, destination.y + 34);
+    await page.waitForFunction((x) => Math.abs(document.querySelector(".reorder-ghost").getBoundingClientRect().x - x) < 1, ghostBefore.x + 8);
+    await page.locator("#overviewGrid").evaluate((grid) => grid.dispatchEvent(new PointerEvent("pointercancel", { pointerId: 99 })));
+    assert.equal(await page.locator(".reorder-ghost").count(), 1, "unrelated pointer does not cancel drag");
+    await page.locator("#overviewGrid").evaluate((grid) => grid.dispatchEvent(new PointerEvent("pointercancel", { pointerId: state.reorder.drag.pointerId })));
+    await page.mouse.up();
+    assert.deepEqual(await page.evaluate(() => state.reorder.ids), records.map((record) => record.id));
+    assert.equal(await page.locator(".reorder-ghost, .reorder-placeholder").count(), 0);
+    await begin("drag-0"); await move("drag-2");
+    await page.waitForFunction(() => state.reorder.ids[2] === "drag-0");
+    await page.locator("#overviewGrid").evaluate((grid) => grid.releasePointerCapture(state.reorder.drag.pointerId));
+    await page.waitForFunction(() => !state.reorder.drag); await page.mouse.up();
+    assert.equal(await page.evaluate(() => state.reorder.ids[0]), "drag-0");
+    await begin("drag-0"); await move("drag-9");
+    await page.waitForFunction(() => state.reorder.ids[9] === "drag-0");
+    await page.mouse.up();
+    await page.waitForFunction(() => !state.reorder.settle);
+    assert.equal(await page.locator(".reorder-ghost, .reorder-placeholder").count(), 0);
+    assert.equal(await page.evaluate(() => state.reorder.ids[9]), "drag-0");
+    await page.locator("#reorderCancel").click();
+    assert.deepEqual(await page.evaluate(() => state.images.map((image) => image.id)), records.map((record) => record.id));
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await page.locator("#overviewFilterButton").click();
+    await page.locator('[data-overview-filter="reviewed"]').check();
+    await page.locator("#reorderImagesButton").click();
+    await begin("drag-0"); await move("drag-6");
+    await page.waitForFunction(() => overviewImages()[3].id === "drag-0");
+    assert.equal(await page.evaluate(() => state.reorder.drag.animations.size), 0);
+    assert.equal(await page.evaluate(() => state.reorder.ids.indexOf("drag-1") < state.reorder.ids.indexOf("drag-3")), true);
+    await page.mouse.up();
+    assert.equal(await page.locator(".reorder-ghost, .reorder-placeholder").count(), 0);
+    await page.locator("#reorderCancel").click();
+    assert.deepEqual(await page.evaluate(() => state.images.map((image) => image.id)), records.map((record) => record.id));
+    assert.deepEqual(errors, []);
   } finally { await context.close(); await browser.close(); await closeServer(fixture.server); }
 });

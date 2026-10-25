@@ -296,3 +296,5 @@ SV-011.1 の `gallery/test_catalog_order_and_numbering.py` は2～5桁の最大�
 SV-011.1 の `saving/test_filename_only_save.py` は、加工しないJPEGの名前変更をコピー・上書きで保存し、圧縮データ・画素・EXIFが変わらないことを検証する。従来ジョブと保存tokenの双方、実HTTP・Chromiumの単一保存、ドロップしたOPFSのFileSystemFileHandleも対象にする。ブラウザー所有の画像は元名の消去と新しいhandleへの更新、元名へ戻す連番上書きは保留した手動名の消去まで確認する。親フォルダー選択はOSとの境界だけを置換し、実Windowsダイアログは対象外とする。
 
 `core/test_mask_memory.py` は、除外範囲が存在しない合成で不要な画像全体の除外配列を確保しないことを、NumPyの割当を含むtracemallocのピーク量で検証する。ブラウザーのGC量・プロセスメモリや実GPUの解放を確認した試験とは扱わない。マスクの優先順位・強制除外・除外消しゴム・寸法の規則は既存の `test_mozarie_domain.py` と `core/test_processing_and_service_boundaries.py` で保持する。
+
+画像一覧の順番入替（DI-185.2）は `gallery/test_catalog_reorder_e2e.cjs` で、ドラッグ中の画像追従・移動前の原一覧保持・挿入位置の仮反映・隣接カードのアニメーション・行をまたぐ移動・離した後の後始末・フォルダー選択肢を再構築しないことを検証する。別ポインターの取消は無視し、操作中ポインターの取消・capture喪失ではドラッグ開始時の並びへ戻す。フィルター適用時と動きを減らす設定でも移動・取消を確認する。端の自動スクロールと仮想表示は既存試験で引き続き検証する。

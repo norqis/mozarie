@@ -18,13 +18,13 @@ async function startCatalogReorder() {
   syncReorderControls(); renderOverview(); updateActionButtons();
 }
 
-function syncReorderControls() {
+function syncReorderControls(visibleImages = null) {
   const mode = state.reorder;
   $("#reorderActions").hidden = !mode;
   $("#reorderImagesButton").hidden = Boolean(mode);
   $("#overviewPane").classList.toggle("overview-reordering", Boolean(mode));
   for (const input of document.querySelectorAll("#overviewQuery, #overviewFolder, #overviewFilterButton, #batchModeButton, [data-overview-filter]")) input.disabled = Boolean(mode);
-  const visible = mode ? overviewImages() : [];
+  const visible = mode ? visibleImages || overviewImages() : [];
   const index = visible.findIndex((image) => image.id === mode?.selectedId);
   $("#reorderStatus").textContent = mode ? t("reorder.position", { position: index + 1, count: visible.length }) : "";
   for (const id of ["reorderFirst", "reorderPrevious"]) $("#" + id).disabled = !mode || mode.pending || index <= 0;
@@ -87,15 +87,74 @@ async function applyCatalogReorder() {
   }
 }
 
-function stopReorderDrag() {
+function clearReorderSettle() {
+  const settle = state.reorder?.settle;
+  if (!settle) return;
+  state.reorder.settle = null;
+  settle.animation.cancel(); settle.ghost.remove(); settle.node.classList.remove("reorder-placeholder");
+}
+
+function stopReorderDrag(restore = false, settle = false) {
+  clearReorderSettle();
   const drag = state.reorder?.drag;
   if (!drag) return;
   cancelAnimationFrame(drag.frame);
+  const ghost = drag.ghost;
+  const node = state.overviewNodes.get(drag.id);
+  const destination = node?.getBoundingClientRect();
+  if (ghost && settle && destination && !matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    node.classList.add("reorder-placeholder");
+    const animation = ghost.animate([
+      { transform: ghost.style.transform },
+      { transform: `translate3d(${destination.left}px, ${destination.top}px, 0)` },
+    ], { duration: 140, easing: "ease-out", fill: "forwards" });
+    state.reorder.settle = { ghost, node, animation };
+    animation.onfinish = clearReorderSettle;
+  } else ghost?.remove();
+  for (const animation of drag.animations.values()) animation.cancel();
   state.reorder.drag = null;
   const grid = $("#overviewGrid");
   if (grid.hasPointerCapture?.(drag.pointerId)) grid.releasePointerCapture(drag.pointerId);
   grid.classList.remove("reorder-dragging");
-  for (const item of state.overviewNodes.values()) item.classList.remove("reorder-target");
+  for (const item of state.overviewNodes.values()) if (!state.reorder.settle || item !== node) item.classList.remove("reorder-placeholder");
+  if (restore && drag.moved) { state.reorder.ids = drag.originalIds; renderOverview(); syncReorderControls(); }
+}
+
+function previewReorderDrag(drag) {
+  const mode = state.reorder;
+  const grid = $("#overviewGrid");
+  drag.ghost.style.transform = `translate3d(${drag.x - drag.offsetX}px, ${drag.y - drag.offsetY}px, 0)`;
+  const rect = grid.getBoundingClientRect();
+  if (drag.x < rect.left || drag.x > rect.right || drag.y < rect.top || drag.y > rect.bottom) return;
+  if (drag.y < rect.top + 40) grid.scrollTop -= 14;
+  else if (drag.y > rect.bottom - 40) grid.scrollTop += 14;
+  const windowState = catalogWindows.get("overview");
+  const layout = catalogLayout(windowState);
+  const { padding, gap } = windowState.options;
+  const column = Math.max(0, Math.min(layout.columns - 1, Math.floor((drag.x - rect.left - padding + gap / 2) / (layout.itemWidth + gap))));
+  const row = Math.max(0, Math.floor((drag.y - rect.top + grid.scrollTop - padding) / layout.rowHeight));
+  const visible = windowState.images;
+  const targetIndex = Math.min(visible.length - 1, row * layout.columns + column);
+  const target = visible[targetIndex];
+  if (!target || target.id === drag.id) return;
+  const before = new Map();
+  for (const [id, node] of state.overviewNodes) if (id !== drag.id) before.set(id, node.getBoundingClientRect());
+  for (const animation of drag.animations.values()) animation.cancel();
+  drag.animations.clear();
+  const destination = mode.ids.indexOf(target.id);
+  mode.ids.splice(mode.ids.indexOf(drag.id), 1); mode.ids.splice(destination, 0, drag.id);
+  const sourceIndex = visible.findIndex((image) => image.id === drag.id);
+  const [image] = visible.splice(sourceIndex, 1); visible.splice(targetIndex, 0, image);
+  renderCatalogWindow(windowState); syncReorderControls(visible);
+  if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  for (const [id, node] of state.overviewNodes) {
+    const previous = before.get(id); if (!previous) continue;
+    const current = node.getBoundingClientRect();
+    const x = previous.left - current.left, y = previous.top - current.top;
+    if (x || y) drag.animations.set(id, node.animate([
+      { transform: `translate(${x}px, ${y}px)` }, { transform: "translate(0, 0)" },
+    ], { duration: 160, easing: "ease-out" }));
+  }
 }
 
 function initCatalogReorder() {
@@ -119,21 +178,19 @@ function initCatalogReorder() {
   }, true);
   grid.addEventListener("pointerdown", (event) => {
     const mode = state.reorder; const item = event.target.closest(".overview-item");
-    if (!mode || mode.pending || event.button !== 0 || !item) return;
+    if (!mode || mode.pending || mode.drag || event.button !== 0 || !item) return;
+    clearReorderSettle();
     selectReorderImage(item.dataset.id);
+    const bounds = item.getBoundingClientRect();
     const drag = { id: item.dataset.id, pointerId: event.pointerId, startX: event.clientX, startY: event.clientY,
-      x: event.clientX, y: event.clientY, moved: false, target: null, frame: 0 };
+      x: event.clientX, y: event.clientY, moved: false, frame: 0, originalIds: mode.ids.slice(),
+      offsetX: event.clientX - bounds.left, offsetY: event.clientY - bounds.top, animations: new Map(), ghost: null };
     mode.drag = drag;
     grid.setPointerCapture(event.pointerId);
     const tick = () => {
       if (state.reorder?.drag !== drag) return;
       if (drag.moved) {
-        const rect = grid.getBoundingClientRect();
-        if (drag.y < rect.top + 40) grid.scrollTop -= 14;
-        else if (drag.y > rect.bottom - 40) grid.scrollTop += 14;
-        const target = document.elementFromPoint(drag.x, drag.y)?.closest(".overview-item");
-        drag.target = target?.dataset.id || null;
-        for (const node of state.overviewNodes.values()) node.classList.toggle("reorder-target", node.dataset.id === drag.target);
+        previewReorderDrag(drag);
       }
       drag.frame = requestAnimationFrame(tick);
     };
@@ -143,16 +200,28 @@ function initCatalogReorder() {
     const drag = state.reorder?.drag;
     if (!drag || event.pointerId !== drag.pointerId) return;
     drag.x = event.clientX; drag.y = event.clientY;
-    drag.moved ||= Math.hypot(drag.x - drag.startX, drag.y - drag.startY) > 6;
+    if (!drag.moved && Math.hypot(drag.x - drag.startX, drag.y - drag.startY) > 6) {
+      drag.moved = true;
+      const item = state.overviewNodes.get(drag.id);
+      const bounds = item.getBoundingClientRect();
+      drag.ghost = item.cloneNode(true);
+      drag.ghost.classList.add("reorder-ghost"); drag.ghost.classList.remove("reorder-placeholder");
+      drag.ghost.removeAttribute("id"); drag.ghost.removeAttribute("data-id");
+      drag.ghost.setAttribute("aria-hidden", "true"); drag.ghost.inert = true;
+      drag.ghost.style.width = `${bounds.width}px`; drag.ghost.style.height = `${bounds.height}px`;
+      drag.ghost.style.transform = `translate3d(${drag.x - drag.offsetX}px, ${drag.y - drag.offsetY}px, 0)`;
+      document.body.append(drag.ghost);
+      item.classList.add("reorder-placeholder");
+    }
     grid.classList.toggle("reorder-dragging", drag.moved);
   });
   grid.addEventListener("pointerup", (event) => {
     const mode = state.reorder; const drag = mode?.drag;
     if (!drag || event.pointerId !== drag.pointerId) return;
-    const target = document.elementFromPoint(event.clientX, event.clientY)?.closest(".overview-item")?.dataset.id || drag.target;
-    stopReorderDrag();
-    if (drag.moved && target) moveReorderImage(drag.id, mode.ids.indexOf(target));
+    if (drag.moved) { drag.x = event.clientX; drag.y = event.clientY; previewReorderDrag(drag); }
+    stopReorderDrag(false, drag.moved);
   });
-  grid.addEventListener("pointercancel", stopReorderDrag);
-  grid.addEventListener("lostpointercapture", stopReorderDrag);
+  const cancelDrag = (event) => { if (state.reorder?.drag?.pointerId === event.pointerId) stopReorderDrag(true); };
+  grid.addEventListener("pointercancel", cancelDrag);
+  grid.addEventListener("lostpointercapture", cancelDrag);
 }
