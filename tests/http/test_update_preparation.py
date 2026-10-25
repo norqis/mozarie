@@ -8,13 +8,13 @@ import unittest
 import zipfile
 
 from mozarie import http as http_module
-from tests.saving.test_native_save_transfer import NativeSaveTransferTests
+from tests.saving import test_native_save_transfer as native_fixture
 from tests.test_updater import UPDATE_ARCHIVE_CONTENTS, Response, make_release
 
 
 class UpdatePreparationTests(unittest.TestCase):
     def test_invalid_downloads_leave_server_running_and_next_request_can_update(self):
-        fixture = NativeSaveTransferTests()
+        fixture = native_fixture.NativeSaveTransferTests()
         fixture.setUp()
         self.addCleanup(fixture.tearDown)
         self.addCleanup(setattr, http_module, "_update_start_requested", False)
