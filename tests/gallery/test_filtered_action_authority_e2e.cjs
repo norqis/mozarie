@@ -460,6 +460,7 @@ test("DI-170 through DI-180 explicit all-image scope ignores view filters and ex
     })), { gallery: ["D"], overview: ["C"], processable: ["A", "B", "C"] }, "view filters narrow the two views but never the explicit all-image processing set");
 
     await page.locator("#detectAllButton").click();
+    await page.waitForFunction(() => !state.detectionDialogPreparing);
     await page.waitForFunction(() => document.querySelector("#detectDialog").open);
     assert.match(await page.locator("#detectTargetCount").textContent(), /3件$/, "all-image detection displays every non-hidden target");
     const detectRequest = page.waitForRequest((request) => new URL(request.url()).pathname === "/api/detect");
@@ -683,6 +684,7 @@ test("DI-170.1 all-image detection shows and sends exactly A-D from A-H regardle
       overview: overviewImages().map((image) => image.id),
     })), { gallery: ["E", "F", "G", "H"], overview: ["A"] });
     await page.locator("#detectAllButton").click();
+    await page.waitForFunction(() => !state.detectionDialogPreparing);
     await page.waitForFunction(() => document.querySelector("#detectDialog").open);
     for (const checkbox of await page.locator("[data-detection-image-filter]").all()) if (!(await checkbox.isChecked())) await checkbox.check({ force: true });
     assert.equal(await page.locator("#detectTargetCount").textContent(), "対象: 4件", "A-D are the exact four displayed all-image targets");
@@ -875,6 +877,7 @@ test("DI-175.2 DI-178.2 detection cancel conflict disconnect and held success ne
     let releaseDetect; const held = new Promise((resolve) => { releaseDetect = resolve; }); let allPayload;
     await page.route("**/api/detect", async (route) => { allPayload = route.request().postDataJSON(); await held; await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ kind: "detect", state: "running" }) }); });
     await page.locator("#detectAllButton").click();
+    await page.waitForFunction(() => !state.detectionDialogPreparing);
     for (const checkbox of await page.locator("[data-detection-image-filter]").all()) if (!(await checkbox.isChecked())) await checkbox.check({ force: true });
     assert.equal(await page.locator("#detectTargetCount").textContent(), "対象: 4件");
     await page.locator("#detectStartButton").click(); await page.waitForFunction(() => state.detectionStarting);

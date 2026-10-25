@@ -29,7 +29,37 @@
   </header>
   <button id="updateToast" class="update-toast" type="button" hidden data-i18n="update.available">新しいバージョンがあります</button>
   <dialog id="projectDialog" class="modal-dialog project-dialog" aria-labelledby="projectDialogTitle"><section class="dialog-body"><div class="settings-heading"><h2 id="projectDialogTitle" data-i18n="project.title">プロジェクト</h2><button id="projectClose" type="button" data-i18n="dialog.close">閉じる</button></div><section class="project-dialog-section" aria-labelledby="projectStartSectionTitle"><h3 id="projectStartSectionTitle" data-i18n="project.startSection">プロジェクトを新規作成・開く</h3><div class="project-actions"><button id="projectNew" type="button" data-i18n="project.new">新規プロジェクト</button><button id="projectOpenList" type="button" data-i18n="project.manage">プロジェクト管理</button></div></section><section class="project-dialog-section" aria-labelledby="projectCurrentSectionTitle"><h3 id="projectCurrentSectionTitle" data-i18n="project.currentSection">現在の作業</h3><p id="projectCurrent" class="muted"></p><p id="projectReadOnlyNotice" class="muted" hidden data-i18n="project.readOnly">完了済みのため閲覧専用です。</p><div class="project-actions"><button id="projectName" type="button" data-i18n="project.saveCurrent">この作業をプロジェクトとして保存</button><button id="projectSourceAdd" type="button" data-i18n="project.sourceAdd">フォルダーを追加</button><button id="projectSourceRelink" type="button" hidden data-i18n="project.sourceRelink">不足元フォルダーを再指定</button><button id="projectResume" class="primary" type="button" hidden data-i18n="project.resume">作業を再開</button><button id="projectComplete" class="danger" type="button" data-i18n="project.complete">プロジェクトを完了</button><button id="projectCloseWorkspace" type="button" data-i18n="project.close">閉じる</button></div></section><section id="projectBrowserRestore" class="project-dialog-section" hidden aria-labelledby="projectBrowserRestoreTitle"><h3 id="projectBrowserRestoreTitle" data-i18n="project.sourceRestoreTitle">画像へのアクセスを復元</h3><p class="muted" data-i18n="project.sourceRestoreMessage">復元する画像を選んでください。</p><div id="projectBrowserRestoreList" class="native-relink-sources" role="list"></div></section></section></dialog>
-  <dialog id="projectListDialog" class="modal-dialog project-list-dialog" aria-labelledby="projectListTitle"><section class="dialog-body project-list-body"><div class="settings-heading"><h2 id="projectListTitle" data-i18n="project.manage">プロジェクト管理</h2><button id="projectListClose" type="button" data-i18n="dialog.close">閉じる</button></div><div class="project-table-wrap"><table id="projectList" class="project-table"><thead><tr><th scope="col" class="project-sort-column"><button class="project-sort-button" type="button" data-project-sort="name"><span data-i18n="project.columnName">PJ名</span><span class="project-sort-indicator" aria-hidden="true">▲▼</span></button></th><th scope="col" data-i18n="project.columnStatus">状態</th><th scope="col" data-i18n="project.columnImageCount">画像数</th><th scope="col" data-i18n="project.columnSource">元フォルダー</th><th scope="col" class="project-sort-column"><button class="project-sort-button" type="button" data-project-sort="created"><span data-i18n="project.columnCreated">作成日時</span><span class="project-sort-indicator" aria-hidden="true">▲▼</span></button></th><th scope="col" class="project-sort-column" aria-sort="descending"><button class="project-sort-button" type="button" data-project-sort="updated"><span data-i18n="project.columnUpdated">更新日時</span><span class="project-sort-indicator" aria-hidden="true">▼</span></button></th><th scope="col" data-i18n="project.columnActions">操作</th></tr></thead><tbody id="projectListBody"></tbody></table></div><p id="projectListEmpty" class="project-list-empty" role="status" hidden data-i18n="project.empty">プロジェクトはありません。</p></section></dialog>
+  <dialog id="projectListDialog" class="modal-dialog project-list-dialog" aria-labelledby="projectListTitle">
+    <section class="dialog-body project-list-body">
+      <div class="settings-heading"><h2 id="projectListTitle" data-i18n="project.manage">プロジェクト管理</h2><button id="projectListClose" type="button" data-i18n="dialog.close">閉じる</button></div>
+      <div id="projectListPanel">
+        <div class="project-table-wrap"><table id="projectList" class="project-table"><thead><tr>
+          <th scope="col" class="project-sort-column"><button class="project-sort-button" type="button" data-project-sort="name"><span data-i18n="project.columnName">プロジェクト名</span><span class="project-sort-indicator" aria-hidden="true">▲▼</span></button></th>
+          <th scope="col" data-i18n="project.columnStatus">状態</th><th scope="col" data-i18n="project.columnImageCount">画像数</th>
+          <th scope="col" class="project-sort-column"><button class="project-sort-button" type="button" data-project-sort="created"><span data-i18n="project.columnCreated">作成日時</span><span class="project-sort-indicator" aria-hidden="true">▲▼</span></button></th>
+          <th scope="col" class="project-sort-column" aria-sort="descending"><button class="project-sort-button" type="button" data-project-sort="updated"><span data-i18n="project.columnUpdated">更新日時</span><span class="project-sort-indicator" aria-hidden="true">▼</span></button></th>
+        </tr></thead><tbody id="projectListBody"></tbody></table></div>
+        <p id="projectListEmpty" class="project-list-empty" role="status" hidden data-i18n="project.empty">プロジェクトはありません。</p>
+      </div>
+      <section id="projectDetailPanel" hidden>
+        <button id="projectDetailBack" type="button" data-i18n="project.backToList">一覧に戻る</button>
+        <p id="projectDetailLoading" role="status" data-i18n="project.loadingDetails">詳細を読み込んでいます。</p>
+        <p id="projectDetailError" role="alert" hidden></p>
+        <div id="projectDetailContent" hidden>
+          <h3 id="projectDetailName" tabindex="-1"></h3>
+          <dl class="project-detail-summary">
+            <dt data-i18n="project.columnStatus">状態</dt><dd id="projectDetailStatus"></dd>
+            <dt data-i18n="project.columnImageCount">画像数</dt><dd id="projectDetailCount"></dd>
+            <dt data-i18n="project.columnCreated">作成日時</dt><dd id="projectDetailCreated"></dd>
+            <dt data-i18n="project.columnUpdated">更新日時</dt><dd id="projectDetailUpdated"></dd>
+          </dl>
+          <h4 data-i18n="project.columnSource">元フォルダー</h4><div id="projectDetailSources"></div>
+          <div class="project-detail-actions"><button id="projectDetailResume" data-project-action="resume" class="primary" type="button" data-i18n="project.resumeSelected">続きから再開</button><button id="projectDetailDelete" data-project-action="delete" class="danger" type="button" data-i18n="project.deleteShort">削除</button></div>
+          <section class="project-detail-downloads"><h4 data-i18n="project.downloads">ダウンロード</h4><div class="project-detail-actions"><button id="projectDetailMosaic" data-project-action="mosaic" type="button" data-i18n="project.mosaicZip">モザイクZIP</button><button id="projectDetailExclude" data-project-action="exclude" type="button" data-i18n="project.excludeZip">除外ZIP</button></div></section>
+        </div>
+      </section>
+    </section>
+  </dialog>
   <dialog id="projectNameDialog" class="modal-dialog" aria-labelledby="projectNameTitle"><form id="projectNameForm" method="dialog" class="dialog-body"><h2 id="projectNameTitle" data-i18n="project.name">名前を付けて保存</h2><label for="projectNameInput" data-i18n="project.nameLabel">プロジェクト名</label><input id="projectNameInput" required autocomplete="off"><div class="dialog-actions"><button value="cancel" type="button" id="projectNameCancel" data-i18n="dialog.cancel">キャンセル</button><button id="projectNameConfirm" value="confirm" class="primary" type="submit" data-i18n="dialog.save">保存</button></div></form></dialog>
   <dialog id="nativeRelinkDialog" class="modal-dialog native-relink-dialog" aria-labelledby="nativeRelinkTitle"><form id="nativeRelinkForm" class="dialog-body"><h2 id="nativeRelinkTitle" data-i18n="project.sourceRelinkTitle">元フォルダーを再指定</h2><div id="nativeRelinkSources" class="native-relink-sources" role="list"></div><p id="nativeRelinkOldPath" class="muted"></p><label for="nativeRelinkPath" data-i18n="project.sourceRelinkPath">新しいフォルダーパス</label><input id="nativeRelinkPath" type="text" required autocomplete="off"><div class="dialog-actions"><button id="nativeRelinkCancel" type="button" data-i18n="dialog.cancel">キャンセル</button><button id="nativeRelinkConfirm" class="primary" type="submit" data-i18n="project.sourceRelinkConfirm">再指定</button></div></form></dialog>
   <dialog id="sourceMismatchDialog" class="modal-dialog" aria-labelledby="sourceMismatchTitle"><form id="sourceMismatchForm" method="dialog" class="dialog-body"><h2 id="sourceMismatchTitle" data-i18n="project.sourceChangedTitle">変更された画像</h2><p data-i18n="project.sourceChangedMessage">前回から変更された画像があります。</p><ul id="sourceMismatchList"></ul><p id="sourceMismatchDimensionsNotice" hidden data-i18n="project.dimensionsChangedNotice"></p><label><input id="sourceMismatchClear" type="checkbox"> <span data-i18n="project.sourceChangedClear">選択した画像のモザイク・除外・履歴を削除</span></label><div class="dialog-actions"><button value="cancel" type="button" id="sourceMismatchCancel" data-i18n="dialog.cancel">キャンセル</button><button id="sourceMismatchConfirm" value="confirm" class="primary" type="submit" data-i18n="dialog.ok">OK</button></div></form></dialog>
@@ -273,6 +303,8 @@
   <dialog id="detectDialog" class="modal-dialog detect-dialog" aria-labelledby="detectDialogTitle" aria-describedby="detectTargetCount detectDialogHelp">
     <form id="detectForm" class="dialog-body">
       <h2 id="detectDialogTitle" data-i18n="detectDialog.title">自動検出の設定</h2>
+      <p id="detectPreparationStatus" role="status" hidden></p>
+      <fieldset id="detectConfiguration" class="detect-configuration" aria-labelledby="detectDialogTitle">
       <p id="detectTargetCount" class="muted"></p>
        <label id="detectParallelismRow" class="form-row">
          <span data-i18n="detectDialog.parallelism">同時処理数</span>
@@ -319,6 +351,7 @@
        <p id="detectTargetValidation" class="dialog-result error" role="alert" hidden></p>
        <p id="detectPaddingValidation" class="dialog-result error" role="alert" hidden></p>
        <p id="detectFluidColorFillValidation" class="dialog-result error" role="alert" hidden></p>
+      </fieldset>
       <div class="dialog-actions">
         <button id="detectCancelButton" type="button" data-i18n="dialog.cancel">キャンセル</button>
         <button id="detectStartButton" type="submit" class="primary" data-i18n="detectDialog.start">検出を開始</button>
@@ -532,6 +565,7 @@
   <script src="/js/editor-masks.js"></script>
   <script src="/js/detection.js"></script>
   <script src="/js/save.js"></script>
+  <script src="/js/save-numbered.js"></script>
   <script src="/js/interaction.js"></script>
   <script src="/js/settings.js"></script>
   <script src="/js/app.js"></script>

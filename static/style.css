@@ -189,6 +189,7 @@ h2 { margin: 0 0 2px; font-size: 14px; } .muted { color: #98a2ad; font-size: 12p
 
 .modal-dialog { width: min(500px, calc(100vw - 32px)); max-height: min(720px, calc(100vh - 32px)); padding: 0; border: 1px solid #505965; border-radius: 6px; background: #24292f; color: #e7eaed; box-shadow: 0 18px 50px #000a; } .modal-dialog::backdrop { background: #0c0e11bb; } .dialog-body { display: grid; gap: 14px; margin: 0; padding: 18px; } .dialog-body h2 { font-size: 16px; } .dialog-body p { margin: 0; line-height: 1.5; } .mosaic-guideline-links { white-space: nowrap; } .dialog-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 7px; }
 .error-dialog { width: min(440px, calc(100vw - 32px)); } .error-dialog-copy { display: grid; gap: 3px; }
+#errorDialogCause { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 50vh; overflow-y: auto; }
 .import-failures-dialog { width: min(680px, calc(100vw - 32px)); } .import-failures-list { max-height: min(45vh, 360px); margin: 0; padding-left: 24px; overflow: auto; overflow-wrap: anywhere; } .import-failures-list li { margin: 4px 0; }
 .settings-dialog { width: min(680px, calc(100vw - 32px)); overflow: hidden; } .settings-dialog .dialog-body { grid-template-rows: auto auto minmax(0, 1fr) auto; max-height: min(720px, calc(100vh - 32px)); } .settings-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; } .settings-tabs { display: flex; gap: 4px; overflow-x: auto; border-bottom: 1px solid #3b424a; } .settings-tab { flex: 0 0 auto; border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: transparent; color: #b8c0c8; } .settings-tab.active { border-bottom-color: #4bb99d; color: #effff8; } .settings-panel { display: grid; gap: 10px; min-height: 0; overflow: auto; padding-right: 2px; } .settings-panel[hidden] { display: none; } .settings-panel input[type="text"] { width: 100%; min-width: 0; } .settings-panel .form-row { grid-template-columns: minmax(0, 360px); gap: 6px; align-items: start; justify-items: start; } .settings-panel .form-row > :first-child { justify-self: start; text-align: left; } .settings-gpu-label { display: inline-flex; align-items: baseline; gap: 6px; } .settings-gpu-loading { color: #98a2ad; font-size: 12px; white-space: nowrap; } .settings-panel .form-row > :is(select, input[type="number"], input[type="color"]), .settings-panel .form-row > .inline-field { max-width: 100%; justify-self: start; } .settings-panel .form-row > :is(select, input[type="number"]), .settings-panel .form-row > .inline-field { width: 360px; } .settings-panel .form-row > input[type="color"] { width: 48px; height: 32px; } .settings-panel .form-row > .inline-field { min-width: 0; } .settings-panel .shortcut-bindings { display: grid; align-content: start; gap: 0; } .settings-panel .shortcut-bindings .form-row { grid-template-columns: minmax(0, 1fr) minmax(90px, 160px) max-content; gap: 12px; align-items: center; padding: 9px 8px; border-bottom: 1px solid #414a54; } .settings-panel .shortcut-bindings .form-row:nth-child(even) { background: #ffffff05; } .settings-panel .shortcut-bindings .form-row > :not(:first-child) { justify-self: end; } .shortcut-global-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px; border-bottom: 1px solid #56616b; } .settings-panel .shortcut-bindings .form-row > :first-child { justify-self: start; text-align: left; } .settings-panel .shortcut-bindings input[type="text"] { width: 100%; text-align: right; } .settings-info-list { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 8px 14px; margin: 0; } .settings-info-list dt { color: #aeb8c2; } .settings-info-list dd { margin: 0; overflow-wrap: anywhere; } .settings-version-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; } .mode-choice { display: flex; gap: 16px; margin: 0; padding: 0; border: 0; } .settings-dialog .dialog-actions { flex-wrap: nowrap; align-items: center; gap: 8px; } .settings-dialog .dialog-actions #settingsResult { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; } .settings-dialog .dialog-actions :is(#settingsResetButton, #settingsSaveButton) { flex: 0 0 auto; }
 .settings-model-section { display: grid; gap: 8px; }
@@ -414,17 +415,16 @@ button { overflow: visible; text-overflow: clip; white-space: nowrap; }
 .native-relink-sources button { width: 100%; min-width: 0; overflow: hidden; text-align: left; text-overflow: ellipsis; white-space: nowrap; }
 .native-relink-sources button[aria-pressed="true"] { border-color: #57a993; background: #335d55; }
 .native-relink-dialog input { width: 100%; min-width: 0; }
-.project-list-dialog { width: min(1120px, calc(100vw - 2rem)); }
+.project-list-dialog { width: min(1320px, calc(100vw - 48px)); max-width: none; }
 .project-list-body { max-height: min(80vh, 44rem); overflow-y: auto; overflow-x: hidden; }
 .project-table-wrap { margin-top: .75rem; max-height: min(55vh, 32rem); overflow-x: hidden; overflow-y: auto; }
 .project-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
 .project-table th, .project-table td { min-width: 0; padding: 6px 8px; border-bottom: 1px solid #3b424a; vertical-align: middle; overflow-wrap: anywhere; }
 .project-table thead th { position: sticky; top: 0; z-index: 2; background: #21262b; box-shadow: 0 1px #3b424a; color: var(--muted, #a5afb9); font-size: .78rem; font-weight: 600; text-align: left; }
-.project-table th:nth-child(1), .project-table th:nth-child(4) { width: calc((100% - 638px) / 2); }
+.project-table th:nth-child(1) { width: auto; }
 .project-table th:nth-child(2) { width: 72px; }
 .project-table th:nth-child(3) { width: 64px; }
-.project-table th:nth-child(5), .project-table th:nth-child(6) { width: 126px; }
-.project-table th:nth-child(7) { width: 250px; }
+.project-table th:nth-child(4), .project-table th:nth-child(5) { width: 180px; }
 .project-sort-button { display: inline-flex; align-items: center; gap: .3rem; min-width: 0; padding: 0; border: 0; color: inherit; background: transparent; font: inherit; text-align: inherit; }
 .project-sort-button:hover, .project-sort-button:focus-visible { color: #d8fff3; }
 .project-sort-indicator { display: inline-block; min-width: .8rem; }
@@ -433,13 +433,25 @@ button { overflow: visible; text-overflow: clip; white-space: nowrap; }
 .project-name-button:hover { background: transparent; color: #d8fff3; }
 .project-name-button:focus-visible { outline-offset: 1px; }
 .project-cell-value { display: block; white-space: nowrap; }
-.project-source-cell .project-cell-value { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .project-table td:nth-child(2), .project-table td:nth-child(3) { font-size: 11px; white-space: nowrap; }
 .project-date-cell { font-size: 12px; white-space: nowrap; }
-.project-table td:nth-child(2), .project-table td:nth-child(3), .project-table td:nth-child(5), .project-table td:nth-child(6), .project-row-actions { padding-inline: 4px; }
-.project-row-actions { white-space: nowrap; }
-.project-row-action-group { display: flex; flex-wrap: nowrap; align-items: center; gap: 4px; }
-.project-row-action-group button { flex: 1 1 0; min-width: 0; min-height: 30px; padding: 4px 5px; font-size: 11.5px; }
+.project-table tbody tr { cursor: pointer; }
+.project-table tbody tr:hover { background: #ffffff08; }
+.project-completed { color: #79dba4; }
+.detect-configuration { display: grid; gap: 14px; min-width: 0; margin: 0; padding: 0; border: 0; }
+#projectDetailPanel:not([hidden]), #projectDetailContent:not([hidden]) { display: grid; gap: 18px; }
+#projectDetailBack { justify-self: start; }
+#projectDetailName { margin: 0; overflow-wrap: anywhere; }
+.project-detail-summary { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 10px 24px; margin: 0; }
+.project-detail-summary dt { color: #a5afb9; }
+.project-detail-summary dd { margin: 0; overflow-wrap: anywhere; }
+#projectDetailContent h4 { margin: 0; font-size: 14px; }
+#projectDetailSources { display: grid; gap: 10px; }
+.project-detail-source { display: flex; align-items: flex-start; gap: 16px; padding: 12px; background: #1c2126; border-radius: 4px; }
+.project-detail-source span { flex: 1; min-width: 0; overflow-wrap: anywhere; user-select: text; }
+.project-detail-source button { flex-shrink: 0; }
+.project-detail-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.project-detail-downloads { display: grid; gap: 12px; padding-top: 20px; border-top: 1px solid #3b424a; }
 .project-table[hidden] { display: none; }
 .project-list-empty { margin: 0; padding: .9rem; color: var(--muted, #a5afb9); text-align: center; }
 .project-delete-target { display: grid; gap: .3rem; margin: .8rem 0; padding: .75rem; border: 1px solid #a65d57; border-radius: .4rem; background: #3b2928; overflow-wrap: anywhere; }
@@ -458,9 +470,6 @@ button { overflow: visible; text-overflow: clip; white-space: nowrap; }
   .project-table tbody th::before, .project-table td::before { content: attr(data-label); color: var(--muted, #a5afb9); font-size: .78rem; font-weight: 600; overflow-wrap: anywhere; }
   .project-table tbody th .project-name-button { grid-column: 2; overflow: visible; text-overflow: clip; white-space: normal; }
   .project-table .project-cell-value { overflow: visible; text-overflow: clip; white-space: normal; }
-  .project-row-actions { display: grid; grid-template-columns: minmax(7.5rem, 42%) minmax(0, 1fr); }
-  .project-row-actions::before { content: attr(data-label); color: var(--muted, #a5afb9); font-size: .78rem; font-weight: 600; overflow-wrap: anywhere; }
-  .project-row-action-group { grid-column: 2; display: grid; gap: 4px; }
 }
 @media (max-width: 720px) {
   .project-list-dialog { width: calc(100vw - 1rem); max-width: none; }

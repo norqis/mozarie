@@ -136,7 +136,9 @@ test("clear masks keeps rerendered controls locked and releases them after succe
     await page.locator("#projectButton").click();
     await page.locator("#projectOpenList").click();
     await page.waitForFunction(() => document.querySelectorAll("[data-project-action]").length >= 4);
-    assert.equal(await page.locator("[data-project-action]").evaluateAll((nodes) => nodes.every((node) => !node.disabled)), true, "project actions are enabled again after the clear settles");
+    assert.equal(await page.locator("#projectListBody [data-project-action]").evaluateAll((nodes) => nodes.every((node) => !node.disabled)), true, "project detail entries are enabled again after the clear settles");
+    await page.locator('#projectListBody [data-project-action="open"]').first().click();
+    await page.locator("#projectDetailDelete").waitFor({ state: "visible" });
     await page.locator('[data-project-action="delete"]').click();
     await page.waitForFunction(() => document.querySelector("#projectDeleteDialog").open);
     await page.locator("#projectDeleteCancel").click();

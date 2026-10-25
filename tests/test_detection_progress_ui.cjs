@@ -74,6 +74,7 @@ test("SD-055 SD-056 sixty visible images start at zero complete at sixty and res
       renderCatalogViews(); updateActionButtons();
     });
     await page.locator("#detectAllButton").click();
+    await page.waitForFunction(() => !state.detectionDialogPreparing);
     assert.match(await page.locator("#detectTargetCount").textContent(), /60/);
     await page.locator("#detectStartButton").click();
     await page.waitForFunction(() => state.processing?.kind === "detect");
@@ -104,6 +105,7 @@ async function withHeldDetection(run) {
     await page.goto(fixture.url, { waitUntil: "domcontentloaded" });
     await page.waitForFunction(() => Boolean(state.settings) && state.images.length === 2);
     await page.locator("#detectAllButton").click();
+    await page.waitForFunction(() => !state.detectionDialogPreparing);
     await page.locator("#detectStartButton").click();
     await page.waitForFunction(() => state.processing?.kind === "detect" && document.querySelector("#processingDialog").open);
     await run(page, fixture);

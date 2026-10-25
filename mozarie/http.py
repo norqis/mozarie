@@ -643,6 +643,14 @@ class MosaicHandler(BaseHTTPRequestHandler):
                 self._json(STATE.catalog_snapshot())
             elif path == "/api/projects":
                 self._json({"projects": STATE.projects(parse_qs(parsed.query).get("sort", ["updated_desc"])[0])})
+            elif path == "/api/project/detail":
+                project_id = parse_qs(parsed.query).get("projectId", [""])[0]
+                project = STATE.workspace_store.project(project_id)
+                if project is None or project["name"] is None:
+                    raise ClientError("プロジェクトが見つかりません。", "project_not_found")
+                self._json({"project": project, "sources": [
+                    {key: source[key] for key in ("kind", "displayName", "nativePath")}
+                    for source in STATE.workspace_store.project_sources(project_id)]})
             elif path == "/api/project/mismatches":
                 self._json({"images": STATE.source_mismatch_snapshot()})
             elif path == "/api/project/source-check":
@@ -1080,6 +1088,7 @@ class MosaicHandler(BaseHTTPRequestHandler):
                 self._json(self._catalog_mutation(expected_project_id, expected_catalog_generation,
                     lambda: STATE.reorder_catalog(payload.get("imageIds"))))
             elif path == "/api/save/prepare":
+                conflicts = [] if _read_bool(payload.get("collectConflicts", False), "同名ファイルの列挙") else None
                 entries = self._catalog_mutation(expected_project_id, expected_catalog_generation, lambda: STATE.prepare_browser_save(
                     payload.get("imageIds", []),
                     _read_mosaic_divisor(payload.get("divisor")),
@@ -1088,9 +1097,9 @@ class MosaicHandler(BaseHTTPRequestHandler):
                     copy_to_default=_read_bool(payload.get("copyToDefault", False), "既定の保存先へコピー"),
                     output_format=str(payload.get("format", "original")),
                     keep_metadata=_read_bool(payload.get("keepMetadata", True), "メタ情報の保持"),
-                    numbering=payload.get("numbering"),
+                    numbering=payload.get("numbering"), conflicts=conflicts,
                 ))
-                self._json({"entries": entries})
+                self._json({"entries": entries, **({"conflicts": conflicts} if conflicts is not None else {})})
             elif path == "/api/save/reserve":
                 self._json(self._catalog_mutation(expected_project_id, expected_catalog_generation, lambda: STATE.reserve_browser_save(
                     str(payload.get("imageId", "")), _read_candidate_revision(payload.get("candidateRevision")),
@@ -1114,6 +1123,7 @@ class MosaicHandler(BaseHTTPRequestHandler):
                     copy_to_default=copy_to_default,
                     copy_to_browser=copy_to_browser,
                     stream_image=_read_bool(payload.get("streamImage", True), "画像応答の転送"),
+                    batch_overwrite=_read_bool(payload.get("batchOverwrite", False), "連番の一括上書き"),
                     client_save_token=_read_client_save_token(payload.get("clientSaveToken")),
                     expected_manual_revision=_read_candidate_revision(payload["expectedManualRevision"]) if "expectedManualRevision" in payload else None,
                     suffix=_read_save_suffix(payload.get("suffix", "_censored")),
@@ -1140,6 +1150,13 @@ class MosaicHandler(BaseHTTPRequestHandler):
                     finally:
                         if rendered.response_path_is_temporary:
                             rendered.response_path.unlink(missing_ok=True)
+            elif path in {"/api/save/batch/prepare", "/api/save/batch/commit"}:
+                from .numbered_batch import commit_batch
+                self._json(self._catalog_mutation(expected_project_id, expected_catalog_generation,
+                    lambda: commit_batch(STATE, payload.get("entries"), prepare=path.endswith("/prepare"))))
+            elif path == "/api/save/batch/abort":
+                from .numbered_batch import abort_batch
+                self._json(abort_batch(STATE, str(payload.get("saveToken", ""))))
             elif path == "/api/save/commit":
                 source_mtime_ms = payload.get("sourceMtimeMs")
                 source_size_bytes = payload.get("sourceSizeBytes")

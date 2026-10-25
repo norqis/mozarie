@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import os
+import json
 import sqlite3
 import threading
 import time
@@ -37,6 +38,7 @@ class SaveJournal:
                 catalog_id TEXT, source_id TEXT, old_path TEXT NOT NULL, new_path TEXT NOT NULL,
                 old_relative TEXT, new_relative TEXT, identity TEXT, state TEXT NOT NULL, updated_at INTEGER NOT NULL
             )""")
+            db.execute("CREATE TABLE IF NOT EXISTS numbered_batches (token TEXT PRIMARY KEY, plan TEXT NOT NULL)")
             rename_columns = {row[1] for row in db.execute("PRAGMA table_info(rename_operations)")}
             if "identity" not in rename_columns:
                 db.execute("ALTER TABLE rename_operations ADD COLUMN identity TEXT")
@@ -639,6 +641,9 @@ class SaveJournal:
     def recover_token(self, token: str, workspace_receipt: Any | None = None) -> bool:
         """Recover one token; a receipt callback makes the commit irreversible."""
         with self._lock, self._connection() as db:
+            batch_tokens = self._numbered_tokens_db(db)
+            if batch_tokens is None or token in batch_tokens:
+                return False
             db.row_factory = sqlite3.Row
             raw = db.execute("SELECT * FROM saves WHERE token=?", (token,)).fetchone()
             if raw is None:
@@ -652,9 +657,25 @@ class SaveJournal:
         with self._lock, self._connection() as db:
             db.row_factory = sqlite3.Row
             rows = [dict(row) for row in db.execute("SELECT * FROM saves")]
+            pending_batches = self._numbered_tokens_db(db)
+            if pending_batches is None:
+                return
             for row in rows:
+                if row["token"] in pending_batches:
+                    continue
                 receipt = workspace_receipt(str(row["token"])) if workspace_receipt is not None else None
                 self._recover_row(db, row, receipt)
             # Only rollback-terminal rows are disposable at startup.  Committed
             # rows remain until the client acknowledges their workspace receipt.
             db.execute("DELETE FROM saves WHERE state='cancelled'")
+
+    @staticmethod
+    def _numbered_tokens_db(db) -> set[str] | None:
+        tokens = set()
+        for (plan,) in db.execute("SELECT plan FROM numbered_batches"):
+            try:
+                tokens.update(member["token"] for member in json.loads(plan))
+            except json.JSONDecodeError:
+                LOGGER.warning("連番保存ジャーナルの回復を保留しました。")
+                return None
+        return tokens

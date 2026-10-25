@@ -83,6 +83,7 @@ class JobsSavingCoverageTests(unittest.TestCase):
         state.catalog_generation = 1; state.active_import_count = 0
         state.settings = {"saving": {"default_output_directory": str(directory / "output"), "parallelism": 2}, "detection": {"exclude_forced_default": True}}
         state.images = {}; state.order = []; state.candidates = {}; state.candidate_revisions = {}; state.projectless_manual_drafts = {}
+        state.numbered_save_batches = {}
         state.browser_save_tokens = {}; state.browser_save_receipts = {}; state.browser_save_claims = set(); state._pending_browser_save_cleanup = []
         state.cache_dir = directory / "cache"; state._image_io_locks = {}
         state.workspace_store = Mock()

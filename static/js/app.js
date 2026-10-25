@@ -82,6 +82,7 @@ let projectListSort = { key: "updated", direction: "desc" };
 let sourceMismatchPending = false;
 let outputDirectorySaveClickInput = null;
 let projectListSortPending = false;
+const projectManagerView = { projectId: "", generation: 0, pending: false, listScrollTop: 0, returnFocusProjectId: "" };
 let nativeRelinkSourceId = "";
 let nativeRelinkBusy = false;
 let pendingBrowserProjectSources = [];
@@ -387,13 +388,16 @@ function renderProjectTableControls() {
   $("#projectListClose").disabled = projectListSortPending || state.projectOperationPending || Boolean(state.catalogTransition);
   for (const row of projectTableRows()) {
     const project = projectListProjects.get(row.dataset.projectId);
-    const exportDisabled = blocked || !project || !(project.imageCount > 0) || projectExportBusy.has(project.id);
-    row.querySelectorAll('[data-project-action="mosaic"], [data-project-action="exclude"]').forEach((button) => {
-      button.disabled = exportDisabled;
-      button.setAttribute("aria-busy", String(Boolean(project && projectExportBusy.has(project.id))));
-    });
     row.querySelector('[data-project-action="open"]').disabled = blocked || !project;
-    row.querySelector('[data-project-action="delete"]').disabled = blocked || !project;
+  }
+  const selected = projectListProjects.get(projectManagerView.projectId);
+  const detailBlocked = blocked || projectManagerView.pending || !selected;
+  $("#projectDetailBack").disabled = state.projectOperationPending || Boolean(state.catalogTransition);
+  $("#projectDetailResume").disabled = detailBlocked;
+  $("#projectDetailDelete").disabled = detailBlocked;
+  for (const button of [$("#projectDetailMosaic"), $("#projectDetailExclude")]) {
+    button.disabled = detailBlocked || !(selected?.imageCount > 0) || projectExportBusy.has(selected?.id);
+    button.setAttribute("aria-busy", String(projectExportBusy.has(selected?.id)));
   }
 }
 
@@ -417,31 +421,80 @@ function renderProjectTable() {
     const nameCell = document.createElement("th"); nameCell.scope = "row"; nameCell.dataset.label = t("project.columnName");
     const openButton = projectActionButton(project, "open", "project.openSelected", "project-name-button");
     openButton.textContent = projectTitle(project); openButton.title = projectTitle(project);
-    openButton.setAttribute("aria-label", t("project.openFor", { name: projectTitle(project) }));
+    openButton.setAttribute("aria-label", t("project.detailsFor", { name: projectTitle(project) }));
     nameCell.append(openButton);
     row.append(
       nameCell,
-      projectTableCell(t(`project.${project.status}`), "project.columnStatus"),
+      projectTableCell(t(`project.${project.status}`), "project.columnStatus", project.status === "completed" ? "project-completed" : ""),
       projectTableCell(t("project.imageCount", { count: project.imageCount || 0 }), "project.columnImageCount"),
-      projectTableCell(projectSource(project), "project.columnSource", "project-source-cell"),
       projectTableCell(projectDate(project.createdAt), "project.columnCreated", "project-date-cell"),
       projectTableCell(projectDate(project.updatedAt), "project.columnUpdated", "project-date-cell"),
     );
-    const actions = document.createElement("td"); actions.dataset.label = t("project.columnActions"); actions.className = "project-row-actions";
-    const group = document.createElement("div"); group.className = "project-row-action-group";
-    group.setAttribute("role", "group"); group.setAttribute("aria-label", t("project.rowActions", { name: projectTitle(project) }));
-    group.append(
-      projectActionButton(project, "mosaic", "project.mosaicZip", "", "project.exportMosaicFor"),
-      projectActionButton(project, "exclude", "project.excludeZip", "", "project.exportExcludeFor"),
-      projectActionButton(project, "delete", "project.deleteShort", "danger", "project.deleteFor"),
-    );
-    actions.append(group);
-    row.append(actions); fragment.append(row);
+    fragment.append(row);
   }
   body.replaceChildren(fragment);
   $("#projectList").hidden = !projectListProjects.size;
   $("#projectListEmpty").hidden = Boolean(projectListProjects.size);
   renderProjectSortHeaders(); renderProjectTableControls();
+}
+
+function showProjectManagerList({ restoreFocus = true } = {}) {
+  projectManagerView.generation += 1;
+  projectManagerView.projectId = ""; projectManagerView.pending = false;
+  $("#projectDetailPanel").hidden = true;
+  $("#projectListPanel").hidden = false;
+  $("#projectListPanel .project-table-wrap").scrollTop = projectManagerView.listScrollTop;
+  renderProjectTableControls();
+  if (restoreFocus) focusElement($("#projectListBody").querySelector(`tr[data-project-id="${projectManagerView.returnFocusProjectId}"] [data-project-action="open"]`) || $("#projectListClose"));
+}
+
+async function showProjectDetails(project) {
+  if (!project || state.projectOperationPending || state.catalogTransition) return;
+  projectManagerView.listScrollTop = $("#projectListPanel .project-table-wrap").scrollTop;
+  projectManagerView.returnFocusProjectId = project.id;
+  projectManagerView.projectId = project.id; projectManagerView.pending = true;
+  const generation = ++projectManagerView.generation;
+  $("#projectListPanel").hidden = true; $("#projectDetailPanel").hidden = false;
+  $("#projectDetailLoading").hidden = false; $("#projectDetailError").hidden = true; $("#projectDetailContent").hidden = true;
+  renderProjectTableControls(); focusElement($("#projectDetailBack"));
+  const current = () => $("#projectListDialog").open && projectManagerView.projectId === project.id && projectManagerView.generation === generation;
+  try {
+    const details = await api(`/api/project/detail?projectId=${encodeURIComponent(project.id)}`);
+    if (!current()) return;
+    projectListProjects.set(project.id, details.project);
+    $("#projectDetailName").textContent = projectTitle(details.project);
+    $("#projectDetailStatus").textContent = t(`project.${details.project.status}`);
+    $("#projectDetailStatus").classList.toggle("project-completed", details.project.status === "completed");
+    $("#projectDetailCount").textContent = t("project.imageCount", { count: details.project.imageCount || 0 });
+    $("#projectDetailCreated").textContent = projectDate(details.project.createdAt);
+    $("#projectDetailUpdated").textContent = projectDate(details.project.updatedAt);
+    const sources = $("#projectDetailSources"); sources.replaceChildren();
+    for (const source of details.sources || []) {
+      const row = document.createElement("div"); row.className = "project-detail-source";
+      const path = document.createElement("span"); path.textContent = source.nativePath || source.displayName;
+      row.append(path);
+      if (source.nativePath) {
+        const copy = document.createElement("button"); copy.type = "button"; copy.textContent = t("project.copyPath");
+        copy.dataset.projectAction = "copy-path"; copy.dataset.path = source.nativePath;
+        row.append(copy);
+      }
+      sources.append(row);
+    }
+    if (!sources.childElementCount) sources.textContent = projectSource(details.project);
+    for (const button of $("#projectDetailContent").querySelectorAll("[data-project-action]")) button.dataset.projectId = project.id;
+    $("#projectDetailContent").hidden = false;
+    focusElement($("#projectDetailName"));
+  } catch (error) {
+    if (!current()) return;
+    $("#projectDetailError").textContent = t(`errorDialog.${userErrorCode(error)}.cause`, error?.params || {});
+    $("#projectDetailError").hidden = false;
+  } finally {
+    if (current()) {
+      projectManagerView.pending = false;
+      $("#projectDetailLoading").hidden = true;
+      renderProjectTableControls();
+    }
+  }
 }
 
 async function showProjectList({ focusProjectId = "", focusTarget = null, sort = projectListSort, keepClosed = false } = {}) {
@@ -450,6 +503,7 @@ async function showProjectList({ focusProjectId = "", focusTarget = null, sort =
   projectListProjects = new Map((data.projects || []).map((project) => [project.id, project]));
   projectListSort = sort;
   renderProjectTable();
+  showProjectManagerList({ restoreFocus: false });
   if (!$("#projectListDialog").open && !keepClosed) {
     if ($("#projectDialog").open) {
       modalInvokers.delete($("#projectDialog"));
@@ -634,6 +688,7 @@ async function deleteProject(projectId) {
       $("#projectList").hidden = empty;
       $("#projectListEmpty").hidden = !empty;
       renderProjectTableControls();
+      if (projectManagerView.projectId === projectId) showProjectManagerList({ restoreFocus: false });
       if (empty) focusElement($("#projectListClose"));
       else if (focusProjectId) {
         focusElement($("#projectListBody").querySelector(`tr[data-project-id="${focusProjectId}"] [data-project-action="open"]`));
@@ -693,16 +748,25 @@ function bindEvents() {
   $("#projectNameDialog").addEventListener("close", () => { projectNameMode = "name"; updateActionButtons(); });
   $("#projectOpenList").addEventListener("click", () => { void showProjectList().catch(showUserError); });
   $("#projectListClose").addEventListener("click", () => { if (!projectListSortPending && !state.projectOperationPending) $("#projectListDialog").close(); });
+  $("#projectListDialog").addEventListener("close", () => { projectManagerView.generation += 1; });
+  $("#projectDetailBack").addEventListener("click", () => showProjectManagerList());
   $("#projectListDialog").addEventListener("cancel", (event) => { if (projectListSortPending || state.projectOperationPending) event.preventDefault(); });
   document.querySelectorAll("[data-project-sort]").forEach((button) => button.addEventListener("click", () => {
     void sortProjectList(button.dataset.projectSort, button).catch(showUserError);
   }));
-  $("#projectList").addEventListener("click", (event) => {
-    const button = event.target.closest("[data-project-action]");
+  $("#projectListDialog").addEventListener("click", async (event) => {
+    const button = event.target.closest("[data-project-action]")
+      || event.target.closest("tr[data-project-id]")?.querySelector('[data-project-action="open"]');
     if (!button || button.disabled || projectListSortPending || state.projectOperationPending) return;
+    if (button.dataset.projectAction === "copy-path") {
+      try { await navigator.clipboard.writeText(button.dataset.path); button.textContent = t("project.pathCopied"); }
+      catch { showUserError(codedError("clipboard_write_failed"), button); }
+      return;
+    }
     const project = projectListProjects.get(button.dataset.projectId);
     if (!project) return;
-    if (button.dataset.projectAction === "open") void openProject(project);
+    if (button.dataset.projectAction === "open") void showProjectDetails(project);
+    else if (button.dataset.projectAction === "resume") void openProject(project, true);
     else if (button.dataset.projectAction === "mosaic") void downloadProjectMasks(project, "mosaic");
     else if (button.dataset.projectAction === "exclude") void downloadProjectMasks(project, "exclude");
     else if (button.dataset.projectAction === "delete") openProjectDeleteDialog(project.id);
@@ -936,7 +1000,7 @@ function bindEvents() {
   $("#folderPath").addEventListener("keydown", (event) => { if (event.key === "Enter") loadFolder(); });
   $("#loadFolderButton").addEventListener("click", loadFolder);
   const detectAll = () => {
-    if (!activeDetection()) openDetectionDialog(allImageDetectionTargets().map((image) => image.id), { filterable: true });
+    openAllDetectionDialog();
   };
   $("#detectAllButton").addEventListener("click", detectAll);
   $("#detectCurrentButton").addEventListener("click", () => { const image = currentRecord(); if (!currentImageActionPending() && isProcessableImage(image)) void runDetection([image.id], detectionConfidence(), 1, persistedDetectionTargets(), persistedFluidColorFill()); });
@@ -1129,6 +1193,7 @@ function bindEvents() {
   }));
   $("#detectForm").addEventListener("submit", startDetectionFromDialog);
   $("#detectCancelButton").addEventListener("click", () => { if (!state.detectionDialogSubmitting) { $("#detectDialog").close(); resetDetectionDialogState(); } });
+  $("#detectDialog").addEventListener("close", () => resetDetectionDialogState());
   $("#detectDialog").addEventListener("cancel", (event) => { event.preventDefault(); if (!state.detectionDialogSubmitting) { $("#detectDialog").close(); resetDetectionDialogState(); } });
   lightDismiss($("#detectDialog"), () => { if (!state.detectionDialogSubmitting) { $("#detectDialog").close(); resetDetectionDialogState(); } });
   $("#undoButton").addEventListener("click", () => { if (undoBoundaryDraft()) return; if (hasDurableHistory()) void restoreProjectHistory("undo"); else restoreSnapshot(state.historyIndex - 1); }); $("#redoButton").addEventListener("click", () => { if (hasDurableHistory()) void restoreProjectHistory("redo"); else restoreSnapshot(state.historyIndex + 1); });
@@ -1566,10 +1631,10 @@ async function initialise() {
     if (typeof resumePendingSourceDeletes === "function") void resumePendingSourceDeletes().catch(() => {});
     if (typeof flushPendingBrowserSaveAcks === "function") void flushPendingBrowserSaveAcks();
   } catch (error) { showUserError(error); }
-  void api("/api/projects?sort=updated_desc")
+  await api("/api/projects?sort=updated_desc")
     .then((data) => retryProjectSourceCleanup(new Set((data.projects || []).map((project) => project.id))))
     .catch(() => {});
   if (document.visibilityState === "visible") setTimeout(() => { void checkForUpdate({ silent: true }); }, 1000);
 }
 
-initialise();
+const appStartup = initialise();

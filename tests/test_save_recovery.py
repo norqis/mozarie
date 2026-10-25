@@ -31,6 +31,7 @@ class _AckOwner:
         self.workspace_store = store
         self.browser_save_receipts = {}
         self.lock = threading.RLock()
+        self.import_lock = threading.RLock()
 
 
 class SaveRecoveryTests(unittest.TestCase):

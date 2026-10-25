@@ -107,7 +107,7 @@ class CatalogOrderAndSaveTests(unittest.TestCase):
         destination.write_bytes(b"existing unrelated output")
         with self.assertRaises(ClientError) as error:
             self.state.prepare_browser_save(ids, 100, "", False, numbering={"digits": 2, "placement": "only"})
-        self.assertEqual(error.exception.error_code, "output_name_conflict")
+        self.assertEqual(error.exception.error_code, "output_files_exist")
         self.assertEqual(destination.read_bytes(), b"existing unrelated output")
         self.assertFalse(self.state.browser_save_tokens)
         self.assertEqual(self.state.order, ids)
@@ -120,7 +120,7 @@ class CatalogOrderAndSaveTests(unittest.TestCase):
         with self.assertRaises(ClientError) as error:
             self.state.prepare_browser_save(ids, 100, "", False, copy_to_default=True,
                 numbering={"digits": 2, "placement": "only"})
-        self.assertEqual(error.exception.error_code, "output_name_conflict")
+        self.assertEqual(error.exception.error_code, "output_files_exist")
         self.assertFalse(self.state.browser_save_tokens)
         destination.unlink()
         image_id = ids[0]

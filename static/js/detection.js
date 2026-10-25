@@ -36,15 +36,26 @@ function detectionDialogTargetImages() {
 }
 
 function syncDetectionDialog() {
-  const imageIds = detectionDialogTargetImages().map((image) => image.id);
+  const imageIds = detectionDialogMatchesCatalog() ? detectionDialogTargetImages().map((image) => image.id) : [];
   state.pendingDetectionTargetIds = imageIds;
   $("#detectTargetCount").textContent = t("detectDialog.target", { count: imageIds.length });
   const targetsValid = validateDetectionTargets(detectionTargets("dialogTarget"), $("#detectTargetValidation"));
-  $("#detectStartButton").disabled = state.detectionDialogSubmitting || !targetsValid || (!state.detectionSettingsOnly && imageIds.length === 0);
+  $("#detectStartButton").disabled = state.detectionDialogPreparing || state.detectionDialogPreparationFailed || state.detectionDialogSubmitting || !targetsValid || (!state.detectionSettingsOnly && imageIds.length === 0);
   return imageIds;
 }
 
+function detectionDialogMatchesCatalog() {
+  return state.detectionDialogCatalogEpoch === state.catalogEpoch
+    && state.detectionDialogProjectId === (state.project?.id || null);
+}
+
 function resetDetectionDialogState() {
+  state.detectionDialogPreparationGeneration = (state.detectionDialogPreparationGeneration || 0) + 1;
+  state.detectionDialogPreparing = false; state.detectionDialogPreparationFailed = false;
+  state.detectionDialogCatalogEpoch = null; state.detectionDialogProjectId = null;
+  $("#detectForm").setAttribute("aria-busy", "false");
+  $("#detectConfiguration").disabled = false;
+  $("#detectPreparationStatus").hidden = true;
   state.pendingDetectionTargetIds = [];
   state.detectionDialogBaseIds = [];
   state.detectionDialogFilterable = false;
@@ -56,6 +67,7 @@ function resetDetectionDialogState() {
 function setDetectionDialogSubmitting(submitting) {
   state.detectionDialogSubmitting = submitting;
   for (const control of $("#detectForm").querySelectorAll("input, button")) control.disabled = submitting;
+  $("#detectConfiguration").disabled = Boolean(submitting || state.detectionDialogPreparing || state.detectionDialogPreparationFailed);
   if (!submitting) {
     syncDetectionFluidColorFill();
     syncDetectionDialog();
@@ -136,6 +148,8 @@ function openDetectionDialog(imageIds, { filterable = false, settingsOnly = fals
   imageIds = [...new Set(imageIds)].filter((imageId) => ids.has(imageId));
   if ((!settingsOnly && !imageIds.length) || isBusy() || state.importing || catalogStagingEditsActive()) return;
   state.detectionSettingsOnly = settingsOnly;
+  state.detectionDialogCatalogEpoch = state.catalogEpoch;
+  state.detectionDialogProjectId = state.project?.id || null;
   state.detectionDialogBaseIds = [...imageIds];
   state.detectionDialogFilterable = filterable;
   state.detectionDialogSubmitting = false;
@@ -158,7 +172,60 @@ function openDetectionDialog(imageIds, { filterable = false, settingsOnly = fals
   $("#detectParallelism").disabled = false;
   setDetectionTargets(state.settings?.detection?.targets, "dialogTarget");
   syncDetectionDialog();
-  showModalFromInvoker($("#detectDialog"));
+  if (!$("#detectDialog").open) showModalFromInvoker($("#detectDialog"));
+  return true;
+}
+
+function openAllDetectionDialog() {
+  if (activeDetection() || isBusy() || state.importing || catalogStagingEditsActive()) return;
+  resetDetectionDialogState();
+  const generation = state.detectionDialogPreparationGeneration;
+  const epoch = state.catalogEpoch;
+  const projectId = state.project?.id || null;
+  const dialog = $("#detectDialog");
+  const current = () => dialog.open && generation === state.detectionDialogPreparationGeneration;
+  const sameCatalog = () => epoch === state.catalogEpoch && projectId === (state.project?.id || null);
+  state.detectionDialogPreparing = true;
+  $("#detectDialogTitle").dataset.i18n = "detectDialog.title";
+  $("#detectDialogTitle").textContent = t("detectDialog.title");
+  $("#detectStartButton").dataset.i18n = "detectDialog.start";
+  $("#detectStartButton").textContent = t("detectDialog.start");
+  $("#detectTargetCount").hidden = false;
+  $("#detectParallelismRow").hidden = false;
+  $("#detectImageFilters").hidden = false;
+  $("#detectPreparationStatus").textContent = t("detectDialog.preparing");
+  $("#detectPreparationStatus").hidden = false;
+  $("#detectTargetCount").textContent = "";
+  $("#detectForm").setAttribute("aria-busy", "true");
+  $("#detectConfiguration").disabled = true;
+  $("#detectStartButton").disabled = true;
+  $("#detectCancelButton").disabled = false;
+  showModalFromInvoker(dialog);
+  const prepare = () => {
+    if (!current()) return;
+    if (!sameCatalog()) { dialog.close(); resetDetectionDialogState(); return; }
+    try {
+      const ids = allImageDetectionTargets().map((image) => image.id);
+      if (!current()) return;
+      if (!sameCatalog() || !openDetectionDialog(ids, { filterable: true })) { dialog.close(); resetDetectionDialogState(); return; }
+      if (!current() || !sameCatalog()) return;
+      state.detectionDialogPreparing = false;
+      $("#detectConfiguration").disabled = false;
+      $("#detectPreparationStatus").hidden = true;
+      $("#detectForm").setAttribute("aria-busy", "false");
+      syncDetectionDialog();
+    } catch (error) {
+      if (!current()) return;
+      state.detectionDialogPreparing = false; state.detectionDialogPreparationFailed = true;
+      $("#detectPreparationStatus").textContent = t(`errorDialog.${userErrorCode(error)}.cause`, error?.params || {});
+      $("#detectForm").setAttribute("aria-busy", "false");
+    }
+  };
+  requestAnimationFrame(() => {
+    if (!current()) return;
+    if (!sameCatalog()) { dialog.close(); resetDetectionDialogState(); return; }
+    requestAnimationFrame(prepare);
+  });
 }
 
 async function runDetection(imageIds, confidence = detectionConfidence(), parallelism = 1, targetClasses = persistedDetectionTargets(), fluidColorFill = null, prepared = false) {
@@ -207,7 +274,13 @@ function beginDetectionStart(imageIds) {
 
 async function startDetectionFromDialog(event) {
   event.preventDefault();
-  if (catalogStagingEditsActive() || state.detectionDialogSubmitting) return;
+  if (catalogStagingEditsActive() || state.detectionDialogPreparing || state.detectionDialogPreparationFailed || state.detectionDialogSubmitting) return;
+  if (!detectionDialogMatchesCatalog()) {
+    $("#detectPreparationStatus").textContent = t("detectDialog.catalogChanged");
+    $("#detectPreparationStatus").hidden = false;
+    $("#detectStartButton").disabled = true;
+    return;
+  }
   const settingsOnly = state.detectionSettingsOnly;
   const confidence = normaliseDetectionConfidence($("#detectConfidenceNumber").value);
   const parallelism = detectionParallelism();
@@ -229,6 +302,7 @@ async function startDetectionFromDialog(event) {
       await saveDraft();
       await flushAllWorkspaceMutations();
     }
+    if (!detectionDialogMatchesCatalog()) throw codedError("stale_catalog");
     const imageIds = syncDetectionDialog();
     if (!settingsOnly && !imageIds.length) { setDetectionDialogSubmitting(false); return; }
     if (state.settings) {
@@ -248,6 +322,7 @@ async function startDetectionFromDialog(event) {
       state.settings = saved.settings;
       setSettingsForm(saved.settings, state.settingsStatus);
     }
+    if (!detectionDialogMatchesCatalog()) throw codedError("stale_catalog");
     setDetectionDialogSubmitting(false);
     $("#detectDialog").close();
     resetDetectionDialogState();

@@ -1,6 +1,7 @@
 "use strict";
 const assert = require("node:assert/strict");
 const { chromium } = require("playwright");
+const { waitForAppStartup } = require("../helpers/app_startup.cjs");
 
 (async () => {
   const origin = process.argv[2]; const mode = process.argv[3];
@@ -11,6 +12,7 @@ const { chromium } = require("playwright");
       const page = await context.newPage(); page.setDefaultTimeout(15000);
       await page.goto(origin, { waitUntil: "domcontentloaded" });
       await page.waitForFunction(() => state.settings && Number.isSafeInteger(state.serverCatalogGeneration) && !state.projectOperationPending);
+      await waitForAppStartup(page);
       return page;
     };
     let page = await open();

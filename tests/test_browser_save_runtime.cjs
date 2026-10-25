@@ -139,6 +139,7 @@ function createRuntime({ commit, copy = null, deleteOriginal = false, renderBina
     atob(value) { return Buffer.from(value, "base64").toString("binary"); },
     window: browserWindow,
     navigator: browserNavigator,
+    IDBKeyRange: { bound: (lower, upper) => ({ lower, upper }) },
     showModalFromInvoker(dialog) { dialog?.showModal?.(); },
     fetch: async (requestPath, options = {}) => {
       if (requestPath === "/api/images") {

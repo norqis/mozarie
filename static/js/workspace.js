@@ -99,6 +99,44 @@ async function browserOverwriteStore(saveToken, payload) {
   finally { db.close(); }
 }
 
+async function numberedSaveBatches() {
+  const db = await directoryCatalogStore();
+  if (!db) throw codedError("source_restore_failed");
+  try {
+    const readPrefix = (prefix) => new Promise((resolve, reject) => {
+      const transaction = db.transaction("sourceOverwrites", "readonly");
+      const request = transaction.objectStore("sourceOverwrites").getAll(IDBKeyRange.bound(prefix, `${prefix}\uffff`));
+      transaction.oncomplete = () => resolve(request.result);
+      transaction.onerror = () => reject(transaction.error);
+      transaction.onabort = () => reject(transaction.error);
+    });
+    const batches = await readPrefix("numbered:");
+    for (const batch of batches) {
+      batch.browser = await readPrefix(`numbered-member:${batch.id}:`);
+      const members = new Map(batch.browser.map((member) => [member.entry.imageId, member]));
+      batch.entries = batch.entries.map((entry) => members.get(entry.imageId)?.entry || entry);
+    }
+    return batches;
+  } finally { db.close(); }
+}
+
+async function deleteNumberedSaveBatch(id) {
+  const db = await directoryCatalogStore();
+  if (!db) throw codedError("source_restore_failed");
+  try {
+    await new Promise((resolve, reject) => {
+      const transaction = db.transaction("sourceOverwrites", "readwrite");
+      const store = transaction.objectStore("sourceOverwrites");
+      store.delete(`numbered:${id}`);
+      const prefix = `numbered-member:${id}:`;
+      store.delete(IDBKeyRange.bound(prefix, `${prefix}\uffff`));
+      transaction.oncomplete = resolve;
+      transaction.onerror = () => reject(transaction.error);
+      transaction.onabort = () => reject(transaction.error);
+    });
+  } finally { db.close(); }
+}
+
 async function rememberPendingSourceDelete(payload) {
   const db = await directoryCatalogStore(); if (!db) throw codedError("source_delete_recovery_unavailable");
   try {

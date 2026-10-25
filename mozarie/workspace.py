@@ -1876,6 +1876,70 @@ class WorkspaceStore:
                 raise
         return changed
 
+    def commit_numbered_saves(self, saves) -> dict[str, tuple[str, Any]]:
+        """Remap a complete filename rotation from its original catalogue snapshot."""
+        native = {old.path.resolve(): new for old, new, _receipt in saves if old.source_kind == "filesystem"}
+        selected = {old.image_id: new for old, new, _receipt in saves}
+        changes = {}
+        now = time.time_ns()
+        with self._lock, self._connect() as db:
+            db.execute("BEGIN IMMEDIATE")
+            try:
+                roots = {}
+                source_ids = {}
+                for source in db.execute("SELECT source_id,native_path FROM project_sources WHERE kind='native-folder'"):
+                    roots.setdefault(Path(source["native_path"]).resolve(), []).append(str(source["source_id"]))
+                # Look up only affected aliases through the existing indexed
+                # source/relative-path keys; other projects' images stay on disk.
+                for old_path, owner in native.items():
+                    for root in old_path.parents:
+                        for source_id in roots.get(root, []):
+                            old_relative = old_path.relative_to(root).as_posix()
+                            for row in db.execute("SELECT image_id FROM images WHERE source_id=? AND relative_path=? COLLATE NOCASE", (source_id, old_relative)):
+                                image_id = str(row["image_id"])
+                                changes[image_id] = (owner.path.relative_to(root).as_posix(), owner)
+                                source_ids[image_id] = source_id
+                for old, owner, _receipt in saves:
+                    if old.source_kind == "filesystem":
+                        continue
+                    row = db.execute("SELECT source_id FROM images WHERE image_id=?", (old.image_id,)).fetchone()
+                    if row is not None:
+                        changes[old.image_id] = (owner.relative_path, owner)
+                        source_ids[old.image_id] = str(row["source_id"])
+                if not set(selected).issubset(changes):
+                    raise ValueError("numbered source image is missing")
+                final_keys = set()
+                for image_id, (relative, _owner) in changes.items():
+                    source_id = source_ids[image_id]
+                    key = (source_id, relative.casefold())
+                    if key in final_keys:
+                        raise ValueError("numbered path conflicts with a catalogue image")
+                    final_keys.add(key)
+                    if any(str(row["image_id"]) not in changes for row in db.execute(
+                        "SELECT image_id FROM images WHERE source_id=? AND relative_path=? COLLATE NOCASE", (source_id, relative))):
+                        raise ValueError("numbered path conflicts with a catalogue image")
+                # The PK includes relative_path. Vacate its slots inside the
+                # transaction before applying a swap's final keys.
+                prefix = f".mozarie-remap-{uuid.uuid4().hex}/"
+                db.executemany("UPDATE images SET relative_path=? WHERE image_id=?",
+                               [(prefix + image_id, image_id) for image_id in changes])
+                for image_id, (relative, owner) in changes.items():
+                    db.execute("""UPDATE images SET relative_path=?,mtime_ns=?,size_bytes=?,updated_at=?,
+                        edited_filename=CASE WHEN ? THEN NULL ELSE edited_filename END WHERE image_id=?""",
+                        (relative, owner.mtime_ns, owner.size_bytes, now, image_id in selected, image_id))
+                    db.execute("""INSERT INTO image_transforms(image_id,flip_horizontal,flip_vertical,source_flip_horizontal,source_flip_vertical,revision)
+                        SELECT image_id,?,?,?,?,1 FROM images WHERE image_id=? ON CONFLICT(image_id) DO UPDATE SET
+                        source_flip_horizontal=excluded.source_flip_horizontal,source_flip_vertical=excluded.source_flip_vertical,
+                        revision=image_transforms.revision+1""", (int(owner.flip_horizontal) if image_id in selected else 0, int(owner.flip_vertical) if image_id in selected else 0, int(owner.flip_horizontal), int(owner.flip_vertical), image_id))
+                for _old, _new, receipt in saves:
+                    db.execute("INSERT INTO browser_save_receipts(token,receipt_json,created_at) VALUES(?,?,?)",
+                               (receipt["token"], json.dumps(receipt, ensure_ascii=False), now))
+                db.execute("COMMIT")
+            except BaseException:
+                db.execute("ROLLBACK")
+                raise
+        return changes
+
     def browser_save_receipt(self, token: str) -> dict[str, Any] | None:
         with self._lock, self._connect() as db:
             row = db.execute("SELECT receipt_json FROM browser_save_receipts WHERE token=?", (token,)).fetchone()

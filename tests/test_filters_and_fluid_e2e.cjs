@@ -178,6 +178,7 @@ test("all-image detection submits the fluid color-fill settings with default tol
       };
     });
     await page.locator("#detectAllButton").click();
+    await page.waitForFunction(() => !state.detectionDialogPreparing);
     await page.waitForFunction(() => document.querySelector("#detectDialog").open);
     assert.equal(await page.locator('label[for="detectFluidColorFillEnabled"], #detectFluidColorFillEnabled').count() > 0, true);
     assert.match(await page.locator("#detectFluidColorFillEnabled").getAttribute("aria-label"), /精液候補を色で広げる|fluid/i);
@@ -198,6 +199,7 @@ test("all-image detection submits the fluid color-fill settings with default tol
     assert.equal(fixture.settingsPayloads.at(-1).body.detection.fluid_color_fill_tolerance, 27);
     await page.waitForFunction(() => !state.processing && !isBusy());
     await page.locator("#detectAllButton").click();
+    await page.waitForFunction(() => !state.detectionDialogPreparing);
     assert.equal(await page.locator("#detectFluidColorFillEnabled").isChecked(), false, "saved OFF is restored when the dialog reopens");
     assert.equal(await page.locator("#detectFluidColorFillTolerance").inputValue(), "27", "saved tolerance is restored when the dialog reopens");
     assert.equal(await page.locator("#detectFluidColorFillTolerance").isDisabled(), true, "OFF visibly disables its dependent tolerance input");
@@ -216,6 +218,7 @@ test("SD-136 fluid color tolerance accepts inclusive bounds and rejects values o
   try {
     ({ context, page } = await freshPage(browser, fixture));
     await page.locator("#detectAllButton").click();
+    await page.waitForFunction(() => !state.detectionDialogPreparing);
     const before = fixture.detectRequests.length;
     for (const invalid of ["-1", "256", ""]) {
       await page.locator("#detectFluidColorFillTolerance").fill(invalid);
@@ -231,6 +234,7 @@ test("SD-136 fluid color tolerance accepts inclusive bounds and rejects values o
       assert.equal(fixture.detectRequests.at(-1).fluidColorFillTolerance, Number(valid));
       await page.waitForFunction(() => !state.processing && !isBusy());
       await page.locator("#detectAllButton").click();
+      await page.waitForFunction(() => !state.detectionDialogPreparing);
       assert.equal(await page.locator("#detectFluidColorFillTolerance").inputValue(), valid);
     }
   } finally {
@@ -247,6 +251,7 @@ test("SD-139 disabling fluid color fill visibly disables tolerance without chang
   try {
     const { context: openedContext, page } = await freshPage(browser, fixture); context = openedContext;
     await page.locator("#detectAllButton").click();
+    await page.waitForFunction(() => !state.detectionDialogPreparing);
     await page.locator("#detectFluidColorFillTolerance").fill("41");
     await page.locator("#detectFluidColorFillEnabled").uncheck();
     assert.equal(await page.locator("#detectFluidColorFillTolerance").isDisabled(), true);
@@ -266,6 +271,7 @@ test("SD-140 current-image detection uses the saved fluid switch and tolerance w
   try {
     const { context: openedContext, page } = await freshPage(browser, fixture); context = openedContext;
     await page.locator("#detectAllButton").click();
+    await page.waitForFunction(() => !state.detectionDialogPreparing);
     await page.locator("#detectFluidColorFillTolerance").fill("37");
     await page.locator("#detectFluidColorFillEnabled").uncheck();
     await page.locator("#detectStartButton").click();
@@ -298,6 +304,7 @@ test("all-image detection filters images with independent OR checkboxes and pers
   try {
     ({ context, page } = await freshPage(browser, fixture, null, 5));
     await page.locator("#detectAllButton").click();
+    await page.waitForFunction(() => !state.detectionDialogPreparing);
     await page.waitForFunction(() => document.querySelector("#detectDialog").open);
     assert.equal(await page.locator("#detectImageFilters legend").textContent(), "検出する画像", "image filters have their own named group");
     assert.equal(await page.locator("#detectImageFilters").evaluate((field) => field.contains(document.querySelector("#dialogTargetPenis"))), false, "image filters are separate from detection classes");
@@ -348,6 +355,7 @@ test("all-image detection filters images with independent OR checkboxes and pers
     await page.evaluate(() => pollJob());
     await page.waitForFunction(() => state.job?.state === "cancelled" && state.processing === null);
     await page.locator("#detectAllButton").click();
+    await page.waitForFunction(() => !state.detectionDialogPreparing);
     await page.waitForFunction(() => document.querySelector("#detectDialog").open);
     assert.equal(await page.locator('[data-detection-image-filter="unreviewed"]').isChecked(), true, "the saved filter is restored when the modal reopens");
     assert.deepEqual(await page.locator("#detectForm").evaluate((form) => [
@@ -536,6 +544,7 @@ test("hiding an image removes it from the visible all-image detection and save t
     await page.waitForFunction(() => state.images.find((image) => image.id === "sample")?.hidden === true);
 
     await page.locator("#detectAllButton").click();
+    await page.waitForFunction(() => !state.detectionDialogPreparing);
     await page.waitForFunction(() => document.querySelector("#detectDialog").open);
     assert.match(await page.locator("#detectTargetCount").textContent(), /1件$/, "the all-image dialog counts only processable images");
     const detectRequest = page.waitForRequest((request) => new URL(request.url()).pathname === "/api/detect");

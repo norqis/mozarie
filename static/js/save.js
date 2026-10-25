@@ -411,9 +411,9 @@ async function reserveSaveRender(entry, payload, clientSaveToken) {
 
 const browserSaveOwnershipLock = "mozarie-browser-save-ownership";
 
-function withBrowserSaveOwnership(callback) {
+function withBrowserSaveOwnership(callback, mode = "shared") {
   return globalThis.navigator?.locks?.request
-    ? navigator.locks.request(browserSaveOwnershipLock, { mode: "shared" }, callback)
+    ? navigator.locks.request(browserSaveOwnershipLock, { mode }, callback)
     : callback();
 }
 
@@ -504,14 +504,29 @@ async function restorePendingBrowserOverwrite(saveToken, pending) {
   await browserOverwriteStore(saveToken, null);
 }
 
-async function reconcilePendingBrowserSaves() {
+let browserSaveReconciliation = null;
+function reconcilePendingBrowserSaves() {
+  if (!browserSaveReconciliation) {
+    const pending = reconcileAbandonedBrowserSaves().finally(() => {
+      if (browserSaveReconciliation === pending) browserSaveReconciliation = null;
+    });
+    browserSaveReconciliation = pending;
+  }
+  return browserSaveReconciliation;
+}
+
+async function reconcileAbandonedBrowserSaves() {
   // Every save creates fresh tokens while holding shared ownership. Snapshot
   // only abandoned tokens; release before HTTP so recovery never queues saves.
   const pending = globalThis.navigator?.locks?.request
     ? await navigator.locks.request(browserSaveOwnershipLock, { mode: "exclusive", ifAvailable: true }, (lock) => lock ? pendingSaveTokens() : {})
     : (state.saving ? {} : pendingSaveTokens());
+  let batchTokens;
+  try { batchTokens = typeof reconcileNumberedSaves === "function" && !state.saving ? await reconcileNumberedSaves() : new Set(); }
+  catch { setStatusKey("save.recoveryPending", {}, "warning"); return false; }
+  for (const token of batchTokens) delete pending[token];
   const deferred = [];
-  let recovered = true;
+  let recovered = batchTokens.size === 0;
   const recoverEntry = ([saveToken, entry]) => withBrowserOverwriteLock(entry.imageId, async () => {
     try {
     const status = await api("/api/save/status", { method: "POST", body: JSON.stringify({ ...entry, saveToken, sourceAction: entry.sourceAction || "keep" }) });
@@ -575,9 +590,8 @@ async function renderDefaultCopy(entry, payload) {
   }
 }
 
-async function renderStreamedSave(entry, payload) {
+async function renderStreamedSave(entry, payload, clientSaveToken = newClientSaveToken()) {
   payload = { ...payload, outputFilename: entry.outputFilename || undefined };
-  const clientSaveToken = newClientSaveToken();
   try {
     await reserveSaveRender(entry, payload, clientSaveToken);
     return await renderSingleSave({ ...payload, clientSaveToken });
@@ -1304,11 +1318,19 @@ async function ensureDistinctBrowserSaveSources(inputs) {
   if (inputs.mode !== "overwrite" && !inputs.deleteOriginal) return;
   const sourcesByName = new Map();
   const pathsByName = new Map();
+  const outsideByName = new Map();
+  const liveIds = new Set(state.images.map((image) => image.id));
+  for (const [imageId, access] of state.sourceAccess) {
+    if (inputs.sources.has(imageId) || !liveIds.has(imageId) || !access?.fileHandle?.name) continue;
+    const name = access.fileHandle.name.toLowerCase();
+    const bucket = outsideByName.get(name) || [];
+    bucket.push(access.fileHandle); outsideByName.set(name, bucket);
+  }
   const sameHandle = async (left, right) => left === right || Boolean(left?.isSameEntry && await left.isSameEntry(right));
   const directoryPath = (access) => access?.sourceKind === "browser-directory" && access.sourceId && access.relativePath && access.rootHandle
     ? String(access.relativePath).replaceAll("\\", "/").toLowerCase() : null;
   const compareSource = async (left, right) => {
-    if (await sameHandle(left, right)) throw codedError("save_write_failed");
+    if (await sameHandle(left, right)) throw codedError(inputs.numbered ? "output_name_conflict" : "save_write_failed");
   };
   const addPath = async (name, access, imageId, renamed) => {
     if (!name || !access.parentHandle) return;
@@ -1346,11 +1368,14 @@ async function ensureDistinctBrowserSaveSources(inputs) {
     if (!access?.fileHandle) continue;
     const name = access.fileHandle.name || access.name || "";
     const key = name.toLowerCase();
+    if (inputs.numbered) for (const other of outsideByName.get(key) || []) {
+      if (await sameHandle(access.fileHandle, other)) throw codedError("output_name_conflict");
+    }
     const bucket = sourcesByName.get(key) || { bySource: new Map(), other: [] };
     const path = directoryPath(access);
     if (path) {
       const paths = bucket.bySource.get(access.sourceId) || new Map();
-      if (paths.has(path)) throw codedError("save_write_failed");
+      if (paths.has(path)) throw codedError(inputs.numbered ? "output_name_conflict" : "save_write_failed");
       for (const [sourceId, group] of bucket.bySource) {
         if (sourceId === access.sourceId) continue;
         for (const other of group.values()) await compareSource(access.fileHandle, other);
@@ -1365,22 +1390,34 @@ async function ensureDistinctBrowserSaveSources(inputs) {
     }
     sourcesByName.set(key, bucket);
     if (inputs.mode === "overwrite") {
-      await addPath(name, access, imageId, false);
-      await addPath(renamedSourceFileName(image, access, inputs.format), access, imageId, true);
+      if (!inputs.numbered) await addPath(name, access, imageId, false);
+      await addPath(renamedSourceFileName(image, access, inputs.format) || (inputs.numbered ? name : ""), access, imageId, true);
     }
   }
   if (inputs.mode === "overwrite") {
+    const conflicts = [...(inputs.conflicts || [])];
     for (const { image, access } of inputs.sources.values()) {
       const targetName = access?.fileHandle && renamedSourceFileName(image, access, inputs.format);
       if (!targetName) continue;
       if (!access.parentHandle) throw codedError("source_action_unavailable");
       try {
-        await access.parentHandle.getFileHandle(targetName);
-        throw codedError("save_write_failed");
+        const target = await access.parentHandle.getFileHandle(targetName);
+        let selected = false;
+        if (inputs.numbered) {
+          const bucket = sourcesByName.get(targetName.toLowerCase());
+          const candidates = bucket ? [...bucket.other, ...[...bucket.bySource.values()].flatMap((group) => [...group.values()])] : [];
+          for (const handle of candidates) if (await sameHandle(handle, target)) { selected = true; break; }
+
+        }
+        if (selected) inputs.batchOverwrite = true;
+        else if (inputs.numbered) conflicts.push([access.rootHandle?.name || access.parentHandle?.name,
+          (access.relativePath || targetName).split("/").slice(0, -1).concat(targetName).join("/")].filter(Boolean).join("/"));
+        else throw codedError("save_write_failed");
       } catch (error) {
         if (typeof error?.code === "string" || error?.name !== "NotFoundError") throw error;
       }
     }
+    if (conflicts.length) throw codedError("output_files_exist", { files: conflicts.sort().join("\n") });
   }
 }
 
@@ -1404,6 +1441,9 @@ async function runBrowserSave(imageIds, suffix, deleteOriginal, mode = "copy", r
       manualRevision: drafts.has(imageId) ? workspaceDraftRevision(imageId) : Number(imagesById.get(imageId)?.manualRevision || 0),
       access: sourceAccessFor(imageId) ? { ...sourceAccessFor(imageId) } : null,
     }])),
+    conflicts: prepared?.conflicts || [],
+    numbered: Boolean(prepared?.entries?.some((entry) => entry.outputFilename)),
+    batchOverwrite: Boolean(prepared?.entries?.some((entry) => entry.batchOverwrite)),
   };
   for (const entry of prepared?.entries || []) {
     const source = inputs.sources.get(entry.imageId);
@@ -1433,6 +1473,10 @@ async function runBrowserSave(imageIds, suffix, deleteOriginal, mode = "copy", r
   updateActionButtons();
   try {
     await withBrowserSaveOwnership(async () => {
+      if (inputs.batchOverwrite) {
+        await runNumberedOverwriteBatch(inputs, save);
+        return;
+      }
       const saveEntry = async (entry) => {
         showBrowserSaveProgress(save, entry);
         const draft = inputs.drafts.get(entry.imageId) || null;
@@ -1583,7 +1627,7 @@ async function runBrowserSave(imageIds, suffix, deleteOriginal, mode = "copy", r
       }));
       const failed = settled.find((result) => result.status === "rejected");
       if (failed) throw failed.reason;
-    });
+    }, inputs.batchOverwrite ? "exclusive" : "shared");
     const cancelled = save.cancelled;
     setApplyResult(cancelled
       ? t("apply.cancelled", { completed: save.completed })
@@ -1727,7 +1771,8 @@ async function startApplyFromDialog(event) {
       setApplyResult(t("apply.outputDirectoryReadyRetry")); return;
     }
     if (numbering) {
-      prepared = await api("/api/save/prepare", { method: "POST", body: JSON.stringify({ imageIds: capturedImageIds, divisor: Number($("#applyDivisor").value), suffix, deleteOriginal: false, copyToDefault: copy, format, keepMetadata: $("#applyKeepMetadata").checked, numbering }) });
+      prepared = await api("/api/save/prepare", { method: "POST", body: JSON.stringify({ imageIds: capturedImageIds, divisor: Number($("#applyDivisor").value), suffix, deleteOriginal: false, copyToDefault: copy, format, keepMetadata: $("#applyKeepMetadata").checked, numbering, collectConflicts: true }) });
+      if (copy && prepared.conflicts?.length) throw codedError("output_files_exist", { files: prepared.conflicts.join("\n") });
       filenames = new Map(prepared.entries.map((entry) => [entry.imageId, entry.outputFilename]));
       if (!copy) beginPreparation();
     }

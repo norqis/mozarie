@@ -28,6 +28,7 @@ from .image_io import (
 from .masks import compose_masks, expand_mask, union_mask
 
 from .numbering import numbered_filenames
+from .numbered_batch import commit_batch, native_plan
 
 class SavingMixin:
     def output_directory_status(self) -> dict[str, str]:
@@ -90,13 +91,19 @@ class SavingMixin:
         if preserve_directory_structure and not exact_name:
             return
         names: set[str] = set()
+        conflicts: list[str] = []
         for record in records:
             relative = self._copy_relative_path(record, suffix, output_format, preserve_directory_structure)
             name = relative.as_posix().casefold()
             destination = output_directory / relative
-            if name in names or destination.exists():
+            if name in names or (not exact_name and destination.exists()):
                 raise ClientError("平坦化後の保存名が重複しています。フォルダー構成を保持するか、ファイル名を変更してください。", "output_name_conflict")
             names.add(name)
+            if exact_name and destination.exists():
+                conflicts.append(str(destination))
+        if conflicts:
+            raise ClientError("保存対象外の同名ファイルがあります。", "output_files_exist",
+                              {"files": "\n".join(sorted(set(conflicts), key=str.casefold))})
 
     def start_apply(
         self,
@@ -236,6 +243,9 @@ class SavingMixin:
                 if durable["image_id"] != image_id or int(durable["revision"]) != revision:
                     raise ClientError("保存確認トークンと保存対象が一致しません。保存をやり直してください。", "save_state_changed")
                 return {"state": str(durable["state"]), "outputPath": str(durable["destination"] or "")}
+            if any(self.browser_save_tokens.get(token) is not None and self.browser_save_tokens[token].image_id == image_id
+                   for token in self.browser_save_claims):
+                raise ClientError("画像の保存処理が進行中です。", "operation_in_progress")
             catalog_generation = self.catalog_generation
             configured_output_directory = Path(self.settings["saving"]["default_output_directory"]).resolve() if copy_to_default else None
             preserve_directory_structure = self._preserve_directory_structure()
@@ -381,6 +391,7 @@ class SavingMixin:
         output_format: str = "original",
         keep_metadata: bool = True,
         numbering: dict[str, Any] | None = None,
+        conflicts: list[str] | None = None,
     ) -> list[dict[str, Any]]:
         with self.lock:
             self._assert_catalog_mutable()
@@ -398,23 +409,25 @@ class SavingMixin:
                 raise ClientError("画像一覧が変更されました。保存をやり直してください。", "save_state_changed")
             for record in records:
                 self._assert_image_editable(record.image_id)
-            if copy_to_default:
-                output_directory = Path(self.settings["saving"]["default_output_directory"])
-                self._copy_destinations_are_available(
-                    destinations, suffix, output_format, output_directory,
-                    self._preserve_directory_structure(), exact_name=bool(filenames),
-                )
-            if not copy_to_default and filenames:
-                for record in destinations:
-                    if record.source_kind != "filesystem":
-                        continue
-                    destination = self._overwrite_destination(record, output_format)
-                    if destination != record.path and destination.exists():
-                        raise ClientError("保存名が既存ファイルと重複しています。", "output_name_conflict")
+            overlap = False
+            try:
+                if copy_to_default:
+                    output_directory = Path(self.settings["saving"]["default_output_directory"])
+                    self._copy_destinations_are_available(
+                        destinations, suffix, output_format, output_directory,
+                        self._preserve_directory_structure(), exact_name=bool(filenames),
+                    )
+                overlap = not copy_to_default and bool(filenames) and native_plan(self, records,
+                    [self._overwrite_destination(record, output_format) for record in destinations])
+            except ClientError as exc:
+                if exc.error_code != "output_files_exist" or conflicts is None:
+                    raise
+                conflicts.extend(exc.params["files"].splitlines())
             return [
                 {
                     "imageId": record.image_id,
                     "outputFilename": filenames.get(record.image_id),
+                    "batchOverwrite": bool(overlap),
                     "relativePath": record.relative_path,
                     "sourceKind": record.source_kind,
                     "candidateRevision": self._candidate_revision(record.image_id),
@@ -439,6 +452,7 @@ class SavingMixin:
         output_format: str = "original",
         keep_metadata: bool = True,
         output_filename: str | None = None,
+        batch_overwrite: bool = False,
     ) -> BrowserSaveRender:
         self._assert_image_editable(image_id)
         stream_image = stream_image or copy_to_browser
@@ -541,7 +555,7 @@ class SavingMixin:
                         record.flip_horizontal == record.source_flip_horizontal and record.flip_vertical == record.source_flip_vertical
                     destination_name = output_filename or record.edited_filename
                     destination_changed = bool(destination_name and destination_name != Path(record.relative_path).name)
-                    no_effect = content_no_effect and (copy_to_default or (not destination_changed and record.edited_filename is None))
+                    no_effect = not batch_overwrite and content_no_effect and (copy_to_default or (not destination_changed and record.edited_filename is None))
                     source_fingerprint = record.asset_fingerprint()
                     # Saving every listed image means an image without a mosaic is
                     # copied as-is.  An overwrite deliberately becomes a commit
@@ -631,6 +645,9 @@ class SavingMixin:
                 self.save_journal.cleanup(client_save_token or "")
 
     def commit_browser_save(self, image_id: str, revision: int, save_token: str, source_action: str, *, source_mtime_ns: int | None = None, source_size_bytes: int | None = None) -> dict[str, Any]:
+        with self.lock:
+            if any(save_token in batch for batch in self.numbered_save_batches.values()):
+                raise ClientError("連番保存が進行中です。", "operation_in_progress")
         if not isinstance(save_token, str) or not save_token:
             raise ClientError("保存確認トークンがありません。保存をやり直してください。", "save_state_changed")
         if source_action not in {"keep", "overwrite", "deleted"}:
@@ -1043,6 +1060,11 @@ class SavingMixin:
         return {"state": "unknown"}
 
     def acknowledge_browser_save(self, save_token: str) -> dict[str, Any]:
+        from .numbered_batch import batch_rows, recover_batch
+        with self.import_lock:
+            for token, members in batch_rows(self.save_journal):
+                if token == save_token and not recover_batch(self, token, members):
+                    return {"acknowledged": False}
         receipt = self.workspace_store.browser_save_receipt(save_token)
         if receipt is not None:
             try:
@@ -1068,6 +1090,9 @@ class SavingMixin:
 
     def cancel_browser_save(self, image_id: str, revision: int, save_token: str, *, restored_source: dict[str, Any] | None = None) -> dict[str, Any]:
         """Cancel a still-pending token and remove only its own new copy."""
+        with self.lock:
+            if any(save_token in batch for batch in self.numbered_save_batches.values()):
+                raise ClientError("連番保存が進行中です。", "operation_in_progress")
         # Serialise claiming and cancellation with commit; once commit has
         # detached a token, cancellation must never remove its successful copy.
         if restored_source is not None:

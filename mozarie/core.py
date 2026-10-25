@@ -90,6 +90,7 @@ PUBLIC_ERROR_PARAMS: dict[str, frozenset[str]] = {
     "numbering_limit": frozenset({"count"}),
     "numbering_overflow": frozenset({"count", "digits", "required"}),
     "image_read_failed": frozenset({"failures"}),
+    "output_files_exist": frozenset({"files"}),
 }
 
 
