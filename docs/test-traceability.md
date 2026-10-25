@@ -329,3 +329,6 @@ SD-061.3 の `detection/test_exclusion_memory.py` は24候補での作業メモ�
 
 
 起動時とオンライン復帰などで同一画面から復旧を重ねて呼んだ場合は、進行中の復旧結果を共有する。`saving/test_active_save_recovery_e2e.cjs` はHTTP応答を保持して2呼出しの失敗結果が一致し、復旧要求が1回で、完了後の再試行が成功することを検証する。アプリの起動Promiseは既存の後片付けも完了してから解決する。`helpers/app_startup.cjs` はその実Promiseだけを待ち、fixture操作を起動完了後に開始する。固定時間待機や製品内のテスト専用フラグは追加しない。
+
+
+順番入替の適用中は、画像ボタンの無効化を解除する印を保持する。`gallery/test_catalog_reorder_e2e.cjs` の `reorder apply success/failure/stale restores visible cards after an idle poll without scrolling` は実ポインタードラッグから適用し、HTTP応答待ちに実際のジョブ状態を取得する。適用完了直後にスクロールせず、表示中カードの無効化・薄い表示が解除され、画像をクリックして開けることを確認する。保存失敗時の編集継続と古い一覧の再同期でも解除を検証する。
