@@ -339,3 +339,5 @@ SD-061.3 の `detection/test_exclusion_memory.py` は24候補での作業メモ�
 連番保存の実HTTP・Chromium試験 `gallery/catalog_numbered_save_live_browser.cjs` と `test_catalog_order_and_numbering.py` は、任意の末尾を入力し、各連番配置・確認済みフィルターで実出力名と元bytesを照合し、上書きでは末尾を追加しないことを確認する。`test_workspace_contract_browser.cjs` のfixtureは起動Promiseとworkspace送信の完了を待ってから閉じ、通信途中の切断をテストの終了条件にしない。
 検証済み更新はWindowsの親プロセス終了を待ってからインストールし、読み込み済みDLLを本体側に残さない。updaterの実プロセスハンドル試験で親終了前の待機と終了後の再開、entrypoint試験で成功・失敗・中断すべての一時領域削除を検証する。一時領域以外と領域外のsourceは削除しない。
 更新準備の一時領域削除に失敗しても、先に予約を解除する。HTTP試験はOSの削除失敗を注入し、エラー応答、本体継続、同一画面からの次の更新成功を確認する。
+
+更新バッチの自己置換は `test_update_batch_self_replacement_preserves_exit_status_across_releases` が実CMDで検証する。v0.5.39・v0.5.42のGit公開アーカイブ内のバッチから現行へ、現行から先頭の長さが変わる次版への更新で、成功・更新不要・中断・失敗の終了コードと余計なコマンドの未実行を確認する。検証済みsource・一時領域・親PIDは環境変数で渡し、日本語と空白の保持、一部だけ指定された場合の拒否、通常の手動更新、起動失敗時の後始末をupdaterとserverの試験で確認する。

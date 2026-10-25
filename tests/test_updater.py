@@ -152,7 +152,8 @@ class UpdaterTests(unittest.TestCase):
                     if isinstance(outcome, BaseException):
                         raise outcome
                     return outcome
-                with patch.object(sys, "argv", ["updater.py", "--prepared", str(source), "--workspace", str(workspace), "--parent-pid", "123"]), \
+                with patch.object(sys, "argv", ["updater.py"]), \
+                        patch.dict(os.environ, {"MOZARIE_UPDATE_SOURCE": str(source), "MOZARIE_UPDATE_WORKSPACE": str(workspace), "MOZARIE_UPDATE_PARENT_PID": "123"}), \
                         patch.object(updater, "APP_DIR", Path(app_directory)), \
                         patch("updater.wait_for_parent_exit", side_effect=lambda _pid: events.append("parent-exited")), \
                         patch("updater.perform_update", side_effect=install):
@@ -170,7 +171,8 @@ class UpdaterTests(unittest.TestCase):
             marker.write_text("keep", encoding="utf-8")
             for workspace, source in ((root, root / "source"), (nested, nested / "source"), (Path(valid), root / "outside")):
                 with self.subTest(workspace=workspace), patch.object(updater, "APP_DIR", root), \
-                        patch.object(sys, "argv", ["updater.py", "--prepared", str(source), "--workspace", str(workspace), "--parent-pid", "123"]):
+                        patch.object(sys, "argv", ["updater.py"]), \
+                        patch.dict(os.environ, {"MOZARIE_UPDATE_SOURCE": str(source), "MOZARIE_UPDATE_WORKSPACE": str(workspace), "MOZARIE_UPDATE_PARENT_PID": "123"}):
                     self.assertEqual(updater.main(), updater.EXIT_ERROR)
                     self.assertEqual(marker.read_text(encoding="utf-8"), "keep")
                     self.assertTrue(workspace.exists())
@@ -237,20 +239,60 @@ class UpdaterTests(unittest.TestCase):
             with self.subTest(pid=pid), self.assertRaises(updater.UpdateError):
                 updater.wait_for_parent_exit(pid)
 
-    def test_update_batch_forwards_prepared_path_with_spaces_and_japanese(self):
+    def test_prepared_entrypoint_rejects_partial_environment_and_preserves_manual_update(self):
+        keys = ("MOZARIE_UPDATE_SOURCE", "MOZARIE_UPDATE_WORKSPACE", "MOZARIE_UPDATE_PARENT_PID")
+        with tempfile.TemporaryDirectory() as directory, patch.object(updater, "APP_DIR", Path(directory)), \
+                patch.object(sys, "argv", ["updater.py"]):
+            for mask in range(1, 7):
+                with self.subTest(mask=mask), patch.dict(os.environ, {key: "value" for index, key in enumerate(keys) if mask & (1 << index)}, clear=True), \
+                        patch("updater.perform_update") as install:
+                    self.assertEqual(updater.main(), updater.EXIT_ERROR)
+                    install.assert_not_called()
+            with patch.dict(os.environ, {}, clear=True), patch("updater.perform_update", return_value=updater.EXIT_CURRENT) as install:
+                self.assertEqual(updater.main(), updater.EXIT_CURRENT)
+                install.assert_called_once_with()
+
+    def test_update_batch_forwards_prepared_environment_with_spaces_and_japanese(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory) / "更新 test"
             root.mkdir()
             shutil.copyfile(Path(__file__).parents[1] / "update.bat", root / "update.bat")
             (root / "updater.py").write_text(
-                'import json, pathlib, sys\npathlib.Path(__file__).with_name("args.json").write_text(json.dumps(sys.argv[1:]), encoding="utf-8")\n',
+                'import json, os, pathlib\npathlib.Path(__file__).with_name("args.json").write_text(json.dumps({key: os.environ[key] for key in ("MOZARIE_UPDATE_SOURCE", "MOZARIE_UPDATE_WORKSPACE", "MOZARIE_UPDATE_PARENT_PID")}), encoding="utf-8")\n',
                 encoding="utf-8")
-            prepared = root / "検証済み source"
-            result = subprocess.run([str(root / "update.bat"), "--prepared", str(prepared)], input="\n", capture_output=True,
+            prepared = {"MOZARIE_UPDATE_SOURCE": str(root / "検証済み source"), "MOZARIE_UPDATE_WORKSPACE": str(root / "一時 workspace"), "MOZARIE_UPDATE_PARENT_PID": "123"}
+            result = subprocess.run([str(root / "update.bat")], input="\n", capture_output=True,
                 text=True, encoding="utf-8", errors="replace", timeout=30,
-                env={**os.environ, "MOZARIE_PYTHON": sys.executable}, creationflags=subprocess.CREATE_NO_WINDOW)
+                env={**os.environ, **prepared, "MOZARIE_PYTHON": sys.executable}, creationflags=subprocess.CREATE_NO_WINDOW)
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-            self.assertEqual(json.loads((root / "args.json").read_text(encoding="utf-8")), ["--prepared", str(prepared)])
+            self.assertEqual(json.loads((root / "args.json").read_text(encoding="utf-8")), prepared)
+
+    def test_update_batch_self_replacement_preserves_exit_status_across_releases(self):
+        repository = Path(__file__).parents[1]
+        current = (repository / "update.bat").read_bytes()
+        batches = {"current": current}
+        for tag in ("v0.5.39", "v0.5.42"):
+            archive = subprocess.check_output(["git", "archive", "--format=zip", tag, "update.bat"], cwd=repository)
+            with zipfile.ZipFile(io.BytesIO(archive)) as bundle:
+                batches[tag] = bundle.read("update.bat")
+        for version, previous in batches.items():
+            for code in (updater.EXIT_CURRENT, updater.EXIT_UPDATED, updater.EXIT_CANCELLED, updater.EXIT_ERROR):
+                with self.subTest(version=version, code=code), tempfile.TemporaryDirectory() as directory:
+                    root = Path(directory)
+                    (root / "update.bat").write_bytes(previous)
+                    replacement = b"@rem shifted future release\r\n" + current if version == "current" else current
+                    (root / "replacement.bat").write_bytes(replacement)
+                    (root / "updater.py").write_text(
+                        'from pathlib import Path\nimport shutil\nroot = Path(__file__).parent\n'
+                        'shutil.copyfile(root / "replacement.bat", root / "update.bat")\n'
+                        f'print("UPDATE_COMPLETED", flush=True)\nraise SystemExit({code})\n', encoding="utf-8")
+                    result = subprocess.run([str(root / "update.bat")], input="\n", capture_output=True,
+                        text=True, encoding="utf-8", errors="replace", timeout=30,
+                        env={**os.environ, "MOZARIE_PYTHON": sys.executable}, creationflags=subprocess.CREATE_NO_WINDOW)
+                    self.assertEqual(result.returncode, code, result.stdout + result.stderr)
+                    self.assertEqual(result.stdout.count("UPDATE_COMPLETED"), 1)
+                    self.assertEqual(result.stderr, "")
+                    self.assertEqual((root / "update.bat").read_bytes(), replacement)
 
     def test_version_parsing_and_display(self):
         self.assertEqual(updater.parse_version("v1.2.3"), (1, 2, 3))
@@ -1252,9 +1294,11 @@ class UpdaterTests(unittest.TestCase):
         batch_path = Path(__file__).parents[1] / "update.bat"
         raw = batch_path.read_bytes()
         batch = raw.decode("utf-8")
-        self.assertEqual(batch.count('"%PYTHON%" -X utf8 "%APP_DIR%updater.py"'), 1)
+        self.assertEqual(batch.count('"%PYTHON%" -X utf8 "%~dp0updater.py"'), 1)
         self.assertIn(
-            '"%PYTHON%" -X utf8 "%APP_DIR%updater.py" %*\r\n'
+            '(\r\n "%PYTHON%" -X utf8 "%~dp0updater.py" &rem rem\r\n'
+            ' goto :finish_update\r\n)\r\n\r\n:finish_update\r\n', batch)
+        self.assertIn(
             'set "EXIT_CODE=%ERRORLEVEL%"\r\n'
             "goto :finish",
             batch,

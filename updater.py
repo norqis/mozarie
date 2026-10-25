@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import argparse
+import os
 import json
 import hashlib
 import hmac
@@ -854,18 +854,18 @@ def main() -> int:
             "check_failed": EXIT_RUNNING_CHECK_FAILED,
         }[mozarie_running_status(APP_DIR)]
     try:
-        if sys.argv[1:2] == ["--prepared"]:
-            parser = argparse.ArgumentParser()
-            parser.add_argument("--prepared", type=Path, required=True)
-            parser.add_argument("--workspace", type=Path, required=True)
-            parser.add_argument("--parent-pid", type=int, required=True)
-            args = parser.parse_args()
-            workspace = update_workspace(args.workspace)
-            source = args.prepared.resolve()
+        prepared = tuple(os.environ.get(key) for key in (
+            "MOZARIE_UPDATE_SOURCE", "MOZARIE_UPDATE_WORKSPACE", "MOZARIE_UPDATE_PARENT_PID",
+        ))
+        if any(value is not None for value in prepared):
+            if not all(prepared):
+                raise UpdateError(tr("archive_invalid_path"))
+            workspace = update_workspace(Path(prepared[1]))
+            source = Path(prepared[0]).resolve()
             if not source.is_relative_to(workspace):
                 raise UpdateError(tr("archive_invalid_path"))
             try:
-                wait_for_parent_exit(args.parent_pid)
+                wait_for_parent_exit(int(prepared[2]))
                 return perform_update(prepared_source=source)
             finally:
                 cleanup_update_workspace(workspace)
