@@ -143,10 +143,11 @@ class UpdaterTests(unittest.TestCase):
                 workspace = Path(tempfile.mkdtemp(prefix="mozarie-update-"))
                 source = workspace / "extracted" / "source"
                 source.mkdir(parents=True)
+                source = source / ".." / "source"
                 events = []
                 def install(**kwargs):
                     self.assertEqual(events, ["parent-exited"])
-                    self.assertEqual(kwargs["prepared_source"], source)
+                    self.assertEqual(kwargs["prepared_source"], source.resolve())
                     self.assertTrue(source.is_dir())
                     if isinstance(outcome, BaseException):
                         raise outcome
