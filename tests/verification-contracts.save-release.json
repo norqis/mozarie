@@ -88,7 +88,9 @@
       "observation": "拡張子の前へ指定文字列を追加する。",
       "status": "automated",
       "testIds": [
-        "python:tests.test_recursive_save_rename.RecursiveSaveTests.test_copy_uses_edited_basename_before_format_and_suffix"
+        "python:tests.test_recursive_save_rename.RecursiveSaveTests.test_copy_uses_edited_basename_before_format_and_suffix",
+        "python:tests.saving.test_filename_only_save.FilenameOnlySaveTests.test_numbered_copies_apply_editable_suffix_once_and_remove_staging",
+        "node:tests/gallery/test_catalog_reorder_e2e.cjs::numbered copy saving keeps the suffix editable and sends its value"
       ]
     },
     {

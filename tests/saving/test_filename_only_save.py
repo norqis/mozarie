@@ -8,12 +8,39 @@ import base64
 
 import numpy as np
 from PIL import Image
+from mozarie.core import ClientError
 
 from tests.saving import test_apply_unchanged_source as save_fixture
 from tests.saving import test_native_save_transfer as native_fixture
 
 
 class FilenameOnlySaveTests(unittest.TestCase):
+    def test_numbered_copies_apply_editable_suffix_once_and_remove_staging(self):
+        fixture = save_fixture.ApplyUnchangedSourceTests()
+        for placement, stem in (("only", "01"), ("prefix", "01_image"), ("suffix", "image_01")):
+            with self.subTest(placement=placement), fixture.fixture() as (state, image_id, source, output, _pixels):
+                name = f"{stem}_edited.png"
+                numbering = {"digits": 2, "placement": placement}
+                entries = state.prepare_browser_save([image_id], 100, "_edited", False,
+                    copy_to_default=True, numbering=numbering)
+                self.assertEqual(entries[0]["outputFilename"], name)
+                (output / name).write_bytes(b"unrelated existing file")
+                with self.assertRaises(ClientError) as conflict:
+                    state.prepare_browser_save([image_id], 100, "_edited", False,
+                        copy_to_default=True, numbering=numbering)
+                self.assertEqual(conflict.exception.error_code, "output_files_exist")
+                self.assertIn(str(output / name), conflict.exception.params["files"])
+                self.assertFalse((output / ".mozarie-staging").exists())
+                (output / name).unlink()
+                token = str(uuid.uuid4())
+                options = dict(copy_to_default=True, suffix="_edited", output_format="original",
+                    keep_metadata=True, output_filename=name)
+                state.reserve_browser_save(image_id, 0, token, **options)
+                state.render_browser_save(image_id, 0, 100, None, client_save_token=token, **options)
+                state.commit_browser_save(image_id, 0, token, "keep")
+                self.assertEqual((output / name).read_bytes(), source.read_bytes())
+                self.assertEqual([path.name for path in output.iterdir()], [name])
+
     def live_rename(self, browser_handle):
         fixture = native_fixture.NativeSaveTransferTests()
         fixture.setUp()

@@ -1078,8 +1078,25 @@ class MosaicHandler(BaseHTTPRequestHandler):
                     raise ClientError("", "operation_in_progress")
                 if not _reserve_update_start():
                     raise ClientError("更新を開始しています。完了するまでお待ちください。", "operation_in_progress")
-                self._json({"ok": True})
-                threading.Thread(target=_start_update_after_response, args=(self.server,), daemon=True).start()
+                temporary = None
+                try:
+                    from updater import cleanup_update_workspace, prepare_update, UpdateError
+                    temporary = Path(tempfile.mkdtemp(prefix="mozarie-update-"))
+                    source = prepare_update(APP_DIR, temporary)
+                    self._json({"ok": True})
+                    self.server.mozarie_update_workspace = temporary
+                    self.server.mozarie_update_source = source
+                    threading.Thread(target=_start_update_after_response, args=(self.server,), daemon=True).start()
+                except Exception as exc:
+                    global _update_start_requested
+                    with _update_start_lock:
+                        _update_start_requested = False
+                    if temporary is not None:
+                        cleanup_update_workspace(temporary)
+                    LOGGER.exception("更新の準備に失敗しました。本体は終了せず再試行できます。")
+                    if isinstance(exc, (UpdateError, OSError)):
+                        raise ClientError("", "update_preparation_failed") from exc
+                    raise
             elif path == "/api/boundary":
                 image_id = str(payload.get("imageId", ""))
                 self._json(self._catalog_mutation(expected_project_id, expected_catalog_generation,

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import os
 import sys
 import threading
 import types
@@ -112,7 +113,15 @@ def main() -> None:
         raise SystemExit(1) from None
     if launch_update:
         import subprocess
-        subprocess.Popen([str(APP_DIR / "update.bat")], cwd=str(APP_DIR), creationflags=getattr(subprocess, "CREATE_NEW_CONSOLE", 0))
+        temporary = http_server.mozarie_update_workspace
+        try:
+            subprocess.Popen([str(APP_DIR / "update.bat"), "--prepared", str(http_server.mozarie_update_source),
+                              "--workspace", str(temporary), "--parent-pid", str(os.getpid())],
+                             cwd=str(APP_DIR), creationflags=getattr(subprocess, "CREATE_NEW_CONSOLE", 0))
+        except Exception:
+            from updater import cleanup_update_workspace
+            cleanup_update_workspace(temporary)
+            raise
 
 
 if __name__ == "__main__":

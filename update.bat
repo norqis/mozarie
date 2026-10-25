@@ -7,7 +7,7 @@ if not exist "%PYTHON%" goto :missing_python
 call :validate_python
 if errorlevel 1 goto :invalid_mozarie_python
 
-"%PYTHON%" -X utf8 "%APP_DIR%updater.py"
+"%PYTHON%" -X utf8 "%APP_DIR%updater.py" %*
 set "EXIT_CODE=%ERRORLEVEL%"
 goto :finish
 

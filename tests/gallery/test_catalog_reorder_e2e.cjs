@@ -152,7 +152,8 @@ test("overview scrolling, native drag suppression, reorder drafts and numbering 
     await page.locator("#applyNumbering").check();
     assert.equal(await page.locator("#applyNumberingDigits").isEnabled(), true);
     assert.equal(await page.locator("#applyNumberingPlacement").isEnabled(), true);
-    assert.equal(await page.locator("#applySuffix").isDisabled(), true);
+    assert.equal(await page.locator("#applySuffix").isEnabled(), true);
+    await page.locator("#applySuffix").fill("_edited");
     for (const placement of ["only", "prefix", "suffix"]) await page.locator("#applyNumberingPlacement").selectOption(placement);
     await page.locator("#applyNumberingDigits").fill("3");
     await page.locator("#applyNumberingDigits").fill("2");
@@ -255,6 +256,38 @@ test("reorder drag follows across rows, rolls back cancellation and respects fil
     await page.locator("#reorderCancel").click();
     assert.deepEqual(await page.evaluate(() => state.images.map((image) => image.id)), records.map((record) => record.id));
     assert.deepEqual(errors, []);
+  } finally { await context.close(); await browser.close(); await closeServer(fixture.server); }
+});
+
+test("numbered copy saving keeps the suffix editable and sends its value", async () => {
+  const fixture = await startFixtureServer();
+  fixture.setCatalog([{ id: "suffix", relativePath: "source.png", sourceKind: "filesystem", width: 1, height: 1, candidateCount: 0 }]);
+  const browser = await chromium.launch({ headless: true });
+  const context = await browser.newContext();
+  try {
+    const page = await context.newPage();
+    await page.goto(fixture.url, { waitUntil: "domcontentloaded" });
+    await page.evaluate(() => appStartup);
+    await page.locator("#saveAllButton").click();
+    await page.locator("#applyCopyMode").check();
+    await page.locator("#applyNumbering").check();
+    await page.locator("#applySuffix").fill("_custom");
+    let payload; let held; let reached;
+    const requested = new Promise((resolve) => { reached = resolve; });
+    await page.route("**/api/save/prepare", (route) => {
+      payload = route.request().postDataJSON();
+      held = route; reached();
+    });
+    await page.locator("#applyStartButton").click();
+    await requested;
+    assert.equal(await page.locator("#applySuffix").isDisabled(), true);
+    await held.fulfill({ status: 400, json: { error_code: "input_invalid" } });
+    await page.locator("#errorDialog").waitFor({ state: "visible" });
+    assert.equal(payload.suffix, "_custom");
+    assert.equal(payload.numbering.digits, 2);
+    assert.equal(payload.copyToDefault, true);
+    assert.equal(await page.locator("#applySuffix").inputValue(), "_custom");
+    assert.equal(await page.locator("#applySuffix").isEnabled(), true);
   } finally { await context.close(); await browser.close(); await closeServer(fixture.server); }
 });
 

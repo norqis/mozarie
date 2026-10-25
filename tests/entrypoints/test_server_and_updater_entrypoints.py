@@ -46,6 +46,50 @@ def ready_app(path: Path, profile: str = "cuda") -> tuple[Path, Path]:
 
 
 class ServerEntrypointCoverageTests(unittest.TestCase):
+    def test_prepared_source_passes_to_child_without_waiting_and_launch_failure_cleans_it(self):
+        for fail_launch in (False, True):
+            with self.subTest(fail_launch=fail_launch):
+                temporary = tempfile.TemporaryDirectory(prefix="mozarie-update-")
+                root = Path(temporary.name)
+                source = root / "prepared 日本語 source"
+                source.mkdir()
+                locked = []
+
+                class Lock:
+                    def __enter__(self):
+                        locked.append(True)
+                    def __exit__(self, *_args):
+                        locked.clear()
+
+                http_server = Mock()
+                http_server.mozarie_update_requested = True
+                http_server.mozarie_update_workspace = root
+                http_server.mozarie_update_source = source
+                child = Mock()
+
+                def launch(*_args, **_kwargs):
+                    self.assertFalse(locked)
+                    self.assertTrue(source.is_dir())
+                    if fail_launch:
+                        raise OSError("launch failed")
+                    return child
+
+                with patch("server.ThreadingHTTPServer", return_value=http_server), \
+                        patch("server.MaintenanceLock", return_value=Lock()), \
+                        patch("server._schedule_browser_open"), patch("subprocess.Popen", side_effect=launch), \
+                        patch("mozarie.state.STATE", Mock(settings={"general": {"port": 31844, "open_browser": False}}, cache_dir=root / "cache")), patch("mozarie.state.STATE_STARTUP_ERROR", None), \
+                        patch.object(sys, "argv", ["server.py"]):
+                    try:
+                        if fail_launch:
+                            with self.assertRaises(OSError):
+                                server.main()
+                        else:
+                            server.main()
+                            child.wait.assert_not_called()
+                        self.assertEqual(root.exists(), not fail_launch)
+                    finally:
+                        temporary.cleanup()
+
     def test_server_import_path_browser_errors_and_busy_main(self) -> None:
         original_path = list(sys.path)
         try:

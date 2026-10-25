@@ -8,10 +8,17 @@ const { waitForAppStartup } = require("../helpers/app_startup.cjs");
   try {
     let page = await context.newPage();
     const errors = [];
+    const startupFailures = [];
     page.on("pageerror", (error) => errors.push(error.message));
+    const requestFailed = (request) => startupFailures.push(`${request.url()}: ${request.failure()?.errorText}`);
+    const responseFailed = (response) => { if (response.status() >= 400) startupFailures.push(`${response.url()}: HTTP ${response.status()}`); };
+    page.on("requestfailed", requestFailed);
+    page.on("response", responseFailed);
     await page.addInitScript(() => { window.showDirectoryPicker = () => navigator.storage.getDirectory(); });
     await page.goto(process.argv[2], { waitUntil: "domcontentloaded" });
-    await waitForAppStartup(page);
+    try { await waitForAppStartup(page); }
+    catch (error) { throw new Error(`${error.message}\nStartup failures: ${JSON.stringify([...errors, ...startupFailures])}`, { cause: error }); }
+    finally { page.off("requestfailed", requestFailed); page.off("response", responseFailed); }
     await page.waitForFunction(() => state.settings && state.images.length === 3);
     const browserSources = process.argv[3] ? JSON.parse(process.argv[3]) : null;
     const failure = process.argv[4];

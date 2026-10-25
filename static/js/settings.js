@@ -768,7 +768,18 @@ async function checkForUpdate({ silent = false } = {}) {
 }
 
 async function startUpdate() {
+  const button = $("#checkUpdateButton");
+  if (button.disabled) return;
   if ($("#checkUpdateButton").dataset.available !== "true") return checkForUpdate();
   if (!await confirmAction(t("update.title"), t("update.message"))) return;
-  try { await api("/api/update/start", { method: "POST", body: JSON.stringify({}) }); } catch (error) { showUserError(error, $("#checkUpdateButton")); }
+  button.disabled = true; button.textContent = t("update.preparing");
+  $("#updateStatus").textContent = t("update.preparing");
+  try {
+    await api("/api/update/start", { method: "POST", body: JSON.stringify({}) });
+    $("#updateStatus").textContent = t("update.starting");
+  } catch (error) {
+    $("#updateStatus").textContent = t("update.prepareFailed");
+    button.disabled = false; button.textContent = t("update.start");
+    showUserError(error, button);
+  }
 }

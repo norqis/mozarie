@@ -104,6 +104,7 @@ const USER_ERROR_CODES = {
   numbering_overflow: "numbering_overflow",
   numbering_limit: "numbering_limit",
   internal_error: "internal_error",
+  update_preparation_failed: "update_preparation_failed",
 };
 
 const CANDIDATE_CLASS_TOKENS = new Set(["penis", "pussy", "testicles", "boundary", "boundary_polygon", "hand", "fluid"]);

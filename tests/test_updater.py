@@ -11,10 +11,11 @@ import shutil
 import subprocess
 import string
 import tempfile
+import threading
 import unittest
 import zipfile
 from pathlib import Path, PurePosixPath
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -121,6 +122,135 @@ class Response(io.BytesIO):
 class UpdaterTests(unittest.TestCase):
     def setUp(self):
         updater._language = "ja"
+
+    def test_prepared_update_installs_without_network_download_or_confirmation(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            app = make_install(root / "install")
+            source = make_source(root / "prepared source 日本語")
+            write_runtime_marker(app)
+            with patch("updater.fetch_latest_release", side_effect=AssertionError("must reuse prepared source")), \
+                    patch("updater.mozarie_running_status", return_value="none"):
+                result = updater.perform_update(app, prepared_source=source,
+                    input_fn=lambda _prompt: self.fail("the UI already confirmed"))
+            self.assertEqual(result, updater.EXIT_UPDATED)
+            self.assertEqual((app / "VERSION").read_text(encoding="utf-8"), "1.2.0")
+            self.assertEqual((app / "server.py").read_bytes(), (source / "server.py").read_bytes())
+
+    def test_prepared_entrypoint_waits_before_install_and_cleans_workspace_on_all_results(self):
+        for outcome in (updater.EXIT_UPDATED, updater.UpdateError("failed"), KeyboardInterrupt()):
+            with self.subTest(outcome=type(outcome).__name__), tempfile.TemporaryDirectory() as app_directory:
+                workspace = Path(tempfile.mkdtemp(prefix="mozarie-update-"))
+                source = workspace / "extracted" / "source"
+                source.mkdir(parents=True)
+                source = source / ".." / "source"
+                events = []
+                def install(**kwargs):
+                    self.assertEqual(events, ["parent-exited"])
+                    self.assertEqual(kwargs["prepared_source"], source.resolve())
+                    self.assertTrue(source.is_dir())
+                    if isinstance(outcome, BaseException):
+                        raise outcome
+                    return outcome
+                with patch.object(sys, "argv", ["updater.py", "--prepared", str(source), "--workspace", str(workspace), "--parent-pid", "123"]), \
+                        patch.object(updater, "APP_DIR", Path(app_directory)), \
+                        patch("updater.wait_for_parent_exit", side_effect=lambda _pid: events.append("parent-exited")), \
+                        patch("updater.perform_update", side_effect=install):
+                    result = updater.main()
+                expected = updater.EXIT_ERROR if isinstance(outcome, updater.UpdateError) else updater.EXIT_CANCELLED if isinstance(outcome, KeyboardInterrupt) else updater.EXIT_UPDATED
+                self.assertEqual(result, expected)
+                self.assertFalse(workspace.exists())
+
+    def test_prepared_entrypoint_never_deletes_outside_its_owned_temporary_workspace(self):
+        with tempfile.TemporaryDirectory() as directory, tempfile.TemporaryDirectory(prefix="mozarie-update-") as valid:
+            root = Path(directory)
+            nested = root / "mozarie-update-nested"
+            nested.mkdir()
+            marker = root / "keep.txt"
+            marker.write_text("keep", encoding="utf-8")
+            for workspace, source in ((root, root / "source"), (nested, nested / "source"), (Path(valid), root / "outside")):
+                with self.subTest(workspace=workspace), patch.object(updater, "APP_DIR", root), \
+                        patch.object(sys, "argv", ["updater.py", "--prepared", str(source), "--workspace", str(workspace), "--parent-pid", "123"]):
+                    self.assertEqual(updater.main(), updater.EXIT_ERROR)
+                    self.assertEqual(marker.read_text(encoding="utf-8"), "keep")
+                    self.assertTrue(workspace.exists())
+
+    def test_parent_wait_uses_the_real_process_handle_until_the_process_exits(self):
+        import ctypes
+        from ctypes import wintypes
+        parent = subprocess.Popen([sys.executable, "-c", 'import sys; print("ready", flush=True); sys.stdin.read()'],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True, creationflags=subprocess.CREATE_NO_WINDOW)
+        kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+        native_wait = kernel.WaitForSingleObject
+        native_wait.argtypes = (wintypes.HANDLE, wintypes.DWORD)
+        native_wait.restype = wintypes.DWORD
+        entered = threading.Event()
+        completed = threading.Event()
+        errors = []
+        def wait(handle, milliseconds):
+            entered.set()
+            return native_wait(handle, milliseconds)
+        kernel.WaitForSingleObject = wait
+        def worker():
+            try:
+                updater.wait_for_parent_exit(parent.pid)
+            except BaseException as exc:
+                errors.append(exc)
+            finally:
+                completed.set()
+        thread = threading.Thread(target=worker)
+        try:
+            self.assertEqual(parent.stdout.readline().strip(), "ready")
+            with patch("ctypes.WinDLL", return_value=kernel):
+                thread.start()
+                self.assertTrue(entered.wait(5))
+                self.assertFalse(completed.is_set())
+                parent.stdin.close()
+                parent.wait(10)
+                self.assertTrue(completed.wait(5))
+                thread.join(5)
+            self.assertFalse(thread.is_alive())
+            self.assertEqual(errors, [])
+        finally:
+            if parent.poll() is None:
+                parent.kill()
+            parent.wait(10)
+            if thread.ident is not None:
+                thread.join(5)
+            parent.stdin.close()
+            parent.stdout.close()
+
+    def test_parent_wait_only_accepts_a_missing_process_not_an_access_failure(self):
+        for error in (87, 5):
+            with self.subTest(error=error):
+                kernel = Mock()
+                kernel.OpenProcess.return_value = None
+                with patch("ctypes.WinDLL", return_value=kernel), patch("ctypes.get_last_error", return_value=error):
+                    if error == 87:
+                        updater.wait_for_parent_exit(123)
+                    else:
+                        with self.assertRaises(updater.UpdateError):
+                            updater.wait_for_parent_exit(123)
+                kernel.WaitForSingleObject.assert_not_called()
+                kernel.CloseHandle.assert_not_called()
+        for pid in (0, -1):
+            with self.subTest(pid=pid), self.assertRaises(updater.UpdateError):
+                updater.wait_for_parent_exit(pid)
+
+    def test_update_batch_forwards_prepared_path_with_spaces_and_japanese(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "更新 test"
+            root.mkdir()
+            shutil.copyfile(Path(__file__).parents[1] / "update.bat", root / "update.bat")
+            (root / "updater.py").write_text(
+                'import json, pathlib, sys\npathlib.Path(__file__).with_name("args.json").write_text(json.dumps(sys.argv[1:]), encoding="utf-8")\n',
+                encoding="utf-8")
+            prepared = root / "検証済み source"
+            result = subprocess.run([str(root / "update.bat"), "--prepared", str(prepared)], input="\n", capture_output=True,
+                text=True, encoding="utf-8", errors="replace", timeout=30,
+                env={**os.environ, "MOZARIE_PYTHON": sys.executable}, creationflags=subprocess.CREATE_NO_WINDOW)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertEqual(json.loads((root / "args.json").read_text(encoding="utf-8")), ["--prepared", str(prepared)])
 
     def test_version_parsing_and_display(self):
         self.assertEqual(updater.parse_version("v1.2.3"), (1, 2, 3))
@@ -335,7 +465,7 @@ class UpdaterTests(unittest.TestCase):
             root = Path(directory)
             archive = root / "mozarie.zip"
             subprocess.run(
-                ["git", "archive", "--format=zip", "--worktree-attributes", "--prefix=mozarie-release/", "--output", str(archive), "HEAD"],
+                [sys.executable, str(repository / "scripts" / "build-release.py"), "HEAD", str(archive)],
                 cwd=str(repository),
                 check=True,
             )
@@ -1124,7 +1254,7 @@ class UpdaterTests(unittest.TestCase):
         batch = raw.decode("utf-8")
         self.assertEqual(batch.count('"%PYTHON%" -X utf8 "%APP_DIR%updater.py"'), 1)
         self.assertIn(
-            '"%PYTHON%" -X utf8 "%APP_DIR%updater.py"\r\n'
+            '"%PYTHON%" -X utf8 "%APP_DIR%updater.py" %*\r\n'
             'set "EXIT_CODE=%ERRORLEVEL%"\r\n'
             "goto :finish",
             batch,

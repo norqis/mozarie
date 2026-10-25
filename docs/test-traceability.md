@@ -332,3 +332,10 @@ SD-061.3 の `detection/test_exclusion_memory.py` は24候補での作業メモ�
 
 
 順番入替の適用中は、画像ボタンの無効化を解除する印を保持する。`gallery/test_catalog_reorder_e2e.cjs` の `reorder apply success/failure/stale restores visible cards after an idle poll without scrolling` は実ポインタードラッグから適用し、HTTP応答待ちに実際のジョブ状態を取得する。適用完了直後にスクロールせず、表示中カードの無効化・薄い表示が解除され、画像をクリックして開けることを確認する。保存失敗時の編集継続と古い一覧の再同期でも解除を検証する。
+
+更新前の検証は `tests/http/test_update_preparation.py` が実HTTPとネットワーク境界で通信・整合性・ZIP構造・VERSION不一致を再現し、本体継続、予約解除、同じ画面からの再POST成功、成功時だけの終了を検証する。`tests/test_settings_dialog_e2e.cjs` は準備表示・二重実行防止・失敗後の再試行を実Chromiumで確認する。`tests/test_updater.py` は公開用 `scripts/build-release.py` そのものが作るZIPを現行とv0.5.13のupdaterで展開し、検証済み更新は再取得・再確認入力をせず既存のインストールへ進むこと、update.batが空白・日本語パスを実プロセスで転送することを確認する。`tests/entrypoints/test_server_and_updater_entrypoints.py` は本体の保守ロックを解放してから子プロセスを起動し、子の終了を待たず本体を終了できること、起動失敗時に一時データを片付けることを確認する。
+
+連番コピーでもファイル名末尾を編集できる。`gallery/test_catalog_reorder_e2e.cjs` は入力値が保存要求まで維持されること、`saving/test_filename_only_save.py` は連番のみ・先頭・末尾の各配置で末尾を一回だけ付け、実ファイル保存・同名衝突の事前検出・元画像保持・保存後の空staging削除を確認する。`.mozarie-staging` は同一ドライブで保存を確定するための一時領域として維持する。既存 `test_recursive_save_rename.py` と `saving/test_apply_staging_failures.py` が空フォルダー削除、稼働中内容保持、失敗と再試行を確認する。
+連番保存の実HTTP・Chromium試験 `gallery/catalog_numbered_save_live_browser.cjs` と `test_catalog_order_and_numbering.py` は、任意の末尾を入力し、各連番配置・確認済みフィルターで実出力名と元bytesを照合し、上書きでは末尾を追加しないことを確認する。`test_workspace_contract_browser.cjs` のfixtureは起動Promiseとworkspace送信の完了を待ってから閉じ、通信途中の切断をテストの終了条件にしない。
+検証済み更新はWindowsの親プロセス終了を待ってからインストールし、読み込み済みDLLを本体側に残さない。updaterの実プロセスハンドル試験で親終了前の待機と終了後の再開、entrypoint試験で成功・失敗・中断すべての一時領域削除を検証する。一時領域以外と領域外のsourceは削除しない。
+更新準備の一時領域削除に失敗しても、先に予約を解除する。HTTP試験はOSの削除失敗を注入し、エラー応答、本体継続、同一画面からの次の更新成功を確認する。
