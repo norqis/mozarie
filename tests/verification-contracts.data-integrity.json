@@ -3259,7 +3259,10 @@
         "node:tests/gallery/test_filtered_action_authority_e2e.cjs::DI-161 DI-164 DI-168 DI-181 DI-183 and DI-185 use the captured visible order for every successor boundary",
         "node:tests/test_source_delete_e2e.cjs::batch source deletion keeps the current canvas when another selected image fails, then moves only after the current image commits",
         "node:tests/gallery/test_catalog_reorder_e2e.cjs::overview scrolling, native drag suppression, reorder drafts and numbering controls",
-        "node:tests/gallery/test_catalog_reorder_e2e.cjs::reorder drag follows across rows, rolls back cancellation and respects filtered reduced motion"
+        "node:tests/gallery/test_catalog_reorder_e2e.cjs::reorder drag follows across rows, rolls back cancellation and respects filtered reduced motion",
+        "node:tests/gallery/test_catalog_reorder_e2e.cjs::reorder apply success restores visible cards after an idle poll without scrolling",
+        "node:tests/gallery/test_catalog_reorder_e2e.cjs::reorder apply failure restores visible cards after an idle poll without scrolling",
+        "node:tests/gallery/test_catalog_reorder_e2e.cjs::reorder apply stale restores visible cards after an idle poll without scrolling"
       ]
     },
     {

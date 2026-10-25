@@ -966,7 +966,8 @@ function updateActionButtons() {
   applyBusyControlLock([...document.querySelectorAll("button, input, select, textarea")], busyLocked, confirmDialog);
   if (state.reorder) {
     for (const control of document.querySelectorAll("#reorderActions button, #overviewGrid .overview-item, #closeOverviewButton")) {
-      delete control.dataset.disabledByLock; control.disabled = state.reorder.pending;
+      if (!state.reorder.pending) delete control.dataset.disabledByLock;
+      control.disabled = state.reorder.pending;
     }
     syncReorderControls();
   }

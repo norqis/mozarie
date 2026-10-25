@@ -257,3 +257,73 @@ test("reorder drag follows across rows, rolls back cancellation and respects fil
     assert.deepEqual(errors, []);
   } finally { await context.close(); await browser.close(); await closeServer(fixture.server); }
 });
+
+for (const outcome of ["success", "failure", "stale"]) {
+  test(`reorder apply ${outcome} restores visible cards after an idle poll without scrolling`, { timeout: 60000 }, async () => {
+    const fixture = await startFixtureServer();
+    const records = Array.from({ length: 104 }, (_, index) => ({ id: `lock-${index}`,
+      relativePath: `lock-${index}.png`, sourceKind: "filesystem", width: 1, height: 1,
+      candidateCount: 0, candidateRevision: 0, reviewed: false, hidden: false }));
+    fixture.setCatalog(records);
+    const browser = await chromium.launch({ headless: true });
+    const context = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+    try {
+      const page = await context.newPage();
+      const errors = [];
+      page.on("pageerror", (error) => errors.push(error.message));
+      let held; let reached;
+      const requested = new Promise((resolve) => { reached = resolve; });
+      await page.route("**/api/catalog/reorder", (route) => { held = route; reached(); });
+      await page.goto(fixture.url, { waitUntil: "domcontentloaded" });
+      await page.waitForFunction(() => state.images.length === 104);
+      await page.evaluate(() => appStartup);
+      await page.evaluate(async () => {
+        clearTimeout(state.jobPollTimer);
+        await state.pollInFlight;
+        clearTimeout(state.jobPollTimer);
+      });
+      const snapshot = await (await context.request.get(fixture.url + "/api/images")).json();
+      await page.locator("#overviewButton").click();
+      await page.locator("#reorderImagesButton").click();
+      const from = await page.locator('.overview-item[data-id="lock-0"]').boundingBox();
+      const to = await page.locator('.overview-item[data-id="lock-3"]').boundingBox();
+      await page.mouse.move(from.x + from.width / 2, from.y + 30);
+      await page.mouse.down();
+      await page.mouse.move(to.x + to.width / 2, to.y + 30, { steps: 8 });
+      await page.waitForFunction(() => state.reorder.ids[3] === "lock-0");
+      await page.mouse.up();
+      await page.waitForFunction(() => !state.reorder.drag && !state.reorder.settle);
+      await page.locator("#reorderApply").click();
+      await requested;
+      // Drive the real idle job response while the reorder request is held.
+      await page.evaluate(() => pollJob());
+      const cards = page.locator("#overviewGrid .overview-item");
+      assert.ok(await cards.count() > 0);
+      assert.equal(await cards.evaluateAll((items) => items.every((item) => item.disabled && getComputedStyle(item).opacity === "0.45")), true);
+      if (outcome === "success") {
+        const byId = new Map(records.map((image) => [image.id, image]));
+        snapshot.images = held.request().postDataJSON().imageIds.map((id) => byId.get(id));
+        fixture.setCatalog(snapshot.images);
+        await held.fulfill({ json: snapshot });
+        await page.waitForFunction(() => state.reorder === null);
+        assert.deepEqual(await page.evaluate(() => state.images.slice(0, 4).map((image) => image.id)), ["lock-1", "lock-2", "lock-3", "lock-0"]);
+      } else {
+        await held.fulfill({ status: outcome === "stale" ? 409 : 500, json: { error_code: outcome === "stale" ? "stale_catalog" : "internal_error" } });
+        await page.locator("#errorDialog").waitFor({ state: "visible" });
+        await page.waitForFunction(() => !state.reorder?.pending);
+        assert.equal(await page.evaluate(() => Boolean(state.reorder)), outcome === "failure");
+        await page.locator("#errorDialogClose").click();
+      }
+      assert.equal(await page.locator("#overviewGrid").evaluate((grid) => grid.scrollTop), 0);
+      assert.equal(await cards.evaluateAll((items) => items.every((item) => !item.disabled && getComputedStyle(item).opacity === "1" && !item.hasAttribute("data-disabled-by-lock"))), true,
+        "existing visible cards recover immediately without scrolling");
+      if (outcome === "failure") await page.locator("#reorderCancel").click();
+      await page.locator('.overview-item[data-id="lock-0"]').click();
+      await page.waitForFunction(() => state.currentId === "lock-0" && state.currentImage && !state.pendingImageId);
+      assert.deepEqual(errors, []);
+    } finally {
+      await context.close(); await browser.close();
+      fixture.server.closeAllConnections(); await closeServer(fixture.server);
+    }
+  });
+}
