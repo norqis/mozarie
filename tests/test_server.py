@@ -1879,11 +1879,16 @@ class MozarieTests(unittest.TestCase):
                 patch.object(state_module.STATE, "cache_dir", self.cache_dir), \
                 patch.object(sys, "argv", ["server.py", "--port", "9876"]):
             server_entry.main()
-        popen.assert_called_once_with(
-            [str(server_entry.APP_DIR / "update.bat"), "--prepared", str(fake_server.mozarie_update_source),
-             "--workspace", str(fake_server.mozarie_update_workspace), "--parent-pid", str(os.getpid())], cwd=str(server_entry.APP_DIR),
-            creationflags=getattr(subprocess, "CREATE_NEW_CONSOLE", 0),
-        )
+        self.assertEqual(popen.call_count, 1)
+        self.assertEqual(popen.call_args.args, ([str(server_entry.APP_DIR / "update.bat")],))
+        options = popen.call_args.kwargs
+        self.assertEqual(options["cwd"], str(server_entry.APP_DIR))
+        self.assertEqual(options["creationflags"], getattr(subprocess, "CREATE_NEW_CONSOLE", 0))
+        self.assertEqual(options["env"]["MOZARIE_UPDATE_SOURCE"], str(fake_server.mozarie_update_source))
+        self.assertEqual(options["env"]["MOZARIE_UPDATE_WORKSPACE"], str(fake_server.mozarie_update_workspace))
+        self.assertEqual(options["env"]["MOZARIE_UPDATE_PARENT_PID"], str(os.getpid()))
+        self.assertTrue(all(options["env"].get(key) == value for key, value in os.environ.items()
+            if key not in {"MOZARIE_UPDATE_SOURCE", "MOZARIE_UPDATE_WORKSPACE", "MOZARIE_UPDATE_PARENT_PID"}))
         popen.return_value.wait.assert_not_called()
 
     def test_main_reports_the_specific_maintenance_lock_failure(self):

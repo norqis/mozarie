@@ -2030,6 +2030,8 @@
         "python:tests.http.test_update_preparation.UpdatePreparationTests.test_invalid_downloads_leave_server_running_and_next_request_can_update",
         "python:tests.test_updater.UpdaterTests.test_prepared_entrypoint_waits_before_install_and_cleans_workspace_on_all_results",
         "python:tests.test_updater.UpdaterTests.test_prepared_entrypoint_never_deletes_outside_its_owned_temporary_workspace",
+        "python:tests.test_updater.UpdaterTests.test_prepared_entrypoint_rejects_partial_environment_and_preserves_manual_update",
+        "python:tests.test_updater.UpdaterTests.test_update_batch_forwards_prepared_environment_with_spaces_and_japanese",
         "python:tests.test_updater.UpdaterTests.test_parent_wait_uses_the_real_process_handle_until_the_process_exits"
       ]
     },

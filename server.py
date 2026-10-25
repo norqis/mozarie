@@ -115,8 +115,13 @@ def main() -> None:
         import subprocess
         temporary = http_server.mozarie_update_workspace
         try:
-            subprocess.Popen([str(APP_DIR / "update.bat"), "--prepared", str(http_server.mozarie_update_source),
-                              "--workspace", str(temporary), "--parent-pid", str(os.getpid())],
+            environment = os.environ.copy()
+            environment.update({
+                "MOZARIE_UPDATE_SOURCE": str(http_server.mozarie_update_source),
+                "MOZARIE_UPDATE_WORKSPACE": str(temporary),
+                "MOZARIE_UPDATE_PARENT_PID": str(os.getpid()),
+            })
+            subprocess.Popen([str(APP_DIR / "update.bat")], env=environment,
                              cwd=str(APP_DIR), creationflags=getattr(subprocess, "CREATE_NEW_CONSOLE", 0))
         except Exception:
             from updater import cleanup_update_workspace
