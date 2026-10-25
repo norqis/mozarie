@@ -1880,11 +1880,11 @@ class MozarieTests(unittest.TestCase):
                 patch.object(sys, "argv", ["server.py", "--port", "9876"]):
             server_entry.main()
         popen.assert_called_once_with(
-            [str(server_entry.APP_DIR / "update.bat"), "--prepared", str(fake_server.mozarie_update_source)], cwd=str(server_entry.APP_DIR),
+            [str(server_entry.APP_DIR / "update.bat"), "--prepared", str(fake_server.mozarie_update_source),
+             "--workspace", str(fake_server.mozarie_update_workspace), "--parent-pid", str(os.getpid())], cwd=str(server_entry.APP_DIR),
             creationflags=getattr(subprocess, "CREATE_NEW_CONSOLE", 0),
         )
-        popen.return_value.wait.assert_called_once()
-        fake_server.mozarie_update_workspace.cleanup.assert_called_once()
+        popen.return_value.wait.assert_not_called()
 
     def test_main_reports_the_specific_maintenance_lock_failure(self):
         for message_key in ("update_in_progress", "maintenance_lock_access"):

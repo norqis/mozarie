@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import json
 import hashlib
 import hmac
@@ -724,6 +725,42 @@ def prepare_update(app_dir: Path, workspace: Path, *, release=None,
     return source
 
 
+def update_workspace(path: Path) -> Path:
+    workspace = path.resolve()
+    if workspace.parent != Path(tempfile.gettempdir()).resolve() or not workspace.name.startswith("mozarie-update-"):
+        raise UpdateError(tr("archive_invalid_path"))
+    return workspace
+
+
+def cleanup_update_workspace(path: Path) -> None:
+    shutil.rmtree(update_workspace(path))
+
+
+def wait_for_parent_exit(pid: int) -> None:
+    """Release the running app's loaded DLLs before pip can replace them."""
+    import ctypes
+    from ctypes import wintypes
+    if pid <= 0:
+        raise UpdateError(tr("running_check_failed"))
+    kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel.OpenProcess.argtypes = (wintypes.DWORD, wintypes.BOOL, wintypes.DWORD)
+    kernel.OpenProcess.restype = wintypes.HANDLE
+    kernel.WaitForSingleObject.argtypes = (wintypes.HANDLE, wintypes.DWORD)
+    kernel.WaitForSingleObject.restype = wintypes.DWORD
+    kernel.CloseHandle.argtypes = (wintypes.HANDLE,)
+    kernel.CloseHandle.restype = wintypes.BOOL
+    handle = kernel.OpenProcess(0x00100000, False, pid)
+    if not handle:
+        if ctypes.get_last_error() == 87:
+            return
+        raise UpdateError(tr("running_check_failed"))
+    try:
+        if kernel.WaitForSingleObject(handle, 0xFFFFFFFF) != 0:
+            raise UpdateError(tr("running_check_failed"))
+    finally:
+        kernel.CloseHandle(handle)
+
+
 def _perform_update(
     app_dir: Path = APP_DIR,
     *,
@@ -817,8 +854,21 @@ def main() -> int:
             "check_failed": EXIT_RUNNING_CHECK_FAILED,
         }[mozarie_running_status(APP_DIR)]
     try:
-        if len(sys.argv) == 3 and sys.argv[1] == "--prepared":
-            return perform_update(prepared_source=Path(sys.argv[2]))
+        if sys.argv[1:2] == ["--prepared"]:
+            parser = argparse.ArgumentParser()
+            parser.add_argument("--prepared", type=Path, required=True)
+            parser.add_argument("--workspace", type=Path, required=True)
+            parser.add_argument("--parent-pid", type=int, required=True)
+            args = parser.parse_args()
+            workspace = update_workspace(args.workspace)
+            source = args.prepared.resolve()
+            if not source.is_relative_to(workspace):
+                raise UpdateError(tr("archive_invalid_path"))
+            try:
+                wait_for_parent_exit(args.parent_pid)
+                return perform_update(prepared_source=source)
+            finally:
+                cleanup_update_workspace(workspace)
         return perform_update()
     except KeyboardInterrupt:
         print(f"\n{tr('cancelled')}")

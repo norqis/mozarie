@@ -46,10 +46,10 @@ def ready_app(path: Path, profile: str = "cuda") -> tuple[Path, Path]:
 
 
 class ServerEntrypointCoverageTests(unittest.TestCase):
-    def test_prepared_source_lives_until_child_exits_and_cleanup_runs_on_launch_failure(self):
+    def test_prepared_source_passes_to_child_without_waiting_and_launch_failure_cleans_it(self):
         for fail_launch in (False, True):
             with self.subTest(fail_launch=fail_launch):
-                temporary = tempfile.TemporaryDirectory(prefix="mozarie-entrypoint-")
+                temporary = tempfile.TemporaryDirectory(prefix="mozarie-update-")
                 root = Path(temporary.name)
                 source = root / "prepared 日本語 source"
                 source.mkdir()
@@ -63,16 +63,9 @@ class ServerEntrypointCoverageTests(unittest.TestCase):
 
                 http_server = Mock()
                 http_server.mozarie_update_requested = True
-                http_server.mozarie_update_workspace = temporary
+                http_server.mozarie_update_workspace = root
                 http_server.mozarie_update_source = source
                 child = Mock()
-
-                def wait():
-                    self.assertFalse(locked)
-                    self.assertTrue(source.is_dir())
-                    return 1
-
-                child.wait.side_effect = wait
 
                 def launch(*_args, **_kwargs):
                     self.assertFalse(locked)
@@ -92,8 +85,8 @@ class ServerEntrypointCoverageTests(unittest.TestCase):
                                 server.main()
                         else:
                             server.main()
-                            child.wait.assert_called_once()
-                        self.assertFalse(root.exists())
+                            child.wait.assert_not_called()
+                        self.assertEqual(root.exists(), not fail_launch)
                     finally:
                         temporary.cleanup()
 

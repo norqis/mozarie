@@ -1080,16 +1080,16 @@ class MosaicHandler(BaseHTTPRequestHandler):
                     raise ClientError("更新を開始しています。完了するまでお待ちください。", "operation_in_progress")
                 temporary = None
                 try:
-                    from updater import prepare_update, UpdateError
-                    temporary = tempfile.TemporaryDirectory(prefix="mozarie-update-")
-                    source = prepare_update(APP_DIR, Path(temporary.name))
+                    from updater import cleanup_update_workspace, prepare_update, UpdateError
+                    temporary = Path(tempfile.mkdtemp(prefix="mozarie-update-"))
+                    source = prepare_update(APP_DIR, temporary)
                     self._json({"ok": True})
                     self.server.mozarie_update_workspace = temporary
                     self.server.mozarie_update_source = source
                     threading.Thread(target=_start_update_after_response, args=(self.server,), daemon=True).start()
                 except Exception as exc:
                     if temporary is not None:
-                        temporary.cleanup()
+                        cleanup_update_workspace(temporary)
                     global _update_start_requested
                     with _update_start_lock:
                         _update_start_requested = False

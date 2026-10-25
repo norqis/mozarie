@@ -10,6 +10,7 @@ import zipfile
 from mozarie import http as http_module
 from tests.saving import test_native_save_transfer as native_fixture
 from tests.test_updater import UPDATE_ARCHIVE_CONTENTS, Response, make_release
+from updater import cleanup_update_workspace
 
 
 class UpdatePreparationTests(unittest.TestCase):
@@ -52,7 +53,7 @@ class UpdatePreparationTests(unittest.TestCase):
                     fixture.request("/api/settings?status=0", {})
                 else:
                     temporary = fixture.server.mozarie_update_workspace
-                    self.addCleanup(temporary.cleanup)
+                    self.addCleanup(cleanup_update_workspace, temporary)
                     self.assertTrue(Path(fixture.server.mozarie_update_source, "server.py").is_file())
                     fixture.thread.join(5)
                     self.assertFalse(fixture.thread.is_alive())

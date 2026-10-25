@@ -184,7 +184,8 @@ class HttpBoundaryCoverageTests(unittest.TestCase):
         self.assertIn("binary", emitted)
         state.render_browser_save.assert_called_once()
         thread.assert_called_once()
-        request.server.mozarie_update_workspace.cleanup()
+        from updater import cleanup_update_workspace
+        cleanup_update_workspace(request.server.mozarie_update_workspace)
 
     def test_binary_reader_rejects_oversize_and_thumbnail_staleness_cleans_temp_file(self) -> None:
         self.assertEqual(handler(headers={"Content-Length": str(100_000_000)})._request_body_length(), 100_000_000)
