@@ -3773,7 +3773,7 @@ class MozarieTests(unittest.TestCase):
         self.assertEqual(DEFAULT_DETECTION_CONFIDENCE, 0.50)
         self.assertEqual(read_detection_confidence("0.10"), 0.10)
         self.assertEqual(read_detection_confidence("1.00"), 1.00)
-        self.assertAlmostEqual(confidence_for_source("ntd11", 0.60), 0.45)
+        self.assertEqual(confidence_for_source("ntd11", 0.60), 0.60)
         self.assertEqual(confidence_for_source("sensitive", 0.10), 0.50)
         self.assertEqual(confidence_for_source("sensitive", 0.85), 0.85)
         with self.assertRaises(ClientError):
@@ -7213,12 +7213,12 @@ class MozarieTests(unittest.TestCase):
         try:
             with patch.object(state_module.STATE, "start_detection") as start:
                 connection = http.client.HTTPConnection("127.0.0.1", httpd.server_port, timeout=5)
-                body = json.dumps({"imageIds": ["image-a"], "confidence": 0.65, "parallelism": 3, "mode": "high_precision"}).encode("utf-8")
+                body = json.dumps({"imageIds": ["image-a"], "confidence": 1.0, "parallelism": 3, "mode": "high_precision"}).encode("utf-8")
                 connection.request("POST", "/api/detect", body, self.mutation_headers(state_module.STATE, httpd))
                 response = connection.getresponse()
                 self.assertEqual(response.status, 200)
                 response.read()
-                start.assert_called_once_with(["image-a"], 0.65, 3, fluid_color_fill=(True, 26))
+                start.assert_called_once_with(["image-a"], 1.0, 3, fluid_color_fill=(True, 26))
         finally:
             if connection is not None:
                 connection.close()

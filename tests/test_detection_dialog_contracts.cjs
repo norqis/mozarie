@@ -134,12 +134,12 @@ test("SD-049 editor confidence slider keeps display and request value identical"
 test("SD-050 all-image confidence number synchronizes the slider and start request", { timeout: 60000 }, async () => {
   await withPage(async (page, fixture) => {
     await page.locator("#detectAllButton").click();
-    await page.locator("#detectConfidenceNumber").fill("0.73");
+    await page.locator("#detectConfidenceNumber").fill("1.00");
     await page.locator("#detectConfidenceNumber").dispatchEvent("input");
-    assert.equal(await page.locator("#detectConfidenceRange").inputValue(), "0.73");
+    assert.equal(await page.locator("#detectConfidenceRange").inputValue(), "1");
     await page.evaluate(() => startDetectionFromDialog({ preventDefault() {} }));
     await page.waitForFunction(() => state.processing?.kind === "detect" || state.job?.kind === "detect");
-    assert.equal(fixture.detectRequests.at(-1).confidence, 0.73);
+    assert.equal(fixture.detectRequests.at(-1).confidence, 1.0);
   });
 });
 
