@@ -181,7 +181,7 @@ test("project table sorts actual rows in both directions for name, creation, and
     opened = await openFixture(fixture); const { page } = opened;
     await page.locator("#projectButton").click(); await page.locator("#projectOpenList").click();
     await page.locator('#projectListBody [data-project-action="open"]').first().waitFor();
-    const column = { name: 0, created: 4, updated: 5 };
+    const column = { name: 0, created: 3, updated: 4 };
     const rows = (key) => page.locator('#projectListBody tr').evaluateAll((items, index) => items.map((row) => ({ id: row.dataset.projectId, value: row.children[index].textContent.trim() })), column[key]);
     for (const key of ["name", "created", "updated"]) {
       const button = page.locator(`[data-project-sort="${key}"]`);
