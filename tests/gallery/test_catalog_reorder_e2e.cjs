@@ -258,8 +258,8 @@ test("reorder drag follows across rows, rolls back cancellation and respects fil
   } finally { await context.close(); await browser.close(); await closeServer(fixture.server); }
 });
 
-for (const outcome of ["success", "failure", "stale"]) {
-  test(`reorder apply ${outcome} restores visible cards after an idle poll without scrolling`, { timeout: 60000 }, async () => {
+function reorderApplyUnlockScenario(outcome) {
+  return async () => {
     const fixture = await startFixtureServer();
     const records = Array.from({ length: 104 }, (_, index) => ({ id: `lock-${index}`,
       relativePath: `lock-${index}.png`, sourceKind: "filesystem", width: 1, height: 1,
@@ -325,5 +325,11 @@ for (const outcome of ["success", "failure", "stale"]) {
       await context.close(); await browser.close();
       fixture.server.closeAllConnections(); await closeServer(fixture.server);
     }
-  });
+  };
 }
+
+test("reorder apply success restores visible cards after an idle poll without scrolling", { timeout: 60000 }, reorderApplyUnlockScenario("success"));
+
+test("reorder apply failure restores visible cards after an idle poll without scrolling", { timeout: 60000 }, reorderApplyUnlockScenario("failure"));
+
+test("reorder apply stale restores visible cards after an idle poll without scrolling", { timeout: 60000 }, reorderApplyUnlockScenario("stale"));
