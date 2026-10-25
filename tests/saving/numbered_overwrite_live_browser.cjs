@@ -1,5 +1,6 @@
 const assert = require("node:assert/strict");
 const { chromium } = require("playwright");
+const { waitForAppStartup } = require("../helpers/app_startup.cjs");
 
 (async () => {
   const browser = await chromium.launch({ headless: true });
@@ -10,6 +11,7 @@ const { chromium } = require("playwright");
     page.on("pageerror", (error) => errors.push(error.message));
     await page.addInitScript(() => { window.showDirectoryPicker = () => navigator.storage.getDirectory(); });
     await page.goto(process.argv[2], { waitUntil: "domcontentloaded" });
+    await waitForAppStartup(page);
     await page.waitForFunction(() => state.settings && state.images.length === 3);
     const browserSources = process.argv[3] ? JSON.parse(process.argv[3]) : null;
     const failure = process.argv[4];
@@ -122,8 +124,9 @@ const { chromium } = require("playwright");
       await page.close();
       page = await context.newPage();
       await page.goto(process.argv[2], { waitUntil: "domcontentloaded" });
+      await waitForAppStartup(page);
       if (failure === "create-gap") {
-        await page.waitForFunction(() => state.status?.key === "save.recoveryPending");
+        assert.equal(await page.evaluate(() => state.status?.key), "save.recoveryPending", JSON.stringify(await page.evaluate(() => ({ status: state.status, tokens: pendingSaveTokens() }))));
         const retained = await page.evaluate(async () => {
           const root = await navigator.storage.getDirectory();
           const batch = (await numberedSaveBatches())[0];

@@ -1631,10 +1631,10 @@ async function initialise() {
     if (typeof resumePendingSourceDeletes === "function") void resumePendingSourceDeletes().catch(() => {});
     if (typeof flushPendingBrowserSaveAcks === "function") void flushPendingBrowserSaveAcks();
   } catch (error) { showUserError(error); }
-  void api("/api/projects?sort=updated_desc")
+  await api("/api/projects?sort=updated_desc")
     .then((data) => retryProjectSourceCleanup(new Set((data.projects || []).map((project) => project.id))))
     .catch(() => {});
   if (document.visibilityState === "visible") setTimeout(() => { void checkForUpdate({ silent: true }); }, 1000);
 }
 
-initialise();
+const appStartup = initialise();

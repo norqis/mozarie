@@ -1,7 +1,7 @@
 "use strict";
 
 const assert = require("node:assert/strict");
-const { observeAppStartup, waitForAppStartup } = require("../helpers/app_startup.cjs");
+const { waitForAppStartup } = require("../helpers/app_startup.cjs");
 const test = require("node:test");
 const { chromium } = require("playwright");
 const { expect } = require("playwright/test");
@@ -14,7 +14,6 @@ async function openCatalogue(browser, fixture, count) {
     window.showDirectoryPicker = async () => ({ async *values() {} });
   });
   const page = await context.newPage();
-  await observeAppStartup(page);
   await page.goto(fixture.url, { waitUntil: "domcontentloaded" });
   await page.waitForFunction((expected) => state.settings && state.images.length === expected, count);
   await waitForAppStartup(page);
