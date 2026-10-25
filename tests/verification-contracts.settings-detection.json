@@ -631,7 +631,8 @@
       "status": "automated",
       "testIds": [
         "python:tests.test_server.MozarieTests.test_standard_detection_never_loads_sam_and_keeps_handseg_evidence",
-        "python:tests.detection.test_candidate_publication.CandidatePublicationTests.test_equal_score_auxiliary_tiles_publish_separate_candidates_and_the_best_duplicate"
+        "python:tests.detection.test_candidate_publication.CandidatePublicationTests.test_equal_score_auxiliary_tiles_publish_separate_candidates_and_the_best_duplicate",
+        "python:tests.detection.test_candidate_publication.CandidatePublicationTests.test_standard_detection_does_not_publish_empty_model_masks"
       ]
     },
     {
@@ -644,7 +645,8 @@
       "testIds": [
         "node:tests/test_settings_dialog_e2e.cjs::SD-041 SAM vit_b selection saves its own checkpoint and survives reload",
         "python:tests.test_server.MozarieTests.test_high_precision_loads_sam_once_only_when_targets_exist",
-        "python:tests.test_server.MozarieTests.test_missing_sam_checkpoint_has_a_specific_error_code"
+        "python:tests.test_server.MozarieTests.test_missing_sam_checkpoint_has_a_specific_error_code",
+        "python:tests.detection.test_predictor_concurrency.PredictorConcurrencyTests.test_outline_preparation_waits_for_inflight_hand_prediction_before_reset"
       ]
     },
     {
@@ -836,7 +838,8 @@
         "node:tests/test_detection_dialog_contracts.cjs::SD-050 all-image confidence number synchronizes the slider and start request",
         "python:tests.detection.test_confidence_thresholds.ConfidenceThresholdTests.test_sources_never_lower_the_selected_confidence",
         "python:tests.detection.test_confidence_thresholds.ConfidenceThresholdTests.test_target_and_auxiliary_decoders_keep_boundary_and_reject_lower_scores",
-        "python:tests.detection.test_confidence_thresholds.ConfidenceThresholdTests.test_tiled_auxiliary_detection_honors_the_maximum_selected_threshold"
+        "python:tests.detection.test_confidence_thresholds.ConfidenceThresholdTests.test_tiled_auxiliary_detection_honors_the_maximum_selected_threshold",
+        "node:tests/test_detection_dialog_contracts.cjs::confidence keyboard editing preserves decimals, stepping, cancellation and the saved request"
       ]
     },
     {
@@ -1051,7 +1054,10 @@
         "python:tests.detection.test_sam_mask_selection.SamMaskSelectionTests.test_added_background_cannot_win_by_retaining_slightly_more_detector_pixels",
         "python:tests.detection.test_sam_mask_selection.SamMaskSelectionTests.test_valid_moderate_outline_expansion_is_still_accepted",
         "python:tests.detection.test_sam_mask_selection.SamMaskSelectionTests.test_consensus_relaxation_keeps_hand_removal_ahead_of_source_overlap",
-        "python:tests.detection.test_sam_mask_selection.SamMaskSelectionTests.test_equal_source_overlap_uses_quality_then_stable_proposal_order"
+        "python:tests.detection.test_sam_mask_selection.SamMaskSelectionTests.test_equal_source_overlap_uses_quality_then_stable_proposal_order",
+        "python:tests.detection.test_exclusion_memory.ExclusionMemoryTests.test_many_candidates_do_not_copy_full_image_planes_per_candidate",
+        "python:tests.detection.test_exclusion_memory.ExclusionMemoryTests.test_confirmed_hand_precedes_fallback_and_finalization_preserves_inputs",
+        "python:tests.detection.test_exclusion_memory.ExclusionMemoryTests.test_negative_hand_and_detector_pixels_do_not_create_exclusions"
       ]
     },
     {

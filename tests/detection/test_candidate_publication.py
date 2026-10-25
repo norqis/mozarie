@@ -116,6 +116,38 @@ class CandidatePublicationTests(unittest.TestCase):
         self.state.worker_thread.join(10)
         self.assertFalse(self.state.worker_thread.is_alive(), "detection did not terminate")
 
+    def test_standard_detection_does_not_publish_empty_model_masks(self):
+        class EmptyMaskTarget:
+            def detect(self, rgb, *_args):
+                return [{"class_name": "penis", "confidence": .99, "source": "target",
+                         "mask": np.zeros(rgb.shape[:2], dtype=np.uint8)}]
+
+        class MixedTarget(EmptyMaskTarget):
+            def detect(self, rgb, *_args):
+                mask = np.zeros(rgb.shape[:2], dtype=np.uint8); mask[3, 3] = 255
+                return [*super().detect(rgb), {"class_name": "penis", "confidence": .9,
+                                              "source": "target", "mask": mask}]
+
+        class EmptyAuxiliary:
+            def detect(self, rgb, *_args):
+                return [{"class_name": "penis", "confidence": .99,
+                         "mask": np.full(rgb.shape[:2], value, dtype=np.int16)} for value in (0, -1)]
+
+        for auxiliary, mixed in ((False, False), (True, False), (True, True)):
+            with self.subTest(auxiliary=auxiliary, mixed=mixed):
+                self.state.models = None
+                self.state.settings["models"].update({"ntd11_enabled": auxiliary,
+                    "ntd11": self.state.settings["models"]["target_segmentation"]})
+                with patch("mozarie.detection.TargetSegmenter", return_value=MixedTarget() if mixed else EmptyMaskTarget()), \
+                     patch("mozarie.detection.GenericYoloSegmenter", return_value=EmptyAuxiliary()):
+                    self._detect()
+                self.assertEqual(self.state.job.state, "complete", self.state.job.error)
+                self.assertEqual(len(self.state.candidates[self.image_id]), int(mixed))
+                self.assertEqual(len(list(self.mask_dir.glob("*.png"))), int(mixed))
+                if mixed:
+                    with Image.open(self.state.candidates[self.image_id][0].mask_path) as image:
+                        self.assertEqual(np.count_nonzero(np.asarray(image)), 1)
+
     def _seed_candidates_with_redo(self) -> None:
         self._detect()
         self.assertEqual(self.state.job.state, "complete")

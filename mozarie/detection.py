@@ -367,7 +367,6 @@ class DetectionMixin:
                                 or not self._job_is_current(job_generation, catalog_generation)
                                 or self.images.get(record.image_id) is not record):
                             return
-                        expected_revision = self._candidate_revision(record.image_id)
                     with stage_lock:
                         staged[record.image_id] = (index, record, candidates)
                     candidates = []
@@ -516,7 +515,8 @@ class DetectionMixin:
         detector_targets = model_targets | ({"female_face"} if "cum_on_breasts" in scene_fluid_tags else set())
         segments = (models.target.detect(rgb, confidence, detector_targets) if detector_targets != TARGET_CLASSES
                     else models.target.detect(rgb, confidence))
-        collected = [segment for segment in segments if segment["class_name"] in detector_targets and segment["mask"].shape == (height, width)]
+        collected = [segment for segment in segments if segment["class_name"] in detector_targets
+                     and segment["mask"].shape == (height, width) and np.any(np.asarray(segment["mask"]) > 0)]
         for source, model in models.auxiliaries:
             tiled_segments: list[dict[str, Any]] = []
             for x_offset, y_offset, tile_width, tile_height in detection_tiles(width, height):
@@ -525,9 +525,10 @@ class DetectionMixin:
                 for segment in detected_segments:
                     if segment["class_name"] not in model_targets:
                         continue
-                    local_mask = np.asarray(segment["mask"], dtype=np.uint8)
-                    if local_mask.shape != (tile_height, tile_width):
+                    local_mask = np.asarray(np.asarray(segment["mask"]) > 0, dtype=np.uint8)
+                    if local_mask.shape != (tile_height, tile_width) or not np.any(local_mask):
                         continue
+                    local_mask *= 255
                     merge_tile_segment(
                         tiled_segments,
                         str(segment["class_name"]),
@@ -688,23 +689,17 @@ class DetectionMixin:
         if not targets and not scene_fluid_tags:
             return segments
 
-        final_masks = [np.asarray(segment["mask"] > 0, dtype=np.uint8) for segment in targets]
-        detector_masks = [
-            np.asarray(segment.get("_detector_mask", segment["mask"]) > 0, dtype=np.uint8)
-            for segment in targets
-        ]
-        hand_masks = [
-            np.asarray(
-                segment.get("_confirmed_hand", segment.get("image_exclusions", {}).get("hand", np.zeros(shape))) > 0,
-                dtype=np.uint8,
-            )
-            for segment in targets
-        ]
-        hand_evidence = np.maximum.reduce(hand_masks) if hand_masks else np.zeros(shape, dtype=np.uint8)
+        final_masks = [np.asarray(segment["mask"]) for segment in targets]
+        hand_evidence = np.zeros(shape, dtype=np.uint8)
+        for segment in targets:
+            hand = segment.get("_confirmed_hand", segment.get("image_exclusions", {}).get("hand"))
+            if hand is not None:
+                np.logical_or(hand_evidence, np.asarray(hand) > 0, out=hand_evidence)
 
         safe_hand = np.zeros(shape, dtype=np.uint8)
         unsafe_targets = np.zeros(shape, dtype=np.uint8)
-        for detector_mask in detector_masks:
+        for segment in targets:
+            detector_mask = np.asarray(segment.get("_detector_mask", segment["mask"])) > 0
             _refined, decision = refine_mask_with_hand(detector_mask, hand_evidence)
             if decision in {"over_cap", "too_small"}:
                 unsafe_targets = np.maximum(unsafe_targets, detector_mask)
@@ -766,7 +761,9 @@ class DetectionMixin:
                 refined_segments.append(segment)
                 continue
             source_mask = (np.asarray(segment.get("_detector_mask", segment["mask"])) > 0).astype(np.uint8)
-            hand_mask = np.asarray(segment.get("_confirmed_hand", np.zeros_like(source_mask)) > 0, dtype=np.uint8)
+            confirmed_hand = segment.get("_confirmed_hand")
+            hand_mask = (np.zeros_like(source_mask) if confirmed_hand is None
+                         else np.asarray(confirmed_hand > 0, dtype=np.uint8))
             bounds = mask_bounds(source_mask > 0)
             if bounds is None:
                 # No detector pixels means there is no APPLY evidence to

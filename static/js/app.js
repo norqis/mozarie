@@ -1113,7 +1113,11 @@ function bindEvents() {
   });
   $("#applyDivisor").addEventListener("input", () => { if (!isBusy() && !state.importing) updateBlockSizeDisplay(); });
   $("#detectConfidenceRange").addEventListener("input", () => setDetectionConfidence($("#detectConfidenceRange").value));
-  $("#detectConfidenceNumber").addEventListener("input", () => setDetectionConfidence($("#detectConfidenceNumber").value));
+  $("#detectConfidenceNumber").addEventListener("input", () => {
+    const value = $("#detectConfidenceNumber").value;
+    if (value !== "") $("#detectConfidenceRange").value = String(normaliseDetectionConfidence(value));
+  });
+  $("#detectConfidenceNumber").addEventListener("change", () => setDetectionConfidence($("#detectConfidenceNumber").value));
   $("#detectFluidColorFillEnabled").addEventListener("change", syncDetectionFluidColorFill);
   $("#detectFluidColorFillTolerance").addEventListener("input", validateDetectionFluidColorFill);
   document.querySelectorAll("#dialogTargetPenis, #dialogTargetPussy").forEach((input) => input.addEventListener("change", () => {
