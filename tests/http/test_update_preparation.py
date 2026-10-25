@@ -57,4 +57,3 @@ class UpdatePreparationTests(unittest.TestCase):
                     fixture.thread.join(5)
                     self.assertFalse(fixture.thread.is_alive())
                     self.assertTrue(fixture.server.mozarie_update_requested)
-
