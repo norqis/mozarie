@@ -1,3 +1,4 @@
+const { observeAppStartup, waitForAppStartup } = require("./helpers/app_startup.cjs");
 const assert = require("node:assert/strict");
 const nodeTest = require("node:test");
 const {
@@ -3250,6 +3251,7 @@ async function main() {
     assert.equal(await settingsFailurePage.locator("#settingsDialog").evaluate((dialog) => dialog.open), false, "the editor is not bound when initial settings are unavailable");
     await stopCoveredPage(settingsFailurePage, true);
     const connectionRecoveryPage = await newCoveredPage(browser);
+    await observeAppStartup(connectionRecoveryPage);
     await connectionRecoveryPage.addInitScript(() => {
       window.__jobPollMode = "online";
       window.__jobPollAttempts = 0;
@@ -3265,6 +3267,7 @@ async function main() {
     });
     await connectionRecoveryPage.goto(fixtureUrl, { waitUntil: "domcontentloaded" });
     await waitForFixtureReady(connectionRecoveryPage);
+    await waitForAppStartup(connectionRecoveryPage);
     await connectionRecoveryPage.waitForFunction(() => state.pollInFlight === null);
     const pollAttemptsBeforeFailures = await connectionRecoveryPage.evaluate(() => {
       clearTimeout(state.jobPollTimer);

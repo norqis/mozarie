@@ -136,3 +136,28 @@ test("abandoned-save recovery uses the configured pool and retains only failed t
     assert.deepEqual(await page.evaluate(() => Object.keys(pendingSaveTokens())), []);
   });
 });
+
+test("overlapping same-tab recovery shares its outcome and a later retry runs again", { timeout: 60000 }, async () => {
+  await withPendingSaves(async ({ open, context, cancellations }) => {
+    const page = await open();
+    await page.waitForFunction(() => state.status?.key === "status.imagesLoaded");
+    const statuses = [];
+    await context.route("**/api/save/status", (route) => { statuses.push(route); });
+    await page.evaluate(() => {
+      rememberPendingSave({ imageId: "first", candidateRevision: 0 }, "abandoned-token");
+      window.firstRecovery = reconcilePendingBrowserSaves();
+      window.secondRecovery = reconcilePendingBrowserSaves();
+    });
+    await expect.poll(() => statuses.length).toBe(1);
+    await statuses[0].fulfill({ status: 503, json: { error_code: "internal_error" } });
+    assert.deepEqual(await page.evaluate(() => Promise.all([window.firstRecovery, window.secondRecovery])), [false, false]);
+    assert.equal(statuses.length, 1);
+    assert.deepEqual(cancellations, []);
+    await page.evaluate(() => { window.retryRecovery = reconcilePendingBrowserSaves(); });
+    await expect.poll(() => statuses.length).toBe(2);
+    await statuses[1].fulfill({ json: { state: "pending" } });
+    assert.equal(await page.evaluate(() => window.retryRecovery), true);
+    assert.deepEqual(cancellations, ["first"]);
+    assert.deepEqual(await page.evaluate(() => Object.keys(pendingSaveTokens())), []);
+  });
+});

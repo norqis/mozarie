@@ -504,7 +504,18 @@ async function restorePendingBrowserOverwrite(saveToken, pending) {
   await browserOverwriteStore(saveToken, null);
 }
 
-async function reconcilePendingBrowserSaves() {
+let browserSaveReconciliation = null;
+function reconcilePendingBrowserSaves() {
+  if (!browserSaveReconciliation) {
+    const pending = reconcileAbandonedBrowserSaves().finally(() => {
+      if (browserSaveReconciliation === pending) browserSaveReconciliation = null;
+    });
+    browserSaveReconciliation = pending;
+  }
+  return browserSaveReconciliation;
+}
+
+async function reconcileAbandonedBrowserSaves() {
   // Every save creates fresh tokens while holding shared ownership. Snapshot
   // only abandoned tokens; release before HTTP so recovery never queues saves.
   const pending = globalThis.navigator?.locks?.request
