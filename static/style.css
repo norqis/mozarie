@@ -482,7 +482,8 @@ img { -webkit-user-drag: none; }
 .overview-reorder-actions output { flex: 1; min-width: 100px; }
 .overview-reordering .overview-item { cursor: grab; touch-action: none; user-select: none; }
 .overview-item.reorder-selected { border-color: #4bb99d; box-shadow: inset 0 0 0 2px #4bb99d; }
-.overview-item.reorder-target { outline: 3px solid #e7bd72; outline-offset: -3px; }
+.overview-item.reorder-placeholder { opacity: .25; border: 2px dashed #4bb99d; }
+.overview-item.reorder-ghost { position: fixed; top: 0; left: 0; z-index: 10000; margin: 0; pointer-events: none; cursor: grabbing; box-shadow: 0 12px 32px #0009; border-color: #4bb99d; will-change: transform; }
 .overview-grid.reorder-dragging { cursor: grabbing; }
 .numbering-options { display: flex; gap: 8px; align-items: center; }
 .numbering-options input { width: 72px; }
