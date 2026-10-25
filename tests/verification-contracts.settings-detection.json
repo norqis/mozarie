@@ -830,10 +830,13 @@
       "sourceIds": [
         "SD-050"
       ],
-      "observation": "スライダーと数値が一致し、その値で開始する",
+      "observation": "スライダーと数値が一致し、最大値1.00を含めて指定したしきい値を補助モデルでも緩めずに開始する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_detection_dialog_contracts.cjs::SD-050 all-image confidence number synchronizes the slider and start request"
+        "node:tests/test_detection_dialog_contracts.cjs::SD-050 all-image confidence number synchronizes the slider and start request",
+        "python:tests.detection.test_confidence_thresholds.ConfidenceThresholdTests.test_sources_never_lower_the_selected_confidence",
+        "python:tests.detection.test_confidence_thresholds.ConfidenceThresholdTests.test_target_and_auxiliary_decoders_keep_boundary_and_reject_lower_scores",
+        "python:tests.detection.test_confidence_thresholds.ConfidenceThresholdTests.test_tiled_auxiliary_detection_honors_the_maximum_selected_threshold"
       ]
     },
     {
@@ -1038,13 +1041,17 @@
       "sourceIds": [
         "SD-061"
       ],
-      "observation": "SAMは輪郭補正だけに使い、通常の検出器thresholdを通過したAPPLY候補はSAMの選択不成立でも保持する",
+      "observation": "SAMは輪郭補正だけに使い、検出領域とのIoUで過剰な背景追加の少ない候補を選び、通常の検出器thresholdを通過したAPPLY候補はSAMの選択不成立でも保持する",
       "status": "automated",
       "testIds": [
         "python:tests.test_server.MozarieTests.test_detect_image_persists_the_refined_apply_mask",
         "python:tests.test_server.MozarieTests.test_high_precision_refinement_keeps_detector_mask_when_sam_is_incompatible",
         "python:tests.core.test_mask_bounds_memory.MaskBoundsMemoryTests.test_sam_roi_preserves_padding_clipping_detector_mask_and_empty_behavior",
-        "python:tests.core.test_mask_bounds_memory.MaskBoundsMemoryTests.test_dense_sam_refinement_memory_preserves_detector_fallback"
+        "python:tests.core.test_mask_bounds_memory.MaskBoundsMemoryTests.test_dense_sam_refinement_memory_preserves_detector_fallback",
+        "python:tests.detection.test_sam_mask_selection.SamMaskSelectionTests.test_added_background_cannot_win_by_retaining_slightly_more_detector_pixels",
+        "python:tests.detection.test_sam_mask_selection.SamMaskSelectionTests.test_valid_moderate_outline_expansion_is_still_accepted",
+        "python:tests.detection.test_sam_mask_selection.SamMaskSelectionTests.test_consensus_relaxation_keeps_hand_removal_ahead_of_source_overlap",
+        "python:tests.detection.test_sam_mask_selection.SamMaskSelectionTests.test_equal_source_overlap_uses_quality_then_stable_proposal_order"
       ]
     },
     {

@@ -905,10 +905,11 @@ def select_semantic_sam_mask(
         retention = overlap / source_area
         if retention < 0.50:
             continue
+        source_iou = overlap / (source_area + area - overlap)
         # A consensus-only relaxation treats less hand overlap as the first
         # preference. The normal path retains its detector-first ordering.
-        rank = ((hand_ratio, -retention, -float(scores[index]), index)
-                if prioritize_hand_overlap else (-retention, -float(scores[index]), hand_ratio, index))
+        rank = ((hand_ratio, -source_iou, -float(scores[index]), index)
+                if prioritize_hand_overlap else (-source_iou, -float(scores[index]), hand_ratio, index))
         choices.append((rank, mask.astype(np.uint8) * 255, index))
     if not choices:
         return None
@@ -917,8 +918,6 @@ def select_semantic_sam_mask(
 
 
 def confidence_for_source(source: str, confidence: float) -> float:
-    if source == "ntd11":
-        return max(0.10, confidence - 0.15)
     if source == "sensitive":
         return max(confidence, SECONDARY_MIN_CONFIDENCE)
     return confidence
