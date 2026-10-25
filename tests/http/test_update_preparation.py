@@ -2,6 +2,7 @@
 import hashlib
 import io
 import json
+import shutil
 from pathlib import Path
 from unittest.mock import patch
 import unittest
@@ -20,7 +21,7 @@ class UpdatePreparationTests(unittest.TestCase):
         self.addCleanup(fixture.tearDown)
         self.addCleanup(setattr, http_module, "_update_start_requested", False)
         http_module._update_start_requested = False
-        for failure in ("network", "digest", "layout", "version", None):
+        for failure in ("network", "digest", "layout", "version", "cleanup", None):
             with self.subTest(failure=failure):
                 contents = dict(UPDATE_ARCHIVE_CONTENTS)
                 if failure == "layout":
@@ -38,15 +39,24 @@ class UpdatePreparationTests(unittest.TestCase):
                     release["assets"][0]["digest"] = "sha256:" + "0" * 64
 
                 def network(request, **_kwargs):
-                    if failure == "network":
+                    if failure in {"network", "cleanup"}:
                         raise OSError("offline")
                     url = getattr(request, "full_url", request)
                     return Response(json.dumps(release).encode() if "api.github.com" in url else payload)
 
-                with patch("updater.urllib.request.urlopen", side_effect=network):
-                    _, response = fixture.request("/api/update/start", {}, expected_status=200 if failure is None else 400)
+                remove = shutil.rmtree
+                retained = []
+                def remove_workspace(path, *args, **kwargs):
+                    if failure == "cleanup" and Path(path).name.startswith("mozarie-update-"):
+                        retained.append(Path(path))
+                        raise PermissionError("temporary folder is busy")
+                    return remove(path, *args, **kwargs)
+                with patch("updater.urllib.request.urlopen", side_effect=network), patch("shutil.rmtree", side_effect=remove_workspace):
+                    _, response = fixture.request("/api/update/start", {}, expected_status=200 if failure is None else 500 if failure == "cleanup" else 400)
+                for workspace in retained:
+                    self.addCleanup(cleanup_update_workspace, workspace)
                 if failure is not None:
-                    self.assertEqual(json.loads(response)["error_code"], "update_preparation_failed")
+                    self.assertEqual(json.loads(response)["error_code"], "internal_error" if failure == "cleanup" else "update_preparation_failed")
                     self.assertFalse(http_module._update_start_requested)
                     self.assertFalse(getattr(fixture.server, "mozarie_update_requested", False))
                     self.assertTrue(fixture.thread.is_alive())

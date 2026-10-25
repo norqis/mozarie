@@ -338,3 +338,4 @@ SD-061.3 の `detection/test_exclusion_memory.py` は24候補での作業メモ�
 連番コピーでもファイル名末尾を編集できる。`gallery/test_catalog_reorder_e2e.cjs` は入力値が保存要求まで維持されること、`saving/test_filename_only_save.py` は連番のみ・先頭・末尾の各配置で末尾を一回だけ付け、実ファイル保存・同名衝突の事前検出・元画像保持・保存後の空staging削除を確認する。`.mozarie-staging` は同一ドライブで保存を確定するための一時領域として維持する。既存 `test_recursive_save_rename.py` と `saving/test_apply_staging_failures.py` が空フォルダー削除、稼働中内容保持、失敗と再試行を確認する。
 連番保存の実HTTP・Chromium試験 `gallery/catalog_numbered_save_live_browser.cjs` と `test_catalog_order_and_numbering.py` は、任意の末尾を入力し、各連番配置・確認済みフィルターで実出力名と元bytesを照合し、上書きでは末尾を追加しないことを確認する。`test_workspace_contract_browser.cjs` のfixtureは起動Promiseとworkspace送信の完了を待ってから閉じ、通信途中の切断をテストの終了条件にしない。
 検証済み更新はWindowsの親プロセス終了を待ってからインストールし、読み込み済みDLLを本体側に残さない。updaterの実プロセスハンドル試験で親終了前の待機と終了後の再開、entrypoint試験で成功・失敗・中断すべての一時領域削除を検証する。一時領域以外と領域外のsourceは削除しない。
+更新準備の一時領域削除に失敗しても、先に予約を解除する。HTTP試験はOSの削除失敗を注入し、エラー応答、本体継続、同一画面からの次の更新成功を確認する。

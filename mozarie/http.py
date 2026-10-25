@@ -1088,11 +1088,11 @@ class MosaicHandler(BaseHTTPRequestHandler):
                     self.server.mozarie_update_source = source
                     threading.Thread(target=_start_update_after_response, args=(self.server,), daemon=True).start()
                 except Exception as exc:
-                    if temporary is not None:
-                        cleanup_update_workspace(temporary)
                     global _update_start_requested
                     with _update_start_lock:
                         _update_start_requested = False
+                    if temporary is not None:
+                        cleanup_update_workspace(temporary)
                     LOGGER.exception("更新の準備に失敗しました。本体は終了せず再試行できます。")
                     if isinstance(exc, (UpdateError, OSError)):
                         raise ClientError("", "update_preparation_failed") from exc
