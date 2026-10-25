@@ -143,6 +143,39 @@ test("SD-050 all-image confidence number synchronizes the slider and start reque
   });
 });
 
+test("confidence keyboard editing preserves decimals, stepping, cancellation and the saved request", { timeout: 60000 }, async () => {
+  await withPage(async (page, fixture) => {
+    await selectFirst(page);
+    const before = await page.evaluate(() => state.settings.detection.threshold);
+    await page.locator("#detectionSettingsButton").click();
+    const input = page.locator("#detectConfidenceNumber");
+    await input.focus(); await input.press("ControlOrMeta+A"); await input.pressSequentially("0.95");
+    assert.equal(await input.inputValue(), "0.95");
+    assert.equal(await page.locator("#detectConfidenceRange").inputValue(), "0.95");
+    await input.press("ArrowUp");
+    assert.equal(Number(await input.inputValue()), .96);
+    assert.equal(Number(await page.locator("#detectConfidenceRange").inputValue()), .96);
+    await input.press("ArrowDown"); await input.press("Tab");
+    assert.equal(await input.inputValue(), "0.95");
+    await page.locator("#detectCancelButton").click();
+    assert.equal(await page.evaluate(() => state.settings.detection.threshold), before);
+    assert.equal(fixture.detectRequests.length, 0);
+    await page.locator("#detectionSettingsButton").click();
+    assert.equal(Number(await input.inputValue()), before);
+    await input.focus(); await input.press("ControlOrMeta+A"); await input.press("Backspace");
+    assert.equal(await input.inputValue(), "");
+    assert.equal(Number(await page.locator("#detectConfidenceRange").inputValue()), before);
+    await input.pressSequentially("1.00"); await input.press("Tab");
+    assert.equal(await input.inputValue(), "1.00");
+    await page.locator("#detectStartButton").click();
+    await page.waitForFunction(() => !document.querySelector("#detectDialog").open);
+    assert.equal(fixture.settingsPayloads.at(-1).body.detection.threshold, 1.0);
+    await page.locator("#detectCurrentButton").click();
+    await page.waitForFunction(() => state.processing?.kind === "detect" || state.job?.kind === "detect");
+    assert.equal(fixture.detectRequests.at(-1).confidence, 1.0);
+  });
+});
+
 test("SD-052 current-image detection targets only the selected image and restores editing", { timeout: 60000 }, async () => {
   await withPage(async (page, fixture) => {
     await selectFirst(page);
