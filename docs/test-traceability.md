@@ -326,6 +326,7 @@ SD-061.3 の `detection/test_exclusion_memory.py` は24候補での作業メモ�
 
 - `tests/workspace/test_project_manager_details_e2e.cjs`: ボタン直後にモーダルと準備中表示が出て、描画後に対象を列挙すること、準備中の開始禁止とキャンセル、初期化失敗、プロジェクト切替後の開始禁止を検証する。
 - 個別画像と設定専用モーダルの同期初期化は従来どおり。モデル実機・GPUとWindowsダイアログは本変更の自動試験対象外。
+- `detection submit paints preparation before settings and start responses and restores controls on failure`: 設定画面の「検出を開始」の直後も進捗モーダルを先に描画する。設定保存と検出開始のHTTP応答を保留し、準備中表示、開始前のジョブ保持、一時停止・中止の無効化、二重送信防止、両段階の失敗時の復帰を実Chromiumで確認する。設定だけの保存には進捗モーダルを出さない。
 
 
 起動時とオンライン復帰などで同一画面から復旧を重ねて呼んだ場合は、進行中の復旧結果を共有する。`saving/test_active_save_recovery_e2e.cjs` はHTTP応答を保持して2呼出しの失敗結果が一致し、復旧要求が1回で、完了後の再試行が成功することを検証する。アプリの起動Promiseは既存の後片付けも完了してから解決する。`helpers/app_startup.cjs` はその実Promiseだけを待ち、fixture操作を起動完了後に開始する。固定時間待機や製品内のテスト専用フラグは追加しない。
@@ -339,5 +340,7 @@ SD-061.3 の `detection/test_exclusion_memory.py` は24候補での作業メモ�
 連番保存の実HTTP・Chromium試験 `gallery/catalog_numbered_save_live_browser.cjs` と `test_catalog_order_and_numbering.py` は、任意の末尾を入力し、各連番配置・確認済みフィルターで実出力名と元bytesを照合し、上書きでは末尾を追加しないことを確認する。`test_workspace_contract_browser.cjs` のfixtureは起動Promiseとworkspace送信の完了を待ってから閉じ、通信途中の切断をテストの終了条件にしない。
 検証済み更新はWindowsの親プロセス終了を待ってからインストールし、読み込み済みDLLを本体側に残さない。updaterの実プロセスハンドル試験で親終了前の待機と終了後の再開、entrypoint試験で成功・失敗・中断すべての一時領域削除を検証する。一時領域以外と領域外のsourceは削除しない。
 更新準備の一時領域削除に失敗しても、先に予約を解除する。HTTP試験はOSの削除失敗を注入し、エラー応答、本体継続、同一画面からの次の更新成功を確認する。
+
+更新は取得・検証と「終了して更新」を別操作にする。`tests/http/test_update_preparation.py` は検証後も本体継続、準備済みの再取得では同じ領域を再利用、明示開始だけ終了、キャンセル後の削除・再試行、未準備での開始拒否を実HTTPで検証する。`tests/test_settings_dialog_e2e.cjs` は検証後の確認ボタン、キャンセル、画面再読込み後の復帰、更新画面とrun.batによる再起動の案内を確認する。`test_exit_without_update_cleans_prepared_files_without_launching_updater` は未開始のまま本体を終了した場合の一時領域削除を検証する。
 
 更新バッチの自己置換は `test_update_batch_self_replacement_preserves_exit_status_across_releases` が実CMDで検証する。v0.5.39・v0.5.42のGit公開アーカイブ内のバッチから現行へ、現行から先頭の長さが変わる次版への更新で、成功・更新不要・中断・失敗の終了コードと余計なコマンドの未実行を確認する。検証済みsource・一時領域・親PIDは環境変数で渡し、日本語と空白の保持、一部だけ指定された場合の拒否、通常の手動更新、起動失敗時の後始末をupdaterとserverの試験で確認する。

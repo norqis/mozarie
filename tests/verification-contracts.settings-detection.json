@@ -874,6 +874,7 @@
       "status": "automated",
       "testIds": [
         "node:tests/test_detection_dialog_contracts.cjs::SD-053 all-image dialog counts only processable non-hidden images before start",
+        "node:tests/workspace/test_project_manager_details_e2e.cjs::detection submit paints preparation before settings and start responses and restores controls on failure",
         "node:tests/workspace/test_project_manager_details_e2e.cjs::all-image detection opens before preparation and cancelled frame callbacks cannot initialize the dialog"
       ]
     },
@@ -2027,7 +2028,11 @@
       "testIds": [
         "node:tests/test_settings_dialog_e2e.cjs::SD-096 update check shows current and latest versions then starts the confirmed update",
         "node:tests/test_settings_dialog_e2e.cjs::update preparation stays visible, prevents duplicate starts and permits retry after failure",
+        "node:tests/test_settings_dialog_e2e.cjs::verified update waits for the explicit exit action and can be cancelled or recovered after reload",
         "python:tests.http.test_update_preparation.UpdatePreparationTests.test_invalid_downloads_leave_server_running_and_next_request_can_update",
+        "python:tests.http.test_update_preparation.UpdatePreparationTests.test_cancelling_prepared_update_keeps_app_running_and_allows_retry",
+        "python:tests.http.test_update_preparation.UpdatePreparationTests.test_preparation_in_progress_cannot_be_restarted_started_or_cancelled",
+        "python:tests.entrypoints.test_server_and_updater_entrypoints.ServerEntrypointCoverageTests.test_exit_without_update_cleans_prepared_files_without_launching_updater",
         "python:tests.test_updater.UpdaterTests.test_prepared_entrypoint_waits_before_install_and_cleans_workspace_on_all_results",
         "python:tests.test_updater.UpdaterTests.test_prepared_entrypoint_never_deletes_outside_its_owned_temporary_workspace",
         "python:tests.test_updater.UpdaterTests.test_prepared_entrypoint_rejects_partial_environment_and_preserves_manual_update",

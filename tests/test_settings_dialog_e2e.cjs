@@ -295,8 +295,15 @@ test("SD-096 update check shows current and latest versions then starts the conf
     assert.match(await page.locator("#confirmMessage").textContent(), /更新|update/i);
     const updateStarted = page.waitForResponse((response) => new URL(response.url()).pathname === "/api/update/start" && response.request().method() === "POST");
     await page.locator("#confirmAccept").click();
+    await page.locator("#confirmAccept").filter({ hasText: "終了して更新" }).waitFor();
+    assert.equal(fixture.updateStarts.length, 0);
+    assert.equal(fixture.updatePreparations.length, 1);
+    assert.match(await page.locator("#confirmMessage").textContent(), /run\.bat/);
+    assert.equal(await page.locator("#confirmNeverShow").isVisible(), false);
+    await page.locator("#confirmAccept").click();
     await updateStarted;
     assert.equal(fixture.updateStarts.length, 1);
+    await page.waitForFunction(() => document.querySelector("#updateStatus").textContent.includes("run.bat"));
   });
 });
 
@@ -308,7 +315,7 @@ test("update preparation stays visible, prevents duplicate starts and permits re
     await page.waitForFunction(() => document.querySelector("#checkUpdateButton").dataset.available === "true");
     let held; let reached;
     const requested = new Promise((resolve) => { reached = resolve; });
-    await page.route("**/api/update/start", (route) => { held = route; reached(); });
+    await page.route("**/api/update/prepare", (route) => { held = route; reached(); });
     await page.locator("#checkUpdateButton").click();
     await page.locator("#confirmAccept").click();
     await requested;
@@ -321,10 +328,43 @@ test("update preparation stays visible, prevents duplicate starts and permits re
     assert.match(await page.locator("#errorDialogAction").textContent(), /終了していません|still running/i);
     await page.locator("#errorDialogClose").click();
     assert.equal(await page.locator("#checkUpdateButton").isEnabled(), true);
-    await page.unroute("**/api/update/start");
+    await page.unroute("**/api/update/prepare");
     await page.locator("#checkUpdateButton").click();
     await page.locator("#confirmAccept").click();
-    await page.waitForFunction(() => document.querySelector("#updateStatus").textContent.includes("検証が完了"));
+    await page.locator("#confirmAccept").filter({ hasText: "終了して更新" }).waitFor();
+    assert.equal(fixture.updateStarts.length, 0);
+    await page.locator("#confirmAccept").click();
+    await page.waitForFunction(() => document.querySelector("#updateStatus").textContent.includes("run.bat"));
+    assert.equal(fixture.updateStarts.length, 1);
+  });
+});
+
+test("verified update waits for the explicit exit action and can be cancelled or recovered after reload", { timeout: 60000 }, async () => {
+  await withSettingsPage(async (page, fixture) => {
+    fixture.setUpdateAvailable(true);
+    const prepare = async () => {
+      await page.locator('[data-settings-tab="info"]').click();
+      await page.locator("#checkUpdateButton").click();
+      await page.waitForFunction(() => document.querySelector("#checkUpdateButton").dataset.available === "true");
+      await page.locator("#checkUpdateButton").click();
+      await page.locator("#confirmAccept").click();
+      await page.locator("#confirmAccept").filter({ hasText: "終了して更新" }).waitFor();
+      assert.equal(fixture.updateStarts.length, 0);
+    };
+    await prepare();
+    await page.locator("#confirmCancel").click();
+    await page.waitForFunction(() => !document.querySelector("#checkUpdateButton").disabled);
+    assert.equal(fixture.updateCancellations.length, 1);
+    assert.match(await page.locator("#updateStatus").textContent(), /引き続き使用/);
+    await page.locator("#checkUpdateButton").click();
+    await page.locator("#confirmAccept").click();
+    await page.locator("#confirmAccept").filter({ hasText: "終了して更新" }).waitFor();
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await page.waitForFunction(() => Boolean(state.settings));
+    await page.locator("#settingsButton").click();
+    await prepare();
+    await page.locator("#confirmAccept").click();
+    await page.waitForFunction(() => document.querySelector("#updateStatus").textContent.includes("run.bat"));
     assert.equal(fixture.updateStarts.length, 1);
   });
 });

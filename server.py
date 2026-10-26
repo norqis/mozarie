@@ -108,6 +108,11 @@ def main() -> None:
                     state_module.STATE.shutdown()
                 LOGGER.info("Mozarieを終了しました")
             launch_update = bool(getattr(http_server, "mozarie_update_requested", False))
+            if not launch_update:
+                temporary = vars(http_server).get("mozarie_update_workspace")
+                if temporary is not None:
+                    from updater import cleanup_update_workspace
+                    cleanup_update_workspace(temporary)
     except UpdateError as exc:
         LOGGER.error("%s", str(exc))
         raise SystemExit(1) from None

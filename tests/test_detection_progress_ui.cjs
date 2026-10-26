@@ -77,7 +77,7 @@ test("SD-055 SD-056 sixty visible images start at zero complete at sixty and res
     await page.waitForFunction(() => !state.detectionDialogPreparing);
     assert.match(await page.locator("#detectTargetCount").textContent(), /60/);
     await page.locator("#detectStartButton").click();
-    await page.waitForFunction(() => state.processing?.kind === "detect");
+    await page.waitForFunction(() => state.processing?.kind === "detect" && !state.detectionStarting);
     assert.deepEqual(fixture.detectRequests.at(-1).imageIds, Array.from({ length: 60 }, (_, index) => `progress-${index}`));
     assert.equal(await page.locator("#processingProgress").getAttribute("max"), "60");
     assert.match(await page.locator("#processingProgressText").textContent(), /0\s*\/\s*60/);
@@ -107,7 +107,7 @@ async function withHeldDetection(run) {
     await page.locator("#detectAllButton").click();
     await page.waitForFunction(() => !state.detectionDialogPreparing);
     await page.locator("#detectStartButton").click();
-    await page.waitForFunction(() => state.processing?.kind === "detect" && document.querySelector("#processingDialog").open);
+    await page.waitForFunction(() => state.processing?.kind === "detect" && !state.detectionStarting && document.querySelector("#processingDialog").open);
     await run(page, fixture);
   } finally {
     await context?.close();

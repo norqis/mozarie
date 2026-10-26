@@ -127,7 +127,7 @@ test("SD-049 editor confidence slider keeps display and request value identical"
     await page.locator("#detectStartButton").click();
     await page.waitForFunction(() => !document.querySelector("#detectDialog").open);
     await page.locator("#detectCurrentButton").click();
-    await page.waitForFunction(() => state.processing?.kind === "detect" || state.job?.kind === "detect");
+    await page.waitForFunction(() => state.job?.kind === "detect" && !state.detectionStarting);
     assert.equal(fixture.detectRequests.at(-1).confidence, 0.61);
   });
 });
@@ -140,7 +140,7 @@ test("SD-050 all-image confidence number synchronizes the slider and start reque
     await page.locator("#detectConfidenceNumber").dispatchEvent("input");
     assert.equal(await page.locator("#detectConfidenceRange").inputValue(), "1");
     await page.evaluate(() => startDetectionFromDialog({ preventDefault() {} }));
-    await page.waitForFunction(() => state.processing?.kind === "detect" || state.job?.kind === "detect");
+    await page.waitForFunction(() => state.job?.kind === "detect" && !state.detectionStarting);
     assert.equal(fixture.detectRequests.at(-1).confidence, 1.0);
   });
 });
@@ -173,7 +173,7 @@ test("confidence keyboard editing preserves decimals, stepping, cancellation and
     await page.waitForFunction(() => !document.querySelector("#detectDialog").open);
     assert.equal(fixture.settingsPayloads.at(-1).body.detection.threshold, 1.0);
     await page.locator("#detectCurrentButton").click();
-    await page.waitForFunction(() => state.processing?.kind === "detect" || state.job?.kind === "detect");
+    await page.waitForFunction(() => state.job?.kind === "detect" && !state.detectionStarting);
     assert.equal(fixture.detectRequests.at(-1).confidence, 1.0);
   });
 });
@@ -182,7 +182,7 @@ test("SD-052 current-image detection targets only the selected image and restore
   await withPage(async (page, fixture) => {
     await selectFirst(page);
     await page.locator("#detectCurrentButton").click();
-    await page.waitForFunction(() => state.processing?.kind === "detect" || state.job?.kind === "detect");
+    await page.waitForFunction(() => state.job?.kind === "detect" && !state.detectionStarting);
     assert.deepEqual(fixture.detectRequests.at(-1).imageIds, ["sample"]);
     await page.waitForFunction(() => !state.processing && !isBusy());
     assert.equal(await page.locator("#editorCanvas").isEnabled(), true);
@@ -224,7 +224,7 @@ function targetSelectionContract(penis, pussy, targets) {
         }
       }, { penis, pussy });
       await page.locator("#detectStartButton").click();
-      await page.waitForFunction(() => state.processing?.kind === "detect" || state.job?.kind === "detect");
+      await page.waitForFunction(() => state.job?.kind === "detect" && !state.detectionStarting);
       assert.deepEqual(fixture.detectRequests.at(-1).targetClasses, targets);
     });
   };
@@ -260,7 +260,7 @@ test("SD-127 detection dialog persists distinct apply and exclusion padding", { 
       document.querySelector("#detectExcludeCandidatePadding").value,
     ]), ["3", "11"]);
     await page.locator("#detectStartButton").click();
-    await page.waitForFunction(() => state.processing?.kind === "detect" || state.job?.kind === "detect");
+    await page.waitForFunction(() => state.job?.kind === "detect" && !state.detectionStarting);
     const detection = fixture.settingsPayloads.at(-1).body.detection;
     assert.equal(detection.default_candidate_padding_px, 3);
     assert.equal(detection.default_exclude_candidate_padding_px, 11);
@@ -286,7 +286,7 @@ test("SD-131 invalid padding blocks detection while zero remains valid", { timeo
     await page.locator("#detectCandidatePadding").fill("0");
     await page.locator("#detectExcludeCandidatePadding").fill("0");
     await page.locator("#detectStartButton").click();
-    await page.waitForFunction(() => state.processing?.kind === "detect" || state.job?.kind === "detect");
+    await page.waitForFunction(() => state.job?.kind === "detect" && !state.detectionStarting);
     const detection = fixture.settingsPayloads.at(-1).body.detection;
     assert.equal(detection.default_candidate_padding_px, 0);
     assert.equal(detection.default_exclude_candidate_padding_px, 0);

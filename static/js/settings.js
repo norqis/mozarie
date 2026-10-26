@@ -771,10 +771,20 @@ async function startUpdate() {
   const button = $("#checkUpdateButton");
   if (button.disabled) return;
   if ($("#checkUpdateButton").dataset.available !== "true") return checkForUpdate();
-  if (!await confirmAction(t("update.title"), t("update.message"))) return;
+  if (!await confirmAction(t("update.title"), t("update.message"), null, null,
+    { acceptLabel: t("update.prepare"), neutral: true, hideNeverShow: true })) return;
   button.disabled = true; button.textContent = t("update.preparing");
   $("#updateStatus").textContent = t("update.preparing");
   try {
+    await api("/api/update/prepare", { method: "POST", body: JSON.stringify({}) });
+    $("#updateStatus").textContent = t("update.ready");
+    if (!await confirmAction(t("update.ready"), t("update.readyMessage"), null, null,
+      { acceptLabel: t("update.exitAndInstall"), neutral: true, hideNeverShow: true })) {
+      await api("/api/update/cancel", { method: "POST", body: JSON.stringify({}) });
+      $("#updateStatus").textContent = t("update.cancelled");
+      button.disabled = false; button.textContent = t("update.start");
+      return;
+    }
     await api("/api/update/start", { method: "POST", body: JSON.stringify({}) });
     $("#updateStatus").textContent = t("update.starting");
   } catch (error) {

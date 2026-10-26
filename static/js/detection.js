@@ -257,6 +257,7 @@ async function runDetection(imageIds, confidence = detectionConfidence(), parall
     state.job = previousJob;
     state.detectionTargetIds = previousDetectionTargetIds;
     state.detectCancelRequested = previousDetectCancelRequested;
+    if (state.processing?.phase === "preparing_request") closeProcessing();
     if (state.job) updateProgress(state.job);
     showUserError(error);
   }
@@ -295,9 +296,16 @@ async function startDetectionFromDialog(event) {
   const fluidColorFillTolerance = detectionFluidColorFillTolerance()
     ?? state.settings?.detection?.fluid_color_fill_tolerance
     ?? 26;
+  const initialImageIds = [...(state.pendingDetectionTargetIds || [])];
+  if (!settingsOnly && !initialImageIds.length) return;
   setDetectionDialogSubmitting(true);
   try {
     if (!settingsOnly) {
+      state.detectionStarting = true;
+      showProcessing({ kind: "detect", state: "running", phase: "preparing_request", total: initialImageIds.length,
+        completed: 0, processed: 0, current: "", cancelRequested: false });
+      updateActionButtons();
+      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
       await flushAllImageMutations();
       await saveDraft();
       await flushAllWorkspaceMutations();
@@ -334,8 +342,14 @@ async function startDetectionFromDialog(event) {
       fluidColorFillTolerance,
     }, true);
   } catch (error) {
-    setDetectionDialogSubmitting(false);
     showUserError(error);
+  } finally {
+    if (!settingsOnly) {
+      if (state.processing?.phase === "preparing_request") closeProcessing();
+      state.detectionStarting = false;
+    }
+    setDetectionDialogSubmitting(false);
+    updateActionButtons();
   }
 }
 

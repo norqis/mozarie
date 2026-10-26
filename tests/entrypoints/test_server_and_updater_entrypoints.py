@@ -46,6 +46,20 @@ def ready_app(path: Path, profile: str = "cuda") -> tuple[Path, Path]:
 
 
 class ServerEntrypointCoverageTests(unittest.TestCase):
+    def test_exit_without_update_cleans_prepared_files_without_launching_updater(self):
+        with tempfile.TemporaryDirectory(prefix="mozarie-update-") as directory:
+            workspace = Path(directory)
+            (workspace / "download.zip").write_bytes(b"prepared")
+            http_server = Mock(mozarie_update_requested=False, mozarie_update_workspace=workspace)
+            with patch("server.ThreadingHTTPServer", return_value=http_server), \
+                    patch("server.MaintenanceLock"), patch("server._schedule_browser_open"), \
+                    patch("subprocess.Popen") as launch, \
+                    patch("mozarie.state.STATE", Mock(settings={"general": {"port": 31844, "open_browser": False}}, cache_dir=workspace / "cache")), \
+                    patch("mozarie.state.STATE_STARTUP_ERROR", None), patch.object(sys, "argv", ["server.py"]):
+                server.main()
+            self.assertFalse(workspace.exists())
+            launch.assert_not_called()
+
     def test_prepared_source_passes_to_child_without_waiting_and_launch_failure_cleans_it(self):
         for fail_launch in (False, True):
             with self.subTest(fail_launch=fail_launch):
