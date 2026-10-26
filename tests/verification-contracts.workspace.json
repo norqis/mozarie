@@ -524,6 +524,7 @@
       "observation": "その画像の確認済み表示が消え、未確認は緑にならない",
       "status": "automated",
       "testIds": [
+        "node:tests/gallery/test_catalog_reorder_e2e.cjs::overview review badges match the sidebar through review changes hiding and virtual scrolling",
         "node:tests/gallery/test_gallery_and_save_runtime.cjs::gallery and save interactions",
         "node:tests/test_workspace_flags_runtime.cjs::workspace flag runtime contracts"
       ]
