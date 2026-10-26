@@ -157,6 +157,7 @@ const { waitForAppStartup } = require("../helpers/app_startup.cjs");
         assert.equal(snapshot.completed, 0);
         assert.match(snapshot.text, new RegExp(`画像を準備中: ${index} / 3`));
         assert.equal(snapshot.value, index);
+        assert.equal(await page.locator("#applyProgress").getAttribute("max"), "3");
         const route = await renderRequests[index];
         await route.continue();
       }
@@ -174,6 +175,8 @@ const { waitForAppStartup } = require("../helpers/app_startup.cjs");
         const parallelism = failure === "progress-serial" ? 1 : 2;
         await page.waitForFunction((count) => window.__numberedWrites.active === count, parallelism);
         assert.match(await page.locator("#applyProgressText").textContent(), /元画像へ書き込み中: 0 /);
+        assert.equal(await page.locator("#applyProgress").getAttribute("value"), "0");
+        assert.equal(await page.locator("#applyProgress").getAttribute("max"), "3");
         if (writeFailure) {
           await page.evaluate(() => window.__numberedWrites.pending.shift().reject(new DOMException("test disk full", "QuotaExceededError")));
           assert.equal(await page.evaluate(() => state.browserSave.numberedProgress.phase), "writing", "rollback waits for the other started write");
@@ -185,6 +188,7 @@ const { waitForAppStartup } = require("../helpers/app_startup.cjs");
           if (index < 2) {
             await page.waitForFunction((count) => state.browserSave.numberedProgress.completed === count, index + 1);
             assert.match(await page.locator("#applyProgressText").textContent(), new RegExp(`元画像へ書き込み中: ${index + 1} / 3`));
+            assert.equal(await page.locator("#applyProgress").getAttribute("value"), String(index + 1));
           }
         }
         assert.equal(await page.evaluate(() => window.__numberedWrites.peak), parallelism);
