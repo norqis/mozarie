@@ -188,12 +188,18 @@ async function reconcileNumberedSaves() {
   return skipped;
 }
 
+function showNumberedSaveProgress(save, phase, completed = 0, total = save.entries.length, entry = null) {
+  save.numberedProgress = { phase, completed, total };
+  showBrowserSaveProgress(save, entry);
+}
+
 async function runNumberedOverwriteBatch(inputs, save) {
   const entries = save.entries.map((entry) => ({ ...entry, saveToken: newClientSaveToken() }));
   const batch = { id: entries[0].saveToken, projectId: inputs.projectId, workspaceId: state.workspaceId, entries, browser: [] };
   let directory = null;
   let index = 0;
   try {
+    showNumberedSaveProgress(save, "preparing");
     await storeNumberedSave(batch);
     const rendered = await Promise.allSettled(Array.from({ length: Math.min(inputs.parallelism, save.entries.length) }, async () => {
       while (await waitForBrowserSave(save)) {
@@ -219,11 +225,17 @@ async function runNumberedOverwriteBatch(inputs, save) {
           batch.browser.push(member);
           await storeNumberedSave(batch, member);
         }
+        save.numberedProgress.completed += 1;
+        showBrowserSaveProgress(save, entry);
       }
     }));
     const failed = rendered.find((result) => result.status === "rejected");
     if (failed) throw failed.reason;
-    if (save.cancelled) { await storeNumberedSave(batch); await rollbackNumberedSave(batch); return; }
+    if (save.cancelled) {
+      showNumberedSaveProgress(save, "recovering");
+      await storeNumberedSave(batch); await rollbackNumberedSave(batch); return;
+    }
+    showNumberedSaveProgress(save, "preparingFiles");
     // Keep API order stable even when rendering workers finish out of order.
     const originalsByName = new Map();
     for (const original of batch.browser) {
@@ -250,39 +262,53 @@ async function runNumberedOverwriteBatch(inputs, save) {
     }
     await storeNumberedSave(batch);
     await api("/api/save/batch/prepare", { method: "POST", body: JSON.stringify({ entries: batch.entries }) });
-    // After the first source write the batch must finish or roll back; cancel
-    // and pause no longer interrupt this short publication phase.
-    for (const member of batch.browser) {
-      if (!member.existed) {
-        member.creating = true;
-        await storeNumberedSave(batch, member);
-        try { await member.target.parentHandle.getFileHandle(member.target.name); throw codedError("output_files_exist", { files: member.target.relativePath }); }
-        catch (error) { if (error?.name !== "NotFoundError") throw error; }
-        member.target.fileHandle = await member.target.parentHandle.getFileHandle(member.target.name, { create: true });
-        member.before = sourceCommitMetadata(await member.target.fileHandle.getFile());
-        if (member.before.sourceSizeBytes !== 0) throw codedError("output_files_exist", { files: member.target.relativePath });
-      } else {
-        const current = await member.target.parentHandle.getFileHandle(member.target.name);
-        const file = await current.getFile();
-        if (!await current.isSameEntry(member.target.fileHandle)
-          || !sourceFileMatches(file, member.before.sourceMtimeMs, member.before.sourceSizeBytes)) throw codedError("save_state_changed");
+    // Once destination preparation begins, writes finish or roll back as a batch.
+    if (batch.browser.length) showNumberedSaveProgress(save, "writing", 0, batch.browser.length);
+    let nextWrite = 0; let writeFailed = false;
+    const writes = await Promise.allSettled(Array.from({ length: Math.min(inputs.parallelism, batch.browser.length) }, async () => {
+      while (!writeFailed) {
+        const member = batch.browser[nextWrite++];
+        if (!member) return;
+        try {
+          if (!member.existed) {
+            member.creating = true;
+            await storeNumberedSave(batch, member);
+            try { await member.target.parentHandle.getFileHandle(member.target.name); throw codedError("output_files_exist", { files: member.target.relativePath }); }
+            catch (error) { if (error?.name !== "NotFoundError") throw error; }
+            member.target.fileHandle = await member.target.parentHandle.getFileHandle(member.target.name, { create: true });
+            member.before = sourceCommitMetadata(await member.target.fileHandle.getFile());
+            if (member.before.sourceSizeBytes !== 0) throw codedError("output_files_exist", { files: member.target.relativePath });
+          } else {
+            const current = await member.target.parentHandle.getFileHandle(member.target.name);
+            const file = await current.getFile();
+            if (!await current.isSameEntry(member.target.fileHandle)
+              || !sourceFileMatches(file, member.before.sourceMtimeMs, member.before.sourceSizeBytes)) throw codedError("save_state_changed");
+          }
+          member.started = true;
+          await storeNumberedSave(batch, member);
+          const output = await (await directory.getFileHandle(`rendered-${member.entry.imageId}`)).getFile();
+          await writeSourceHandle(member.target, new Response(output.stream()));
+          member.written = sourceCommitMetadata(member.target);
+          member.entry.sourceMetadata = member.written;
+          await storeNumberedSave(batch, member);
+          save.numberedProgress.completed += 1;
+          showBrowserSaveProgress(save, member.entry);
+        } catch (error) { writeFailed = true; throw error; }
       }
-      member.started = true;
-      await storeNumberedSave(batch, member);
-      const output = await (await directory.getFileHandle(`rendered-${member.entry.imageId}`)).getFile();
-      await writeSourceHandle(member.target, new Response(output.stream()));
-      member.written = sourceCommitMetadata(member.target);
-      member.entry.sourceMetadata = member.written;
-      await storeNumberedSave(batch, member);
-    }
+    }));
+    const writeError = writes.find((result) => result.status === "rejected");
+    if (writeError) throw writeError.reason;
+    showNumberedSaveProgress(save, "committing");
     await api("/api/save/batch/commit", { method: "POST", body: JSON.stringify({ entries: batch.entries }) });
+    showNumberedSaveProgress(save, "cleaning");
     await finishNumberedSave(batch);
     save.completed = save.entries.length;
     save.needsCatalogReconcile = true; save.reloadCurrent = true;
     if (inputs.removeSaved) save.entries.forEach((entry) => save.savedImageIds.add(entry.imageId));
-    showBrowserSaveProgress(save, save.entries.at(-1));
+    showNumberedSaveProgress(save, "complete", save.completed, save.entries.length, save.entries.at(-1));
   } catch (error) {
     save.failed = true;
+    showNumberedSaveProgress(save, "recovering");
     if (batch.id) {
       await storeNumberedSave(batch);
       const status = await numberedBatchStatus(batch).catch(() => null);

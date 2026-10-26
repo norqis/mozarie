@@ -312,6 +312,9 @@ SD-061.3 の `detection/test_exclusion_memory.py` は24候補での作業メモ�
 
 ## 連番保存の衝突と一括上書き
 
+- `test_native_progress_counts_preparation_and_waits_for_commit_and_cleanup` と `test_browser_progress_and_publication_follow_parallelism`: 実HTTP・Chromiumで準備件数の段階更新、実ファイル書込みの設定並列数、保存先準備・確定・後処理の保留中の未完了表示と一時停止・取消の無効化を確認する。確定・後処理は不明な割合を作らず不定表示とし、後処理が終わってから保存済み件数を確定する。
+- `test_browser_publication_respects_single_worker_setting` と `test_browser_write_failure_drains_started_writes_before_rollback`: 同時保存数1の遵守と、失敗後は新規書込みを始めず既に始めた書込みをすべて待ってから復元すること、元画像のbytes保持を確認する。
+
 - `tests/saving/test_numbered_overwrite_batches.py`: 連番の入替・循環でも元画像と画像IDを保ち、保存対象外の同名ファイルをパス読込み・ブラウザー読込みの混在時も一括列挙し、描画・token作成前に止める。SQLite失敗、途中書込み失敗、別プロジェクトの同一元画像への名前・反転状態の追随、更新日時保持、新規出力名を含む連鎖、復旧待ち一時画像の保持、公開後の競合、タブ終了、書込み・復元とジャーナル更新の間の終了で復旧を検証する。
 - `tests/saving/numbered_overwrite_live_browser.cjs`: 実Chromium・HTTP・SQLite・OPFSを接続し、元画像の全バイト、一覧名、アクセス情報、未完了tokenを検証する。Windowsの選択画面のみ外部境界として置換する。
 - ブラウザーの新規ファイル作成とIndexedDB記録は原子的にできない。所有権を記録する前に終了し、その名前が存在する場合はファイルとバックアップを保持して復旧を保留する。空slotを明示的に解消した後の復旧も自動試験する。OSダイアログそのものは対象外。

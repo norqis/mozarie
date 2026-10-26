@@ -210,6 +210,8 @@ class NumberedOverwriteBatchTests(unittest.TestCase):
         args = ["node", str(Path(__file__).with_name("numbered_overwrite_live_browser.cjs")), self.fixture.origin]
         if browser_sources:
             args.append(json.dumps({path.name: base64.b64encode(path.read_bytes()).decode("ascii") for path in self.paths.values()}))
+        elif failure:
+            args.append("null")
         if failure:
             args.append(failure)
         result = subprocess.run(args, cwd=Path(__file__).resolve().parents[2], capture_output=True,
@@ -225,6 +227,18 @@ class NumberedOverwriteBatchTests(unittest.TestCase):
 
     def test_real_browser_dropped_handle_cycle(self):
         self.live_rotation(True)
+
+    def test_native_progress_counts_preparation_and_waits_for_commit_and_cleanup(self):
+        self.live_rotation(False, "progress")
+
+    def test_browser_progress_and_publication_follow_parallelism(self):
+        self.live_rotation(True, "progress")
+
+    def test_browser_publication_respects_single_worker_setting(self):
+        self.live_rotation(True, "progress-serial")
+
+    def test_browser_write_failure_drains_started_writes_before_rollback(self):
+        self.live_rotation(True, "progress-write-failure")
 
     def test_real_browser_second_write_failure_restores_all_slots(self):
         self.live_rotation(True, "write")

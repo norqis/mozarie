@@ -109,6 +109,8 @@ jobs:
           node-version: '22'
           cache: npm
       - run: npm ci
+      - name: Use Ubuntu archive mirror
+        run: sudo sed -i 's|http://azure\.archive\.ubuntu\.com/ubuntu/|https://archive.ubuntu.com/ubuntu/|g' /etc/apt/apt-mirrors.txt
       - run: npx playwright install --with-deps chromium --only-shell
       - run: node scripts/test-quiet.cjs frontend-shard --shard-index ${{ matrix.shard }} --shard-total 2 --artifacts "${{ runner.temp }}/mozarie-coverage"
       - if: always()
@@ -131,6 +133,8 @@ jobs:
           node-version: '22'
           cache: npm
       - run: npm ci
+      - name: Use Ubuntu archive mirror
+        run: sudo sed -i 's|http://azure\.archive\.ubuntu\.com/ubuntu/|https://archive.ubuntu.com/ubuntu/|g' /etc/apt/apt-mirrors.txt
       - run: npx playwright install --with-deps chromium --only-shell
       - run: node scripts/test-quiet.cjs frontend-performance --artifacts "${{ runner.temp }}/mozarie-coverage"
       - if: always()

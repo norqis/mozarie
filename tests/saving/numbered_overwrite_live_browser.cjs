@@ -22,7 +22,9 @@ const { waitForAppStartup } = require("../helpers/app_startup.cjs");
     await page.waitForFunction(() => state.settings && state.images.length === 3);
     const browserSources = process.argv[3] ? JSON.parse(process.argv[3]) : null;
     const failure = process.argv[4];
-    const failed = failure && failure !== "chain";
+    const progressTest = failure?.startsWith("progress");
+    const writeFailure = failure === "progress-write-failure";
+    const failed = failure && failure !== "chain" && (!progressTest || writeFailure);
     if (browserSources) {
       await page.evaluate(async ({ sources, mixed }) => {
         if (!mixed) await api("/api/catalog/remove", { method: "POST", body: JSON.stringify({ imageIds: state.images.map((image) => image.id) }) });
@@ -105,9 +107,36 @@ const { waitForAppStartup } = require("../helpers/app_startup.cjs");
     let commitRoute;
     let requestedCommit;
     const commitRequested = new Promise((resolve) => { requestedCommit = resolve; });
-    if (failure === "restart") {
+    if (failure === "restart" || progressTest) {
       await page.route("**/api/save/batch/commit", async (route) => {
         commitRoute = route; requestedCommit();
+      });
+    }
+    let prepareRoute; let prepared;
+    const prepareRequested = new Promise((resolve) => { prepared = resolve; });
+    const renderReady = [];
+    const renderRequests = Array.from({ length: 3 }, () => new Promise((resolve) => renderReady.push(resolve)));
+    let renderedRequests = 0;
+    let ackRoute; let ackSeen;
+    const cleanupRequested = new Promise((resolve) => { ackSeen = resolve; });
+    if (progressTest) {
+      await page.evaluate((parallelism) => { state.settings.saving.parallelism = parallelism; }, failure === "progress-serial" ? 1 : 2);
+      await page.route("**/api/save/render", (route) => { renderReady[renderedRequests++](route); });
+      await page.route("**/api/save/batch/prepare", (route) => { prepareRoute = route; prepared(); });
+      await page.route("**/api/save/ack", (route) => { if (!ackRoute) { ackRoute = route; ackSeen(); } else return route.continue(); });
+      if (browserSources) await page.evaluate(() => {
+        const prototype = FileSystemFileHandle.prototype;
+        const create = prototype.createWritable;
+        window.__numberedWrites = { active: 0, peak: 0, starts: [], pending: [] };
+        prototype.createWritable = async function (...args) {
+          const writes = window.__numberedWrites;
+          if (state.browserSave?.numberedProgress?.phase === "writing" && /^\d{2}\.png$/.test(this.name)) {
+            writes.starts.push(this.name); writes.active++; writes.peak = Math.max(writes.peak, writes.active);
+            try { await new Promise((resolve, reject) => writes.pending.push({ resolve, reject })); }
+            finally { writes.active--; }
+          }
+          return create.apply(this, args);
+        };
       });
     }
     await page.locator("#saveAllButton").click();
@@ -118,6 +147,65 @@ const { waitForAppStartup } = require("../helpers/app_startup.cjs");
     await page.locator("#applyStartButton").click();
     await page.locator("#confirmDialog").waitFor({ state: "visible" });
     await page.locator("#confirmAccept").click();
+    if (progressTest) {
+      // Hold one rendered response at a time. Counts describe prepared images,
+      // never durable saves, and advance without waiting for the final commit.
+      for (let index = 0; index < 3; index++) {
+        await page.waitForFunction((count) => state.browserSave?.numberedProgress?.completed === count, index);
+        const snapshot = await page.evaluate(() => ({ completed: state.browserSave.completed,
+          text: document.querySelector("#applyProgressText").textContent, value: document.querySelector("#applyProgress").value }));
+        assert.equal(snapshot.completed, 0);
+        assert.match(snapshot.text, new RegExp(`画像を準備中: ${index} / 3`));
+        assert.equal(snapshot.value, index);
+        assert.equal(await page.locator("#applyProgress").getAttribute("max"), "3");
+        const route = await renderRequests[index];
+        await route.continue();
+      }
+      await prepareRequested;
+      assert.match(await page.locator("#applyProgressText").textContent(), /保存先を準備中/);
+      assert.equal(await page.locator("#applyProgress").getAttribute("value"), null);
+      assert.equal(await page.locator("#applyPauseButton").isDisabled(), true);
+      assert.equal(await page.locator("#applyCancelButton").isDisabled(), true);
+      assert.deepEqual(await page.evaluate(async () => {
+        await controlApply("pause"); await controlApply("cancel");
+        return [state.browserSave.paused, state.browserSave.cancelled];
+      }), [false, false]);
+      await prepareRoute.continue();
+      if (browserSources) {
+        const parallelism = failure === "progress-serial" ? 1 : 2;
+        await page.waitForFunction((count) => window.__numberedWrites.active === count, parallelism);
+        assert.match(await page.locator("#applyProgressText").textContent(), /元画像へ書き込み中: 0 /);
+        assert.equal(await page.locator("#applyProgress").getAttribute("value"), "0");
+        assert.equal(await page.locator("#applyProgress").getAttribute("max"), "3");
+        if (writeFailure) {
+          await page.evaluate(() => window.__numberedWrites.pending.shift().reject(new DOMException("test disk full", "QuotaExceededError")));
+          assert.equal(await page.evaluate(() => state.browserSave.numberedProgress.phase), "writing", "rollback waits for the other started write");
+          assert.equal(await page.evaluate(() => window.__numberedWrites.active), 1);
+          await page.evaluate(() => window.__numberedWrites.pending.shift().resolve());
+        } else for (let index = 0; index < 3; index++) {
+          await page.waitForFunction(() => window.__numberedWrites.pending.length > 0);
+          await page.evaluate(() => window.__numberedWrites.pending.shift().resolve());
+          if (index < 2) {
+            await page.waitForFunction((count) => state.browserSave.numberedProgress.completed === count, index + 1);
+            assert.match(await page.locator("#applyProgressText").textContent(), new RegExp(`元画像へ書き込み中: ${index + 1} / 3`));
+            assert.equal(await page.locator("#applyProgress").getAttribute("value"), String(index + 1));
+          }
+        }
+        assert.equal(await page.evaluate(() => window.__numberedWrites.peak), parallelism);
+      }
+      if (!writeFailure) {
+        await commitRequested;
+        assert.match(await page.locator("#applyProgressText").textContent(), /保存を確定中/);
+        assert.equal(await page.locator("#applyProgress").getAttribute("value"), null);
+        assert.equal(await page.evaluate(() => state.browserSave.completed), 0);
+        await commitRoute.continue();
+        await cleanupRequested;
+        assert.match(await page.locator("#applyProgressText").textContent(), /後処理中/);
+        assert.equal(await page.locator("#applyProgress").getAttribute("value"), null);
+        assert.equal(await page.evaluate(() => state.browserSave.completed), 0);
+        await ackRoute.continue();
+      }
+    }
     if (failure === "restart" || pausedGap) {
       if (pausedGap) await pausedGap;
       else await commitRequested;
@@ -153,7 +241,7 @@ const { waitForAppStartup } = require("../helpers/app_startup.cjs");
       await page.waitForFunction(() => state.settings && !Object.keys(pendingSaveTokens()).length);
     }
     await page.waitForFunction(() => !state.saveStarting && !state.applyRunning && !state.saving);
-    assert.equal(await page.locator("#errorDialog").evaluate((dialog) => dialog.open), failure === "write",
+    assert.equal(await page.locator("#errorDialog").evaluate((dialog) => dialog.open), failure === "write" || writeFailure,
       await page.locator("#errorDialogCause").textContent());
     assert.deepEqual(await page.evaluate(() => state.images.map((image) => ({ id: image.id, name: image.relativePath }))),
       order.map((image, index) => ({ id: image.id, name: failed ? image.name : `${String(index + 1).padStart(2, "0")}.png` })));
@@ -175,6 +263,10 @@ const { waitForAppStartup } = require("../helpers/app_startup.cjs");
       catch (error) { if (error.name === "NotFoundError") return false; throw error; }
     }), false);
     assert.deepEqual(await page.evaluate(() => Object.keys(pendingSaveTokens())), []);
+    if (progressTest) {
+      assert.equal(await page.locator("#applyProgress").getAttribute("value"), writeFailure ? "0" : "3");
+      if (writeFailure) assert.equal(await page.evaluate(() => window.__numberedWrites.starts.length), 2, "a failed write starts no further member");
+    }
     assert.deepEqual(errors, []);
     console.log("numbered overwrite complete");
   } finally { await context.close(); await browser.close(); }

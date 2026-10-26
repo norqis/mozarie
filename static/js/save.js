@@ -874,12 +874,19 @@ async function waitForBrowserSave(save) {
 
 function showBrowserSaveProgress(save, entry) {
   const displayName = imageDisplayPath(save.imagesById?.get(entry?.imageId)) || entry?.relativePath || "";
-  $("#applyPauseButton").disabled = false;
+  const numbered = save.numberedProgress;
+  const locked = Boolean(numbered && numbered.phase !== "preparing");
+  $("#applyPauseButton").disabled = locked;
+  $("#applyCancelButton").disabled = locked;
   state.job = { kind: "apply", state: save.paused ? "paused" : "running", total: save.entries.length, completed: save.completed, current: displayName };
-  $("#applyProgress").max = Math.max(1, save.entries.length);
-  $("#applyProgress").value = save.completed;
+  const counted = numbered && ["preparing", "writing"].includes(numbered.phase);
+  $("#applyProgress").max = Math.max(1, counted ? numbered.total : save.entries.length);
+  if (numbered && !counted && numbered.phase !== "complete") $("#applyProgress").removeAttribute("value");
+  else $("#applyProgress").value = counted ? numbered.completed : save.completed;
   $("#applyCurrentName").textContent = displayName;
-  $("#applyProgressText").textContent = t("apply.progress", { completed: save.completed, total: save.entries.length });
+  $("#applyProgressText").textContent = numbered && numbered.phase !== "complete"
+    ? t(`apply.numbered.${numbered.phase}`, numbered)
+    : t("apply.progress", { completed: save.completed, total: save.entries.length });
   $("#applyPauseButton").textContent = t(save.paused ? "apply.resume" : "apply.pause");
 }
 
@@ -1680,6 +1687,10 @@ async function runBrowserSave(imageIds, suffix, deleteOriginal, mode = "copy", r
         }
       }
     } finally {
+      if (save.numberedProgress && save.numberedProgress.phase !== "complete") {
+        save.numberedProgress = null;
+        showBrowserSaveProgress(save);
+      }
       state.saving = false;
       state.applyRunning = false;
       state.applyCatalogSnapshot = null;
@@ -1828,6 +1839,7 @@ function finishSaveStart() {
 
 async function controlApply(action) {
   if (state.browserSave) {
+    if (state.browserSave.numberedProgress && state.browserSave.numberedProgress.phase !== "preparing") return;
     if (action === "cancel") state.browserSave.cancelled = true;
     if (action === "pause") state.browserSave.paused = true;
     if (action === "resume") state.browserSave.paused = false;
