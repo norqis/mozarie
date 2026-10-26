@@ -62,8 +62,8 @@ h2 { margin: 0 0 2px; font-size: 14px; } .muted { color: #98a2ad; font-size: 12p
 .gallery-item { position: relative; display: grid; grid-template-rows: minmax(0, 1fr) 32px; align-self: start; min-width: 0; min-height: 0; padding: 0; overflow: hidden; border: 1px solid #424953; border-radius: 5px; background: #282d33; cursor: pointer; text-align: left; }
 .gallery-item:hover { border-color: #6d7783; } .gallery-item.current { border-color: #42a98f; box-shadow: inset 0 0 0 1px #42a98f; }
 .gallery-item img { display: block; width: calc(100% - 8px); min-height: 0; max-height: calc(100% - 4px); aspect-ratio: 4 / 3; margin: 4px 4px 0; border-radius: 3px; object-fit: contain; background: #151719; }
-.gallery-review-badge { position: absolute; top: 5px; right: 5px; max-width: calc(100% - 10px); padding: 2px 5px; overflow: hidden; border: 1px solid #3a9780; border-radius: 3px; background: #173e35e8; color: #d8fff3; font-size: 10px; line-height: 1.25; text-overflow: ellipsis; white-space: nowrap; }
-.gallery-item.reviewed .gallery-review-badge { border-color: #3a9780; background: #173e35e8; color: #d8fff3; }
+.gallery-review-badge, .overview-review-badge { position: absolute; top: 5px; right: 5px; z-index: 1; max-width: calc(100% - 10px); padding: 2px 5px; overflow: hidden; border: 1px solid #596570; border-radius: 3px; background: #29313aeb; color: #d0d7de; font-size: 10px; line-height: 1.25; text-overflow: ellipsis; white-space: nowrap; }
+.gallery-item.reviewed .gallery-review-badge, .overview-item.reviewed .overview-review-badge { border-color: #3a9780; background: #173e35e8; color: #d8fff3; }
 .thumbnail-error { position: absolute; inset: 8px; display: grid; place-items: center; padding: 8px; background: #151719e8; color: #ffd5d5; font-size: 12px; text-align: center; cursor: pointer; } .thumbnail-error[hidden] { display: none; }
 .catalog-card-footer { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 8px; align-items: center; min-width: 0; height: 32px; padding: 0 8px; }
 .gallery-name, .gallery-meta, .overview-item-name, .overview-item-dimensions { min-width: 0; padding: 0; overflow: hidden; font-size: 12px; line-height: 16px; text-overflow: ellipsis; white-space: nowrap; }
@@ -185,7 +185,7 @@ h2 { margin: 0 0 2px; font-size: 14px; } .muted { color: #98a2ad; font-size: 12p
 .overview-empty-state { position: absolute; inset: 0; display: grid; place-items: center; min-height: 120px; margin: 0; padding: 14px; color: #98a2ad; text-align: center; }
 .overview-empty-state[hidden] { display: none; }
 .overview-item { position: relative; display: grid; grid-template-rows: minmax(0, 1fr) 40px; width: 100%; min-width: 0; min-height: 0; padding: 0; overflow: hidden; border-color: #424953; background: #282d33; text-align: left; } .overview-item.current { border-color: #8aa0b5; box-shadow: inset 0 0 0 1px #8aa0b5; } .overview-item.batch-selected { border-color: #42a98f; box-shadow: inset 0 0 0 3px #42a98f; } .overview-item.current.batch-selected { border-color: #8aa0b5; box-shadow: inset 0 0 0 1px #8aa0b5, inset 0 0 0 3px #42a98f; }
-.overview-item img { display: block; width: calc(100% - 8px); aspect-ratio: 1; margin: 4px 4px 0; border-radius: 3px; object-fit: contain; background: #151719; } .overview-review-badge, .gallery-review-badge { position: absolute; top: 5px; right: 5px; z-index: 1; font-size: 10px; }
+.overview-item img { display: block; width: calc(100% - 8px); aspect-ratio: 1; margin: 4px 4px 0; border-radius: 3px; object-fit: contain; background: #151719; }
 
 .modal-dialog { width: min(500px, calc(100vw - 32px)); max-height: min(720px, calc(100vh - 32px)); padding: 0; border: 1px solid #505965; border-radius: 6px; background: #24292f; color: #e7eaed; box-shadow: 0 18px 50px #000a; } .modal-dialog::backdrop { background: #0c0e11bb; } .dialog-body { display: grid; gap: 14px; margin: 0; padding: 18px; } .dialog-body h2 { font-size: 16px; } .dialog-body p { margin: 0; line-height: 1.5; } .mosaic-guideline-links { white-space: nowrap; } .dialog-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 7px; }
 .error-dialog { width: min(440px, calc(100vw - 32px)); } .error-dialog-copy { display: grid; gap: 3px; }
@@ -400,8 +400,6 @@ button { overflow: visible; text-overflow: clip; white-space: nowrap; }
 .studio-grid.gallery-collapsed.inspector-collapsed { grid-template-columns: 40px 8px minmax(320px, 1fr) 8px 40px; }
 .gallery { overflow-y: auto; overflow-x: hidden; }
 .gallery-item { width: 100%; }
-.gallery-review-badge { border-color: #596570; background: #29313aeb; color: #d0d7de; }
-.gallery-item.reviewed .gallery-review-badge { border-color: #3a9780; background: #173e35e8; color: #d8fff3; }
 .canvas-navigation-bar .current-file-name { overflow: hidden; text-overflow: ellipsis; }
 .update-toast { position: fixed; right: 1rem; bottom: 1rem; z-index: 20; }
 .project-dialog-section { display: grid; gap: .65rem; padding: .9rem; border: 1px solid #3b424a; border-radius: .5rem; }

@@ -3,6 +3,48 @@ const { test } = require("node:test");
 const { chromium } = require("playwright");
 const { startFixtureServer, closeServer } = require("../test_import_picker_e2e.cjs");
 
+test("overview review badges match the sidebar through review changes hiding and virtual scrolling", { timeout: 60000 }, async () => {
+  const fixture = await startFixtureServer();
+  fixture.setCatalog(Array.from({ length: 200 }, (_, index) => ({
+    id: `badge-${index}`, relativePath: `badge-${index}.png`, sourceKind: "filesystem",
+    width: 100, height: 80, candidateCount: 0, reviewed: index === 0 || index === 2, hidden: index === 2,
+  })));
+  const browser = await chromium.launch({ headless: true });
+  const context = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+  try {
+    const page = await context.newPage();
+    await page.goto(fixture.url, { waitUntil: "domcontentloaded" });
+    await page.waitForFunction(() => state.settings && state.images.length === 200);
+    const badge = (scope, index) => page.locator(`.${scope === "gallery" ? "gallery" : "overview"}-item[data-id="badge-${index}"] .${scope === "gallery" ? "gallery" : "overview"}-review-badge`);
+    const appearance = (node) => node.evaluate((badge) => {
+      const style = getComputedStyle(badge);
+      return { text: badge.textContent, color: style.color, background: style.backgroundColor,
+        border: style.borderColor, padding: style.padding };
+    });
+    const sidebar = await Promise.all([0, 1, 2].map((index) => appearance(badge("gallery", index))));
+    assert.equal(sidebar[0].border, "rgb(58, 151, 128)");
+    assert.notEqual(sidebar[1].background, sidebar[0].background);
+    assert.equal(sidebar[2].background, sidebar[1].background);
+    await page.locator("#overviewButton").click();
+    for (const index of [0, 1, 2]) assert.deepEqual(await appearance(badge("overview", index)), sidebar[index]);
+    await page.evaluate(() => setReviewed(state.images.find((image) => image.id === "badge-1"), true));
+    assert.deepEqual(await appearance(badge("overview", 1)), sidebar[0]);
+    await page.evaluate(() => setReviewed(state.images.find((image) => image.id === "badge-1"), false));
+    assert.deepEqual(await appearance(badge("overview", 1)), sidebar[1]);
+    await page.evaluate(() => setHidden(state.images.find((image) => image.id === "badge-0"), true));
+    assert.deepEqual(await appearance(badge("overview", 0)), sidebar[2]);
+    await page.evaluate(() => setHidden(state.images.find((image) => image.id === "badge-0"), false));
+    assert.deepEqual(await appearance(badge("overview", 0)), sidebar[0]);
+    await page.locator("#overviewGrid").evaluate((grid) => { grid.scrollTop = grid.scrollHeight; });
+    await page.waitForFunction(() => !document.querySelector('.overview-item[data-id="badge-0"]'));
+    await page.locator("#overviewGrid").evaluate((grid) => { grid.scrollTop = 0; });
+    await badge("overview", 0).waitFor();
+    assert.deepEqual(await appearance(badge("overview", 0)), sidebar[0]);
+  } finally {
+    await context.close(); await browser.close(); await closeServer(fixture.server);
+  }
+});
+
 test("overview scrolling, native drag suppression, reorder drafts and numbering controls", async () => {
   const fixture = await startFixtureServer();
   const records = Array.from({ length: 104 }, (_, index) => ({

@@ -316,6 +316,10 @@ SD-061.3 の `detection/test_exclusion_memory.py` は24候補での作業メモ�
 - `tests/saving/numbered_overwrite_live_browser.cjs`: 実Chromium・HTTP・SQLite・OPFSを接続し、元画像の全バイト、一覧名、アクセス情報、未完了tokenを検証する。Windowsの選択画面のみ外部境界として置換する。
 - ブラウザーの新規ファイル作成とIndexedDB記録は原子的にできない。所有権を記録する前に終了し、その名前が存在する場合はファイルとバックアップを保持して復旧を保留する。空slotを明示的に解消した後の復旧も自動試験する。OSダイアログそのものは対象外。
 
+## 画像一覧の確認表示
+
+画像一覧の確認済みバッジは左一覧と同じ緑色とし、未確認・非表示には通常色を使う。`gallery/test_catalog_reorder_e2e.cjs` の `overview review badges match the sidebar through review changes hiding and virtual scrolling` は実Chromiumで文字・文字色・背景・枠色・余白を比較し、確認状態と非表示の切替、仮想スクロールによる再描画後も表示が一致することを確認する。
+
 ## プロジェクト管理の一覧と詳細
 
 - `tests/workspace/test_project_details.py`: 保存済みのパスなどを読取り、現在のプロジェクトや画像一覧を変更せず、元フォルダーへアクセスしない。
