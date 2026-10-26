@@ -3,6 +3,57 @@ const test = require("node:test");
 const { chromium } = require("playwright");
 const { closeServer, startFixtureServer } = require("../test_import_picker_e2e.cjs");
 
+test("detection submit paints preparation before settings and start responses and restores controls on failure", { timeout: 60000 }, async () => {
+  for (const failure of ["settings", "detect", null]) await withPage(async (page, fixture) => {
+    await page.goto(fixture.url, { waitUntil: "domcontentloaded" });
+    await page.waitForFunction(() => state.images.length === 2 && Boolean(state.settings));
+    await page.locator("#detectAllButton").click();
+    await page.waitForFunction(() => !state.detectionDialogPreparing);
+    const previousJob = await page.evaluate(() => structuredClone(state.job));
+    let settingsRoute; let detectRoute;
+    let settingsSeen; let detectSeen;
+    const settingsRequested = new Promise((resolve) => { settingsSeen = resolve; });
+    const detectRequested = new Promise((resolve) => { detectSeen = resolve; });
+    await page.route("**/api/settings?status=0", (route) => { settingsRoute = route; settingsSeen(); });
+    await page.route("**/api/detect", (route) => { detectRoute = route; detectSeen(); });
+    const assertPreparing = async () => {
+      assert.equal(await page.locator("#processingDialog").isVisible(), true);
+      assert.match(await page.locator("#processingCurrent").textContent(), /検出を準備中/);
+      assert.equal(await page.locator("#processingPauseButton").isDisabled(), true);
+      assert.equal(await page.locator("#processingCancelButton").isDisabled(), true);
+      assert.equal(await page.evaluate(() => state.processing.phase), "preparing_request");
+      assert.deepEqual(await page.evaluate(() => state.job), previousJob);
+      assert.equal(fixture.detectRequests.length, 0);
+    };
+    await page.locator("#detectStartButton").click();
+    await settingsRequested;
+    await assertPreparing();
+    await page.evaluate(() => { void startDetectionFromDialog({ preventDefault() {} }); });
+    if (failure === "settings") {
+      await settingsRoute.fulfill({ status: 400, json: { error_code: "input_invalid" } });
+    } else {
+      await settingsRoute.continue();
+      await detectRequested;
+      await assertPreparing();
+      if (failure === "detect") await detectRoute.fulfill({ status: 400, json: { error_code: "input_invalid" } });
+      else await detectRoute.continue();
+    }
+    await page.waitForFunction(() => !state.detectionStarting);
+    if (failure) {
+      assert.equal(await page.locator("#processingDialog").isVisible(), false);
+      assert.equal(await page.locator("#errorDialog").isVisible(), true);
+      assert.deepEqual(await page.evaluate(() => state.job), previousJob);
+      if (failure === "settings") {
+        await page.locator("#errorDialogClose").click();
+        assert.equal(await page.locator("#detectStartButton").isEnabled(), true);
+      }
+    } else {
+      assert.equal(fixture.detectRequests.length, 1);
+      await page.waitForFunction(() => state.processing?.phase === "preparing_models" || state.job?.state === "complete");
+    }
+  });
+});
+
 async function withPage(body) {
   const fixture = await startFixtureServer();
   const browser = await chromium.launch({ headless: true });

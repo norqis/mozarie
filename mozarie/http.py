@@ -97,7 +97,9 @@ _POST_OPERATION_LABELS = {
     "/api/output-directory/create": "保存先フォルダー作成",
     "/api/model-download/start": "モデルダウンロード開始",
     "/api/model-download/cancel": "モデルダウンロード取消",
-    "/api/update/start": "更新開始",
+    "/api/update/prepare": "更新ファイルの取得・検証",
+    "/api/update/start": "終了して更新",
+    "/api/update/cancel": "更新のキャンセル",
     "/api/boundary": "境界候補追加",
     "/api/save/prepare": "ブラウザー保存準備",
     "/api/save/render": "ブラウザー保存レンダー",
@@ -1073,30 +1075,63 @@ class MosaicHandler(BaseHTTPRequestHandler):
                     raise ClientError("", "model_download_invalid") from exc
             elif path == "/api/model-download/cancel":
                 self._json(STATE.model_downloads.cancel())
-            elif path == "/api/update/start":
+            elif path == "/api/update/prepare":
                 if STATE.model_downloads.snapshot().get("state") in {"running", "cancelling"}:
                     raise ClientError("", "operation_in_progress")
                 if not _reserve_update_start():
-                    raise ClientError("更新を開始しています。完了するまでお待ちください。", "operation_in_progress")
+                    with _update_start_lock:
+                        if vars(self.server).get("mozarie_update_source") is not None and not vars(self.server).get("mozarie_update_requested", False):
+                            self._json({"ok": True})
+                            return
+                    raise ClientError("", "operation_in_progress")
                 temporary = None
                 try:
                     from updater import cleanup_update_workspace, prepare_update, UpdateError
                     temporary = Path(tempfile.mkdtemp(prefix="mozarie-update-"))
                     source = prepare_update(APP_DIR, temporary)
-                    self._json({"ok": True})
-                    self.server.mozarie_update_workspace = temporary
-                    self.server.mozarie_update_source = source
-                    threading.Thread(target=_start_update_after_response, args=(self.server,), daemon=True).start()
+                    with _update_start_lock:
+                        self.server.mozarie_update_workspace = temporary
+                        self.server.mozarie_update_source = source
+                        self._json({"ok": True})
                 except Exception as exc:
                     global _update_start_requested
                     with _update_start_lock:
                         _update_start_requested = False
+                        self.server.mozarie_update_workspace = None
+                        self.server.mozarie_update_source = None
                     if temporary is not None:
                         cleanup_update_workspace(temporary)
                     LOGGER.exception("更新の準備に失敗しました。本体は終了せず再試行できます。")
                     if isinstance(exc, (UpdateError, OSError)):
                         raise ClientError("", "update_preparation_failed") from exc
                     raise
+            elif path == "/api/update/start":
+                if STATE.model_downloads.snapshot().get("state") in {"running", "cancelling"}:
+                    raise ClientError("", "operation_in_progress")
+                with _update_start_lock:
+                    if vars(self.server).get("mozarie_update_source") is None:
+                        raise ClientError("", "input_invalid")
+                    if vars(self.server).get("mozarie_update_requested", False):
+                        raise ClientError("", "operation_in_progress")
+                    self.server.mozarie_update_requested = True
+                    try:
+                        threading.Thread(target=_start_update_after_response, args=(self.server,), daemon=True).start()
+                    except Exception:
+                        self.server.mozarie_update_requested = False
+                        raise
+                    self._json({"ok": True})
+            elif path == "/api/update/cancel":
+                from updater import cleanup_update_workspace
+                with _update_start_lock:
+                    temporary = vars(self.server).get("mozarie_update_workspace")
+                    if vars(self.server).get("mozarie_update_requested", False) or (_update_start_requested and temporary is None):
+                        raise ClientError("", "operation_in_progress")
+                    self.server.mozarie_update_workspace = None
+                    self.server.mozarie_update_source = None
+                    _update_start_requested = False
+                if temporary is not None:
+                    cleanup_update_workspace(temporary)
+                self._json({"ok": True})
             elif path == "/api/boundary":
                 image_id = str(payload.get("imageId", ""))
                 self._json(self._catalog_mutation(expected_project_id, expected_catalog_generation,
@@ -1663,5 +1698,4 @@ def _update_status() -> dict[str, Any]:
 
 def _start_update_after_response(http_server: ThreadingHTTPServer) -> None:
     time.sleep(0.2)
-    http_server.mozarie_update_requested = True
     http_server.shutdown()

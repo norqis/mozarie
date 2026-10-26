@@ -8788,7 +8788,7 @@ class MozarieTests(unittest.TestCase):
 
     def test_update_request_only_stops_the_http_server(self):
         events = []
-        http_server = Mock(); http_server.shutdown.side_effect = lambda: events.append("server")
+        http_server = Mock(mozarie_update_requested=True); http_server.shutdown.side_effect = lambda: events.append("server")
         with patch.object(http_module.time, "sleep"):
             http_module._start_update_after_response(http_server)
         self.assertEqual(events, ["server"])

@@ -307,6 +307,7 @@ function progressText(job) {
 }
 
 function processingCurrentPath(job) {
+  if (job.kind === "detect" && job.phase === "preparing_request") return t("processing.preparingDetection");
   if (job?.kind !== "detect") return job?.current || "";
   if (job.phase === "preparing_models" && ["running", "pausing", "paused"].includes(job.state)) return t("processing.preparingModels");
   const imageIds = job.imageIds || [];
@@ -334,9 +335,10 @@ function showProcessing(processing) {
   const cancelling = Boolean(current.cancelRequested || state.detectCancelRequested || state.importSession?.cancelled);
   const detectionPublicationPending = current.kind === "detect" && current.state === "running"
     && Number(current.processed) >= Number(current.total);
+  const detectionRequestPending = current.kind === "detect" && current.phase === "preparing_request";
   $("#processingPauseButton").textContent = t(current.state === "paused" ? "apply.resume" : "apply.pause");
-  $("#processingPauseButton").disabled = current.state === "pausing" || cancelling || detectionPublicationPending;
-  $("#processingCancelButton").disabled = cancelling;
+  $("#processingPauseButton").disabled = detectionRequestPending || current.state === "pausing" || cancelling || detectionPublicationPending;
+  $("#processingCancelButton").disabled = detectionRequestPending || cancelling;
   showModalFromInvoker(modal);
 }
 

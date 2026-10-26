@@ -656,6 +656,7 @@ async function testDetectionImportAndSaveBehaviour() {
     t: (key) => key, api: async () => ({}), isCurrentGeneration: () => true, setSettingsForm() {}, scheduleJobPoll() {}, showProcessing() {}, syncDetectionTargetSwitch() {}, syncDetectionFluidColorFill() {},
   };
   const source = fs.readFileSync(path.join(jsRoot, "detection.js"), "utf8");
+  context.requestAnimationFrame = (callback) => setImmediate(callback);
   vm.runInNewContext(source, context, { filename: path.join(jsRoot, "detection.js") });
   context.validateDetectionTargets = () => true;
   vm.runInNewContext("globalThis.detectionCoverage={ detectionParallelism, detectionTargets, setDetectionTargets, detectionImageFilters, setDetectionImageFilters, syncDetectionDialog, resetDetectionDialogState, normaliseImportParallelism, importParallelism, openDetectionDialog, runDetection, startDetectionFromDialog, cancelDetection, saveCurrent, saveAll };", context, { filename: "test-detection-exports.js" });

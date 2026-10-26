@@ -168,8 +168,10 @@ class HttpBoundaryCoverageTests(unittest.TestCase):
             request.path = "/api/model-download/start"
             request._read_json_body = lambda: {"modelKey": "target", "samType": ""}
             request.do_POST()
-            request.path = "/api/update/start"
+            request.path = "/api/update/prepare"
             request._read_json_body = lambda: {}
+            request.do_POST()
+            request.path = "/api/update/prepare"
             request.do_POST()
             request.path = "/api/update/start"
             request.do_POST()
