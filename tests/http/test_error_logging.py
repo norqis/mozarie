@@ -57,4 +57,3 @@ class ErrorLoggingTests(unittest.TestCase):
         self.assertEqual(response["error_code"], "save_write_failed")
         self.assertIn("保存用の一時ファイルへ書き込めませんでした。", "\n".join(logs.output))
         self.assertIn("PermissionError: fixture access denied", "\n".join(logs.output))
-

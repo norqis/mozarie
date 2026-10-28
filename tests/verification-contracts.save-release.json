@@ -511,7 +511,7 @@
         "python:tests.test_recursive_save_rename.StudioStateNativeRenameTests.test_edited_name_collision_keeps_original_and_edit",
         "python:tests.saving.test_save_preflight_conflicts.SavePreflightConflictTests.test_native_format_conversion_lists_every_conflict_before_any_output",
         "python:tests.saving.test_save_preflight_conflicts.SavePreflightConflictTests.test_browser_single_and_batch_show_all_conflicts_before_render_and_can_retry",
-        "node:tests/http/test_browser_error_reporting_e2e.cjs::single copy respects server preflight conflicts before render",
+        "node:tests/http/test_browser_error_reporting_e2e.cjs::single and numbered copy respect server preflight conflicts before render",
         "node:tests/test_browser_save_runtime.cjs::preflight conflicts are deduplicated and sorted before copy rendering"
       ]
     },

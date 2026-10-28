@@ -52,4 +52,3 @@ class SavePreflightConflictTests(unittest.TestCase):
             text=True, encoding="utf-8", errors="replace", capture_output=True, timeout=120, check=False,
         )
         self.assertEqual(result.returncode, 0, result.stdout + "\n" + result.stderr)
-

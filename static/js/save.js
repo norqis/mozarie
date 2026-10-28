@@ -1798,7 +1798,7 @@ async function startApplyFromDialog(event) {
     }
     if (numbering) {
       prepared = await api("/api/save/prepare", { method: "POST", body: JSON.stringify({ imageIds: capturedImageIds, divisor: Number($("#applyDivisor").value), suffix, deleteOriginal: false, copyToDefault: copy, format, keepMetadata: $("#applyKeepMetadata").checked, numbering, collectConflicts: true }) });
-      if (copy && prepared.conflicts?.length) throw codedError("output_files_exist", { files: prepared.conflicts.join("\n") });
+      if (copy) assertNoSaveConflicts(prepared.conflicts || []);
       filenames = new Map(prepared.entries.map((entry) => [entry.imageId, entry.outputFilename]));
       if (!copy) beginPreparation();
     }

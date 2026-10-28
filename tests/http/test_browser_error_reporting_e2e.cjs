@@ -6,14 +6,15 @@ const { chromium } = require("playwright");
 const { startFixtureServer, closeServer } = require("../test_import_picker_e2e.cjs");
 const { waitForAppStartup } = require("../helpers/app_startup.cjs");
 
-test("single copy respects server preflight conflicts before render", { timeout: 30000 }, async () => {
+test("single and numbered copy respect server preflight conflicts before render", { timeout: 30000 }, async () => {
   const fixture = await startFixtureServer();
   let browser;
   try {
     browser = await chromium.launch();
     const page = await browser.newPage();
+    let conflicts = ["existing.jpg"];
     await page.route("**/api/save/prepare", (route) => route.fulfill({ json: {
-      entries: [{ imageId: "image-1", relativePath: "source.png", candidateRevision: 0 }], conflicts: ["existing.jpg"],
+      entries: [{ imageId: "image-1", relativePath: "source.png", candidateRevision: 0 }], conflicts,
     } }));
     const writes = [];
     page.on("request", (request) => { if (/\/api\/save\/(render|reserve)$/.test(request.url())) writes.push(request.url()); });
@@ -26,6 +27,17 @@ test("single copy respects server preflight conflicts before render", { timeout:
     await page.locator("#singleSaveStartButton").click();
     await page.locator("#errorDialog").waitFor({ state: "visible" });
     assert.match(await page.locator("#errorDialogCause").textContent(), /existing\.jpg/);
+    assert.deepEqual(writes, []);
+    await page.locator("#errorDialogClose").click();
+    await page.locator("#singleSaveCloseButton").click();
+    conflicts = ["folder/Z.jpg", "folder/a.jpg", "folder\\A.JPG", "folder/b.jpg"];
+    await page.locator("#saveAllButton").click();
+    await page.locator("#applyCopyMode").check();
+    await page.locator("#applyNumbering").check();
+    await page.locator("#applyStartButton").click();
+    await page.locator("#errorDialog").waitFor({ state: "visible" });
+    assert.equal(await page.locator("#errorDialogCause").textContent(),
+      await page.evaluate(() => t("errorDialog.output_files_exist.cause", { files: "folder\\A.JPG\nfolder/b.jpg\nfolder/Z.jpg" })));
     assert.deepEqual(writes, []);
   } finally {
     await browser?.close();
