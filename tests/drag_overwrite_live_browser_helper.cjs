@@ -4,6 +4,8 @@ const assert = require("node:assert/strict");
 const { chromium } = require("playwright");
 const origin = process.argv[2];
 const nativeFilePath = process.argv[3];
+const sourceName = nativeFilePath ? require("node:path").basename(nativeFilePath) : "drag-source.png";
+const renamedName = `intended-new-name${require("node:path").extname(sourceName)}`;
 const png = "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFklEQVR4nGP4z8DAwPCfkeE/w38GBgAc+AP+/XLlFAAAAABJRU5ErkJggg==";
 
 async function assertSaveButtonHitTarget(page, startId, pickerId) {
@@ -23,6 +25,7 @@ async function assertSaveButtonHitTarget(page, startId, pickerId) {
   const browser = await chromium.launch({ headless: true,
     ...(nativeFilePath ? { args: ["--enable-experimental-web-platform-features"] } : {}) });
   const context = await browser.newContext();
+  await context.addInitScript(({ name, renamed }) => { window.sourceName = name; window.renamedName = renamed; }, { name: sourceName, renamed: renamedName });
   try {
     const page = await context.newPage();
     const outputPickerRequests = [];
@@ -52,7 +55,7 @@ async function assertSaveButtonHitTarget(page, startId, pickerId) {
       } finally { await cdp.detach(); }
     } else await page.evaluate(async (base64) => {
       const root = await navigator.storage.getDirectory();
-      const handle = await root.getFileHandle("drag-source.png", { create: true });
+      const handle = await root.getFileHandle(sourceName, { create: true });
       const writer = await handle.createWritable();
       await writer.write(Uint8Array.from(atob(base64), (character) => character.charCodeAt(0)));
       await writer.close();
@@ -67,11 +70,11 @@ async function assertSaveButtonHitTarget(page, startId, pickerId) {
       }] } });
       document.querySelector("#gallery").dispatchEvent(event);
     }, png);
-    await page.waitForFunction(() => !state.importing && state.images.some((image) => image.relativePath === "drag-source.png"));
-    await page.locator('.gallery-item[data-id]').filter({ hasText: "drag-source.png" }).click();
-    await page.waitForFunction(() => state.currentImage && state.currentId === state.images.find((image) => image.relativePath === "drag-source.png")?.id);
+    await page.waitForFunction(() => !state.importing && state.images.some((image) => image.relativePath === sourceName));
+    await page.locator('.gallery-item[data-id]').filter({ hasText: sourceName }).click();
+    await page.waitForFunction(() => state.currentImage && state.currentId === state.images.find((image) => image.relativePath === sourceName)?.id);
     await page.evaluate(() => {
-      const image = state.images.find((item) => item.relativePath === "drag-source.png");
+      const image = state.images.find((item) => item.relativePath === sourceName);
       const handle = state.sourceAccess.get(image.id).fileHandle;
       window.__dragSource = handle;
       window.__writePermissionRequests = 0;
@@ -82,29 +85,29 @@ async function assertSaveButtonHitTarget(page, startId, pickerId) {
       Object.defineProperty(handle, "requestPermission", { value: async () => { window.__writePermissionRequests++; return "granted"; } });
     });
     const before = await page.evaluate(async () => {
-      const image = state.images.find((item) => item.relativePath === "drag-source.png");
+      const image = state.images.find((item) => item.relativePath === sourceName);
       const access = state.sourceAccess.get(image.id);
       return { relativePath: image.relativePath, editedFilename: image.editedFilename, handleName: access.fileHandle.name,
         accessName: access.name, bytes: [...new Uint8Array(await (await access.fileHandle.getFile()).arrayBuffer())] };
     });
     assert.equal(before.editedFilename, null);
-    assert.equal(before.handleName, "drag-source.png");
-    assert.equal(before.accessName, "drag-source.png");
+    assert.equal(before.handleName, sourceName);
+    assert.equal(before.accessName, sourceName);
     await page.locator("#flipHorizontalButton").click();
-    await page.waitForFunction(() => state.images.find((image) => image.relativePath === "drag-source.png")?.flipH === true && !state.transformPending);
+    await page.waitForFunction(() => state.images.find((image) => image.relativePath === sourceName)?.flipH === true && !state.transformPending);
     await page.locator("#saveButton").click();
     await page.waitForFunction(() => document.querySelector("#singleSaveDialog").open && !document.querySelector("#singleSaveStartButton").disabled);
     await page.locator("#singleSaveOverwriteMode").check();
     await page.locator("#singleSaveOutputFormat").selectOption("original");
     const preSave = await page.evaluate(() => {
-      const image = state.images.find((item) => item.relativePath === "drag-source.png");
+      const image = state.images.find((item) => item.relativePath === sourceName);
       const access = state.sourceAccess.get(image.id);
       return { relativePath: image.relativePath, editedFilename: image.editedFilename, handleName: access.fileHandle.name,
         accessName: access.name, format: document.querySelector("#singleSaveOutputFormat").value,
         mode: document.querySelector('input[name="singleSaveMode"]:checked').value };
     });
-    assert.deepEqual(preSave, { relativePath: "drag-source.png", editedFilename: null, handleName: "drag-source.png",
-      accessName: "drag-source.png", format: "original", mode: "overwrite" });
+    assert.deepEqual(preSave, { relativePath: sourceName, editedFilename: null, handleName: sourceName,
+      accessName: sourceName, format: "original", mode: "overwrite" });
     await assertSaveButtonHitTarget(page, "singleSaveStartButton", "singleSaveChooseOutputDirectoryButton");
     await page.setViewportSize({ width: 800, height: 600 });
     await assertSaveButtonHitTarget(page, "singleSaveStartButton", "singleSaveChooseOutputDirectoryButton");
@@ -139,7 +142,7 @@ async function assertSaveButtonHitTarget(page, startId, pickerId) {
     assert.equal(outputPickerRequests.length, 0, "single Save activation by Enter needs no Windows output folder picker");
     await page.locator("#singleSaveCloseButton").click();
     await page.locator("#flipVerticalButton").click();
-    await page.waitForFunction(() => state.images.find((image) => image.relativePath === "drag-source.png")?.flipV === true && !state.transformPending);
+    await page.waitForFunction(() => state.images.find((image) => image.relativePath === sourceName)?.flipV === true && !state.transformPending);
     await page.locator("#saveAllButton").click();
     await page.waitForFunction(() => document.querySelector("#applyDialog").open);
     await page.locator("#applyOverwriteMode").check();
@@ -177,31 +180,31 @@ async function assertSaveButtonHitTarget(page, startId, pickerId) {
     await page.locator("#projectNameInput").fill("Drag overwrite fixture");
     await page.locator("#projectNameConfirm").click();
     await page.waitForFunction(() => state.project?.id && !state.projectOperationPending);
-    await page.evaluate(() => openRenameImageDialog(state.images.find((image) => image.relativePath === "drag-source.png").id));
-    await page.locator("#renameImageFilename").fill("intended-new-name.png");
+    await page.evaluate(() => openRenameImageDialog(state.images.find((image) => image.relativePath === sourceName).id));
+    await page.locator("#renameImageFilename").fill(renamedName);
     await page.locator("#renameImageConfirm").click();
-    await page.waitForFunction(() => state.images.find((image) => image.relativePath === "drag-source.png")?.editedFilename === "intended-new-name.png");
+    await page.waitForFunction(() => state.images.find((image) => image.relativePath === sourceName)?.editedFilename === renamedName);
     await page.reload({ waitUntil: "domcontentloaded" });
-    await page.waitForFunction(() => state.settings && state.images.some((image) => image.relativePath === "drag-source.png") && !state.projectOperationPending);
+    await page.waitForFunction(() => state.settings && state.images.some((image) => image.relativePath === sourceName) && !state.projectOperationPending);
     await page.waitForFunction(() => {
-      const image = state.images.find((item) => item.relativePath === "drag-source.png");
+      const image = state.images.find((item) => item.relativePath === sourceName);
       return state.sourceAccess.get(image.id)?.fileHandle;
     });
     const persisted = await page.evaluate(() => {
-      const image = state.images.find((item) => item.relativePath === "drag-source.png");
+      const image = state.images.find((item) => item.relativePath === sourceName);
       const access = state.sourceAccess.get(image.id);
       return { relativePath: image.relativePath, editedFilename: image.editedFilename,
         handleName: access?.fileHandle?.name || null, accessName: access?.name || null };
     });
-    assert.equal(persisted.editedFilename, "intended-new-name.png", "an explicit pending rename survives project reload");
-    assert.equal(persisted.relativePath, "drag-source.png");
-    assert.equal(persisted.handleName, "drag-source.png");
+    assert.equal(persisted.editedFilename, renamedName, "an explicit pending rename survives project reload");
+    assert.equal(persisted.relativePath, sourceName);
+    assert.equal(persisted.handleName, sourceName);
     await page.evaluate(() => {
       window.__pickerCalls = 0;
       window.showDirectoryPicker = async () => { window.__pickerCalls++; throw new DOMException("cancelled", "AbortError"); };
     });
-    await page.locator('.gallery-item[data-id]').filter({ hasText: "intended-new-name.png" }).click();
-    await page.waitForFunction(() => state.currentImage && state.currentId === state.images.find((image) => image.relativePath === "drag-source.png")?.id);
+    await page.locator('.gallery-item[data-id]').filter({ hasText: renamedName }).click();
+    await page.waitForFunction(() => state.currentImage && state.currentId === state.images.find((image) => image.relativePath === sourceName)?.id);
     await page.locator("#saveButton").click();
     await page.waitForFunction(() => document.querySelector("#singleSaveDialog").open && !document.querySelector("#singleSaveStartButton").disabled);
     await page.locator("#singleSaveOverwriteMode").check();

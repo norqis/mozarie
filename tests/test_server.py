@@ -6986,6 +6986,7 @@ class MozarieTests(unittest.TestCase):
 
     def test_http_error_params_are_allowlisted(self):
         handler = object.__new__(MosaicHandler)
+        handler.command, handler.path = "POST", "/api/test"
         handler._json = Mock()
         handler._client_error(
             ClientError("private details", "gpu_out_of_memory", {"parallelism": 2, "path": "C:/private"}),

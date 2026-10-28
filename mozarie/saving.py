@@ -420,8 +420,10 @@ class SavingMixin:
                         destinations, suffix, output_format, output_directory,
                         self._preserve_directory_structure(), exact_name=bool(filenames),
                     )
-                overlap = not copy_to_default and bool(filenames) and native_plan(self, records,
-                    [self._overwrite_destination(record, output_format) for record in destinations])
+                if not copy_to_default:
+                    native_overlap = native_plan(self, records,
+                        [self._overwrite_destination(record, output_format) for record in destinations])
+                    overlap = bool(filenames) and native_overlap
             except ClientError as exc:
                 if exc.error_code != "output_files_exist" or conflicts is None:
                     raise
