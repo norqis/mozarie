@@ -328,6 +328,7 @@ class HttpBranchTests(unittest.TestCase):
 
     def test_client_error_and_static_response_choose_safe_user_codes(self) -> None:
         handler = self.handler()
+        handler.command, handler.path = "POST", "/api/test"
         emitted: list[tuple[object, object]] = []
         handler._json = lambda payload, status: emitted.append((payload, status))
         handler._client_error(ClientError("bad", "bad_code", {"x": 1}), http_module.HTTPStatus.BAD_REQUEST)

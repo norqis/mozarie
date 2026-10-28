@@ -117,8 +117,8 @@ function validCandidateTokens(candidate) {
     && (candidate.refinement === null || CANDIDATE_REFINEMENT_TOKENS.has(candidate.refinement));
 }
 
-function codedError(code, params = {}) {
-  const error = new Error();
+function codedError(code, params = {}, cause = undefined) {
+  const error = new Error(code, cause === undefined ? undefined : { cause });
   error.code = code;
   error.params = params;
   return error;
@@ -133,9 +133,39 @@ function sourceDeleteErrorCode(reason) {
   return reason === "source_action_unavailable" ? "source_delete_failed" : reason;
 }
 
+function reportClientError(error, invoker = document.activeElement, source = "showUserError") {
+  const code = userErrorCode(error);
+  const describe = (value) => ({ name: value?.name || "", message: value?.message || String(value?.code || value || ""), stack: value?.stack || "" });
+  try {
+    const batch = $("#applyDialog")?.open;
+    const imageId = error?.imageId || (batch ? "" : state.singleSave?.imageId || state.currentId);
+    const image = state.images.find((item) => item.id === imageId);
+    const access = state.sourceAccess.get(image?.id);
+    const format = $(batch ? "#applyOutputFormat" : "#singleSaveOutputFormat")?.value || "";
+    const request = fetch("/api/client-error", {
+      method: "POST", headers: catalogRequestHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({ source, code, ...describe(error), cause: error?.cause ? describe(error.cause) : null,
+        title: t(`errorDialog.${code}.title`, error?.params || {}),
+        displayedCause: t(`errorDialog.${code}.cause`, error?.params || {}),
+        action: t(`errorDialog.${code}.action`, error?.params || {}),
+        path: location.pathname, requestPath: error?.requestPath || "", phase: error?.savePhase || error?.cause?.savePhase || "",
+        control: invoker?.id || "", imageId: image?.id || "", image: imageDisplayPath(image) || "",
+        saveMode: document.querySelector(`input[name="${batch ? "batchSaveMode" : "singleSaveMode"}"]:checked`)?.value || "",
+        format, sourceKind: image?.sourceKind || "", sourceName: access?.fileHandle?.name || "",
+        targetName: access?.fileHandle && typeof renamedSourceFileName === "function" ? renamedSourceFileName(image, access, format) : "",
+        hasSourceHandle: String(Boolean(access?.fileHandle)), hasParentHandle: String(Boolean(access?.parentHandle)) }),
+    });
+    void request.catch(() => {});
+  } catch { /* Logging must not interrupt the original error display. */ }
+}
+
+window.addEventListener("error", (event) => { if (event.error) reportClientError(event.error, null, "error"); });
+window.addEventListener("unhandledrejection", (event) => { reportClientError(event.reason, null, "unhandledrejection"); });
+
 function showUserError(error, invoker = document.activeElement) {
   const code = userErrorCode(error);
-  if (code === "connection_lost") { showConnectionFailure(); return; }
+  if (code === "connection_lost") { showConnectionFailure(error, invoker); return; }
+  reportClientError(error, invoker);
   const dialog = $("#errorDialog");
   if (!dialog) return;
   $("#errorDialogTitle").textContent = t(`errorDialog.${code}.title`, error?.params || {});
@@ -199,6 +229,7 @@ function responseError(response, payload) {
   const params = payload?.params && typeof payload.params === "object" && !Array.isArray(payload.params) ? payload.params : {};
   const error = codedError(code, params);
   error.status = response.status;
+  error.requestPath = response.url ? new URL(response.url).pathname : "";
   return error;
 }
 
@@ -251,13 +282,14 @@ async function api(path, options = {}) {
       if (resyncOnStale && error?.name !== "AbortError") await resyncAfterStaleCatalog(error);
       throw error;
     }
-    const safeError = new Error();
-    safeError.code = "connection_lost";
+    const safeError = codedError("connection_lost", {}, error);
+    safeError.requestPath = path.split(/[?#]/, 1)[0];
     throw safeError;
   }
 }
 
-function showConnectionFailure() {
+function showConnectionFailure(error = "connection_lost", invoker = document.activeElement) {
+  reportClientError(error, invoker);
   state.status = { message: t("error.connectionLost"), kind: "error", connectionFailure: true };
   renderStatus();
 }

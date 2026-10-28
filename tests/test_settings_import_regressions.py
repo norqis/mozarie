@@ -242,6 +242,27 @@ class SettingsImportRegressionTests(unittest.TestCase):
             self.assertEqual([saved.getpixel(point) for point in [(0, 0), (15, 0), (0, 15), (15, 15)]], list(reversed(colors)))
         print(result.stdout.strip())
 
+    def test_live_native_jpeg_drag_overwrites_single_and_batch_without_folder_picker(self) -> None:
+        self.state.set_root(str(self.source))
+        source = self.root / "画像 258.jpg"
+        with Image.new("RGB", (32, 24), "white") as image:
+            image.paste("red", (0, 0, 16, 12))
+            image.paste("blue", (16, 12, 32, 24))
+            image.save(source, quality=95)
+        original = source.read_bytes()
+        result = subprocess.run(
+            ["node", str(Path(__file__).with_name("drag_overwrite_live_browser_helper.cjs")), self.origin, str(source)],
+            cwd=Path(__file__).resolve().parents[1], env={**os.environ, "PYTHONUTF8": "1"},
+            text=True, encoding="utf-8", errors="replace", capture_output=True, timeout=120, check=False,
+        )
+        self.assertEqual(result.returncode, 0, f"native JPEG overwrite failed\n{result.stdout}\n{result.stderr}")
+        self.assertNotEqual(source.read_bytes(), original)
+        with Image.open(source) as saved:
+            self.assertEqual(saved.format, "JPEG")
+            self.assertEqual(saved.size, (32, 24))
+            self.assertGreater(saved.getpixel((2, 2))[2], 200)
+            self.assertGreater(saved.getpixel((29, 21))[0], 200)
+
 
 if __name__ == "__main__":
     unittest.main()

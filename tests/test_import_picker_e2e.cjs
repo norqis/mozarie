@@ -207,6 +207,11 @@ function startFixtureServer(options = {}) {
   const server = http.createServer(async (request, response) => {
     const requestUrl = new URL(request.url, "http://127.0.0.1");
     const requestPath = requestUrl.pathname;
+    if (requestPath === "/api/client-error" && request.method === "POST") {
+      request.resume();
+      response.writeHead(200, { "Content-Type": "application/json" });
+      response.end(JSON.stringify({ ok: true })); return;
+    }
     if (requestPath === "/api/settings/reset" && request.method === "POST") {
       settingsActions.push({ path: requestPath, method: request.method });
       response.writeHead(200, { "Content-Type": "application/json" });

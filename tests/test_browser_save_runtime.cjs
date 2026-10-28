@@ -794,7 +794,8 @@ async function runBrowserSourceCollisionCases() {
   };
   const occupied = createRuntime({ entries, initialImages: images.map((image, index) => ({ ...image, editedFilename: index ? "new-two.png" : "OCCUPIED.PNG" })), commit: () => jsonResponse({}) });
   for (const [index, entry] of entries.entries()) occupied.state.sourceAccess.set(entry.imageId, { fileHandle: handleFor(entry.imageId), parentHandle: parents[index], name: entry.relativePath, size: 3, lastModified: 1 });
-  await assert.rejects(occupied.runBrowserSave(["one", "two"], "", false, "overwrite"), { code: "save_write_failed" });
+  await assert.rejects(occupied.runBrowserSave(["one", "two"], "", false, "overwrite"), (error) =>
+    error.code === "output_files_exist" && error.params.files === "OCCUPIED.PNG" && error.savePhase === "check_output_targets");
   assert.equal(occupied.requests.length, 0, "an already-existing destination aborts the entire batch before render or write");
 }
 
@@ -1710,7 +1711,7 @@ async function runFormattedHandleCollisionCase() {
   runtime.state.images = [{ id: 'image-1', sourceKind: 'session', relativePath: 'source.png', width: 32, height: 32, candidateCount: 1, enabledCandidateCount: 1 }];
   runtime.state.sourceAccess.set('image-1', { fileHandle: sourceHandle, parentHandle, name: 'source.png', size: 12, lastModified: 34 });
   runtime.element('#applyOutputFormat').value = 'jpg';
-  await assert.rejects(runtime.runBrowserSave(['image-1'], '_censored', false, 'overwrite'), (error) => error?.code === 'save_write_failed');
+  await assert.rejects(runtime.runBrowserSave(['image-1'], '_censored', false, 'overwrite'), (error) => error?.code === 'output_files_exist' && error.params.files === 'source.jpg');
   assert.equal(runtime.requests.some((request) => request.path === '/api/save/commit'), false, 'a pre-existing renamed target leaves the original source and does not commit');
 }
 
@@ -2076,6 +2077,15 @@ async function runSaveKeepsCatalogueAndEditorStateCase() {
   assert.deepEqual(Array.from(runtime.state.hiddenImageIds), [second.id], "saving does not change hidden state");
   assert.equal(runtime.requests.some((request) => request.path === "/api/catalog/remove"), false, "saving never removes list entries");
 }
+
+nodeTest("preflight conflicts are deduplicated and sorted before copy rendering", async () => {
+  const runtime = createRuntime({ commit: () => { throw new Error("must not commit"); } });
+  await assert.rejects(runtime.runBrowserSave(["image-1"], "", false, "copy", false, {
+    entries: [{ imageId: "image-1", candidateRevision: 7 }],
+    conflicts: ["folder/Z.jpg", "folder/a.jpg", "folder\\A.JPG", "folder/b.jpg"],
+  }), (error) => error.code === "output_files_exist" && error.params.files === "folder\\A.JPG\nfolder/b.jpg\nfolder/Z.jpg");
+  assert.deepEqual(runtime.requests, []);
+});
 
 nodeTest("copy-delete requests source deletion only after the rendered copy succeeds", async () => {
   await runDeleteOriginalCase();

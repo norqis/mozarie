@@ -648,11 +648,14 @@ async function startSingleSave(event) {
     let entry; let saveToken = ""; let output = null; let sourceSnapshot = null; let sourceRename = null; let cleanupIntent = null; let browserSourceDelete = null;
     const cleanupProjectId = state.project?.id || null;
     try {
-    const prepared = await api("/api/save/prepare", { method: "POST", body: JSON.stringify({ imageIds: [save.imageId], divisor: save.divisor, suffix, deleteOriginal: false, copyToDefault: copying, format, keepMetadata }) });
+    const prepared = await api("/api/save/prepare", { method: "POST", body: JSON.stringify({ imageIds: [save.imageId], divisor: save.divisor, suffix, deleteOriginal: false, copyToDefault: copying, format, keepMetadata, collectConflicts: true }) });
     entry = prepared.entries?.[0]; if (!entry) throw Object.assign(new Error("save_state_changed"), { code: "save_state_changed" });
     await flushWorkspaceDraft(save.imageId);
     const access = sourceAccessFor(save.imageId);
     if (!copying) await ensureSaveSources([save.imageId], "overwrite", false, format, sourcePreparation);
+    if (copying) assertNoSaveConflicts(prepared.conflicts || []);
+    if (!copying) await ensureDistinctBrowserSaveSources({ mode, format, deleteOriginal: false,
+      sources: new Map([[save.imageId, { image, access }]]), conflicts: prepared.conflicts || [] });
     const rendered = copying
       ? await renderDefaultCopy(entry, { imageId: save.imageId, candidateRevision: entry.candidateRevision, expectedManualRevision: save.manualRevision, divisor: save.divisor, draft: save.draft, copyToDefault: true, suffix, format, keepMetadata })
       : { response: await renderStreamedSave(entry, { imageId: save.imageId, candidateRevision: entry.candidateRevision, expectedManualRevision: save.manualRevision, divisor: save.divisor, draft: save.draft, suffix, format, keepMetadata, streamImage: image.sourceKind !== "filesystem" || Boolean(access?.fileHandle) }) };
@@ -1018,16 +1021,17 @@ function sourceNeedsParent(image, access, mode, deleteOriginal, format) {
 function beginSaveSourcePreparation(imageIds, mode, deleteOriginal, format = "original", filenames = null) {
   const prepared = new Map();
   const imagesById = new Map(state.images.map((image) => [image.id, filenames?.get(image.id) ? { ...image, editedFilename: filenames.get(image.id) } : image]));
-  const settle = (request) => {
-    try { return Promise.resolve(request()).then((value) => ({ value }), (error) => ({ error })); }
-    catch (error) { return Promise.resolve({ error }); }
+  const settle = (request, phase = "source_permission") => {
+    const failed = (error) => { error.savePhase = phase; return { error }; };
+    try { return Promise.resolve(request()).then((value) => ({ value }), failed); }
+    catch (error) { return Promise.resolve(failed(error)); }
   };
   const needsPicker = imageIds.some((imageId) => {
     const image = imagesById.get(imageId); const access = sourceAccessFor(imageId);
     return sourceNeedsParent(image, access, mode, deleteOriginal, format) && !access?.parentHandle;
   });
   const sharedPicker = needsPicker && typeof window.showDirectoryPicker === "function"
-    ? settle(() => window.showDirectoryPicker({ mode: "readwrite", id: "mozarie-source-parent" })) : null;
+    ? settle(() => window.showDirectoryPicker({ mode: "readwrite", id: "mozarie-source-parent" }), "pick_source_parent") : null;
   const permissions = new Map();
   for (const imageId of imageIds) {
     const image = imagesById.get(imageId);
@@ -1113,6 +1117,7 @@ async function ensureSaveSources(imageIds, mode, deleteOriginal, format = "origi
     const image = imagesById.get(imageId);
     const access = sourceAccessFor(imageId);
     const item = preparation?.get(imageId);
+    try {
     if (mode === "overwrite" && !sourceCanOverwrite(image, format)) throw codedError("source_action_unavailable");
     if (mode === "copy" && deleteOriginal && !sourceCanDelete(image)) throw codedError("source_action_unavailable");
     if (!access?.fileHandle) continue;
@@ -1124,6 +1129,7 @@ async function ensureSaveSources(imageIds, mode, deleteOriginal, format = "origi
       await ensureParentPermission(access.parentHandle, item?.parentPermission);
     }
     await ensureHandlePermission(access, mode === "overwrite" || deleteOriginal, item?.filePermission, !sourceNeedsParent(image, access, mode, deleteOriginal, format));
+    } catch (error) { error.imageId = imageId; error.savePhase ||= "prepare_source"; throw error; }
   }
 }
 
@@ -1132,10 +1138,11 @@ async function writeSourceHandle(access, response) {
   try {
     stream = await access.fileHandle.createWritable({ keepExistingData: false, mode: "exclusive" });
   } catch (error) {
+    error.savePhase = "create_source_writer";
     if (["NoModificationAllowedError", "InvalidStateError"].includes(error?.name)) {
-      throw codedError("source_busy");
+      throw codedError("source_busy", {}, error);
     }
-    if (["TypeError", "NotSupportedError"].includes(error?.name)) throw codedError("source_write_unsupported");
+    if (["TypeError", "NotSupportedError"].includes(error?.name)) throw codedError("source_write_unsupported", {}, error);
     throw error;
   }
   try {
@@ -1145,7 +1152,7 @@ async function writeSourceHandle(access, response) {
     access.size = file.size;
     access.lastModified = file.lastModified;
   }
-  catch (error) { try { await stream.abort?.(); } catch { /* Preserve the original whenever possible. */ } throw error; }
+  catch (error) { error.savePhase = "write_source"; try { await stream.abort?.(); } catch { /* Preserve the original whenever possible. */ } throw error; }
 }
 
 function renamedSourceFileName(image, access, format) {
@@ -1165,9 +1172,9 @@ async function writeFormattedSourceHandle(access, image, format, response, saveT
   if (!access.parentHandle) throw codedError("source_action_unavailable");
   try {
     await access.parentHandle.getFileHandle(targetName);
-    throw codedError("save_write_failed");
+    throw codedError("output_files_exist", { files: targetName });
   } catch (error) {
-    if (typeof error?.code === "string" || error?.name !== "NotFoundError") throw error;
+    if (typeof error?.code === "string" || error?.name !== "NotFoundError") { error.savePhase = "check_renamed_target"; throw error; }
   }
   access.clientKey ||= newClientKey();
   const overwrite = { ...browserOverwriteRecord(entry, access, image), targetName };
@@ -1321,7 +1328,15 @@ async function restoreCopiedBrowserSourcesAfterRejectedDelete(pending) {
   }
 }
 
+function assertNoSaveConflicts(conflicts) {
+  if (!conflicts.length) return;
+  const byPath = new Map(conflicts.map((file) => [file.replaceAll("\\", "/").toLowerCase(), file]));
+  const files = [...byPath].sort(([left], [right]) => left < right ? -1 : left > right ? 1 : 0).map(([, file]) => file);
+  throw Object.assign(codedError("output_files_exist", { files: files.join("\n") }), { savePhase: "check_output_targets" });
+}
+
 async function ensureDistinctBrowserSaveSources(inputs) {
+  if (inputs.mode !== "overwrite") assertNoSaveConflicts(inputs.conflicts || []);
   if (inputs.mode !== "overwrite" && !inputs.deleteOriginal) return;
   const sourcesByName = new Map();
   const pathsByName = new Map();
@@ -1417,14 +1432,13 @@ async function ensureDistinctBrowserSaveSources(inputs) {
 
         }
         if (selected) inputs.batchOverwrite = true;
-        else if (inputs.numbered) conflicts.push([access.rootHandle?.name || access.parentHandle?.name,
+        else conflicts.push([access.rootHandle?.name || access.parentHandle?.name,
           (access.relativePath || targetName).split("/").slice(0, -1).concat(targetName).join("/")].filter(Boolean).join("/"));
-        else throw codedError("save_write_failed");
       } catch (error) {
-        if (typeof error?.code === "string" || error?.name !== "NotFoundError") throw error;
+        if (typeof error?.code === "string" || error?.name !== "NotFoundError") { error.imageId = image.id; error.savePhase = "check_output_target"; throw error; }
       }
     }
-    if (conflicts.length) throw codedError("output_files_exist", { files: conflicts.sort().join("\n") });
+    assertNoSaveConflicts(conflicts);
   }
 }
 
@@ -1628,6 +1642,7 @@ async function runBrowserSave(imageIds, suffix, deleteOriginal, mode = "copy", r
           if (!entry) return;
           try { await saveEntry(entry); }
           catch (error) {
+            error.imageId = entry.imageId;
             save.failed = true; throw error;
           }
         }
@@ -1783,7 +1798,7 @@ async function startApplyFromDialog(event) {
     }
     if (numbering) {
       prepared = await api("/api/save/prepare", { method: "POST", body: JSON.stringify({ imageIds: capturedImageIds, divisor: Number($("#applyDivisor").value), suffix, deleteOriginal: false, copyToDefault: copy, format, keepMetadata: $("#applyKeepMetadata").checked, numbering, collectConflicts: true }) });
-      if (copy && prepared.conflicts?.length) throw codedError("output_files_exist", { files: prepared.conflicts.join("\n") });
+      if (copy) assertNoSaveConflicts(prepared.conflicts || []);
       filenames = new Map(prepared.entries.map((entry) => [entry.imageId, entry.outputFilename]));
       if (!copy) beginPreparation();
     }
@@ -1808,7 +1823,7 @@ async function startApplyFromDialog(event) {
     if (copy && !await ensureDirectoryStructurePreference($("#applyPreserveDirectoryStructure"))) return;
     if (state.candidateUpdateChains.size) await waitForCandidateMutations();
     if (state.importing) return;
-    prepared ||= await api("/api/save/prepare", { method: "POST", body: JSON.stringify({ imageIds, divisor: Number($("#applyDivisor").value), suffix, deleteOriginal: false, copyToDefault: copy, format: selectedApplyOutputFormat(), keepMetadata: $("#applyKeepMetadata").checked }) });
+    prepared ||= await api("/api/save/prepare", { method: "POST", body: JSON.stringify({ imageIds, divisor: Number($("#applyDivisor").value), suffix, deleteOriginal: false, copyToDefault: copy, format: selectedApplyOutputFormat(), keepMetadata: $("#applyKeepMetadata").checked, collectConflicts: true }) });
     await Promise.all(imageIds.map((imageId) => flushWorkspaceDraft(imageId)));
     state.saveStarting = false;
     await runBrowserSave(imageIds, suffix, copy && $("#deleteOriginal").checked, mode, removeSaved, prepared);

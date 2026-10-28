@@ -854,6 +854,21 @@ class MosaicHandler(BaseHTTPRequestHandler):
                 return
             self._require_json_request()
             payload = self._read_json_body()
+            if path == "/api/client-error":
+                fields = ("source", "code", "name", "message", "stack", "title", "displayedCause", "action", "path",
+                          "requestPath", "phase", "control", "imageId", "image", "saveMode", "format", "sourceKind",
+                          "sourceName", "targetName", "hasSourceHandle", "hasParentHandle")
+                details = {key: payload[key] for key in fields if key in payload}
+                if any(not isinstance(value, str) for value in details.values()):
+                    raise ClientError("ブラウザーエラーの形式が正しくありません。", "input_invalid")
+                cause = payload.get("cause")
+                if cause is not None:
+                    if not isinstance(cause, dict) or any(not isinstance(cause.get(key, ""), str) for key in ("name", "message", "stack")):
+                        raise ClientError("ブラウザーエラーの原因が正しくありません。", "input_invalid")
+                    details["cause"] = {key: cause.get(key, "") for key in ("name", "message", "stack")}
+                LOGGER.error("ブラウザーエラー: %s", json.dumps(details, ensure_ascii=False))
+                self._json({"ok": True})
+                return
             expected_project_id, expected_catalog_generation = self._catalog_expectation(payload)
             if operation is not None and (details := _operation_log_details(path, payload)):
                 LOGGER.info("操作対象: %s [%s]%s", operation[0], operation[1], details)
@@ -1535,6 +1550,10 @@ class MosaicHandler(BaseHTTPRequestHandler):
             code, params = "workspace_database_error", {}
         else:
             code, params = default_code or "request_failed", {}
+        if isinstance(error, (ClientError, StaleMaskError)):
+            LOGGER.warning("HTTPエラー: %s %s status=%d error_code=%s: %s", self.command,
+                           urlparse(self.path).path, int(status), code, error,
+                           exc_info=error if error.__cause__ is not None else None)
         self._json({"error_code": code, "params": public_error_params(code, params)}, status)
 
     def _binary(

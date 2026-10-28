@@ -351,3 +351,7 @@ SD-061.3 の `detection/test_exclusion_memory.py` は24候補での作業メモ�
 更新は取得・検証と「終了して更新」を別操作にする。`tests/http/test_update_preparation.py` は検証後も本体継続、準備済みの再取得では同じ領域を再利用、明示開始だけ終了、キャンセル後の削除・再試行、未準備での開始拒否を実HTTPで検証する。`tests/test_settings_dialog_e2e.cjs` は検証後の確認ボタン、キャンセル、画面再読込み後の復帰、更新画面とrun.batによる再起動の案内を確認する。`test_exit_without_update_cleans_prepared_files_without_launching_updater` は未開始のまま本体を終了した場合の一時領域削除を検証する。
 
 更新バッチの自己置換は `test_update_batch_self_replacement_preserves_exit_status_across_releases` が実CMDで検証する。v0.5.39・v0.5.42のGit公開アーカイブ内のバッチから現行へ、現行から先頭の長さが変わる次版への更新で、成功・更新不要・中断・失敗の終了コードと余計なコマンドの未実行を確認する。検証済みsource・一時領域・親PIDは環境変数で渡し、日本語と空白の保持、一部だけ指定された場合の拒否、通常の手動更新、起動失敗時の後始末をupdaterとserverの試験で確認する。
+
+保存エラーの診断は `http/test_error_logging.py` が実HTTPで認証、一覧世代に依存しない受信、画面文言・元例外・OS原因のCMDログ、未知フィールドの非記録、改行の一行化を確認する。`http/test_browser_error_reporting_e2e.cjs` は実Chromiumで翻訳済み画面文言と元DOMException、通信断・未処理例外の記録、ログ通信失敗時の再帰防止を確認する。`test_settings_import_regressions.py` のnative JPEGドラッグ試験は日本語・空白の実ファイルを単体・一括・繰返し上書きし、親フォルダー選択なし・画像形式と変換後ピクセル・実bytesを検証する。変換先に既存ファイルがある場合は保存不可の汎用理由ではなく、競合ファイル名を表示し元画像を保持する。
+
+保存開始前の同名検出は `saving/test_save_preflight_conflicts.py` が非連番のPNG→JPG変換でも全対象の競合を実HTTPで列挙し、保存tokenを作らず全bytesを保持することを確認する。`saving/save_preflight_live_browser.cjs` はドラッグ追加から親フォルダー取得、単体・一括の実保存ボタン、全件の注意モーダル、reserve/render開始前の中断、元画像・既存画像・競合しない画像の保持、競合解消後の同じ画面からの再試行と実JPEG保存まで検証する。コピー保存の既存の命名規則は変更しない。
