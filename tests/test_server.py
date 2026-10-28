@@ -8803,6 +8803,7 @@ class MozarieTests(unittest.TestCase):
 
     def test_update_start_is_rejected_while_a_model_download_is_active(self):
         handler = object.__new__(MosaicHandler)
+        handler.command = "POST"
         handler.server = Mock()
         handler._json = Mock()
         handler.headers = {}
