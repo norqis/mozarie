@@ -3,6 +3,52 @@ const { test } = require("node:test");
 const { chromium } = require("playwright");
 const { startFixtureServer, closeServer } = require("../test_import_picker_e2e.cjs");
 
+test("numbering digits follow loaded image count while modal edits stay independent of filters", { timeout: 60000 }, async () => {
+  const fixture = await startFixtureServer();
+  const catalog = (count) => Array.from({ length: count }, (_, index) => ({
+    id: `automatic-${index}`, relativePath: `automatic-${index}.png`, sourceKind: "filesystem",
+    width: 1, height: 1, candidateCount: 0, reviewed: index === 0, hidden: count > 1 && index === count - 1,
+  }));
+  fixture.setCatalog(catalog(1));
+  const browser = await chromium.launch({ headless: true });
+  const context = await browser.newContext();
+  try {
+    const page = await context.newPage();
+    await page.goto(fixture.url, { waitUntil: "domcontentloaded" });
+    await page.evaluate(() => appStartup);
+    for (const [count, digits] of [[1, 2], [99, 2], [100, 3], [999, 3], [1000, 4], [9999, 4], [10000, 5], [100, 3]]) {
+      fixture.setCatalog(catalog(count));
+      await page.evaluate(() => syncCatalogOnReturn());
+      await page.waitForFunction((count) => state.images.length === count, count);
+      await page.locator("#saveAllButton").click();
+      assert.equal(await page.locator("#applyNumberingDigits").inputValue(), String(digits), `${count} loaded images`);
+      await page.locator("#applyCloseButton").click();
+    }
+    await page.locator("#saveAllButton").click();
+    await page.locator("#applyNumbering").check();
+    await page.locator("#applyNumberingDigits").fill("5");
+    await page.locator("label:has(#applyFilterReviewed)").click();
+    assert.equal(await page.evaluate(() => state.applyTargetIds.length), 1);
+    await page.locator("#applyOutputFormat").selectOption("jpg");
+    await page.locator("#applyNumbering").uncheck();
+    await page.locator("#applyNumbering").check();
+    await page.evaluate(() => pollJob());
+    assert.equal(await page.locator("#applyNumberingDigits").inputValue(), "5");
+    await page.locator("#applyCloseButton").click();
+    await page.locator("#saveAllButton").click();
+    assert.equal(await page.locator("#applyNumberingDigits").inputValue(), "3", "reopen uses all 100 loaded images despite one filtered save target");
+    let payload;
+    await page.route("**/api/save/prepare", async (route) => {
+      payload = route.request().postDataJSON();
+      await route.fulfill({ status: 400, json: { error_code: "input_invalid" } });
+    });
+    await page.locator("#applyStartButton").click();
+    await page.locator("#errorDialog").waitFor({ state: "visible" });
+    assert.equal(payload.imageIds.length, 1);
+    assert.equal(payload.numbering.digits, 3);
+  } finally { await context.close(); await browser.close(); await closeServer(fixture.server); }
+});
+
 test("overview review badges match the sidebar through review changes hiding and virtual scrolling", { timeout: 60000 }, async () => {
   const fixture = await startFixtureServer();
   fixture.setCatalog(Array.from({ length: 200 }, (_, index) => ({

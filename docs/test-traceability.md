@@ -355,3 +355,5 @@ SD-061.3 の `detection/test_exclusion_memory.py` は24候補での作業メモ�
 保存エラーの診断は `http/test_error_logging.py` が実HTTPで認証、一覧世代に依存しない受信、画面文言・元例外・OS原因のCMDログ、未知フィールドの非記録、改行の一行化を確認する。`http/test_browser_error_reporting_e2e.cjs` は実Chromiumで翻訳済み画面文言と元DOMException、通信断・未処理例外の記録、ログ通信失敗時の再帰防止を確認する。`test_settings_import_regressions.py` のnative JPEGドラッグ試験は日本語・空白の実ファイルを単体・一括・繰返し上書きし、親フォルダー選択なし・画像形式と変換後ピクセル・実bytesを検証する。変換先に既存ファイルがある場合は保存不可の汎用理由ではなく、競合ファイル名を表示し元画像を保持する。
 
 保存開始前の同名検出は `saving/test_save_preflight_conflicts.py` が非連番のPNG→JPG変換でも全対象の競合を実HTTPで列挙し、保存tokenを作らず全bytesを保持することを確認する。`saving/save_preflight_live_browser.cjs` はドラッグ追加から親フォルダー取得、単体・一括の実保存ボタン、全件の注意モーダル、reserve/render開始前の中断、元画像・既存画像・競合しない画像の保持、競合解消後の同じ画面からの再試行と実JPEG保存まで検証する。コピー保存の既存の命名規則は変更しない。
+
+連番の自動桁数は `gallery/test_catalog_reorder_e2e.cjs` の `numbering digits follow loaded image count while modal edits stay independent of filters` が読み込み枚数の増減と99/100・999/1000・9999/10000境界、非表示画像を含む読み込み総数、再表示時の再計算、同じ画面での手入力保持、フィルターで対象を減らした実保存要求の桁数を確認する。画像の再読み込みや走査を追加せず、保存画面を開くときに既存配列のlengthから設定する。
