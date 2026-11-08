@@ -7,7 +7,7 @@
   },
   "baseline": {
     "rows": 93,
-    "observations": 139
+    "observations": 140
   },
   "observations": [
     {
@@ -1709,6 +1709,17 @@
         "python:tests.http.test_error_logging.ErrorLoggingTests.test_browser_error_requires_same_origin_token_and_string_fields",
         "python:tests.http.test_error_logging.ErrorLoggingTests.test_http_save_failure_logs_original_message_and_os_cause",
         "node:tests/http/test_browser_error_reporting_e2e.cjs::displayed and uncaught browser errors report original details without recursive failures"
+      ]
+    },
+    {
+      "key": "SV-011.2",
+      "sourceIds": [
+        "SV-011"
+      ],
+      "observation": "連番の桁数は保存画面を開くたびに読み込み総数に応じて自動設定し、同じ画面内の手入力をフィルターや表示更新で変更しない。",
+      "status": "automated",
+      "testIds": [
+        "node:tests/gallery/test_catalog_reorder_e2e.cjs::numbering digits follow loaded image count while modal edits stay independent of filters"
       ]
     }
   ]

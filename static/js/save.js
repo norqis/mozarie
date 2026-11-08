@@ -256,6 +256,7 @@ async function openApplyDialog() {
   try { await flushDraftSaves(); }
   catch (error) { showUserError(error); return; }
   if (!state.applyDialogInitialized) setApplyImageFilters(state.settings?.saving?.image_filters || []);
+  $("#applyNumberingDigits").value = Math.min(5, Math.max(2, String(state.images.length).length));
   refreshApplyTargets();
   state.applyRunning = false;
   if (!state.applyDialogInitialized) {
