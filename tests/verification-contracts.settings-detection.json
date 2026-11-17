@@ -1588,7 +1588,7 @@
       "sourceIds": [
         "SD-117"
       ],
-      "observation": "通常の編集・操作を妨げず、削除しない",
+      "observation": "入力中・キーボード操作中の通常の編集・操作を妨げず、削除しない",
       "status": "automated",
       "testIds": [
         "node:tests/test_settings_actions_e2e.cjs::SD-117 editable controls and a noncurrent gallery card cannot start source deletion"
@@ -1710,7 +1710,7 @@
       "sourceIds": [
         "SD-126"
       ],
-      "observation": "他のbutton、現在画像以外のカード、一覧表示、ダイアログ中では削除を開始しない",
+      "observation": "キーボードでフォーカスした他のbutton、現在画像以外のカード、一覧表示、ダイアログ中では削除を開始しない",
       "status": "automated",
       "testIds": [
         "node:tests/test_settings_actions_e2e.cjs::SD-117 editable controls and a noncurrent gallery card cannot start source deletion",

@@ -91,6 +91,8 @@ test("rename Enter submits only the dialog and Escape preserves the pending boun
 
 test("boundary Cancel button Enter cancels while canvas Enter detects and Escape cancels", { timeout: 30000 }, () => withEditor(async ({ page, boundaryRequests }) => {
   await drawRectangle(page);
+  // Enter keyboard-navigation mode before focusing the control under test.
+  await page.keyboard.press("Tab");
   await page.locator("#boundaryCancelButton").press("Enter");
   await page.waitForFunction(() => !hasBoundaryDraft());
   assert.equal(boundaryRequests.length, 0, "native Cancel activation must not run detection");

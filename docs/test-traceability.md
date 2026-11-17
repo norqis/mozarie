@@ -363,3 +363,5 @@ SD-061.3 の `detection/test_exclusion_memory.py` は24候補での作業メモ�
 ブラウザー離脱確認は `app/test_browser_leave_confirmation_e2e.cjs` が実Chromiumのhistory.backでbeforeunloadを受け取り、取消後のURL・画像一覧・選択・履歴位置の保持と、承認後の前ページへの移動を確認する。画像の次・前では確認を発生させない。`app/test_startup_catalog_and_detection_controls.cjs` はpreventDefaultと互換用returnValueの設定を確認する。表示文言と操作前の警告抑止はブラウザー仕様に従い、独自の履歴追加や保存処理は行わない。
 
 範囲表示の4ショートカットは `editor/test_range_display_navigation_e2e.cjs` でShift+A/S/D/FのON/OFF、表示方式切替、画像切替継承、入力・モーダル・無効ボタンでの抑止、設定再割当と個別・全体OFFの保存/再読込を確認する。`test_config.py` は4既定キーの一意性と設定保存、旧設定が4キーを既に使う場合に既存割当を奪わず新操作を代替キー・OFFで追加する移行を確認する。`app/test_editor_pointer_focus_e2e.cjs` は通常画面のマウス・タッチ操作後のショートカット復帰と、入力・メニュー・モーダル・キーボードフォーカスの保持を実Chromiumで確認する。
+
+キーボードでフォーカスした取消ボタン・削除対象外の要素の試験は、実際にTabを入力してから対象へフォーカスし、マウス操作後のショートカット復帰とは区別して検証します。既存の取消・削除抑止のアサーションも維持します。

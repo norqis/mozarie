@@ -1441,10 +1441,9 @@ async function runDynamicProjectAndShortcutScenario(browser, fixtureUrl, setting
 
     await page.locator("#settingsButton").click();
     await page.locator("#settingsTabShortcuts").click();
-    const shortcutKeys = ["previous", "next", "previousVisible", "nextVisible", "first", "last", "reviewAndNext", "removeImage", "renameImage", "toggleOverview", "undo", "redo", "cycleMosaicTool", "cycleExclusionTool", "mosaicBrush", "mosaicFill", "mosaicEraser", "boundaryMenu", "boundaryRectangle", "boundaryPolygon", "boundaryBrush", "exclusionBrush", "exclusionFill", "exclusionEraser", "singleView", "compareView", "fitView", "flipHorizontal", "flipVertical", "mosaicPreview"];
-    // Keep these page-level shortcuts clear of Chromium's own Ctrl/Alt
-    // shortcuts so replay remains focused on the gallery card.
-    const shortcutLetters = shortcutKeys.map((_, index) => [..."ABCDEFGHIJKLMNOPQRSTUVWXYZ", "F3", "F4", "F5", "F6"][index]);
+    const shortcutKeys = ["previous", "next", "previousVisible", "nextVisible", "first", "last", "reviewAndNext", "removeImage", "renameImage", "toggleOverview", "undo", "redo", "cycleMosaicTool", "cycleExclusionTool", "mosaicBrush", "mosaicFill", "mosaicEraser", "boundaryMenu", "boundaryRectangle", "boundaryPolygon", "boundaryBrush", "exclusionBrush", "exclusionFill", "exclusionEraser", "singleView", "compareView", "fitView", "flipHorizontal", "flipVertical", "mosaicPreview", "mosaicDetectionRanges", "mosaicAppliedRanges", "exclusionDetectionRanges", "exclusionAppliedRanges"];
+    // Use distinct Shift combinations; assignment fields consume these events.
+    const shortcutLetters = shortcutKeys.map((_, index) => [..."ABCDEFGHIJKLMNOPQRSTUVWXYZ", "F3", "F4", "F5", "F6", "F7", "F8", "F9", "F10"][index]);
     const shortcutBindings = Object.fromEntries(shortcutKeys.map((action, index) => [action, `Shift+${shortcutLetters[index]}`]));
     assert.equal(await page.locator("[data-shortcut-action]").count(), shortcutKeys.length, "shortcut settings renders the fixed complete action inventory");
     assert.deepEqual(await page.locator("[data-shortcut-action]").evaluateAll((inputs) => inputs.map((input) => input.dataset.shortcutAction)), shortcutKeys, "shortcut settings exposes every action in its documented order");
