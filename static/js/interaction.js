@@ -651,7 +651,7 @@ async function permanentlyDeleteImages(images, visibleImages) {
   } catch (error) {
     await restoreDeletionSelection(selection, imageIds);
     showUserError(error);
-  } finally { state.catalogMutation = false; updateActionButtons(); updateSelectionActionBar(); }
+  } finally { state.catalogMutation = false; renderCandidates(); updateActionButtons(); updateSelectionActionBar(); }
 }
 
 async function removeImageFromCatalog(imageId = state.contextMenuImageId) {
@@ -675,7 +675,7 @@ async function removeImagesFromList(images, visibleImages = galleryFilteredImage
     setStatusKey("status.removedFromList", { count: ids.size }, "success");
   } catch (error) {
     if (isCurrentCatalogEpoch(epoch)) showUserError(error);
-  } finally { state.catalogMutation = false; updateActionButtons(); updateSelectionActionBar(); }
+  } finally { state.catalogMutation = false; renderCandidates(); updateActionButtons(); updateSelectionActionBar(); }
 }
 
 function removeContextImagesFromList() {

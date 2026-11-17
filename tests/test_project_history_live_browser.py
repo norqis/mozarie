@@ -9,6 +9,9 @@ or PNG decoding path this regression needs to protect.
 from __future__ import annotations
 
 import os
+import base64
+import io
+import json
 from pathlib import Path
 import subprocess
 import tempfile
@@ -22,6 +25,7 @@ import mozarie.http as http_module
 import mozarie.state as state_module
 from mozarie.http import MosaicHandler
 from mozarie.state import StudioState
+from mozarie.domain import Candidate, CandidateRole
 
 
 class LiveProjectHistoryBrowserTests(unittest.TestCase):
@@ -52,6 +56,51 @@ class LiveProjectHistoryBrowserTests(unittest.TestCase):
         self.state.shutdown()
         state_module.APP_DIR = self._previous_app_dir
         self._temporary_directory.cleanup()
+
+    def check_deletion_navigation_controls(self, mode: str) -> None:
+        (self.source_dir / "history.png").unlink()
+        for name in ("a.png", "b.png", "c.png", "d.png"):
+            with Image.new("RGB", (64, 48), "white") as image:
+                image.save(self.source_dir / name)
+        self.state.create_project("Delete controls")
+        images = self.state.set_root(str(self.source_dir))
+        ids = {image["relativePath"]: image["id"] for image in images}
+        with Image.new("L", (64, 48), 0) as mask:
+            mask.putpixel((10, 10), 255)
+            stream = io.BytesIO(); mask.save(stream, format="PNG")
+        raw = stream.getvalue()
+        for image in images:
+            image_id = image["id"]
+            candidates = []
+            for role in (CandidateRole.APPLY, CandidateRole.EXCLUDE):
+                path = self.state.cache_dir / image_id / f"{role.value}.png"
+                path.parent.mkdir(parents=True, exist_ok=True); path.write_bytes(raw)
+                candidates.append(Candidate(role.value, "penis" if role == CandidateRole.APPLY else "hand", .9, path, role=role))
+            with self.state.image_io_lock(image_id), self.state.lock:
+                self.state._commit_candidate_snapshot(image_id, candidates, replace=True)
+            uri = "data:image/png;base64," + base64.b64encode(raw).decode("ascii")
+            self.state.save_manual_workspace(image_id, {
+                "add": uri, "exclusion": uri, "exclusionErase": uri,
+                "removedCandidateIds": [], "candidateRevision": self.state._candidate_revision(image_id),
+                "hasEffectiveMask": True,
+            })
+        self.state.set_image_flags(ids["b.png"], {"reviewed": True})
+        helper = Path(__file__).with_name("editor") / "delete_navigation_live_browser_helper.cjs"
+        result = subprocess.run(
+            ["node", str(helper), self.origin, mode, json.dumps(ids)],
+            cwd=Path(__file__).resolve().parents[1], env={**os.environ, "PYTHONUTF8": "1"},
+            text=True, encoding="utf-8", errors="replace", capture_output=True, timeout=90, check=False,
+        )
+        self.assertEqual(result.returncode, 0, f"delete navigation helper failed\n{result.stdout}\n{result.stderr}")
+        self.assertEqual(self.state.order, [ids["b.png"]])
+        for name in ids:
+            self.assertEqual((self.source_dir / name).exists(), mode == "list" or name == "b.png")
+
+    def test_source_delete_navigation_restores_editor_and_candidate_controls(self) -> None:
+        self.check_deletion_navigation_controls("source")
+
+    def test_list_removal_navigation_restores_editor_and_candidate_controls(self) -> None:
+        self.check_deletion_navigation_controls("list")
 
     def test_project_keeps_native_paths_picker_and_drop_imports_together(self) -> None:
         other = Path(self._temporary_directory.name) / "other"

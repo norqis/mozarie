@@ -7,7 +7,7 @@
   },
   "baseline": {
     "rows": 138,
-    "observations": 235
+    "observations": 236
   },
   "observations": [
     {
@@ -2710,6 +2710,18 @@
       "testIds": [
         "python:tests.test_http_live_endpoints.LiveHttpEndpointTests.test_unlimited_png_jpeg_webp_catalog_and_assets_preserve_dimensions",
         "python:tests.test_http_live_endpoints.LiveHttpEndpointTests.test_exif_rotated_thumbnail_and_editor_asset_have_identical_visual_orientation"
+      ]
+    },
+    {
+      "key": "WS-036.4",
+      "sourceIds": [
+        "WS-036"
+      ],
+      "observation": "元画像の削除・一覧から削除の処理中は編集を無効化し、絞り込み対象の次画像または末尾の前画像へ移動した後はモザイク・除外のツール、候補・手描き行、一括ボタンを再度操作できる。対象が残らないときは編集を無効にする。",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_project_history_live_browser.LiveProjectHistoryBrowserTests.test_source_delete_navigation_restores_editor_and_candidate_controls",
+        "python:tests.test_project_history_live_browser.LiveProjectHistoryBrowserTests.test_list_removal_navigation_restores_editor_and_candidate_controls"
       ]
     }
   ]
