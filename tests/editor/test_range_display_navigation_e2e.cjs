@@ -45,6 +45,11 @@ test("bulk range display follows image navigation without carrying image-specifi
       await page.locator(`.gallery-item[data-id="${id}"]`).click();
       await page.waitForFunction((id) => state.currentId === id && !state.pendingImageId, id);
     };
+    const closeSettings = async () => {
+      await page.locator("#settingsCloseButton").click();
+      await page.waitForFunction(() => !document.querySelector("#settingsDialog").open && document.activeElement.id === "settingsButton");
+      await page.locator("#editorCanvas").focus();
+    };
     const snapshot = () => page.evaluate(() => ({
       current: state.currentId, ids: [...state.blinkCandidateIds].sort(), modes: [...state.blinkModes].sort(),
       roles: [...state.blinkRoleModes].sort(), timer: state.blinkTimer, timerCount: window.rangeTimerCount(),
@@ -66,8 +71,67 @@ test("bulk range display follows image navigation without carrying image-specifi
       assert.deepEqual(phase, { changed: true, matches: true });
     };
     await select("first");
-    await page.locator('[data-candidate-display-toggle="apply"]').click();
-    await page.locator('[data-candidate-effective-toggle="exclude"]').click();
+    const rangeKeys = [
+      ["Shift+A", "apply", "normal", "mosaicDetectionRanges"], ["Shift+S", "apply", "effective", "mosaicAppliedRanges"],
+      ["Shift+D", "exclude", "normal", "exclusionDetectionRanges"], ["Shift+F", "exclude", "effective", "exclusionAppliedRanges"],
+    ];
+    for (const [key, role, mode] of rangeKeys) {
+      await page.locator("#editorCanvas").focus();
+      await page.keyboard.down("Shift"); await page.keyboard.down(key.split("+")[1]);
+      assert.deepEqual((await snapshot()).roles, [[role, mode]], `${key} turns its role display ON`);
+      await page.keyboard.down(key.split("+")[1]);
+      assert.deepEqual((await snapshot()).roles, [[role, mode]], `${key} does not toggle repeatedly while held`);
+      await page.keyboard.up(key.split("+")[1]); await page.keyboard.up("Shift");
+      await page.keyboard.press(key);
+      assert.deepEqual((await snapshot()).roles, [], `${key} turns the same display OFF`);
+    }
+    await page.locator("#brushSize").focus();
+    for (const [key] of rangeKeys) await page.keyboard.press(key);
+    assert.deepEqual((await snapshot()).roles, [], "range shortcuts do not run while an editor input owns focus");
+    await page.locator("#settingsButton").click();
+    await page.locator("#settingsTabShortcuts").click();
+    await page.locator("#settingsTabGeneral").click(); await page.locator("#settingsPort").focus();
+    for (const [key] of rangeKeys) await page.keyboard.press(key);
+    assert.deepEqual((await snapshot()).roles, [], "range shortcuts do not run behind a modal");
+    await page.locator("#settingsTabShortcuts").click();
+    for (const [key, , , action] of rangeKeys) {
+      const input = page.locator(`[data-shortcut-action="${action}"]`);
+      assert.equal(await input.inputValue(), key);
+      assert.ok(await input.getAttribute("aria-label"), "each new shortcut has a translated name");
+    }
+    await page.locator('[data-shortcut-action="mosaicDetectionRanges"]').press("Control+Alt+A");
+    await page.locator('[data-shortcut-enabled="mosaicDetectionRanges"]').uncheck();
+    await page.locator("#settingsSaveButton").click();
+    await page.waitForFunction(() => state.settings.shortcuts.bindings.mosaicDetectionRanges === "Ctrl+Alt+A" && state.settings.shortcuts.actions.mosaicDetectionRanges === false);
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await page.evaluate(() => appStartup);
+    await select("first");
+    await page.locator("#editorCanvas").focus();
+    await page.keyboard.press("Control+Alt+A");
+    assert.deepEqual((await snapshot()).roles, [], "a saved per-action OFF blocks the remapped key after reload");
+    await page.locator("#settingsButton").click(); await page.locator("#settingsTabShortcuts").click();
+    assert.equal(await page.locator('[data-shortcut-action="mosaicDetectionRanges"]').inputValue(), "Ctrl+Alt+A");
+    await page.locator('[data-shortcut-enabled="mosaicDetectionRanges"]').check();
+    await page.locator("#settingsSaveButton").click();
+    await page.waitForFunction(() => state.settings.shortcuts.actions.mosaicDetectionRanges === true);
+    await closeSettings();
+    await page.keyboard.press("Shift+A");
+    assert.deepEqual((await snapshot()).roles, [], "the former default key no longer activates a remapped action");
+    await page.keyboard.press("Control+Alt+A");
+    assert.deepEqual((await snapshot()).roles, [["apply", "normal"]]);
+    await page.keyboard.press("Control+Alt+A");
+    await page.locator("#settingsButton").click(); await page.locator("#settingsTabShortcuts").click();
+    await page.locator("#settingsShortcutsEnabled").uncheck(); await page.locator("#settingsSaveButton").click();
+    await page.waitForFunction(() => state.navigationShortcutsEnabled === false);
+    await closeSettings();
+    for (const key of ["Control+Alt+A", "Shift+S", "Shift+D", "Shift+F"]) await page.keyboard.press(key);
+    assert.deepEqual((await snapshot()).roles, [], "global OFF blocks all four range shortcuts");
+    await page.locator("#settingsButton").click(); await page.locator("#settingsTabShortcuts").click();
+    await page.locator("#settingsShortcutsEnabled").check(); await page.locator("#settingsSaveButton").click();
+    await page.waitForFunction(() => state.navigationShortcutsEnabled === true);
+    await closeSettings();
+    await page.keyboard.press("Control+Alt+A");
+    await page.keyboard.press("Shift+F");
     await page.locator("#nextImageButton").click();
     await page.waitForFunction(() => state.currentId === "second" && !state.pendingImageId);
     await assertDisplay("second", "normal", "effective");
@@ -76,6 +140,10 @@ test("bulk range display follows image navigation without carrying image-specifi
     await assertDisplay("first", "normal", "effective");
     await select("empty");
     assert.deepEqual(await snapshot(), { current: "empty", ids: [], modes: [], roles: [["apply", "normal"], ["exclude", "effective"]], timer: null, timerCount: 0 });
+    const emptyDisplay = await snapshot();
+    await page.locator("#editorCanvas").focus();
+    for (const key of ["Control+Alt+A", "Shift+S", "Shift+D", "Shift+F"]) await page.keyboard.press(key);
+    assert.deepEqual(await snapshot(), emptyDisplay, "disabled range buttons reject every shortcut on an empty image");
     await select("last");
     await assertDisplay("last", "normal", "effective");
     const beforeFailure = await snapshot();
@@ -83,8 +151,9 @@ test("bulk range display follows image navigation without carrying image-specifi
     await page.locator("#errorDialog").waitFor({ state: "visible" });
     assert.deepEqual(await snapshot(), beforeFailure, "failed image loading leaves the old display and timer intact");
     await page.locator("#errorDialogClose").click();
-    await page.locator('[data-candidate-effective-toggle="apply"]').click();
-    await page.locator('[data-candidate-display-toggle="exclude"]').click();
+    await page.locator("#editorCanvas").focus();
+    await page.keyboard.press("Shift+S");
+    await page.keyboard.press("Shift+D");
     await select("second");
     await assertDisplay("second", "effective", "normal");
     // Removing a manual row clears that row, while the bulk preference stays ON.
@@ -101,6 +170,7 @@ test("bulk range display follows image navigation without carrying image-specifi
     await select("first");
     assert.deepEqual((await snapshot()).ids, [], "individual range selections are not inherited");
     await page.locator('[data-candidate-display-toggle="apply"]').click();
+    assert.equal(await page.evaluate(() => document.activeElement.id), "editorCanvas", "bulk display clicks do not keep focus away from editor shortcuts");
     await page.locator("#batchMoreButton").click();
     await page.locator("#clearCatalogButton").click();
     await page.locator("#confirmAccept").click();

@@ -7,7 +7,7 @@
   },
   "baseline": {
     "rows": 149,
-    "observations": 222
+    "observations": 224
   },
   "observations": [
     {
@@ -2560,6 +2560,30 @@
       "status": "automated",
       "testIds": [
         "node:tests/app/test_browser_leave_confirmation_e2e.cjs::browser back asks before leaving while image navigation stays inside the editor"
+      ]
+    },
+    {
+      "key": "SD-076.2",
+      "sourceIds": [
+        "SD-076"
+      ],
+      "observation": "モザイク全体の検出範囲・適用範囲と除外全体の検出範囲・適用範囲をShift+A/S/D/FでON/OFFする。設定から再割当・個別OFF・全体OFFを保存し再読込する → ボタンと同じ表示切替を行い、無効な操作や入力中・モーダル中は切り替えない。旧設定で4既定キーが使用済みなら既存割当を維持する",
+      "status": "automated",
+      "testIds": [
+        "node:tests/editor/test_range_display_navigation_e2e.cjs::bulk range display follows image navigation without carrying image-specific selections",
+        "python:tests.test_config.SettingsTests.test_range_shortcuts_migrate_without_claiming_any_existing_custom_key",
+        "python:tests.test_config.SettingsTests.test_toolbar_shortcuts_defaults_are_complete_unique_and_round_trip"
+      ]
+    },
+    {
+      "key": "SD-076.3",
+      "sourceIds": [
+        "SD-076"
+      ],
+      "observation": "通常編集画面のボタン・画像・余白をポインターで操作してからEnterを押す → クリック先にフォーカスを残さずショートカットを妨げず、確認済みにして次へ進む。入力欄・モーダル・メニューとキーボードで選んだボタンの標準操作は維持する",
+      "status": "automated",
+      "testIds": [
+        "node:tests/app/test_editor_pointer_focus_e2e.cjs::pointer buttons return to editor shortcuts without stealing input menu or keyboard focus"
       ]
     }
   ]

@@ -3845,7 +3845,7 @@ async function main() {
       const rect = button.getBoundingClientRect(); return rect.width === 28 && rect.height === 28;
     })), true, "all model help buttons, including SAM type, share the compact 28px target");
     await page.locator("#settingsTabShortcuts").click();
-    assert.equal(await page.locator("#shortcutBindings > .form-row").evaluateAll((rows) => rows.length === 30 && rows.every((row) => {
+    assert.equal(await page.locator("#shortcutBindings > .form-row").evaluateAll((rows) => rows.length === 34 && rows.every((row) => {
       const children = [...row.children];
       return children.length === 3 && children.every((child) => Math.abs((child.getBoundingClientRect().y + child.getBoundingClientRect().height / 2) - (row.getBoundingClientRect().y + row.getBoundingClientRect().height / 2)) < 2);
     })), true, "all shortcut bindings keep one three-column row");

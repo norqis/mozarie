@@ -1,3 +1,4 @@
+import copy
 import json
 import tempfile
 import unittest
@@ -313,11 +314,13 @@ class SettingsTests(unittest.TestCase):
             "exclusionBrush": "Shift+B", "exclusionFill": "Shift+K", "exclusionEraser": "Shift+E",
             "singleView": "1", "compareView": "2", "fitView": "F",
             "flipHorizontal": "H", "flipVertical": "V", "mosaicPreview": "M",
+            "mosaicDetectionRanges": "Shift+A", "mosaicAppliedRanges": "Shift+S",
+            "exclusionDetectionRanges": "Shift+D", "exclusionAppliedRanges": "Shift+F",
         }
         for action, binding in expected.items():
             self.assertEqual(defaults["shortcuts"]["bindings"][action], binding)
             self.assertTrue(defaults["shortcuts"]["actions"][action])
-        self.assertEqual(len(set(defaults["shortcuts"]["bindings"].values())), 30)
+        self.assertEqual(len(set(defaults["shortcuts"]["bindings"].values())), 34)
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory); config = root / "config"; config.mkdir()
             (config / "defaults.json").write_text(json.dumps(defaults), encoding="utf-8")
@@ -329,6 +332,33 @@ class SettingsTests(unittest.TestCase):
             with self.assertRaises(SettingsError):
                 store.save({"shortcuts": {"bindings": {"cycleExclusionTool": "Shift+Q"}}})
             self.assertEqual(SettingsStore(root).load()["shortcuts"], saved["shortcuts"])
+
+    def test_range_shortcuts_migrate_without_claiming_any_existing_custom_key(self):
+        defaults = default_settings()
+        additions = {
+            "mosaicDetectionRanges": "Shift+A", "mosaicAppliedRanges": "Shift+S",
+            "exclusionDetectionRanges": "Shift+D", "exclusionAppliedRanges": "Shift+F",
+        }
+        legacy = copy.deepcopy(defaults)
+        for action in additions:
+            del legacy["shortcuts"]["bindings"][action]
+            del legacy["shortcuts"]["actions"][action]
+        owners = dict(zip(("previous", "next", "first", "last"), additions.values()))
+        legacy["shortcuts"]["bindings"].update(owners)
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); config = root / "config"; config.mkdir()
+            (config / "defaults.json").write_text(json.dumps(defaults), encoding="utf-8")
+            (config / "local.json").write_text(json.dumps(legacy), encoding="utf-8")
+            store = SettingsStore(root)
+            migrated = store.load()["shortcuts"]
+            for owner, binding in owners.items():
+                self.assertEqual(migrated["bindings"][owner], binding)
+            for action, preferred in additions.items():
+                self.assertNotEqual(migrated["bindings"][action], preferred)
+                self.assertFalse(migrated["actions"][action])
+            self.assertEqual(len(set(migrated["bindings"].values())), 34)
+            store.save({"shortcuts": migrated})
+            self.assertEqual(SettingsStore(root).load()["shortcuts"], migrated)
 
     def test_toolbar_shortcuts_migrate_without_claiming_custom_keys(self):
         legacy_actions = ["previous", "next", "previousVisible", "nextVisible", "first", "last", "reviewAndNext", "removeImage", "toggleOverview", "undo", "redo", "renameImage"]
@@ -354,6 +384,6 @@ class SettingsTests(unittest.TestCase):
                 self.assertNotEqual(shortcuts["bindings"][action], defaults["shortcuts"]["bindings"][action])
                 self.assertNotIn("legacy disabled", shortcuts["bindings"][action])
             self.assertEqual(shortcuts["bindings"]["mosaicBrush"], "B")
-            self.assertEqual(len(set(shortcuts["bindings"].values())), 30)
+            self.assertEqual(len(set(shortcuts["bindings"].values())), 34)
             store.save({"shortcuts": shortcuts})
             self.assertEqual(SettingsStore(root).load()["shortcuts"], shortcuts)
