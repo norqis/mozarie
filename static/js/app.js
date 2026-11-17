@@ -1576,6 +1576,10 @@ function bindEvents() {
     }
     handleWindowKeydown(event);
   });
+  window.addEventListener("beforeunload", (event) => {
+    event.preventDefault();
+    event.returnValue = true;
+  });
   window.addEventListener("dragend", () => setGalleryDropOverlay(false));
   document.addEventListener("pointerdown", (event) => {
     const boundaryMenu = $("#boundaryModeMenu");

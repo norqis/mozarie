@@ -359,3 +359,5 @@ SD-061.3 の `detection/test_exclusion_memory.py` は24候補での作業メモ�
 連番の自動桁数は `gallery/test_catalog_reorder_e2e.cjs` の `numbering digits follow loaded image count while modal edits stay independent of filters` が読み込み枚数の増減と99/100・999/1000・9999/10000境界、非表示画像を含む読み込み総数、再表示時の再計算、同じ画面での手入力保持、フィルターで対象を減らした実保存要求の桁数を確認する。画像の再読み込みや走査を追加せず、保存画面を開くときに既存配列のlengthから設定する。
 
 一括範囲表示の画像切替継承は `editor/test_range_display_navigation_e2e.cjs` が実Chromiumの次・前・一覧選択で確認する。モザイクと除外それぞれの検出範囲・適用範囲、切替先の候補と手描き範囲、旧画像固有IDの破棄、空画像でのタイマー停止と次画像での再開、読込失敗時の旧表示保持、手描き行削除時の全体ON維持、一括OFFと個別表示、一覧クリアによる設定解除を検証する。既存のタイマーを1本だけ使い、画像の再処理や新しい常駐処理は追加しない。
+
+ブラウザー離脱確認は `app/test_browser_leave_confirmation_e2e.cjs` が実Chromiumのhistory.backでbeforeunloadを受け取り、取消後のURL・画像一覧・選択・履歴位置の保持と、承認後の前ページへの移動を確認する。画像の次・前では確認を発生させない。`app/test_startup_catalog_and_detection_controls.cjs` はpreventDefaultと互換用returnValueの設定を確認する。表示文言と操作前の警告抑止はブラウザー仕様に従い、独自の履歴追加や保存処理は行わない。

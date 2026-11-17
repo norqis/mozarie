@@ -7,7 +7,7 @@
   },
   "baseline": {
     "rows": 149,
-    "observations": 221
+    "observations": 222
   },
   "observations": [
     {
@@ -2550,6 +2550,17 @@
       "observation": "候補がない種類は精度確認済みと扱わない",
       "status": "retired",
       "retirementReason": "実モデルの検出精度や候補数は入力画像とモデルに依存するため、精度評価の観測を決定的な自動回帰検証の対象外とする。"
+    },
+    {
+      "key": "SD-016.3",
+      "sourceIds": [
+        "SD-016"
+      ],
+      "observation": "ユーザー操作後に戻るを含むブラウザ外への移動を試みる → ブラウザ標準の固定文言で離脱を確認し、取消時はURLと編集状態を保持、承認時は前ページへ移動する。アプリ内の画像移動では確認を出さない",
+      "status": "automated",
+      "testIds": [
+        "node:tests/app/test_browser_leave_confirmation_e2e.cjs::browser back asks before leaving while image navigation stays inside the editor"
+      ]
     }
   ]
 }
