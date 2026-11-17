@@ -166,4 +166,3 @@ class InferenceResourceLifetimeTests(unittest.TestCase):
         with Image.open(path) as saved:
             np.testing.assert_array_equal(np.asarray(saved), (original > 0).astype(np.uint8) * 255)
             self.assertEqual(saved.info['mozarie_expand_px'], '0')
-
