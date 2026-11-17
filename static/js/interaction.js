@@ -1188,6 +1188,8 @@ const TOOLBAR_SHORTCUT_BUTTONS = {
   exclusionBrush: "#eraserTool", exclusionFill: "#excludeBucketTool", exclusionEraser: "#excludeEraserTool",
   singleView: "#singleViewButton", compareView: "#compareViewButton", fitView: "#fitButton",
   flipHorizontal: "#flipHorizontalButton", flipVertical: "#flipVerticalButton", mosaicPreview: "#mosaicPreviewButton",
+  mosaicDetectionRanges: '[data-candidate-display-toggle="apply"]', mosaicAppliedRanges: '[data-candidate-effective-toggle="apply"]',
+  exclusionDetectionRanges: '[data-candidate-display-toggle="exclude"]', exclusionAppliedRanges: '[data-candidate-effective-toggle="exclude"]',
 };
 const TOOLBAR_SHORTCUT_CYCLES = {
   cycleMosaicTool: [["brush", "mosaicBrush"], ["bucket", "mosaicFill"], ["mosaic_eraser", "mosaicEraser"], ["boundary", "boundaryRectangle"], ["polygon", "boundaryPolygon"], ["boundary_brush", "boundaryBrush"]],
@@ -1214,9 +1216,11 @@ function navigationShortcutAction(event) {
   if (!actionForBinding || state.settings?.shortcuts?.actions?.[actionForBinding] === false) return null;
   const toolbarAction = TOOLBAR_SHORTCUT_BUTTONS[actionForBinding] || TOOLBAR_SHORTCUT_CYCLES[actionForBinding];
   const focusedToolbarButton = document.activeElement?.matches?.("#canvasToolRail button:not(:disabled)");
+  const pointerFocusedButton = state.pointerShortcutFocus && document.activeElement?.tagName === "BUTTON"
+    && !document.querySelector("[popover]:popover-open") && $("#boundaryModeMenu").hidden;
   const currentGalleryItem = document.activeElement?.matches("button.gallery-item.current") && document.activeElement.dataset.id === state.currentId;
   const focusedCatalogItem = document.activeElement?.matches("button.gallery-item, button.overview-item");
-  if (isEditableTarget(document.activeElement) && !(toolbarAction && focusedToolbarButton) && !(actionForBinding === "removeImage" && currentGalleryItem) && !(actionForBinding === "renameImage" && focusedCatalogItem)) return null;
+  if (isEditableTarget(document.activeElement) && !pointerFocusedButton && !(toolbarAction && focusedToolbarButton) && !(actionForBinding === "removeImage" && currentGalleryItem) && !(actionForBinding === "renameImage" && focusedCatalogItem)) return null;
   if (actionForBinding === "toggleOverview") return "toggleOverview";
   if (actionForBinding === "renameImage") {
     const focusedId = document.activeElement?.matches("button.gallery-item, button.overview-item") ? document.activeElement.dataset.id : state.currentId;

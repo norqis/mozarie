@@ -1441,10 +1441,9 @@ async function runDynamicProjectAndShortcutScenario(browser, fixtureUrl, setting
 
     await page.locator("#settingsButton").click();
     await page.locator("#settingsTabShortcuts").click();
-    const shortcutKeys = ["previous", "next", "previousVisible", "nextVisible", "first", "last", "reviewAndNext", "removeImage", "renameImage", "toggleOverview", "undo", "redo", "cycleMosaicTool", "cycleExclusionTool", "mosaicBrush", "mosaicFill", "mosaicEraser", "boundaryMenu", "boundaryRectangle", "boundaryPolygon", "boundaryBrush", "exclusionBrush", "exclusionFill", "exclusionEraser", "singleView", "compareView", "fitView", "flipHorizontal", "flipVertical", "mosaicPreview"];
-    // Keep these page-level shortcuts clear of Chromium's own Ctrl/Alt
-    // shortcuts so replay remains focused on the gallery card.
-    const shortcutLetters = shortcutKeys.map((_, index) => [..."ABCDEFGHIJKLMNOPQRSTUVWXYZ", "F3", "F4", "F5", "F6"][index]);
+    const shortcutKeys = ["previous", "next", "previousVisible", "nextVisible", "first", "last", "reviewAndNext", "removeImage", "renameImage", "toggleOverview", "undo", "redo", "cycleMosaicTool", "cycleExclusionTool", "mosaicBrush", "mosaicFill", "mosaicEraser", "boundaryMenu", "boundaryRectangle", "boundaryPolygon", "boundaryBrush", "exclusionBrush", "exclusionFill", "exclusionEraser", "singleView", "compareView", "fitView", "flipHorizontal", "flipVertical", "mosaicPreview", "mosaicDetectionRanges", "mosaicAppliedRanges", "exclusionDetectionRanges", "exclusionAppliedRanges"];
+    // Use distinct Shift combinations; assignment fields consume these events.
+    const shortcutLetters = shortcutKeys.map((_, index) => [..."ABCDEFGHIJKLMNOPQRSTUVWXYZ", "F3", "F4", "F5", "F6", "F7", "F8", "F9", "F10"][index]);
     const shortcutBindings = Object.fromEntries(shortcutKeys.map((action, index) => [action, `Shift+${shortcutLetters[index]}`]));
     assert.equal(await page.locator("[data-shortcut-action]").count(), shortcutKeys.length, "shortcut settings renders the fixed complete action inventory");
     assert.deepEqual(await page.locator("[data-shortcut-action]").evaluateAll((inputs) => inputs.map((input) => input.dataset.shortcutAction)), shortcutKeys, "shortcut settings exposes every action in its documented order");
@@ -3845,7 +3844,7 @@ async function main() {
       const rect = button.getBoundingClientRect(); return rect.width === 28 && rect.height === 28;
     })), true, "all model help buttons, including SAM type, share the compact 28px target");
     await page.locator("#settingsTabShortcuts").click();
-    assert.equal(await page.locator("#shortcutBindings > .form-row").evaluateAll((rows) => rows.length === 30 && rows.every((row) => {
+    assert.equal(await page.locator("#shortcutBindings > .form-row").evaluateAll((rows) => rows.length === 34 && rows.every((row) => {
       const children = [...row.children];
       return children.length === 3 && children.every((child) => Math.abs((child.getBoundingClientRect().y + child.getBoundingClientRect().height / 2) - (row.getBoundingClientRect().y + row.getBoundingClientRect().height / 2)) < 2);
     })), true, "all shortcut bindings keep one three-column row");

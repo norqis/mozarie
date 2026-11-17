@@ -250,6 +250,8 @@ Object.assign(SHORTCUT_LABELS, {
   exclusionBrush: "editor.eraser", exclusionFill: "editor.excludeFill", exclusionEraser: "editor.excludeEraser",
   singleView: "editor.singleView", compareView: "editor.compareView", fitView: "editor.fit",
   flipHorizontal: "editor.flipHorizontal", flipVertical: "editor.flipVertical", mosaicPreview: "editor.mosaicPreview",
+  mosaicDetectionRanges: "settings.shortcut.mosaicDetectionRanges", mosaicAppliedRanges: "settings.shortcut.mosaicAppliedRanges",
+  exclusionDetectionRanges: "settings.shortcut.exclusionDetectionRanges", exclusionAppliedRanges: "settings.shortcut.exclusionAppliedRanges",
 });
 function syncShortcutSwitch(input) {
   const label = input.parentElement?.querySelector?.("[data-switch-state]");

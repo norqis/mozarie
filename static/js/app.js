@@ -1547,6 +1547,7 @@ function bindEvents() {
     state.view.x = mouseX - sourceX * state.view.scale; state.view.y = mouseY - sourceY * state.view.scale; render(); updateBrushCursor();
   }, { passive: false });
   window.addEventListener("keydown", (event) => {
+    if (event.key === "Tab") state.pointerShortcutFocus = false;
     if (event.defaultPrevented || hasOpenDialog()) return;
     const editable = isEditableTarget(event.target);
     if (!editable && event.key === "Escape" && state.fillWorker) { event.preventDefault(); cancelFillWork(); return; }
@@ -1576,8 +1577,21 @@ function bindEvents() {
     }
     handleWindowKeydown(event);
   });
+  window.addEventListener("beforeunload", (event) => {
+    event.preventDefault();
+    event.returnValue = true;
+  });
   window.addEventListener("dragend", () => setGalleryDropOverlay(false));
+  document.addEventListener("click", (event) => {
+    if (!event.detail || state.viewMode !== "edit" || hasOpenDialog()) return;
+    if (event.target.closest("dialog, [popover], input, textarea, select, label, [contenteditable], a")) return;
+    const targetPopover = event.target.closest("button")?.popoverTargetElement;
+    if (targetPopover && !targetPopover.matches(":popover-open")) return;
+    if ([...document.querySelectorAll("[popover]:popover-open")].some((popover) => popover !== targetPopover) || !$("#boundaryModeMenu").hidden) return;
+    focusCanvas();
+  });
   document.addEventListener("pointerdown", (event) => {
+    state.pointerShortcutFocus = true;
     const boundaryMenu = $("#boundaryModeMenu");
     if (!boundaryMenu.hidden && event.target !== $("#boundaryTool") && !boundaryMenu.contains?.(event.target)) closeBoundaryModeMenu();
     const menu = $("#catalogContextMenu");

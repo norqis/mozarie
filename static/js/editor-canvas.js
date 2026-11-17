@@ -111,7 +111,7 @@ async function selectImage(imageId, force = false, { saveCurrentDraft = true, pr
       abortCatalogLoads();
       const previousImage = state.currentImage;
       const previousCandidateImages = state.candidateImages;
-      if (state.currentId !== imageId) clearCandidateBlink();
+      if (state.currentId !== imageId) clearCandidateBlink({ clearRoles: false });
       state.currentId = imageId;
       state.pendingImageId = null; state.pendingImageKey = null; state.pendingCandidateKey = null;
       state.currentImage = image;
@@ -126,6 +126,9 @@ async function selectImage(imageId, force = false, { saveCurrentDraft = true, pr
       syncResourceOwnership();
       canvasSizeForImage(record);
       if (!await restoreDraft(imageId, generation, draft, draftImages)) return false;
+      for (const role of state.blinkRoleModes.keys()) {
+        inheritRoleCandidateDisplayMode(role, candidateDisplayIdsForRole(role));
+      }
       if (!hasDraft) {
         state.workspaceDraftRevisions.set(imageId, snapshot.manualRevision);
         const live = state.images.find((image) => image.id === imageId);

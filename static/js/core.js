@@ -5,7 +5,7 @@ const state = {
   viewMode: "edit", displayMode: "single", compareSplit: .5, overviewFilter: new Set(), overviewQuery: "", overviewFolder: "", reviewedImageIds: new Set(), hiddenImageIds: new Set(), reviewRoot: "",
   reorder: null,
   selectedImageIds: new Set(), selectionAnchorId: null, batchMode: false,
-  navigationShortcutsEnabled: true,
+  navigationShortcutsEnabled: true, pointerShortcutFocus: false,
   candidates: [], candidateImages: new Map(), candidatePaddingPreviewImages: new Map(), drafts: new Map(),
   tool: "brush", panning: false, drawing: false, gestureDisplaySide: null, hoverDisplaySide: "left", boundaryPending: false,
   boundaryRoi: null, boundaryStart: null, boundaryStartClient: null, boundaryPoint: null, boundaryPromptPoint: null, boundaryDragging: false, boundaryDisplaySide: "left",

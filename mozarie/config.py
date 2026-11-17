@@ -357,6 +357,8 @@ _TOOLBAR_SHORTCUTS = {
     "exclusionBrush": "Shift+B", "exclusionFill": "Shift+K", "exclusionEraser": "Shift+E",
     "singleView": "1", "compareView": "2", "fitView": "F",
     "flipHorizontal": "H", "flipVertical": "V", "mosaicPreview": "M",
+    "mosaicDetectionRanges": "Shift+A", "mosaicAppliedRanges": "Shift+S",
+    "exclusionDetectionRanges": "Shift+D", "exclusionAppliedRanges": "Shift+F",
 }
 _DEFAULT_SHORTCUTS.update(_TOOLBAR_SHORTCUTS)
 _SHORTCUT_ACTIONS = set(_DEFAULT_SHORTCUTS)

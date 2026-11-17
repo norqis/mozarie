@@ -147,7 +147,7 @@ test("toolbar shortcuts obey per-action global focus modal busy and disabled con
 
 test("shortcut switches align after key inputs and preserve remapped disabled bindings after reload", { timeout: 60000 }, async () => {
   await page.locator("#settingsButton").click(); await page.locator("#settingsTabShortcuts").click();
-  assert.equal(await page.locator("[data-shortcut-action]").count(), 30);
+  assert.equal(await page.locator("[data-shortcut-action]").count(), 34);
   const layout = await page.locator("#shortcutBindings > .form-row").evaluateAll((rows) => rows.map((row) => {
     const input = row.querySelector("[data-shortcut-action]"); const toggle = row.querySelector(".shortcut-switch");
     return { right: input.getBoundingClientRect().right, switchLeft: toggle.getBoundingClientRect().left, switchRight: toggle.getBoundingClientRect().right, border: getComputedStyle(row).borderBottomWidth, background: getComputedStyle(row).backgroundColor, role: toggle.querySelector("input").getAttribute("role") };

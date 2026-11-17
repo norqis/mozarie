@@ -225,6 +225,8 @@ test("SD-117 editable controls and a noncurrent gallery card cannot start source
   }
   assert.ok(exercisedSettings >= 10, "every visible settings control category is exercised");
   await page.locator("#settingsCloseButton").click();
+  // These focus calls model keyboard navigation, not the preceding pointer click.
+  await page.keyboard.press("Tab");
   const editorControls = page.locator('input:visible, textarea:visible, select:visible, button:visible:not(.gallery-item.current)');
   let exercisedEditor = 0;
   for (let index = 0; index < await editorControls.count(); index += 1) {
@@ -341,6 +343,7 @@ test("SD-125 a network disconnect during source deletion keeps the image and sel
 
 test("SD-126 only the current gallery card can open confirmation and commit its source deletion", { timeout: 60000 }, async () => {
   await select("sample");
+  await page.keyboard.press("Tab");
   await page.locator('.gallery-item[data-id="sample-two"]').focus(); await page.keyboard.press("Delete"); await page.waitForTimeout(50);
   assert.equal(await page.locator("#confirmDialog").evaluate((dialog) => dialog.open), false);
   await page.locator('.gallery-item[data-id="sample"]').focus(); await page.keyboard.press("Delete"); await page.waitForFunction(() => document.querySelector("#confirmDialog").open);
