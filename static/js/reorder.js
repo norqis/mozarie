@@ -92,6 +92,7 @@ function clearReorderSettle() {
   if (!settle) return;
   state.reorder.settle = null;
   settle.animation.cancel(); settle.ghost.remove(); settle.node.classList.remove("reorder-placeholder");
+  syncOverviewSizeButtons();
 }
 
 function stopReorderDrag(restore = false, settle = false) {
@@ -113,6 +114,7 @@ function stopReorderDrag(restore = false, settle = false) {
   } else ghost?.remove();
   for (const animation of drag.animations.values()) animation.cancel();
   state.reorder.drag = null;
+  syncOverviewSizeButtons();
   const grid = $("#overviewGrid");
   if (grid.hasPointerCapture?.(drag.pointerId)) grid.releasePointerCapture(drag.pointerId);
   grid.classList.remove("reorder-dragging");
@@ -186,6 +188,7 @@ function initCatalogReorder() {
       x: event.clientX, y: event.clientY, moved: false, frame: 0, originalIds: mode.ids.slice(),
       offsetX: event.clientX - bounds.left, offsetY: event.clientY - bounds.top, animations: new Map(), ghost: null };
     mode.drag = drag;
+    syncOverviewSizeButtons();
     grid.setPointerCapture(event.pointerId);
     const tick = () => {
       if (state.reorder?.drag !== drag) return;

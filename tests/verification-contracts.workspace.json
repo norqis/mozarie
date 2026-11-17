@@ -7,7 +7,7 @@
   },
   "baseline": {
     "rows": 138,
-    "observations": 236
+    "observations": 237
   },
   "observations": [
     {
@@ -2722,6 +2722,17 @@
       "testIds": [
         "python:tests.test_project_history_live_browser.LiveProjectHistoryBrowserTests.test_source_delete_navigation_restores_editor_and_candidate_controls",
         "python:tests.test_project_history_live_browser.LiveProjectHistoryBrowserTests.test_list_removal_navigation_restores_editor_and_candidate_controls"
+      ]
+    },
+    {
+      "key": "WS-037.2",
+      "sourceIds": [
+        "WS-037"
+      ],
+      "observation": "画像一覧の−/＋でカードの幅と高さを変更し、先頭可視画像・選択・絞り込み・順番入替の下書きを保持する。表示分だけを描画し、同じURLの表示済みサムネイルを再取得しない。キーボード操作・読取専用表示に対応し、ドラッグ・着地中とサイズ端では適切に無効化する。",
+      "status": "automated",
+      "testIds": [
+        "node:tests/gallery/test_overview_size_e2e.cjs::overview size buttons preserve virtual scrolling selection reorder and keyboard operation"
       ]
     }
   ]

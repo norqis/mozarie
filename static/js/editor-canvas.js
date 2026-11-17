@@ -585,7 +585,7 @@ async function saveDraft(historyIndexOverride = null) {
       dirtyLayers: [...pendingLayers], dirtyRois: pendingRois,
     });
     if (keepLocalHistory) void queueWorkspaceDraft(imageId);
-    else void queueWorkspaceDraft(imageId, true).catch(showUserError);
+    else void queueWorkspaceDraft(imageId, true, { dirtyLayers: [...dirtyLayers], dirtyRois }).catch(showUserError);
   }).catch((error) => {
     if (state.currentId === imageId && isCurrentCatalogEpoch(catalogEpoch)) {
       markDraftDirty(...dirtyLayers);

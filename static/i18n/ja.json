@@ -875,5 +875,7 @@
   "errorCode.numbering_limit": "5桁の連番で保存できるのは99,999枚までです。",
   "errorDialog.numbering_limit.title": "5桁の連番に収まりません",
   "errorDialog.numbering_limit.cause": "対象が{count}枚あります。",
-  "errorDialog.numbering_limit.action": "対象を99,999枚以下に絞るか、連番をオフにしてください。"
+  "errorDialog.numbering_limit.action": "対象を99,999枚以下に絞るか、連番をオフにしてください。",
+  "overview.smaller": "一覧画像を縮小",
+  "overview.larger": "一覧画像を拡大"
 }

@@ -1118,6 +1118,8 @@ function bindEvents() {
   $("#overviewButton").addEventListener("click", () => { if (!isBusy() && !state.importing) setViewMode("overview"); });
   $("#closeOverviewButton").addEventListener("click", () => { if (state.reorder?.pending) return; if (state.reorder) cancelCatalogReorder(); setViewMode("edit"); });
   initCatalogReorder();
+  $("#overviewSmallerButton").addEventListener("click", () => resizeOverviewItems(1));
+  $("#overviewLargerButton").addEventListener("click", () => resizeOverviewItems(-1));
   $("#previousImageButton").addEventListener("click", () => runNavigationAction(() => moveCurrentBy(-1)));
   $("#nextImageButton").addEventListener("click", () => runNavigationAction(() => moveCurrentBy(1)));
   $("#reviewAndNextButton").addEventListener("click", () => { void runNavigationAction(reviewAndMoveNext); });

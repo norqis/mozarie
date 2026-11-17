@@ -96,6 +96,22 @@ class LiveProjectHistoryBrowserTests(unittest.TestCase):
         for name in ids:
             self.assertEqual((self.source_dir / name).exists(), mode == "list" or name == "b.png")
 
+    def test_rapid_manual_strokes_keep_save_regions_local_and_history_exact(self) -> None:
+        with Image.new("RGB", (1024, 1024), "white") as image:
+            image.save(self.source_dir / "history.png")
+        self.state.set_root(str(self.source_dir))
+        helper = Path(__file__).with_name("editor") / "manual_stroke_queue_live_browser_helper.cjs"
+        result = subprocess.run(
+            ["node", str(helper), self.origin], cwd=Path(__file__).resolve().parents[1],
+            env={**os.environ, "PYTHONUTF8": "1"}, text=True, encoding="utf-8",
+            errors="replace", capture_output=True, timeout=90, check=False,
+        )
+        self.assertEqual(result.returncode, 0, f"manual queue helper failed\n{result.stdout}\n{result.stderr}")
+        image_id = next(iter(self.state.images))
+        saved = self.state.manual_workspace(image_id)
+        with Image.open(io.BytesIO(base64.b64decode(saved["add"].split(",", 1)[1]))) as mask:
+            self.assertEqual(mask.getchannel("A").getpixel((700, 700)), 255)
+
     def test_source_delete_navigation_restores_editor_and_candidate_controls(self) -> None:
         self.check_deletion_navigation_controls("source")
 

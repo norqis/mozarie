@@ -177,7 +177,7 @@ h2 { margin: 0 0 2px; font-size: 14px; } .muted { color: #98a2ad; font-size: 12p
 
 .overview-pane { height: 100%; min-height: 0; display: grid; grid-template-rows: auto auto minmax(0, 1fr); background: #171a1d; } .overview-pane[hidden] { display: none; }
 .overview-toolbar { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 10px; align-items: center; padding: 10px 14px; border-bottom: 1px solid #3b424a; background: #20252a; }
-.overview-heading, .overview-search-controls, .overview-selection-bar { display: flex; gap: 6px; align-items: center; min-width: 0; } .overview-heading h2 { font-size: 15px; } .overview-heading #batchModeButton { margin-left: auto; }
+.overview-heading, .overview-search-controls, .overview-selection-bar { display: flex; gap: 6px; align-items: center; min-width: 0; } .overview-heading h2 { font-size: 15px; } .overview-heading { flex-wrap: wrap; } .overview-size-controls { display: flex; gap: 4px; } .overview-size-controls button { min-width: 30px; font-size: 17px; } .overview-heading #batchModeButton { margin-left: auto; }
 .overview-selection-bar { min-height: 45px; padding: 6px 14px; border-bottom: 1px solid #3b424a; background: #20252a; } .overview-selection-bar[hidden] { display: none; } .overview-selection-bar output { min-width: 0; margin-right: auto; color: #d5f2e9; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .overview-search-controls input { width: min(280px, 24vw); } .overview-search-controls select { width: min(220px, 19vw); }
 .overview-grid-viewport { position: relative; grid-row: 3; min-height: 0; overflow: hidden; }
