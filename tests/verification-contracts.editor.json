@@ -7,7 +7,7 @@
   },
   "baseline": {
     "rows": 129,
-    "observations": 175
+    "observations": 176
   },
   "observations": [
     {
@@ -1166,11 +1166,12 @@
       "sourceIds": [
         "ED-084"
       ],
-      "observation": "点滅中に別画像へ移動 → 移動先へ旧画像の点滅を持ち越さない",
+      "observation": "個別の範囲表示をONにして別画像へ移動 → 旧画像固有の点滅対象IDを持ち越さない。役割の一括ON設定だけは切替先の範囲へ引き継ぐ",
       "status": "automated",
       "testIds": [
         "node:tests/test_editor_masks_behavior.cjs::editor masks, fill, candidates, and history",
-        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
+        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage",
+        "node:tests/editor/test_range_display_navigation_e2e.cjs::bulk range display follows image navigation without carrying image-specific selections"
       ]
     },
     {
@@ -1621,11 +1622,12 @@
       "sourceIds": [
         "ED-111"
       ],
-      "observation": "検出範囲または適用範囲を役割ごとにONにし、手描き、境界候補、自動検出を追加してUndo→Redoする。手描き開始直後に取消も行う → 個別表示操作、削除、画像またはカタログ切替では役割の継承を解除する",
+      "observation": "範囲表示の個別操作、自動候補の削除、役割一括削除、カタログ・プロジェクト切替では役割の継承を解除する。手描き行の削除は対象IDのみ解除し、一括ON設定は保持する",
       "status": "automated",
       "testIds": [
         "node:tests/test_editor_masks_behavior.cjs::editor masks, fill, candidates, and history",
-        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
+        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage",
+        "node:tests/editor/test_range_display_navigation_e2e.cjs::bulk range display follows image navigation without carrying image-specific selections"
       ]
     },
     {
@@ -2092,6 +2094,17 @@
       "observation": "実OSのメモリ不足で境界処理を実行する → 実際のメモリ割当失敗を画像またはマスクの読み込み失敗として分類する",
       "status": "retired",
       "retirementReason": "Windows実機で、対象画像またはマスクの確保だけが失敗する実メモリ逼迫状態での観測は対象外とする。OSと画像ライブラリの実際のメモリ割当失敗を、CIプロセスや同居ジョブを不安定化させず決定的に発生させられないため"
+    },
+    {
+      "key": "ED-084.2",
+      "sourceIds": [
+        "ED-084"
+      ],
+      "observation": "モザイク・除外の一括検出範囲または適用範囲をONにして画像を切り替える → 切替先の候補と手描き範囲が同じ方式で点滅する。空画像ではタイマーを止め設定を保持し、読込失敗は元の表示を維持する。OFF・個別表示・一覧クリアも区別する",
+      "status": "automated",
+      "testIds": [
+        "node:tests/editor/test_range_display_navigation_e2e.cjs::bulk range display follows image navigation without carrying image-specific selections"
+      ]
     }
   ]
 }

@@ -357,3 +357,5 @@ SD-061.3 の `detection/test_exclusion_memory.py` は24候補での作業メモ�
 保存開始前の同名検出は `saving/test_save_preflight_conflicts.py` が非連番のPNG→JPG変換でも全対象の競合を実HTTPで列挙し、保存tokenを作らず全bytesを保持することを確認する。`saving/save_preflight_live_browser.cjs` はドラッグ追加から親フォルダー取得、単体・一括の実保存ボタン、全件の注意モーダル、reserve/render開始前の中断、元画像・既存画像・競合しない画像の保持、競合解消後の同じ画面からの再試行と実JPEG保存まで検証する。コピー保存の既存の命名規則は変更しない。
 
 連番の自動桁数は `gallery/test_catalog_reorder_e2e.cjs` の `numbering digits follow loaded image count while modal edits stay independent of filters` が読み込み枚数の増減と99/100・999/1000・9999/10000境界、非表示画像を含む読み込み総数、再表示時の再計算、同じ画面での手入力保持、フィルターで対象を減らした実保存要求の桁数を確認する。画像の再読み込みや走査を追加せず、保存画面を開くときに既存配列のlengthから設定する。
+
+一括範囲表示の画像切替継承は `editor/test_range_display_navigation_e2e.cjs` が実Chromiumの次・前・一覧選択で確認する。モザイクと除外それぞれの検出範囲・適用範囲、切替先の候補と手描き範囲、旧画像固有IDの破棄、空画像でのタイマー停止と次画像での再開、読込失敗時の旧表示保持、手描き行削除時の全体ON維持、一括OFFと個別表示、一覧クリアによる設定解除を検証する。既存のタイマーを1本だけ使い、画像の再処理や新しい常駐処理は追加しない。
