@@ -277,15 +277,8 @@ class ProjectHttpCoverageTests(unittest.TestCase):
         Image.new("RGB", (12, 8), "blue").save(second / "same.png")
         project = self.state.create_project("same-name masks")
         first_id = self.state.set_root(str(first))[0]["id"]
-        second_path = second / "same.png"
-        second_stat = second_path.stat()
-        second_source = self.state.workspace_store.ensure_project_source(
-            project["id"], kind="native-folder", display_name=second.name, identity=str(second.resolve()),
-        )
-        self.state.workspace_store.reconcile_images(project["id"], [SimpleNamespace(
-            relative_path="same.png", size_bytes=second_stat.st_size, mtime_ns=second_stat.st_mtime_ns,
-            width=12, height=8,
-        )], second_source)
+        self.state.set_root(str(second))
+        self.assertEqual(self.state.catalog_id, project["id"])
         self.state.open_project(project["id"])
         ids = {self.state.image_for_id(item["id"]).path.parent.name: item["id"] for item in self.state.list_images()}
         self.assertEqual(set(ids), {"first-source", "second-source"})

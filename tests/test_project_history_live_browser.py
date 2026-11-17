@@ -53,6 +53,20 @@ class LiveProjectHistoryBrowserTests(unittest.TestCase):
         state_module.APP_DIR = self._previous_app_dir
         self._temporary_directory.cleanup()
 
+    def test_project_keeps_native_paths_picker_and_drop_imports_together(self) -> None:
+        other = Path(self._temporary_directory.name) / "other"
+        other.mkdir()
+        Image.new("RGB", (64, 48), "blue").save(other / "history.png")
+        helper = Path(__file__).with_name("workspace") / "project_image_import_live_browser_helper.cjs"
+        result = subprocess.run(
+            ["node", str(helper), self.origin, str(self.source_dir.resolve()), str(other.resolve())],
+            cwd=Path(__file__).resolve().parents[1], env={**os.environ, "PYTHONUTF8": "1"},
+            text=True, encoding="utf-8", errors="replace", capture_output=True, timeout=90, check=False,
+        )
+        self.assertEqual(result.returncode, 0, f"project import helper failed\n{result.stdout}\n{result.stderr}")
+        self.assertEqual(len(self.state.workspace_store.project_sources(self.state.catalog_id)), 5)
+        self.assertEqual(len(self.state.images), 5)
+
     def test_browser_undo_redo_round_trips_localized_durable_manual_layers(self) -> None:
         helper = Path(__file__).with_name("project_history_live_browser_helper.cjs")
         result = subprocess.run(

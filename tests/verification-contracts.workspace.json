@@ -284,10 +284,11 @@
       "sourceIds": [
         "WS-011"
       ],
-      "observation": "BをPJへ追加せず、画面はBだけの無名作業へ切り替わる。",
+      "observation": "開いているプロジェクトへ別フォルダーBの画像を追加し、Aの画像・編集・履歴とプロジェクトIDを保持する。別ソースの同名画像は独立し、再読込で重複しない。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
+        "python:tests.workspace.test_project_catalog_lifecycle.ProjectCatalogCoverageTests.test_adding_other_folder_preserves_project_sources_edits_and_restart",
+        "python:tests.test_project_history_live_browser.LiveProjectHistoryBrowserTests.test_project_keeps_native_paths_picker_and_drop_imports_together"
       ]
     },
     {
@@ -295,10 +296,11 @@
       "sourceIds": [
         "WS-011"
       ],
-      "observation": "元PJを開き直すとAの画像・編集状態を復元する",
+      "observation": "プロジェクトを閉じて再開、または再起動後に開き直すと、AとBの画像・編集状態・履歴と保存済みの画像順序を復元する。",
       "status": "automated",
       "testIds": [
-        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
+        "python:tests.workspace.test_project_catalog_lifecycle.ProjectCatalogCoverageTests.test_adding_other_folder_preserves_project_sources_edits_and_restart",
+        "python:tests.test_project_history_live_browser.LiveProjectHistoryBrowserTests.test_project_keeps_native_paths_picker_and_drop_imports_together"
       ]
     },
     {

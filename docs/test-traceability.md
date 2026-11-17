@@ -365,3 +365,5 @@ SD-061.3 の `detection/test_exclusion_memory.py` は24候補での作業メモ�
 範囲表示の4ショートカットは `editor/test_range_display_navigation_e2e.cjs` でShift+A/S/D/FのON/OFF、表示方式切替、画像切替継承、入力・モーダル・無効ボタンでの抑止、設定再割当と個別・全体OFFの保存/再読込を確認する。`test_config.py` は4既定キーの一意性と設定保存、旧設定が4キーを既に使う場合に既存割当を奪わず新操作を代替キー・OFFで追加する移行を確認する。`app/test_editor_pointer_focus_e2e.cjs` は通常画面のマウス・タッチ操作後のショートカット復帰と、入力・メニュー・モーダル・キーボードフォーカスの保持を実Chromiumで確認する。
 
 キーボードでフォーカスした取消ボタン・削除対象外の要素の試験は、実際にTabを入力してから対象へフォーカスし、マウス操作後のショートカット復帰とは区別して検証します。既存の取消・削除抑止のアサーションも維持します。
+
+WS-011.1・WS-011.2 は、別フォルダー読込で無名作業へ切り替える旧契約を、開いているプロジェクトへの追加に変更しました。`ProjectCatalogCoverageTests.test_adding_other_folder_preserves_project_sources_edits_and_restart` は別ディレクトリの同名画像、候補・手描き・名前変更・確認状態・履歴の独立、再読込の重複防止、空／破損フォルダー失敗時の全状態保持、再起動後の復元を確認します。既存の自動並び順は維持し、保存済み手動順序は保持します。`LiveProjectHistoryBrowserTests.test_project_keeps_native_paths_picker_and_drop_imports_together` は実HTTP・SQLite・Chromiumでパス入力、フォルダー選択、画像選択、ドロップを同じプロジェクトへ混在させ、既存IDと確認状態を保持することを確認します。OSの選択画面だけを実OPFSハンドルで置き換えます。別ソース同名画像のZIP出力試験も、公開のフォルダー追加経路から検証します。
