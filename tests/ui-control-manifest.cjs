@@ -2,6 +2,7 @@
 // Dynamic template controls deliberately use data-* selectors and are exercised
 // by the candidate, gallery, overview, model, and context-menu E2E cases.
 const ids = `
+overviewSmallerButton overviewLargerButton
 projectDetailBack projectDetailResume projectDetailDelete projectDetailMosaic projectDetailExclude
 projectButton projectClose projectNew projectName projectOpenList projectSourceAdd projectSourceRelink projectResume projectComplete projectCloseWorkspace projectListClose projectNameInput projectNameCancel projectNameConfirm sourceMismatchClear sourceMismatchCancel sourceMismatchConfirm sameSourceOpen sameSourceSeparate sameSourceCancel projectDeleteCancel projectDeleteConfirm nativeRelinkPath nativeRelinkCancel nativeRelinkConfirm pickFolder detectAllButton saveAllButton folderPath loadFolderButton pickImages pickFolderFiles settingsButton updateToast batchMoreButton clearAllMasksButton clearCatalogButton galleryFilterButton overviewButton collapseGalleryButton
 brushTool bucketTool mosaicEraserTool eraserTool excludeBucketTool excludeEraserTool boundaryTool rectangleTool polygonTool boundaryBrushTool singleViewButton compareViewButton fitButton flipHorizontalButton flipVerticalButton undoButton redoButton mosaicPreviewButton brushSize mosaicHelpButton divisor bucketTolerance bucketToleranceDecrease bucketToleranceIncrease bucketToleranceClose
@@ -48,7 +49,10 @@ const PROJECT_LIFECYCLE_TEST = "node:tests/test_project_ui_runtime.cjs::project 
 const PROJECT_CANCEL_TEST = "node:tests/test_project_ui_runtime.cjs::project completion and deletion cancellation preserve the exact project and image list";
 const SAME_SOURCE_TEST = "node:tests/test_project_ui_runtime.cjs::same-source warning offers open separate and cancel without changing work until chosen";
 const WORKSPACE_SPLITTER_TEST = "node:tests/test_workspace_splitters_e2e.cjs::workspace pane splitters preserve content and use gesture deltas";
+const OVERVIEW_SIZE_TEST = "node:tests/gallery/test_overview_size_e2e.cjs::overview size buttons preserve virtual scrolling selection reorder and keyboard operation";
 const exemptions = {
+  overviewSmallerButton: { reason: "gallery size and disabled state are covered by the dedicated browser scenario", testIds: [OVERVIEW_SIZE_TEST] },
+  overviewLargerButton: { reason: "gallery size and disabled state are covered by the dedicated browser scenario", testIds: [OVERVIEW_SIZE_TEST] },
   reorderImagesButton: { reason: "covered by the dedicated reorder and numbering browser scenario", testIds: ["node:tests/gallery/test_catalog_reorder_e2e.cjs::overview scrolling, native drag suppression, reorder drafts and numbering controls"] },
   reorderFirst: { reason: "covered by the dedicated reorder and numbering browser scenario", testIds: ["node:tests/gallery/test_catalog_reorder_e2e.cjs::overview scrolling, native drag suppression, reorder drafts and numbering controls"] },
   reorderPrevious: { reason: "covered by the dedicated reorder and numbering browser scenario", testIds: ["node:tests/gallery/test_catalog_reorder_e2e.cjs::overview scrolling, native drag suppression, reorder drafts and numbering controls"] },

@@ -524,7 +524,7 @@ async function saveWorkspaceDraft(imageId, draft) {
   }
 }
 
-function queueWorkspaceDraft(imageId, immediate = false) {
+function queueWorkspaceDraft(imageId, immediate = false, changes = null) {
   if (!imageId || !state.images.some((image) => image.id === imageId)) return Promise.resolve();
   state.workspaceDraftPending ??= new Map();
   const previousTimer = state.workspaceDraftTimers.get(imageId);
@@ -532,7 +532,8 @@ function queueWorkspaceDraft(imageId, immediate = false) {
   const write = () => {
     state.workspaceDraftTimers.delete(imageId);
     const draft = state.drafts.get(imageId);
-    const persisted = queueWorkspaceMutation(imageId, () => saveWorkspaceDraft(imageId, draft));
+    const persisted = queueWorkspaceMutation(imageId, () => saveWorkspaceDraft(imageId,
+      draft && changes && !state.workspaceMutationErrors.has(imageId) ? { ...draft, ...changes } : draft));
     const completed = persisted.then((result) => {
       if (draft && state.drafts.get(imageId) === draft) {
         draft.dirtyLayers = [];

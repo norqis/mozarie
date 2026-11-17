@@ -7,7 +7,7 @@
   },
   "baseline": {
     "rows": 129,
-    "observations": 176
+    "observations": 177
   },
   "observations": [
     {
@@ -2104,6 +2104,18 @@
       "status": "automated",
       "testIds": [
         "node:tests/editor/test_range_display_navigation_e2e.cjs::bulk range display follows image navigation without carrying image-specific selections"
+      ]
+    },
+    {
+      "key": "ED-106.3",
+      "sourceIds": [
+        "ED-106"
+      ],
+      "observation": "手描きを連続確定しても、成功済みの変更範囲・レイヤーを次の保存へ累積させない。各ストロークの履歴と失敗時の再試行を保持し、複数回確定後の4Kドラッグも描画遅延の基準内に収める。",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_project_history_live_browser.LiveProjectHistoryBrowserTests.test_rapid_manual_strokes_keep_save_regions_local_and_history_exact",
+        "node:tests/test_mosaic_drag_performance_e2e.cjs::4K durable mosaic drag displays cropped worker previews within a gross latency budget"
       ]
     }
   ]

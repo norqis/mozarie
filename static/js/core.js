@@ -2,7 +2,7 @@ const $ = (selector) => document.querySelector(selector);
 
 const state = {
   images: [], currentId: null, currentImage: null, pendingImageId: null, galleryFilter: new Set(), maskStatus: new Map(),
-  viewMode: "edit", displayMode: "single", compareSplit: .5, overviewFilter: new Set(), overviewQuery: "", overviewFolder: "", reviewedImageIds: new Set(), hiddenImageIds: new Set(), reviewRoot: "",
+  viewMode: "edit", displayMode: "single", compareSplit: .5, overviewFilter: new Set(), overviewQuery: "", overviewFolder: "", overviewColumns: null, reviewedImageIds: new Set(), hiddenImageIds: new Set(), reviewRoot: "",
   reorder: null,
   selectedImageIds: new Set(), selectionAnchorId: null, batchMode: false,
   navigationShortcutsEnabled: true, pointerShortcutFocus: false,
@@ -450,9 +450,9 @@ function mosaicDivisor() { return normaliseDivisor($("#divisor").value); }
 function calculatedBlockSize(image = currentRecord(), divisor = mosaicDivisor()) {
   return image ? Math.max(4, Math.ceil(Math.max(image.width, image.height) / divisor)) : 0;
 }
-function isBusy({ ignoreOutputDirectoryCommit = false } = {}) {
+function isBusy({ ignoreOutputDirectoryCommit = false, ignoreReorder = false } = {}) {
   return ["running", "pausing", "paused"].includes(state.job?.state)
-    || Boolean(state.reorder) || state.saving || state.saveStarting || state.detectionStarting || state.masksClearing
+    || (!ignoreReorder && Boolean(state.reorder)) || state.saving || state.saveStarting || state.detectionStarting || state.masksClearing
     || state.processing?.kind === "detect"
     || state.catalogMutation || state.boundaryPending || state.fillPending || state.transformPending || state.outputDirectoryPicking || (!ignoreOutputDirectoryCommit && state.outputDirectoryCommitPending) || state.projectHistoryBusy || state.historyRestoreBusy;
 }
@@ -973,7 +973,7 @@ function updateActionButtons() {
       "projectButton", "projectClose", "projectOpenList", "projectListClose", "projectResume", "projectCloseWorkspace", "projectNew",
       "downloadCurrentMosaicMask", "downloadCurrentExcludeMask",
       "singleViewButton", "compareViewButton", "fitButton", "mosaicPreviewButton", "previousImageButton", "nextImageButton",
-      "overviewButton", "galleryFilterButton", "overviewFilterButton", "collapseGalleryButton", "collapseInspectorButton", "settingsButton", "settingsCloseButton", "errorDialogClose",
+      "overviewButton", "overviewSmallerButton", "overviewLargerButton", "galleryFilterButton", "overviewFilterButton", "collapseGalleryButton", "collapseInspectorButton", "settingsButton", "settingsCloseButton", "errorDialogClose",
       "closeOverviewButton", "overviewQuery", "overviewFolder", "sourceMismatchCancel", "detectCancelButton",
       "projectDeleteCancel", "projectDeleteConfirm", "copyImagePathMenuItem",
     ]);
@@ -1000,12 +1000,13 @@ function updateActionButtons() {
   if (typeof renderProjectTableControls === "function") renderProjectTableControls();
   applyBusyControlLock([...document.querySelectorAll("button, input, select, textarea")], busyLocked, confirmDialog);
   if (state.reorder) {
-    for (const control of document.querySelectorAll("#reorderActions button, #overviewGrid .overview-item, #closeOverviewButton")) {
+    for (const control of document.querySelectorAll("#reorderActions button, #overviewGrid .overview-item, #closeOverviewButton, #overviewSmallerButton, #overviewLargerButton")) {
       if (!state.reorder.pending) delete control.dataset.disabledByLock;
       control.disabled = state.reorder.pending;
     }
     syncReorderControls();
   }
+  if (typeof syncOverviewSizeButtons === "function") syncOverviewSizeButtons();
 }
 
 function updateCandidateBatchButtons(hasImage = Boolean(state.currentId && state.currentImage && currentRecord()), mutationLocked = isBusy() || state.importing || state.projectReadOnly || currentRecord()?.sourceDimensionsChanged || state.candidateBatchPending.has(state.currentId), presence, viewLocked = mutationLocked) {

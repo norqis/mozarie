@@ -875,5 +875,7 @@
   "errorCode.numbering_limit": "Five-digit numbering supports up to 99,999 images.",
   "errorDialog.numbering_limit.title": "Too many images for five digits",
   "errorDialog.numbering_limit.cause": "There are {count} images.",
-  "errorDialog.numbering_limit.action": "Select at most 99,999 images or disable numbering."
+  "errorDialog.numbering_limit.action": "Select at most 99,999 images or disable numbering.",
+  "overview.smaller": "Smaller gallery images",
+  "overview.larger": "Larger gallery images"
 }

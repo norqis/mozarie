@@ -146,6 +146,80 @@ class ProjectCatalogCoverageTests(unittest.TestCase):
         self.assertFalse(self.states[-1].project_read_only)
         self.states[-1].close_project()
 
+    def test_adding_other_folder_preserves_project_sources_edits_and_restart(self) -> None:
+        first_root = self.root / "first"; second_root = self.root / "second"
+        self.image(first_root, "same.png"); self.image(second_root, "same.png")
+        state = self.state(); project_id = state.create_project("mixed folders")["id"]
+        first_id = state.set_root(str(first_root))[0]["id"]
+        self.commit_candidates(state, first_id, [self.candidate(state, first_id, "first-candidate")])
+        state.save_manual_workspace(first_id, {
+            "add": "data:image/png;base64," + base64.b64encode(self.png(pixel=(4, 4))).decode("ascii"),
+            "exclusion": "", "exclusionErase": "", "removedCandidateIds": [],
+            "candidateRevision": state._candidate_revision(first_id), "hasEffectiveMask": True,
+        })
+        state.rename_catalog_image(first_id, "chosen.png")
+        state.set_image_transform(first_id, {"flipH": True, "flipV": False})
+        state.set_image_flags(first_id, {"reviewed": True})
+        first_state = state.workspace_store.export_state(first_id)
+        first_history = state.project_history_status(first_id)
+        first_source = state.images[first_id].source_id
+
+        images = state.set_root(str(second_root))
+        self.assertEqual((state.catalog_id, state.workspace_id), (project_id, project_id))
+        self.assertEqual(len(images), 2)
+        second_id = next(image["id"] for image in images if image["id"] != first_id)
+        self.assertEqual(set(state.order), {first_id, second_id})
+        second_source = state.images[second_id].source_id
+        self.assertNotEqual(first_source, second_source)
+        self.assertEqual(state.images[first_id].source_root, first_root.resolve())
+        self.assertEqual(state.images[second_id].source_root, second_root.resolve())
+        self.assertEqual(state.images[first_id].edited_filename, "chosen.png")
+        self.assertEqual(state.workspace_store.export_state(first_id), first_state)
+        self.assertEqual(state.project_history_status(first_id), first_history)
+        self.assertEqual([candidate.candidate_id for candidate in state.candidates[first_id]], ["first-candidate"])
+        self.assertIsNotNone(state.manual_workspace(first_id))
+        self.assertEqual(state.candidates[second_id], [])
+        self.assertIsNone(state.manual_workspace(second_id))
+        state.rename_catalog_image(second_id, "other.png")
+        state.set_image_flags(second_id, {"hidden": True})
+        self.assertEqual(state.workspace_store.export_state(first_id), first_state)
+        self.assertEqual(state.project_history_status(first_id), first_history)
+        state.reorder_catalog([second_id, first_id])
+        for folder in (first_root, second_root):
+            state.set_root(str(folder))
+            self.assertEqual(state.order, [second_id, first_id])
+            self.assertEqual((state.images[first_id].source_id, state.images[second_id].source_id), (first_source, second_source))
+            self.assertEqual(state.images[first_id].edited_filename, "chosen.png")
+            self.assertEqual(state.images[second_id].edited_filename, "other.png")
+            self.assertEqual(state.catalog_id, project_id)
+
+        before = state.catalog_snapshot()
+        states = {image_id: state.workspace_store.export_state(image_id) for image_id in state.order}
+        histories = {image_id: state.project_history_status(image_id) for image_id in state.order}
+        for name in ("empty", "broken"):
+            folder = self.root / name; folder.mkdir()
+            if name == "broken": (folder / "bad.png").write_bytes(b"broken")
+            with self.assertRaises(ClientError): state.set_root(str(folder))
+            self.assertEqual(state.catalog_snapshot(), before)
+            self.assertEqual(state.workspace_id, project_id)
+            self.assertEqual({image_id: state.workspace_store.export_state(image_id) for image_id in state.order}, states)
+            self.assertEqual({image_id: state.project_history_status(image_id) for image_id in state.order}, histories)
+
+        state.shutdown(); self.states.remove(state)
+        restarted = self.state(); reopened = restarted.open_project(project_id)
+        self.assertEqual(reopened["project"]["id"], project_id)
+        self.assertEqual(restarted.order, [second_id, first_id])
+        self.assertEqual(restarted.images[first_id].edited_filename, "chosen.png")
+        self.assertEqual(restarted.images[second_id].edited_filename, "other.png")
+        self.assertEqual((restarted.images[first_id].source_id, restarted.images[second_id].source_id), (first_source, second_source))
+        self.assertEqual(restarted.images[first_id].source_root, first_root.resolve())
+        self.assertEqual(restarted.images[second_id].source_root, second_root.resolve())
+        self.assertEqual({image_id: restarted.workspace_store.export_state(image_id) for image_id in restarted.order}, states)
+        self.assertEqual({image_id: restarted.project_history_status(image_id) for image_id in restarted.order}, histories)
+        self.assertEqual([candidate.candidate_id for candidate in restarted.candidates[first_id]], ["first-candidate"])
+        self.assertIsNotNone(restarted.manual_workspace(first_id))
+        self.assertEqual(len(reopened["sources"]), 2)
+
     def test_twenty_thousand_project_reopen_scans_metadata_and_hydrates_once(self) -> None:
         """The actual open_project path is linear metadata work, not PNG decoding."""
         source = self.root / "large-source"; source.mkdir()

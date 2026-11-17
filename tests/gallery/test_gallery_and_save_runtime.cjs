@@ -95,7 +95,7 @@ function makeGalleryRuntime() {
     codedError(code) { const error = new Error(); error.code = code; return error; }, responseError(response, payload) { const error = new Error(); error.status = response.status; error.code = payload?.error_code || "internal_error"; return error; },
     console, Map, Set, Array, Math, String, Object, document, encodeURIComponent, window: { addEventListener() {} },
     IntersectionObserver: class { constructor(callback, options) { this.callback = callback; this.options = options; observers.push(this); } observe(image) { this.observed = image; } unobserve(image) { image.unobserved = true; } },
-    state, $: (selector) => nodes.get(selector), $$: () => [],
+    state, $: (selector) => nodes.get(selector), $$: () => [], isBusy() { return false; },
     t(key, values = {}) { return `${key}:${Object.values(values).join(",")}`; },
     imageAssetVersion(image) { return image.assetVersion || ""; },
     isHidden(image) { return Boolean(image?.hidden); }, isReviewed(image) { return Boolean(image?.reviewed); }, imageHasMask(image) { return Boolean(image?.masked); }, currentImageActionPending() { return Boolean(state.pendingImageId); }, hasDurableHistory() { return false; },

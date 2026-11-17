@@ -183,6 +183,10 @@
           <button id="closeOverviewButton" class="text-button" type="button" data-i18n="overview.back">編集に戻る</button>
           <h2 data-i18n="overview.title">画像一覧</h2><button id="reorderImagesButton" type="button" data-i18n="reorder.start">順番を入れ替え</button>
           <output id="overviewCount" class="muted">0 / 0</output>
+          <div class="overview-size-controls">
+            <button id="overviewSmallerButton" type="button" aria-label="一覧画像を縮小" title="一覧画像を縮小" data-i18n-aria-label="overview.smaller" data-i18n-title="overview.smaller">−</button>
+            <button id="overviewLargerButton" type="button" aria-label="一覧画像を拡大" title="一覧画像を拡大" data-i18n-aria-label="overview.larger" data-i18n-title="overview.larger">＋</button>
+          </div>
           <button id="batchModeButton" type="button" aria-pressed="false" disabled data-i18n="selection.batchMode">一括編集</button>
         </div>
         <button id="overviewFilterButton" class="filter-menu-button" type="button" popovertarget="overviewFilterMenu" aria-controls="overviewFilterMenu" aria-expanded="false">絞り込み</button>

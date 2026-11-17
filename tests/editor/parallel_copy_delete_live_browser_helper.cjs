@@ -7,6 +7,7 @@ async function main() {
   try {
     const page = await context.newPage();
     await page.goto(process.argv[2], { waitUntil: "domcontentloaded" });
+    await page.evaluate(() => appStartup);
     const kind = process.argv[3] || "native";
     if (kind !== "native") {
       await page.waitForFunction(() => state.settings && !state.importing);

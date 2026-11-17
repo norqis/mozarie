@@ -455,14 +455,9 @@ class CatalogMixin:
                     for source in sources
                 )
                 return self._set_root(raw_path, inherit_current_catalog=same_workspace_source)
-            sources = self.workspace_store.project_sources(catalog_id)
-            same_project_source = any(
-                source["kind"] == "native-folder"
-                and source.get("nativePath")
-                and native_source_identity(str(source["nativePath"])) == native_source_identity(root)
-                for source in sources
-            )
-            return self._set_root(raw_path, inherit_current_catalog=not sources or same_project_source)
+            # Every folder loaded into an open project belongs to that project.
+            # _set_root reconciles this source and retains the other sources.
+            return self._set_root(raw_path)
 
     def _set_root(self, raw_path: str, project_id: str | None = None, *, defer_replace: bool = False,
                    relink_source_id: str | None = None, allow_new: bool = True,

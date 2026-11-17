@@ -121,7 +121,8 @@ def HandDetector(*args: Any, **kwargs: Any) -> Any:
 def _save_binary_mask(mask: Any, path: Path) -> None:
     """Persist every non-zero mask pixel as fully opaque PNG data."""
 
-    binary = np.where(np.asarray(mask) > 0, 255, 0).astype(np.uint8)
+    binary = (np.asarray(mask) > 0).astype(np.uint8)
+    binary *= 255
     metadata = PngImagePlugin.PngInfo()
     metadata.add_text("mozarie_expand_px", "0")
     Image.fromarray(binary).save(path, format="PNG", pnginfo=metadata)
@@ -869,11 +870,15 @@ class DetectionMixin:
         with self.image_io_lock(record.image_id):
             self._assert_record_stat_matches(record)
             image, source, info = canonical_image(record)
-            scene_fluid_tags = (
-                _scene_fluid_tags({**info, **read_scene_png_metadata(source)})
-                if fluid_exclusion_enabled else frozenset()
-            )
-            rgb, alpha = _inference_pixels(image)
+            try:
+                scene_fluid_tags = (
+                    _scene_fluid_tags({**info, **read_scene_png_metadata(source)})
+                    if fluid_exclusion_enabled else frozenset()
+                )
+                rgb, alpha = _inference_pixels(image)
+            finally:
+                image.close()
+            del image, source, info
         segments = self._detect_arbitrated_segments(models, rgb, confidence, target_classes or TARGET_CLASSES, scene_fluid_tags)
         _clip_detection_masks_to_alpha(segments, alpha)
         detected, hand_mask, _ = self._hand_refinement_context(models, record, rgb, segments)
@@ -934,7 +939,7 @@ class DetectionMixin:
                     ))
                 if segment["class_name"] not in DETECTED_TARGET_CLASSES:
                     continue
-                apply_mask = np.asarray(segment["mask"]).copy()
+                apply_mask = np.asarray(segment["mask"])
                 # Keep the detector/SAM mask intact.  Hands and fluid are separate
                 # exclusion candidates, so their checkbox can genuinely restore the
                 # underlying target mask when turned off.
@@ -1015,7 +1020,11 @@ class DetectionMixin:
             self._assert_record_stat_matches(record)
             try:
                 image, _source, _info = canonical_image(record)
-                rgb, alpha = _inference_pixels(image)
+                try:
+                    rgb, alpha = _inference_pixels(image)
+                finally:
+                    image.close()
+                del image, _source, _info
             except (MemoryError, OSError) as exc:
                 raise ClientError("境界候補用の画像を読み込めません。使用可能なメモリを確認してください。", "image_read_failed") from exc
         with self.inference_lock:

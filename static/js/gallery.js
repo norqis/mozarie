@@ -70,9 +70,36 @@ function catalogLayout(windowState) {
   const { container, options } = windowState;
   const width = Math.max(1, (Number(container.clientWidth) || options.minWidth + options.padding * 2) - options.padding * 2);
   const cssColumns = Number(globalThis.getComputedStyle?.(container).getPropertyValue("--catalog-columns"));
-  const columns = cssColumns || options.columns || Math.max(1, Math.floor((width + options.gap) / (options.minWidth + options.gap)));
+  const baseColumns = cssColumns || options.columns || Math.max(1, Math.floor((width + options.gap) / (options.minWidth + options.gap)));
+  const maxColumns = Math.max(baseColumns, Math.floor((width + options.gap) / (96 + options.gap)));
+  const columns = windowState.scope === "overview" ? Math.max(1, Math.min(maxColumns, state.overviewColumns ?? baseColumns)) : baseColumns;
+  const rowHeight = windowState.scope === "overview" ? options.rowHeight * baseColumns / columns : options.rowHeight;
   const itemWidth = (width - (columns - 1) * options.gap) / columns;
-  return { columns, itemWidth, rowHeight: options.rowHeight, totalHeight: Math.ceil(windowState.images.length / columns) * options.rowHeight + options.padding * 2 };
+  return { columns, maxColumns, itemWidth, rowHeight, totalHeight: Math.ceil(windowState.images.length / columns) * rowHeight + options.padding * 2 };
+}
+
+function syncOverviewSizeButtons() {
+  const windowState = catalogWindows.get("overview");
+  const layout = windowState ? catalogLayout(windowState) : null;
+  const locked = !windowState?.images.length || isBusy({ ignoreReorder: true }) || state.importing || Boolean(state.reorder?.drag || state.reorder?.settle || state.reorder?.pending);
+  const smaller = $("#overviewSmallerButton"), larger = $("#overviewLargerButton");
+  if (smaller) smaller.disabled = locked || !layout || layout.columns >= layout.maxColumns;
+  if (larger) larger.disabled = locked || !layout || layout.columns <= 1;
+}
+
+function resizeOverviewItems(direction) {
+  const windowState = catalogWindows.get("overview");
+  if (!windowState || isBusy({ ignoreReorder: true }) || state.importing || state.reorder?.drag || state.reorder?.settle || state.reorder?.pending) return;
+  const {container, options} = windowState;
+  const previous = catalogLayout(windowState);
+  const rowPosition = Math.max(0, (container.scrollTop - options.padding) / previous.rowHeight);
+  const anchorIndex = Math.floor(rowPosition) * previous.columns;
+  state.overviewColumns = Math.max(1, Math.min(previous.maxColumns, previous.columns + direction));
+  const layout = catalogLayout(windowState);
+  windowState.spacer.style.height = `${layout.totalHeight}px`;
+  container.scrollTop = container.scrollTop <= options.padding ? 0
+    : options.padding + (Math.floor(anchorIndex / layout.columns) + rowPosition % 1) * layout.rowHeight;
+  renderCatalogWindow(windowState);
 }
 
 function catalogRow(windowState, row, layout) {
@@ -199,6 +226,7 @@ function renderCatalogWindow(windowState) {
   }
   for (const item of nodes.values()) item.style.visibility = "";
   if (clearedHover) syncResourceOwnership();
+  if (windowState.scope === "overview") syncOverviewSizeButtons();
   return layout;
 }
 

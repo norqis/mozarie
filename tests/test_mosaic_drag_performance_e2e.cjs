@@ -44,6 +44,14 @@ test("4K durable mosaic drag displays cropped worker previews within a gross lat
     await page.waitForFunction(() => !state.mosaicWorkerBusy && state.mosaicSourceId && !state.mosaicPreviewRequested);
     await page.locator("#brushTool").click();
     const screen = (x, y) => ({ x: geometry.left + x * geometry.scale, y: geometry.top + y * geometry.scale });
+    // Exercise completed edits and their save chain before measuring the next
+    // drag, rather than testing only a fresh canvas and cancelling its history.
+    for (let index = 0; index < 20; index += 1) {
+      const point = screen(600 + index * 90, 700);
+      await page.mouse.click(point.x, point.y);
+    }
+    await page.evaluate(() => flushWorkspaceDraft(state.currentId));
+    await page.waitForFunction(() => !state.mosaicWorkerBusy && !state.mosaicPending && !state.mosaicPreviewRequested);
     const start = screen(600, 1000);
     await page.mouse.move(start.x, start.y); await page.mouse.down();
     await page.waitForFunction(() => !state.mosaicWorkerBusy && !state.mosaicPending && !state.mosaicPreviewRequested);

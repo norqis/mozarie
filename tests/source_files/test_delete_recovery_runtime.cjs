@@ -118,6 +118,7 @@ test("source-delete refuses file I/O when the durable local intent cannot be wri
     + range("async function permanentlyDeleteImages", "async function removeImageFromCatalog");
   let removeCalls = 0;
   let shownError = null;
+  let renderCalls = 0;
   const image = { id: "one", sourceKind: "session" };
   const state = { importing: false, catalogMutation: false };
   let cancelledPermissionStarts = 0;
@@ -129,18 +130,20 @@ test("source-delete refuses file I/O when the durable local intent cannot be wri
   assert.equal(cancelledPermissionStarts, 0, "cancelling confirmation never starts a permission request");
   const fn = new Function(
     "isBusy", "state", "confirmAction", "t", "beginBrowserDeletePermissionRequests", "deletionSelectionSnapshot", "crypto",
-    "invalidatePendingImage", "updateActionButtons", "updateSelectionActionBar", "rememberPendingSourceDelete", "restoreDeletionSelection", "showUserError",
+    "invalidatePendingImage", "updateActionButtons", "updateSelectionActionBar", "rememberPendingSourceDelete", "restoreDeletionSelection", "showUserError", "renderCandidates",
     `${operationSource}; return permanentlyDeleteImages;`,
   )(
     () => false, state, async (_title, _message, _key, onConfirm) => { onConfirm(); return true; }, (key) => key,
     () => async () => { removeCalls += 1; return []; }, () => ({ currentImageId: "one" }), { randomUUID: () => "token" },
     () => {}, () => {}, () => {}, async () => { throw codedError("source_delete_recovery_unavailable"); }, async () => {},
     (error) => { shownError = error; },
+    () => { assert.equal(state.catalogMutation, false); renderCalls += 1; },
   );
   await fn([image], [image]);
   assert.equal(removeCalls, 0, "failure to persist the preparing intent stops before browser-source preflight or removeEntry");
   assert.equal(shownError?.code, "source_delete_recovery_unavailable");
   assert.equal(state.catalogMutation, false, "the public operation also releases its busy state");
+  assert.equal(renderCalls, 1, "candidate controls are refreshed after releasing the busy state");
 });
 
 test("source-delete startup recovery reconciles a lost prepare, an already-missing entry, and an empty receipt", async () => {
