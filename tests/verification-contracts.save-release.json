@@ -7,7 +7,7 @@
   },
   "baseline": {
     "rows": 93,
-    "observations": 140
+    "observations": 141
   },
   "observations": [
     {
@@ -987,7 +987,8 @@
       "status": "automated",
       "testIds": [
         "python:tests.test_server.MozarieTests.test_gpu_oom_discards_all_cached_models_once",
-        "python:tests.test_server.MozarieTests.test_terminal_gpu_release_allows_detection_models_to_reload"
+        "python:tests.test_server.MozarieTests.test_terminal_gpu_release_allows_detection_models_to_reload",
+        "python:tests.detection.test_inference_resource_lifetime.InferenceResourceLifetimeTests.test_directml_complete_cancel_failure_release_models_and_allow_next_job"
       ]
     },
     {
@@ -1000,6 +1001,19 @@
       "retirementReason": "対応GPUと実検出モデルを使用するWindows環境での観測は対象外とする。実GPUドライバーのVRAM割当と解放後の基準値はCIのCPU環境では再現できない。"
     },
     {
+      "key": "SV-059.3",
+      "sourceIds": [
+        "SV-059"
+      ],
+      "observation": "通常検出・境界検出は独立したRGB入力の作成後、推論前に元画像のPillow画像・元バイト列・メタ情報の参照を解放する。候補マスク保存ではint64の全面中間配列を作らず、画素結果と入力を保持する。",
+      "status": "automated",
+      "testIds": [
+        "python:tests.detection.test_inference_resource_lifetime.InferenceResourceLifetimeTests.test_detection_discards_decoded_original_before_inference_and_reuses_cpu_model",
+        "python:tests.detection.test_inference_resource_lifetime.InferenceResourceLifetimeTests.test_boundary_discards_decoded_original_before_sam_embedding",
+        "python:tests.detection.test_inference_resource_lifetime.InferenceResourceLifetimeTests.test_binary_mask_save_avoids_wide_integer_plane_and_preserves_pixels"
+      ]
+    },
+    {
       "key": "SV-060.1",
       "sourceIds": [
         "SV-060"
@@ -1008,7 +1022,8 @@
       "status": "automated",
       "testIds": [
         "python:tests.test_server.MozarieTests.test_terminal_gpu_release_allows_detection_models_to_reload",
-        "python:tests.jobs.test_job_control_and_saving.JobsSavingCoverageTests.test_job_thread_releases_gpu_once_after_every_terminal_worker_path"
+        "python:tests.jobs.test_job_control_and_saving.JobsSavingCoverageTests.test_job_thread_releases_gpu_once_after_every_terminal_worker_path",
+        "python:tests.detection.test_inference_resource_lifetime.InferenceResourceLifetimeTests.test_directml_complete_cancel_failure_release_models_and_allow_next_job"
       ]
     },
     {
@@ -1020,7 +1035,8 @@
       "status": "automated",
       "testIds": [
         "python:tests.test_server.MozarieTests.test_model_verification_occurs_once_for_a_loaded_model_set",
-        "python:tests.jobs.test_job_control_and_saving.JobsSavingCoverageTests.test_terminal_release_keeps_cpu_model_cache"
+        "python:tests.jobs.test_job_control_and_saving.JobsSavingCoverageTests.test_terminal_release_keeps_cpu_model_cache",
+        "python:tests.detection.test_inference_resource_lifetime.InferenceResourceLifetimeTests.test_detection_discards_decoded_original_before_inference_and_reuses_cpu_model"
       ]
     },
     {
