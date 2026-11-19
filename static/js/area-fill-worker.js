@@ -55,7 +55,7 @@ if (typeof self !== 'undefined') self.onmessage = ({ data }) => {
       result = enclosedAreaSpans(mask, width, height, x, y);
     }
     self.postMessage(result, [result.spans.buffer]);
-  } catch (error) { data.bitmap?.close(); self.postMessage({ error: error.message }); }
+  } catch (error) { data.bitmap?.close(); self.postMessage({ failure: error.message }); }
   finally { if (surface) { surface.width = 1; surface.height = 1; } }
 };
 if (typeof module !== 'undefined') module.exports = { enclosedAreaSpans, alphaSpans };

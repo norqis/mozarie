@@ -2174,7 +2174,8 @@
       "testIds": [
         "python:tests.test_area_fill_live_browser.LiveAreaFillBrowserTests.test_replace_cuts_candidate_and_all_manual_masks_inside_only_and_undo_is_exact",
         "python:tests.test_area_fill_live_browser.LiveAreaFillBrowserTests.test_fill_failure_retry_busy_restore_pending_brush_reopen_and_saved_output",
-        "python:tests.editor.test_area_fill_workspace.AreaFillWorkspaceTests.test_repeated_replacement_reclaims_old_cache_and_history_restores_from_database"
+        "python:tests.editor.test_area_fill_workspace.AreaFillWorkspaceTests.test_repeated_replacement_reclaims_old_cache_and_history_restores_from_database",
+        "node:tests/editor/test_area_fill_e2e.cjs::area worker failures restore editor controls and show a translated error"
       ]
     },
     {

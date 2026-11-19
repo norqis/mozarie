@@ -84,7 +84,7 @@ async function applyAreaFill({ point = null, points = null } = {}) {
       let worker;
       try { worker = operation.worker = new Worker('/js/area-fill-worker.js'); }
       catch (error) { payload.bitmap?.close(); reject(error); return; }
-      worker.onmessage = ({ data }) => data.error ? reject(new Error(data.error)) : resolve(data);
+      worker.onmessage = ({ data }) => data.failure ? reject(new Error(data.failure)) : resolve(data);
       worker.onerror = reject;
       try { worker.postMessage(payload, payload.bitmap ? [payload.bitmap] : []); }
       catch (error) { payload.bitmap?.close(); reject(error); }

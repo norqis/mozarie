@@ -183,3 +183,24 @@ test('enclosure worker closes paths and fills self intersections with the previe
   });
   assert.deepEqual(results,{closedCenter:true,closedOutside:false,crossedTop:true,crossedBottom:true,crossedSide:false,empty:[]});
 }));
+test('area worker failures restore editor controls and show a translated error', {timeout:60000}, async()=>scenario(async({page,calls,path})=>{
+  await page.evaluate(()=>{
+    window.areaNativeWorker=window.Worker;
+    window.Worker=class extends window.areaNativeWorker {
+      constructor(url,options){super(url,options);this.areaFillWorker=String(url).endsWith('/area-fill-worker.js');}
+      postMessage(payload,transfer){super.postMessage(this.areaFillWorker?{...payload,width:-1}:payload,transfer);}
+    };
+  });
+  try {
+    await page.locator('#mosaicEncloseTool').click();
+    const before=await page.evaluate(()=>({history:state.history.length,add:addCanvas.toDataURL(),exclude:exclusionCanvas.toDataURL(),erase:exclusionEraseCanvas.toDataURL()}));
+    await path([[10,10],[70,10],[70,60]]);
+    assert.deepEqual(await page.evaluate(()=>({history:state.history.length,add:addCanvas.toDataURL(),exclude:exclusionCanvas.toDataURL(),erase:exclusionEraseCanvas.toDataURL()})),before);
+    assert.equal(calls.length,0,'worker failure must not submit any mask changes');
+    assert.equal(await page.locator('#errorDialog').isVisible(),true);
+    const text=await page.locator('#errorDialog').innerText();assert.match(text,/操作を完了できませんでした/);assert.match(text,/予期しない問題/);assert.doesNotMatch(text,/OffscreenCanvas|RangeError|negative/);
+    await page.locator('#errorDialogClose').click();
+    for(const id of ['mosaicAreaBucketTool','mosaicEncloseTool','excludeAreaBucketTool','excludeEncloseTool','areaReplaceExisting'])assert.equal(await page.locator('#'+id).isEnabled(),true);
+    assert.equal(await page.evaluate(()=>state.fillPending||Boolean(state.areaFillOperation)),false);
+  }finally{await page.evaluate(()=>{window.Worker=window.areaNativeWorker;});}
+}));
