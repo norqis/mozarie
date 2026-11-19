@@ -13,6 +13,7 @@ const { chromium } = require("playwright");
     });
     await page.goto(process.argv[2], { waitUntil: "domcontentloaded" });
     await page.evaluate(() => appStartup);
+    assert.equal(await page.evaluate(() => state.images.length), 0, "preflight fixture begins with an empty unnamed workspace");
     await page.evaluate(async () => {
       const root = await navigator.storage.getDirectory();
       const canvas = document.createElement("canvas"); canvas.width = 12; canvas.height = 8;
@@ -36,6 +37,8 @@ const { chromium } = require("playwright");
       document.querySelector("#gallery").dispatchEvent(event);
     });
     await page.waitForFunction(() => !state.importing && state.images.length === 3);
+    await page.locator("#projectNameDialog").waitFor({ state: "visible" });
+    await page.locator("#projectNameCancel").click();
     await page.locator(".gallery-item").filter({ hasText: "a.png" }).click();
     await page.waitForFunction(() => state.currentImage && !state.pendingImageId);
     const acceptOverwrite = async () => {

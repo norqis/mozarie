@@ -234,6 +234,7 @@ def validate_settings(value: Any) -> dict[str, Any]:
         },
         "editing": {
             "fill_color_tolerance": fill_color_tolerance,
+            "area_replace_existing": _expect_bool(editing.get("area_replace_existing", False), "editing.area_replace_existing"),
         },
         "detection": {
             "mode": mode,
@@ -353,6 +354,8 @@ _DEFAULT_SHORTCUTS = {"previous": "ArrowLeft", "next": "ArrowRight", "previousVi
 _TOOLBAR_SHORTCUTS = {
     "cycleMosaicTool": "Q", "cycleExclusionTool": "W",
     "mosaicBrush": "B", "mosaicFill": "K", "mosaicEraser": "E",
+    "mosaicAreaBucket": "Alt+K", "mosaicEnclose": "Alt+P",
+    "exclusionAreaBucket": "Shift+Alt+K", "exclusionEnclose": "Shift+Alt+P",
     "boundaryMenu": "T", "boundaryRectangle": "R", "boundaryPolygon": "P", "boundaryBrush": "C",
     "exclusionBrush": "Shift+B", "exclusionFill": "Shift+K", "exclusionEraser": "Shift+E",
     "singleView": "1", "compareView": "2", "fitView": "F",

@@ -354,7 +354,8 @@ function showNativeRelinkDialog() {
   renderNativeRelinkDialog(); showModalFromInvoker($("#nativeRelinkDialog"), $("#projectSourceRelink")); focusElement($("#nativeRelinkPath"));
 }
 function openProjectNameDialog(mode) {
-  projectNameMode = mode; $("#projectNameInput").value = mode === "name" ? (state.project?.name || "") : "";
+  projectNameMode = mode; $("#projectNameInput").value = mode === "import" ? importProjectSuggestion.name : mode === "name" ? (state.project?.name || "") : "";
+  renderProjectNameDialogMode();
   $("#projectNameInput").disabled = false;
   $("#projectNameCancel").disabled = false;
   $("#projectNameForm").querySelector('[type="submit"]').disabled = false;
@@ -745,7 +746,7 @@ function bindEvents() {
   $("#projectClose").addEventListener("click", () => { if (!state.projectOperationPending) $("#projectDialog").close(); });
   $("#projectNew").addEventListener("click", () => openProjectNameDialog("new"));
   $("#projectName").addEventListener("click", () => openProjectNameDialog("name"));
-  $("#projectNameDialog").addEventListener("close", () => { projectNameMode = "name"; updateActionButtons(); });
+  $("#projectNameDialog").addEventListener("close", () => { projectNameMode = "name"; importProjectSuggestion = null; renderProjectNameDialogMode(); updateActionButtons(); });
   $("#projectOpenList").addEventListener("click", () => { void showProjectList().catch(showUserError); });
   $("#projectListClose").addEventListener("click", () => { if (!projectListSortPending && !state.projectOperationPending) $("#projectListDialog").close(); });
   $("#projectListDialog").addEventListener("close", () => { projectManagerView.generation += 1; });
@@ -829,9 +830,11 @@ function bindEvents() {
   $("#projectDeleteCancel").addEventListener("click", () => { if (projectDeleteBusy) return; projectDeleteId = ""; $("#projectDeleteDialog").close(); });
   $("#projectDeleteDialog").addEventListener("cancel", (event) => { if (projectDeleteBusy) event.preventDefault(); });
   $("#projectDeleteConfirm").addEventListener("click", () => { void deleteProject(projectDeleteId); });
-  $("#projectNameForm").addEventListener("submit", (event) => { event.preventDefault(); void (async () => { if (!beginProjectOperation()) return; try {
+  $("#projectNameForm").addEventListener("submit", (event) => { event.preventDefault(); void (async () => {
+    if (projectNameMode === "import" && !currentImportProjectSuggestion()) { $("#projectNameDialog").close(); return; }
+    if (!beginProjectOperation()) return; try {
     const name = $("#projectNameInput").value.trim(); const mode = projectNameMode;
-    const projectlessSave = mode === "name" && !state.project?.id;
+    const projectlessSave = (mode === "name" || mode === "import") && !state.project?.id;
     if (mode === "new" || projectlessSave) { await flushAllImageMutations(); await flushAllWorkspaceMutations(); }
     const projectId = projectlessSave ? state.workspaceId : "";
     if (projectlessSave && !projectId) throw codedError("project_not_found");
@@ -849,7 +852,10 @@ function bindEvents() {
     state.project = data.project; state.projectReadOnly = false;
     if (projectlessSave) state.projectlessDirectorySources.clear();
     $("#projectNameDialog").close(); if (mode === "new") { resetCatalog([], ""); state.missingNativeSources = []; } renderProjectCurrent();
-  } catch (error) { showUserError(error); } finally { endProjectOperation(); } })(); });
+  } catch (error) {
+    if (projectNameMode === "import" && matchesImportProjectImages(importProjectSuggestion)) importProjectSuggestion.epoch = state.catalogEpoch;
+    showUserError(error);
+  } finally { endProjectOperation(); } })(); });
   const syncSourceMismatchControls = () => {
     $("#sourceMismatchClear").disabled = sourceMismatchPending;
     $("#sourceMismatchCancel").disabled = sourceMismatchPending;
@@ -1156,6 +1162,8 @@ function bindEvents() {
   $("#boundaryTool").addEventListener("click", () => {
     setBoundaryModeMenuOpen($("#boundaryModeMenu").hidden);
   });
+  for (const [selector, tool] of [["#mosaicAreaBucketTool", "area_bucket"], ["#mosaicEncloseTool", "area_enclose"], ["#excludeAreaBucketTool", "exclude_area_bucket"], ["#excludeEncloseTool", "exclude_area_enclose"]]) $(selector).addEventListener("click", () => setTool(tool));
+  $("#areaReplaceExisting").addEventListener("change", (event) => saveAreaFillPreference(event.target.checked));
   for (const [selector, tool] of [["#bucketTool", "bucket"], ["#excludeBucketTool", "exclude_bucket"]]) {
     $(selector).addEventListener("pointerdown", () => rememberFillToleranceTrigger(tool));
     $(selector).addEventListener("keydown", (event) => { if (event.key === "Enter" || event.key === " ") rememberFillToleranceTrigger(tool); });
@@ -1457,6 +1465,11 @@ function bindEvents() {
       updateBoundaryActions(); render(); return;
     }
     if (state.tool === "boundary_brush") { beginBoundaryBrushStroke(point); render(); return; }
+    if (isAreaFillTool()) {
+      if (state.tool.endsWith("area_bucket")) { state.drawing = false; state.gestureDisplaySide = null; void applyAreaFill({ point }); }
+      else beginAreaEnclosure(point);
+      render(); return;
+    }
     if (["bucket", "exclude_bucket"].includes(state.tool)) { state.drawing = false; fillAt(point); return; }
     beginManualStroke(point); render();
   });
@@ -1483,7 +1496,8 @@ function bindEvents() {
         }
       } else if (state.tool === "boundary_brush") {
         appendBoundaryBrushPoint(point);
-      } else { appendManualStrokePoint(point); state.pointer = point; }
+      } else if (state.areaFill) appendAreaEnclosure(point);
+      else { appendManualStrokePoint(point); state.pointer = point; }
     }
   };
   canvas.addEventListener("pointermove", (event) => {
@@ -1499,6 +1513,12 @@ function bindEvents() {
     const boundaryStarted = Boolean(state.boundaryStart);
     try { if (event && canvas.hasPointerCapture(event.pointerId)) canvas.releasePointerCapture(event.pointerId); } catch { /* Pointer capture may already be released. */ }
     state.drawing = false; state.panning = false;
+    if (state.areaFill) {
+      if (!cancelled && event) appendAreaEnclosure(clampPoint(pointFromEvent(event)));
+      const points = state.areaFill.points; state.areaFill = null; state.gestureDisplaySide = null;
+      if (!cancelled) void applyAreaFill({ points });
+      flushRender(); return;
+    }
     if (state.tool === "polygon") {
       if (state.polygonPoints.length === 4 && polygonIsValid()) {
         addBoundaryDraft({ type: "polygon", points: state.polygonPoints.map((item) => ({ ...item })), roi: polygonRoi(state.polygonPoints) });
@@ -1552,6 +1572,7 @@ function bindEvents() {
     if (event.key === "Tab") state.pointerShortcutFocus = false;
     if (event.defaultPrevented || hasOpenDialog()) return;
     const editable = isEditableTarget(event.target);
+    if (!editable && event.key === "Escape" && (state.areaFill || state.areaFillOperation?.phase !== "committing" && state.areaFillOperation)) { event.preventDefault(); cancelAreaFill(); return; }
     if (!editable && event.key === "Escape" && state.fillWorker) { event.preventDefault(); cancelFillWork(); return; }
     if (event.key === "Escape" && !$("#boundaryModeMenu").hidden) {
       event.preventDefault(); closeBoundaryModeMenu(); focusElement($("#boundaryTool")); return;

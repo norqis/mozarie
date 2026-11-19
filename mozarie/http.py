@@ -981,6 +981,10 @@ class MosaicHandler(BaseHTTPRequestHandler):
                 revision = self._catalog_mutation(expected_project_id, expected_catalog_generation,
                                        lambda: STATE.save_manual_workspace(path.removeprefix("/api/workspace/manual/"), payload))
                 self._json({"ok": True, "manualRevision": revision})
+            elif path.startswith("/api/images/") and path.endswith("/area-fill"):
+                image_id = path.removeprefix("/api/images/").removesuffix("/area-fill").rstrip("/")
+                self._json(self._catalog_mutation(expected_project_id, expected_catalog_generation,
+                                                   lambda: STATE.fill_image_area(image_id, payload)))
             elif path.startswith("/api/images/") and path.endswith("/transform"):
                 image_id = path.removeprefix("/api/images/").removesuffix("/transform").rstrip("/")
                 self._json(self._catalog_mutation(expected_project_id, expected_catalog_generation,

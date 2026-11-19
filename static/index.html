@@ -99,7 +99,9 @@
         <div id="canvasToolRail" class="canvas-tool-rail" role="toolbar" aria-orientation="horizontal" aria-label="編集ツール" data-i18n-aria-label="editor.tools">
           <div class="tool-pair" role="group" aria-label="モザイク編集" data-i18n-aria-label="editor.mosaicTools">
             <button id="brushTool" class="tool icon-button tool-icon tool-icon-brush active" type="button" data-toolbar-item aria-pressed="true" aria-label="モザイクブラシ" title="モザイクブラシ" data-i18n-aria-label="editor.brush" data-i18n-title="editor.brush"><span aria-hidden="true"></span></button>
-            <div id="bucketToolAnchor" class="fill-tool-anchor"><button id="bucketTool" class="tool icon-button" type="button" data-toolbar-item aria-pressed="false" aria-controls="bucketToleranceControl" aria-expanded="false" aria-label="モザイク塗りつぶし" title="モザイク塗りつぶし" data-i18n-aria-label="editor.mosaicFill" data-i18n-title="editor.mosaicFill">▣</button></div>
+            <div id="bucketToolAnchor" class="fill-tool-anchor"><button id="bucketTool" class="tool icon-button" type="button" data-toolbar-item aria-pressed="false" aria-controls="bucketToleranceControl" aria-expanded="false" aria-label="モザイクを色で塗りつぶし" title="モザイクを色で塗りつぶし" data-i18n-aria-label="editor.mosaicFill" data-i18n-title="editor.mosaicFill">▣</button></div>
+            <button id="mosaicAreaBucketTool" class="tool icon-button tool-icon-area-bucket" type="button" data-toolbar-item aria-pressed="false" aria-label="モザイクの穴を埋める" title="モザイクの穴を埋める" data-i18n-aria-label="editor.mosaicAreaBucket" data-i18n-title="editor.mosaicAreaBucket"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 10 12 3l8 8-7 7z M5 10l8 8 M4 20h16 M20 14c-3 3-3 5 0 5s3-2 0-5"/></svg></button>
+            <button id="mosaicEncloseTool" class="tool icon-button tool-icon-enclose" type="button" data-toolbar-item aria-pressed="false" aria-label="囲んでモザイク" title="囲んでモザイク" data-i18n-aria-label="editor.mosaicEnclose" data-i18n-title="editor.mosaicEnclose"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5c-6 2-5 12 1 13 5 1 12-2 12-7s-8-9-13-6z M8 18c-1 5 5 5 6 1"/></svg></button>
             <button id="mosaicEraserTool" class="tool icon-button tool-icon tool-icon-eraser" type="button" data-toolbar-item aria-pressed="false" aria-label="モザイク消しゴム" title="モザイク消しゴム" data-i18n-aria-label="editor.mosaicEraser" data-i18n-title="editor.mosaicEraser"><span aria-hidden="true"></span></button>
             <div class="boundary-tool-menu">
               <button id="boundaryTool" class="tool icon-button tool-icon tool-icon-boundary" type="button" data-toolbar-item aria-pressed="false" aria-expanded="false" aria-controls="boundaryModeMenu" aria-label="境界" title="境界" data-i18n-aria-label="editor.boundary" data-i18n-title="editor.boundary"><span aria-hidden="true"></span></button>
@@ -112,7 +114,9 @@
           </div>
           <div class="tool-pair" role="group" aria-label="除外編集" data-i18n-aria-label="editor.exclusionTools">
             <button id="eraserTool" class="tool icon-button tool-icon tool-icon-brush" type="button" data-toolbar-item aria-pressed="false" aria-label="除外ブラシ" title="除外ブラシ" data-i18n-aria-label="editor.eraser" data-i18n-title="editor.eraser"><span aria-hidden="true"></span></button>
-            <div id="excludeBucketToolAnchor" class="fill-tool-anchor"><button id="excludeBucketTool" class="tool icon-button" type="button" data-toolbar-item aria-pressed="false" aria-controls="bucketToleranceControl" aria-expanded="false" aria-label="除外塗りつぶし" title="除外塗りつぶし" data-i18n-aria-label="editor.excludeFill" data-i18n-title="editor.excludeFill">▧</button></div>
+            <div id="excludeBucketToolAnchor" class="fill-tool-anchor"><button id="excludeBucketTool" class="tool icon-button" type="button" data-toolbar-item aria-pressed="false" aria-controls="bucketToleranceControl" aria-expanded="false" aria-label="除外を色で塗りつぶし" title="除外を色で塗りつぶし" data-i18n-aria-label="editor.excludeFill" data-i18n-title="editor.excludeFill">▧</button></div>
+            <button id="excludeAreaBucketTool" class="tool icon-button tool-icon-area-bucket" type="button" data-toolbar-item aria-pressed="false" aria-label="除外の穴を埋める" title="除外の穴を埋める" data-i18n-aria-label="editor.excludeAreaBucket" data-i18n-title="editor.excludeAreaBucket"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 10 12 3l8 8-7 7z M5 10l8 8 M4 20h16 M20 14c-3 3-3 5 0 5s3-2 0-5"/></svg></button>
+            <button id="excludeEncloseTool" class="tool icon-button tool-icon-enclose" type="button" data-toolbar-item aria-pressed="false" aria-label="囲んで除外" title="囲んで除外" data-i18n-aria-label="editor.excludeEnclose" data-i18n-title="editor.excludeEnclose"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5c-6 2-5 12 1 13 5 1 12-2 12-7s-8-9-13-6z M8 18c-1 5 5 5 6 1"/></svg></button>
             <button id="excludeEraserTool" class="tool icon-button tool-icon tool-icon-eraser" type="button" data-toolbar-item aria-pressed="false" aria-label="除外消しゴム" title="除外消しゴム" data-i18n-aria-label="editor.excludeEraser" data-i18n-title="editor.excludeEraser"><span aria-hidden="true"></span></button>
           </div>
           <span class="tool-separator" aria-hidden="true"></span>
@@ -125,6 +129,7 @@
           <button id="flipVerticalButton" class="tool icon-button" type="button" data-toolbar-item aria-pressed="false" aria-label="上下反転" title="上下反転" data-i18n-aria-label="editor.flipVertical" data-i18n-title="editor.flipVertical">⇅</button>
           <button id="mosaicPreviewButton" class="tool icon-button active" type="button" data-toolbar-item aria-pressed="true" aria-label="モザイク表示" title="モザイク表示" data-i18n-aria-label="editor.mosaicPreview" data-i18n-title="editor.mosaicPreview">▦</button>
         <span class="tool-separator" aria-hidden="true"></span>
+        <label id="areaFillOptions" class="area-fill-options" hidden><input id="areaReplaceExisting" type="checkbox"><span data-i18n="editor.areaReplaceExisting">範囲内の既存処理を置き換える</span></label>
         <div class="canvas-settings-bar" data-i18n-aria-label="editor.settings" aria-label="編集設定">
           <label class="numeric-control" for="brushSize"><span data-i18n="editor.brushSize">ブラシ径</span><input id="brushSize" type="range" min="1" max="300" value="48" data-i18n-aria-label="editor.brushSize" aria-label="ブラシ径"><output id="brushSizeValue">48 px</output></label>
           <div class="numeric-control block-control"><span class="block-control-heading"><label for="divisor" data-i18n="editor.blockSize">モザイク粗さ</label><button id="mosaicHelpButton" class="help-button" type="button" data-i18n-aria-label="mosaicHelp.title" data-i18n-title="mosaicHelp.title" aria-label="モザイク粗さ" title="モザイク粗さ"></button></span><span class="ratio-prefix">1 /</span><input id="divisor" type="number" min="1" value="100"><output id="blockSizeValue"></output></div>
@@ -570,8 +575,10 @@
   <script src="/js/detection.js"></script>
   <script src="/js/save.js"></script>
   <script src="/js/save-numbered.js"></script>
+  <script src="/js/area-fill.js"></script>
   <script src="/js/interaction.js"></script>
   <script src="/js/settings.js"></script>
+  <script src="/js/import-project-prompt.js"></script>
   <script src="/js/app.js"></script>
 </body>
 </html>

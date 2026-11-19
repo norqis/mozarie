@@ -513,8 +513,6 @@ function setRoleCandidateDisplayMode(role, mode) {
   setCandidateDisplayMode(candidateDisplayIdsForRole(role), mode);
 }
 
-function clearRoleCandidateDisplayMode(role) { state.blinkRoleModes.delete(role); }
-
 function inheritRoleCandidateDisplayMode(role, ids) {
   const mode = state.blinkRoleModes.get(role);
   if (mode && ids.length) setCandidateDisplayMode(ids, mode);
@@ -542,7 +540,7 @@ function candidateDisplayToggle(id, role = "apply", disabled = false) {
   const button = document.createElement("button"); button.type = "button"; button.className = "candidate-display-toggle";
   button.dataset.candidateDisplayId = id;
   button.textContent = t("candidates.show"); button.title = t("candidates.displayHelp"); button.setAttribute("aria-label", t("candidates.displayHelp")); button.setAttribute("aria-pressed", String(candidateDisplayMode(id) === "normal")); button.disabled = disabled;
-  button.addEventListener("click", () => { if (!disabled && !currentImageActionPending()) { clearRoleCandidateDisplayMode(role); setCandidateDisplayMode([id], candidateDisplayMode(id) === "normal" ? "off" : "normal"); } });
+  button.addEventListener("click", () => { if (!disabled && !currentImageActionPending()) { setCandidateDisplayMode([id], candidateDisplayMode(id) === "normal" ? "off" : "normal"); } });
   return button;
 }
 
@@ -550,7 +548,7 @@ function candidateEffectiveToggle(id, role = "apply", disabled = false) {
   const button = document.createElement("button"); button.type = "button"; button.className = "candidate-effective-toggle";
   button.dataset.candidateEffectiveId = id;
   button.textContent = t("candidates.applied"); button.title = t("candidates.displayEffective"); button.setAttribute("aria-label", t("candidates.displayEffective")); button.setAttribute("aria-pressed", String(candidateDisplayMode(id) === "effective")); button.disabled = disabled;
-  button.addEventListener("click", () => { if (!disabled && !currentImageActionPending()) { clearRoleCandidateDisplayMode(role); setCandidateDisplayMode([id], candidateDisplayMode(id) === "effective" ? "off" : "effective"); } });
+  button.addEventListener("click", () => { if (!disabled && !currentImageActionPending()) { setCandidateDisplayMode([id], candidateDisplayMode(id) === "effective" ? "off" : "effective"); } });
   return button;
 }
 
@@ -664,7 +662,7 @@ async function deleteCandidate(candidate) {
   if (!imageId || isBusy() || state.importing || currentImageActionPending()) return;
   if (confirmationRequired("candidateDelete") && !await confirmAction(t("confirm.candidateDelete.title"), t("confirm.candidateDelete.message"), "candidateDelete")) return;
   if (state.currentId !== imageId || !isCurrentGeneration(generation) || currentImageActionPending() || !state.candidates.some((item) => item.id === candidate.id)) return;
-  clearRoleCandidateDisplayMode(candidate.role); state.removedCandidateIds.add(candidate.id);
+  state.removedCandidateIds.add(candidate.id);
   setCandidateDisplayMode([candidate.id], "off");
   markMaskDirty(); recordHistoryOperation({ kind: "removeCandidates", ids: [candidate.id] }); syncCurrentCandidateRecord(); refreshCurrentReviewAndMask(); requestMosaicPreview(); saveDraft().catch(showUserError); renderCandidates(); render(); renderCatalogViews();
 }
@@ -716,7 +714,6 @@ async function batchCandidateOperation(spec) {
   if (state.currentId !== imageId || !isCurrentGeneration(generation) || currentImageActionPending()) return;
   const changed = state.candidates.filter((item) => item.role === role && !state.removedCandidateIds.has(item.id));
   if (operation === "delete") {
-    clearRoleCandidateDisplayMode(role);
     const ids = changed.map((item) => item.id);
     const manualRoles = [];
     if (role === "apply" && state.manualMaskPresent) {

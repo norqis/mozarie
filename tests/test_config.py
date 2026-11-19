@@ -162,6 +162,20 @@ class SettingsTests(unittest.TestCase):
             self.assertTrue((root / "config" / "local.json").is_file())
             self.assertEqual(json.loads((root / "config" / "defaults.json").read_text(encoding="utf-8")), defaults)
 
+    def test_area_replace_existing_defaults_persist_and_reject_non_booleans(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); config = root / "config"; config.mkdir()
+            (config / "defaults.json").write_text(json.dumps(default_settings()), encoding="utf-8")
+            (config / "local.json").write_text(json.dumps({"editing": {"fill_color_tolerance": 37}}), encoding="utf-8")
+            store = SettingsStore(root)
+            self.assertFalse(store.load()["editing"]["area_replace_existing"])
+            store.save({"editing": {"area_replace_existing": True}})
+            self.assertTrue(SettingsStore(root).load()["editing"]["area_replace_existing"])
+            self.assertEqual(store.load()["editing"]["fill_color_tolerance"], 37)
+            for value in (1, None, "true", []):
+                with self.subTest(value=value), self.assertRaises(SettingsError):
+                    store.validate_update({"editing": {"area_replace_existing": value}})
+
     def test_local_settings_gain_fill_tolerance_default(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory); config = root / "config"; config.mkdir()
@@ -320,7 +334,7 @@ class SettingsTests(unittest.TestCase):
         for action, binding in expected.items():
             self.assertEqual(defaults["shortcuts"]["bindings"][action], binding)
             self.assertTrue(defaults["shortcuts"]["actions"][action])
-        self.assertEqual(len(set(defaults["shortcuts"]["bindings"].values())), 34)
+        self.assertEqual(len(set(defaults["shortcuts"]["bindings"].values())), 38)
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory); config = root / "config"; config.mkdir()
             (config / "defaults.json").write_text(json.dumps(defaults), encoding="utf-8")
@@ -356,7 +370,7 @@ class SettingsTests(unittest.TestCase):
             for action, preferred in additions.items():
                 self.assertNotEqual(migrated["bindings"][action], preferred)
                 self.assertFalse(migrated["actions"][action])
-            self.assertEqual(len(set(migrated["bindings"].values())), 34)
+            self.assertEqual(len(set(migrated["bindings"].values())), 38)
             store.save({"shortcuts": migrated})
             self.assertEqual(SettingsStore(root).load()["shortcuts"], migrated)
 
@@ -384,6 +398,6 @@ class SettingsTests(unittest.TestCase):
                 self.assertNotEqual(shortcuts["bindings"][action], defaults["shortcuts"]["bindings"][action])
                 self.assertNotIn("legacy disabled", shortcuts["bindings"][action])
             self.assertEqual(shortcuts["bindings"]["mosaicBrush"], "B")
-            self.assertEqual(len(set(shortcuts["bindings"].values())), 34)
+            self.assertEqual(len(set(shortcuts["bindings"].values())), 38)
             store.save({"shortcuts": shortcuts})
             self.assertEqual(SettingsStore(root).load()["shortcuts"], shortcuts)

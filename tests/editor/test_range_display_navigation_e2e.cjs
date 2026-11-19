@@ -179,3 +179,94 @@ test("bulk range display follows image navigation without carrying image-specifi
     assert.equal((await snapshot()).timerCount, 0);
   } finally { await context.close(); await browser.close(); await closeServer(fixture.server); }
 });
+
+test("bulk range modes survive individual off disable deletion and role deletion across navigation", { timeout: 90000 }, async () => {
+  const fixture = await startFixtureServer(); const browser = await chromium.launch();
+  const defaults = structuredClone(require("../../config/defaults.json"));
+  defaults.confirmations.candidateDelete = false; defaults.confirmations.candidateRoleDelete = false;
+  fixture.setSettings(defaults);
+  try {
+    for (const role of ["apply", "exclude"]) for (const mode of ["normal", "effective"]) for (const action of ["rangeOff", "disable", "delete", "deleteRole"]) {
+      const context = await browser.newContext({ viewport: { width: 1440, height: 960 } });
+      const label = `${role}/${mode}/${action}`;
+      fixture.resetScenario(); fixture.setCatalog(["first", "second"].map(id => ({ id, relativePath: `${id}.png`, sourceKind: "filesystem", width: 80, height: 60, candidateRevision: 1, reviewed: false, hidden: false })));
+      try {
+        const page = await context.newPage(); const errors = [];
+        page.on("pageerror", error => errors.push(error.message));
+        if (process.env.MOZARIE_JS_COVERAGE === "1") await page.coverage.startJSCoverage({ resetOnNavigation: false });
+        await page.addInitScript(() => {
+          const start = window.setInterval.bind(window), stop = window.clearInterval.bind(window);
+          const timers = new Map(); let sequence = 0;
+          window.setInterval = (callback, delay, ...args) => { if (delay !== 200) return start(callback, delay, ...args); const id = `range-${++sequence}`; timers.set(id, () => callback(...args)); return id; };
+          window.clearInterval = id => { if (!timers.delete(id)) stop(id); };
+          window.tickRangeDisplay = () => [...timers.values()].forEach(tick => tick()); window.rangeTimerCount = () => timers.size;
+        });
+        const assets = await page.evaluate(() => {
+          const canvas = document.createElement("canvas"); canvas.width = 80; canvas.height = 60; const c = canvas.getContext("2d");
+          c.fillStyle = "#fff"; c.fillRect(0, 0, 80, 60); const source = canvas.toDataURL().split(",")[1];
+          const masks = {};
+          for (const [name, x] of [["apply-a", 5], ["apply-b", 25], ["exclude-a", 45], ["exclude-b", 65]]) { c.clearRect(0, 0, 80, 60); c.fillRect(x, 10, 15, 20); masks[name] = canvas.toDataURL().split(",")[1]; }
+          return { source, masks };
+        });
+        const candidates = new Map(["first", "second"].map(imageId => [imageId, ["apply", "exclude"].flatMap(candidateRole => ["a", "b"].map(suffix => ({ id: `${imageId}-${candidateRole}-${suffix}`, role: candidateRole, enabled: true, forced: true, expandPx: 0, labelToken: candidateRole === "apply" ? "penis" : "hand", source: candidateRole === "apply" ? "target" : "hand_exclusion", refinement: null, confidence: .9, color: candidateRole === "apply" ? "#ff3d4d" : "#28d3ff" })))]));
+        await page.route("**/api/image/*", route => route.fulfill({ contentType: "image/png", body: Buffer.from(assets.source, "base64") }));
+        await page.route("**/api/mask/**", route => {
+          const id = new URL(route.request().url()).pathname.split("/").at(-1); const key = id.slice(id.indexOf("-") + 1);
+          return route.fulfill({ contentType: "image/png", body: Buffer.from(assets.masks[key], "base64") });
+        });
+        await page.route("**/api/candidates/*", route => {
+          const id = new URL(route.request().url()).pathname.split("/").at(-1);
+          return route.fulfill({ json: { candidates: candidates.get(id), candidateRevision: 1 } });
+        });
+        await page.route("**/api/candidate/**", route => {
+          const parts = new URL(route.request().url()).pathname.split("/"); const imageId = parts.at(-2), id = parts.at(-1);
+          Object.assign(candidates.get(imageId).find(candidate => candidate.id === id), route.request().postDataJSON());
+          return route.fulfill({ json: { candidateRevision: 2 } });
+        });
+        await page.route("**/api/workspace/manual/*", route => route.request().method() === "GET" ? route.fulfill({ json: { draft: null, manualRevision: 0 } }) : route.continue());
+        await page.goto(fixture.url, { waitUntil: "domcontentloaded" }); await page.evaluate(() => appStartup);
+        await page.locator('.gallery-item[data-id="first"]').click(); await page.waitForFunction(() => state.currentId === "first" && !currentImageActionPending());
+        await page.locator("#mosaicPreviewButton").click();
+        const attribute = mode === "normal" ? "data-candidate-display-toggle" : "data-candidate-effective-toggle";
+        const bulk = page.locator(`[${attribute}="${role}"]`); await bulk.click();
+        const row = page.locator(`[data-candidate-blink-id="first-${role}-a"]`);
+        if (action === "rangeOff") await row.locator(mode === "normal" ? ".candidate-display-toggle" : ".candidate-effective-toggle").click();
+        else if (action === "disable") { await row.locator(".candidate-toggle").click(); await page.waitForFunction(() => !state.candidateUpdateChains.size && !currentImageActionPending()); }
+        else if (action === "delete") await row.locator(".candidate-delete").click();
+        else await page.locator(`[data-candidate-batch="${role}:delete"]`).click();
+        await page.evaluate(() => flushWorkspaceDraft(state.currentId));
+        assert.equal(await page.evaluate(role => state.blinkRoleModes.get(role), role), mode, `${label}: bulk preference survives`);
+        if (action === "rangeOff") assert.equal(await bulk.getAttribute("aria-pressed"), "mixed", `${label}: current image keeps its mixed state`);
+        const assertDestination = async () => {
+          const stateView = await page.evaluate(({ role, mode }) => {
+            const ids = state.candidates.filter(candidate => candidate.role === role && !state.removedCandidateIds.has(candidate.id)).map(candidate => candidate.id);
+            const x = role === "apply" ? 10 : 50; const y = 20;
+            const transformed = transformImagePoint({ x, y }); const ratio = canvas.width / stage.clientWidth;
+            const px = Math.floor((state.view.x + transformed.x * state.view.scale) * ratio), py = Math.floor((state.view.y + transformed.y * state.view.scale) * ratio);
+            const paint = () => { flushRender(); return [...ctx.getImageData(px, py, 1, 1).data]; };
+            if (!state.blinkPhase) window.tickRangeDisplay(); const on = paint(); window.tickRangeDisplay(); const off = paint();
+            return { ids, modes: ids.map(id => candidateDisplayMode(id)), selected: [...state.blinkCandidateIds].sort(), roleMode: state.blinkRoleModes.get(role), timerCount: window.rangeTimerCount(), on, off };
+          }, { role, mode });
+          assert.deepEqual(stateView.ids.sort(), [`second-${role}-a`, `second-${role}-b`], label);
+          assert.deepEqual(stateView.modes, [mode, mode], label); assert.deepEqual(stateView.selected, stateView.ids.sort(), label);
+          assert.equal(stateView.roleMode, mode, label); assert.equal(stateView.timerCount, 1, label);
+          assert.notDeepEqual(stateView.on, stateView.off, `${label}: actual range overlay blinks`); assert.deepEqual(stateView.off, [255, 255, 255, 255], `${label}: off phase shows the source`);
+          assert.equal(await bulk.getAttribute("aria-pressed"), "true", label);
+        };
+        await page.locator("#nextImageButton").click(); await page.waitForFunction(() => state.currentId === "second" && !currentImageActionPending()); await assertDestination();
+        await page.locator("#previousImageButton").click(); await page.waitForFunction(() => state.currentId === "first" && !currentImageActionPending());
+        assert.equal(await page.evaluate(role => state.blinkRoleModes.get(role), role), mode, `${label}: previous keeps the selected mode`);
+        await page.locator("#nextImageButton").click(); await page.waitForFunction(() => state.currentId === "second" && !currentImageActionPending()); await assertDestination();
+        await bulk.click(); await page.locator("#previousImageButton").click(); await page.waitForFunction(() => state.currentId === "first" && !currentImageActionPending());
+        assert.equal(await page.evaluate(role => state.blinkRoleModes.has(role), role), false, `${label}: explicit bulk OFF is retained`);
+        await page.locator("#nextImageButton").click(); await page.waitForFunction(() => state.currentId === "second" && !currentImageActionPending());
+        assert.equal(await page.evaluate(() => state.blinkCandidateIds.size), 0, label); assert.equal(await page.evaluate(() => window.rangeTimerCount()), 0, label);
+        await page.locator(`[data-candidate-blink-id="second-${role}-a"] .candidate-display-toggle`).click();
+        await page.locator("#previousImageButton").click(); await page.waitForFunction(() => state.currentId === "first" && !currentImageActionPending());
+        assert.equal(await page.evaluate(() => state.blinkCandidateIds.size), 0, `${label}: individual-only selections never carry over`);
+        assert.deepEqual(errors, [], label);
+        if (process.env.MOZARIE_JS_COVERAGE === "1" && process.env.MOZARIE_BROWSER_COVERAGE_FILE) await require("../test_import_picker_e2e.cjs").appendBrowserCoverage(process.env.MOZARIE_BROWSER_COVERAGE_FILE, await page.coverage.stopJSCoverage());
+      } finally { await context.close(); }
+    }
+  } finally { await browser.close(); await closeServer(fixture.server); }
+});

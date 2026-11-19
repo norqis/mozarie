@@ -35,7 +35,8 @@
     "parallelism": 3
   },
   "editing": {
-    "fill_color_tolerance": 20
+    "fill_color_tolerance": 20,
+    "area_replace_existing": false
   },
   "detection": {
     "mode": "standard",
@@ -75,6 +76,10 @@
       "cycleExclusionTool": "W",
       "mosaicBrush": "B",
       "mosaicFill": "K",
+      "mosaicAreaBucket": "Alt+K",
+      "mosaicEnclose": "Alt+P",
+      "exclusionAreaBucket": "Shift+Alt+K",
+      "exclusionEnclose": "Shift+Alt+P",
       "mosaicEraser": "E",
       "boundaryMenu": "T",
       "boundaryRectangle": "R",
@@ -94,7 +99,7 @@
       "exclusionDetectionRanges": "Shift+D",
       "exclusionAppliedRanges": "Shift+F"
     },
-    "actions": {"previous": true, "next": true, "previousVisible": true, "nextVisible": true, "first": true, "last": true, "reviewAndNext": true, "removeImage": true, "toggleOverview": true, "undo": true, "redo": true, "renameImage": true, "cycleMosaicTool": true, "cycleExclusionTool": true, "mosaicBrush": true, "mosaicFill": true, "mosaicEraser": true, "boundaryMenu": true, "boundaryRectangle": true, "boundaryPolygon": true, "boundaryBrush": true, "exclusionBrush": true, "exclusionFill": true, "exclusionEraser": true, "singleView": true, "compareView": true, "fitView": true, "flipHorizontal": true, "flipVertical": true, "mosaicPreview": true, "mosaicDetectionRanges": true, "mosaicAppliedRanges": true, "exclusionDetectionRanges": true, "exclusionAppliedRanges": true}
+    "actions": {"previous": true, "next": true, "previousVisible": true, "nextVisible": true, "first": true, "last": true, "reviewAndNext": true, "removeImage": true, "toggleOverview": true, "undo": true, "redo": true, "renameImage": true, "cycleMosaicTool": true, "cycleExclusionTool": true, "mosaicBrush": true, "mosaicFill": true, "mosaicAreaBucket": true, "mosaicEnclose": true, "exclusionAreaBucket": true, "exclusionEnclose": true, "mosaicEraser": true, "boundaryMenu": true, "boundaryRectangle": true, "boundaryPolygon": true, "boundaryBrush": true, "exclusionBrush": true, "exclusionFill": true, "exclusionEraser": true, "singleView": true, "compareView": true, "fitView": true, "flipHorizontal": true, "flipVertical": true, "mosaicPreview": true, "mosaicDetectionRanges": true, "mosaicAppliedRanges": true, "exclusionDetectionRanges": true, "exclusionAppliedRanges": true}
   },
   "confirmations": {
     "clearMasks": true,

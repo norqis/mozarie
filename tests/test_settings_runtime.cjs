@@ -78,6 +78,7 @@ const context = {
   pickOutputDirectory: async () => "", api: async () => ({ settings: { general: { language: "ja", shortcuts_enabled: true }, display: { mosaic_preview: true } }, version: "v1" }), clearInterval() {}, setInterval() { return 1; },
   confirmAction: async () => true,
 };
+vm.runInNewContext(fs.readFileSync(path.join(__dirname, "..", "static", "js", "area-fill.js"), "utf8"), context, { filename: "area-fill.js" });
 vm.runInNewContext(source, context, { filename: settingsPath });
 vm.runInNewContext("globalThis.settingsTest={renderModelStatus,renderSamVariantStatuses,selectedSamType,selectSamVariant,selectSettingsTab,moveSettingsTab,setToolRailTabStop,renderSettingsStatus,setSettingsForm,settingsPayload,openSettings,saveSettings,resetSettings,chooseSettingsOutputDirectory,chooseSettingsModelFile,handleToolRailKeydown,modelDownloadInput,renderModelDownload,refreshModelDownload,refreshSettingsStatus,showUnsupportedModelDownload,modelDownloadConfirmation,startModelDownload,beginModelDownload,cancelModelDownload,checkForUpdate,startUpdate,samTypeFromPath,shortcutFromEvent,gpuMemoryLabel,modelCardEnabled,setHandSegmentationAvailable,setPrecisionDetectionEnabled,setFluidExclusionEnabled,setFillColorTolerance,saveFillColorTolerance,isWindowsAbsoluteSettingsPath,validateAbsoluteSettingsPaths};", context, { filename: "test-settings-exports.js" });
 
@@ -221,9 +222,17 @@ nodeTest("settings, model pickers, and download state", async () => {
   context.settingsTest.handleToolRailKeydown(railEvent);
   assert.equal(context.focused, element("#bucketTool"), "right arrow follows the mosaic toolbar order");
   context.settingsTest.handleToolRailKeydown({ target: element("#bucketTool"), key: "ArrowRight", preventDefault() {} });
-  assert.equal(context.focused, element("#mosaicEraserTool"), "fill precedes the mosaic eraser in the roving toolbar order");
+  assert.equal(context.focused, element("#mosaicAreaBucketTool"), "color fill precedes the enclosed-area bucket in the roving toolbar order");
+  context.settingsTest.handleToolRailKeydown({ key: "ArrowRight", target: element("#mosaicAreaBucketTool"), preventDefault() {} });
+  assert.equal(context.focused, element("#mosaicEncloseTool"));
+  context.settingsTest.handleToolRailKeydown({ key: "ArrowRight", target: element("#mosaicEncloseTool"), preventDefault() {} });
+  assert.equal(context.focused, element("#mosaicEraserTool"));
   context.settingsTest.handleToolRailKeydown({ target: element("#excludeBucketTool"), key: "ArrowRight", preventDefault() {} });
-  assert.equal(context.focused, element("#excludeEraserTool"), "exclude fill precedes the exclusion eraser in the roving toolbar order");
+  assert.equal(context.focused, element("#excludeAreaBucketTool"), "exclusion color fill precedes its enclosed-area bucket");
+  context.settingsTest.handleToolRailKeydown({ key: "ArrowRight", target: element("#excludeAreaBucketTool"), preventDefault() {} });
+  assert.equal(context.focused, element("#excludeEncloseTool"));
+  context.settingsTest.handleToolRailKeydown({ key: "ArrowRight", target: element("#excludeEncloseTool"), preventDefault() {} });
+  assert.equal(context.focused, element("#excludeEraserTool"));
   context.settingsTest.handleToolRailKeydown({ target: element("#eraserTool"), key: "ArrowLeft", preventDefault() {} });
   context.settingsTest.handleToolRailKeydown({ target: element("#eraserTool"), key: "Home", preventDefault() {} });
   context.settingsTest.handleToolRailKeydown({ target: element("#eraserTool"), key: "End", preventDefault() {} });

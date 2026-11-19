@@ -257,6 +257,9 @@ test("unnamed browser workspace promotion keeps its actual directory and browser
     setSnapshot(() => ({ ...snapshot(), project: null, workspace: true, workspaceId, historyDurable: true, sources: [], needsSource: false }));
     await page.locator("#pickFolder").click(); await page.locator("#pickFolderFiles").click();
     await page.waitForFunction((id) => state.project === null && state.workspaceId === id && state.images.length === 3 && !state.importing, workspaceId);
+    await page.locator("#projectNameDialog").waitFor({ state: "visible" });
+    await page.locator("#projectNameCancel").click();
+    assert.equal(await page.locator("#projectNameDialog").evaluate((dialog) => dialog.open), false, "declining the first-import suggestion keeps the workspace available for the later explicit promotion");
     await page.evaluate(async () => {
       const root = await navigator.storage.getDirectory();
       const handle = await root.getFileHandle("picked-file.png", { create: true });

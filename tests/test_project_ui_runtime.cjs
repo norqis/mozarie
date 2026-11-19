@@ -111,6 +111,7 @@ const appPath = path.join(__dirname, "..", "static", "js", "app.js");
 const corePath = path.join(__dirname, "..", "static", "js", "core.js");
 const imageDisplayPathSource = fs.readFileSync(corePath, "utf8").match(/function imageDisplayPath\(image\) \{[\s\S]*?\n\}/)?.[0];
 vm.runInNewContext(imageDisplayPathSource, context, { filename: corePath });
+vm.runInNewContext(fs.readFileSync(path.join(__dirname, "..", "static", "js", "import-project-prompt.js"), "utf8"), context, { filename: "import-project-prompt.js" });
 vm.runInNewContext(fs.readFileSync(appPath, "utf8"), context, { filename: appPath });
 vm.runInNewContext("globalThis.projectTest={projectTitle,projectDate,projectSource,renderProjectCurrent,renderNativeRelinkDialog,showSameSourceDialog,openProjectNameDialog,showProjectList,showSourceMismatches,openProject,downloadProjectArtifact,downloadProjectMasks,renderProjectTableControls,resumeCurrentProject,openSameSourceDialog,openProjectDeleteDialog,deleteProject,bindEvents,restoreBrowserProjectSourcesForCurrentCatalog,setPendingBrowserProjectSources:(sources)=>{ pendingBrowserProjectSources=sources; },pendingBrowserProjectSources:()=>pendingBrowserProjectSources};", context, { filename: "project-ui-exports.js" });
 const test = context.projectTest;

@@ -126,6 +126,8 @@ const context = {
   isGestureActive: () => gesture, moveCurrentBy: () => {}, setViewMode: (mode) => { state.viewMode = mode; }, reviewAndMoveNext: () => {}, hasDurableHistory: () => false, restoreProjectHistory: () => {}, restoreSnapshot: () => {},
 };
 
+vm.runInNewContext(fs.readFileSync(path.join(__dirname, "..", "..", "static", "js", "import-project-prompt.js"), "utf8"), context, { filename: "import-project-prompt.js" });
+vm.runInNewContext(fs.readFileSync(path.join(__dirname, "..", "..", "static", "js", "area-fill.js"), "utf8"), context, { filename: "area-fill.js" });
 const interactionPath = path.join(__dirname, "..", "..", "static", "js", "interaction.js");
 const source = fs.readFileSync(interactionPath, "utf8");
 vm.runInNewContext(source, context, { filename: interactionPath });

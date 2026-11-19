@@ -1475,6 +1475,7 @@ function renderNow() {
   }
   drawBoundaryRoi();
   drawPolygonBoundary();
+  drawAreaEnclosure();
   updateBrushCursor();
   updateBoundaryActions();
 }

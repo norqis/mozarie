@@ -29,7 +29,7 @@ const state = {
   galleryCollapsed: false, inspectorCollapsed: false,
   settings: null, settingsStatus: null, jobPollTimer: null,
   imageCache: null, candidateBundleCache: null, catalogLoadControllers: new Set(), resourceImageKeys: new Set(), resourceCandidateKeys: new Set(), hoverPrefetchId: null,
-  fillWorker: null, fillPending: false,
+  fillWorker: null, fillPending: false, areaFill: null, areaFillOperation: null,
   project: null, projectReadOnly: false, projectHistory: new Map(), projectHistoryBusy: false, projectOperationPending: false,
   missingNativeSources: [],
   renderFrame: 0,
@@ -94,6 +94,7 @@ const USER_ERROR_CODES = {
   clipboard_write_failed: "clipboard_write_failed",
   workspace_corrupt: "workspace_corrupt", workspace_write_failed: "workspace_write_failed", workspace_database_error: "workspace_write_failed",
   manual_revision_conflict: "manual_revision_conflict",
+  candidate_revision_conflict: "candidate_revision_conflict",
   output_unavailable: "output_folder_unavailable", model_not_configured: "model_not_configured",
   directory_picker_unsupported: "directory_picker_unsupported", output_name_exhausted: "output_name_exhausted",
   model_file_missing: "model_file_missing", model_file_invalid: "model_file_invalid", model_load_failed: "model_load_failed", sam_checkpoint_missing: "sam_checkpoint_missing",
@@ -667,6 +668,8 @@ function abortCatalogLoads() {
   state.imageInflight.clear(); state.candidateInflight.clear();
 }
 function cancelFillWork() {
+  if (typeof cancelAreaFill === "function" && state.areaFillOperation?.phase === "committing") return;
+  if (typeof cancelAreaFill === "function") cancelAreaFill();
   state.fillWorker?.terminate?.(); state.fillWorker = null; state.fillPending = false;
   renderCandidates(); updateActionButtons();
 }
@@ -932,7 +935,7 @@ function updateActionButtons() {
   const currentSaveDisabled = busyLocked || mutationLocked || catalogStaging || switchingImages || mutatingCandidates || !currentProcessable;
   $("#saveButton").disabled = currentSaveDisabled;
   const editorControlsLocked = busyLocked || mutationLocked || switchingImages || (Boolean(state.currentId) && !currentProcessable);
-  for (const control of document.querySelectorAll("[data-toolbar-item]:not(#singleViewButton):not(#compareViewButton):not(#fitButton):not(#mosaicPreviewButton), #rectangleTool, #polygonTool, #boundaryBrushTool, #brushSize, #bucketTolerance, #bucketToleranceDecrease, #bucketToleranceIncrease")) {
+  for (const control of document.querySelectorAll("[data-toolbar-item]:not(#singleViewButton):not(#compareViewButton):not(#fitButton):not(#mosaicPreviewButton), #rectangleTool, #polygonTool, #boundaryBrushTool, #brushSize, #bucketTolerance, #bucketToleranceDecrease, #bucketToleranceIncrease, #areaReplaceExisting")) {
     if (editorControlsLocked && !control.disabled) { control.dataset.disabledByLock = "true"; control.disabled = true; }
     else if (!currentProcessable && !control.disabled) { control.dataset.disabledByEmptyEditor = "true"; control.disabled = true; }
   }
@@ -1158,6 +1161,9 @@ async function loadFolder({ skipSameSourceWarning = false, path: suppliedPath = 
   if (!skipSameSourceWarning && typeof openSameSourceDialog === "function" && await openSameSourceDialog(path)) return;
   const picker = $("#pickerMenu");
   if (picker?.matches?.(":popover-open")) picker.hidePopover();
+  const projectSuggestion = captureProjectImportSuggestion();
+  let importSucceeded = false;
+  let importedRoot = path;
   try {
     await runCatalogTransition(async ({ epoch, signal }) => {
       ++state.imageGeneration;
@@ -1167,6 +1173,8 @@ async function loadFolder({ skipSameSourceWarning = false, path: suppliedPath = 
       const data = await catalogApi("/api/folder", { path }, { method: "POST", signal, resyncOnFailure: false });
       if (!isCurrentCatalogEpoch(epoch)) return;
       resetCatalog(data.images || [], data.root || path);
+      importedRoot = data.root || path;
+      importSucceeded = true;
       applyProjectSnapshot(data);
       state.missingNativeSources = typeof missingNativeSources === "function" ? missingNativeSources(data.sources) : [];
       if (typeof restoreBrowserProjectSourcesForCurrentCatalog === "function") void restoreBrowserProjectSourcesForCurrentCatalog(data.sources).catch(() => {});
@@ -1174,6 +1182,7 @@ async function loadFolder({ skipSameSourceWarning = false, path: suppliedPath = 
       showImportFailures(data.importFailures, state.images.length, $("loadFolderButton"));
       if (typeof showSourceMismatches === "function") await showSourceMismatches();
     }, { allowEdits: true, allowNested: allowDuringCatalogTransition });
+    completeProjectImportSuggestion(projectSuggestion, importedRoot.replace(/[\\/]+$/, "").split(/[\\/]/).pop(), importSucceeded);
   } catch (error) {
     if (Array.isArray(error?.params?.failures)) showImportFailures(error.params.failures, 0, $("loadFolderButton"));
     else showUserError(error);

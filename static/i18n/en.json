@@ -1,4 +1,7 @@
 {
+  "project.importCreateTitle": "Create a new project?",
+  "project.importDoNotCreate": "Do not create",
+  "project.importCreate": "Create",
   "detectDialog.preparing": "Preparing settings and target images…",
   "detectDialog.catalogChanged": "The image list has changed. Close and reopen these settings.",
   "errorCode.output_files_exist": "Files outside this save selection already use the output names.",
@@ -156,10 +159,10 @@
   "editor.eraser": "Exclude brush",
   "editor.excludeEraser": "Exclusion eraser",
   "editor.mosaicEraser": "Mosaic eraser",
-  "editor.mosaicFill": "Mosaic fill",
+  "editor.mosaicFill": "Mosaic by color",
   "editor.mosaicTools": "Mosaic editing",
   "editor.exclusionTools": "Exclusion editing",
-  "editor.excludeFill": "Exclude fill",
+  "editor.excludeFill": "Exclude by color",
   "editor.fit": "Fit",
   "editor.flipHorizontal": "Flip horizontally",
   "editor.flipVertical": "Flip vertically",
@@ -877,5 +880,14 @@
   "errorDialog.numbering_limit.cause": "There are {count} images.",
   "errorDialog.numbering_limit.action": "Select at most 99,999 images or disable numbering.",
   "overview.smaller": "Smaller gallery images",
-  "overview.larger": "Larger gallery images"
+  "overview.larger": "Larger gallery images",
+  "editor.mosaicAreaBucket": "Fill mosaic hole",
+  "editor.mosaicEnclose": "Enclose and mosaic",
+  "editor.excludeAreaBucket": "Fill exclusion hole",
+  "editor.excludeEnclose": "Enclose and exclude",
+  "editor.areaReplaceExisting": "Replace existing edits inside the area",
+  "editor.areaNotClosed": "The area is not enclosed",
+  "errorDialog.candidate_revision_conflict.title": "Candidates have changed",
+  "errorDialog.candidate_revision_conflict.cause": "The saved candidates changed during another operation. The fill was not applied.",
+  "errorDialog.candidate_revision_conflict.action": "Select the image again to load its latest candidates, then try again."
 }

@@ -494,3 +494,7 @@ img { -webkit-user-drag: none; }
 .overview-grid.reorder-dragging { cursor: grabbing; }
 .numbering-options { display: flex; gap: 8px; align-items: center; }
 .numbering-options input { width: 72px; }
+
+.tool-icon-area-bucket svg, .tool-icon-enclose svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linejoin: round; stroke-linecap: round; }
+.area-fill-options { display: flex; align-items: center; gap: 6px; font-size: 12px; white-space: nowrap; }
+.area-fill-options[hidden] { display: none; }
