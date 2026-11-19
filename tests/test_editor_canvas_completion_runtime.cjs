@@ -87,6 +87,7 @@ const context = {
   resetHistoryToCurrentManualMask() {}, rebuildManualMaskFromHistory() {}, renderCatalogViews() {},
 };
 
+vm.runInNewContext(fs.readFileSync(path.join(__dirname, "..", "static", "js", "area-fill.js"), "utf8"), context, { filename: "area-fill.js" });
 const canvasPath = path.join(__dirname, "..", "static", "js", "editor-canvas.js");
 const source = fs.readFileSync(canvasPath, "utf8");
 vm.runInNewContext(source, context, { filename: canvasPath });

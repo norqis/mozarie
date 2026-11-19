@@ -126,7 +126,7 @@ function setFluidExclusionEnabled(enabled) {
   if (stateLabel) stateLabel.textContent = t(enabled ? "settings.on" : "settings.off");
 }
 
-function toolRailItems() { return ["#brushTool", "#bucketTool", "#mosaicEraserTool", "#boundaryTool", "#eraserTool", "#excludeBucketTool", "#excludeEraserTool", "#singleViewButton", "#compareViewButton", "#fitButton", "#undoButton", "#redoButton", "#flipHorizontalButton", "#flipVerticalButton", "#mosaicPreviewButton"].map($); }
+function toolRailItems() { return ["#brushTool", "#bucketTool", "#mosaicAreaBucketTool", "#mosaicEncloseTool", "#mosaicEraserTool", "#boundaryTool", "#eraserTool", "#excludeBucketTool", "#excludeAreaBucketTool", "#excludeEncloseTool", "#excludeEraserTool", "#singleViewButton", "#compareViewButton", "#fitButton", "#undoButton", "#redoButton", "#flipHorizontalButton", "#flipVerticalButton", "#mosaicPreviewButton"].map($); }
 
 function setToolRailTabStop(activeItem = null) {
   const items = toolRailItems().filter((item) => !item.disabled);
@@ -239,12 +239,14 @@ function setSettingsForm(settings, status = null) {
   $("#confirmOverwriteSource").checked = settings.confirmations?.overwriteSource !== false;
   $("#confirmDeleteSourceAfterCopy").checked = settings.confirmations?.deleteSourceAfterCopy !== false;
   renderShortcutBindings(settings.shortcuts?.bindings || {}, settings.shortcuts?.actions || {});
+  syncAreaFillOptions();
   renderSettingsStatus(status || state.settingsStatus, settings.models.gpu_device);
 }
 
 const SHORTCUT_LABELS = { previous: "settings.shortcut.previous", next: "settings.shortcut.next", previousVisible: "settings.shortcut.previousVisible", nextVisible: "settings.shortcut.nextVisible", first: "settings.shortcut.first", last: "settings.shortcut.last", reviewAndNext: "settings.shortcut.reviewAndNext", removeImage: "settings.shortcut.removeImage", renameImage: "settings.shortcut.renameImage", toggleOverview: "settings.shortcut.toggleOverview", undo: "settings.shortcut.undo", redo: "settings.shortcut.redo" };
 Object.assign(SHORTCUT_LABELS, {
   cycleMosaicTool: "settings.shortcut.cycleMosaicTool", cycleExclusionTool: "settings.shortcut.cycleExclusionTool",
+  mosaicAreaBucket: "editor.mosaicAreaBucket", mosaicEnclose: "editor.mosaicEnclose", exclusionAreaBucket: "editor.excludeAreaBucket", exclusionEnclose: "editor.excludeEnclose",
   mosaicBrush: "editor.brush", mosaicFill: "editor.mosaicFill", mosaicEraser: "editor.mosaicEraser",
   boundaryMenu: "editor.boundary", boundaryRectangle: "boundary.rectangle", boundaryPolygon: "boundary.polygon", boundaryBrush: "boundary.brush",
   exclusionBrush: "editor.eraser", exclusionFill: "editor.excludeFill", exclusionEraser: "editor.excludeEraser",
@@ -296,6 +298,8 @@ function setFillColorTolerance(value) {
 
 let fillToleranceMutation = Promise.resolve();
 let fillToleranceVersion = 0;
+let fillTolerancePending = 0;
+let fillToleranceSaved = 0;
 
 async function saveFillColorTolerance() {
   const input = $("#bucketTolerance");
@@ -303,20 +307,26 @@ async function saveFillColorTolerance() {
   const tolerance = Math.max(0, Math.min(255, Math.round(Number(input.value))));
   setFillColorTolerance(tolerance);
   if (tolerance === previous) return;
+  if (!fillTolerancePending) fillToleranceSaved = previous;
+  fillTolerancePending++;
   state.settings.editing.fill_color_tolerance = tolerance;
   const version = ++fillToleranceVersion;
-  const save = fillToleranceMutation.then(async () => api("/api/settings?status=0", { method: "POST", body: JSON.stringify({ editing: { fill_color_tolerance: tolerance } }) }));
+  const save = fillToleranceMutation.then(async () => {
+    const data = await api("/api/settings?status=0", { method: "POST", body: JSON.stringify({ editing: { fill_color_tolerance: tolerance } }) });
+    fillToleranceSaved = data.settings.editing.fill_color_tolerance;
+    return data;
+  });
   fillToleranceMutation = save.catch(() => {});
   try {
     const data = await save;
-    if (version === fillToleranceVersion) { state.settings = data.settings; setFillColorTolerance(data.settings.editing.fill_color_tolerance); }
+    if (version === fillToleranceVersion) { state.settings.editing.fill_color_tolerance = data.settings.editing.fill_color_tolerance; setFillColorTolerance(data.settings.editing.fill_color_tolerance); }
   } catch (error) {
     if (version === fillToleranceVersion) {
-      state.settings.editing.fill_color_tolerance = previous;
-      setFillColorTolerance(previous);
+      state.settings.editing.fill_color_tolerance = fillToleranceSaved;
+      setFillColorTolerance(fillToleranceSaved);
       showUserError(error, input);
     }
-  }
+  } finally { fillTolerancePending--; }
 }
 
 function settingsPayload() {

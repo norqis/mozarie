@@ -7,7 +7,7 @@
   },
   "baseline": {
     "rows": 138,
-    "observations": 237
+    "observations": 239
   },
   "observations": [
     {
@@ -2733,6 +2733,37 @@
       "status": "automated",
       "testIds": [
         "node:tests/gallery/test_overview_size_e2e.cjs::overview size buttons preserve virtual scrolling selection reorder and keyboard operation"
+      ]
+    },
+    {
+      "key": "WS-012.2",
+      "sourceIds": [
+        "WS-012"
+      ],
+      "observation": "画像0枚・プロジェクトなしからのユーザー読込成功後だけ作成確認を1回表示し、取得できる元フォルダー末尾名を入力する。取消・Esc・全失敗・0件・既存一覧への追加では画像を失わない。",
+      "status": "automated",
+      "testIds": [
+        "node:tests/projects/test_first_import_project_prompt_e2e.cjs::first import cancel and Escape keep images while later additions and empty loads do not prompt",
+        "node:tests/projects/test_first_import_project_prompt_e2e.cjs::picker and drop entrypoints offer one prompt with only genuine folder names",
+        "node:tests/projects/test_first_import_project_prompt_e2e.cjs::partial import failures precede the project prompt and stale catalogs discard it",
+        "python:tests.test_first_import_project_live_browser.LiveFirstImportProjectBrowserTests.test_declining_first_import_project_creation_keeps_the_unnamed_images",
+        "python:tests.test_first_import_project_live_browser.LiveFirstImportProjectBrowserTests.test_escape_from_first_import_project_creation_keeps_the_unnamed_images",
+        "node:tests/projects/test_first_import_project_prompt_e2e.cjs::a successful upload followed by a batch failure offers project creation after the error closes"
+      ]
+    },
+    {
+      "key": "WS-011.3",
+      "sourceIds": [
+        "WS-011"
+      ],
+      "observation": "読込後の作成確認は同じ無名workspaceをプロジェクトへ昇格し画像ID・画像・編集・履歴を保持する。作成失敗時は名前と画像を保って再試行し、既存プロジェクトを離脱しない。",
+      "status": "automated",
+      "testIds": [
+        "node:tests/projects/test_first_import_project_prompt_e2e.cjs::first path import offers project creation and preserves the imported workspace through retry and reload",
+        "node:tests/projects/test_first_import_project_prompt_e2e.cjs::project suggestion survives same-catalog visibility refresh but rejects replaced images",
+        "python:tests.test_first_import_project_live_browser.LiveFirstImportProjectBrowserTests.test_native_first_import_promotes_the_existing_workspace_and_restores_masks_history_and_sources",
+        "python:tests.test_first_import_project_live_browser.LiveFirstImportProjectBrowserTests.test_real_file_picker_handles_survive_first_import_project_promotion_and_reopen",
+        "python:tests.test_first_import_project_live_browser.LiveFirstImportProjectBrowserTests.test_real_directory_picker_handle_survives_first_import_project_promotion_and_reopen"
       ]
     }
   ]

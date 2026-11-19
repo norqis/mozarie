@@ -2021,8 +2021,8 @@ async function assertToolRailLayout(page, position) {
   assert.equal(overlaps(boxes.rail, boxes.settings), true, "tool settings are integrated into the top editor toolbar");
   assert.equal(overlaps(boxes.rail, boxes.navigation), false, `${position} rail must not overlap image navigation`);
   assert.ok(boxes.rail.y <= boxes.settings.y, "toolbar is fixed at the editor top");
-  assert.deepEqual(boxes.mosaicTools, ["brushTool", "bucketTool", "mosaicEraserTool"], "mosaic tools keep brush, fill, eraser order");
-  assert.deepEqual(boxes.exclusionTools, ["eraserTool", "excludeBucketTool", "excludeEraserTool"], "exclusion tools keep brush, fill, eraser order");
+  assert.deepEqual(boxes.mosaicTools, ["brushTool", "bucketTool", "mosaicAreaBucketTool", "mosaicEncloseTool", "mosaicEraserTool"], "mosaic tools keep brush, color fill, enclosed fill, enclosure, eraser order");
+  assert.deepEqual(boxes.exclusionTools, ["eraserTool", "excludeBucketTool", "excludeAreaBucketTool", "excludeEncloseTool", "excludeEraserTool"], "exclusion tools use the same brush and fill order");
   await page.locator("#boundaryTool").click();
   const menu = await page.locator("#boundaryModeMenu").evaluate((element) => {
     const box = element.getBoundingClientRect();
@@ -3844,10 +3844,10 @@ async function main() {
       const rect = button.getBoundingClientRect(); return rect.width === 28 && rect.height === 28;
     })), true, "all model help buttons, including SAM type, share the compact 28px target");
     await page.locator("#settingsTabShortcuts").click();
-    assert.equal(await page.locator("#shortcutBindings > .form-row").evaluateAll((rows) => rows.length === 34 && rows.every((row) => {
+    assert.equal(await page.locator("#shortcutBindings > .form-row").evaluateAll((rows, expectedCount) => rows.length === expectedCount && rows.every((row) => {
       const children = [...row.children];
       return children.length === 3 && children.every((child) => Math.abs((child.getBoundingClientRect().y + child.getBoundingClientRect().height / 2) - (row.getBoundingClientRect().y + row.getBoundingClientRect().height / 2)) < 2);
-    })), true, "all shortcut bindings keep one three-column row");
+    }), Object.keys(shortcutDefaults.bindings).length), true, "all shortcut bindings keep one three-column row");
     await page.locator("#settingsTabInfo").click();
     const versionRow = await page.evaluate(() => {
       const version = document.querySelector("#settingsVersion").getBoundingClientRect();

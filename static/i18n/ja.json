@@ -1,4 +1,7 @@
 {
+  "project.importCreateTitle": "新規プロジェクトを作成しますか？",
+  "project.importDoNotCreate": "作成しない",
+  "project.importCreate": "作成する",
   "detectDialog.preparing": "設定と対象画像を準備しています…",
   "detectDialog.catalogChanged": "画像一覧が変更されました。設定を閉じて、もう一度開いてください。",
   "errorCode.output_files_exist": "保存対象ではない同名ファイルが存在します。",
@@ -75,10 +78,10 @@
   "editor.eraser": "除外ブラシ",
   "editor.excludeEraser": "除外消しゴム",
   "editor.mosaicEraser": "モザイク消しゴム",
-  "editor.mosaicFill": "モザイク塗りつぶし",
+  "editor.mosaicFill": "モザイクを色で塗りつぶし",
   "editor.mosaicTools": "モザイク編集",
   "editor.exclusionTools": "除外編集",
-  "editor.excludeFill": "除外塗りつぶし",
+  "editor.excludeFill": "除外を色で塗りつぶし",
   "editor.boundary": "境界",
   "editor.fit": "全体表示",
   "editor.flipHorizontal": "左右反転",
@@ -877,5 +880,14 @@
   "errorDialog.numbering_limit.cause": "対象が{count}枚あります。",
   "errorDialog.numbering_limit.action": "対象を99,999枚以下に絞るか、連番をオフにしてください。",
   "overview.smaller": "一覧画像を縮小",
-  "overview.larger": "一覧画像を拡大"
+  "overview.larger": "一覧画像を拡大",
+  "editor.mosaicAreaBucket": "モザイクの穴を埋める",
+  "editor.mosaicEnclose": "囲んでモザイク",
+  "editor.excludeAreaBucket": "除外の穴を埋める",
+  "editor.excludeEnclose": "囲んで除外",
+  "editor.areaReplaceExisting": "範囲内の既存処理を置き換える",
+  "editor.areaNotClosed": "範囲が閉じていません",
+  "errorDialog.candidate_revision_conflict.title": "候補が変更されています",
+  "errorDialog.candidate_revision_conflict.cause": "保存済みの候補が別の操作で変更されたため、塗りつぶしを適用しませんでした。",
+  "errorDialog.candidate_revision_conflict.action": "画像を選び直して最新の候補を表示し、もう一度実行してください。"
 }

@@ -73,7 +73,7 @@ const context = {
   api: async () => ({ settings: state.settings }), showModalFromInvoker() {}, showUserError(error) { userErrors.push(error); },
 };
 
-for (const sourcePath of [canvasPath, masksPath, interactionPath]) {
+for (const sourcePath of [path.join(root, "static", "js", "import-project-prompt.js"), path.join(root, "static", "js", "area-fill.js"), canvasPath, masksPath, interactionPath]) {
   vm.runInNewContext(fs.readFileSync(sourcePath, "utf8"), context, { filename: sourcePath });
 }
 vm.runInNewContext(`globalThis.editorTest = {

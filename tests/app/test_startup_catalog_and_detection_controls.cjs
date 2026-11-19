@@ -150,6 +150,7 @@ async function testBoundApplicationEvents() {
   assert.ok(keyboardTargetHelpers, "the event fixture loads the product dialog and editable-target helpers");
   vm.runInNewContext(keyboardTargetHelpers, context, { filename: path.join(jsRoot, "core.js") });
   const source = fs.readFileSync(path.join(jsRoot, "app.js"), "utf8");
+  vm.runInNewContext(fs.readFileSync(path.join(jsRoot, "area-fill.js"), "utf8"), context, { filename: "area-fill.js" });
   vm.runInNewContext(source, context, { filename: path.join(jsRoot, "app.js") });
   vm.runInNewContext("globalThis.appEvents={ bindEvents };", context, { filename: "test-app-events-exports.js" });
   context.appEvents.bindEvents();
@@ -271,6 +272,7 @@ async function testApplicationStartupPaths() {
   assert.ok(epochHelper);
   vm.runInNewContext(epochHelper, context, { filename: path.join(jsRoot, "core.js") });
   const source = fs.readFileSync(path.join(jsRoot, "app.js"), "utf8");
+  vm.runInNewContext(fs.readFileSync(path.join(jsRoot, "area-fill.js"), "utf8"), context, { filename: "area-fill.js" });
   vm.runInNewContext(source, context, { filename: path.join(jsRoot, "app.js") });
   vm.runInNewContext("globalThis.appCoverage={ initialise, bindEvents };", context, { filename: "test-app-exports.js" });
 

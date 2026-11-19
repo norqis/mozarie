@@ -83,6 +83,7 @@ context.originalCanvas = canvas(); context.originalCtx = context.originalCanvas.
 context.mosaicCanvas = canvas(); context.mosaicCtx = context.mosaicCanvas.getContext("2d");
 context.historyAddCanvas = canvas(); context.historyExclusionCanvas = canvas(); context.historyExclusionEraseCanvas = canvas();
 
+vm.runInNewContext(fs.readFileSync(path.join(__dirname, "..", "static", "js", "area-fill.js"), "utf8"), context, { filename: "area-fill.js" });
 const canvasPath = path.join(__dirname, "..", "static", "js", "editor-canvas.js");
 const corePath = path.join(__dirname, "..", "static", "js", "core.js");
 const coreSource = fs.readFileSync(corePath, "utf8");

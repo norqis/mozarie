@@ -2029,7 +2029,7 @@ class WorkspaceStore:
     def _write_candidate_state_db(self, db: sqlite3.Connection, image_id: str, revision: int, candidates: list[Any], effective: bool,
                                   *, replace: bool, history_group: str | None = None, expected_revision: int | None = None,
                                   require_candidate_masks: bool = False, manual_flags: dict[str, bool] | None = None,
-                                  manual_revision: int | None = None) -> None:
+                                  manual_revision: int | None = None, record_history: bool = True) -> None:
         if expected_revision is not None:
             current = db.execute("SELECT candidate_revision FROM images WHERE image_id=?", (image_id,)).fetchone()
             if current is None or int(current["candidate_revision"]) != expected_revision:
@@ -2069,7 +2069,8 @@ class WorkspaceStore:
             assignments = ",".join(f"{columns[key]}=?" for key in manual_flags)
             db.execute(f"UPDATE manual_edits SET {assignments} WHERE image_id=?", (*map(int, manual_flags.values()), image_id))
             db.execute("UPDATE images SET manual_revision=? WHERE image_id=?", (manual_revision, image_id))
-        self._record_history_db(db, image_id, before, self._history_state_db(db, image_id), group_id=history_group)
+        if record_history:
+            self._record_history_db(db, image_id, before, self._history_state_db(db, image_id), group_id=history_group)
 
     def commit_candidate_role_state(self, image_id: str, revision: int, candidates: list[Any], effective: bool,
                                     manual_flags: dict[str, bool], expected_manual_revision: int) -> int:
@@ -2228,7 +2229,7 @@ class WorkspaceStore:
             raise ClientError("別の画面で手描きの編集内容が変更されました。", "manual_revision_conflict")
         return revision
 
-    def _save_manual_db(self, db: sqlite3.Connection, image_id: str, payload: dict[str, Any], decoder: Any) -> int:
+    def _save_manual_db(self, db: sqlite3.Connection, image_id: str, payload: dict[str, Any], decoder: Any, *, record_history: bool = True) -> int:
         manual_revision = self._manual_revision_db(db, image_id, payload.get("expectedManualRevision")) + 1
         removed = payload.get("removedCandidateIds", [])
         if not isinstance(removed, list) or any(not isinstance(item, str) for item in removed):
@@ -2291,10 +2292,30 @@ class WorkspaceStore:
                 exclusion_forced=excluded.exclusion_forced,removed_candidate_ids=excluded.removed_candidate_ids,candidate_revision=excluded.candidate_revision,has_effective_mask=excluded.has_effective_mask,history_json=excluded.history_json,updated_at=excluded.updated_at""",
             (image_id,layers["add"],layers["exclusion"],layers["erase"],int(payload.get("manualEnabled", True)),int(payload.get("manualExclusionEnabled", True)),int(payload.get("manualExclusionEraseEnabled", True)),int(payload.get("manualExclusionForced", True)),json.dumps(removed),revision,int(has_effective_mask),history_json,updated_at))
         db.execute("UPDATE images SET manual_revision=?,updated_at=? WHERE image_id=?", (manual_revision, updated_at, image_id))
-        self._record_history_db(db, image_id, before, self._history_state_db(db, image_id), manual_rois={
-            "add": rois.get("add"), "exclusion": rois.get("exclusion"), "erase": rois.get("exclusionErase"),
-        })
+        if record_history:
+            self._record_history_db(db, image_id, before, self._history_state_db(db, image_id), manual_rois={
+                "add": rois.get("add"), "exclusion": rois.get("exclusion"), "erase": rois.get("exclusionErase"),
+            })
         return manual_revision
+
+    def save_area_fill(self, image_id: str, candidates: list[Any], revision: int,
+                       expected_revision: int, payload: dict[str, Any], decoder: Any) -> int:
+        """Commit candidate cuts and the new manual fill as one undo operation."""
+        with self._lock, self._connect() as db:
+            db.execute("BEGIN IMMEDIATE")
+            try:
+                self._manual_revision_db(db, image_id, payload["expectedManualRevision"])
+                before = self._history_state_db(db, image_id)
+                self._write_candidate_state_db(db, image_id, revision, candidates, payload["hasEffectiveMask"],
+                                               replace=True, expected_revision=expected_revision,
+                                               require_candidate_masks=True, record_history=False)
+                manual_revision = self._save_manual_db(db, image_id, payload, decoder, record_history=False)
+                self._record_history_db(db, image_id, before, self._history_state_db(db, image_id))
+                db.execute("COMMIT")
+                return manual_revision
+            except Exception:
+                db.execute("ROLLBACK")
+                raise
 
     def save_manual(self, image_id: str, payload: dict[str, Any], decoder: Any) -> int:
         with self._lock, self._connect() as db:

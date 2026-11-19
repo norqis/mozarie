@@ -27,9 +27,9 @@ afterEach(async () => { await context.close(); });
 after(async () => { await browser.close(); await closeServer(fixture.server); });
 
 const tools = [
-  ["mosaicBrush", "brush", "brushTool"], ["mosaicFill", "bucket", "bucketTool"], ["mosaicEraser", "mosaic_eraser", "mosaicEraserTool"],
+  ["mosaicBrush", "brush", "brushTool"], ["mosaicFill", "bucket", "bucketTool"], ["mosaicAreaBucket", "area_bucket", "mosaicAreaBucketTool"], ["mosaicEnclose", "area_enclose", "mosaicEncloseTool"], ["mosaicEraser", "mosaic_eraser", "mosaicEraserTool"],
   ["boundaryRectangle", "boundary", "rectangleTool"], ["boundaryPolygon", "polygon", "polygonTool"], ["boundaryBrush", "boundary_brush", "boundaryBrushTool"],
-  ["exclusionBrush", "eraser", "eraserTool"], ["exclusionFill", "exclude_bucket", "excludeBucketTool"], ["exclusionEraser", "exclude_eraser", "excludeEraserTool"],
+  ["exclusionBrush", "eraser", "eraserTool"], ["exclusionFill", "exclude_bucket", "excludeBucketTool"], ["exclusionAreaBucket", "exclude_area_bucket", "excludeAreaBucketTool"], ["exclusionEnclose", "exclude_area_enclose", "excludeEncloseTool"], ["exclusionEraser", "exclude_eraser", "excludeEraserTool"],
 ];
 const keyFor = (action) => defaults.shortcuts.bindings[action].replace(/^Ctrl\+/, "Control+");
 async function pressTool(action, tool, id) {
@@ -45,11 +45,14 @@ async function closeSettings() {
 }
 
 test("toolbar shortcuts select every drawing mode and cycle each group in visible order", { timeout: 60000 }, async () => {
-  for (const entry of tools) await pressTool(...entry);
-  for (const entry of [...tools.slice(0, 6), tools[0]]) {
+  for (const entry of tools) {
+    if (defaults.shortcuts.bindings[entry[0]]) await pressTool(...entry);
+    else { await page.locator(`#${entry[2]}`).click(); assert.equal(await page.evaluate(() => state.tool), entry[1]); }
+  }
+  for (const entry of [...tools.slice(0, 8), tools[0]]) {
     await pressTool("cycleMosaicTool", entry[1], entry[2]);
   }
-  for (const entry of [...tools.slice(6), tools[6]]) {
+  for (const entry of [...tools.slice(8), tools[8]]) {
     await pressTool("cycleExclusionTool", entry[1], entry[2]);
   }
   // Both cross-group directions always start at the first brush.
@@ -112,7 +115,7 @@ test("toolbar shortcuts obey per-action global focus modal busy and disabled con
   const unchanged = await snapshot();
   for (const action of allNew) {
     await page.evaluate((action) => { state.settings.shortcuts.actions[action] = false; }, action);
-    await page.keyboard.press(keyFor(action));
+    if (defaults.shortcuts.bindings[action]) await page.keyboard.press(keyFor(action));
     assert.deepEqual(await snapshot(), unchanged, `${action} disabled`);
     await page.evaluate((action) => { state.settings.shortcuts.actions[action] = true; }, action);
   }
@@ -147,7 +150,7 @@ test("toolbar shortcuts obey per-action global focus modal busy and disabled con
 
 test("shortcut switches align after key inputs and preserve remapped disabled bindings after reload", { timeout: 60000 }, async () => {
   await page.locator("#settingsButton").click(); await page.locator("#settingsTabShortcuts").click();
-  assert.equal(await page.locator("[data-shortcut-action]").count(), 34);
+  assert.equal(await page.locator("[data-shortcut-action]").count(), 38);
   const layout = await page.locator("#shortcutBindings > .form-row").evaluateAll((rows) => rows.map((row) => {
     const input = row.querySelector("[data-shortcut-action]"); const toggle = row.querySelector(".shortcut-switch");
     return { right: input.getBoundingClientRect().right, switchLeft: toggle.getBoundingClientRect().left, switchRight: toggle.getBoundingClientRect().right, border: getComputedStyle(row).borderBottomWidth, background: getComputedStyle(row).backgroundColor, role: toggle.querySelector("input").getAttribute("role") };

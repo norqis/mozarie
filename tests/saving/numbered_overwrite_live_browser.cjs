@@ -26,9 +26,10 @@ const { waitForAppStartup } = require("../helpers/app_startup.cjs");
     const writeFailure = failure === "progress-write-failure";
     const failed = failure && failure !== "chain" && (!progressTest || writeFailure);
     if (browserSources) {
-      await page.evaluate(async ({ sources, mixed }) => {
+      const firstImport = await page.evaluate(async ({ sources, mixed }) => {
         if (!mixed) await api("/api/catalog/remove", { method: "POST", body: JSON.stringify({ imageIds: state.images.map((image) => image.id) }) });
         await syncCatalogOnReturn();
+        const firstImport = !state.project?.id && state.images.length === 0;
         const root = await navigator.storage.getDirectory();
         const files = []; const items = [];
         for (const [name, base64] of Object.entries(sources)) {
@@ -42,9 +43,14 @@ const { waitForAppStartup } = require("../helpers/app_startup.cjs");
         const event = new DragEvent("drop", { bubbles: true, cancelable: true });
         Object.defineProperty(event, "dataTransfer", { value: { types: ["Files"], files, items } });
         document.querySelector("#gallery").dispatchEvent(event);
+        return firstImport;
       }, { sources: browserSources, mixed: failure === "mixed-conflicts" });
       await page.waitForFunction((mixed) => !state.importing && state.images.length === (mixed ? 6 : 3)
         && state.images.filter((image) => image.sourceKind === "session").length === 3, failure === "mixed-conflicts");
+      if (firstImport) {
+        await page.locator("#projectNameDialog").waitFor({ state: "visible" });
+        await page.locator("#projectNameCancel").click();
+      }
     }
     if (failure === "mixed-conflicts") {
       let mutations = 0;

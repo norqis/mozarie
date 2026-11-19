@@ -7,7 +7,7 @@
   },
   "baseline": {
     "rows": 129,
-    "observations": 177
+    "observations": 182
   },
   "observations": [
     {
@@ -65,7 +65,9 @@
       "observation": "モザイク塗りつぶしで単色領域をクリック → クリック地点から連結する許容色領域だけを追加する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_editor_basic_tools_e2e.cjs::basic editor tools keep their pixel-layer contracts > ED-004 mosaic fill changes only the connected tolerated region"
+        "node:tests/test_editor_basic_tools_e2e.cjs::basic editor tools keep their pixel-layer contracts > ED-004 mosaic fill changes only the connected tolerated region",
+        "node:tests/editor/test_color_fill_connectivity_e2e.cjs::color buckets honor tolerance and four-neighbor connectivity for both manual roles",
+        "node:tests/editor/test_color_fill_connectivity_e2e.cjs::flipped compare-pane color fills select source pixels and keep masks after image navigation"
       ]
     },
     {
@@ -146,7 +148,8 @@
       "observation": "除外塗りつぶしで単色領域をクリック → 連結する許容色領域へ除外だけを追加する",
       "status": "automated",
       "testIds": [
-        "node:tests/test_editor_basic_tools_e2e.cjs::basic editor tools keep their pixel-layer contracts > ED-008 exclusion fill changes only the connected exclusion region"
+        "node:tests/test_editor_basic_tools_e2e.cjs::basic editor tools keep their pixel-layer contracts > ED-008 exclusion fill changes only the connected exclusion region",
+        "node:tests/editor/test_color_fill_connectivity_e2e.cjs::color buckets honor tolerance and four-neighbor connectivity for both manual roles"
       ]
     },
     {
@@ -157,7 +160,8 @@
       "observation": "モザイク塗りつぶしの許容値を小→大へ変え、Undoを挟み同じ点をクリック → 小さい値では色差の大きい隣接領域を含めず、大きい値では許容された隣接色まで広がる",
       "status": "automated",
       "testIds": [
-        "node:tests/test_editor_basic_tools_e2e.cjs::basic editor tools keep their pixel-layer contracts > ED-009 mosaic fill tolerance changes the connected result across undo"
+        "node:tests/test_editor_basic_tools_e2e.cjs::basic editor tools keep their pixel-layer contracts > ED-009 mosaic fill tolerance changes the connected result across undo",
+        "node:tests/editor/test_color_fill_connectivity_e2e.cjs::color buckets honor tolerance and four-neighbor connectivity for both manual roles"
       ]
     },
     {
@@ -168,7 +172,8 @@
       "observation": "除外塗りつぶしの許容値を小→大へ変え、Undoを挟み同じ点をクリック → 許容値に応じ除外だけが広がり、離れた同色領域は変わらない",
       "status": "automated",
       "testIds": [
-        "node:tests/test_editor_basic_tools_e2e.cjs::basic editor tools keep their pixel-layer contracts > ED-010 exclusion fill tolerance changes only exclusion across undo"
+        "node:tests/test_editor_basic_tools_e2e.cjs::basic editor tools keep their pixel-layer contracts > ED-010 exclusion fill tolerance changes only exclusion across undo",
+        "node:tests/editor/test_color_fill_connectivity_e2e.cjs::color buckets honor tolerance and four-neighbor connectivity for both manual roles"
       ]
     },
     {
@@ -213,7 +218,8 @@
       "status": "automated",
       "testIds": [
         "python:tests.test_config.SettingsTests.test_fill_tolerance_survives_settings_store_reinitialization",
-        "node:tests/test_editor_basic_tools_e2e.cjs::basic editor tools keep their pixel-layer contracts > ED-014 fill tolerance survives a page reload and drives the next fill"
+        "node:tests/test_editor_basic_tools_e2e.cjs::basic editor tools keep their pixel-layer contracts > ED-014 fill tolerance survives a page reload and drives the next fill",
+        "node:tests/editor/test_color_fill_connectivity_e2e.cjs::color tolerance restores acknowledged settings after two failed queued changes and retry"
       ]
     },
     {
@@ -1651,7 +1657,9 @@
       "status": "automated",
       "testIds": [
         "node:tests/test_editor_masks_behavior.cjs::editor masks, fill, candidates, and history",
-        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage"
+        "node:tests/test_import_picker_e2e.cjs::import picker browser coverage",
+        "node:tests/editor/test_color_fill_connectivity_e2e.cjs::color tolerance restores acknowledged settings after two failed queued changes and retry",
+        "node:tests/editor/test_color_fill_connectivity_e2e.cjs::color tolerance acknowledgements preserve a newer replacement preference"
       ]
     },
     {
@@ -2100,10 +2108,11 @@
       "sourceIds": [
         "ED-084"
       ],
-      "observation": "モザイク・除外の一括検出範囲または適用範囲をONにして画像を切り替える → 切替先の候補と手描き範囲が同じ方式で点滅する。空画像ではタイマーを止め設定を保持し、読込失敗は元の表示を維持する。OFF・個別表示・一覧クリアも区別する",
+      "observation": "モザイク・除外の一括検出範囲または適用範囲をONにして画像を切り替える → 切替先の候補と手描き範囲が同じ方式で点滅する。空画像ではタイマーを止め設定を保持し、読込失敗は元の表示を維持する。OFF・個別表示・一覧クリアも区別する。個別候補の表示OFF・処理OFF・削除・役割の一括削除でも一括の表示設定を消さず、次画像と戻った画像へ引き継ぐ",
       "status": "automated",
       "testIds": [
-        "node:tests/editor/test_range_display_navigation_e2e.cjs::bulk range display follows image navigation without carrying image-specific selections"
+        "node:tests/editor/test_range_display_navigation_e2e.cjs::bulk range display follows image navigation without carrying image-specific selections",
+        "node:tests/editor/test_range_display_navigation_e2e.cjs::bulk range modes survive individual off disable deletion and role deletion across navigation"
       ]
     },
     {
@@ -2116,6 +2125,68 @@
       "testIds": [
         "python:tests.test_project_history_live_browser.LiveProjectHistoryBrowserTests.test_rapid_manual_strokes_keep_save_regions_local_and_history_exact",
         "node:tests/test_mosaic_drag_performance_e2e.cjs::4K durable mosaic drag displays cropped worker previews within a gross latency budget"
+      ]
+    },
+    {
+      "key": "ED-004.3",
+      "sourceIds": [
+        "ED-004"
+      ],
+      "observation": "モザイク用バケツは、ONの自動候補・手描きを壁にした閉じた穴だけを埋める。画像端につながる領域や壁へのクリックは画素・履歴を変更しない。",
+      "status": "automated",
+      "testIds": [
+        "node:tests/editor/test_area_fill_worker.cjs::enclosed bucket fills only the connected hole with four-neighbor boundaries",
+        "node:tests/editor/test_area_fill_worker.cjs::open gaps and the exterior never produce a fill",
+        "python:tests.test_area_fill_live_browser.LiveAreaFillBrowserTests.test_bucket_fills_only_closed_holes_in_candidate_and_manual_masks_for_both_roles"
+      ]
+    },
+    {
+      "key": "ED-008.2",
+      "sourceIds": [
+        "ED-008"
+      ],
+      "observation": "除外用バケツは除外の適用範囲だけを壁として閉領域を埋め、モザイク用と独立する。既存の色による塗りつぶしも維持する。",
+      "status": "automated",
+      "testIds": [
+        "node:tests/editor/test_area_fill_e2e.cjs::bucket reads current role masks and rejects open areas without a modal",
+        "python:tests.test_area_fill_live_browser.LiveAreaFillBrowserTests.test_bucket_fills_only_closed_holes_in_candidate_and_manual_masks_for_both_roles"
+      ]
+    },
+    {
+      "key": "ED-105.2",
+      "sourceIds": [
+        "ED-105"
+      ],
+      "observation": "モザイク・除外の囲みツールは途中で離しても始点終点を直線で閉じて適用する。確定前の半透明プレビュー、Escとpointercancelの取消は元のマスクを保持する。",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_area_fill_live_browser.LiveAreaFillBrowserTests.test_freehand_auto_closes_and_cancel_leaves_both_role_masks_and_history_unchanged",
+        "node:tests/editor/test_area_fill_e2e.cjs::enclosure previews closes an unfinished stroke and cancels without changes"
+      ]
+    },
+    {
+      "key": "ED-114.3",
+      "sourceIds": [
+        "ED-114"
+      ],
+      "observation": "範囲内の既存処理を置き換えるON/OFFで候補と手描きの実データを部分置換・保持し、1回のUndo/Redo、再開、保存出力で再現する。失敗時は画素・履歴を保ちボタンを復帰する。",
+      "status": "automated",
+      "testIds": [
+        "python:tests.test_area_fill_live_browser.LiveAreaFillBrowserTests.test_replace_cuts_candidate_and_all_manual_masks_inside_only_and_undo_is_exact",
+        "python:tests.test_area_fill_live_browser.LiveAreaFillBrowserTests.test_fill_failure_retry_busy_restore_pending_brush_reopen_and_saved_output",
+        "python:tests.editor.test_area_fill_workspace.AreaFillWorkspaceTests.test_repeated_replacement_reclaims_old_cache_and_history_restores_from_database"
+      ]
+    },
+    {
+      "key": "ED-106.4",
+      "sourceIds": [
+        "ED-106"
+      ],
+      "observation": "4Kバケツの画素抽出と閉領域走査をWorkerで行い、画面側は応答し続ける。適用範囲は画素ごとの座標配列ではなく行単位で転送する。",
+      "status": "automated",
+      "testIds": [
+        "node:tests/editor/test_area_fill_e2e.cjs::4K bitmap area worker returns compact spans while the page remains responsive",
+        "node:tests/editor/test_area_fill_worker.cjs::4K area output stays scanline-sized and ignores color channels"
       ]
     }
   ]

@@ -6,9 +6,12 @@ const path = require("node:path");
 const root = path.resolve(__dirname, "..");
 const testDirectory = path.join(root, "tests");
 const browserCoverageTestFiles = [
+  "tests/editor/test_area_fill_e2e.cjs",
+  "tests/editor/test_color_fill_connectivity_e2e.cjs",
   "tests/editor/test_dialog_keyboard_e2e.cjs",
   "tests/editor/test_draft_residency_e2e.cjs",
   "tests/editor/test_draft_transition_e2e.cjs",
+  "tests/editor/test_range_display_navigation_e2e.cjs",
   "tests/import/test_import_cancellation_e2e.cjs",
   "tests/test_import_picker_e2e.cjs",
 ];

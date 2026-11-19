@@ -1,5 +1,6 @@
 function setTool(tool) {
   if (isBusy() || state.importing || (catalogStagingEditsActive() && ["boundary", "polygon", "boundary_brush"].includes(tool))) return;
+  if (state.areaFill) cancelAreaFill();
   const previousTool = state.tool;
   const toggleTolerance = fillToleranceToggleRequest === tool;
   fillToleranceToggleRequest = null;
@@ -8,7 +9,7 @@ function setTool(tool) {
   if (!boundaryTools.has(tool)) clearBoundaryInteraction();
   else if (state.tool !== tool) clearBoundaryConstruction();
   state.tool = tool;
-  for (const [id, name] of [["#brushTool", "brush"], ["#bucketTool", "bucket"], ["#mosaicEraserTool", "mosaic_eraser"], ["#eraserTool", "eraser"], ["#excludeBucketTool", "exclude_bucket"], ["#excludeEraserTool", "exclude_eraser"], ["#rectangleTool", "boundary"], ["#polygonTool", "polygon"], ["#boundaryBrushTool", "boundary_brush"]]) {
+  for (const [id, name] of [["#mosaicAreaBucketTool", "area_bucket"], ["#mosaicEncloseTool", "area_enclose"], ["#excludeAreaBucketTool", "exclude_area_bucket"], ["#excludeEncloseTool", "exclude_area_enclose"], ["#brushTool", "brush"], ["#bucketTool", "bucket"], ["#mosaicEraserTool", "mosaic_eraser"], ["#eraserTool", "eraser"], ["#excludeBucketTool", "exclude_bucket"], ["#excludeEraserTool", "exclude_eraser"], ["#rectangleTool", "boundary"], ["#polygonTool", "polygon"], ["#boundaryBrushTool", "boundary_brush"]]) {
     const active = tool === name; $(id).classList.toggle("active", active); $(id).setAttribute("aria-pressed", String(active));
   }
   $("#boundaryTool").classList.toggle("active", boundaryTools.has(tool));
@@ -20,6 +21,7 @@ function setTool(tool) {
   const toleranceOpen = $("#bucketToleranceControl").matches?.(":popover-open") === true;
   $("#bucketTool").setAttribute("aria-expanded", String(toleranceOpen && tool === "bucket"));
   $("#excludeBucketTool").setAttribute("aria-expanded", String(toleranceOpen && tool === "exclude_bucket"));
+  syncAreaFillOptions();
   canvas.style.cursor = "default";
   updateBoundaryActions(); render(); updateBrushCursor();
   if (focusedInBoundaryMenu) focusCanvas();
@@ -1124,19 +1126,36 @@ async function importProjectFileHandles(sources, projectId) {
 
 async function pickImageFiles() {
   $("#pickerMenu").hidePopover();
+  const suggestion = captureProjectImportSuggestion();
   const session = beginImportSession(); if (!session) return;
-  try { await importFileHandles(await window.showOpenFilePicker({ multiple: true, types: [{ description: "Images", accept: { "image/png": [".png"], "image/jpeg": [".jpg", ".jpeg"], "image/webp": [".webp"] } }] }), session); }
-  catch (error) { if (error?.name !== "AbortError") showUserError(error); finishImportSession(session); }
+  let name = "";
+  try {
+    const handles = await window.showOpenFilePicker({ multiple: true, types: [{ description: "Images", accept: { "image/png": [".png"], "image/jpeg": [".jpg", ".jpeg"], "image/webp": [".webp"] } }] });
+    name = importProjectDirectoryName(handles);
+    await importFileHandles(handles, session);
+  } catch (error) { if (error?.name !== "AbortError") showUserError(error); }
+  finally {
+    finishImportSession(session);
+    completeProjectImportSuggestion(suggestion, name, session.successes > 0 && isCurrentCatalogEpoch(session.epoch));
+  }
 }
 
 async function pickImageDirectory() {
   $("#pickerMenu").hidePopover();
+  const suggestion = captureProjectImportSuggestion();
   const session = beginImportSession(); if (!session) return;
-  try { await importDirectoryHandle(await window.showDirectoryPicker({ mode: "readwrite", id: "mozarie-source" }), session); }
-  catch (error) {
+  let name = "";
+  try {
+    const directory = await window.showDirectoryPicker({ mode: "readwrite", id: "mozarie-source" });
+    name = directory.name;
+    await importDirectoryHandle(directory, session);
+  } catch (error) {
     if (error?.name === "AbortError") setStatusKey("status.folderPickerCancelled");
     else { setStatusKey("status.folderPickerFailed"); showUserError(error); }
-  } finally { finishImportSession(session); }
+  } finally {
+    finishImportSession(session);
+    completeProjectImportSuggestion(suggestion, name, session.successes > 0 && isCurrentCatalogEpoch(session.epoch));
+  }
 }
 
 async function importDroppedFiles(event) {
@@ -1145,16 +1164,22 @@ async function importDroppedFiles(event) {
   event.preventDefault();
   event.stopPropagation();
   setGalleryDropOverlay(false);
+  const suggestion = captureProjectImportSuggestion();
   const session = beginImportSession();
   if (!session) return;
+  let name = "";
   try {
     showProcessing({ kind: "import", state: "running", total: 1, completed: 0, current: "" });
     const dropped = await directFilesFromDrop(event.dataTransfer, session);
     if (!await waitForImportSession(session)) return;
+    name = importProjectDirectoryName(dropped?.handleEntries || dropped || []);
     if (dropped?.handleEntries) await importHandleEntries(dropped.handleEntries, session);
     else await importFiles(dropped, session);
   } catch (error) { showUserError(error); }
-  finally { finishImportSession(session); setGalleryDropOverlay(false); }
+  finally {
+    finishImportSession(session); setGalleryDropOverlay(false);
+    completeProjectImportSuggestion(suggestion, name, session.successes > 0 && isCurrentCatalogEpoch(session.epoch));
+  }
 }
 
 function setGalleryDropOverlay(visible) {
@@ -1183,6 +1208,7 @@ function handleEditorKeydown(event) {
 }
 
 const TOOLBAR_SHORTCUT_BUTTONS = {
+  mosaicAreaBucket: "#mosaicAreaBucketTool", mosaicEnclose: "#mosaicEncloseTool", exclusionAreaBucket: "#excludeAreaBucketTool", exclusionEnclose: "#excludeEncloseTool",
   mosaicBrush: "#brushTool", mosaicFill: "#bucketTool", mosaicEraser: "#mosaicEraserTool",
   boundaryMenu: "#boundaryTool", boundaryRectangle: "#rectangleTool", boundaryPolygon: "#polygonTool", boundaryBrush: "#boundaryBrushTool",
   exclusionBrush: "#eraserTool", exclusionFill: "#excludeBucketTool", exclusionEraser: "#excludeEraserTool",
@@ -1192,8 +1218,8 @@ const TOOLBAR_SHORTCUT_BUTTONS = {
   exclusionDetectionRanges: '[data-candidate-display-toggle="exclude"]', exclusionAppliedRanges: '[data-candidate-effective-toggle="exclude"]',
 };
 const TOOLBAR_SHORTCUT_CYCLES = {
-  cycleMosaicTool: [["brush", "mosaicBrush"], ["bucket", "mosaicFill"], ["mosaic_eraser", "mosaicEraser"], ["boundary", "boundaryRectangle"], ["polygon", "boundaryPolygon"], ["boundary_brush", "boundaryBrush"]],
-  cycleExclusionTool: [["eraser", "exclusionBrush"], ["exclude_bucket", "exclusionFill"], ["exclude_eraser", "exclusionEraser"]],
+  cycleMosaicTool: [["brush", "mosaicBrush"], ["bucket", "mosaicFill"], ["area_bucket", "mosaicAreaBucket"], ["area_enclose", "mosaicEnclose"], ["mosaic_eraser", "mosaicEraser"], ["boundary", "boundaryRectangle"], ["polygon", "boundaryPolygon"], ["boundary_brush", "boundaryBrush"]],
+  cycleExclusionTool: [["eraser", "exclusionBrush"], ["exclude_bucket", "exclusionFill"], ["exclude_area_bucket", "exclusionAreaBucket"], ["exclude_area_enclose", "exclusionEnclose"], ["exclude_eraser", "exclusionEraser"]],
 };
 
 function toolbarShortcutButton(action) {
